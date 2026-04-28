@@ -1,0 +1,21 @@
+{
+  "name": "fury",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FURY - Paid Traffic Automation Platform",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run --workspaces --if-present dev",
+    "build": "npm run --workspaces --if-present build",
+    "lint": "npm run --workspaces --if-present lint",
+    "db:migrate": "npm run --workspace @fury/db migrate",
+    "db:studio": "npm run --workspace @fury/db studio"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
