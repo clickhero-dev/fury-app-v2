@@ -1,15 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 
-declare global {
-  namespace Express {
-    interface Request {
-      tenant?: {
-        tenantId: string;
-      };
-    }
-  }
-}
-
 export function tenantMiddleware(req: Request, res: Response, next: NextFunction) {
   if (!req.user?.userId) {
     return res.status(403).json({
