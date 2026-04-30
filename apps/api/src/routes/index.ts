@@ -8,10 +8,6 @@ const router = Router();
 
 router.use('/', healthRoutes);
 
-// Metrics with middleware
 router.use('/metrics', authMiddleware, tenantMiddleware, metricsRoutes);
-
-// Debug: Test metrics without middleware
-router.use('/metrics-test', metricsRoutes);
 
 export default router;
