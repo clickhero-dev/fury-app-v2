@@ -14,16 +14,21 @@ import {
 } from '../../utils/metrics-formatter.js';
 
 export class MockMetricsProvider implements IMetricsProvider {
+  private parseDate(dateStr: string): Date {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+
   async getSummary(
     tenantId: string,
     startDate: string,
     endDate: string
   ): Promise<MetricsSummaryResponse | null> {
-    const startDateObj = new Date(startDate);
-    const endDateObj = new Date(endDate);
+    const startDateObj = this.parseDate(startDate);
+    const endDateObj = this.parseDate(endDate);
 
     const filteredDaily = mockMetrics.daily.filter(d => {
-      const d_date = new Date(d.date);
+      const d_date = this.parseDate(d.date);
       return d_date >= startDateObj && d_date <= endDateObj;
     });
 
@@ -61,18 +66,18 @@ export class MockMetricsProvider implements IMetricsProvider {
     page: number;
     pageSize: number;
   }> {
-    const startDateObj = new Date(startDate);
-    const endDateObj = new Date(endDate);
-
     let filtered = mockMetrics.campaigns;
 
     if (status) {
       filtered = filtered.filter(c => c.status === status);
     }
 
+    const startDateObj = this.parseDate(startDate);
+    const endDateObj = this.parseDate(endDate);
+
     const campaigns: CampaignResponse[] = filtered.map(campaign => {
       const dailyInRange = campaign.daily.filter(d => {
-        const d_date = new Date(d.date);
+        const d_date = this.parseDate(d.date);
         return d_date >= startDateObj && d_date <= endDateObj;
       });
 
@@ -127,11 +132,11 @@ export class MockMetricsProvider implements IMetricsProvider {
       };
     }
 
-    const startDateObj = new Date(startDate);
-    const endDateObj = new Date(endDate);
+    const startDateObj = this.parseDate(startDate);
+    const endDateObj = this.parseDate(endDate);
 
     const filteredDaily = campaign.daily.filter(d => {
-      const d_date = new Date(d.date);
+      const d_date = this.parseDate(d.date);
       return d_date >= startDateObj && d_date <= endDateObj;
     });
 
@@ -178,11 +183,11 @@ export class MockMetricsProvider implements IMetricsProvider {
     startDate: string,
     endDate: string
   ): Promise<DailyMetricsResponse[]> {
-    const startDateObj = new Date(startDate);
-    const endDateObj = new Date(endDate);
+    const startDateObj = this.parseDate(startDate);
+    const endDateObj = this.parseDate(endDate);
 
     const filtered = mockMetrics.daily.filter(d => {
-      const d_date = new Date(d.date);
+      const d_date = this.parseDate(d.date);
       return d_date >= startDateObj && d_date <= endDateObj;
     });
 

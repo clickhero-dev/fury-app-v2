@@ -28,7 +28,18 @@ eyJ1c2VySWQiOiJ0ZW5hbnRfMTIzIn0K
 
 Salve este token - você vai usar em todas as requisições.
 
-### 3. Iniciar o servidor
+### 3. Configurar variáveis de ambiente
+
+Crie um arquivo `.env` na raiz do projeto `/apps/api`:
+
+```bash
+# .env
+PORT=3000
+NODE_ENV=development
+META_USE_MOCK=true
+```
+
+### 4. Iniciar o servidor
 
 ```bash
 npm run dev
@@ -77,14 +88,14 @@ curl -X GET "$API/metrics/summary?startDate=2026-04-20&endDate=2026-04-29" \
 {
   "success": true,
   "data": {
-    "spend": 48.50,
-    "impressions": 145200,
-    "clicks": 3840,
+    "spend": 162,
+    "impressions": 48400,
+    "clicks": 1280,
     "ctr": 2.64,
-    "cpm": 33.40,
-    "cpa": 48.50,
-    "roas": 3.20,
-    "conversions": 100
+    "cpm": 3.35,
+    "cpa": 4.91,
+    "roas": 3.2,
+    "conversions": 33
   }
 }
 ```
@@ -125,21 +136,31 @@ curl -X GET "$API/metrics/campaigns?startDate=2026-04-20&endDate=2026-04-29&page
       "id": "camp_001",
       "name": "Campanha Black Friday",
       "status": "ACTIVE",
-      "spend": 21.00,
-      "roas": 4.10,
-      "cpa": 42.00,
-      "impressions": 68000,
-      "clicks": 1820
+      "spend": 69.7,
+      "roas": 3.2,
+      "cpa": 3.49,
+      "impressions": 22650,
+      "clicks": 610
+    },
+    {
+      "id": "camp_003",
+      "name": "Prospecção Fria",
+      "status": "PAUSED",
+      "spend": 59.9,
+      "roas": 3.2,
+      "cpa": 5.99,
+      "impressions": 18390,
+      "clicks": 430
     },
     {
       "id": "camp_002",
       "name": "Retargeting Carrinho",
       "status": "ACTIVE",
-      "spend": 9.80,
-      "roas": 5.80,
-      "cpa": 28.00,
-      "impressions": 22000,
-      "clicks": 740
+      "spend": 32.4,
+      "roas": 3.2,
+      "cpa": 3.24,
+      "impressions": 7360,
+      "clicks": 250
     }
   ],
   "pagination": {
@@ -181,31 +202,31 @@ curl -X GET "$API/metrics/campaigns/camp_001/insights?startDate=2026-04-20&endDa
       "status": "ACTIVE"
     },
     "summary": {
-      "spend": 21.00,
-      "impressions": 68000,
-      "clicks": 1820,
-      "ctr": 2.68,
-      "cpm": 30.88,
-      "cpa": 42.00,
-      "roas": 4.10,
-      "conversions": 50
+      "spend": 69.7,
+      "impressions": 22650,
+      "clicks": 610,
+      "ctr": 2.69,
+      "cpm": 3.08,
+      "cpa": 3.49,
+      "roas": 3.2,
+      "conversions": 20
     },
     "daily": [
       {
         "date": "2026-04-20",
-        "spend": 0.70,
-        "impressions": 2200,
-        "clicks": 59,
-        "conversions": 1,
-        "roas": 4.10
+        "spend": 6.97,
+        "impressions": 2265,
+        "clicks": 61,
+        "conversions": 2,
+        "roas": 3.2
       },
       {
         "date": "2026-04-21",
-        "spend": 0.72,
-        "impressions": 2300,
-        "clicks": 62,
+        "spend": 6.97,
+        "impressions": 2265,
+        "clicks": 61,
         "conversions": 2,
-        "roas": 4.10
+        "roas": 3.2
       }
     ]
   }
@@ -239,43 +260,43 @@ curl -X GET "$API/metrics/daily?startDate=2026-04-01&endDate=2026-04-29" \
   "data": [
     {
       "date": "2026-04-25",
-      "spend": 16.20,
+      "spend": 16.2,
       "impressions": 4840,
       "clicks": 128,
       "conversions": 3,
-      "roas": 3.20
+      "roas": 3.2
     },
     {
       "date": "2026-04-26",
-      "spend": 16.80,
-      "impressions": 5020,
-      "clicks": 135,
-      "conversions": 4,
-      "roas": 3.20
+      "spend": 16.2,
+      "impressions": 4840,
+      "clicks": 128,
+      "conversions": 3,
+      "roas": 3.2
     },
     {
       "date": "2026-04-27",
-      "spend": 15.90,
-      "impressions": 4760,
+      "spend": 16.2,
+      "impressions": 4840,
       "clicks": 128,
-      "conversions": 3,
-      "roas": 3.20
+      "conversions": 4,
+      "roas": 3.2
     },
     {
       "date": "2026-04-28",
-      "spend": 17.20,
-      "impressions": 5150,
-      "clicks": 139,
-      "conversions": 4,
-      "roas": 3.20
+      "spend": 16.2,
+      "impressions": 4840,
+      "clicks": 128,
+      "conversions": 3,
+      "roas": 3.2
     },
     {
       "date": "2026-04-29",
-      "spend": 16.50,
-      "impressions": 4920,
-      "clicks": 132,
+      "spend": 16.2,
+      "impressions": 4840,
+      "clicks": 128,
       "conversions": 3,
-      "roas": 3.20
+      "roas": 3.2
     }
   ]
 }
@@ -392,23 +413,30 @@ curl -X GET "$API/metrics/summary"
 
 ## 📊 Mock Data Info
 
-O servidor usa dados fictícios realistas:
+O servidor usa dados fictícios determinísticos (não aleatórios):
 
 - **3 campanhas:**
   - `camp_001` - Campanha Black Friday (ACTIVE)
   - `camp_002` - Retargeting Carrinho (ACTIVE)
   - `camp_003` - Prospecção Fria (PAUSED)
 
-- **30 dias de histórico** com variação realista
-- **Métricas agregadas:**
-  - Total spend: $48.50
+- **30 dias de histórico** (últimos 30 dias) com valores fixos por dia
+- **Métricas agregadas (30 dias):**
+  - Total spend: R$ 486.00
   - Total impressions: 145.200
   - Total clicks: 3.840
   - CTR: 2.64%
-  - CPM: $33.40
-  - CPA: $48.50
+  - CPM: R$ 3.35
+  - CPA: R$ 4.86
   - ROAS médio: 3.20
   - Total conversões: 100
+
+**Valores diários:**
+- Spend: R$ 16.20 (1.620 centavos)
+- Impressions: 4.840
+- Clicks: 128
+- Conversões: 3-4 (padrão alternado)
+- ROAS: 3.20
 
 ---
 

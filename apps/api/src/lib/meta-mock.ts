@@ -9,15 +9,14 @@ function generateMockDailyData(): DailyMetricsDB[] {
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
 
-    const baseSpend = 16160 + Math.random() * 5000;
-    const baseImpressions = 4840 + Math.random() * 2000;
+    const conversions = i % 3 === 0 ? 4 : 3;
 
     daily.push({
       date: dateStr,
-      spend: Math.round(baseSpend * 100),
-      impressions: Math.round(baseImpressions),
-      clicks: Math.round(baseImpressions * 0.027),
-      conversions: Math.round(baseImpressions * 0.0007),
+      spend: 1620,
+      impressions: 4840,
+      clicks: 128,
+      conversions,
       roas: 3.2,
     });
   }
