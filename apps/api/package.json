@@ -17,6 +17,7 @@
   "dependencies": {
     "@fury/db": "*",
     "@fury/shared": "*",
+    "dotenv": "^17.4.2",
     "express": "^4.18.2",
     "zod": "^3.22.4"
   }
