@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { MetricsService } from '../services/metrics.service';
+import { MetricsService } from '../services/metrics.service.js';
 import {
   metricsQuerySchema,
   campaignsQuerySchema,
   dailyQuerySchema,
-} from '../types/metrics.types';
+} from '../types/metrics.types.js';
 
 export class MetricsController {
   constructor(private metricsService: MetricsService) {}

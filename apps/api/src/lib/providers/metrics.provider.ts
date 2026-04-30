@@ -1,4 +1,4 @@
-import { MetricsSummaryResponse, CampaignResponse, DailyMetricsResponse } from '../types/metrics.types';
+import type { MetricsSummaryResponse, CampaignResponse, DailyMetricsResponse } from '../../types/metrics.types';
 
 export interface IMetricsProvider {
   getSummary(

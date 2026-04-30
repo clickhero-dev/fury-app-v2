@@ -1,17 +1,17 @@
-import { IMetricsProvider } from './metrics.provider';
-import { mockMetrics } from '../meta-mock';
-import {
+import { IMetricsProvider } from './metrics.provider.js';
+import { mockMetrics } from '../meta-mock.js';
+import type {
   MetricsSummaryResponse,
   CampaignResponse,
   DailyMetricsResponse,
-} from '../types/metrics.types';
+} from '../../types/metrics.types';
 import {
   centavosToReais,
   calculateCTR,
   calculateCPA,
   calculateCPM,
   aggregateDailyMetrics,
-} from '../utils/metrics-formatter';
+} from '../../utils/metrics-formatter';
 
 export class MockMetricsProvider implements IMetricsProvider {
   async getSummary(

@@ -1,9 +1,9 @@
-import { IMetricsProvider } from './metrics.provider';
-import {
+import { IMetricsProvider } from './metrics.provider.js';
+import type {
   MetricsSummaryResponse,
   CampaignResponse,
   DailyMetricsResponse,
-} from '../types/metrics.types';
+} from '../../types/metrics.types';
 
 export class DatabaseMetricsProvider implements IMetricsProvider {
   async getSummary(
