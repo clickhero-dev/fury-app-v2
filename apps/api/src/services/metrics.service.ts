@@ -1,5 +1,5 @@
-import { IMetricsProvider } from '../lib/providers/metrics.provider';
-import {
+import { IMetricsProvider } from '../lib/providers/metrics.provider.js';
+import type {
   MetricsSummaryResponse,
   CampaignResponse,
   DailyMetricsResponse,

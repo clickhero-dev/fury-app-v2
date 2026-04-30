@@ -11,7 +11,7 @@ import {
   calculateCPA,
   calculateCPM,
   aggregateDailyMetrics,
-} from '../../utils/metrics-formatter';
+} from '../../utils/metrics-formatter.js';
 
 export class MockMetricsProvider implements IMetricsProvider {
   async getSummary(
