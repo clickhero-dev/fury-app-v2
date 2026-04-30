@@ -4,7 +4,7 @@
 
 - Node.js 20+
 - `npm`
-- Porta 3000 disponível
+- Porta 3333 disponível
 
 ## 🔧 Setup
 
@@ -30,14 +30,15 @@ Salve este token - você vai usar em todas as requisições.
 
 ### 3. Configurar variáveis de ambiente
 
-Crie um arquivo `.env` na raiz do projeto `/apps/api`:
+Já existe um arquivo `.env` configurado em `/apps/api` com:
 
 ```bash
-# .env
-PORT=3000
+PORT=3333
 NODE_ENV=development
 META_USE_MOCK=true
 ```
+
+Este arquivo é carregado automaticamente ao iniciar o servidor.
 
 ### 4. Iniciar o servidor
 
@@ -47,7 +48,7 @@ npm run dev
 
 Você verá:
 ```
-✅ Server running on http://localhost:3000
+✅ Server running on http://localhost:3333
 📝 Environment: development
 ```
 
@@ -59,7 +60,7 @@ Você verá:
 
 ```bash
 TOKEN="eyJ1c2VySWQiOiJ0ZW5hbnRfMTIzIn0K"
-API="http://localhost:3000/api"
+API="http://localhost:3333/api"
 ```
 
 Use esses valores em todos os exemplos abaixo.
@@ -332,7 +333,7 @@ Salve como `test-metrics.sh`:
 #!/bin/bash
 
 TOKEN="eyJ1c2VySWQiOiJ0ZW5hbnRfMTIzIn0K"
-API="http://localhost:3000/api"
+API="http://localhost:3333/api"
 
 echo "🧪 Testing Metrics API"
 echo "======================"
@@ -449,5 +450,34 @@ O servidor usa dados fictícios determinísticos (não aleatórios):
 
 ---
 
+## 🔧 Troubleshooting
+
+### Porta 3333 em uso
+
+Se a porta 3333 já está em uso, altere no arquivo `.env`:
+
+```bash
+PORT=3334  # ou qualquer outra porta disponível
+```
+
+### Variáveis de ambiente não carregadas
+
+O arquivo `.env` é carregado automaticamente. Certifique-se de que:
+- O arquivo `.env` existe em `/apps/api`
+- As variáveis estão no formato: `KEY=value`
+- Reinicie o servidor após alterações no `.env`
+
+### Dados mock não aparecem
+
+Verifique se `META_USE_MOCK=true` está configurado no `.env`:
+
+```bash
+cat .env | grep META_USE_MOCK
+# Deve retornar: META_USE_MOCK=true
+```
+
+---
+
 **Status:** ✅ Pronto para teste local  
-**Branch:** `feature/api-metricas-gabriel`
+**Branch:** `feature/api-metricas-gabriel`  
+**Port:** 3333
