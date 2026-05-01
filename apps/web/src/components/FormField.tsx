@@ -10,12 +10,12 @@ export function FormField({ label, error, id, ...props }: FormFieldProps) {
   const inputId = id || props.name;
 
   return (
-    <div className="space-y-2">
-      <label htmlFor={inputId} className="text-sm font-medium text-gray-900">
+    <div className="space-y-3">
+      <label htmlFor={inputId} className="block text-sm font-semibold text-[#1C1C1E]">
         {label}
       </label>
       <Input id={inputId} {...props} />
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs font-semibold text-[#DA3633]">{error}</p>}
     </div>
   );
 }

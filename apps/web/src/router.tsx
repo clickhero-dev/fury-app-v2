@@ -4,16 +4,11 @@ import { RegisterPage } from './pages/auth/RegisterPage';
 import { ConectarMetaPage } from './pages/onboarding/ConectarMetaPage';
 import { MetaAuthorizePage } from './pages/onboarding/MetaAuthorizePage';
 import { ProtectedRoute } from './components/ProtectedRoute';
-
-// Placeholder dashboard page
-function DashboardPage() {
-  return (
-    <div className="min-h-screen bg-white p-8">
-      <h1 className="text-3xl font-bold text-gray-900">Painel (Em desenvolvimento)</h1>
-      <p className="text-gray-600 mt-4">Bem-vindo ao FURY!</p>
-    </div>
-  );
-}
+import { Dashboard } from './pages/dashboard/Dashboard';
+import { Campanhas } from './pages/campanhas/Campanhas';
+import { EstudioCriativo } from './pages/estudio-criativo/EstudioCriativo';
+import { Configuracoes } from './pages/configuracoes/Configuracoes';
+import { ComponentsDemo } from './pages/ComponentsDemo';
 
 export const router = createBrowserRouter([
   {
@@ -40,7 +35,39 @@ export const router = createBrowserRouter([
     path: '/dashboard',
     element: (
       <ProtectedRoute>
-        <DashboardPage />
+        <Dashboard />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/campanhas',
+    element: (
+      <ProtectedRoute>
+        <Campanhas />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/estudio-criativo',
+    element: (
+      <ProtectedRoute>
+        <EstudioCriativo />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/configuracoes',
+    element: (
+      <ProtectedRoute>
+        <Configuracoes />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/components-demo',
+    element: (
+      <ProtectedRoute>
+        <ComponentsDemo />
       </ProtectedRoute>
     ),
   },

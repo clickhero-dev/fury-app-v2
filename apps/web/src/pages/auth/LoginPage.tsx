@@ -36,7 +36,10 @@ export function LoginPage() {
   const onSubmit = async (data: LoginFormValues) => {
     try {
       setError('');
-      await loginMutation.mutateAsync(data);
+      await loginMutation.mutateAsync({
+        email: data.email,
+        password: data.password,
+      });
       navigate('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao fazer login');
@@ -45,12 +48,14 @@ export function LoginPage() {
 
   return (
     <AuthLayout>
-      <div className="space-y-8">
-        <div className="space-y-2">
-          <h2 className="text-3xl font-bold text-gray-900">Entrar</h2>
-          <p className="text-gray-500">Acesse sua conta FURY</p>
+      <div className="space-y-10">
+        {/* Header */}
+        <div className="space-y-3">
+          <h2 className="text-3xl font-black text-[#1C1C1E]">Bem-vindo</h2>
+          <p className="text-lg text-[#6E7681] font-medium">Acesse sua conta FURY</p>
         </div>
 
+        {/* Form */}
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           <FormField
             label="Email"
@@ -62,48 +67,69 @@ export function LoginPage() {
 
           <FormField
             label="Senha"
-            placeholder="••••••"
+            placeholder="••••••••"
             type="password"
             error={errors.password?.message}
             {...register('password')}
           />
 
           {error && (
-            <div className="p-3.5 bg-red-50 border border-red-200 text-red-800 rounded-lg text-sm font-medium">
-              {error}
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3 items-start">
+              <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              <p className="text-sm font-semibold text-red-800">{error}</p>
             </div>
           )}
 
           <Button
             type="submit"
             variant="primary"
-            className="w-full text-white font-semibold"
             size="md"
+            className="w-full"
             disabled={loginMutation.isPending}
             aria-busy={loginMutation.isPending}
           >
-            {loginMutation.isPending ? 'Entrando...' : 'Entrar'}
+            {loginMutation.isPending ? 'Entrando...' : 'Entrar na conta'}
           </Button>
         </form>
 
-        <div className="border-t border-gray-100 pt-6 text-center">
-          <p className="text-gray-600 text-sm">
+        {/* Divider */}
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-[#E0E0E0]"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-3 bg-white text-[#6E7681]">ou</span>
+          </div>
+        </div>
+
+        {/* Sign Up Link */}
+        <div className="space-y-4">
+          <p className="text-center text-[#6E7681] text-sm">
             Não tem conta?{' '}
             <Link
               to="/cadastro"
-              className="font-semibold hover:opacity-80 transition-opacity"
+              className="font-bold hover:underline transition-all"
               style={{ color: FURY_COLORS.primary }}
             >
-              Criar conta
+              Criar conta gratuita
             </Link>
           </p>
-        </div>
 
-        <div className="p-4 bg-gray-50 border border-gray-100 rounded-lg space-y-2">
-          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Demo</p>
-          <div className="text-sm text-gray-700 space-y-1">
-            <p>Email: <code className="font-mono bg-white px-2 py-1 rounded border border-gray-200">{DEMO_CREDENTIALS.email}</code></p>
-            <p>Senha: <code className="font-mono bg-white px-2 py-1 rounded border border-gray-200">{DEMO_CREDENTIALS.password}</code></p>
+          {/* Demo Credentials */}
+          <div className="bg-[#F6F8FA] border border-[#E0E0E0] rounded-xl p-4 space-y-3">
+            <p className="text-xs font-bold text-[#6E7681] uppercase tracking-widest">Credenciais Demo</p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[#6E7681]">Email:</span>
+                <code className="text-sm font-bold text-[#1C1C1E] font-mono">{DEMO_CREDENTIALS.email}</code>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[#6E7681]">Senha:</span>
+                <code className="text-sm font-bold text-[#1C1C1E] font-mono">{DEMO_CREDENTIALS.password}</code>
+              </div>
+            </div>
           </div>
         </div>
       </div>

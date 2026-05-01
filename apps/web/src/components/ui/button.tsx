@@ -25,18 +25,18 @@ export function Button({
   return (
     <button
       className={cn(
-        'font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+        'font-semibold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
         !isPrimary && variant === 'default' &&
-          'bg-gray-900 text-white hover:bg-gray-800 active:bg-gray-950',
+          'bg-[#1C1C1E] text-white hover:bg-[#2a2a2d] active:bg-[#0f0f11] shadow-sm',
         isPrimary &&
-          'text-white hover:opacity-95 active:opacity-90 shadow-sm hover:shadow-md',
+          'text-white shadow-md hover:shadow-lg active:shadow-sm hover:brightness-95 active:brightness-90',
         variant === 'outline' &&
-          'border border-gray-200 text-gray-900 hover:bg-gray-50 active:bg-gray-100',
+          'border-2 border-[#E0E0E0] text-[#1C1C1E] hover:bg-[#F6F8FA] active:bg-white font-medium',
         variant === 'ghost' &&
-          'text-gray-700 hover:bg-gray-100 active:bg-gray-200',
-        size === 'sm' && 'px-3 py-1.5 text-sm',
-        size === 'md' && 'px-4 py-2.5 text-base',
-        size === 'lg' && 'px-6 py-3 text-lg',
+          'text-[#1C1C1E] hover:bg-[#F6F8FA] active:bg-white',
+        size === 'sm' && 'px-4 py-2.5 text-sm',
+        size === 'md' && 'px-6 py-3.5 text-base font-semibold',
+        size === 'lg' && 'px-8 py-4 text-lg',
         className
       )}
       style={buttonStyle}
