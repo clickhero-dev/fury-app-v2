@@ -13,7 +13,10 @@
     "build": "npm run --workspaces --if-present build",
     "lint": "npm run --workspaces --if-present lint",
     "db:migrate": "npm run --workspace @fury/db migrate",
-    "db:studio": "npm run --workspace @fury/db studio"
+    "db:studio": "npm run --workspace @fury/db studio",
+    "db:seed": "npm run db:seed --workspace=@fury/db",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
