@@ -6,6 +6,6 @@ export function tenantMiddleware(req: Request, res: Response, next: NextFunction
     return next(new AppError(401, 'UNAUTHORIZED', 'Tenant context not found'));
   }
 
-  req.tenantId = req.user.tenantId;
+  req.tenant = { tenantId: req.user.tenantId };
   next();
 }

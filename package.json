@@ -16,6 +16,7 @@
     "db:studio": "npm run --workspace @fury/db studio"
   },
   "devDependencies": {
+    "tsx": "^4.21.0",
     "typescript": "^5.3.3"
   }
 }
