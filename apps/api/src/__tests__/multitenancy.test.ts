@@ -9,8 +9,9 @@ describe('Multi-tenancy Isolation', () => {
   let tenant2AccessToken: string;
   let tenant1Id: string;
   let tenant2Id: string;
+  const uniqueId = () => Date.now().toString().slice(-8);
 
-  beforeEach(async () => {
+  const clearData = async () => {
     // Clear data - delete in correct order to respect foreign keys
     await db.delete(schema.furyInsights);
     await db.delete(schema.campaigns);
@@ -19,29 +20,36 @@ describe('Multi-tenancy Isolation', () => {
     await db.delete(schema.metaConnections);
     await db.delete(schema.users);
     await db.delete(schema.tenants);
+  };
+
+  beforeEach(async () => {
+    await clearData();
 
     // Create tenant 1 and user
+    const id1 = uniqueId();
     const tenant1Response = await request(app).post('/api/auth/register').send({
-      name: `Tenant One ${Date.now()}`,
-      email: `tenant1-${Date.now()}@test.com`,
+      name: `Tenant One ${id1}`,
+      email: `tenant1-${id1}@test.com`,
       password: 'SecurePass123!',
-      companyName: 'Company One',
+      companyName: `Company One ${id1}`,
     });
 
     tenant1AccessToken = tenant1Response.body.data.tokens.accessToken;
     tenant1Id = tenant1Response.body.data.user.tenantId;
 
     // Create tenant 2 and user
+    const id2 = uniqueId();
     const tenant2Response = await request(app).post('/api/auth/register').send({
-      name: `Tenant Two ${Date.now()}`,
-      email: `tenant2-${Date.now()}@test.com`,
+      name: `Tenant Two ${id2}`,
+      email: `tenant2-${id2}@test.com`,
       password: 'SecurePass123!',
-      companyName: 'Company Two',
+      companyName: `Company Two ${id2}`,
     });
 
-    tenant2AccessToken = tenant2Response.body.data.accessToken;
+    tenant2AccessToken = tenant2Response.body.data.tokens.accessToken;
     tenant2Id = tenant2Response.body.data.user.tenantId;
   });
+
 
   describe('JWT Token Isolation', () => {
     it('should include correct tenantId in token', async () => {
@@ -101,6 +109,10 @@ describe('Multi-tenancy Isolation', () => {
       const response2 = await request(app)
         .get('/api/auth/me')
         .set('Authorization', `Bearer ${tenant2AccessToken}`);
+
+      // Both should be 200 OK
+      expect(response1.status).toBe(200);
+      expect(response2.status).toBe(200);
 
       // Both should be owners since they're first users
       expect(response1.body.data.role).toBe('owner');

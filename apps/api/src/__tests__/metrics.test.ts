@@ -8,9 +8,9 @@ describe('Metrics Endpoints', () => {
   let accessToken: string;
   let tenantId: string;
   let campaignId: string;
+  const uniqueId = () => Date.now().toString().slice(-8);
 
-  beforeEach(async () => {
-    // Clear data
+  const clearData = async () => {
     await db.delete(schema.furyInsights);
     await db.delete(schema.campaigns);
     await db.delete(schema.clientGoals);
@@ -18,13 +18,18 @@ describe('Metrics Endpoints', () => {
     await db.delete(schema.creativeAssets);
     await db.delete(schema.users);
     await db.delete(schema.tenants);
+  };
+
+  beforeEach(async () => {
+    await clearData();
 
     // Create user
+    const id = uniqueId();
     const registerResponse = await request(app).post('/api/auth/register').send({
       name: 'Test User',
-      email: `test-${Date.now()}@test.com`,
+      email: `test-${id}@test.com`,
       password: 'SecurePass123!',
-      companyName: `Test Company ${Date.now()}`,
+      companyName: `Test Company ${id}`,
     });
 
     accessToken = registerResponse.body.data.tokens.accessToken;
@@ -92,6 +97,7 @@ describe('Metrics Endpoints', () => {
       },
     ]);
   });
+
 
   describe('GET /api/metrics/summary', () => {
     it('should return metrics summary with spend, roas, cpa, ctr', async () => {

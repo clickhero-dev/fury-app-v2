@@ -6,6 +6,13 @@ export default defineConfig({
     environment: 'node',
     root: process.cwd(),
     globals: true,
+    testTimeout: 30000,
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

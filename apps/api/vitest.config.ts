@@ -6,6 +6,12 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     setupFiles: [],
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
     env: {
       META_USE_MOCK: 'true',
       NODE_ENV: 'test',

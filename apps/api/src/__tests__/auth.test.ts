@@ -5,19 +5,26 @@ import { db } from '@fury/db';
 import { tenants, users } from '@fury/db';
 
 describe('Auth Endpoints', () => {
-  beforeEach(async () => {
-    // Clear users and tenants before each test
+  const uniqueId = () => Date.now().toString().slice(-8);
+
+  const clearData = async () => {
     await db.delete(users);
     await db.delete(tenants);
+  };
+
+  beforeEach(async () => {
+    await clearData();
   });
+
 
   describe('POST /api/auth/register', () => {
     it('should create tenant + user and return valid tokens', async () => {
+      const id = uniqueId();
       const response = await request(app).post('/api/auth/register').send({
         name: 'John Doe',
-        email: `john-${Date.now()}@test.com`,
+        email: `john-${id}@test.com`,
         password: 'SecurePass123!',
-        companyName: `Test Company ${Date.now()}`,
+        companyName: `Test Company ${id}`,
       });
 
       expect(response.status).toBe(201);
@@ -37,18 +44,25 @@ describe('Auth Endpoints', () => {
     });
 
     it('should return 409 if email already exists', async () => {
+      const id = uniqueId();
       const userData = {
         name: 'John Doe',
-        email: 'john@test.com',
+        email: `john-${id}@test.com`,
         password: 'SecurePass123!',
-        companyName: 'Test Company',
+        companyName: `Test Company ${id}`,
       };
 
-      // First registration
+      // First registration - creates tenant 1
       await request(app).post('/api/auth/register').send(userData);
 
-      // Second registration with same email
-      const response = await request(app).post('/api/auth/register').send(userData);
+      // Second registration with same email but different company should still fail
+      // because email is globally unique
+      const response = await request(app).post('/api/auth/register').send({
+        name: 'Jane Doe',
+        email: userData.email,
+        password: 'SecurePass123!',
+        companyName: `Different Company ${id}`,
+      });
 
       expect(response.status).toBe(409);
       expect(response.body.success).toBe(false);
@@ -82,23 +96,30 @@ describe('Auth Endpoints', () => {
   });
 
   describe('POST /api/auth/login', () => {
+    let testEmail: string;
+    let testPassword: string;
+
     beforeEach(async () => {
       // Clear and create a user before login tests
       await db.delete(users);
       await db.delete(tenants);
 
+      const id = uniqueId();
+      testEmail = `john-${id}@test.com`;
+      testPassword = 'SecurePass123!';
+
       await request(app).post('/api/auth/register').send({
         name: 'John Doe',
-        email: 'john@test.com',
-        password: 'SecurePass123!',
-        companyName: 'Test Company',
+        email: testEmail,
+        password: testPassword,
+        companyName: `Test Company ${id}`,
       });
     });
 
     it('should return tokens with valid credentials', async () => {
       const response = await request(app).post('/api/auth/login').send({
-        email: 'john@test.com',
-        password: 'SecurePass123!',
+        email: testEmail,
+        password: testPassword,
       });
 
       expect(response.status).toBe(200);
@@ -106,12 +127,12 @@ describe('Auth Endpoints', () => {
       expect(response.body.data).toHaveProperty('tokens');
       expect(response.body.data.tokens).toHaveProperty('accessToken');
       expect(response.body.data.tokens).toHaveProperty('refreshToken');
-      expect(response.body.data.user.email).toBe('john@test.com');
+      expect(response.body.data.user.email).toBe(testEmail);
     });
 
     it('should return 401 with invalid credentials', async () => {
       const response = await request(app).post('/api/auth/login').send({
-        email: 'john@test.com',
+        email: testEmail,
         password: 'WrongPassword123!',
       });
 
@@ -133,14 +154,18 @@ describe('Auth Endpoints', () => {
 
   describe('GET /api/auth/me', () => {
     let accessToken: string;
+    let testEmail: string;
 
     beforeEach(async () => {
       // Create a user and get token
+      const id = uniqueId();
+      testEmail = `john-${id}@test.com`;
+
       const registerResponse = await request(app).post('/api/auth/register').send({
         name: 'John Doe',
-        email: 'john@test.com',
+        email: testEmail,
         password: 'SecurePass123!',
-        companyName: 'Test Company',
+        companyName: `Test Company ${id}`,
       });
 
       accessToken = registerResponse.body.data.tokens.accessToken;
@@ -155,7 +180,7 @@ describe('Auth Endpoints', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data).toEqual(
         expect.objectContaining({
-          email: 'john@test.com',
+          email: testEmail,
           role: 'owner',
         })
       );
@@ -191,11 +216,12 @@ describe('Auth Endpoints', () => {
     let refreshToken: string;
 
     beforeEach(async () => {
+      const id = uniqueId();
       const registerResponse = await request(app).post('/api/auth/register').send({
         name: 'John Doe',
-        email: 'john@test.com',
+        email: `john-${id}@test.com`,
         password: 'SecurePass123!',
-        companyName: 'Test Company',
+        companyName: `Test Company ${id}`,
       });
 
       refreshToken = registerResponse.body.data.tokens.refreshToken;
@@ -228,11 +254,12 @@ describe('Auth Endpoints', () => {
     let accessToken: string;
 
     beforeEach(async () => {
+      const id = uniqueId();
       const registerResponse = await request(app).post('/api/auth/register').send({
         name: 'John Doe',
-        email: 'john@test.com',
+        email: `john-${id}@test.com`,
         password: 'SecurePass123!',
-        companyName: 'Test Company',
+        companyName: `Test Company ${id}`,
       });
 
       accessToken = registerResponse.body.data.tokens.accessToken;
