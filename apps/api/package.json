@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --loader ts-node/esm src/index.ts",
+    "dev": "TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm src/index.ts",
     "build": "tsc",
     "lint": "eslint src --ext .ts"
   },

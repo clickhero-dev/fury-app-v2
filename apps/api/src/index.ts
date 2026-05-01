@@ -1,8 +1,9 @@
-/// <reference path="./types/express.d.ts" />
 import express from 'express';
 import { loggerMiddleware } from './middleware/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
+import { closeRedis } from './lib/redis.js';
+import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,12 +35,18 @@ app.use((req, res) => {
 const server = app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
   console.log(`📝 Environment: ${NODE_ENV}`);
+
+  void startSyncJobsWorker().catch((error) => {
+    console.error('Failed to start Meta sync worker:', error);
+  });
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
-  server.close(() => {
+  server.close(async () => {
+    await stopSyncJobsWorker();
+    await closeRedis();
     console.log('Server closed');
     process.exit(0);
   });
