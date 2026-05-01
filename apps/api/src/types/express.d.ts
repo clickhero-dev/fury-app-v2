@@ -9,7 +9,11 @@ declare global {
         email: string;
         role: string;
       };
-      tenantId?: string;
+      tenant?: {
+        tenantId: string;
+      };
     }
   }
 }
+
+export {};
