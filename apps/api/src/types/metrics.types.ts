@@ -31,14 +31,61 @@ export const campaignsQuerySchema = z.object({
   { message: 'endDate must be >= startDate', path: ['endDate'] }
 );
 
-export const dailyQuerySchema = z.object({
-  startDate: dateSchema,
-  endDate: dateSchema,
-  adAccountId: z.string().optional(),
-}).refine(
-  (data) => new Date(data.endDate) >= new Date(data.startDate),
-  { message: 'endDate must be >= startDate', path: ['endDate'] }
-);
+export const dailyQuerySchema = z
+  .object({
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    adAccountId: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (data.startDate === undefined || data.startDate.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'startDate is required',
+        path: ['startDate'],
+      });
+    } else if (!dateRe.test(data.startDate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invalid date format. Use YYYY-MM-DD',
+        path: ['startDate'],
+      });
+    }
+
+    if (data.endDate === undefined || data.endDate.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDate is required',
+        path: ['endDate'],
+      });
+    } else if (!dateRe.test(data.endDate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invalid date format. Use YYYY-MM-DD',
+        path: ['endDate'],
+      });
+    }
+
+    if (
+      data.startDate &&
+      data.endDate &&
+      dateRe.test(data.startDate) &&
+      dateRe.test(data.endDate) &&
+      new Date(data.endDate) < new Date(data.startDate)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDate must be >= startDate',
+        path: ['endDate'],
+      });
+    }
+  })
+  .transform((data) => ({
+    startDate: data.startDate as string,
+    endDate: data.endDate as string,
+    adAccountId: data.adAccountId,
+  }));
 
 // ==================== Response Types ====================
 

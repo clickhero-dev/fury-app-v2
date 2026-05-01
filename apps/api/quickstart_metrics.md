@@ -28,6 +28,8 @@ eyJ1c2VySWQiOiJ0ZW5hbnRfMTIzIn0K
 
 Salve este token - você vai usar em todas as requisições.
 
+Com `META_USE_MOCK=true` no `.env` (padrão deste guia), a API aceita este token base64 em desenvolvimento. Fora desse modo, use um **JWT** válido (por exemplo o retornado em `/api/auth/login`).
+
 ### 3. Configurar variáveis de ambiente
 
 Já existe um arquivo `.env` configurado em `/apps/api` com:
@@ -89,17 +91,19 @@ curl -X GET "$API/metrics/summary?startDate=2026-04-20&endDate=2026-04-29" \
 {
   "success": true,
   "data": {
-    "spend": 162,
-    "impressions": 48400,
-    "clicks": 1280,
+    "spend": 486,
+    "impressions": 145200,
+    "clicks": 3840,
     "ctr": 2.64,
     "cpm": 3.35,
-    "cpa": 4.91,
+    "cpa": 4.86,
     "roas": 3.2,
-    "conversions": 33
+    "conversions": 100
   }
 }
 ```
+
+(Agrega os últimos ~30 dias até a data atual; alinhado ao mock em `META_USE_MOCK=true`.)
 
 ---
 
