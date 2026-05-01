@@ -12,10 +12,14 @@
     "dev": "npm run --workspaces --if-present dev",
     "build": "npm run --workspaces --if-present build",
     "lint": "npm run --workspaces --if-present lint",
+    "test": "npm run --workspaces --if-present test",
     "db:migrate": "npm run --workspace @fury/db migrate",
     "db:studio": "npm run --workspace @fury/db studio"
   },
   "devDependencies": {
+    "@eslint/js": "^9.33.0",
+    "eslint": "^9.33.0",
+    "typescript-eslint": "^8.40.0",
     "typescript": "^5.3.3"
   }
 }

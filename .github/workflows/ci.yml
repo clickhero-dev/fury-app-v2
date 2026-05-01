@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - &checkout
+        uses: actions/checkout@v4
+      - &setup_node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - &npm_ci
+        run: npm ci
+      - run: npm run --workspace @fury/api lint
+      - run: npm run --workspace @fury/web lint
+
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+      - *setup_node
+      - *npm_ci
+      - run: npm exec tsc -- --noEmit -p tsconfig.json
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+      - *setup_node
+      - *npm_ci
+      - run: npm test
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - *checkout
+      - *setup_node
+      - *npm_ci
+      - run: npm run --workspace @fury/api build
+
