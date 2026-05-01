@@ -34,6 +34,20 @@ app.use((req, res) => {
   });
 });
 
+let server: any;
+if (NODE_ENV !== 'test') {
+  server = app.listen(PORT, () => {
+    console.log(`✅ Server running on http://localhost:${PORT}`);
+    console.log(`📝 Environment: ${NODE_ENV}`);
+  });
+
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully...');
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
 const server = app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
   console.log(`📝 Environment: ${NODE_ENV}`);
@@ -52,6 +66,6 @@ process.on('SIGTERM', () => {
     console.log('Server closed');
     process.exit(0);
   });
-});
+}
 
 export default app;

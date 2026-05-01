@@ -10,7 +10,8 @@
     "dev": "node --loader ts-node/esm src/index.ts",
     "generate": "drizzle-kit generate:pg",
     "migrate": "node --loader ts-node/esm src/migrate.ts",
-    "studio": "drizzle-kit studio"
+    "studio": "drizzle-kit studio",
+    "db:seed": "node --loader ts-node/esm src/seed.ts"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
@@ -20,6 +21,8 @@
   },
   "dependencies": {
     "@fury/shared": "*",
+    "bcryptjs": "^2.4.3",
+    "drizzle-orm": "^0.30.10",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.4"
   }
