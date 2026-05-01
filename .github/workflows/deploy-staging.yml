@@ -1,0 +1,24 @@
+name: Deploy (Staging)
+
+on:
+  push:
+    branches:
+      - develop
+
+concurrency:
+  group: deploy-staging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run --workspace @fury/api build
+      - run: echo "Deploy para staging configurado — adicionar servidor aqui"
+
