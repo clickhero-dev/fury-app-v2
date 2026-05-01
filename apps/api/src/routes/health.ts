@@ -1,15 +1,15 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { HealthCheckResponse } from '@fury/shared';
 
 const router = Router();
 
-router.get('/health', (req: Request, res: Response) => {
-  const startTime = process.uptime ? process.uptime() : 0;
+router.get('/', (_req, res) => {
   const response: HealthCheckResponse = {
     status: 'ok',
     timestamp: new Date().toISOString(),
-    uptime: startTime,
+    uptime: process.uptime(),
   };
+
   res.json(response);
 });
 

@@ -1,17 +1,9 @@
+/// <reference path="./types/express.d.ts" />
 import 'dotenv/config';
-import express, { Request } from 'express';
+import express from 'express';
 import { loggerMiddleware } from './middleware/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: { userId: string };
-      tenant?: { tenantId: string };
-    }
-  }
-}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,13 +15,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use(loggerMiddleware);
 
 // Routes
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-  });
-});
-
 app.use('/api', routes);
 
 // Error handling

@@ -1,36 +1,26 @@
 import { Request, Response, NextFunction } from 'express';
+import { verifyAccessToken } from '../lib/jwt.js';
+import { AppError } from './errorHandler.js';
 
-export function authMiddleware(req: Request, res: Response, next: NextFunction) {
+export function authMiddleware(req: Request, _res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({
-      success: false,
-      error: {
-        code: 'UNAUTHORIZED',
-        message: 'Missing or invalid Authorization header',
-      },
-    });
+    return next(new AppError(401, 'UNAUTHORIZED', 'Missing or invalid authorization header'));
   }
 
-  const token = authHeader.slice(7);
+  const token = authHeader.substring(7);
 
   try {
-    const decoded = JSON.parse(Buffer.from(token, 'base64').toString());
-
-    if (!decoded.userId) {
-      throw new Error('Invalid token structure');
-    }
-
-    req.user = { userId: decoded.userId };
+    const payload = verifyAccessToken(token);
+    req.user = {
+      userId: payload.userId,
+      tenantId: payload.tenantId,
+      email: payload.email,
+      role: payload.role,
+    };
     next();
   } catch (error) {
-    return res.status(401).json({
-      success: false,
-      error: {
-        code: 'UNAUTHORIZED',
-        message: 'Invalid token',
-      },
-    });
+    next(error);
   }
 }
