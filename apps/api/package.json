@@ -19,6 +19,7 @@
     "@anthropic-ai/sdk": "^0.92.0",
     "@fury/db": "*",
     "@fury/shared": "*",
+    "bullmq": "^5.58.5",
     "express": "^4.18.2",
     "ioredis": "^5.10.1",
     "zod": "^3.22.4"

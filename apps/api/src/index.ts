@@ -2,6 +2,7 @@ import express from 'express';
 import { loggerMiddleware } from './middleware/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
+import { initWorkers, shutdownWorkers } from './workers/index.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -40,12 +41,25 @@ app.use((req, res) => {
 const server = app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
   console.log(`📝 Environment: ${NODE_ENV}`);
+
+  initWorkers().catch((err) => {
+    console.error('[workers] failed to start:', (err as Error).message);
+  });
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
   server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  server.close(async () => {
+    await shutdownWorkers().catch(() => undefined);
     console.log('Server closed');
     process.exit(0);
   });
