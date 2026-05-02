@@ -19,6 +19,10 @@ type MetaApiErrorPayload = {
   };
 };
 
+type MetaApiError = Error & {
+  metaCode?: number;
+  delay?: number;
+};
 function mapMetaCampaignStatus(status: unknown): 'draft' | 'active' | 'paused' | 'archived' {
   const s = String(status ?? '').toUpperCase();
   if (s === 'ACTIVE') return 'active';
@@ -52,7 +56,7 @@ async function metaGetJson<T>(path: string): Promise<T> {
       maybeErr?.error?.message ||
       (typeof json === 'object' ? JSON.stringify(json) : String(json));
     const err = new Error(`[Meta] ${code ?? res.status}: ${message}`);
-    (err as any).metaCode = code;
+    (err as MetaApiError).metaCode = code;
     throw err;
   }
 
@@ -155,7 +159,7 @@ export function createCampaignSyncWorker(connection: IORedis) {
           `/${encodeURIComponent(MOCK_AD_ACCOUNT)}/campaigns?fields=id,name,status,daily_budget,lifetime_budget,objective`
         );
       } catch (err) {
-        const code = (err as any)?.metaCode as number | undefined;
+        const code = (err as MetaApiError).metaCode;
 
         if (code === 17 || code === 80004) {
           // Rate limit: retry after 5 minutes
@@ -186,7 +190,7 @@ export function createCampaignSyncWorker(connection: IORedis) {
             `/${encodeURIComponent(c.id)}/insights?fields=spend,impressions,clicks,ctr,cpm,cpp,actions&date_preset=last_7d`
           );
         } catch (err) {
-          const code = (err as any)?.metaCode as number | undefined;
+          const code = (err as MetaApiError).metaCode;
 
           if (code === 17 || code === 80004) {
             throw Object.assign(err as Error, { delay: 5 * 60 * 1000 });
@@ -243,7 +247,7 @@ export function createCampaignSyncWorker(connection: IORedis) {
       // We implement retry delays via `err.delay` on rate limit errors.
       settings: {
         backoffStrategy: (attemptsMade, type, err) => {
-          const delay = (err as any)?.delay;
+          const delay = (err as MetaApiError | undefined)?.delay;
           if (typeof delay === 'number') return delay;
           return Math.min(30_000, attemptsMade * 2_000);
         },
