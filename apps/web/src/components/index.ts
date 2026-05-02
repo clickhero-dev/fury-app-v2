@@ -6,6 +6,7 @@ export { Input } from './ui/input';
 // Layout Components
 export { AuthLayout } from './AuthLayout';
 export { AppLayout } from './layout/AppLayout';
+export { Sidebar } from './Sidebar';
 
 // Feature Components
 export { FormField } from './FormField';

@@ -29,10 +29,10 @@ export function DataTable<T extends Record<string, any>>({
 }: DataTableProps<T>) {
   if (isLoading) {
     return (
-      <div className={cn('bg-white rounded-2xl border border-[#E0E0E0] p-8', className)}>
+      <div className={cn('bg-surface rounded-xl border border-border p-8', className)}>
         <div className="flex items-center justify-center gap-3">
-          <div className="w-4 h-4 bg-[#E8631A] rounded-full animate-bounce" />
-          <span className="text-[#6E7681]">Carregando...</span>
+          <div className="w-4 h-4 bg-accent rounded-full animate-bounce" />
+          <span className="text-text-secondary">Carregando...</span>
         </div>
       </div>
     );
@@ -40,25 +40,25 @@ export function DataTable<T extends Record<string, any>>({
 
   if (isEmpty || data.length === 0) {
     return (
-      <div className={cn('bg-white rounded-2xl border border-[#E0E0E0] p-8', className)}>
+      <div className={cn('bg-surface rounded-xl border border-border p-8', className)}>
         <div className="flex items-center justify-center py-12">
-          <span className="text-[#6E7681]">{emptyMessage}</span>
+          <span className="text-text-secondary">{emptyMessage}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={cn('bg-white rounded-2xl border border-[#E0E0E0] overflow-hidden', className)}>
+    <div className={cn('bg-surface rounded-xl border border-border overflow-hidden', className)}>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-[#E0E0E0] bg-[#F6F8FA]">
+            <tr className="border-b border-border bg-surface-secondary">
               {columns.map((column) => (
                 <th
                   key={String(column.key)}
                   className={cn(
-                    'px-6 py-4 text-left font-semibold text-[#6E7681] text-sm',
+                    'px-6 py-4 text-left font-semibold text-text-secondary text-sm',
                     column.align === 'center' && 'text-center',
                     column.align === 'right' && 'text-right'
                   )}
@@ -73,7 +73,7 @@ export function DataTable<T extends Record<string, any>>({
               <tr
                 key={String(row[keyField])}
                 className={cn(
-                  'border-b border-[#E0E0E0] hover:bg-[#F6F8FA] transition-colors',
+                  'border-b border-border hover:bg-surface-secondary transition-colors',
                   index === data.length - 1 && 'border-b-0'
                 )}
               >
@@ -81,7 +81,7 @@ export function DataTable<T extends Record<string, any>>({
                   <td
                     key={String(column.key)}
                     className={cn(
-                      'px-6 py-4 text-[#1C1C1E] text-sm',
+                      'px-6 py-4 text-text-primary text-sm',
                       column.align === 'center' && 'text-center',
                       column.align === 'right' && 'text-right'
                     )}

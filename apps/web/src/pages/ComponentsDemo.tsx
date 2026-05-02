@@ -163,7 +163,7 @@ export function ComponentsDemo() {
         <section className="space-y-4">
           <h3 className="text-lg font-bold text-[#1C1C1E]">Componentes Disponíveis</h3>
           <DataTable
-            columns={tableColumns}
+            columns={tableColumns as any}
             data={demoTableData}
             keyField="id"
           />
@@ -180,9 +180,9 @@ export function ComponentsDemo() {
                 <Button variant="primary" size="lg">Primary Large</Button>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button variant="secondary" size="sm">Secondary Small</Button>
-                <Button variant="secondary" size="md">Secondary Medium</Button>
-                <Button variant="secondary" size="lg">Secondary Large</Button>
+                <Button variant="outline" size="sm">Outline Small</Button>
+                <Button variant="outline" size="md">Outline Medium</Button>
+                <Button variant="outline" size="lg">Outline Large</Button>
               </div>
               <div className="flex flex-wrap gap-3">
                 <Button variant="outline" size="sm">Outline Small</Button>

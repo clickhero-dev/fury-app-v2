@@ -103,8 +103,8 @@ export function Campanhas() {
     {
       key: 'type' as const,
       label: 'Tipo',
-      render: (value: string) => (
-        <span className="inline-flex items-center gap-2 px-3 py-1 bg-[#E8631A]/10 text-[#E8631A] rounded-lg text-xs font-semibold">
+      render: (value: any) => (
+        <span className="inline-flex items-center gap-2 px-3 py-1 bg-accent-light/10 text-accent-light rounded-lg text-xs font-semibold">
           {value}
         </span>
       ),
@@ -113,7 +113,7 @@ export function Campanhas() {
       key: 'startDate' as const,
       label: 'Período',
       render: (_: string, row: CampaignItem) => (
-        <span className="text-[#1C1C1E] text-sm">
+        <span className="text-text-primary text-sm">
           {row.startDate} a {row.endDate}
         </span>
       ),
@@ -131,14 +131,14 @@ export function Campanhas() {
     {
       key: 'status' as const,
       label: 'Status',
-      render: (value: string) => (
+      render: (value: any) => (
         <span
           className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold ${
             value === 'ativo'
-              ? 'bg-[#2EA043]/10 text-[#2EA043]'
+              ? 'bg-success-light text-success'
               : value === 'pausado'
-                ? 'bg-[#FFB81C]/10 text-[#FFB81C]'
-                : 'bg-[#6E7681]/10 text-[#6E7681]'
+                ? 'bg-warning-light text-warning'
+                : 'bg-[#6E7681]/10 text-text-secondary'
           }`}
         >
           {value.charAt(0).toUpperCase() + value.slice(1)}
@@ -151,12 +151,12 @@ export function Campanhas() {
       align: 'right' as const,
       render: () => (
         <div className="flex items-center gap-2">
-          <button className="p-1 hover:bg-[#F6F8FA] rounded-lg transition-colors">
-            <svg className="w-4 h-4 text-[#6E7681]" fill="currentColor" viewBox="0 0 20 20">
+          <button className="p-1 hover:bg-surface-secondary rounded-lg transition-colors">
+            <svg className="w-4 h-4 text-text-secondary" fill="currentColor" viewBox="0 0 20 20">
               <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
             </svg>
           </button>
-          <button className="p-1 hover:bg-red-50 rounded-lg transition-colors">
+          <button className="p-1 hover:bg-error-light rounded-lg transition-colors">
             <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
@@ -193,7 +193,7 @@ export function Campanhas() {
     <AppLayout
       header={
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-[#1C1C1E]">Campanhas</h2>
+          <h2 className="text-lg font-bold text-text-primary">Campanhas</h2>
           <Button variant="primary" size="sm">
             + Nova Campanha
           </Button>
@@ -217,7 +217,7 @@ export function Campanhas() {
                   className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
                     filter === option.value
                       ? 'bg-[#E8631A] text-white'
-                      : 'bg-[#F6F8FA] text-[#6E7681] hover:bg-[#E0E0E0]'
+                      : 'bg-surface-secondary text-text-secondary hover:bg-border'
                   }`}
                 >
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">

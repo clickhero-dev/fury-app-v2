@@ -16,22 +16,21 @@ export function MetricCard({
   change,
   changeLabel,
   icon,
-  trend = 'neutral',
 }: MetricCardProps) {
   const isPositive = change && change > 0;
   const isNegative = change && change < 0;
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E0E0E0] p-6 space-y-4 hover:shadow-lg transition-shadow">
+    <div className="bg-surface rounded-xl border border-border p-6 space-y-4 hover:shadow-lg transition-shadow">
       {/* Header with icon and label */}
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-[#6E7681]">{label}</p>
-        {icon && <div className="text-[#E8631A]">{icon}</div>}
+        <p className="text-sm font-semibold text-text-secondary">{label}</p>
+        {icon && <div className="text-accent">{icon}</div>}
       </div>
 
       {/* Main value */}
       <div className="space-y-2">
-        <div className="text-4xl font-black text-[#1C1C1E]">{value}</div>
+        <div className="text-4xl font-black text-text-primary">{value}</div>
 
         {/* Change badge */}
         {change !== undefined && (
@@ -39,9 +38,9 @@ export function MetricCard({
             <span
               className={cn(
                 'inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg',
-                isPositive && 'bg-[#2EA043]/10 text-[#2EA043]',
-                isNegative && 'bg-[#DA3633]/10 text-[#DA3633]',
-                !isPositive && !isNegative && 'bg-[#6E7681]/10 text-[#6E7681]'
+                isPositive && 'bg-success-light text-success',
+                isNegative && 'bg-error-light text-error',
+                !isPositive && !isNegative && 'bg-border text-text-tertiary'
               )}
             >
               {isPositive && (
@@ -57,7 +56,7 @@ export function MetricCard({
               <span>{Math.abs(change)}%</span>
             </span>
             {changeLabel && (
-              <span className="text-xs text-[#6E7681]">{changeLabel}</span>
+              <span className="text-xs text-text-secondary">{changeLabel}</span>
             )}
           </div>
         )}

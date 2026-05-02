@@ -122,7 +122,7 @@ export function Dashboard() {
     {
       key: 'status' as const,
       label: 'Status',
-      render: (value: string) => (
+      render: (value: any) => (
         <span
           className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold ${
             value === 'ativo'
@@ -140,19 +140,19 @@ export function Dashboard() {
       key: 'impressions' as const,
       label: 'Impressões',
       align: 'right' as const,
-      render: (value: number) => value.toLocaleString('pt-BR'),
+      render: (value: any) => (value as number).toLocaleString('pt-BR'),
     },
     {
       key: 'clicks' as const,
       label: 'Cliques',
       align: 'right' as const,
-      render: (value: number) => value.toLocaleString('pt-BR'),
+      render: (value: any) => (value as number).toLocaleString('pt-BR'),
     },
     {
       key: 'conversions' as const,
       label: 'Conversões',
       align: 'right' as const,
-      render: (value: number) => value.toLocaleString('pt-BR'),
+      render: (value: any) => (value as number).toLocaleString('pt-BR'),
     },
     {
       key: 'roi' as const,
@@ -193,7 +193,7 @@ export function Dashboard() {
         {/* Recent Campaigns */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-[#1C1C1E]">Campanhas Recentes</h3>
+            <h3 className="text-lg font-bold text-text-primary">Campanhas Recentes</h3>
             <Button variant="ghost" size="sm">
               Ver Todas
             </Button>

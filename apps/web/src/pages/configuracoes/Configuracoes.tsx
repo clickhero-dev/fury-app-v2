@@ -55,7 +55,7 @@ export function Configuracoes() {
     <AppLayout
       header={
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-[#1C1C1E]">Configurações</h2>
+          <h2 className="text-lg font-bold text-text-primary">Configurações</h2>
         </div>
       }
     >
@@ -69,15 +69,15 @@ export function Configuracoes() {
           {/* Sidebar Navigation */}
           <aside className="lg:col-span-1">
             <Card>
-              <div className="p-0 divide-y divide-[#E0E0E0]">
+              <div className="p-0 divide-y divide-border">
                 {settingsTabs.map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={`w-full px-4 py-3 flex items-center gap-3 font-semibold text-sm transition-colors ${
                       activeTab === tab.id
-                        ? 'bg-[#E8631A]/10 text-[#E8631A]'
-                        : 'text-[#6E7681] hover:bg-[#F6F8FA]'
+                        ? 'bg-accent-light/10 text-accent'
+                        : 'text-text-secondary hover:bg-surface-secondary'
                     }`}
                   >
                     {tab.icon}
@@ -95,56 +95,56 @@ export function Configuracoes() {
               <Card>
                 <div className="p-6 space-y-6">
                   <div>
-                    <h3 className="text-lg font-bold text-[#1C1C1E] mb-4">Informações da Conta</h3>
+                    <h3 className="text-lg font-bold text-text-primary mb-4">Informações da Conta</h3>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-semibold text-[#6E7681] mb-2">
+                        <label className="block text-sm font-semibold text-text-secondary mb-2">
                           Nome Completo
                         </label>
                         <input
                           type="text"
                           defaultValue="Mallyssa Silva"
-                          className="w-full px-4 py-2 border border-[#E0E0E0] rounded-lg text-[#1C1C1E] focus:outline-none focus:ring-2 focus:ring-[#E8631A]"
+                          className="w-full px-4 py-2 border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-[#6E7681] mb-2">
+                        <label className="block text-sm font-semibold text-text-secondary mb-2">
                           Email
                         </label>
                         <input
                           type="email"
                           defaultValue="mallyssa@example.com"
-                          className="w-full px-4 py-2 border border-[#E0E0E0] rounded-lg text-[#1C1C1E] focus:outline-none focus:ring-2 focus:ring-[#E8631A]"
+                          className="w-full px-4 py-2 border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-[#6E7681] mb-2">
+                        <label className="block text-sm font-semibold text-text-secondary mb-2">
                           Organização
                         </label>
                         <input
                           type="text"
                           defaultValue="FURY"
-                          className="w-full px-4 py-2 border border-[#E0E0E0] rounded-lg text-[#1C1C1E] focus:outline-none focus:ring-2 focus:ring-[#E8631A]"
+                          className="w-full px-4 py-2 border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div className="border-t border-[#E0E0E0] pt-6">
-                    <h3 className="text-lg font-bold text-[#1C1C1E] mb-4">Preferências</h3>
+                  <div className="border-t border-border pt-6">
+                    <h3 className="text-lg font-bold text-text-primary mb-4">Preferências</h3>
                     <div className="space-y-4">
                       <label className="flex items-center gap-3 cursor-pointer">
                         <input type="checkbox" defaultChecked className="w-4 h-4" />
-                        <span className="text-sm font-semibold text-[#1C1C1E]">Modo Escuro</span>
+                        <span className="text-sm font-semibold text-text-primary">Modo Escuro</span>
                       </label>
                       <label className="flex items-center gap-3 cursor-pointer">
                         <input type="checkbox" defaultChecked className="w-4 h-4" />
-                        <span className="text-sm font-semibold text-[#1C1C1E]">Modo Compacto</span>
+                        <span className="text-sm font-semibold text-text-primary">Modo Compacto</span>
                       </label>
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-3 pt-4 border-t border-[#E0E0E0]">
+                  <div className="flex justify-end gap-3 pt-4 border-t border-border">
                     <Button variant="outline" size="md">
                       Cancelar
                     </Button>
@@ -161,33 +161,33 @@ export function Configuracoes() {
               <Card>
                 <div className="p-6 space-y-6">
                   <div>
-                    <h3 className="text-lg font-bold text-[#1C1C1E] mb-4">Preferências de Notificação</h3>
+                    <h3 className="text-lg font-bold text-text-primary mb-4">Preferências de Notificação</h3>
                     <div className="space-y-4">
-                      <label className="flex items-center justify-between p-4 border border-[#E0E0E0] rounded-lg hover:bg-[#F6F8FA] transition-colors cursor-pointer">
+                      <label className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-surface-secondary transition-colors cursor-pointer">
                         <div>
-                          <p className="font-semibold text-[#1C1C1E]">Campanhas</p>
-                          <p className="text-sm text-[#6E7681]">Notificações sobre campanhas ativas</p>
+                          <p className="font-semibold text-text-primary">Campanhas</p>
+                          <p className="text-sm text-text-secondary">Notificações sobre campanhas ativas</p>
                         </div>
                         <input type="checkbox" defaultChecked className="w-5 h-5" />
                       </label>
-                      <label className="flex items-center justify-between p-4 border border-[#E0E0E0] rounded-lg hover:bg-[#F6F8FA] transition-colors cursor-pointer">
+                      <label className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-surface-secondary transition-colors cursor-pointer">
                         <div>
-                          <p className="font-semibold text-[#1C1C1E]">Performance</p>
-                          <p className="text-sm text-[#6E7681]">Alertas de performance e relatórios</p>
+                          <p className="font-semibold text-text-primary">Performance</p>
+                          <p className="text-sm text-text-secondary">Alertas de performance e relatórios</p>
                         </div>
                         <input type="checkbox" defaultChecked className="w-5 h-5" />
                       </label>
-                      <label className="flex items-center justify-between p-4 border border-[#E0E0E0] rounded-lg hover:bg-[#F6F8FA] transition-colors cursor-pointer">
+                      <label className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-surface-secondary transition-colors cursor-pointer">
                         <div>
-                          <p className="font-semibold text-[#1C1C1E]">Equipe</p>
-                          <p className="text-sm text-[#6E7681]">Notificações da atividade da equipe</p>
+                          <p className="font-semibold text-text-primary">Equipe</p>
+                          <p className="text-sm text-text-secondary">Notificações da atividade da equipe</p>
                         </div>
                         <input type="checkbox" className="w-5 h-5" />
                       </label>
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-3 pt-4 border-t border-[#E0E0E0]">
+                  <div className="flex justify-end gap-3 pt-4 border-t border-border">
                     <Button variant="primary" size="md">
                       Salvar Preferências
                     </Button>
@@ -201,21 +201,21 @@ export function Configuracoes() {
               <Card>
                 <div className="p-6 space-y-6">
                   <div>
-                    <h3 className="text-lg font-bold text-[#1C1C1E] mb-4">Segurança da Conta</h3>
+                    <h3 className="text-lg font-bold text-text-primary mb-4">Segurança da Conta</h3>
                     <div className="space-y-4">
-                      <div className="p-4 border border-[#E0E0E0] rounded-lg flex items-center justify-between">
+                      <div className="p-4 border border-border rounded-lg flex items-center justify-between">
                         <div>
-                          <p className="font-semibold text-[#1C1C1E]">Alterar Senha</p>
-                          <p className="text-sm text-[#6E7681]">Atualize sua senha regularmente</p>
+                          <p className="font-semibold text-text-primary">Alterar Senha</p>
+                          <p className="text-sm text-text-secondary">Atualize sua senha regularmente</p>
                         </div>
                         <Button variant="outline" size="sm">
                           Alterar
                         </Button>
                       </div>
-                      <div className="p-4 border border-[#E0E0E0] rounded-lg flex items-center justify-between">
+                      <div className="p-4 border border-border rounded-lg flex items-center justify-between">
                         <div>
-                          <p className="font-semibold text-[#1C1C1E]">Autenticação de Dois Fatores</p>
-                          <p className="text-sm text-[#6E7681]">Ative para maior segurança</p>
+                          <p className="font-semibold text-text-primary">Autenticação de Dois Fatores</p>
+                          <p className="text-sm text-text-secondary">Ative para maior segurança</p>
                         </div>
                         <Button variant="outline" size="sm">
                           Configurar
@@ -224,14 +224,14 @@ export function Configuracoes() {
                     </div>
                   </div>
 
-                  <div className="border-t border-[#E0E0E0] pt-6">
-                    <h3 className="text-lg font-bold text-[#1C1C1E] mb-4">Sessões Ativas</h3>
-                    <div className="p-4 border border-[#E0E0E0] rounded-lg flex items-center justify-between">
+                  <div className="border-t border-border pt-6">
+                    <h3 className="text-lg font-bold text-text-primary mb-4">Sessões Ativas</h3>
+                    <div className="p-4 border border-border rounded-lg flex items-center justify-between">
                       <div>
-                        <p className="font-semibold text-[#1C1C1E]">Sessão Atual</p>
-                        <p className="text-sm text-[#6E7681]">Windows Chrome - Último acesso: agora</p>
+                        <p className="font-semibold text-text-primary">Sessão Atual</p>
+                        <p className="text-sm text-text-secondary">Windows Chrome - Último acesso: agora</p>
                       </div>
-                      <span className="text-xs font-bold text-[#2EA043]">Ativa</span>
+                      <span className="text-xs font-bold text-success">Ativa</span>
                     </div>
                   </div>
                 </div>
@@ -243,33 +243,33 @@ export function Configuracoes() {
               <Card>
                 <div className="p-6 space-y-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-[#1C1C1E]">Membros da Equipe</h3>
+                    <h3 className="text-lg font-bold text-text-primary">Membros da Equipe</h3>
                     <Button variant="primary" size="sm">
                       + Convidar Membro
                     </Button>
                   </div>
 
                   <div className="space-y-3">
-                    <div className="p-4 border border-[#E0E0E0] rounded-lg flex items-center justify-between">
+                    <div className="p-4 border border-border rounded-lg flex items-center justify-between">
                       <div>
-                        <p className="font-semibold text-[#1C1C1E]">Mallyssa Silva</p>
-                        <p className="text-sm text-[#6E7681]">mallyssa@example.com</p>
+                        <p className="font-semibold text-text-primary">Mallyssa Silva</p>
+                        <p className="text-sm text-text-secondary">mallyssa@example.com</p>
                       </div>
-                      <span className="text-xs font-bold text-[#E8631A]">Proprietário</span>
+                      <span className="text-xs font-bold text-accent">Proprietário</span>
                     </div>
-                    <div className="p-4 border border-[#E0E0E0] rounded-lg flex items-center justify-between">
+                    <div className="p-4 border border-border rounded-lg flex items-center justify-between">
                       <div>
-                        <p className="font-semibold text-[#1C1C1E]">Ricardo Silva</p>
-                        <p className="text-sm text-[#6E7681]">ricardo@example.com</p>
+                        <p className="font-semibold text-text-primary">Ricardo Silva</p>
+                        <p className="text-sm text-text-secondary">ricardo@example.com</p>
                       </div>
-                      <span className="text-xs font-bold text-[#2EA043]">Admin</span>
+                      <span className="text-xs font-bold text-success">Admin</span>
                     </div>
-                    <div className="p-4 border border-[#E0E0E0] rounded-lg flex items-center justify-between">
+                    <div className="p-4 border border-border rounded-lg flex items-center justify-between">
                       <div>
-                        <p className="font-semibold text-[#1C1C1E]">Gabrielle Silva</p>
-                        <p className="text-sm text-[#6E7681]">gabrielle@example.com</p>
+                        <p className="font-semibold text-text-primary">Gabrielle Silva</p>
+                        <p className="text-sm text-text-secondary">gabrielle@example.com</p>
                       </div>
-                      <span className="text-xs font-bold text-[#6E7681]">Membro</span>
+                      <span className="text-xs font-bold text-text-secondary">Membro</span>
                     </div>
                   </div>
                 </div>
@@ -281,29 +281,29 @@ export function Configuracoes() {
               <Card>
                 <div className="p-6 space-y-6">
                   <div>
-                    <h3 className="text-lg font-bold text-[#1C1C1E] mb-4">Plano Atual</h3>
-                    <div className="p-4 border border-[#E0E0E0] rounded-lg bg-[#F6F8FA] space-y-3">
+                    <h3 className="text-lg font-bold text-text-primary mb-4">Plano Atual</h3>
+                    <div className="p-4 border border-border rounded-lg bg-surface-secondary space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-[#6E7681]">Plano</span>
-                        <span className="text-sm font-bold text-[#1C1C1E]">Premium</span>
+                        <span className="text-sm font-semibold text-text-secondary">Plano</span>
+                        <span className="text-sm font-bold text-text-primary">Premium</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-[#6E7681]">Próxima Cobrança</span>
-                        <span className="text-sm font-bold text-[#1C1C1E]">15 de Junho, 2026</span>
+                        <span className="text-sm font-semibold text-text-secondary">Próxima Cobrança</span>
+                        <span className="text-sm font-bold text-text-primary">15 de Junho, 2026</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-[#6E7681]">Valor Mensal</span>
-                        <span className="text-sm font-bold text-[#1C1C1E]">R$ 299,00</span>
+                        <span className="text-sm font-semibold text-text-secondary">Valor Mensal</span>
+                        <span className="text-sm font-bold text-text-primary">R$ 299,00</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="border-t border-[#E0E0E0] pt-6">
-                    <h3 className="text-lg font-bold text-[#1C1C1E] mb-4">Método de Pagamento</h3>
-                    <div className="p-4 border border-[#E0E0E0] rounded-lg flex items-center justify-between">
+                  <div className="border-t border-border pt-6">
+                    <h3 className="text-lg font-bold text-text-primary mb-4">Método de Pagamento</h3>
+                    <div className="p-4 border border-border rounded-lg flex items-center justify-between">
                       <div>
-                        <p className="font-semibold text-[#1C1C1E]">Cartão de Crédito</p>
-                        <p className="text-sm text-[#6E7681]">****  ****  ****  4242</p>
+                        <p className="font-semibold text-text-primary">Cartão de Crédito</p>
+                        <p className="text-sm text-text-secondary">****  ****  ****  4242</p>
                       </div>
                       <Button variant="outline" size="sm">
                         Alterar
@@ -311,7 +311,7 @@ export function Configuracoes() {
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-3 pt-4 border-t border-[#E0E0E0]">
+                  <div className="flex justify-end gap-3 pt-4 border-t border-border">
                     <Button variant="outline" size="md">
                       Cancelar Plano
                     </Button>
