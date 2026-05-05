@@ -2,17 +2,18 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "../..",
-    "baseUrl": "."
+    "rootDir": "./src",
+    "paths": {
+      "@fury/shared": ["../../packages/shared/src/index.ts"],
+      "@fury/db": ["../../packages/db/src/index.ts"]
+    }
   },
   "include": [
-    "src/**/*.ts",
-    "../../packages/shared/src/**/*.ts",
-    "../../packages/db/src/**/*.ts"
+    "src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "src/__tests__/**/*.ts",
+    "src/__tests__",
     "**/*.test.ts",
     "**/*.spec.ts"
   ]
