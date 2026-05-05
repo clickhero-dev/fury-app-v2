@@ -6,3 +6,6 @@ buildCommand = "npm install && npm run build --workspace=packages/shared && npm 
 startCommand = "node --loader ts-node/esm apps/api/src/index.ts"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
+
+[environment]
+NODE_VERSION = "22"
