@@ -20,7 +20,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@fury/shared": "workspace:*"
+    "@fury/shared": "file:../../packages/shared"
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.30.10",
     "drizzle-orm": "^0.45.2",
