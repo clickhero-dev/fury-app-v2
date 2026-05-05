@@ -18,13 +18,11 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
-"@fury/db": "file:../../packages/db",
-"@fury/shared": "file:../../packages/shared"
+    "@fury/db": "file:../../packages/db",
+    "@fury/shared": "file:../../packages/shared",
     "bullmq": "^5.58.5",
     "express": "^4.18.2",
     "ioredis": "^5.10.1",
     "zod": "^3.22.4"
   }
-
-
 }
