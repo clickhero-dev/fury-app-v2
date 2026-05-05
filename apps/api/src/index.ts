@@ -11,18 +11,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(loggerMiddleware);
 
-// Routes
 app.use('/api', routes);
-
-// Error handling
 app.use(errorHandler);
 
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -34,30 +29,16 @@ app.use((req, res) => {
   });
 });
 
-let server: any;
-if (NODE_ENV !== 'test') {
-  server = app.listen(PORT, () => {
-    console.log(`✅ Server running on http://localhost:${PORT}`);
-    console.log(`📝 Environment: ${NODE_ENV}`);
-  });
-
-  // Graceful shutdown
-  process.on('SIGTERM', () => {
-    console.log('SIGTERM received, shutting down gracefully...');
-    server.close(() => {
-      console.log('Server closed');
-      process.exit(0);
-    });
 const server = app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
   console.log(`📝 Environment: ${NODE_ENV}`);
-
-  void startSyncJobsWorker().catch((error) => {
-    console.error('Failed to start Meta sync worker:', error);
-  });
+  if (NODE_ENV !== 'test') {
+    void startSyncJobsWorker().catch((error) => {
+      console.error('Failed to start Meta sync worker:', error);
+    });
+  }
 });
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
   server.close(async () => {
@@ -66,6 +47,6 @@ process.on('SIGTERM', () => {
     console.log('Server closed');
     process.exit(0);
   });
-}
+});
 
 export default app;
