@@ -17,7 +17,6 @@ export async function getAuthUrl(req: Request, res: Response, next: NextFunction
     if (!req.user?.tenantId) {
       throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no token JWT.');
     }
-
     const authUrl = metaService.generateMetaAuthUrl(req.user.tenantId);
     res.status(200).json({
       success: true,
@@ -41,11 +40,10 @@ export async function authCallback(req: Request, res: Response, next: NextFuncti
 
 export async function getConnections(req: Request, res: Response, next: NextFunction) {
   try {
-    if (!req.tenantId) {
+    if (!req.tenant?.tenantId) {
       throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
     }
-
-    const connections = await metaService.getTenantMetaConnections(req.tenantId);
+    const connections = await metaService.getTenantMetaConnections(req.tenant.tenantId);
     res.status(200).json({
       success: true,
       data: connections,
@@ -58,13 +56,11 @@ export async function getConnections(req: Request, res: Response, next: NextFunc
 
 export async function deleteConnection(req: Request, res: Response, next: NextFunction) {
   try {
-    if (!req.tenantId) {
+    if (!req.tenant?.tenantId) {
       throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
     }
-
     const params = connectionIdSchema.parse(req.params);
-    await metaService.deleteTenantMetaConnection(req.tenantId, params.id);
-
+    await metaService.deleteTenantMetaConnection(req.tenant.tenantId, params.id);
     res.status(200).json({
       success: true,
       data: null,

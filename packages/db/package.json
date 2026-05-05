@@ -21,9 +21,7 @@
   },
   "dependencies": {
     "@fury/shared": "*",
-    "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.30.10",
-    "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.4"
   }
 }
