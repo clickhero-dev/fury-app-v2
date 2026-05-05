@@ -1,27 +1,28 @@
 {
-  "name": "@fury/db",
+  "name": "@fury/api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
     "dev": "node --loader ts-node/esm src/index.ts",
-    "generate": "drizzle-kit generate:pg",
-    "migrate": "node --loader ts-node/esm src/migrate.ts",
-    "studio": "drizzle-kit studio",
-    "db:seed": "node --loader ts-node/esm src/seed.ts"
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/ioredis": "^4.28.10",
     "@types/node": "^20.10.6",
-    "drizzle-kit": "^0.31.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@fury/shared": "file:../shared",
-    "drizzle-orm": "^0.30.10",
-    "postgres": "^3.4.4"
+    "@anthropic-ai/sdk": "^0.92.0",
+    "@fury/db": "*",
+    "@fury/shared": "*",
+    "bullmq": "^5.58.5",
+    "express": "^4.18.2",
+    "ioredis": "^5.10.1",
+    "zod": "^3.22.4"
   }
 }

@@ -20,7 +20,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@fury/shared": "file:../shared",
+    "@fury/shared": "*",
     "drizzle-orm": "^0.30.10",
     "postgres": "^3.4.4"
   }
