@@ -1,10 +1,17 @@
+import 'express';
+
 declare global {
   namespace Express {
     interface Request {
-      userId: string;
-      tenantId: string;
+      user?: {
+        userId: string;
+        tenantId: string;
+        email: string;
+        role: string;
+      };
+      userId?: string;
+      tenantId?: string;
+      userRole?: string;
     }
   }
 }
-
-export {};

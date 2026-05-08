@@ -1,11 +1,30 @@
 import Redis from 'ioredis';
 
-export const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-  lazyConnect: true,
-  enableOfflineQueue: false,
-  maxRetriesPerRequest: 1,
-});
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+let redisClient: Redis | null = null;
 
-redis.on('error', (err: Error) => {
-  console.warn('[Redis] Connection error (rate limiting will be skipped):', err.message);
-});
+export function getRedis(): Redis {
+  if (!redisClient) {
+    redisClient = new Redis(redisUrl, {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+    });
+
+    redisClient.on('error', (err) => {
+      console.error('Redis error:', err);
+    });
+
+    redisClient.on('connect', () => {
+      console.log('✅ Redis connected');
+    });
+  }
+
+  return redisClient;
+}
+
+export async function closeRedis(): Promise<void> {
+  if (redisClient) {
+    await redisClient.quit();
+    redisClient = null;
+  }
+}

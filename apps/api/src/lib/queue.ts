@@ -1,15 +1,15 @@
 import { Queue } from 'bullmq';
 import type IORedis from 'ioredis';
-import { redis } from './redis.js';
+import { getRedis } from './redis.js';
 
 /**
  * BullMQ expects dedicated connections; we duplicate the existing ioredis instance
  * so we keep the same URL/options from `redis.ts` without re-declaring them.
  */
 export async function createBullConnection(): Promise<IORedis> {
+  const redis = getRedis();
   const conn = redis.duplicate();
-  // `redis.ts` uses lazyConnect, so ensure the duplicated connection is actually connected.
-  await conn.connect();
+  // `redis.ts` already connected, so connection is ready.
   return conn;
 }
 

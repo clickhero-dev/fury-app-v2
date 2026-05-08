@@ -8,20 +8,21 @@
     "build": "tsc",
     "lint": "eslint src --ext .ts"
   },
+  "dependencies": {
+    "@fury/db": "*",
+    "@fury/shared": "*",
+    "bcryptjs": "^2.4.3",
+    "express": "^4.18.2",
+    "ioredis": "^5.3.2",
+    "jsonwebtoken": "^9.0.0",
+    "zod": "^3.22.4"
+  },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.2",
     "@types/express": "^4.17.21",
-    "@types/ioredis": "^4.28.10",
+    "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.10.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.92.0",
-    "@fury/db": "*",
-    "@fury/shared": "*",
-    "bullmq": "^5.58.5",
-    "express": "^4.18.2",
-    "ioredis": "^5.10.1",
-    "zod": "^3.22.4"
   }
 }

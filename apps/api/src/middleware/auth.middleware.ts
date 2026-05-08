@@ -1,15 +1,25 @@
 import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import { AppError } from './errorHandler.js';
 
-// TODO: Replace with real JWT validation when auth service is implemented.
-// For now, accepts X-User-Id + X-Tenant-Id headers (development/testing only).
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
-  const userId = req.headers['x-user-id'] as string | undefined;
+  const authHeader = req.headers.authorization;
 
-  if (!userId) {
+  if (!authHeader) {
     return next(new AppError(401, 'UNAUTHORIZED', 'Authentication required'));
   }
 
-  req.userId = userId;
-  next();
+  const token = authHeader.replace('Bearer ', '');
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+
+    req.userId = decoded.userId;
+    req.tenantId = decoded.tenantId;
+    req.userRole = decoded.role;
+
+    return next();
+  } catch (err) {
+    return next(new AppError(401, 'UNAUTHORIZED', 'Invalid token'));
+  }
 }

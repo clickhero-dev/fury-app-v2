@@ -17,7 +17,10 @@ const goalSchema = z.object({
 export async function setupGoal(req: Request, res: Response, next: NextFunction) {
   try {
     const data = goalSchema.parse(req.body);
-    const { tenantId } = req;
+    const tenantId = req.tenantId || '';
+    if (!tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+    }
 
     const existing = await db.query.clientGoals.findFirst({
       where: eq(clientGoals.tenantId, tenantId),
@@ -63,8 +66,12 @@ export async function setupGoal(req: Request, res: Response, next: NextFunction)
 
 export async function getGoal(req: Request, res: Response, next: NextFunction) {
   try {
+    const tenantId = req.tenantId || '';
+    if (!tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+    }
     const goal = await db.query.clientGoals.findFirst({
-      where: eq(clientGoals.tenantId, req.tenantId),
+      where: eq(clientGoals.tenantId, tenantId),
     });
 
     if (!goal) {
@@ -84,7 +91,10 @@ export async function getGoal(req: Request, res: Response, next: NextFunction) {
 export async function updateGoal(req: Request, res: Response, next: NextFunction) {
   try {
     const data = goalSchema.parse(req.body);
-    const { tenantId } = req;
+    const tenantId = req.tenantId || '';
+    if (!tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+    }
 
     const existing = await db.query.clientGoals.findFirst({
       where: eq(clientGoals.tenantId, tenantId),

@@ -1,3 +1,4 @@
+import 'dotenv/config.js';
 import express from 'express';
 import { loggerMiddleware } from './middleware/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
