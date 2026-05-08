@@ -10,6 +10,7 @@ export declare enum CreativeType {
 }
 export declare enum ComplianceStatus {
     PENDING = "pending",
+    PENDING_COMPLIANCE = "pending_compliance",
     APPROVED = "approved",
     REJECTED = "rejected"
 }

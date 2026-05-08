@@ -12,6 +12,7 @@ export enum CreativeType {
 
 export enum ComplianceStatus {
   PENDING = 'pending',
+  PENDING_COMPLIANCE = 'pending_compliance',
   APPROVED = 'approved',
   REJECTED = 'rejected',
 }

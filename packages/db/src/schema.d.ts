@@ -1,6 +1,6 @@
 export declare const userRoleEnum: import("drizzle-orm/pg-core").PgEnum<["owner", "admin", "member"]>;
 export declare const creativeTypeEnum: import("drizzle-orm/pg-core").PgEnum<["image", "video", "copy"]>;
-export declare const complianceStatusEnum: import("drizzle-orm/pg-core").PgEnum<["pending", "approved", "rejected"]>;
+export declare const complianceStatusEnum: import("drizzle-orm/pg-core").PgEnum<["pending", "pending_compliance", "approved", "rejected"]>;
 export declare const campaignStatusEnum: import("drizzle-orm/pg-core").PgEnum<["draft", "active", "paused", "archived"]>;
 export declare const tenants: import("drizzle-orm/pg-core").PgTableWithColumns<{
     name: "tenants";
@@ -411,11 +411,11 @@ export declare const creativeAssets: import("drizzle-orm/pg-core").PgTableWithCo
             tableName: "creative_assets";
             dataType: "string";
             columnType: "PgEnumColumn";
-            data: "pending" | "approved" | "rejected";
+            data: "pending" | "pending_compliance" | "approved" | "rejected";
             driverParam: string;
             notNull: true;
             hasDefault: true;
-            enumValues: ["pending", "approved", "rejected"];
+            enumValues: ["pending", "pending_compliance", "approved", "rejected"];
             baseColumn: never;
         }, {}, {}>;
         createdAt: import("drizzle-orm/pg-core").PgColumn<{
