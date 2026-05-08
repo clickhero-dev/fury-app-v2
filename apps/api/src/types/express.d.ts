@@ -15,3 +15,11 @@ declare global {
     }
   }
 }
+      tenant?: {
+        tenantId: string;
+      };
+    }
+  }
+}
+
+export {};

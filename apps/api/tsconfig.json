@@ -10,3 +10,19 @@
   ],
   "exclude": ["node_modules"]
 }
+    "rootDir": "./src",
+    "paths": {
+      "@fury/shared": ["../../packages/shared/src/index.ts"],
+      "@fury/db": ["../../packages/db/src/index.ts"]
+    }
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "src/__tests__",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
+}

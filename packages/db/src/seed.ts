@@ -14,6 +14,29 @@ function encryptAccessToken(token: string): string {
   encrypted += cipher.final('hex');
 
   return `${iv.toString('hex')}:${encrypted}`;
+import crypto from 'node:crypto';
+import { db } from './client.js';
+import * as schema from './schema.js';
+
+const ENCRYPTION_KEY = crypto
+  .createHash('sha256')
+  .update('fury-dev-seed-key-do-not-use-in-production')
+  .digest();
+
+function encryptAccessToken(token: string): string {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+  let encrypted = cipher.update(token, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return iv.toString('hex') + ':' + encrypted;
+}
+
+// Simple hash function using crypto
+function simpleHash(password: string): string {
+  const salt = crypto.randomBytes(16);
+  const iterations = 10000;
+  const hash = crypto.pbkdf2Sync(password, salt, iterations, 64, 'sha256');
+  return salt.toString('hex') + ':' + hash.toString('hex') + ':' + iterations;
 }
 
 async function seedDatabase() {
@@ -23,6 +46,7 @@ async function seedDatabase() {
     // Clear existing data
     console.log('🗑️ Limpando dados existentes...');
 
+    console.log('🗑️  Limpando dados existentes...');
     await db.delete(schema.furyInsights);
     await db.delete(schema.clientGoals);
     await db.delete(schema.campaigns);
@@ -62,6 +86,12 @@ async function seedDatabase() {
 
     const fashionPasswordHash = await bcrypt.hash('Dev@12345', 12);
     const dentalPasswordHash = await bcrypt.hash('Dev@12345', 12);
+    console.log(`✅ Tenants criados: ${fashionTenant.name}, ${dentalTenant.name}`);
+
+    // Create users with simple hash
+    console.log('👤 Criando usuários...');
+    const fashionPasswordHash = simpleHash('Dev@12345');
+    const dentalPasswordHash = simpleHash('Dev@12345');
 
     const fashionUser = (
       await db
@@ -128,6 +158,52 @@ async function seedDatabase() {
     // Create campaigns
     console.log('📢 Criando campanhas...');
 
+    console.log(`✅ Usuários criados: ${fashionUser.email}, ${dentalUser.email}`);
+
+    // Create meta connections
+    console.log('🔗 Criando conexões Meta...');
+    const fashionMetaConnection = (
+      await db
+        .insert(schema.metaConnections)
+        .values({
+          tenantId: fashionTenant.id,
+          metaUserId: 'mock_user_001',
+          accessToken: encryptAccessToken('mock_access_token_dev'),
+          adAccounts: [
+            {
+              id: 'act_111111111',
+              name: 'Loja Fashion SP Ads',
+              account_status: 1,
+              currency: 'BRL',
+            },
+          ] as unknown as any,
+        })
+        .returning()
+    )[0];
+
+    const dentalMetaConnection = (
+      await db
+        .insert(schema.metaConnections)
+        .values({
+          tenantId: dentalTenant.id,
+          metaUserId: 'mock_user_002',
+          accessToken: encryptAccessToken('mock_access_token_dev'),
+          adAccounts: [
+            {
+              id: 'act_222222222',
+              name: 'Clínica Dental Rio Ads',
+              account_status: 1,
+              currency: 'BRL',
+            },
+          ] as unknown as any,
+        })
+        .returning()
+    )[0];
+
+    console.log(`✅ Meta connections criadas`);
+
+    // Create campaigns for fashion tenant
+    console.log('📢 Criando campanhas...');
     const fashionCampaigns = await db
       .insert(schema.campaigns)
       .values([
@@ -138,11 +214,13 @@ async function seedDatabase() {
           status: 'active' as any,
           metrics: {
             spend: 21000000,
+            spend: 21000000, // 210,000 em centavos
             impressions: 68000,
             clicks: 1820,
             ctr: 2.68,
             cpm: 3088,
             cpa: 420000,
+            cpa: 420000, // 4,200 em centavos
             roas: 4.1,
             conversions: 50,
             date_preset: 'last_7d',
@@ -177,6 +255,7 @@ async function seedDatabase() {
             ctr: 2.43,
             cpm: 2857,
             cpa: 885000,
+            cpa: 885000, // 8,850 - 77% acima da meta
             roas: 1.8,
             conversions: 9,
             date_preset: 'last_7d',
@@ -185,6 +264,7 @@ async function seedDatabase() {
       ])
       .returning();
 
+    // Create campaigns for dental tenant
     const dentalCampaigns = await db
       .insert(schema.campaigns)
       .values([
@@ -200,6 +280,7 @@ async function seedDatabase() {
             ctr: 2.8,
             cpm: 3429,
             cpa: 1220000,
+            cpa: 1220000, // 12,200
             roas: 3.2,
             conversions: 10,
             date_preset: 'last_7d',
@@ -217,6 +298,7 @@ async function seedDatabase() {
             ctr: 2.4,
             cpm: 1731,
             cpa: 1440000,
+            cpa: 1440000, // 14,400
             roas: 2.8,
             conversions: 6,
             date_preset: 'last_7d',
@@ -234,6 +316,7 @@ async function seedDatabase() {
             ctr: 2.5,
             cpm: 2778,
             cpa: 800000,
+            cpa: 800000, // 8,000
             roas: 2.1,
             conversions: 6,
             date_preset: 'last_7d',
@@ -249,6 +332,10 @@ async function seedDatabase() {
     // Create client goals
     console.log('🎯 Criando objetivos de clientes...');
 
+    console.log(`✅ ${fashionCampaigns.length + dentalCampaigns.length} campanhas criadas`);
+
+    // Create client goals
+    console.log('🎯 Criando objetivos de clientes...');
     await db.insert(schema.clientGoals).values([
       {
         tenantId: fashionTenant.id,
@@ -261,6 +348,8 @@ async function seedDatabase() {
           amount: 500000,
           currency: 'BRL',
         } as unknown as any,
+        monthlyBudget: { amount: 500000, currency: 'BRL' } as unknown as any,
+        targetCpa: { amount: 500000, currency: 'BRL' } as unknown as any, // 5,000
         niche: 'moda feminina',
       },
       {
@@ -274,6 +363,8 @@ async function seedDatabase() {
           amount: 1500000,
           currency: 'BRL',
         } as unknown as any,
+        monthlyBudget: { amount: 300000, currency: 'BRL' } as unknown as any,
+        targetCpa: { amount: 1500000, currency: 'BRL' } as unknown as any, // 15,000
         niche: 'odontologia estética',
       },
     ]);
@@ -338,6 +429,110 @@ async function seedDatabase() {
     console.log('   ✓ Client Goals: 2');
     console.log('   ✓ Fury Insights: 3');
 
+    console.log(`✅ Client goals criados`);
+
+    // Create fury insights
+    console.log('💡 Criando Fury Insights...');
+    const fashionInsights = await db
+      .insert(schema.furyInsights)
+      .values([
+        {
+          tenantId: fashionTenant.id,
+          campaignId: fashionCampaigns[2].id, // Prospecção Fria
+          suggestionType: 'campaign_pause',
+          suggestionData: {
+            type: 'campaign_pause',
+            priority: 'high',
+            title: 'Pausar campanha com CPA acima da meta',
+            description:
+              'A campanha Prospecção Fria está com CPA de R$88,50, 77% acima da meta de R$50,00. Recomendamos pausar para revisar a segmentação.',
+            expectedImpact: 'Redução de 15-20% no CPA médio',
+          } as unknown as any,
+        },
+        {
+          tenantId: fashionTenant.id,
+          campaignId: fashionCampaigns[1].id, // Retargeting Carrinho
+          suggestionType: 'budget_increase',
+          suggestionData: {
+            type: 'budget_increase',
+            priority: 'medium',
+            title: 'Aumentar orçamento da campanha com melhor ROAS',
+            description:
+              'A campanha Retargeting Carrinho tem ROAS de 5.2x. Recomendamos aumentar o orçamento em 20% para maximizar retorno.',
+            expectedImpact: 'Aumento de 18-22% em conversões',
+          } as unknown as any,
+        },
+        {
+          tenantId: fashionTenant.id,
+          campaignId: fashionCampaigns[0].id, // Campanha Verão
+          suggestionType: 'audience_expansion',
+          suggestionData: {
+            type: 'audience_expansion',
+            priority: 'medium',
+            title: 'Expandir público-alvo',
+            description:
+              'A campanha Verão 2026 tem bom desempenho. Considere expandir para públicos lookalike baseados em conversores.',
+            expectedImpact: 'Crescimento potencial de 10-15% em impressões',
+          } as unknown as any,
+        },
+      ])
+      .returning();
+
+    const dentalInsights = await db
+      .insert(schema.furyInsights)
+      .values([
+        {
+          tenantId: dentalTenant.id,
+          campaignId: dentalCampaigns[0].id, // Leads Implante
+          suggestionType: 'campaign_optimize',
+          suggestionData: {
+            type: 'campaign_optimize',
+            priority: 'high',
+            title: 'Otimizar campanha de leads de implante',
+            description:
+              'A campanha Leads Implante tem CPA de R$12,20. Sugerimos revisar creative assets e públicos para reduzir custo.',
+            expectedImpact: 'Redução potencial de 15-25% no CPA',
+          } as unknown as any,
+        },
+        {
+          tenantId: dentalTenant.id,
+          campaignId: dentalCampaigns[1].id, // Awareness Clareamento
+          suggestionType: 'campaign_pause',
+          suggestionData: {
+            type: 'campaign_pause',
+            priority: 'medium',
+            title: 'Analisar desempenho da campanha Awareness',
+            description:
+              'A campanha está em fase LEARNING com CPA acima da meta. Recomendamos pausar temporariamente para ajustes.',
+            expectedImpact: 'Economia de 20-30% em gastos com publicidade',
+          } as unknown as any,
+        },
+        {
+          tenantId: dentalTenant.id,
+          campaignId: dentalCampaigns[2].id, // Retargeting Site
+          suggestionType: 'reactivate_campaign',
+          suggestionData: {
+            type: 'reactivate_campaign',
+            priority: 'low',
+            title: 'Reativar campanha de retargeting',
+            description:
+              'A campanha Retargeting Site está pausada. Considere reativá-la com orçamento reduzido e segmentação refinada.',
+            expectedImpact: 'Recuperação de 5-10% em conversões',
+          } as unknown as any,
+        },
+      ])
+      .returning();
+
+    console.log(`✅ ${fashionInsights.length + dentalInsights.length} Fury Insights criados`);
+
+    console.log('\n✅ Seed completed successfully!');
+    console.log('\n📊 Summary:');
+    console.log(`   ✓ Tenants: 2`);
+    console.log(`   ✓ Users: 2 (owners)`);
+    console.log(`   ✓ Meta Connections: 2`);
+    console.log(`   ✓ Campaigns: ${fashionCampaigns.length + dentalCampaigns.length}`);
+    console.log(`   ✓ Client Goals: 2`);
+    console.log(`   ✓ Fury Insights: ${fashionInsights.length + dentalInsights.length}`);
     console.log('\n🔐 Default credentials:');
     console.log('   Fashion: dev.fashion@fury.test / Dev@12345');
     console.log('   Dental:  dev.dental@fury.test / Dev@12345');
@@ -349,4 +544,5 @@ async function seedDatabase() {
   }
 }
 
+seedDatabase();
 seedDatabase();

@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  /* Sidebar */
+  --color-sidebar: #E8631A;
+  --color-sidebar-hover: #D45714;
+  --color-sidebar-active: #BF4B10;
+
+  /* Accent */
+  --color-accent: #e8631a;
+  --color-accent-light: #ff8a4a;
+
+  /* Surface */
+  --color-surface: #ffffff;
+  --color-surface-secondary: #f6f8fa;
+  --color-background: #ffffff;
+
+  /* Text */
+  --color-text-primary: #1c1c1e;
+  --color-text-secondary: #6e7681;
+  --color-text-tertiary: #9ca3af;
+
+  /* Border */
+  --color-border: #e0e0e0;
+  --color-border-light: #f0f0f0;
+
+  /* Status */
+  --color-success: #2ea043;
+  --color-success-light: #dff3e4;
+  --color-warning: #e8a317;
+  --color-warning-light: #fff4d6;
+  --color-error: #da3633;
+  --color-error-light: #fde8e7;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--color-background);
+  color: var(--color-text-primary);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  margin: 0;
+}
+
+h1 {
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 1.5rem;
+  line-height: 1.3;
+}
+
+h3 {
+  font-size: 1.25rem;
+  line-height: 1.4;
+}
+
+p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}

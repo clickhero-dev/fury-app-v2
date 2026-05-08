@@ -5,4 +5,7 @@
 		}
 	],
 	"settings": {}
+			"path": "apps/api"
+		}
+	]
 }
