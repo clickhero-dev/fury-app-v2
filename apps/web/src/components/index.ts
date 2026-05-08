@@ -14,5 +14,6 @@ export { MetricCard } from './MetricCard';
 export { PageHeader } from './PageHeader';
 export { DataTable } from './DataTable';
 export { ProtectedRoute } from './ProtectedRoute';
-
-// Note: StatusBadge, LoadingSpinner, and EmptyState are maintained by Gabrielle
+export { StatusBadge } from './StatusBadge';
+export { LoadingSpinner } from './LoadingSpinner';
+export { EmptyState } from './EmptyState';

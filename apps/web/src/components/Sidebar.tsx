@@ -10,7 +10,7 @@ interface SidebarProps {
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Megaphone, label: 'Campanhas', path: '/campanhas' },
-  { icon: Palette, label: 'Estúdio', path: '/estudio-criativo' },
+  { icon: Palette, label: 'Estúdio', path: '/estudio' },
   { icon: Settings, label: 'Configurações', path: '/configuracoes' },
 ];
 
