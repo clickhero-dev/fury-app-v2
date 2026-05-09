@@ -6,6 +6,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
 import { closeRedis } from './lib/redis.js';
 import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
+import { startRuleEngine, stopRuleEngine } from './lib/rule-engine-manager.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,6 +37,9 @@ const server = app.listen(PORT, () => {
     void startSyncJobsWorker().catch((error) => {
       console.error('Failed to start Meta sync worker:', error);
     });
+    void startRuleEngine().catch((error) => {
+      console.error('Failed to start rule engine:', error);
+    });
   }
 });
 
@@ -43,6 +47,7 @@ process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
   server.close(async () => {
     await stopSyncJobsWorker();
+    await stopRuleEngine();
     await closeRedis();
     console.log('Server closed');
     process.exit(0);
