@@ -128,3 +128,57 @@ export async function getMetaUserId(accessToken: string): Promise<string> {
 
   return payload.id;
 }
+
+export interface MetaInsightsAction {
+  action_type: string;
+  value: number | string;
+}
+
+export interface MetaInsightsData {
+  date_start?: string;
+  date_stop?: string;
+  spend?: string;
+  impressions?: string;
+  clicks?: string;
+  ctr?: string;
+  cpm?: string;
+  actions?: MetaInsightsAction[];
+  action_values?: MetaInsightsAction[];
+}
+
+export interface MetaInsightsResponse {
+  data: MetaInsightsData[];
+  paging?: {
+    cursors: {
+      before: string;
+      after: string;
+    };
+    next?: string;
+  };
+}
+
+export async function getMetaInsights(params: {
+  accessToken: string;
+  adAccountId: string;
+  startDate: string;
+  endDate: string;
+  timeIncrement?: number;
+}): Promise<MetaInsightsResponse> {
+  const url = new URL(`${META_GRAPH_BASE_URL}/${params.adAccountId}/insights`);
+  const fields = 'spend,impressions,clicks,ctr,cpm,actions,action_values,date_start,date_stop';
+  const timeRange = JSON.stringify({ since: params.startDate, until: params.endDate });
+
+  url.searchParams.set('fields', fields);
+  url.searchParams.set('time_range', timeRange);
+  url.searchParams.set('access_token', params.accessToken);
+
+  if (params.timeIncrement) {
+    url.searchParams.set('time_increment', params.timeIncrement.toString());
+  }
+
+  const response = await fetch(url, { method: 'GET' });
+  return parseMetaResponse<MetaInsightsResponse>(
+    response,
+    'Falha ao buscar insights da conta de anuncios no Meta.'
+  );
+}
