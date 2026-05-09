@@ -200,4 +200,39 @@ export class MockMetricsProvider implements IMetricsProvider {
       roas: d.roas,
     }));
   }
+
+  async getGoalsProgress(tenantId: string): Promise<
+    Array<{
+      goal: { id: string; metric: string; target: number };
+      current: number;
+      progressPercent: number;
+      onTrack: boolean;
+    }>
+  > {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startDate = monthStart.toISOString().split('T')[0];
+    const endDate = now.toISOString().split('T')[0];
+
+    const summary = await this.getSummary(tenantId, startDate, endDate);
+
+    if (!summary) {
+      return [];
+    }
+
+    return [
+      {
+        goal: { id: 'goal_roas', metric: 'roas', target: 3 },
+        current: summary.roas,
+        progressPercent: (summary.roas / 3) * 100,
+        onTrack: summary.roas >= 3,
+      },
+      {
+        goal: { id: 'goal_conversions', metric: 'conversions', target: 100 },
+        current: summary.conversions,
+        progressPercent: (summary.conversions / 100) * 100,
+        onTrack: summary.conversions >= 100,
+      },
+    ];
+  }
 }

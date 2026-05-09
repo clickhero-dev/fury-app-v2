@@ -109,6 +109,6 @@ export class MetricsService {
       onTrack: boolean;
     }>
   > {
-    return [];
+    return this.provider.getGoalsProgress(tenantId);
   }
 }
