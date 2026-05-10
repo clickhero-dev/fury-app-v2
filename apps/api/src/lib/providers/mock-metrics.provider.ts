@@ -4,7 +4,7 @@ import type {
   MetricsSummaryResponse,
   CampaignResponse,
   DailyMetricsResponse,
-} from '../../types/metrics.types';
+} from '../../types/metrics.types.js';
 import {
   centavosToReais,
   calculateCTR,

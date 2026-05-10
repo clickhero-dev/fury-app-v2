@@ -3,7 +3,7 @@ import type {
   MetricsSummaryResponse,
   CampaignResponse,
   DailyMetricsResponse,
-} from '../../types/metrics.types';
+} from '../../types/metrics.types.js';
 
 export class DatabaseMetricsProvider implements IMetricsProvider {
   async getSummary(

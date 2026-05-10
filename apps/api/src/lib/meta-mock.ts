@@ -1,4 +1,4 @@
-import { CampaignMetricsDB, DailyMetricsDB } from '../types/metrics.types';
+import { CampaignMetricsDB, DailyMetricsDB } from '../types/metrics.types.js';
 
 function generateMockDailyData(): DailyMetricsDB[] {
   const daily: DailyMetricsDB[] = [];
