@@ -1,4 +1,4 @@
-type Status = 'active' | 'paused' | 'rejected' | 'pending' | 'learning';
+type Status = 'active' | 'paused' | 'rejected' | 'pending' | 'learning' | 'approved';
  
 interface StatusBadgeProps {
   status: Status;
@@ -20,6 +20,11 @@ const config: Record<Status, { label: string; dot: string; badge: string }> = {
     label: 'Reprovado',
     dot: 'bg-red-500',
     badge: 'bg-red-50 text-red-700',
+  },
+  approved: {
+    label: 'Aprovado',
+    dot: 'bg-green-500',
+    badge: 'bg-green-50 text-green-700',
   },
   pending: {
     label: 'Pendente',
