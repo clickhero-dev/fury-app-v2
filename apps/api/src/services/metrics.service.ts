@@ -4,7 +4,7 @@ import type {
   CampaignResponse,
   DailyMetricsResponse,
   PaginatedResponse,
-} from '../types/metrics.types';
+} from '../types/metrics.types.js';
 
 export class MetricsService {
   constructor(private provider: IMetricsProvider) {}
