@@ -7,6 +7,8 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Dashboard } from './pages/dashboard/Dashboard';
 import { Campanhas } from './pages/campanhas/Campanhas';
 import { EstudioCriativo } from './pages/estudio-criativo/EstudioCriativo';
+import { EstudioHome } from './pages/estudio/EstudioHome';
+import { GeradorImagem } from './pages/estudio/GeradorImagem';
 import { Configuracoes } from './pages/configuracoes/Configuracoes';
 import { ComponentsDemo } from './pages/ComponentsDemo';
 
@@ -52,6 +54,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <EstudioCriativo />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/estudio',
+    element: (
+      <ProtectedRoute>
+        <EstudioHome />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/estudio/imagem',
+    element: (
+      <ProtectedRoute>
+        <GeradorImagem />
       </ProtectedRoute>
     ),
   },
