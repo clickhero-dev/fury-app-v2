@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { db, metaConnections } from '@fury/db';
 import { eq } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler.js';
-import { getMetaInsights, type MetaInsightsData } from '../meta-api.js';
+import { getMetaInsights, metaApiCall, type MetaInsightsData } from '../meta-api.js';
 import { mockMetrics } from '../meta-mock.js';
 import { IMetricsProvider } from './metrics.provider.js';
 import {
@@ -15,7 +15,11 @@ import type {
   MetricsSummaryResponse,
   CampaignResponse,
   DailyMetricsResponse,
+  CampaignInsightsResponse,
+  AdsetResponse,
+  GoalsProgressResponse,
 } from '../../types/metrics.types.js';
+import { getClientGoals } from '../../services/goal-service.js';
 
 export class DatabaseMetricsProvider implements IMetricsProvider {
   private decryptToken(encryptedPayload: string): string {
@@ -123,6 +127,45 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       cpa,
       roas,
     };
+  }
+
+  private mapMetaInsightToDaily(item: MetaInsightsData): DailyMetricsResponse | null {
+    if (!item.date_start || !item.date_stop) {
+      return null;
+    }
+
+    const spend = parseFloat(item.spend || '0');
+    const impressions = parseInt(item.impressions || '0', 10);
+    const clicks = parseInt(item.clicks || '0', 10);
+
+    const conversions = (item.actions || [])
+      .filter(
+        (a) =>
+          a.action_type === 'purchase' ||
+          a.action_type === 'lead' ||
+          a.action_type === 'offsite_conversion'
+      )
+      .reduce((sum, a) => sum + parseInt(String(a.value), 10), 0);
+
+    const revenue = (item.action_values || [])
+      .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
+      .reduce((sum, a) => sum + parseFloat(String(a.value)), 0);
+
+    const roas = spend > 0 ? revenue / spend : 0;
+
+    return {
+      date: item.date_start,
+      spend: centavosToReais(Math.round(spend * 100)),
+      impressions,
+      clicks,
+      conversions,
+      roas,
+    };
+  }
+
+  private capDailySeries(daily: DailyMetricsResponse[], maxDays: number): DailyMetricsResponse[] {
+    const sorted = [...daily].sort((a, b) => a.date.localeCompare(b.date));
+    return sorted.length <= maxDays ? sorted : sorted.slice(-maxDays);
   }
 
   async getSummary(
@@ -319,11 +362,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     campaignId: string,
     startDate: string,
     endDate: string
-  ): Promise<{
-    campaign: { id: string; name: string; status: string } | null;
-    summary: MetricsSummaryResponse | null;
-    daily: DailyMetricsResponse[];
-  }> {
+  ): Promise<CampaignInsightsResponse> {
     if (process.env.META_USE_MOCK === 'true') {
       const campaign = mockMetrics.campaigns.find(c => c.campaignId === campaignId);
 
@@ -332,6 +371,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
           campaign: null,
           summary: null,
           daily: [],
+          creatives: [],
         };
       }
 
@@ -371,23 +411,28 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         };
       }
 
-      const daily: DailyMetricsResponse[] = filteredDaily.map(d => ({
-        date: d.date,
-        spend: centavosToReais(d.spend),
-        impressions: d.impressions,
-        clicks: d.clicks,
-        conversions: d.conversions,
-        roas: d.roas,
-      }));
+      const daily: DailyMetricsResponse[] = this.capDailySeries(
+        filteredDaily.map(d => ({
+          date: d.date,
+          spend: centavosToReais(d.spend),
+          impressions: d.impressions,
+          clicks: d.clicks,
+          conversions: d.conversions,
+          roas: d.roas,
+        })),
+        30
+      );
 
       return {
         campaign: {
           id: campaign.campaignId,
           name: campaign.name,
           status: campaign.status,
+          objective: 'OUTCOME_SALES',
         },
         summary,
         daily,
+        creatives: [],
       };
     }
 
@@ -405,18 +450,40 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       }
 
       const accessToken = this.decryptToken(connection.accessToken);
-      const adAccounts = (connection.adAccounts as any[]) || [];
-      const adAccountId = adAccounts[0]?.id;
 
-      if (!adAccountId) {
-        throw new AppError(400, 'NO_AD_ACCOUNT', 'Nenhuma conta de anuncios encontrada');
+      let campaignBlock: CampaignInsightsResponse['campaign'] = {
+        id: campaignId,
+        name: `Campaign ${campaignId}`,
+        status: 'ACTIVE',
+        objective: 'UNKNOWN',
+      };
+
+      try {
+        const c = await metaApiCall<{
+          id?: string;
+          name?: string;
+          status?: string;
+          objective?: string;
+        }>(
+          `/${campaignId}?fields=${encodeURIComponent('id,name,status,objective')}`,
+          accessToken
+        );
+        campaignBlock = {
+          id: c.id || campaignId,
+          name: c.name || `Campaign ${campaignId}`,
+          status: (c.status || 'ACTIVE').toUpperCase(),
+          objective: c.objective || 'UNKNOWN',
+        };
+      } catch {
+        /* fallback ja definido em campaignBlock */
       }
 
       const response = await getMetaInsights({
         accessToken,
-        adAccountId,
+        entityId: campaignId,
         startDate,
         endDate,
+        timeIncrement: 1,
       });
 
       const insights = response.data || [];
@@ -426,50 +493,96 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         summary = this.normalizeInsights(insights);
       }
 
-      const daily: DailyMetricsResponse[] = insights
-        .filter((item) => item.date_start && item.date_stop)
-        .map((item) => {
-          const spend = parseFloat(item.spend || '0');
-          const impressions = parseInt(item.impressions || '0', 10);
-          const clicks = parseInt(item.clicks || '0', 10);
+      const dailyRaw: DailyMetricsResponse[] = [];
+      for (const item of insights) {
+        const row = this.mapMetaInsightToDaily(item);
+        if (row) {
+          dailyRaw.push(row);
+        }
+      }
 
-          const conversions = (item.actions || [])
-            .filter(
-              (a) =>
-                a.action_type === 'purchase' ||
-                a.action_type === 'lead' ||
-                a.action_type === 'offsite_conversion'
-            )
-            .reduce((sum, a) => sum + parseInt(String(a.value), 10), 0);
-
-          const revenue = (item.action_values || [])
-            .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
-            .reduce((sum, a) => sum + parseFloat(String(a.value)), 0);
-
-          const roas = spend > 0 ? revenue / spend : 0;
-
-          return {
-            date: item.date_start!,
-            spend: centavosToReais(Math.round(spend * 100)),
-            impressions,
-            clicks,
-            conversions,
-            roas,
-          };
-        });
+      const daily = this.capDailySeries(dailyRaw, 30);
 
       return {
-        campaign: {
-          id: campaignId,
-          name: `Campaign ${campaignId}`,
-          status: 'ACTIVE',
-        },
+        campaign: campaignBlock,
         summary,
         daily,
+        creatives: [],
       };
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError(500, 'META_API_ERROR', 'Erro ao buscar insights da campanha');
+    }
+  }
+
+  async getCampaignAdsets(tenantId: string, campaignId: string): Promise<AdsetResponse[]> {
+    if (process.env.META_USE_MOCK === 'true') {
+      return [
+        {
+          id: 'mock_adset_1',
+          name: 'Conjunto mock',
+          status: 'ACTIVE',
+          dailyBudget: centavosToReais(50000),
+          metrics: {
+            spend: 120.5,
+            clicks: 400,
+            ctr: 2.5,
+            cpm: 15.2,
+          },
+        },
+      ];
+    }
+
+    try {
+      const connection = await db.query.metaConnections.findFirst({
+        where: eq(metaConnections.tenantId, tenantId),
+      });
+
+      if (!connection) {
+        throw new AppError(
+          401,
+          'META_NOT_CONNECTED',
+          'Conta Meta nao conectada. Acesse Configuracoes > Integracoes.'
+        );
+      }
+
+      const accessToken = this.decryptToken(connection.accessToken);
+
+      const fields = encodeURIComponent(
+        'id,name,status,daily_budget,targeting,insights{spend,clicks,ctr,cpm}'
+      );
+      const payload = await metaApiCall<{ data: any[] }>(
+        `/${campaignId}/adsets?fields=${fields}`,
+        accessToken
+      );
+
+      const rows = payload.data || [];
+
+      return rows.map((adset: any): AdsetResponse => {
+        const dailyBudgetRaw = adset.daily_budget;
+        const dailyBudget =
+          dailyBudgetRaw !== undefined && dailyBudgetRaw !== null
+            ? centavosToReais(Math.round(Number(dailyBudgetRaw)))
+            : 0;
+
+        const ins = adset.insights?.data?.[0];
+        const spendStr = ins?.spend ?? '0';
+        const spend = centavosToReais(Math.round(parseFloat(String(spendStr)) * 100));
+        const clicks = ins ? parseInt(String(ins.clicks || '0'), 10) : 0;
+        const ctr = ins ? parseFloat(String(ins.ctr || '0')) : 0;
+        const cpm = ins ? parseFloat(String(ins.cpm || '0')) : 0;
+
+        return {
+          id: String(adset.id),
+          name: String(adset.name || ''),
+          status: String(adset.status || 'UNKNOWN'),
+          dailyBudget,
+          metrics: { spend, clicks, ctr, cpm },
+        };
+      });
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError(500, 'META_API_ERROR', 'Erro ao buscar conjuntos de anuncios');
     }
   }
 
@@ -542,16 +655,19 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     }
   }
 
-  async getGoalsProgress(tenantId: string): Promise<
-    Array<{
-      goal: { id: string; metric: string; target: number };
-      current: number;
-      progressPercent: number;
-      onTrack: boolean;
-    }>
-  > {
+  async getGoalsProgress(tenantId: string): Promise<GoalsProgressResponse> {
     if (process.env.META_USE_MOCK === 'true') {
-      return [];
+      return {
+        goal: {
+          id: 'mock_goal',
+          targetCpa: 50,
+          targetRoas: null,
+          monthlyBudget: 10000,
+        },
+        current: 42,
+        progressPercent: 65,
+        onTrack: true,
+      };
     }
 
     try {
@@ -560,6 +676,8 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       const startDate = monthStart.toISOString().split('T')[0];
       const endDate = now.toISOString().split('T')[0];
 
+      const goals = await getClientGoals(tenantId);
+
       const insights = await this.fetchMetaInsights({
         tenantId,
         startDate,
@@ -567,25 +685,41 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       });
 
       if (insights.length === 0) {
-        return [];
+        return {
+          goal: {
+            id: goals.id,
+            targetCpa: goals.targetCpa,
+            targetRoas: goals.targetRoas,
+            monthlyBudget: goals.monthlyBudget,
+          },
+          current: 0,
+          progressPercent: 0,
+          onTrack: false,
+        };
       }
 
       const summary = this.normalizeInsights(insights);
+      const estimatedGoalConversions = goals.monthlyBudget / goals.targetCpa;
+      const progressPercent =
+        estimatedGoalConversions > 0
+          ? Math.min(
+              Math.round((summary.conversions / estimatedGoalConversions) * 100),
+              100
+            )
+          : 0;
+      const onTrack = summary.cpa <= goals.targetCpa * 1.1;
 
-      return [
-        {
-          goal: { id: 'goal_roas', metric: 'roas', target: 3 },
-          current: summary.roas,
-          progressPercent: (summary.roas / 3) * 100,
-          onTrack: summary.roas >= 3,
+      return {
+        goal: {
+          id: goals.id,
+          targetCpa: goals.targetCpa,
+          targetRoas: goals.targetRoas,
+          monthlyBudget: goals.monthlyBudget,
         },
-        {
-          goal: { id: 'goal_conversions', metric: 'conversions', target: 100 },
-          current: summary.conversions,
-          progressPercent: (summary.conversions / 100) * 100,
-          onTrack: summary.conversions >= 100,
-        },
-      ];
+        current: summary.conversions,
+        progressPercent,
+        onTrack,
+      };
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError(500, 'META_API_ERROR', 'Erro ao buscar progresso das metas');
