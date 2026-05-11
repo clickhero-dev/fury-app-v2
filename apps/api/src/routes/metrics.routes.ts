@@ -21,6 +21,10 @@ router.get('/campaigns', (req: Request, res: Response, next: NextFunction) =>
   metricsController.getCampaigns(req, res, next)
 );
 
+router.get('/campaigns/:campaignId/adsets', (req: Request, res: Response, next: NextFunction) =>
+  metricsController.getCampaignAdsets(req, res, next)
+);
+
 router.get('/campaigns/:campaignId/insights', (req: Request, res: Response, next: NextFunction) =>
   metricsController.getCampaignInsights(req, res, next)
 );

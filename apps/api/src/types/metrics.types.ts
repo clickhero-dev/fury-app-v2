@@ -147,6 +147,46 @@ export interface GoalProgressResponse {
   onTrack: boolean;
 }
 
+/** Resposta única de progresso de metas (CPA / orçamento mensal no banco). */
+export interface GoalsProgressResponse {
+  goal: {
+    id: string;
+    targetCpa: number;
+    targetRoas: number | null;
+    monthlyBudget: number;
+  };
+  current: number;
+  progressPercent: number;
+  onTrack: boolean;
+}
+
+export interface CampaignInsightsResponse {
+  campaign: {
+    id: string;
+    name: string;
+    status: string;
+    objective: string;
+  } | null;
+  summary: MetricsSummaryResponse | null;
+  daily: DailyMetricsResponse[];
+  creatives: unknown[];
+}
+
+export interface AdsetMetricsResponse {
+  spend: number;
+  clicks: number;
+  ctr: number;
+  cpm: number;
+}
+
+export interface AdsetResponse {
+  id: string;
+  name: string;
+  status: string;
+  dailyBudget: number;
+  metrics: AdsetMetricsResponse;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   pagination: {

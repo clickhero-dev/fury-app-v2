@@ -4,6 +4,9 @@ import type {
   CampaignResponse,
   DailyMetricsResponse,
   PaginatedResponse,
+  CampaignInsightsResponse,
+  AdsetResponse,
+  GoalsProgressResponse,
 } from '../types/metrics.types.js';
 
 export class MetricsService {
@@ -72,11 +75,7 @@ export class MetricsService {
     campaignId: string,
     startDate?: string,
     endDate?: string
-  ): Promise<{
-    campaign: { id: string; name: string; status: string } | null;
-    summary: MetricsSummaryResponse | null;
-    daily: DailyMetricsResponse[];
-  }> {
+  ): Promise<CampaignInsightsResponse> {
     const { startDate: defaultStart, endDate: defaultEnd } =
       this.getDefaultDateRange();
 
@@ -91,6 +90,13 @@ export class MetricsService {
     );
   }
 
+  async getCampaignAdsets(
+    tenantId: string,
+    campaignId: string
+  ): Promise<AdsetResponse[]> {
+    return this.provider.getCampaignAdsets(tenantId, campaignId);
+  }
+
   async getDailyMetrics(
     tenantId: string,
     startDate: string,
@@ -99,16 +105,7 @@ export class MetricsService {
     return this.provider.getDailyMetrics(tenantId, startDate, endDate);
   }
 
-  async getGoalsProgress(
-    tenantId: string
-  ): Promise<
-    Array<{
-      goal: { id: string; metric: string; target: number };
-      current: number;
-      progressPercent: number;
-      onTrack: boolean;
-    }>
-  > {
+  async getGoalsProgress(tenantId: string): Promise<GoalsProgressResponse> {
     return this.provider.getGoalsProgress(tenantId);
   }
 }
