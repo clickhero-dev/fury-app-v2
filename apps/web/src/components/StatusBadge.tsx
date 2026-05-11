@@ -39,7 +39,10 @@ const config: Record<Status, { label: string; dot: string; badge: string }> = {
 };
  
 export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
-  const { label, dot, badge } = config[status];
+  const normalizedStatus = status?.toLowerCase() as Status;
+
+const { label, dot, badge } =
+  config[normalizedStatus] || config.pending;
  
   return (
     <span
