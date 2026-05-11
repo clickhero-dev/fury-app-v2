@@ -172,6 +172,34 @@ export async function getMetaUserId(accessToken: string): Promise<string> {
   return payload.id;
 }
 
+export interface MetaInsightsAction {
+  action_type: string;
+  value: number | string;
+}
+
+export interface MetaInsightsData {
+  date_start?: string;
+  date_stop?: string;
+  spend?: string;
+  impressions?: string;
+  clicks?: string;
+  ctr?: string;
+  cpm?: string;
+  actions?: MetaInsightsAction[];
+  action_values?: MetaInsightsAction[];
+}
+
+export interface MetaInsightsResponse {
+  data: MetaInsightsData[];
+  paging?: {
+    cursors: {
+      before: string;
+      after: string;
+    };
+    next?: string;
+  };
+}
+
 type MetaApiErrorPayload2 = {
   error?: {
     code?: number;
@@ -258,3 +286,23 @@ export type MetaCampaignResponse = {
 export type MetaCampaignCreateResponse = {
   id: string;
 };
+
+export async function getMetaInsights(params: {
+  accessToken: string;
+  adAccountId: string;
+  startDate: string;
+  endDate: string;
+  timeIncrement?: number;
+}): Promise<MetaInsightsResponse> {
+  const path = `/${params.adAccountId}/insights`;
+  const fields = 'spend,impressions,clicks,ctr,cpm,actions,action_values,date_start,date_stop';
+  const timeRange = JSON.stringify({ since: params.startDate, until: params.endDate });
+  
+  let fullPath = `${path}?fields=${fields}&time_range=${timeRange}`;
+  
+  if (params.timeIncrement) {
+    fullPath += `&time_increment=${params.timeIncrement}`;
+  }
+  
+  return metaApiCall<MetaInsightsResponse>(fullPath, params.accessToken);
+}

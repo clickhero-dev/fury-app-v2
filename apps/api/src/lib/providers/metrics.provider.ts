@@ -37,4 +37,15 @@ export interface IMetricsProvider {
     startDate: string,
     endDate: string
   ): Promise<DailyMetricsResponse[]>;
+
+  getGoalsProgress(
+    tenantId: string
+  ): Promise<
+    Array<{
+      goal: { id: string; metric: string; target: number };
+      current: number;
+      progressPercent: number;
+      onTrack: boolean;
+    }>
+  >;
 }
