@@ -158,6 +158,28 @@ export const furyInsights = pgTable(
   })
 );
 
+// Automation rules table
+export const automationRules = pgTable(
+  'automation_rules',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    description: text('description'),
+    trigger: varchar('trigger', { length: 255 }).notNull(),
+    threshold: text('threshold').notNull(),
+    action: varchar('action', { length: 255 }).notNull(),
+    enabled: text('enabled').notNull().default('true'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('automation_rules_tenant_id_idx').on(table.tenantId),
+  })
+);
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -167,4 +189,5 @@ export const allTables = {
   creativeAssets,
   clientGoals,
   furyInsights,
+  automationRules,
 };

@@ -1,5 +1,5 @@
 import { generateAccessToken } from '../../lib/jwt.js';
-import { db, tenants, users, metaConnections, campaigns, creativeAssets } from '@fury/db';
+import { db, tenants, users, metaConnections, campaigns, creativeAssets, automationRules } from '@fury/db';
 import { eq } from 'drizzle-orm';
 
 export interface TestUser {
@@ -75,6 +75,7 @@ export async function cleanupDatabase() {
     await db.delete(clientGoals);
     await db.delete(campaigns);
     await db.delete(creativeAssets);
+    await db.delete(automationRules);
     await db.delete(metaConnections);
     await db.delete(users);
     await db.delete(tenants);

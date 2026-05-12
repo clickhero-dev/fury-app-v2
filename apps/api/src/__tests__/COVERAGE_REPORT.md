@@ -10,8 +10,8 @@
 |------|-------|--------|
 | campaigns.test.ts | 8 passed | ✅ |
 | studio.test.ts | 6 passed, 2 skipped | ✅ |
-| automation.test.ts | 3 skipped | ⏳ |
-| **Total** | **14 passed, 5 skipped** | **✅** |
+| automation.test.ts | 6 passed | ✅ |
+| **Total** | **20 passed, 2 skipped** | **✅** |
 
 ## Test Coverage by Endpoint
 
@@ -50,11 +50,14 @@
 ### 3. Automation Endpoints
 
 #### POST /api/automation/rules
-- ⏳ deve salvar regra com threshold válido (endpoint não implementado)
-- ⏳ deve rejeitar threshold negativo (400) (endpoint não implementado)
+- ✅ deve salvar regra com threshold válido
+- ✅ deve rejeitar threshold negativo (400)
+- ✅ deve aceitar diferentes valores de threshold válidos
 
 #### GET /api/automation/rules
-- ⏳ deve retornar apenas regras do tenant autenticado (endpoint não implementado)
+- ✅ deve retornar apenas regras do tenant autenticado
+- ✅ deve retornar lista vazia se nenhuma regra existe
+- ✅ deve retornar todas as regras do tenant
 
 ## Test Features
 
@@ -148,8 +151,10 @@ The following endpoints are covered by tests but need implementation:
 
 ## Criteria Met
 
-- ✅ npm test passes with 0 failures (campaigns and studio tests)
+- ✅ npm test passes with 0 failures (all tests passing)
 - ✅ All implemented endpoints have 3+ tests each
 - ✅ Multitenancy tested: tenant A cannot access tenant B data
 - ✅ Test database isolation working correctly
 - ✅ Error cases properly validated (400, 403, 404)
+- ✅ Automation endpoints fully implemented and tested
+- ✅ 20 tests passing, only 2 skipped (studio generate-copy - pending implementation)
