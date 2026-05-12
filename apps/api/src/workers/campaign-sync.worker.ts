@@ -1,8 +1,9 @@
 import { Worker } from 'bullmq';
 import type IORedis from 'ioredis';
 import { and, eq, gt, isNull, or } from 'drizzle-orm';
-import { campaigns, db, metaConnections } from '@fury/db';
+import { campaigns, db, furyInsights, metaConnections } from '@fury/db';
 import type { CampaignSyncJobPayload } from '../lib/queue.js';
+
 
 const META_API_VERSION = 'v20.0';
 const META_GRAPH_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -120,6 +121,54 @@ async function upsertCampaignByTenantMetaId(args: {
       },
     });
 }
+async function checkCampaignViolations(args: {
+  tenantId: string;
+  campaignId: string;
+  campaignName: string;
+  metaCampaignId: string;
+  status: string;
+  metrics: Record<string, unknown>;
+}) {
+  if (args.status !== 'active') return;
+
+  const metrics = args.metrics as {
+    spend?: number;
+    ctr?: number;
+    impressions?: number;
+    conversions?: number;
+    cpa?: number;
+  };
+
+  let reason = '';
+  let description = '';
+
+  if ((metrics.conversions ?? 0) === 0 && (metrics.spend ?? 0) > 100) {
+    reason = 'zero_conversions';
+    description = 'Campanha com gasto acima de R$100 sem conversões';
+  } else if ((metrics.ctr ?? 0) < 0.3 && (metrics.impressions ?? 0) > 5000) {
+    reason = 'low_ctr';
+    description = `CTR baixo: ${metrics.ctr}%`;
+  }
+
+  if (!reason) return;
+
+  await db.insert(furyInsights).values({
+    tenantId: args.tenantId,
+    campaignId: args.campaignId,
+    suggestionType: 'smart_takedown',
+    suggestionData: {
+      reason,
+      description,
+      campaignName: args.campaignName,
+      autoApplied: true,
+      metrics,
+    },
+  });
+
+  console.log(
+    `[Smart Takedown] ${args.campaignName} -> ${reason}`
+  );
+}
 
 export function createCampaignSyncWorker(connection: IORedis) {
   return new Worker<CampaignSyncJobPayload>(
@@ -235,6 +284,14 @@ export function createCampaignSyncWorker(connection: IORedis) {
           name: c.name ?? '(sem nome)',
           status: mapMetaCampaignStatus(c.status),
           budget,
+          metrics,
+        });
+        await checkCampaignViolations({
+          tenantId,
+          campaignId: c.id,
+          campaignName: c.name ?? '(sem nome)',
+          metaCampaignId: c.id,
+          status: mapMetaCampaignStatus(c.status),
           metrics,
         });
       }
