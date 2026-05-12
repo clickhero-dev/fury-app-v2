@@ -5,7 +5,8 @@ import { ConectarMetaPage } from './pages/onboarding/ConectarMetaPage';
 import { MetaAuthorizePage } from './pages/onboarding/MetaAuthorizePage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Dashboard } from './pages/dashboard/Dashboard';
-import { Campanhas } from './pages/campanhas/Campanhas';
+import { PainelCampanhas } from './pages/campanhas/PainelCampanhas';
+import { RegrasCampanhas } from './pages/campanhas/RegrasCampanhas';
 import { EstudioCriativo } from './pages/estudio-criativo/EstudioCriativo';
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
@@ -45,7 +46,15 @@ export const router = createBrowserRouter([
     path: '/campanhas',
     element: (
       <ProtectedRoute>
-        <Campanhas />
+        <PainelCampanhas />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/campanhas/regras',
+    element: (
+      <ProtectedRoute>
+        <RegrasCampanhas />
       </ProtectedRoute>
     ),
   },

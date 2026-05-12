@@ -221,7 +221,7 @@ describe('Metrics Endpoints', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
 
-      const progress = response.body.data.progress;
+      const progress = response.body.data;
       expect(progress).toHaveProperty('progressPercent');
       expect(typeof progress.progressPercent).toBe('number');
       expect(progress.progressPercent).toBeGreaterThanOrEqual(0);
@@ -241,15 +241,14 @@ describe('Metrics Endpoints', () => {
 
       expect(response.status).toBe(200);
 
-      const progress = response.body.data.progress;
+      const progress = response.body.data;
       expect(progress).toHaveProperty('progressPercent');
       expect(progress.progressPercent).toBeGreaterThanOrEqual(0);
       expect(progress.progressPercent).toBeLessThanOrEqual(100);
 
-      // Additional properties that might be useful
-      expect(progress).toHaveProperty('objective');
-      expect(progress).toHaveProperty('spent');
-      expect(progress).toHaveProperty('budget');
+      expect(progress).toHaveProperty('goal');
+      expect(progress.goal).toHaveProperty('targetCpa');
+      expect(progress.goal).toHaveProperty('monthlyBudget');
     });
 
     it('should return 401 without authentication', async () => {

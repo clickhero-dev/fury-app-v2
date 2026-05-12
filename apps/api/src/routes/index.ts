@@ -4,6 +4,7 @@ import authRoutes from './auth.routes.js';
 import metaRoutes from './meta.routes.js';
 import metricsRoutes from './metrics.routes.js';
 import automationRoutes from './automation.routes.js';
+import studioRoutes from './studio.routes.js';
 import campaignRoutes from './campaigns.routes.js';
 
 import { authMiddleware } from '../middleware/auth.middleware.js';
@@ -16,9 +17,8 @@ router.use('/auth', authRoutes);
 router.use('/meta', metaRoutes);
 
 router.use('/metrics', authMiddleware, tenantMiddleware, metricsRoutes);
-
 router.use('/automation', automationRoutes);
-
+router.use('/studio', studioRoutes);
 router.use('/campaigns', authMiddleware, tenantMiddleware, campaignRoutes);
 
 

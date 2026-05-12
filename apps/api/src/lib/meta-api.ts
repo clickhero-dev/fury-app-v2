@@ -172,6 +172,34 @@ export async function getMetaUserId(accessToken: string): Promise<string> {
   return payload.id;
 }
 
+export interface MetaInsightsAction {
+  action_type: string;
+  value: number | string;
+}
+
+export interface MetaInsightsData {
+  date_start?: string;
+  date_stop?: string;
+  spend?: string;
+  impressions?: string;
+  clicks?: string;
+  ctr?: string;
+  cpm?: string;
+  actions?: MetaInsightsAction[];
+  action_values?: MetaInsightsAction[];
+}
+
+export interface MetaInsightsResponse {
+  data: MetaInsightsData[];
+  paging?: {
+    cursors: {
+      before: string;
+      after: string;
+    };
+    next?: string;
+  };
+}
+
 type MetaApiErrorPayload2 = {
   error?: {
     code?: number;
@@ -211,10 +239,50 @@ export async function metaApiCall<T>(
     }
 
     if (method === 'GET') {
+      const pathNoQuery = path.split('?')[0] || path;
+      if (pathNoQuery.includes('/insights')) {
+        return {
+          data: [
+            {
+              date_start: '2024-06-01',
+              date_stop: '2024-06-01',
+              spend: '100.5',
+              impressions: '10000',
+              clicks: '250',
+              actions: [{ action_type: 'purchase', value: '10' }],
+              action_values: [{ action_type: 'purchase', value: '500' }],
+            },
+          ],
+        } as T;
+      }
+      if (pathNoQuery.includes('/adsets')) {
+        return {
+          data: [
+            {
+              id: 'mock_adset_1',
+              name: 'Mock Ad Set',
+              status: 'ACTIVE',
+              daily_budget: '50000',
+              insights: {
+                data: [
+                  {
+                    spend: '120.50',
+                    clicks: '400',
+                    ctr: '2.5',
+                    cpm: '15.2',
+                  },
+                ],
+              },
+            },
+          ],
+        } as T;
+      }
+
       return {
-        id: path.replace(/^\//, ''),
+        id: pathNoQuery.replace(/^\//, '').split('/')[0],
         status: 'ACTIVE',
         name: 'Mock Campaign',
+        objective: 'OUTCOME_SALES',
       } as T;
     }
   }
@@ -258,3 +326,31 @@ export type MetaCampaignResponse = {
 export type MetaCampaignCreateResponse = {
   id: string;
 };
+
+export async function getMetaInsights(params: {
+  accessToken: string;
+  /** Conta de anúncios (ex.: act_123). Usado quando `entityId` não é informado. */
+  adAccountId?: string;
+  /** Objeto Meta (campanha, conjunto, etc.) para `/{id}/insights`. */
+  entityId?: string;
+  startDate: string;
+  endDate: string;
+  timeIncrement?: number;
+}): Promise<MetaInsightsResponse> {
+  const objectId = params.entityId ?? params.adAccountId;
+  if (!objectId) {
+    throw new AppError(400, 'META_INSIGHTS_ID', 'Informe adAccountId ou entityId para insights.');
+  }
+
+  const path = `/${objectId}/insights`;
+  const fields = 'spend,impressions,clicks,ctr,cpm,actions,action_values,date_start,date_stop';
+  const timeRange = JSON.stringify({ since: params.startDate, until: params.endDate });
+
+  let fullPath = `${path}?fields=${fields}&time_range=${encodeURIComponent(timeRange)}`;
+
+  if (params.timeIncrement) {
+    fullPath += `&time_increment=${params.timeIncrement}`;
+  }
+
+  return metaApiCall<MetaInsightsResponse>(fullPath, params.accessToken);
+}

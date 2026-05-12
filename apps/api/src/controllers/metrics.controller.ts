@@ -87,6 +87,29 @@ export class MetricsController {
     }
   }
 
+  async getCampaignAdsets(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { campaignId } = req.params;
+
+      const tenantId = req.tenant?.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'No tenant context' },
+        });
+      }
+
+      const adsets = await this.metricsService.getCampaignAdsets(tenantId, campaignId);
+
+      return res.status(200).json({
+        success: true,
+        data: adsets,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getCampaignInsights(req: Request, res: Response, next: NextFunction) {
     try {
       const { campaignId } = req.params;
@@ -177,7 +200,7 @@ export class MetricsController {
 
       return res.status(200).json({
         success: true,
-        data: progress || [],
+        data: progress,
       });
     } catch (error) {
       next(error);

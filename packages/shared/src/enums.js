@@ -13,6 +13,7 @@ export var CreativeType;
 export var ComplianceStatus;
 (function (ComplianceStatus) {
     ComplianceStatus["PENDING"] = "pending";
+    ComplianceStatus["PENDING_COMPLIANCE"] = "pending_compliance";
     ComplianceStatus["APPROVED"] = "approved";
     ComplianceStatus["REJECTED"] = "rejected";
 })(ComplianceStatus || (ComplianceStatus = {}));

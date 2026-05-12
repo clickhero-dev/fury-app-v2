@@ -15,7 +15,12 @@ import { sql } from 'drizzle-orm';
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member']);
 export const creativeTypeEnum = pgEnum('creative_type', ['image', 'video', 'copy']);
-export const complianceStatusEnum = pgEnum('compliance_status', ['pending', 'approved', 'rejected']);
+export const complianceStatusEnum = pgEnum('compliance_status', [
+  'pending',
+  'pending_compliance',
+  'approved',
+  'rejected',
+]);
 export const campaignStatusEnum = pgEnum('campaign_status', ['draft', 'active', 'paused', 'archived']);
 
 // Tenants table
@@ -104,7 +109,7 @@ export const creativeAssets = pgTable(
     type: creativeTypeEnum('type').notNull(),
     url: text('url').notNull(),
     metaAssetId: varchar('meta_asset_id', { length: 255 }),
-    complianceStatus: complianceStatusEnum('compliance_status').notNull().default('pending'),
+    complianceStatus: complianceStatusEnum('compliance_status').notNull().default('pending_compliance'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({

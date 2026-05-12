@@ -4,6 +4,9 @@ import type {
   MetricsSummaryResponse,
   CampaignResponse,
   DailyMetricsResponse,
+  CampaignInsightsResponse,
+  AdsetResponse,
+  GoalsProgressResponse,
 } from '../../types/metrics.types.js';
 import {
   centavosToReais,
@@ -117,11 +120,7 @@ export class MockMetricsProvider implements IMetricsProvider {
     campaignId: string,
     startDate: string,
     endDate: string
-  ): Promise<{
-    campaign: { id: string; name: string; status: string } | null;
-    summary: MetricsSummaryResponse | null;
-    daily: DailyMetricsResponse[];
-  }> {
+  ): Promise<CampaignInsightsResponse> {
     const campaign = mockMetrics.campaigns.find(c => c.campaignId === campaignId);
 
     if (!campaign) {
@@ -129,6 +128,7 @@ export class MockMetricsProvider implements IMetricsProvider {
         campaign: null,
         summary: null,
         daily: [],
+        creatives: [],
       };
     }
 
@@ -158,7 +158,10 @@ export class MockMetricsProvider implements IMetricsProvider {
       };
     }
 
-    const daily: DailyMetricsResponse[] = filteredDaily.map(d => ({
+    const sorted = [...filteredDaily].sort((a, b) => a.date.localeCompare(b.date));
+    const capped = sorted.length <= 30 ? sorted : sorted.slice(-30);
+
+    const daily: DailyMetricsResponse[] = capped.map(d => ({
       date: d.date,
       spend: centavosToReais(d.spend),
       impressions: d.impressions,
@@ -172,10 +175,29 @@ export class MockMetricsProvider implements IMetricsProvider {
         id: campaign.campaignId,
         name: campaign.name,
         status: campaign.status,
+        objective: 'OUTCOME_SALES',
       },
       summary,
       daily,
+      creatives: [],
     };
+  }
+
+  async getCampaignAdsets(_tenantId: string, _campaignId: string): Promise<AdsetResponse[]> {
+    return [
+      {
+        id: 'mock_adset_1',
+        name: 'Conjunto mock',
+        status: 'ACTIVE',
+        dailyBudget: centavosToReais(50000),
+        metrics: {
+          spend: 120.5,
+          clicks: 400,
+          ctr: 2.5,
+          cpm: 15.2,
+        },
+      },
+    ];
   }
 
   async getDailyMetrics(
@@ -199,5 +221,52 @@ export class MockMetricsProvider implements IMetricsProvider {
       conversions: d.conversions,
       roas: d.roas,
     }));
+  }
+
+  async getGoalsProgress(tenantId: string): Promise<GoalsProgressResponse> {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startDate = monthStart.toISOString().split('T')[0];
+    const endDate = now.toISOString().split('T')[0];
+
+    const summary = await this.getSummary(tenantId, startDate, endDate);
+
+    if (!summary) {
+      return {
+        goal: {
+          id: 'mock_goal',
+          targetCpa: 50,
+          targetRoas: null,
+          monthlyBudget: 10000,
+        },
+        current: 0,
+        progressPercent: 0,
+        onTrack: false,
+      };
+    }
+
+    const targetCpa = 50;
+    const monthlyBudget = 10000;
+    const estimatedGoalConversions = monthlyBudget / targetCpa;
+    const progressPercent =
+      estimatedGoalConversions > 0
+        ? Math.min(
+            Math.round((summary.conversions / estimatedGoalConversions) * 100),
+            100
+          )
+        : 0;
+    const onTrack = summary.cpa <= targetCpa * 1.1;
+
+    return {
+      goal: {
+        id: 'mock_goal',
+        targetCpa,
+        targetRoas: null,
+        monthlyBudget,
+      },
+      current: summary.conversions,
+      progressPercent,
+      onTrack,
+    };
   }
 }

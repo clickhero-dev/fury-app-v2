@@ -1,6 +1,8 @@
-import { Queue } from 'bullmq';
+import { Queue, QueueEvents } from 'bullmq';
 import type IORedis from 'ioredis';
 import { getRedis } from './redis.js';
+
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
 /**
  * BullMQ expects dedicated connections; we duplicate the existing ioredis instance
@@ -8,7 +10,6 @@ import { getRedis } from './redis.js';
  */
 export async function createBullConnection(): Promise<IORedis> {
   const conn = getRedis().duplicate();
-  // `redis.ts` uses lazyConnect, so ensure the duplicated connection is actually connected.
   await conn.connect();
   return conn;
 }
@@ -46,3 +47,29 @@ export function createRuleEngineQueue(connection: IORedis) {
   });
 }
 
+export const studioQueue = new Queue('studio-generate-image', {
+  connection: {
+    url: redisUrl,
+  },
+});
+
+export const studioQueueEvents = new QueueEvents('studio-generate-image', {
+  connection: {
+    url: redisUrl,
+  },
+});
+
+export const complianceQueue = new Queue('compliance-check', {
+  connection: {
+    url: redisUrl,
+  },
+});
+
+export async function closeStudioQueue(): Promise<void> {
+  await studioQueueEvents.close();
+  await studioQueue.close();
+}
+
+export async function closeComplianceQueue(): Promise<void> {
+  await complianceQueue.close();
+}

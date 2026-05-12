@@ -1,4 +1,11 @@
-import type { MetricsSummaryResponse, CampaignResponse, DailyMetricsResponse } from '../../types/metrics.types.js';
+import type {
+  MetricsSummaryResponse,
+  CampaignResponse,
+  DailyMetricsResponse,
+  CampaignInsightsResponse,
+  AdsetResponse,
+  GoalsProgressResponse,
+} from '../../types/metrics.types.js';
 
 export interface IMetricsProvider {
   getSummary(
@@ -26,15 +33,15 @@ export interface IMetricsProvider {
     campaignId: string,
     startDate: string,
     endDate: string
-  ): Promise<{
-    campaign: { id: string; name: string; status: string } | null;
-    summary: MetricsSummaryResponse | null;
-    daily: DailyMetricsResponse[];
-  }>;
+  ): Promise<CampaignInsightsResponse>;
+
+  getCampaignAdsets(tenantId: string, campaignId: string): Promise<AdsetResponse[]>;
 
   getDailyMetrics(
     tenantId: string,
     startDate: string,
     endDate: string
   ): Promise<DailyMetricsResponse[]>;
+
+  getGoalsProgress(tenantId: string): Promise<GoalsProgressResponse>;
 }
