@@ -1,6 +1,6 @@
 import { claude } from '../lib/claude';
-import { creative_assets } from 'db/src/schema';
-import { db } from 'db';
+import { creative_assets } from '../../../../packages/db/src/schema'
+import { db } from '../../../../packages/db/src'
 import { eq } from 'drizzle-orm';
 
 const CHAR_LIMITS = {
