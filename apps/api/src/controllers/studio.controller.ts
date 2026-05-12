@@ -36,12 +36,12 @@ export async function generateImage(req: Request, res: Response, next: NextFunct
 
 const generateCopySchema = z.object({
   type: z.enum(['headline', 'descricao', 'cta', 'completo']),
-  produto: z.string().min(3, 'Produto deve ter no minimo 3 caracteres').max(200, 'Produto deve ter no maximo 200 caracteres'),
-  publico: z.string().min(5, 'Publico deve ter no minimo 5 caracteres').max(200, 'Publico deve ter no maximo 200 caracteres'),
-  objetivo: z.string().min(5, 'Objetivo deve ter no minimo 5 caracteres').max(200, 'Objetivo deve ter no maximo 200 caracteres'),
+  produto: z.string().min(3).max(200),
+  publico: z.string().min(5).max(200),
+  objetivo: z.string().min(5).max(200),
   tom: z.enum(['formal', 'casual', 'urgente', 'emocional']),
-  quantidadeVariacoes: z.number().int().min(3).max(5).optional(),
-});
+  quantidadeVariacoes: z.number().min(3).max(5).default(3),
+})
 
 function calcularPontuacao(texto: string, type: 'headline' | 'descricao' | 'cta' | 'completo') {
   const limiteChars: Record<string, number> = { headline: 40, descricao: 125, cta: 20, completo: 300 };

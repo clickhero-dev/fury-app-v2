@@ -1,93 +1,132 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import request from 'supertest';
-import express from 'express';
-import bodyParser from 'body-parser';
-import studioRoutes from '../routes/studio.routes.js';
+import express from 'express'
+import request from 'supertest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import studioRoutes from '../routes/studio.routes'
 
-describe('POST /generate-copy', () => {
-  let app: any;
+// Mocking dependencies
+vi.mock('../lib/claude', () => ({
+  claude: {
+    model: 'claude-sonnet-4-20250514',
+    messages: {
+      create: vi.fn(),
+    },
+  },
+}))
+
+vi.mock('db', () => ({
+  db: {
+    insert: vi.fn().mockReturnThis(),
+    values: vi.fn().mockImplementation(() => ({
+      then: (cb) => cb(),
+    })),
+  },
+}))
+
+describe('POST /api/studio/generate-copy', () => {
+  let app
 
   beforeEach(() => {
-    delete process.env.ANTHROPIC_API_KEY;
-    vi.resetModules();
+    vi.resetModules()
+    vi.clearAllMocks()
 
-    app = express();
-    app.use(bodyParser.json());
-    // mock auth and tenant middlewares used by the route
-    app.use((req: any, _res, next) => { req.user = { id: 'u' }; next(); });
-    app.use((req: any, _res, next) => { req.tenant = { tenantId: 'test-tenant' }; next(); });
-    app.use('/api', studioRoutes);
-  });
+    // Re-import claude to be able to mock it in tests
+    const { claude } = require('../lib/claude')
 
-  it('returns fallback when ANTHROPIC_API_KEY not set', async () => {
-    const res = await request(app)
-      .post('/api/generate-copy')
+    app = express()
+    app.use(express.json())
+    // Mock middlewares
+    app.use((req: any, res, next) => {
+      req.user = { id: 'test-user-id' }
+      req.tenant = { tenantId: 'test-tenant-id' }
+      next()
+    })
+    app.use('/api/studio', studioRoutes)
+  })
+
+  it('should return fallback variations when ANTHROPIC_API_KEY is not set', async () => {
+    delete process.env.ANTHROPIC_API_KEY
+
+    const response = await request(app)
+      .post('/api/studio/generate-copy')
       .send({
         type: 'headline',
-        produto: 'Produto Teste',
-        publico: 'pequenas empresas',
-        objetivo: 'aumentar vendas',
-        tom: 'casual',
-        quantidadeVariacoes: 3,
-      })
-      .expect(200);
-
-    expect(res.body).toHaveProperty('variacoes');
-    expect(Array.isArray(res.body.variacoes)).toBe(true);
-    expect(res.body.variacoes.length).toBe(3);
-  });
-
-  it('validates body and rejects bad inputs', async () => {
-    const res = await request(app)
-      .post('/api/generate-copy')
-      .send({
-        type: 'unknown',
-        produto: 'x',
-        publico: 'a',
-        objetivo: 'b',
-        tom: 'casual',
-      })
-      .expect(400);
-
-    expect(res.body).toHaveProperty('error');
-  });
-
-  it('respects character limits in mocked claude response', async () => {
-    process.env.ANTHROPIC_API_KEY = 'test';
-
-    const mockResponse = JSON.stringify({
-      variacoes: [
-        { texto: 'Curto', caracteres: 5 },
-        { texto: 'Muito muito muito longo texto que excede o limite para headline', caracteres: 80 },
-        { texto: 'CTA compre agora', caracteres: 15 },
-      ]
-    });
-
-    vi.mock('../lib/claude.js', () => ({
-      claude: {
-        messages: {
-          create: async () => ({ content: [{ type: 'text', text: mockResponse }] }),
-        },
-      },
-    }));
-
-    const res = await request(app)
-      .post('/api/generate-copy')
-      .send({
-        type: 'headline',
-        produto: 'Produto Teste',
-        publico: 'pequenas empresas',
-        objetivo: 'aumentar vendas',
+        produto: 'Super Cadeira',
+        publico: 'Escritórios modernos',
+        objetivo: 'Vender mais',
         tom: 'formal',
         quantidadeVariacoes: 3,
       })
-      .expect(200);
 
-    expect(res.body.variacoes.length).toBe(3);
-    res.body.variacoes.forEach((v: any) => {
-      expect(v).toHaveProperty('texto');
-      expect(v).toHaveProperty('caracteres');
-      expect(v).toHaveProperty('pontuacao');
-    });
-  });
-});
+    expect(response.status).toBe(200)
+    expect(response.body).toHaveProperty('variacoes')
+    expect(response.body.variacoes.length).toBe(3)
+    expect(response.body.variacoes[0].texto).toContain('Super Cadeira')
+  })
+
+  it('should return 400 for invalid body', async () => {
+    const response = await request(app)
+      .post('/api/studio/generate-copy')
+      .send({
+        type: 'invalid-type', // Invalid enum value
+        produto: 'a', // Too short
+        publico: 'b', // Too short
+        objetivo: 'c', // Too short
+        tom: 'casual',
+        quantidadeVariacoes: 1, // Too few
+      })
+
+    expect(response.status).toBe(400)
+    expect(response.body).toHaveProperty('error')
+  })
+
+  it('should generate copy, calculate score, and save to db', async () => {
+    process.env.ANTHROPIC_API_KEY = 'fake-key'
+
+    const { claude } = require('../lib/claude')
+    const { db } = require('db')
+
+    const mockApiResponse = {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            variacoes: [
+              { texto: 'Compre a cadeira do futuro, hoje.', caracteres: 0 },
+              {
+                texto:
+                  'Ergonomia e design para seu escritório. Saiba mais agora!',
+                caracteres: 0,
+              },
+              { texto: 'Sua coluna agradece. Clique e garanta.', caracteres: 0 },
+            ],
+          }),
+        },
+      ],
+    }
+    claude.messages.create.mockResolvedValue(mockApiResponse)
+
+    const response = await request(app)
+      .post('/api/studio/generate-copy')
+      .send({
+        type: 'descricao',
+        produto: 'Super Cadeira Ergonômica',
+        publico: 'Profissionais que passam horas sentados',
+        objetivo: 'Gerar leads qualificados',
+        tom: 'urgente',
+        quantidadeVariacoes: 3,
+      })
+
+    expect(response.status).toBe(200)
+    expect(response.body).toHaveProperty('variacoes')
+    expect(response.body.variacoes.length).toBe(3)
+
+    // Check if scoring and character count is working
+    const firstVariation = response.body.variacoes[0]
+    expect(firstVariation.texto).toBe('Compre a cadeira do futuro, hoje.')
+    expect(firstVariation.caracteres).toBe(33)
+    expect(firstVariation.pontuacao).toBeGreaterThan(5) // Should have points for CTA and length
+
+    // Check if it was "saved" to the DB
+    expect(db.insert).toHaveBeenCalled()
+  })
+})

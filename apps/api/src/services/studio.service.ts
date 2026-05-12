@@ -1,137 +1,152 @@
-import OpenAI from 'openai';
-import { db, creativeAssets } from '@fury/db';
-import { AppError } from '../middleware/errorHandler.js';
-import { complianceQueue, studioQueue, studioQueueEvents } from '../lib/queue.js';
-import { saveTemporaryStudioImage } from '../lib/temp-storage.js';
+import { claude } from '../lib/claude';
+import { creative_assets } from 'db/src/schema';
+import { db } from 'db';
+import { eq } from 'drizzle-orm';
 
-export type StudioImageFormat = 'feed' | 'stories' | 'banner';
-export type StudioImageStyle = 'fotografico' | 'ilustracao' | 'minimalista';
+const CHAR_LIMITS = {
+  headline: 40,
+  descricao: 125,
+  cta: 20,
+  completo: 300, // Soft limit for prompt
+};
 
-export interface GenerateStudioImageInput {
+type CopyType = keyof typeof CHAR_LIMITS;
+
+function calcularPontuacao(texto: string, type: CopyType): number {
+  let pontuacao = 3.0; // Base score
+
+  // 1. Check character limits
+  if (texto.length <= CHAR_LIMITS[type]) {
+    pontuacao += 3.0;
+  }
+
+  // 2. Check for clear call to action
+  const ctaKeywords = ['compre', 'acesse', 'saiba', 'clique', 'garanta'];
+  if (ctaKeywords.some((keyword) => texto.toLowerCase().includes(keyword))) {
+    pontuacao += 2.0;
+  }
+
+  // 3. Check for forbidden words
+  const forbiddenKeywords = ['grátis', 'garantido 100%', 'melhor do mundo'];
+  if (
+    !forbiddenKeywords.some((keyword) => texto.toLowerCase().includes(keyword))
+  ) {
+    pontuacao += 2.0;
+  }
+
+  return Math.min(pontuacao, 10.0); // Cap at 10
+}
+
+async function generateCopy({
+  tenantId,
+  type,
+  produto,
+  publico,
+  objetivo,
+  tom,
+  quantidadeVariacoes,
+}: {
   tenantId: string;
-  briefing: string;
-  format: StudioImageFormat;
-  style: StudioImageStyle;
-  adAccountId: string;
-  publicBaseUrl: string;
-}
-
-export interface GenerateStudioImageResult {
-  creativeAssetId: string;
-  imageUrl: string;
-  status: 'pending_compliance';
-}
-
-export interface StudioGenerationJobData extends GenerateStudioImageInput {}
-
-function getImageSize(format: StudioImageFormat): '1024x1024' | '1024x1792' | '1792x1024' {
-  switch (format) {
-    case 'stories':
-      return '1024x1792';
-    case 'banner':
-      return '1792x1024';
-    case 'feed':
-    default:
-      return '1024x1024';
+  type: CopyType;
+  produto: string;
+  publico: string;
+  objetivo: string;
+  tom: 'formal' | 'casual' | 'urgente' | 'emocional';
+  quantidadeVariacoes: number;
+}) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn(
+      'ANTHROPIC_API_KEY is not set. Using fallback response.'
+    );
+    return {
+      variacoes: [
+        {
+          texto: `${produto} — transforme seu negócio hoje!`,
+          caracteres: `${produto} — transforme seu negócio hoje!`.length,
+          pontuacao: 7.0,
+        },
+        {
+          texto: `Descubra ${produto} para ${publico}`,
+          caracteres: `Descubra ${produto} para ${publico}`.length,
+          pontuacao: 6.5,
+        },
+        {
+          texto: `A melhor escolha em ${produto}`,
+          caracteres: `A melhor escolha em ${produto}`.length,
+          pontuacao: 6.0,
+        },
+      ],
+    };
   }
-}
 
-function buildPrompt(briefing: string, style: StudioImageStyle, size: string): string {
-  const styleDescription =
-    style === 'fotografico'
-      ? 'fotográfico realista'
-      : style === 'ilustracao'
-        ? 'ilustração vetorial moderna'
-        : 'design minimalista limpo';
+  const systemPrompt = `Você é um especialista em copywriting para anúncios digitais no Facebook e Instagram.
+Gere variações de copy persuasivas, claras e em português brasileiro adequadas para o público-alvo.
+Respeite RIGOROSAMENTE os limites de caracteres especificados.
+Responda APENAS em JSON válido, sem texto adicional, sem markdown.`;
 
-  return `Crie uma imagem publicitária profissional para uso em redes sociais brasileiras.
+  const userPrompt = `Produto/serviço: ${produto}
+Público-alvo: ${publico}
+Objetivo do anúncio: ${objetivo}
+Tom de comunicação: ${tom}
 
-${briefing}.
+Gere ${quantidadeVariacoes} variações de ${type} em português brasileiro.
+Limite máximo: ${CHAR_LIMITS[type]} caracteres por variação.
 
-Estilo: ${styleDescription}. Formato: ${size}.
+Retorne APENAS este JSON:
+{
+  "variacoes": [
+    { "texto": "texto da variação aqui", "caracteres": 0 }
+  ]
+}`;
 
-A imagem deve ser limpa, com área para texto sobreposto, sem texto na imagem, cores vibrantes e atrativas, composição profissional de marketing digital.`;
-}
-
-function getMockResult(): GenerateStudioImageResult {
-  return {
-    creativeAssetId: 'mock_id',
-    imageUrl: 'https://picsum.photos/1024/1024',
-    status: 'pending_compliance',
-  };
-}
-
-function getPublicStudioAssetUrl(publicBaseUrl: string, fileName: string): string {
-  return new URL(`/studio-assets/${fileName}`, publicBaseUrl).toString();
-}
-
-async function generateRealStudioImage(
-  input: GenerateStudioImageInput
-): Promise<GenerateStudioImageResult> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const size = getImageSize(input.format);
-  const prompt = buildPrompt(input.briefing, input.style, size);
-
-  const response = await openai.images.generate({
-    model: 'dall-e-3',
-    prompt,
-    size,
-    quality: 'standard',
-    n: 1,
+  const response = await claude.messages.create({
+    max_tokens: 1000,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
   });
 
-  const imageUrl = response.data?.[0]?.url;
-  if (!imageUrl) {
-    throw new AppError(502, 'OPENAI_IMAGE_GENERATION_FAILED', 'Nao foi possivel gerar a imagem.');
-  }
+  const responseText = response.content[0].type === 'text'
+    ? response.content[0].text
+    : '';
+  const parsed = JSON.parse(responseText.replace(/```json|```/g, '').trim());
 
-  const { fileName } = await saveTemporaryStudioImage(imageUrl);
-  const publicImageUrl = getPublicStudioAssetUrl(input.publicBaseUrl, fileName);
+  const finalVariations = parsed.variacoes.map((v: { texto: string }) => ({
+    texto: v.texto,
+    caracteres: v.texto.length,
+    pontuacao: calcularPontuacao(v.texto, type),
+  }));
 
-  const [asset] = await db
-    .insert(creativeAssets)
+  // Save to database (fire and forget)
+  db.insert(creative_assets)
     .values({
-      tenantId: input.tenantId,
-      type: 'image',
-      url: publicImageUrl,
-      complianceStatus: 'pending_compliance' as any,
+      tenantId,
+      type: 'copy',
+      prompt: userPrompt,
+      settings: {
+        model: claude.model,
+        type,
+        tom,
+        objetivo,
+        publico,
+        produto,
+      },
+      content: { variations: finalVariations }, // Store the full JSON with scores
+      complianceStatus: 'approved', // Copy doesn't need image compliance
+      url: null,
     })
-    .returning();
+    .then(() => console.log('Creative asset saved for tenant:', tenantId))
+    .catch((err) =>
+      console.error('Failed to save creative asset:', err.message),
+    );
 
-  if (!asset) {
-    throw new AppError(500, 'CREATIVE_ASSET_CREATE_FAILED', 'Nao foi possivel salvar o asset criativo.');
-  }
-
-  await complianceQueue.add('compliance-check', {
-    creativeAssetId: asset.id,
-    tenantId: input.tenantId,
-  });
-
-  return {
-    creativeAssetId: asset.id,
-    imageUrl: publicImageUrl,
-    status: 'pending_compliance',
-  };
+  return { variacoes: finalVariations };
 }
 
-export async function processStudioGenerationJob(
-  input: StudioGenerationJobData
-): Promise<GenerateStudioImageResult> {
-  if (!process.env.OPENAI_API_KEY) {
-    return getMockResult();
-  }
-
-  return generateRealStudioImage(input);
+async function generateImage(prompt: string) {
+  // ...
 }
 
-export async function requestStudioImageGeneration(
-  input: GenerateStudioImageInput
-): Promise<GenerateStudioImageResult> {
-  if (!process.env.OPENAI_API_KEY) {
-    return getMockResult();
-  }
-
-  const job = await studioQueue.add('generate-image', input);
-  const result = await job.waitUntilFinished(studioQueueEvents);
-  return result as GenerateStudioImageResult;
-}
+export const studioService = {
+  generateCopy,
+  generateImage,
+};

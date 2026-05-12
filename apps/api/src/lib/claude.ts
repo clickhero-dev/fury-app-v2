@@ -11,7 +11,7 @@ export const claude = {
       const prompt = `${opts.system}\n\n${opts.messages.map(m => m.content).join('\n\n')}`;
 
       const body = {
-        model: opts.model,
+          model: 'claude-sonnet-4-20250514',
         prompt,
         max_tokens_to_sample: opts.max_tokens,
       } as any;
