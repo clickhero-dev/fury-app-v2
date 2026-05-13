@@ -6,7 +6,7 @@ import metricsRoutes from './metrics.routes.js';
 import automationRoutes from './automation.routes.js';
 import studioRoutes from './studio.routes.js';
 import campaignRoutes from './campaigns.routes.js';
-import automationRoutes from './automation.routes.js';
+
 
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
