@@ -71,8 +71,8 @@ if (NODE_ENV !== 'test') {
     });
   });
 
-export default app;
-process.on('SIGTERM', () => {
+
+  process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
   server.close(async () => {
     await stopSyncJobsWorker();
@@ -86,3 +86,6 @@ process.on('SIGTERM', () => {
     process.exit(0);
   });
 });
+}
+
+export default app;
