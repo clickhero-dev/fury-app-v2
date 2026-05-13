@@ -115,5 +115,6 @@ router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: Requ
 });
 
 router.post('/generate-image', authMiddleware, tenantMiddleware, studioController.generateImage);
+router.post('/upload-to-meta', authMiddleware, tenantMiddleware, studioController.uploadToMeta);
 
 export default router;

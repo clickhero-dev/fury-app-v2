@@ -10,12 +10,12 @@ const ALGORITHM = 'aes-256-cbc';
 export function decryptAccessToken(encryptedToken: string): string {
   try {
     if (encryptedToken.length < 50) {
-      return encryptedToken;
+      throw new AppError(500, 'TOKEN_DECRYPT_ERROR', 'Token criptografado invalido: formato desconhecido.');
     }
 
     const [ivHex, encryptedHex] = encryptedToken.split(':');
     if (!ivHex || !encryptedHex) {
-      return encryptedToken;
+      throw new AppError(500, 'TOKEN_DECRYPT_ERROR', 'Token criptografado invalido: componentes ausentes.');
     }
 
     const iv = Buffer.from(ivHex, 'hex');
@@ -29,8 +29,8 @@ export function decryptAccessToken(encryptedToken: string): string {
 
     return decrypted;
   } catch (err) {
-    console.error('Failed to decrypt token:', (err as Error).message);
-    return encryptedToken;
+    if (err instanceof AppError) throw err;
+    throw new AppError(500, 'TOKEN_DECRYPT_ERROR', 'Falha ao descriptografar token Meta.');
   }
 }
 
@@ -221,12 +221,16 @@ export async function metaApiCall<T>(
     body?: Record<string, unknown>;
   }
 ): Promise<T> {
-  const isMocked = accessToken.toLowerCase().includes('mock') ||
-                   !accessToken.startsWith('EAAC') ||
-                   process.env.NODE_ENV === 'development';
+  const isMocked = (accessToken.toLowerCase().includes('mock') ||
+                   process.env.META_API_MOCK === 'true') &&
+                   !accessToken.startsWith('EAAC');
 
   if (isMocked) {
     const method = options?.method || 'GET';
+
+    if (method === 'POST' && path.includes('/adimages')) {
+      return { images: { 'fury_upload': { hash: `mock_hash_${Date.now()}` } } } as T;
+    }
 
     if (method === 'POST' && path.includes('/campaigns')) {
       return {
@@ -353,4 +357,31 @@ export async function getMetaInsights(params: {
   }
 
   return metaApiCall<MetaInsightsResponse>(fullPath, params.accessToken);
+}
+
+export interface MetaAdImageUploadResponse {
+  images: Record<string, { hash: string; url?: string }>;
+}
+
+export async function uploadAdImage(params: {
+  adAccountId: string;
+  base64: string;
+  filename: string;
+  accessToken: string;
+}): Promise<string> {
+  const response = await metaApiCall<MetaAdImageUploadResponse>(
+    `/${encodeURIComponent(params.adAccountId)}/adimages`,
+    params.accessToken,
+    {
+      method: 'POST',
+      body: { bytes: params.base64, name: params.filename },
+    }
+  );
+
+  const imageData = Object.values(response.images)[0];
+  if (!imageData?.hash) {
+    throw new AppError(502, 'META_IMAGE_UPLOAD_FAILED', 'Meta nao retornou hash da imagem enviada.');
+  }
+
+  return imageData.hash;
 }
