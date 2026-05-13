@@ -6,5 +6,6 @@ import * as studioController from '../controllers/studio.controller.js';
 const router = Router();
 
 router.post('/generate-image', authMiddleware, tenantMiddleware, studioController.generateImage);
+router.post('/upload-to-meta', authMiddleware, tenantMiddleware, studioController.uploadToMeta);
 
 export default router;
