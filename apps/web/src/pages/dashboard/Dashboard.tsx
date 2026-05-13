@@ -1,208 +1,305 @@
-import { useMemo } from 'react';
-import { AppLayout, MetricCard, PageHeader, DataTable, Button } from '@/components';
+import { useQuery } from '@tanstack/react-query';
+import { Brain, TrendingUp, DollarSign, Target, ShoppingCart } from 'lucide-react';
+import {
+  AppLayout,
+  MetricCard,
+  PageHeader,
+  LoadingSpinner,
+  EmptyState,
+  InsightCard,
+  ProgressGoal,
+  StatusBadge,
+} from '@/components';
+import api from '@/lib/api';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface MetricsSummary {
+  spend: number;
+  roas: number;
+  cpa: number;
+  conversions: number;
+  impressions: number;
+  clicks: number;
+}
+
+interface GoalsProgress {
+  goal: { objective: string; monthlyBudget: number; targetCpa: number };
+  current: { spend: number; roas: number; cpa: number };
+  progressPercent: number;
+  onTrack: boolean;
+}
+
+interface Insight {
+  type: string;
+  priority: 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
+  expectedImpact?: string;
+}
 
 interface Campaign {
   id: string;
   name: string;
-  status: 'ativo' | 'pausado' | 'finalizado';
-  impressions: number;
-  clicks: number;
-  conversions: number;
-  roi: string;
+  status: string;
+  metrics: { roas?: number; cpa?: number; spend?: number };
 }
 
+// ─── Mocks ────────────────────────────────────────────────────────────────────
+
+const MOCK_SUMMARY: MetricsSummary = {
+  spend: 4850,
+  roas: 3.2,
+  cpa: 48.5,
+  conversions: 100,
+  impressions: 145200,
+  clicks: 3840,
+};
+
+const MOCK_PROGRESS: GoalsProgress = {
+  goal: { objective: 'aumentar_vendas', monthlyBudget: 8000, targetCpa: 50 },
+  current: { spend: 4850, roas: 3.2, cpa: 48.5 },
+  progressPercent: 61,
+  onTrack: true,
+};
+
+const MOCK_INSIGHTS: Insight[] = [
+  {
+    type: 'budget_adjustment',
+    priority: 'high',
+    title: 'Aumentar orçamento da campanha top',
+    description: 'Sua melhor campanha tem ROAS de 5.8x e ainda tem espaço para escalar.',
+    expectedImpact: 'Potencial de +30% em conversões',
+  },
+  {
+    type: 'campaign_pause',
+    priority: 'medium',
+    title: 'Pausar campanha com CPA alto',
+    description: 'A campanha Prospecção Fria está com CPA 77% acima da meta.',
+    expectedImpact: 'Redução de R$ 120/dia em desperdício',
+  },
+];
+
+const MOCK_CAMPAIGNS: Campaign[] = [
+  { id: '1', name: 'Campanha Verão 2026', status: 'active', metrics: { roas: 5.8, cpa: 32.5, spend: 1800 } },
+  { id: '2', name: 'Prospecção Fria', status: 'active', metrics: { roas: 1.2, cpa: 86.2, spend: 1200 } },
+  { id: '3', name: 'Retargeting DPA', status: 'paused', metrics: { roas: 3.5, cpa: 45.8, spend: 600 } },
+];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const OBJECTIVES: Record<string, string> = {
+  aumentar_vendas: 'Aumentar Vendas',
+  gerar_leads: 'Gerar Leads',
+  aumentar_awareness: 'Aumentar Awareness',
+  maximizar_roas: 'Maximizar ROAS',
+  reduzir_cpa: 'Reduzir CPA',
+};
+
+function translateObjective(key?: string) {
+  return (key && OBJECTIVES[key]) ?? key ?? 'Objetivo';
+}
+
+function fmt(n: number) {
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export function Dashboard() {
-  const metrics = [
-    {
-      label: 'Campanhas Ativas',
-      value: 12,
-      change: 8,
-      changeLabel: 'vs. semana passada',
-      icon: (
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" />
-        </svg>
-      ),
-      trend: 'up' as const,
+  const { data: summary, isLoading: loadingSummary } = useQuery<MetricsSummary>({
+    queryKey: ['metrics-summary'],
+    queryFn: async () => {
+      try {
+        return await api.get('/metrics/summary').then((r) => r.data);
+      } catch {
+        return MOCK_SUMMARY;
+      }
     },
-    {
-      label: 'Taxa de Conversão',
-      value: '34.8%',
-      change: 5,
-      changeLabel: 'vs. semana passada',
-      icon: (
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
-        </svg>
-      ),
-      trend: 'up' as const,
-    },
-    {
-      label: 'Total de Impressões',
-      value: '1.2M',
-      change: 12,
-      changeLabel: 'vs. semana passada',
-      icon: (
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 11.93a7.001 7.001 0 00-10.86 0M17.07 11.93a9 9 0 00-14.14 0M15.68 16.68a5.5 5.5 0 11-11.36 0" />
-        </svg>
-      ),
-      trend: 'up' as const,
-    },
-    {
-      label: 'Receita Gerada',
-      value: 'R$ 45.2K',
-      change: 18,
-      changeLabel: 'vs. semana passada',
-      icon: (
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M8.16 2.75a.75.75 0 0 0-.75.75v2h3V3.5a.75.75 0 0 0-.75-.75H8.16zM10 2a.75.75 0 0 1 .75.75V5h2V3.75A.75.75 0 0 1 13.5 3v2H16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2.5V3.75A.75.75 0 0 1 10 2z" />
-        </svg>
-      ),
-      trend: 'up' as const,
-    },
-  ];
+    refetchInterval: 30000,
+    placeholderData: MOCK_SUMMARY,
+  });
 
-  const campaigns: Campaign[] = useMemo(
-    () => [
-      {
-        id: '1',
-        name: 'Promoção Verão 2026',
-        status: 'ativo',
-        impressions: 234500,
-        clicks: 12400,
-        conversions: 4321,
-        roi: '340%',
-      },
-      {
-        id: '2',
-        name: 'Black Friday Preview',
-        status: 'ativo',
-        impressions: 189300,
-        clicks: 8900,
-        conversions: 2134,
-        roi: '285%',
-      },
-      {
-        id: '3',
-        name: 'Lançamento Novo Produto',
-        status: 'ativo',
-        impressions: 156700,
-        clicks: 7234,
-        conversions: 1876,
-        roi: '312%',
-      },
-      {
-        id: '4',
-        name: 'Campanha de Retargeting',
-        status: 'pausado',
-        impressions: 98200,
-        clicks: 3421,
-        conversions: 567,
-        roi: '198%',
-      },
-      {
-        id: '5',
-        name: 'Teste A/B Página Principal',
-        status: 'finalizado',
-        impressions: 456800,
-        clicks: 23400,
-        conversions: 8923,
-        roi: '425%',
-      },
-    ],
-    []
-  );
+  const { data: progress } = useQuery<GoalsProgress>({
+    queryKey: ['goals-progress'],
+    queryFn: async () => {
+      try {
+        return await api.get('/metrics/goals-progress').then((r) => r.data);
+      } catch {
+        return MOCK_PROGRESS;
+      }
+    },
+    placeholderData: MOCK_PROGRESS,
+  });
 
-  const campaignColumns = [
-    {
-      key: 'name' as const,
-      label: 'Campanha',
+  const { data: insightsData } = useQuery<{ insights?: Insight[] } | Insight[]>({
+    queryKey: ['fury-insights'],
+    queryFn: async () => {
+      try {
+        return await api.get('/fury/insights').then((r) => r.data);
+      } catch {
+        return { insights: MOCK_INSIGHTS };
+      }
     },
-    {
-      key: 'status' as const,
-      label: 'Status',
-      render: (value: any) => (
-        <span
-          className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold ${
-            value === 'ativo'
-              ? 'bg-[#2EA043]/10 text-[#2EA043]'
-              : value === 'pausado'
-                ? 'bg-[#FFB81C]/10 text-[#FFB81C]'
-                : 'bg-[#6E7681]/10 text-[#6E7681]'
-          }`}
-        >
-          {value.charAt(0).toUpperCase() + value.slice(1)}
-        </span>
-      ),
-    },
-    {
-      key: 'impressions' as const,
-      label: 'Impressões',
-      align: 'right' as const,
-      render: (value: any) => (value as number).toLocaleString('pt-BR'),
-    },
-    {
-      key: 'clicks' as const,
-      label: 'Cliques',
-      align: 'right' as const,
-      render: (value: any) => (value as number).toLocaleString('pt-BR'),
-    },
-    {
-      key: 'conversions' as const,
-      label: 'Conversões',
-      align: 'right' as const,
-      render: (value: any) => (value as number).toLocaleString('pt-BR'),
-    },
-    {
-      key: 'roi' as const,
-      label: 'ROI',
-      align: 'right' as const,
-    },
-  ];
+    placeholderData: { insights: MOCK_INSIGHTS },
+  });
 
-  const handleNewCampaign = () => {
-    // TODO: Navegar para criar nova campanha
-    console.log('Criar nova campanha');
-  };
+  const { data: campaignsData } = useQuery<Campaign[]>({
+    queryKey: ['campaigns-top'],
+    queryFn: async () => {
+      try {
+        return await api.get('/metrics/campaigns?limit=3').then((r) => r.data);
+      } catch {
+        return MOCK_CAMPAIGNS;
+      }
+    },
+    placeholderData: MOCK_CAMPAIGNS,
+  });
+
+  const s = summary ?? MOCK_SUMMARY;
+  const p = progress ?? MOCK_PROGRESS;
+
+  const insights: Insight[] = Array.isArray(insightsData)
+    ? insightsData
+    : (insightsData as { insights?: Insight[] })?.insights ?? MOCK_INSIGHTS;
+
+  const campaigns = campaignsData ?? MOCK_CAMPAIGNS;
+
+  const objectiveLabel = translateObjective(p.goal?.objective);
 
   return (
-    <AppLayout
-      header={
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-[#1C1C1E]">FURY Dashboard</h2>
-          <Button variant="primary" size="sm" onClick={handleNewCampaign}>
-            + Nova Campanha
-          </Button>
-        </div>
-      }
-    >
+    <AppLayout>
       <div className="space-y-8">
         <PageHeader
           title="Dashboard"
-          description="Visão geral do desempenho das suas campanhas"
+          description={`Objetivo atual: ${objectiveLabel}`}
         />
 
-        {/* Metrics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {metrics.map((metric, idx) => (
-            <MetricCard key={idx} {...metric} />
-          ))}
-        </div>
-
-        {/* Recent Campaigns */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-text-primary">Campanhas Recentes</h3>
-            <Button variant="ghost" size="sm">
-              Ver Todas
-            </Button>
+        {/* ── Metric Cards ─────────────────────────────────────────────── */}
+        {loadingSummary ? (
+          <div className="flex justify-center py-8">
+            <LoadingSpinner size="lg" />
           </div>
-          <DataTable
-            columns={campaignColumns}
-            data={campaigns}
-            keyField="id"
-          />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <MetricCard
+              label="ROAS"
+              value={`${s.roas.toFixed(1)}x`}
+              change={12}
+              changeLabel="vs. semana passada"
+              icon={<TrendingUp className="w-5 h-5" />}
+              trend="up"
+            />
+            <MetricCard
+              label="CPA"
+              value={`R$ ${fmt(s.cpa)}`}
+              change={-8}
+              changeLabel="vs. semana passada"
+              icon={<Target className="w-5 h-5" />}
+              trend="down"
+            />
+            <MetricCard
+              label="Investido"
+              value={`R$ ${s.spend.toLocaleString('pt-BR')}`}
+              icon={<DollarSign className="w-5 h-5" />}
+            />
+            <MetricCard
+              label="Conversões"
+              value={s.conversions.toLocaleString('pt-BR')}
+              icon={<ShoppingCart className="w-5 h-5" />}
+            />
+          </div>
+        )}
+
+        {/* ── Progress Goal ─────────────────────────────────────────────── */}
+        <ProgressGoal
+          label={`Meta do mês: ${objectiveLabel}`}
+          progressPercent={p.progressPercent}
+          onTrack={p.onTrack}
+          currentLabel={`R$ ${(p.current?.spend ?? 0).toLocaleString('pt-BR')}`}
+          targetLabel={`R$ ${(p.goal?.monthlyBudget ?? 0).toLocaleString('pt-BR')}`}
+        />
+
+        {/* ── FURY Insights ─────────────────────────────────────────────── */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#FEF0E7] flex items-center justify-center">
+              <Brain className="w-4 h-4 text-accent" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-text-primary">Insights do FURY</h3>
+              <p className="text-xs text-text-secondary">Sugestões geradas pela IA com base na sua performance</p>
+            </div>
+          </div>
+
+          {insights.length === 0 ? (
+            <div className="border border-border rounded-xl">
+              <EmptyState
+                title="A IA ainda está analisando suas campanhas"
+                description="Os insights aparecerão aqui assim que houver dados suficientes para análise."
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {insights.slice(0, 3).map((insight, i) => (
+                <InsightCard key={`${insight.type}-${i}`} {...insight} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* ── Top Campanhas ─────────────────────────────────────────────── */}
+        <section className="space-y-4">
+          <h3 className="text-base font-bold text-text-primary">Top Campanhas</h3>
+
+          <div className="bg-surface border border-border rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-surface-secondary">
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                    Nome
+                  </th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="text-right px-5 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                    ROAS
+                  </th>
+                  <th className="text-right px-5 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                    CPA
+                  </th>
+                  <th className="text-right px-5 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                    Investido
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {campaigns.map((c) => (
+                  <tr key={c.id} className="hover:bg-surface-secondary transition-colors">
+                    <td className="px-5 py-3.5 font-medium text-text-primary">{c.name}</td>
+                    <td className="px-5 py-3.5">
+                      <StatusBadge
+                        status={
+                          c.status === 'active' || c.status === 'paused'
+                            ? (c.status as 'active' | 'paused')
+                            : 'pending'
+                        }
+                      />
+                    </td>
+                    <td className="px-5 py-3.5 text-right font-semibold text-text-primary">
+                      {(c.metrics?.roas ?? 0).toFixed(1)}x
+                    </td>
+                    <td className="px-5 py-3.5 text-right text-text-secondary">
+                      R$ {fmt(c.metrics?.cpa ?? 0)}
+                    </td>
+                    <td className="px-5 py-3.5 text-right text-text-secondary">
+                      R$ {(c.metrics?.spend ?? 0).toLocaleString('pt-BR')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       </div>
     </AppLayout>

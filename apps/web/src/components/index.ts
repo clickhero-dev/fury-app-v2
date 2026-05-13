@@ -17,3 +17,5 @@ export { ProtectedRoute } from './ProtectedRoute';
 export { StatusBadge } from './StatusBadge';
 export { LoadingSpinner } from './LoadingSpinner';
 export { EmptyState } from './EmptyState';
+export { InsightCard } from './InsightCard';
+export { ProgressGoal } from './ProgressGoal';
