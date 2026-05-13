@@ -122,8 +122,6 @@ export const automationRules = pgTable('automation_rules', {
     name: varchar('name', { length: 255 }).notNull(),
     description: text('description'),
     trigger: varchar('trigger', { length: 255 }).notNull(),
-    threshold: text('threshold').notNull(),
-    action: varchar('action', { length: 255 }).notNull(),
     enabled: text('enabled').notNull().default('true'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -131,7 +129,6 @@ export const automationRules = pgTable('automation_rules', {
     isActive: boolean('is_active').notNull().default(true),
     threshold: numeric('threshold').notNull(),
     action: text('action').notNull().default('pause'), // 'pause' | 'notify' | 'reduce_budget'
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     tenantIdIdx: index('automation_rules_tenant_id_idx').on(table.tenantId),
 }));

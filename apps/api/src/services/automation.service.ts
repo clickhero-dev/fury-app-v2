@@ -22,6 +22,7 @@ export async function createAutomationRule(args: {
       name: args.name,
       description: args.description,
       trigger: args.trigger,
+      ruleType: args.trigger,
       threshold: args.threshold.toString(),
       action: args.action,
       enabled: (args.enabled !== false).toString(),

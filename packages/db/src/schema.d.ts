@@ -703,30 +703,6 @@ export declare const automationRules: import("drizzle-orm/pg-core").PgTableWithC
             enumValues: [string, ...string[]];
             baseColumn: never;
         }, {}, {}>;
-        threshold: import("drizzle-orm/pg-core").PgColumn<{
-            name: "threshold";
-            tableName: "automation_rules";
-            dataType: "string";
-            columnType: "PgNumeric";
-            data: string;
-            driverParam: string;
-            notNull: true;
-            hasDefault: false;
-            enumValues: undefined;
-            baseColumn: never;
-        }, {}, {}>;
-        action: import("drizzle-orm/pg-core").PgColumn<{
-            name: "action";
-            tableName: "automation_rules";
-            dataType: "string";
-            columnType: "PgText";
-            data: string;
-            driverParam: string;
-            notNull: true;
-            hasDefault: true;
-            enumValues: [string, ...string[]];
-            baseColumn: never;
-        }, {}, {}>;
         enabled: import("drizzle-orm/pg-core").PgColumn<{
             name: "enabled";
             tableName: "automation_rules";
@@ -785,6 +761,30 @@ export declare const automationRules: import("drizzle-orm/pg-core").PgTableWithC
             notNull: true;
             hasDefault: true;
             enumValues: undefined;
+            baseColumn: never;
+        }, {}, {}>;
+        threshold: import("drizzle-orm/pg-core").PgColumn<{
+            name: "threshold";
+            tableName: "automation_rules";
+            dataType: "string";
+            columnType: "PgNumeric";
+            data: string;
+            driverParam: string;
+            notNull: true;
+            hasDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+        }, {}, {}>;
+        action: import("drizzle-orm/pg-core").PgColumn<{
+            name: "action";
+            tableName: "automation_rules";
+            dataType: "string";
+            columnType: "PgText";
+            data: string;
+            driverParam: string;
+            notNull: true;
+            hasDefault: true;
+            enumValues: [string, ...string[]];
             baseColumn: never;
         }, {}, {}>;
     };
@@ -1492,30 +1492,6 @@ export declare const allTables: {
                 enumValues: [string, ...string[]];
                 baseColumn: never;
             }, {}, {}>;
-            threshold: import("drizzle-orm/pg-core").PgColumn<{
-                name: "threshold";
-                tableName: "automation_rules";
-                dataType: "string";
-                columnType: "PgNumeric";
-                data: string;
-                driverParam: string;
-                notNull: true;
-                hasDefault: false;
-                enumValues: undefined;
-                baseColumn: never;
-            }, {}, {}>;
-            action: import("drizzle-orm/pg-core").PgColumn<{
-                name: "action";
-                tableName: "automation_rules";
-                dataType: "string";
-                columnType: "PgText";
-                data: string;
-                driverParam: string;
-                notNull: true;
-                hasDefault: true;
-                enumValues: [string, ...string[]];
-                baseColumn: never;
-            }, {}, {}>;
             enabled: import("drizzle-orm/pg-core").PgColumn<{
                 name: "enabled";
                 tableName: "automation_rules";
@@ -1574,6 +1550,30 @@ export declare const allTables: {
                 notNull: true;
                 hasDefault: true;
                 enumValues: undefined;
+                baseColumn: never;
+            }, {}, {}>;
+            threshold: import("drizzle-orm/pg-core").PgColumn<{
+                name: "threshold";
+                tableName: "automation_rules";
+                dataType: "string";
+                columnType: "PgNumeric";
+                data: string;
+                driverParam: string;
+                notNull: true;
+                hasDefault: false;
+                enumValues: undefined;
+                baseColumn: never;
+            }, {}, {}>;
+            action: import("drizzle-orm/pg-core").PgColumn<{
+                name: "action";
+                tableName: "automation_rules";
+                dataType: "string";
+                columnType: "PgText";
+                data: string;
+                driverParam: string;
+                notNull: true;
+                hasDefault: true;
+                enumValues: [string, ...string[]];
                 baseColumn: never;
             }, {}, {}>;
         };

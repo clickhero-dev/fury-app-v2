@@ -150,11 +150,6 @@ export const studioService = {
   processStudioGenerationJob,
 };
 
-  const job = await studioQueue.add('generate-image', input);
-  const result = await job.waitUntilFinished(studioQueueEvents);
-  return result as GenerateStudioImageResult;
-}
-
 const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const IMAGE_FETCH_TIMEOUT_MS = 30000;
