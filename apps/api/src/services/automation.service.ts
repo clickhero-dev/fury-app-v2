@@ -25,7 +25,7 @@ export async function createAutomationRule(args: {
       ruleType: args.trigger,
       threshold: args.threshold.toString(),
       action: args.action,
-      enabled: (args.enabled !== false).toString(),
+      enabled: args.enabled ? 'true' : 'false',
     })
     .returning();
 

@@ -1,4 +1,5 @@
 import { pgTable, uuid, text, varchar, timestamp, jsonb, pgEnum, index, boolean, numeric, } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, varchar, timestamp, jsonb, pgEnum, index, boolean, } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member']);
@@ -122,6 +123,8 @@ export const automationRules = pgTable('automation_rules', {
     name: varchar('name', { length: 255 }).notNull(),
     description: text('description'),
     trigger: varchar('trigger', { length: 255 }).notNull(),
+    threshold: text('threshold').notNull(),
+    action: varchar('action', { length: 255 }).notNull(),
     enabled: text('enabled').notNull().default('true'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

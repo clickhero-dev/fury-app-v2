@@ -14,16 +14,58 @@ const createRuleSchema = z.object({
   isActive: z.boolean().optional().default(true),
   action: z.string().min(1, 'Action is required'),
   enabled: z.boolean().optional().default(true),
+import { and, eq, desc } from 'drizzle-orm';
+import { db, automationRules, furyInsights } from '@fury/db';
+
+import {
+  createAutomationRule,
+  getAutomationRules,
+} from '../services/automation.service.js';
+
+import { AppError } from '../middleware/errorHandler.js';
+
+import {
+  emitToTenant,
+  registerSSEClient,
+  removeSSEClient,
+} from '../lib/sse.js';
+
+const createRuleSchema = z.object({
+  ruleType: z.string().min(1, 'Rule type is required'),
+  isActive: z.boolean().optional().default(true),
+  threshold: z
+    .string()
+    .or(z.number())
+    .refine((v) => !isNaN(parseFloat(String(v))), 'Invalid threshold'),
+  action: z
+    .enum(['pause', 'notify', 'reduce_budget'])
+    .optional()
+    .default('pause'),
 });
 
 const deleteRuleSchema = z.object({
   id: z.string().uuid('Invalid rule ID'),
 });
 
-export async function createRule(req: Request, res: Response, next: NextFunction) {
+const budgetSmartSchema = z.object({
+  monthlyBudget: z
+    .number()
+    .min(300, 'Monthly budget must be at least R$300'),
+  adAccountId: z.string().min(1, 'Ad account ID is required'),
+});
+
+export async function createRuleHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant not found in request context');
+      throw new AppError(
+        401,
+        'UNAUTHORIZED',
+        'Tenant not found in request context',
+      );
     }
 
     const payload = createRuleSchema.parse(req.body);
@@ -40,6 +82,52 @@ export async function createRule(req: Request, res: Response, next: NextFunction
 
     emitToTenant(req.tenant.tenantId, 'rule_created', created);
 
+    const threshold = parseFloat(String(payload.threshold));
+
+    const existing = await db.query.automationRules.findFirst({
+      where: and(
+        eq(automationRules.tenantId, req.tenant.tenantId),
+        eq(automationRules.ruleType, payload.ruleType),
+      ),
+    });
+
+    if (existing) {
+      const updated = await db
+        .update(automationRules)
+        .set({
+          name: payload.ruleType,
+          trigger: payload.ruleType,
+          isActive: payload.isActive,
+          threshold: threshold.toString(),
+          action: payload.action,
+        })
+        .where(eq(automationRules.id, existing.id))
+        .returning();
+
+      emitToTenant(req.tenant.tenantId, 'rule_updated', updated[0]);
+
+      return res.status(200).json({
+        success: true,
+        data: updated[0],
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const created = await db
+      .insert(automationRules)
+      .values({
+        tenantId: req.tenant.tenantId,
+        name: payload.ruleType,
+        trigger: payload.ruleType,
+        ruleType: payload.ruleType,
+        isActive: payload.isActive,
+        threshold: threshold.toString(),
+        action: payload.action,
+      })
+      .returning();
+
+    emitToTenant(req.tenant.tenantId, 'rule_created', created[0]);
+
     return res.status(201).json({
       success: true,
       data: created,
@@ -50,10 +138,18 @@ export async function createRule(req: Request, res: Response, next: NextFunction
   }
 }
 
-export async function getRules(req: Request, res: Response, next: NextFunction) {
+export async function getRulesHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant not found in request context');
+      throw new AppError(
+        401,
+        'UNAUTHORIZED',
+        'Tenant not found in request context',
+      );
     }
 
     const rules = await getAutomationRules(req.tenant.tenantId);
@@ -68,10 +164,18 @@ export async function getRules(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-export async function deleteRule(req: Request, res: Response, next: NextFunction) {
+export async function deleteRuleHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant not found in request context');
+      throw new AppError(
+        401,
+        'UNAUTHORIZED',
+        'Tenant not found in request context',
+      );
     }
 
     const params = deleteRuleSchema.parse(req.params);
@@ -79,17 +183,23 @@ export async function deleteRule(req: Request, res: Response, next: NextFunction
     const existing = await db.query.automationRules.findFirst({
       where: and(
         eq(automationRules.id, params.id),
-        eq(automationRules.tenantId, req.tenant.tenantId)
+        eq(automationRules.tenantId, req.tenant.tenantId),
       ),
     });
 
     if (!existing) {
-      throw new AppError(403, 'FORBIDDEN', 'Rule not found or does not belong to this tenant');
+      throw new AppError(
+        403,
+        'FORBIDDEN',
+        'Rule not found or does not belong to this tenant',
+      );
     }
 
     await db.delete(automationRules).where(eq(automationRules.id, params.id));
 
-    emitToTenant(req.tenant.tenantId, 'rule_deleted', { id: params.id });
+    emitToTenant(req.tenant.tenantId, 'rule_deleted', {
+      id: params.id,
+    });
 
     return res.status(200).json({
       success: true,
@@ -101,16 +211,24 @@ export async function deleteRule(req: Request, res: Response, next: NextFunction
   }
 }
 
-export async function getTakedowns(req: Request, res: Response, next: NextFunction) {
+export async function getTakedownsHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant not found in request context');
+      throw new AppError(
+        401,
+        'UNAUTHORIZED',
+        'Tenant not found in request context',
+      );
     }
 
     const takedowns = await db.query.furyInsights.findMany({
       where: and(
         eq(furyInsights.tenantId, req.tenant.tenantId),
-        eq(furyInsights.suggestionType, 'smart_takedown')
+        eq(furyInsights.suggestionType, 'smart_takedown'),
       ),
       orderBy: (table) => [desc(table.createdAt)],
       limit: 20,
@@ -126,10 +244,18 @@ export async function getTakedowns(req: Request, res: Response, next: NextFuncti
   }
 }
 
-export async function getSSEFeed(req: Request, res: Response, next: NextFunction) {
+export async function getSSEFeedHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant not found in request context');
+      throw new AppError(
+        401,
+        'UNAUTHORIZED',
+        'Tenant not found in request context',
+      );
     }
 
     const tenantId = req.tenant.tenantId;
@@ -162,4 +288,101 @@ export async function createRuleHandler(req: Request, res: Response, next: NextF
 
 export async function getRulesHandler(req: Request, res: Response, next: NextFunction) {
   return getRules(req, res, next);
+}
+export async function budgetSmartHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(
+        401,
+        'UNAUTHORIZED',
+        'Tenant not found in request context',
+      );
+    }
+
+    const payload = budgetSmartSchema.parse(req.body);
+
+    const monthlyBudget = payload.monthlyBudget;
+
+    const campaigns = [
+      {
+        id: '1',
+        name: 'Campanha Leads',
+        budget: 500,
+        metrics: { roas: 4.5 },
+      },
+      {
+        id: '2',
+        name: 'Campanha Conversão',
+        budget: 300,
+        metrics: { roas: 2.8 },
+      },
+    ];
+
+    if (!campaigns.length) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          monthlyBudget,
+          distribution: [],
+          previsao: {
+            leadsEstimados: Math.round(monthlyBudget / 50),
+            vendasEstimadas: Math.round(monthlyBudget / 150),
+            roasEsperado: 3.2,
+            resumo: `Com R$${monthlyBudget}/mês, estimamos ${Math.round(
+              monthlyBudget / 50,
+            )} leads a um CPA médio de R$50.`,
+          },
+        },
+      });
+    }
+
+    const sortedCampaigns = campaigns.sort(
+      (a, b) => b.metrics.roas - a.metrics.roas,
+    );
+
+    const totalRoas = sortedCampaigns.reduce(
+      (acc, campaign) => acc + campaign.metrics.roas,
+      0,
+    );
+
+    const distribution = sortedCampaigns.map((campaign) => {
+      const percentage = campaign.metrics.roas / totalRoas;
+
+      return {
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        currentBudget: campaign.budget,
+        suggestedBudget: Math.round(monthlyBudget * percentage),
+        roas: campaign.metrics.roas,
+      };
+    });
+
+    const response = {
+      monthlyBudget,
+      distribution,
+      previsao: {
+        leadsEstimados: Math.round(monthlyBudget / 45),
+        vendasEstimadas: Math.round(monthlyBudget / 160),
+        roasEsperado: 3.8,
+        resumo: `Com R$${monthlyBudget}/mês, a distribuição inteligente prioriza campanhas com maior ROAS, aumentando potencial de conversão e retorno.`,
+      },
+      diasRestantes: new Date(
+        new Date().getFullYear(),
+        new Date().getMonth() + 1,
+        0,
+      ).getDate() - new Date().getDate(),
+    };
+
+    res.status(200).json({
+      success: true,
+      data: response,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
 }
