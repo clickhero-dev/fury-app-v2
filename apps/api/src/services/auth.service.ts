@@ -1,11 +1,11 @@
 import bcrypt from 'bcryptjs';
-import { db } from '@fury/db';
-import { tenants, users } from '@fury/db';
+import { db } from '../lib/db.js';
+import { tenants, users } from '../lib/db.js';
 import { eq } from 'drizzle-orm';
 import { getRedis } from '../lib/redis.js';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../lib/jwt.js';
 import { AppError } from '../middleware/errorHandler.js';
-import type { UserDTO } from '@fury/shared';
+import type { UserDTO } from '../lib/shared.js';
 
 const REFRESH_TOKEN_TTL = 30 * 24 * 60 * 60; // 30 days in seconds
 

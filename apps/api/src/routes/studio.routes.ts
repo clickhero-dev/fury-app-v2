@@ -41,12 +41,19 @@ function getMockVariations(body: any, quantidade: number): any[] {
     { texto: `${body.produto} — transforme seu negócio hoje!`, pontuacao: 7.0 },
     { texto: `Descubra ${body.produto} para ${body.publico}`, pontuacao: 6.5 },
     { texto: `A melhor solução em ${body.produto}`, pontuacao: 8.0 },
+    { texto: `Clique e conheça ${body.produto}`, pontuacao: 7.5 },
+    { texto: `Garanta ${body.produto} agora mesmo`, pontuacao: 7.8 },
   ];
-  return mockOptions.slice(0, quantidade).map(m => ({
-    texto: m.texto,
-    caracteres: m.texto.length,
-    pontuacao: m.pontuacao,
-  }));
+
+  const total = Math.min(Math.max(quantidade || 3, 3), 5);
+  return Array.from({ length: total }, (_, index) => {
+    const item = mockOptions[index % mockOptions.length];
+    return {
+      texto: item.texto,
+      caracteres: item.texto.length,
+      pontuacao: item.pontuacao,
+    };
+  });
 }
 
 router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {

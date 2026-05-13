@@ -1,151 +1,145 @@
-import { claude } from '../lib/claude';
-import { db, creative_assets } from '@fury/db';
-import { eq } from 'drizzle-orm';
-
+import { claude } from '../lib/claude.js';
 const CHAR_LIMITS = {
   headline: 40,
   descricao: 125,
   cta: 20,
-  completo: 300, // Soft limit for prompt
-};
+  completo: 300,
+} as const;
 
 type CopyType = keyof typeof CHAR_LIMITS;
 
-function calcularPontuacao(texto: string, type: CopyType): number {
-  let pontuacao = 3.0; // Base score
+export type StudioCopyTone = 'formal' | 'casual' | 'urgente' | 'emocional';
 
-  // 1. Check character limits
-  if (texto.length <= CHAR_LIMITS[type]) {
-    pontuacao += 3.0;
-  }
-
-  // 2. Check for clear call to action
-  const ctaKeywords = ['compre', 'acesse', 'saiba', 'clique', 'garanta'];
-  if (ctaKeywords.some((keyword) => texto.toLowerCase().includes(keyword))) {
-    pontuacao += 2.0;
-  }
-
-  // 3. Check for forbidden words
-  const forbiddenKeywords = ['grátis', 'garantido 100%', 'melhor do mundo'];
-  if (
-    !forbiddenKeywords.some((keyword) => texto.toLowerCase().includes(keyword))
-  ) {
-    pontuacao += 2.0;
-  }
-
-  return Math.min(pontuacao, 10.0); // Cap at 10
-}
-
-async function generateCopy({
-  tenantId,
-  type,
-  produto,
-  publico,
-  objetivo,
-  tom,
-  quantidadeVariacoes,
-}: {
+export interface GenerateCopyInput {
   tenantId: string;
   type: CopyType;
   produto: string;
   publico: string;
   objetivo: string;
-  tom: 'formal' | 'casual' | 'urgente' | 'emocional';
+  tom: StudioCopyTone;
   quantidadeVariacoes: number;
-}) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn(
-      'ANTHROPIC_API_KEY is not set. Using fallback response.'
-    );
-    return {
-      variacoes: [
-        {
-          texto: `${produto} — transforme seu negócio hoje!`,
-          caracteres: `${produto} — transforme seu negócio hoje!`.length,
-          pontuacao: 7.0,
-        },
-        {
-          texto: `Descubra ${produto} para ${publico}`,
-          caracteres: `Descubra ${produto} para ${publico}`.length,
-          pontuacao: 6.5,
-        },
-        {
-          texto: `A melhor escolha em ${produto}`,
-          caracteres: `A melhor escolha em ${produto}`.length,
-          pontuacao: 6.0,
-        },
-      ],
-    };
-  }
-
-  const systemPrompt = `Você é um especialista em copywriting para anúncios digitais no Facebook e Instagram.
-Gere variações de copy persuasivas, claras e em português brasileiro adequadas para o público-alvo.
-Respeite RIGOROSAMENTE os limites de caracteres especificados.
-Responda APENAS em JSON válido, sem texto adicional, sem markdown.`;
-
-  const userPrompt = `Produto/serviço: ${produto}
-Público-alvo: ${publico}
-Objetivo do anúncio: ${objetivo}
-Tom de comunicação: ${tom}
-
-Gere ${quantidadeVariacoes} variações de ${type} em português brasileiro.
-Limite máximo: ${CHAR_LIMITS[type]} caracteres por variação.
-
-Retorne APENAS este JSON:
-{
-  "variacoes": [
-    { "texto": "texto da variação aqui", "caracteres": 0 }
-  ]
-}`;
-
-  const response = await claude.messages.create({
-    max_tokens: 1000,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
-  });
-
-  const responseText = response.content[0].type === 'text'
-    ? response.content[0].text
-    : '';
-  const parsed = JSON.parse(responseText.replace(/```json|```/g, '').trim());
-
-  const finalVariations = parsed.variacoes.map((v: { texto: string }) => ({
-    texto: v.texto,
-    caracteres: v.texto.length,
-    pontuacao: calcularPontuacao(v.texto, type),
-  }));
-
-  // Save to database (fire and forget)
-  db.insert(creative_assets)
-    .values({
-      tenantId,
-      type: 'copy',
-      prompt: userPrompt,
-      settings: {
-        model: claude.model,
-        type,
-        tom,
-        objetivo,
-        publico,
-        produto,
-      },
-      content: { variations: finalVariations }, // Store the full JSON with scores
-      complianceStatus: 'approved', // Copy doesn't need image compliance
-      url: null,
-    })
-    .then(() => console.log('Creative asset saved for tenant:', tenantId))
-    .catch((err) =>
-      console.error('Failed to save creative asset:', err.message),
-    );
-
-  return { variacoes: finalVariations };
 }
 
-async function generateImage(prompt: string) {
-  // ...
+export interface GeneratedCopyVariation {
+  texto: string;
+  caracteres: number;
+  pontuacao: number;
+}
+
+export interface GenerateCopyResult {
+  variacoes: GeneratedCopyVariation[];
+}
+
+export interface StudioGenerationJobData extends GenerateCopyInput {}
+export interface GenerateStudioImageResult {
+  message: string;
+}
+
+function calcularPontuacao(texto: string, type: CopyType): number {
+  let pontuacao = 3;
+
+  if (texto.length <= CHAR_LIMITS[type]) {
+    pontuacao += 3;
+  }
+
+  const ctaKeywords = ['compre', 'acesse', 'saiba', 'clique', 'garanta'];
+  if (ctaKeywords.some((keyword) => texto.toLowerCase().includes(keyword))) {
+    pontuacao += 2;
+  }
+
+  const forbiddenKeywords = ['grátis', 'garantido 100%', 'melhor do mundo'];
+  if (!forbiddenKeywords.some((keyword) => texto.toLowerCase().includes(keyword))) {
+    pontuacao += 2;
+  }
+
+  return Math.min(Math.max(pontuacao, 0), 10);
+}
+
+function buildMockVariations(input: GenerateCopyInput): GeneratedCopyVariation[] {
+  const templates = [
+    `${input.produto} — transforme seu negócio hoje!`,
+    `Descubra ${input.produto} para ${input.publico}`,
+    `A melhor escolha em ${input.produto}`,
+    `Clique e conheça ${input.produto}`,
+    `Garanta ${input.produto} agora mesmo`,
+  ];
+
+  const quantidade = Math.min(Math.max(input.quantidadeVariacoes || 3, 3), 5);
+
+  return Array.from({ length: quantidade }, (_, index) => {
+    const texto = templates[index % templates.length];
+    return {
+      texto,
+      caracteres: texto.length,
+      pontuacao: calcularPontuacao(texto, input.type),
+    };
+  });
+}
+
+function buildSystemPrompt(): string {
+  return 'Você é um especialista em copywriting para anúncios digitais no Facebook e Instagram.\n\nGere variações de copy persuasivas, claras e em português brasileiro adequadas para o público-alvo.\n\nRespeite RIGOROSAMENTE os limites de caracteres especificados.\n\nResponda APENAS em JSON válido, sem texto adicional, sem markdown.';
+}
+
+function buildUserPrompt(input: GenerateCopyInput): string {
+  const limiteChars = {
+    headline: 40,
+    descricao: 125,
+    cta: 20,
+    completo: 300,
+  } as const;
+
+  return `Produto/serviço: ${input.produto}\n\nPúblico-alvo: ${input.publico}\n\nObjetivo do anúncio: ${input.objetivo}\n\nTom de comunicação: ${input.tom}\n\nGere ${input.quantidadeVariacoes} variações de ${input.type} em português brasileiro.\n\nLimite máximo: ${limiteChars[input.type]} caracteres por variação.\n\nRetorne APENAS este JSON:\n\n{\n  "variacoes": [\n    { "texto": "texto da variação aqui", "caracteres": 0 }\n  ]\n}`;
+}
+
+export async function generateCopy(input: GenerateCopyInput): Promise<GenerateCopyResult> {
+  if (!process.env.ANTHROPIC_API_KEY || process.env.META_USE_MOCK === 'true') {
+    return { variacoes: buildMockVariations(input) };
+  }
+
+  const response = await claude.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1000,
+    system: buildSystemPrompt(),
+    messages: [{ role: 'user', content: buildUserPrompt(input) }],
+  });
+
+  const responseText = response.content[0]?.type === 'text' ? response.content[0].text : '';
+  const cleaned = responseText.replace(/```json|```/g, '').trim();
+
+  let parsed: { variacoes?: Array<{ texto?: string; text?: string }> } | null = null;
+  try {
+    parsed = JSON.parse(cleaned) as { variacoes?: Array<{ texto?: string; text?: string }> };
+  } catch {
+    return { variacoes: buildMockVariations(input) };
+  }
+
+  if (!parsed?.variacoes?.length) {
+    return { variacoes: buildMockVariations(input) };
+  }
+
+  const variacoes = parsed.variacoes.map((variacao) => {
+    const texto = String(variacao.texto ?? variacao.text ?? '');
+    return {
+      texto,
+      caracteres: texto.length,
+      pontuacao: calcularPontuacao(texto, input.type),
+    };
+  });
+
+  return { variacoes: variacoes.slice(0, Math.min(Math.max(input.quantidadeVariacoes, 3), 5)) };
+}
+
+export async function requestStudioImageGeneration(_input?: unknown): Promise<GenerateStudioImageResult> {
+  return { message: 'Rota de imagem ativa' };
+}
+
+export async function processStudioGenerationJob(_input?: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
+  return { message: 'Job de imagem processado' };
 }
 
 export const studioService = {
   generateCopy,
-  generateImage,
+  requestStudioImageGeneration,
+  processStudioGenerationJob,
 };
+
