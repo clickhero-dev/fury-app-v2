@@ -27,7 +27,7 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
       console.log(`[COMPLIANCE] 🔍 Iniciando análise do asset: ${creativeAssetId} | Tenant: ${tenantId}`);
 
       try {
-        // 1. Buscar asset no banco de dados
+        // 1. Buscar asset no banco de dados (Drizzle)
         const assets = await db
           .select()
           .from(creativeAssets)
@@ -36,9 +36,15 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
 
         const asset = assets[0];
 
-        if (!asset || !asset.url) {
-          console.warn(`[COMPLIANCE] ⚠️  Asset não encontrado ou sem URL: ${creativeAssetId}`);
-          return await fallbackApprove(creativeAssetId, 'Asset não encontrado ou sem URL', 'rejected');
+        // Se não encontrar no banco, logamos mas não temos como atualizar o registro
+        if (!asset) {
+          console.error(`[COMPLIANCE] ❌ Asset não existe no banco: ${creativeAssetId}`);
+          return;
+        }
+
+        if (!asset.url) {
+          console.warn(`[COMPLIANCE] ⚠️ Asset sem URL: ${creativeAssetId}`);
+          return await fallbackApprove(creativeAssetId, 'Asset sem URL de imagem', 'rejected');
         }
 
         // 2. Download e conversão para Base64
@@ -52,72 +58,59 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
             throw new Error(`HTTP ${response.status} ao baixar imagem`);
           }
 
-          // Detectar tipo MIME da resposta
           const contentType = response.headers.get('content-type') || 'image/jpeg';
           if (contentType.includes('png')) mediaType = 'image/png';
           else if (contentType.includes('gif')) mediaType = 'image/gif';
           else if (contentType.includes('webp')) mediaType = 'image/webp';
-          else mediaType = 'image/jpeg';
 
           const arrayBuffer = await response.arrayBuffer();
           base64Image = Buffer.from(arrayBuffer).toString('base64');
 
-          console.log(`[COMPLIANCE] ✅ Imagem baixada com sucesso (${mediaType})`);
+          console.log(`[COMPLIANCE] ✅ Imagem baixada (${mediaType})`);
         } catch (err) {
-          console.error(`[COMPLIANCE] ❌ Erro ao baixar imagem:`, err);
+          console.error(`[COMPLIANCE] ❌ Erro no download:`, err);
           return await fallbackApprove(
             creativeAssetId,
-            `Erro ao baixar imagem: ${err instanceof Error ? err.message : 'Erro desconhecido'}`,
-            'approved' // Fallback para aprovação manual
-          );
-        }
-
-        // 3. Verificar se Claude está disponível
-        if (!process.env.ANTHROPIC_API_KEY) {
-          console.warn('[COMPLIANCE] ⚠️  ANTHROPIC_API_KEY não configurada, usando fallback');
-          return await fallbackApprove(
-            creativeAssetId,
-            'API Key da Anthropic não configurada - revisar manualmente',
+            `Erro no download: ${err instanceof Error ? err.message : 'Erro desconhecido'}`,
             'approved'
           );
         }
 
-        // 4. Chamar Claude Vision para análise
+        // 3. Fallback se API Key não existir
+        if (!process.env.ANTHROPIC_API_KEY) {
+          console.warn('[COMPLIANCE] ⚠️ ANTHROPIC_API_KEY ausente');
+          return await fallbackApprove(
+            creativeAssetId,
+            'Compliance automático indisponível — revisar manualmente',
+            'approved'
+          );
+        }
+
+        // 4. Chamada Claude Vision
         const client = new Anthropic({
           apiKey: process.env.ANTHROPIC_API_KEY,
         });
 
-        const systemPrompt = `Você é um especialista em políticas de publicidade Meta (Facebook/Instagram). 
-Sua tarefa é analisar imagens de anúncios e determinar se violam as políticas de publicidade.
+        const systemPrompt = `Você é um especialista em políticas de publicidade do Facebook e Instagram.
+Analise esta imagem de anúncio e verifique se viola alguma política.
+Responda APENAS em JSON válido.`;
 
-Políticas principais a verificar:
-- Texto excessivo (mais de 20% da imagem)
-- Antes-e-depois enganosos
-- Linguagem discriminatória ou ofensiva
-- Conteúdo não apropriado para todas as idades
-- Promessas irrealistas
-- Imagens de baixa qualidade ou enganosas
-
-Responda SEMPRE em JSON válido no seguinte formato:
+        const userPrompt = `Analise esta imagem e retorne:
 {
   "aprovado": boolean,
-  "motivos_reprovacao": string[],
-  "confianca": number (0-100),
+  "motivos_reprovacao": string[], // vazio se aprovado
+  "score_confianca": number,      // 0 a 100
   "observacoes": string
-}`;
+}
 
-        const userPrompt = `Analise esta imagem publicitária para redes sociais (Meta Ads - Facebook/Instagram).
+Verificar:
+- Texto excessivo na imagem (mais de 20% da área)
+- Conteúdo enganoso ou sensacionalista
+- Imagens de 'antes e depois' para saúde/beleza
+- Linguagem discriminatória
+- Conteúdo adulto ou violento`;
 
-Verifique:
-1. Proporção de texto (máximo 20%)
-2. Qualidade e clareza da imagem
-3. Conformidade com políticas de publicidade
-4. Conteúdo apropriado
-5. Promessas realistas
-
-Retorne a análise em JSON.`;
-
-        console.log('[COMPLIANCE] 📤 Enviando para Claude Vision...');
+        console.log('[COMPLIANCE] 📤 Enviando para Claude API...');
 
         const response = await client.messages.create({
           model: 'claude-3-sonnet-20240229',
@@ -144,39 +137,27 @@ Retorne a análise em JSON.`;
           ],
         });
 
-        // 5. Processar resposta do Claude
+        // 5. Parsear Resposta
         const textContent = response.content.find((block) => block.type === 'text');
         if (!textContent || textContent.type !== 'text') {
-          throw new Error('Claude não retornou análise de texto');
+          throw new Error('Claude não retornou texto');
         }
 
-        let analysis: ComplianceAnalysis;
+        let analysis: any;
         try {
-          // Extrair JSON da resposta
           const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
-          if (!jsonMatch) {
-            throw new Error('JSON não encontrado na resposta');
-          }
-          analysis = JSON.parse(jsonMatch[0]);
+          analysis = JSON.parse(jsonMatch ? jsonMatch[0] : textContent.text);
         } catch (parseErr) {
-          console.error('[COMPLIANCE] Erro ao parsear JSON::', parseErr);
-          console.error('[COMPLIANCE] Resposta bruta:', textContent.text);
-          return await fallbackApprove(
-            creativeAssetId,
-            'Erro ao processar análise do Claude',
-            'approved'
-          );
+          console.error('[COMPLIANCE] Erro de Parse JSON Claude');
+          return await fallbackApprove(creativeAssetId, 'Erro no parse da análise do Claude', 'approved');
         }
 
-        // 6. Atualizar banco de dados
+        // 6. Atualizar Creative Asset no Banco
         const status = analysis.aprovado ? 'approved' : 'rejected';
         const notes = [
-          ...analysis.motivos_reprovacao,
-          `Confiança: ${analysis.confianca}%`,
-          analysis.observacoes,
-        ]
-          .filter(Boolean)
-          .join(' | ');
+          ...(analysis.motivos_reprovacao || []),
+          analysis.observacoes
+        ].filter(Boolean).join(' | ');
 
         await db
           .update(creativeAssets)
@@ -186,71 +167,38 @@ Retorne a análise em JSON.`;
           })
           .where(eq(creativeAssets.id, creativeAssetId));
 
-        const emoji = analysis.aprovado ? '✅' : '❌';
-        console.log(
-          `[COMPLIANCE] ${emoji} Resultado para ${creativeAssetId}: ${status.toUpperCase()} (Confiança: ${analysis.confianca}%)`
-        );
+        console.log(`[COMPLIANCE] 🚀 Status Atualizado: ${status.toUpperCase()} para Asset ${creativeAssetId}`);
 
-        return { success: true, status, confianca: analysis.confianca };
+        return { success: true, status };
       } catch (error) {
-        console.error(`[COMPLIANCE ERROR] Job falhou:`, error);
+        console.error(`[COMPLIANCE ERROR] Falha crítica no Job:`, error);
         return await fallbackApprove(
           creativeAssetId,
-          `Erro no processamento: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
-          'approved' // Fallback para aprovação (revisão manual necessária)
+          `Erro interno no worker: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+          'approved'
         );
       }
     },
     {
       connection: getRedis(),
-      concurrency: 5, // Processar até 5 jobs simultaneamente
+      concurrency: 5,
     }
   );
 };
 
-/**
- * Inicializar o worker de compliance check
- */
 export async function startComplianceCheckWorker(): Promise<void> {
-  if (complianceWorkerInstance) {
-    return;
-  }
-
+  if (complianceWorkerInstance) return;
   complianceWorkerInstance = createComplianceWorker();
-
-  // Event listeners para logging
-  complianceWorkerInstance.on('completed', (job) => {
-    console.log(`[COMPLIANCE] ✨ Job ${job.id} concluído com sucesso`);
-  });
-
-  complianceWorkerInstance.on('failed', (job, error) => {
-    console.error(`[COMPLIANCE] 🔥 Job ${job?.id} falhou permanentemente:`, error);
-  });
-
-  complianceWorkerInstance.on('error', (error) => {
-    console.error('[COMPLIANCE] ⚠️  Erro no worker:', error);
-  });
-
   console.log('✅ Compliance check worker started');
 }
 
-/**
- * Parar o worker de compliance check
- */
 export async function stopComplianceCheckWorker(): Promise<void> {
-  if (!complianceWorkerInstance) {
-    return;
-  }
-
+  if (!complianceWorkerInstance) return;
   await complianceWorkerInstance.close();
   complianceWorkerInstance = null;
   console.log('🛑 Compliance check worker stopped');
 }
 
-/**
- * Função de fallback para aprovar manualmente
- * Marca como aprovado quando há falha, indicando que precisa de revisão manual
- */
 async function fallbackApprove(
   assetId: string,
   reason: string,
@@ -268,7 +216,7 @@ async function fallbackApprove(
     console.log(`[COMPLIANCE] 🔄 Fallback aplicado: ${status} | Motivo: ${reason}`);
     return { success: true, fallback: true };
   } catch (err) {
-    console.error(`[COMPLIANCE] 💥 Erro crítico ao aplicar fallback:`, err);
+    console.error(`[COMPLIANCE] 💥 Erro crítico no fallback:`, err);
     return { success: false, fallback: true };
   }
 }
