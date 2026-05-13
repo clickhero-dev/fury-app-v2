@@ -152,6 +152,37 @@ async function checkCampaignViolations(args: {
 
   if (!reason) return;
 
+  try {
+    await fetch(
+      `${META_GRAPH_BASE}/${encodeURIComponent(args.metaCampaignId)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'PAUSED',
+          access_token: MOCK_ACCESS_TOKEN,
+        }),
+      }
+    );
+
+    await db
+      .update(campaigns)
+      .set({
+        status: 'paused',
+      })
+      .where(eq(campaigns.metaCampaignId, args.metaCampaignId));
+
+  } catch (error) {
+    console.error(
+      '[Smart Takedown] erro ao pausar campanha:',
+      error
+    );
+
+    return;
+  }
+
   await db.insert(furyInsights).values({
     tenantId: args.tenantId,
     campaignId: args.campaignId,
