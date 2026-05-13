@@ -178,9 +178,6 @@ export const automationRules = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     ruleType: text('rule_type').notNull(), // 'pause_high_cpa' | 'pause_low_roas' | 'pause_zero_conversions' | 'budget_limit'
     isActive: boolean('is_active').notNull().default(true),
-    threshold: numeric('threshold').notNull(),
-    action: text('action').notNull().default('pause'), // 'pause' | 'notify' | 'reduce_budget'
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
     tenantIdIdx: index('automation_rules_tenant_id_idx').on(table.tenantId),

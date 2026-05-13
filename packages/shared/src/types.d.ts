@@ -19,8 +19,17 @@ export interface MetaConnection {
     metaUserId: string;
     accessToken: string;
     tokenExpiresAt: Date | null;
-    adAccounts: Record<string, unknown>[];
+    adAccounts: MetaAdAccount[];
     createdAt: Date;
+}
+export interface MetaAdAccount {
+    id: string;
+    name: string;
+    account_status: number;
+    currency: string;
+}
+export interface MetaConnectionSafe extends Omit<MetaConnection, 'accessToken'> {
+    accessTokenLast4: string;
 }
 export interface Campaign {
     id: string;
