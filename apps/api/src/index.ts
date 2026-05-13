@@ -7,6 +7,7 @@ import routes from './routes/index.js';
 import { closeRedis } from './lib/redis.js';
 import { closeComplianceQueue, closeStudioQueue } from './lib/queue.js';
 import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
+import { startRuleEngine, stopRuleEngine } from './lib/rule-engine-manager.js';
 import { ensureStudioAssetsDir, studioAssetsDir } from './lib/temp-storage.js';
 import { startStudioGenerationWorker, stopStudioGenerationWorker } from './workers/studio-generation.worker.js';
 
@@ -45,6 +46,9 @@ if (NODE_ENV !== 'test') {
     void startSyncJobsWorker().catch((error) => {
       console.error('Failed to start Meta sync worker:', error);
     });
+    void startRuleEngine().catch((error) => {
+      console.error('Failed to start rule engine:', error);
+    });
     void startStudioGenerationWorker().catch((error) => {
       console.error('Failed to start Studio generation worker:', error);
     });
@@ -65,3 +69,16 @@ if (NODE_ENV !== 'test') {
 }
 
 export default app;
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  server.close(async () => {
+    await stopSyncJobsWorker();
+    await stopRuleEngine();
+    await stopStudioGenerationWorker();
+    await closeStudioQueue();
+    await closeComplianceQueue();
+    await closeRedis();
+    console.log('Server closed');
+    process.exit(0);
+  });
+});

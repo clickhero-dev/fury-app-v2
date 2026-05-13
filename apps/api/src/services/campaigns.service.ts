@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { db, campaigns, metaConnections, furyInsights } from '@fury/db';
+import { db, campaigns, metaConnections, furyInsights } from '../lib/db.js';
 import { metaApiCall, decryptAccessToken, type MetaCampaignCreateResponse } from '../lib/meta-api.js';
 import { AppError } from '../middleware/errorHandler.js';
 

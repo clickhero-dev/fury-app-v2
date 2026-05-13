@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { and, eq } from 'drizzle-orm';
-import { db, metaConnections } from '@fury/db';
+import { db, metaConnections } from '../lib/db.js';
 import { AppError } from '../middleware/errorHandler.js';
 import {
   exchangeCodeForToken,
