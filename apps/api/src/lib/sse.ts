@@ -8,13 +8,20 @@ export function registerSSEClient(tenantId: string, res: Response): void {
   if (!sseClients.has(tenantId)) {
     sseClients.set(tenantId, new Set());
   }
+
   sseClients.get(tenantId)!.add(res);
+
+  res.on('close', () => {
+    removeSSEClient(tenantId, res);
+  });
 }
 
 export function removeSSEClient(tenantId: string, res: Response): void {
   const clients = sseClients.get(tenantId);
+
   if (clients) {
     clients.delete(res);
+
     if (clients.size === 0) {
       sseClients.delete(tenantId);
     }
@@ -23,6 +30,7 @@ export function removeSSEClient(tenantId: string, res: Response): void {
 
 export function emitToTenant(tenantId: string, event: string, data: unknown): void {
   const clients = sseClients.get(tenantId);
+
   if (!clients) return;
 
   const message = `data: ${JSON.stringify({

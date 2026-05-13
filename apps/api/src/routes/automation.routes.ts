@@ -1,24 +1,22 @@
 import { Router } from 'express';
+
+import * as automationController from '../controllers/automation.controller.js';
+
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
-import { createRuleHandler, getRulesHandler } from '../controllers/automation.controller.js';
 
 const router = Router();
 
 router.use(authMiddleware, tenantMiddleware);
 
-router.post('/rules', createRuleHandler);
-router.get('/rules', getRulesHandler);
-import * as automationController from '../controllers/automation.controller.js';
-import { authMiddleware } from '../middleware/auth.middleware.js';
-import { tenantMiddleware } from '../middleware/tenant.middleware.js';
+router.post('/rules', automationController.createRule);
 
-const router = Router();
+router.get('/rules', automationController.getRules);
 
-router.post('/rules', authMiddleware, tenantMiddleware, automationController.createRule);
-router.get('/rules', authMiddleware, tenantMiddleware, automationController.getRules);
-router.delete('/rules/:id', authMiddleware, tenantMiddleware, automationController.deleteRule);
-router.get('/takedowns', authMiddleware, tenantMiddleware, automationController.getTakedowns);
-router.get('/feed', authMiddleware, tenantMiddleware, automationController.getSSEFeed);
+router.delete('/rules/:id', automationController.deleteRule);
+
+router.get('/takedowns', automationController.getTakedowns);
+
+router.get('/feed', automationController.getSSEFeed);
 
 export default router;
