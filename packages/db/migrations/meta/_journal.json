@@ -8,6 +8,13 @@
       "when": 1777397310841,
       "tag": "0000_cloudy_jack_murdock",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1778268868197,
+      "tag": "0001_tranquil_vance_astro",
+      "breakpoints": true
     }
   ]
 }

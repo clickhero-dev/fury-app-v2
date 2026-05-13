@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { db, metaConnections } from '@fury/db';
+import { db, metaConnections } from '../db.js';
 import { eq } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler.js';
 import { getMetaInsights, metaApiCall, type MetaInsightsData } from '../meta-api.js';

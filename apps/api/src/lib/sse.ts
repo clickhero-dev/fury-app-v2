@@ -1,30 +1,47 @@
-import type { Response } from 'express';
+import { Response } from 'express';
 
-const clients = new Map<string, Set<Response>>();
+type SSEClients = Map<string, Set<Response>>;
 
-export function registerSSEClient(tenantId: string, res: Response) {
-  if (!clients.has(tenantId)) {
-    clients.set(tenantId, new Set());
+const sseClients: SSEClients = new Map();
+
+export function registerSSEClient(tenantId: string, res: Response): void {
+  if (!sseClients.has(tenantId)) {
+    sseClients.set(tenantId, new Set());
   }
 
-  clients.get(tenantId)?.add(res);
+  sseClients.get(tenantId)!.add(res);
 
   res.on('close', () => {
-    clients.get(tenantId)?.delete(res);
+    removeSSEClient(tenantId, res);
   });
 }
 
-export function emitToTenant(
-  tenantId: string,
-  event: string,
-  payload: Record<string, unknown>
-) {
-  const tenantClients = clients.get(tenantId);
+export function removeSSEClient(tenantId: string, res: Response): void {
+  const clients = sseClients.get(tenantId);
 
-  if (!tenantClients) return;
+  if (clients) {
+    clients.delete(res);
 
-  for (const client of tenantClients) {
-    client.write(`event: ${event}\n`);
-    client.write(`data: ${JSON.stringify(payload)}\n\n`);
+    if (clients.size === 0) {
+      sseClients.delete(tenantId);
+    }
   }
+}
+
+export function emitToTenant(tenantId: string, event: string, data: unknown): void {
+  const clients = sseClients.get(tenantId);
+
+  if (!clients) return;
+
+  const message = `data: ${JSON.stringify({
+    event,
+    data,
+    timestamp: new Date().toISOString(),
+  })}\n\n`;
+
+  clients.forEach((res) => {
+    if (!res.writableEnded) {
+      res.write(message);
+    }
+  });
 }
