@@ -1,53 +1,112 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { claude } from '../lib/claude.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
+import * as studioController from '../controllers/studio.controller.js';
 
 const router = Router();
 
 const generateCopySchema = z.object({
   type: z.enum(['headline', 'descricao', 'cta', 'completo']),
-  produto: z.string().min(3).max(200),
-  publico: z.string().min(5).max(200),
-  objetivo: z.string().min(5).max(200),
+  produto: z.string().min(3, 'Produto deve ter min 3 caracteres').max(200, 'Produto deve ter max 200 caracteres'),
+  publico: z.string().min(5, 'Publico deve ter min 5 caracteres').max(200, 'Publico deve ter max 200 caracteres'),
+  objetivo: z.string().min(5, 'Objetivo deve ter min 5 caracteres').max(200, 'Objetivo deve ter max 200 caracteres'),
   tom: z.enum(['formal', 'casual', 'urgente', 'emocional']),
-  quantidadeVariacoes: z.number().min(3).max(5).default(3),
+  quantidadeVariacoes: z.number().int().min(3).max(5).default(3),
 });
 
-router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: any, res: any) => {
+type CopyType = 'headline' | 'descricao' | 'cta' | 'completo';
+
+function calcularPontuacao(texto: string, type: CopyType): number {
+  const limiteChars: Record<CopyType, number> = { headline: 40, descricao: 125, cta: 20, completo: 300 };
+  let score = 3; // base
+
+  const limite = limiteChars[type] ?? 300;
+  if (texto.length <= limite) score += 3;
+
+  const ctaWords = ['compre', 'acesse', 'saiba', 'clique', 'garanta'];
+  const hasCta = ctaWords.some(w => texto.toLowerCase().includes(w));
+  if (hasCta) score += 2;
+
+  const forbidden = ['grátis excessivo', 'garantido 100%', 'melhor do mundo'];
+  const hasForbidden = forbidden.some(w => texto.toLowerCase().includes(w));
+  if (!hasForbidden) score += 2;
+
+  return Math.min(10, Math.max(0, Math.round((score + Number.EPSILON) * 10) / 10));
+}
+
+function getMockVariations(body: any, quantidade: number): any[] {
+  const mockOptions = [
+    { texto: `${body.produto} — transforme seu negócio hoje!`, pontuacao: 7.0 },
+    { texto: `Descubra ${body.produto} para ${body.publico}`, pontuacao: 6.5 },
+    { texto: `A melhor solução em ${body.produto}`, pontuacao: 8.0 },
+  ];
+  return mockOptions.slice(0, quantidade).map(m => ({
+    texto: m.texto,
+    caracteres: m.texto.length,
+    pontuacao: m.pontuacao,
+  }));
+}
+
+router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = generateCopySchema.parse(req.body);
+    const type = body.type as CopyType;
+    const quantidade = body.quantidadeVariacoes ?? 3;
 
     // Fallback/Mock se não houver chave
     if (!process.env.ANTHROPIC_API_KEY || process.env.META_USE_MOCK === 'true') {
       return res.json({
-        variacoes: [
-          { texto: `${body.produto} — Sua melhor escolha!`, caracteres: 30, pontuacao: 8.5 },
-          { texto: `Aproveite ${body.produto} agora.`, caracteres: 28, pontuacao: 7.0 },
-          { texto: `Solução ideal para ${body.publico}`, caracteres: 35, pontuacao: 9.0 }
-        ].slice(0, body.quantidadeVariacoes)
+        variacoes: getMockVariations(body, quantidade),
       });
     }
+
+    const limiteChars: Record<CopyType, number> = { headline: 40, descricao: 125, cta: 20, completo: 300 };
+    const systemPrompt = `Você é um especialista em copywriting para anúncios digitais no Facebook e Instagram. Gere variações de copy persuasivas, claras e em português brasileiro. Respeite RIGOROSAMENTE os limites de caracteres especificados. Responda APENAS em JSON válido sem texto adicional.`;
+    const userPrompt = `Produto: ${body.produto}\nPúblico: ${body.publico}\nObjetivo: ${body.objetivo}\nTom: ${body.tom}\n\nGere ${quantidade} variações de ${type} em português, limite máximo ${limiteChars[type]} caracteres.\n\nRetorne APENAS:\n{"variacoes": [{"texto": "..."}]}`;
 
     const response = await claude.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1000,
-      system: "Você é um copywriter expert. Responda apenas com JSON.",
-      messages: [{ role: 'user', content: `Gere ${body.quantidadeVariacoes} variações de ${body.type} para ${body.produto}.` }]
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
     });
 
-    const text = response.content[0].text;
-    res.json(JSON.parse(text));
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Erro ao gerar copy' });
+    const text = response?.content?.[0]?.text || '';
+    const cleaned = text.replace(/```json|```/g, '').trim();
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (err) {
+      console.error('[PARSE ERROR]', err);
+      return res.json({ variacoes: getMockVariations(body, quantidade) });
+    }
+
+    if (!parsed?.variacoes || !Array.isArray(parsed.variacoes)) {
+      return res.json({ variacoes: getMockVariations(body, quantidade) });
+    }
+
+    const result = parsed.variacoes.map((v: any) => {
+      const texto = String(v.texto || v.text || '');
+      return {
+        texto,
+        caracteres: texto.length,
+        pontuacao: calcularPontuacao(texto, type),
+      };
+    });
+
+    return res.json({ variacoes: result });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation error', details: error.errors });
+    }
+    console.error('[GENERATE COPY ERROR]', error);
+    return res.status(500).json({ error: 'Erro ao gerar copy' });
   }
 });
 
-// Mantendo a rota de imagem que já estava lá
-router.post('/generate-image', authMiddleware, tenantMiddleware, async (req, res) => {
-    // Sua lógica de imagem aqui...
-    res.json({ message: "Rota de imagem ativa" });
-});
+router.post('/generate-image', authMiddleware, tenantMiddleware, studioController.generateImage);
 
 export default router;
