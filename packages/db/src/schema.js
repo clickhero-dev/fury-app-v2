@@ -1,9 +1,14 @@
-import { pgTable, uuid, text, varchar, timestamp, jsonb, pgEnum, index, } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, varchar, timestamp, jsonb, pgEnum, index, boolean, numeric, } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member']);
 export const creativeTypeEnum = pgEnum('creative_type', ['image', 'video', 'copy']);
-export const complianceStatusEnum = pgEnum('compliance_status', ['pending', 'pending_compliance', 'approved', 'rejected']);
+export const complianceStatusEnum = pgEnum('compliance_status', [
+    'pending',
+    'pending_compliance',
+    'approved',
+    'rejected',
+]);
 export const campaignStatusEnum = pgEnum('campaign_status', ['draft', 'active', 'paused', 'archived']);
 // Tenants table
 export const tenants = pgTable('tenants', {
@@ -70,6 +75,7 @@ export const creativeAssets = pgTable('creative_assets', {
     url: text('url').notNull(),
     metaAssetId: varchar('meta_asset_id', { length: 255 }),
     complianceStatus: complianceStatusEnum('compliance_status').notNull().default('pending_compliance'),
+    complianceNotes: text('compliance_notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     tenantIdIdx: index('creative_assets_tenant_id_idx').on(table.tenantId),
@@ -107,6 +113,28 @@ export const furyInsights = pgTable('fury_insights', {
     tenantIdIdx: index('fury_insights_tenant_id_idx').on(table.tenantId),
     campaignIdIdx: index('fury_insights_campaign_id_idx').on(table.campaignId),
 }));
+// Automation rules table
+export const automationRules = pgTable('automation_rules', {
+    id: uuid('id').primaryKey().default(sql `gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+        .notNull()
+        .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    description: text('description'),
+    trigger: varchar('trigger', { length: 255 }).notNull(),
+    threshold: text('threshold').notNull(),
+    action: varchar('action', { length: 255 }).notNull(),
+    enabled: text('enabled').notNull().default('true'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    ruleType: text('rule_type').notNull(), // 'pause_high_cpa' | 'pause_low_roas' | 'pause_zero_conversions' | 'budget_limit'
+    isActive: boolean('is_active').notNull().default(true),
+    threshold: numeric('threshold').notNull(),
+    action: text('action').notNull().default('pause'), // 'pause' | 'notify' | 'reduce_budget'
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+    tenantIdIdx: index('automation_rules_tenant_id_idx').on(table.tenantId),
+}));
 // Export all tables
 export const allTables = {
     tenants,
@@ -116,5 +144,6 @@ export const allTables = {
     creativeAssets,
     clientGoals,
     furyInsights,
+    automationRules,
 };
 //# sourceMappingURL=schema.js.map
