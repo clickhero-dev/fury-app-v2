@@ -108,6 +108,7 @@ export const creativeAssets = pgTable(
     url: text('url').notNull(),
     metaAssetId: varchar('meta_asset_id', { length: 255 }),
     complianceStatus: complianceStatusEnum('compliance_status').notNull().default('pending_compliance'),
+    complianceNotes: text('compliance_notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({

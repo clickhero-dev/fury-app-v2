@@ -9,6 +9,7 @@ import { closeComplianceQueue, closeStudioQueue } from './lib/queue.js';
 import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
 import { ensureStudioAssetsDir, studioAssetsDir } from './lib/temp-storage.js';
 import { startStudioGenerationWorker, stopStudioGenerationWorker } from './workers/studio-generation.worker.js';
+import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,6 +47,9 @@ const server = app.listen(PORT, () => {
     void startStudioGenerationWorker().catch((error) => {
       console.error('Failed to start Studio generation worker:', error);
     });
+    void startComplianceCheckWorker().catch((error) => {
+      console.error('Failed to start Compliance check worker:', error);
+    });
   }
 });
 
@@ -54,6 +58,7 @@ process.on('SIGTERM', () => {
   server.close(async () => {
     await stopSyncJobsWorker();
     await stopStudioGenerationWorker();
+    await stopComplianceCheckWorker();
     await closeStudioQueue();
     await closeComplianceQueue();
     await closeRedis();
