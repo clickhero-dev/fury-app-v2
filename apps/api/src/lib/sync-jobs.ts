@@ -1,6 +1,6 @@
 import { createDecipheriv, createHash, randomUUID } from 'crypto';
 import { and, eq } from 'drizzle-orm';
-import { db, metaConnections } from '@fury/db';
+import { db, metaConnections } from './db.js';
 import type { MetaAdAccount } from './meta-api.js';
 import { getUserAdAccounts } from './meta-api.js';
 import { getRedis } from './redis.js';

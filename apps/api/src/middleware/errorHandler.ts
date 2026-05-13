@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { ApiResponse } from '@fury/shared';
+import { ApiResponse } from '../lib/shared.js';
 import { ZodError } from 'zod';
 
 class AppError extends Error {
