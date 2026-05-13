@@ -3,6 +3,7 @@ import type IORedis from 'ioredis';
 import { and, eq, gt, isNull, or } from 'drizzle-orm';
 import { campaigns, db, furyInsights, metaConnections } from '@fury/db';
 import type { CampaignSyncJobPayload } from '../lib/queue.js';
+import { emitToTenant } from '../lib/sse.js';
 
 
 const META_API_VERSION = 'v20.0';
@@ -194,6 +195,12 @@ async function checkCampaignViolations(args: {
       autoApplied: true,
       metrics,
     },
+  });
+  emitToTenant(args.tenantId, 'takedown', {
+    campaignId: args.campaignId,
+    campaignName: args.campaignName,
+    reason,
+    description,
   });
 
   console.log(
