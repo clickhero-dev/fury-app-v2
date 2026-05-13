@@ -1,4 +1,4 @@
-import { db, clientGoals } from '@fury/db';
+import { db, clientGoals } from '../lib/db.js';
 import { eq } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler.js';
 import { centavosToReais } from '../utils/metrics-formatter.js';
