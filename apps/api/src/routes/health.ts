@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { HealthCheckResponse } from '@fury/shared';
+import { HealthCheckResponse } from '../lib/shared.js';
 
 const router = Router();
 
