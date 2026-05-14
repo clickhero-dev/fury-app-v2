@@ -3,32 +3,8 @@ import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, automationRules, furyInsights } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
-import { createAutomationRule, getAutomationRules } from '../services/automation.service.js';
+import { getAutomationRules } from '../services/automation.service.js';
 import { emitToTenant, registerSSEClient, removeSSEClient } from '../lib/sse.js';
-
-const createRuleSchema = z.object({
-  name: z.string().min(3, 'Rule name must be at least 3 characters'),
-  description: z.string().optional(),
-  trigger: z.string().min(1, 'Trigger is required'),
-  threshold: z.number().min(0, 'Threshold cannot be negative'),
-  isActive: z.boolean().optional().default(true),
-  action: z.string().min(1, 'Action is required'),
-  enabled: z.boolean().optional().default(true),
-import { and, eq, desc } from 'drizzle-orm';
-import { db, automationRules, furyInsights } from '@fury/db';
-
-import {
-  createAutomationRule,
-  getAutomationRules,
-} from '../services/automation.service.js';
-
-import { AppError } from '../middleware/errorHandler.js';
-
-import {
-  emitToTenant,
-  registerSSEClient,
-  removeSSEClient,
-} from '../lib/sse.js';
 
 const createRuleSchema = z.object({
   ruleType: z.string().min(1, 'Rule type is required'),
@@ -36,7 +12,7 @@ const createRuleSchema = z.object({
   threshold: z
     .string()
     .or(z.number())
-    .refine((v) => !isNaN(parseFloat(String(v))), 'Invalid threshold'),
+    .refine((v) => !Number.isNaN(parseFloat(String(v))), 'Invalid threshold'),
   action: z
     .enum(['pause', 'notify', 'reduce_budget'])
     .optional()
@@ -69,19 +45,6 @@ export async function createRuleHandler(
     }
 
     const payload = createRuleSchema.parse(req.body);
-
-    const created = await createAutomationRule({
-      tenantId: req.tenant.tenantId,
-      name: payload.name,
-      description: payload.description,
-      trigger: payload.trigger,
-      threshold: payload.threshold,
-      action: payload.action,
-      enabled: payload.enabled,
-    });
-
-    emitToTenant(req.tenant.tenantId, 'rule_created', created);
-
     const threshold = parseFloat(String(payload.threshold));
 
     const existing = await db.query.automationRules.findFirst({
@@ -282,13 +245,6 @@ export async function getSSEFeedHandler(
   }
 }
 
-export async function createRuleHandler(req: Request, res: Response, next: NextFunction) {
-  return createRule(req, res, next);
-}
-
-export async function getRulesHandler(req: Request, res: Response, next: NextFunction) {
-  return getRules(req, res, next);
-}
 export async function budgetSmartHandler(
   req: Request,
   res: Response,

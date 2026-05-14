@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { eq } from 'drizzle-orm';
+import { and, count, desc, eq, or, type SQL } from 'drizzle-orm';
 import { db, creativeAssets, metaConnections } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
 import { complianceQueue, studioQueue, studioQueueEvents } from '../lib/queue.js';
@@ -260,4 +260,75 @@ export async function uploadCreativeAssetToMeta(params: {
     .where(eq(creativeAssets.id, params.creativeAssetId));
 
   return { metaAssetId };
+}
+
+export type StudioAssetListItem = {
+  id: string;
+  type: 'image' | 'video' | 'copy';
+  url: string;
+  complianceStatus: string;
+  metaAssetId: string | null;
+  createdAt: string;
+};
+
+export async function listStudioAssetsForTenant(params: {
+  tenantId: string;
+  type?: 'image' | 'video' | 'copy';
+  status?: 'pending' | 'approved' | 'rejected';
+  page: number;
+  limit: number;
+}): Promise<{
+  assets: StudioAssetListItem[];
+  total: number;
+  page: number;
+  totalPages: number;
+}> {
+  const { tenantId, type, status, page, limit } = params;
+  const offset = (page - 1) * limit;
+
+  const clauses: SQL[] = [eq(creativeAssets.tenantId, tenantId)];
+  if (type) {
+    clauses.push(eq(creativeAssets.type, type));
+  }
+  if (status === 'pending') {
+    clauses.push(
+      or(
+        eq(creativeAssets.complianceStatus, 'pending'),
+        eq(creativeAssets.complianceStatus, 'pending_compliance'),
+      )!,
+    );
+  } else if (status) {
+    clauses.push(eq(creativeAssets.complianceStatus, status));
+  }
+
+  const whereClause = and(...clauses);
+
+  const [countRow] = await db
+    .select({ total: count() })
+    .from(creativeAssets)
+    .where(whereClause);
+
+  const rows = await db.query.creativeAssets.findMany({
+    where: whereClause,
+    orderBy: [desc(creativeAssets.createdAt)],
+    limit,
+    offset,
+  });
+
+  const total = Number(countRow?.total ?? 0);
+  const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+  return {
+    assets: rows.map((r) => ({
+      id: r.id,
+      type: r.type,
+      url: r.url,
+      complianceStatus: r.complianceStatus,
+      metaAssetId: r.metaAssetId ?? null,
+      createdAt: r.createdAt.toISOString(),
+    })),
+    total,
+    page,
+    totalPages,
+  };
 }

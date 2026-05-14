@@ -7,6 +7,8 @@ import * as studioController from '../controllers/studio.controller.js';
 
 const router = Router();
 
+router.get('/assets', authMiddleware, tenantMiddleware, studioController.listAssets);
+
 const generateCopySchema = z.object({
   type: z.enum(['headline', 'descricao', 'cta', 'completo']),
   produto: z.string().min(3, 'Produto deve ter min 3 caracteres').max(200, 'Produto deve ter max 200 caracteres'),

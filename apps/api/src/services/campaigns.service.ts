@@ -1,5 +1,5 @@
-import { eq } from 'drizzle-orm';
-import { db, campaigns, metaConnections, furyInsights } from '../lib/db.js';
+import { and, desc, eq } from 'drizzle-orm';
+import { automationRules, campaigns, db, furyInsights, metaConnections } from '../lib/db.js';
 import { metaApiCall, decryptAccessToken, type MetaCampaignCreateResponse } from '../lib/meta-api.js';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -263,18 +263,147 @@ export async function updateCampaignBudget(args: {
   return updatedCampaign;
 }
 
+export interface CampaignPanelMetrics {
+  spend: number;
+  roas: number;
+  cpa: number;
+  ctr: number;
+  cpm: number;
+  conversions: number;
+  impressions: number;
+}
+
+export interface TakedownItem {
+  id: string;
+  campaignId: string;
+  suggestionType: string;
+  suggestionData: Record<string, unknown>;
+  appliedAt: string | null;
+  createdAt: string;
+}
+
+export interface AutomationRuleItem {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string | null;
+  trigger: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  ruleType: string;
+  isActive: boolean;
+  threshold: number;
+  action: string;
+}
+
+function normalizeCampaignPanelMetrics(raw: unknown): CampaignPanelMetrics {
+  const m = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const num = (v: unknown) => {
+    const n = typeof v === 'number' ? v : parseFloat(String(v ?? '0'));
+    return Number.isFinite(n) ? n : 0;
+  };
+  return {
+    spend: num(m.spend),
+    roas: num(m.roas),
+    cpa: num(m.cpa),
+    ctr: num(m.ctr),
+    cpm: num(m.cpm),
+    conversions: num(m.conversions),
+    impressions: num(m.impressions),
+  };
+}
+
 export async function getCampaign(args: { tenantId: string; campaignId: string }) {
   const campaign = await db.query.campaigns.findFirst({
-    where: eq(campaigns.id, args.campaignId),
+    where: and(eq(campaigns.id, args.campaignId), eq(campaigns.tenantId, args.tenantId)),
   });
 
   if (!campaign) {
     throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
   }
 
-  if (campaign.tenantId !== args.tenantId) {
-    throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');
+  return campaign;
+}
+
+export async function getCampaignPanelDetail(args: {
+  tenantId: string;
+  campaignId: string;
+}): Promise<{
+  campaign: {
+    id: string;
+    name: string;
+    status: string;
+    objective: string | null;
+    budget: unknown;
+    metaCampaignId: string;
+    metrics: CampaignPanelMetrics;
+    lastSyncedAt: string | null;
+    createdAt: string;
+  };
+  recentTakedowns: TakedownItem[];
+  automationRules: AutomationRuleItem[];
+} | null> {
+  const campaign = await db.query.campaigns.findFirst({
+    where: and(eq(campaigns.id, args.campaignId), eq(campaigns.tenantId, args.tenantId)),
+  });
+
+  if (!campaign) {
+    return null;
   }
 
-  return campaign;
+  const recentTakedownsRows = await db.query.furyInsights.findMany({
+    where: and(
+      eq(furyInsights.tenantId, args.tenantId),
+      eq(furyInsights.campaignId, args.campaignId),
+      eq(furyInsights.suggestionType, 'smart_takedown'),
+    ),
+    orderBy: [desc(furyInsights.createdAt)],
+    limit: 5,
+  });
+
+  const rulesRows = await db.query.automationRules.findMany({
+    where: and(eq(automationRules.tenantId, args.tenantId), eq(automationRules.isActive, true)),
+    orderBy: [desc(automationRules.updatedAt)],
+  });
+
+  const budgetObj = campaign.budget as Record<string, unknown> | null | undefined;
+  const objective =
+    budgetObj && typeof budgetObj.objective === 'string' ? budgetObj.objective : null;
+
+  return {
+    campaign: {
+      id: campaign.id,
+      name: campaign.name,
+      status: campaign.status,
+      objective,
+      budget: campaign.budget ?? {},
+      metaCampaignId: campaign.metaCampaignId,
+      metrics: normalizeCampaignPanelMetrics(campaign.metrics),
+      lastSyncedAt: campaign.lastSyncedAt?.toISOString() ?? null,
+      createdAt: campaign.createdAt.toISOString(),
+    },
+    recentTakedowns: recentTakedownsRows.map((t) => ({
+      id: t.id,
+      campaignId: t.campaignId,
+      suggestionType: t.suggestionType,
+      suggestionData: (t.suggestionData as Record<string, unknown>) ?? {},
+      appliedAt: t.appliedAt?.toISOString() ?? null,
+      createdAt: t.createdAt.toISOString(),
+    })),
+    automationRules: rulesRows.map((r) => ({
+      id: r.id,
+      tenantId: r.tenantId,
+      name: r.name,
+      description: r.description,
+      trigger: r.trigger,
+      enabled: r.enabled === 'true',
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+      ruleType: r.ruleType,
+      isActive: r.isActive,
+      threshold: parseFloat(String(r.threshold)) || 0,
+      action: r.action,
+    })),
+  };
 }
