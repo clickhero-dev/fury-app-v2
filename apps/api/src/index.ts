@@ -10,6 +10,7 @@ import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
 import { startRuleEngine, stopRuleEngine } from './lib/rule-engine-manager.js';
 import { ensureStudioAssetsDir, studioAssetsDir } from './lib/temp-storage.js';
 import { startStudioGenerationWorker, stopStudioGenerationWorker } from './workers/studio-generation.worker.js';
+import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -52,6 +53,9 @@ if (NODE_ENV !== 'test') {
     void startStudioGenerationWorker().catch((error) => {
       console.error('Failed to start Studio generation worker:', error);
     });
+    void startComplianceCheckWorker().catch((error) => {
+      console.error('Failed to start Compliance check worker:', error);
+    });
   });
 
   process.on('SIGTERM', () => {
@@ -66,15 +70,15 @@ if (NODE_ENV !== 'test') {
       process.exit(0);
     });
   });
-}
 
-export default app;
-process.on('SIGTERM', () => {
+
+  process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
   server.close(async () => {
     await stopSyncJobsWorker();
     await stopRuleEngine();
     await stopStudioGenerationWorker();
+    await stopComplianceCheckWorker();
     await closeStudioQueue();
     await closeComplianceQueue();
     await closeRedis();
@@ -82,3 +86,6 @@ process.on('SIGTERM', () => {
     process.exit(0);
   });
 });
+}
+
+export default app;

@@ -1,5 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
+import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { db, automationRules, furyInsights } from '@fury/db';
+import { AppError } from '../middleware/errorHandler.js';
+import { createAutomationRule, getAutomationRules } from '../services/automation.service.js';
+import { emitToTenant, registerSSEClient, removeSSEClient } from '../lib/sse.js';
+
+const createRuleSchema = z.object({
+  name: z.string().min(3, 'Rule name must be at least 3 characters'),
+  description: z.string().optional(),
+  trigger: z.string().min(1, 'Trigger is required'),
+  threshold: z.number().min(0, 'Threshold cannot be negative'),
+  isActive: z.boolean().optional().default(true),
+  action: z.string().min(1, 'Action is required'),
+  enabled: z.boolean().optional().default(true),
 import { and, eq, desc } from 'drizzle-orm';
 import { db, automationRules, furyInsights } from '@fury/db';
 
@@ -56,6 +70,18 @@ export async function createRuleHandler(
 
     const payload = createRuleSchema.parse(req.body);
 
+    const created = await createAutomationRule({
+      tenantId: req.tenant.tenantId,
+      name: payload.name,
+      description: payload.description,
+      trigger: payload.trigger,
+      threshold: payload.threshold,
+      action: payload.action,
+      enabled: payload.enabled,
+    });
+
+    emitToTenant(req.tenant.tenantId, 'rule_created', created);
+
     const threshold = parseFloat(String(payload.threshold));
 
     const existing = await db.query.automationRules.findFirst({
@@ -102,9 +128,9 @@ export async function createRuleHandler(
 
     emitToTenant(req.tenant.tenantId, 'rule_created', created[0]);
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      data: created[0],
+      data: created,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -126,12 +152,9 @@ export async function getRulesHandler(
       );
     }
 
-    const rules = await db.query.automationRules.findMany({
-      where: eq(automationRules.tenantId, req.tenant.tenantId),
-      orderBy: (table) => [desc(table.createdAt)],
-    });
+    const rules = await getAutomationRules(req.tenant.tenantId);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: rules,
       timestamp: new Date().toISOString(),
@@ -178,7 +201,7 @@ export async function deleteRuleHandler(
       id: params.id,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: null,
       timestamp: new Date().toISOString(),
@@ -211,7 +234,7 @@ export async function getTakedownsHandler(
       limit: 20,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: takedowns,
       timestamp: new Date().toISOString(),
@@ -259,6 +282,13 @@ export async function getSSEFeedHandler(
   }
 }
 
+export async function createRuleHandler(req: Request, res: Response, next: NextFunction) {
+  return createRule(req, res, next);
+}
+
+export async function getRulesHandler(req: Request, res: Response, next: NextFunction) {
+  return getRules(req, res, next);
+}
 export async function budgetSmartHandler(
   req: Request,
   res: Response,

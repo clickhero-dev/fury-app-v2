@@ -1,3 +1,4 @@
+import { pgTable, uuid, text, varchar, timestamp, jsonb, pgEnum, index, boolean, numeric, } from 'drizzle-orm/pg-core';
 import { pgTable, uuid, text, varchar, timestamp, jsonb, pgEnum, index, boolean, } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 // Enums
@@ -75,6 +76,7 @@ export const creativeAssets = pgTable('creative_assets', {
     url: text('url').notNull(),
     metaAssetId: varchar('meta_asset_id', { length: 255 }),
     complianceStatus: complianceStatusEnum('compliance_status').notNull().default('pending_compliance'),
+    complianceNotes: text('compliance_notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     tenantIdIdx: index('creative_assets_tenant_id_idx').on(table.tenantId),
@@ -128,6 +130,8 @@ export const automationRules = pgTable('automation_rules', {
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     ruleType: text('rule_type').notNull(), // 'pause_high_cpa' | 'pause_low_roas' | 'pause_zero_conversions' | 'budget_limit'
     isActive: boolean('is_active').notNull().default(true),
+    threshold: numeric('threshold').notNull(),
+    action: text('action').notNull().default('pause'), // 'pause' | 'notify' | 'reduce_budget'
 }, (table) => ({
     tenantIdIdx: index('automation_rules_tenant_id_idx').on(table.tenantId),
 }));
