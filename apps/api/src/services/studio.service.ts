@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { and, count, desc, eq, or, type SQL } from 'drizzle-orm';
 import { db, creativeAssets, metaConnections } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
-import { complianceQueue, studioQueue, studioQueueEvents } from '../lib/queue.js';
+import { getComplianceQueue, getStudioQueue, getStudioQueueEvents } from '../lib/queue.js';
 import { saveTemporaryStudioImage } from '../lib/temp-storage.js';
 import { decryptAccessToken, uploadAdImage } from '../lib/meta-api.js';
 import { claude } from '../lib/claude.js';

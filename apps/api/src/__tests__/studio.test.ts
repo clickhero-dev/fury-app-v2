@@ -10,7 +10,7 @@ import {
 
 // Mock OpenAI and studio services
 vi.mock('../lib/queue.js', () => ({
-  studioQueue: {
+  getStudioQueue: vi.fn().mockReturnValue({
     add: vi.fn().mockResolvedValue({
       waitUntilFinished: vi.fn().mockResolvedValue({
         creativeAssetId: 'mock_asset_123',
@@ -18,11 +18,11 @@ vi.mock('../lib/queue.js', () => ({
         status: 'pending_compliance',
       }),
     }),
-  },
-  studioQueueEvents: {},
-  complianceQueue: {
+  }),
+  getStudioQueueEvents: vi.fn().mockReturnValue({}),
+  getComplianceQueue: vi.fn().mockReturnValue({
     add: vi.fn(),
-  },
+  }),
   closeStudioQueue: vi.fn(),
   closeComplianceQueue: vi.fn(),
 }));

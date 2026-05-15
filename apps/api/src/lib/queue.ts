@@ -47,29 +47,35 @@ export function createRuleEngineQueue(connection: IORedis) {
   });
 }
 
-export const studioQueue = new Queue('studio-generate-image', {
-  connection: {
-    url: redisUrl,
-  },
-});
+let _studioQueue: Queue | null = null;
+export function getStudioQueue(): Queue {
+  if (!_studioQueue) {
+    _studioQueue = new Queue('studio-generate-image', { connection: { url: redisUrl } });
+  }
+  return _studioQueue;
+}
 
-export const studioQueueEvents = new QueueEvents('studio-generate-image', {
-  connection: {
-    url: redisUrl,
-  },
-});
+let _studioQueueEvents: QueueEvents | null = null;
+export function getStudioQueueEvents(): QueueEvents {
+  if (!_studioQueueEvents) {
+    _studioQueueEvents = new QueueEvents('studio-generate-image', { connection: { url: redisUrl } });
+  }
+  return _studioQueueEvents;
+}
 
-export const complianceQueue = new Queue('compliance-check', {
-  connection: {
-    url: redisUrl,
-  },
-});
+let _complianceQueue: Queue | null = null;
+export function getComplianceQueue(): Queue {
+  if (!_complianceQueue) {
+    _complianceQueue = new Queue('compliance-check', { connection: { url: redisUrl } });
+  }
+  return _complianceQueue;
+}
 
 export async function closeStudioQueue(): Promise<void> {
-  await studioQueueEvents.close();
-  await studioQueue.close();
+  await getStudioQueueEvents().close();
+  await getStudioQueue().close();
 }
 
 export async function closeComplianceQueue(): Promise<void> {
-  await complianceQueue.close();
+  await getComplianceQueue().close();
 }
