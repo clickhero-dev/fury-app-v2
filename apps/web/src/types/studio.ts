@@ -22,3 +22,25 @@ export interface GenerateImageResponse {
   prompt: string;
   createdAt: string;
 }
+
+export interface CopyVariacao {
+  texto: string;
+  caracteres: number;
+  pontuacao: number;
+}
+
+export type CopyType = 'headline' | 'descricao' | 'cta' | 'completo';
+export type CopyTone = 'formal' | 'casual' | 'urgente' | 'emocional';
+
+export interface GenerateCopyPayload {
+  type: CopyType;
+  produto: string;
+  publico: string;
+  objetivo: string;
+  tom: CopyTone;
+  quantidadeVariacoes: 3 | 4 | 5;
+}
+
+export interface GenerateCopyResponse {
+  variacoes: CopyVariacao[];
+}

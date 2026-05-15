@@ -151,7 +151,6 @@ export function Metas() {
   const isOnTrack = p.onTrack;
   const pct = p.progressPercent ?? 0;
   const isWarning = !isOnTrack && pct >= 40;
-  const isDanger = !isOnTrack && pct < 40;
 
   const StatusIcon = isOnTrack ? CheckCircle2 : isWarning ? AlertTriangle : XCircle;
   const statusText = isOnTrack ? 'No caminho certo' : isWarning ? 'Atenção necessária' : 'Fora da meta';

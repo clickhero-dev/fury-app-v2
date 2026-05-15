@@ -14,7 +14,6 @@ export function ProgressGoal({ label, progressPercent, onTrack, currentLabel, ta
 
   const isGreen = onTrack;
   const isYellow = !onTrack && clamped >= 40;
-  const isRed = !onTrack && clamped < 40;
 
   const StatusIcon = isGreen ? CheckCircle2 : isYellow ? AlertTriangle : XCircle;
   const statusText = isGreen ? 'No caminho certo' : isYellow ? 'Atenção necessária' : 'Abaixo da meta';
