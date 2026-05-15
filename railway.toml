@@ -1,11 +1,8 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm install --include=dev && npm run build"
+buildCommand = "npm install && npm run build --workspace=packages/shared && npm run build --workspace=packages/db && npm run build --workspace=@fury/api"
 
 [deploy]
 startCommand = "node apps/api/dist/index.js"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
-
-[environment]
-NODE_VERSION = "22"
