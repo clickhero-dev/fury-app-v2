@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppLayout, PageHeader, Button, Card } from '@/components';
 
-type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento';
+type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento' | 'integracoes';
 
 interface SettingSection {
   id: TabType;
@@ -40,7 +41,14 @@ const creditCardIcon = (
   </svg>
 );
 
+const plugIcon = (
+  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm6 0a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+  </svg>
+);
+
 export function Configuracoes() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>('geral');
 
   const settingsTabs: SettingSection[] = [
@@ -49,6 +57,7 @@ export function Configuracoes() {
     { id: 'seguranca', label: 'Segurança', icon: shieldIcon },
     { id: 'equipe', label: 'Equipe', icon: userIcon },
     { id: 'faturamento', label: 'Faturamento', icon: creditCardIcon },
+    { id: 'integracoes', label: 'Integrações', icon: plugIcon },
   ];
 
   return (
@@ -73,7 +82,13 @@ export function Configuracoes() {
                 {settingsTabs.map((tab) => (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      if (tab.id === 'integracoes') {
+                        navigate('/configuracoes/integracoes');
+                      } else {
+                        setActiveTab(tab.id);
+                      }
+                    }}
                     className={`w-full px-4 py-3 flex items-center gap-3 font-semibold text-sm transition-colors ${
                       activeTab === tab.id
                         ? 'bg-accent-light/10 text-accent'

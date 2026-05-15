@@ -51,8 +51,12 @@ export function EstudioHome() {
     { value: 'reprovado', label: 'Reprovado', count: (data?.assets || MOCK_ASSETS).filter((a) => a.compliance_status === 'rejected').length },
   ];
 
-  const handleGenerateClick = () => {
+  const handleGenerateImageClick = () => {
     navigate('/estudio/imagem');
+  };
+
+  const handleGenerateCopyClick = () => {
+    navigate('/estudio/copy');
   };
 
   return (
@@ -60,14 +64,23 @@ export function EstudioHome() {
       header={
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-text-primary">Estúdio Criativo</h2>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleGenerateClick}
-            className="bg-[#E8631A] hover:bg-[#D45714]"
-          >
-            + Gerar Novo Criativo
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGenerateCopyClick}
+            >
+              + Gerar Copy
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleGenerateImageClick}
+              className="bg-[#E8631A] hover:bg-[#D45714]"
+            >
+              + Gerar Imagem
+            </Button>
+          </div>
         </div>
       }
     >
@@ -112,7 +125,7 @@ export function EstudioHome() {
             description="Clique no botão acima para começar a gerar criativos incríveis"
             action={{
               label: 'Gerar Novo Criativo',
-              onClick: handleGenerateClick,
+              onClick: handleGenerateImageClick,
             }}
           />
         ) : (
