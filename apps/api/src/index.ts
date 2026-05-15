@@ -4,8 +4,8 @@ import express from 'express';
 import { loggerMiddleware } from './middleware/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
-import { closeRedis } from './lib/redis.js';
-import { closeComplianceQueue, closeStudioQueue } from './lib/queue.js';
+import { closeRedis, waitForRedisReady } from './lib/redis.js';
+import { closeComplianceQueue, closeStudioQueue, closeRedisConnection } from './lib/queue.js';
 import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
 import { startRuleEngine, stopRuleEngine } from './lib/rule-engine-manager.js';
 import { ensureStudioAssetsDir, studioAssetsDir } from './lib/temp-storage.js';
@@ -35,57 +35,50 @@ app.use((req, res) => {
   });
 });
 
-let server: any = null;
+// Tudo que precisa de await fica dentro da IIFE
+(async () => {
+  if (NODE_ENV !== 'test') {
+    // Aguarda o Redis estar pronto antes de iniciar qualquer worker
+    await waitForRedisReady();
 
-if (NODE_ENV !== 'test') {
-  server = app.listen(PORT, () => {
-    console.log(`✅ Server running on http://localhost:${PORT}`);
-    console.log(`📝 Environment: ${NODE_ENV}`);
-    void ensureStudioAssetsDir().catch((error) => {
-      console.error('Failed to prepare studio assets dir:', error);
+    const server = app.listen(PORT, () => {
+      console.log(`✅ Server running on http://localhost:${PORT}`);
+      console.log(`📝 Environment: ${NODE_ENV}`);
+      
+      void ensureStudioAssetsDir().catch((error) => {
+        console.error('Failed to prepare studio assets dir:', error);
+      });
+      void startSyncJobsWorker().catch((error) => {
+        console.error('Failed to start Meta sync worker:', error);
+      });
+      void startRuleEngine().catch((error) => {
+        console.error('Failed to start rule engine:', error);
+      });
+      void startStudioGenerationWorker().catch((error) => {
+        console.error('Failed to start Studio generation worker:', error);
+      });
+      void startComplianceCheckWorker().catch((error) => {
+        console.error('Failed to start Compliance check worker:', error);
+      });
     });
-    void startSyncJobsWorker().catch((error) => {
-      console.error('Failed to start Meta sync worker:', error);
-    });
-    void startRuleEngine().catch((error) => {
-      console.error('Failed to start rule engine:', error);
-    });
-    void startStudioGenerationWorker().catch((error) => {
-      console.error('Failed to start Studio generation worker:', error);
-    });
-    void startComplianceCheckWorker().catch((error) => {
-      console.error('Failed to start Compliance check worker:', error);
-    });
-  });
 
-  process.on('SIGTERM', () => {
-    console.log('SIGTERM received, shutting down gracefully...');
-    server.close(async () => {
-      await stopSyncJobsWorker();
-      await stopStudioGenerationWorker();
-      await closeStudioQueue();
-      await closeComplianceQueue();
-      await closeRedis();
-      console.log('Server closed');
-      process.exit(0);
+    // Tratamento de encerramento (único handler)
+    process.on('SIGTERM', () => {
+      console.log('SIGTERM received, shutting down gracefully...');
+      server.close(async () => {
+        await stopSyncJobsWorker();
+        await stopRuleEngine();
+        await stopStudioGenerationWorker();
+        await stopComplianceCheckWorker();
+        await closeStudioQueue();
+        await closeComplianceQueue();
+        await closeRedisConnection();
+        await closeRedis();
+        console.log('Server closed');
+        process.exit(0);
+      });
     });
-  });
-
-
-  process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  server.close(async () => {
-    await stopSyncJobsWorker();
-    await stopRuleEngine();
-    await stopStudioGenerationWorker();
-    await stopComplianceCheckWorker();
-    await closeStudioQueue();
-    await closeComplianceQueue();
-    await closeRedis();
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
-}
+  }
+})();
 
 export default app;
