@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { db, metaConnections } from './db.js';
 import type { MetaAdAccount } from './meta-api.js';
 import { getUserAdAccounts } from './meta-api.js';
-import { getRedis } from './redis.js';
+import { getRedis, waitForRedisReady } from './redis.js';
 
 export interface AddSyncJobParams {
   tenantId: string;
@@ -114,11 +114,34 @@ function parseSyncJob(raw: string): SyncJobRecord {
 }
 
 async function runWorkerLoop(): Promise<void> {
-  const workerRedis = getRedis().duplicate();
+  await waitForRedisReady();
+  const mainRedis = getRedis();
 
+  // Cria uma conexão dedicada para o worker (blpop é bloqueante)
+  const workerRedis = mainRedis.duplicate();
   workerRedis.on('error', (err) => {
     console.error('Meta sync worker Redis error:', err);
   });
+
+  // Aguarda a conexão duplicada ficar pronta (sem chamar .connect())
+  if (workerRedis.status !== 'ready') {
+    await new Promise<void>((resolve, reject) => {
+      const onReady = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = (err: Error) => {
+        cleanup();
+        reject(err);
+      };
+      const cleanup = () => {
+        workerRedis.off('ready', onReady);
+        workerRedis.off('error', onError);
+      };
+      workerRedis.once('ready', onReady);
+      workerRedis.once('error', onError);
+    });
+  }
 
   try {
     while (workerRunning) {
@@ -135,7 +158,6 @@ async function runWorkerLoop(): Promise<void> {
         if (!workerRunning) {
           break;
         }
-
         console.error('Failed to process meta sync job:', error);
         await sleep(1000);
       }
@@ -149,7 +171,6 @@ export async function startSyncJobsWorker(): Promise<void> {
   if (workerRunning) {
     return;
   }
-
   workerRunning = true;
   workerPromise = runWorkerLoop();
   console.log('✅ Meta sync worker started');
@@ -159,7 +180,6 @@ export async function stopSyncJobsWorker(): Promise<void> {
   if (!workerRunning) {
     return;
   }
-
   workerRunning = false;
   if (workerPromise) {
     await workerPromise;
@@ -169,6 +189,9 @@ export async function stopSyncJobsWorker(): Promise<void> {
 }
 
 export async function addSyncJob(params: AddSyncJobParams): Promise<SyncJobRecord> {
+  await waitForRedisReady();
+  const mainRedis = getRedis();
+
   const job: SyncJobRecord = {
     id: randomUUID(),
     type: 'meta-initial-sync',
@@ -178,7 +201,7 @@ export async function addSyncJob(params: AddSyncJobParams): Promise<SyncJobRecor
     queuedAt: new Date(),
   };
 
-  await getRedis().rpush(META_SYNC_QUEUE_KEY, JSON.stringify(job));
+  await mainRedis.rpush(META_SYNC_QUEUE_KEY, JSON.stringify(job));
 
   console.info('Meta sync job queued', {
     id: job.id,
