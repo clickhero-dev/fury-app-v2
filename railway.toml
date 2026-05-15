@@ -1,9 +1,9 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm install && npm run build --workspace=packages/shared"
+buildCommand = "npm install && npm run build"
 
 [deploy]
-startCommand = "node --loader ts-node/esm apps/api/src/index.ts"
+startCommand = "node apps/api/dist/index.js"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
