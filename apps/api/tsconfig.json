@@ -2,10 +2,12 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "../..",
+    "rootDir": "./src",
+    "baseUrl": ".",
+    "noEmitOnError": false,
     "paths": {
-      "@fury/shared": ["../../packages/shared/src/index.ts"],
-      "@fury/db": ["../../packages/db/src/index.ts"]
+      "@fury/shared": ["../../packages/shared/dist/index.d.ts"],
+      "@fury/db": ["../../packages/db/dist/index.d.ts"]
     }
   },
   "include": [

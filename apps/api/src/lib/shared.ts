@@ -1,1 +1,1 @@
-export * from '../../../../packages/shared/src/index.js';
+export * from '@fury/shared';
