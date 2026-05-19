@@ -52,15 +52,13 @@ vi.mock('bullmq', () => {
   return { Worker: WorkerMock };
 });
 
-vi.mock('@anthropic-ai/sdk', () => {
-  class AnthropicMock {
-    messages = {
+vi.mock('../lib/claude.js', () => ({
+  claude: {
+    messages: {
       create: state.anthropicCreate,
-    };
-  }
-
-  return { default: AnthropicMock };
-});
+    },
+  },
+}));
 
 vi.mock('@fury/db', () => {
   const db = {
@@ -119,6 +117,7 @@ vi.mock('../lib/temp-storage.js', () => ({
 }));
 
 vi.mock('../lib/queue.js', () => ({
+  createBullConnection: vi.fn().mockResolvedValue({}),
   closeStudioQueue: vi.fn().mockResolvedValue(undefined),
   closeComplianceQueue: vi.fn().mockResolvedValue(undefined),
 }));

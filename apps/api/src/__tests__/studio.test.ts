@@ -8,6 +8,10 @@ import {
   getAuthHeader,
 } from './utils/test-helpers.js';
 
+const { complianceQueueAdd } = vi.hoisted(() => ({
+  complianceQueueAdd: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Mock OpenAI and studio services
 vi.mock('../lib/queue.js', () => ({
   studioQueue: {
@@ -21,7 +25,7 @@ vi.mock('../lib/queue.js', () => ({
   },
   studioQueueEvents: {},
   complianceQueue: {
-    add: vi.fn(),
+    add: complianceQueueAdd,
   },
   closeStudioQueue: vi.fn(),
   closeComplianceQueue: vi.fn(),
@@ -62,6 +66,7 @@ describe('POST /api/studio/generate-image', () => {
     expect(response.body.creativeAssetId).toBeDefined();
     expect(response.body.imageUrl).toBeDefined();
     expect(response.body.status).toBe('pending_compliance');
+    expect(complianceQueueAdd).toHaveBeenCalledTimes(1);
   });
 
   it('deve rejeitar briefing vazio (400)', async () => {
