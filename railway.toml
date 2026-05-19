@@ -1,11 +1,8 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm install && npm run build --workspace=packages/shared && npm run build --workspace=packages/db && npm run build --workspace=@fury/api"
+buildCommand = "npm install --include=dev && npm run build --workspace=packages/shared && npm run build --workspace=packages/db && npm run build --workspace=@fury/api"
 
 [deploy]
-startCommand = "sh -lc 'if [ -f apps/api/dist/index.js ]; then echo "Starting from dist" && node apps/api/dist/index.js; else echo "dist not found, falling back to ts-node" && node --loader ts-node/esm apps/api/src/index.ts; fi'"
+startCommand = "node apps/api/dist/index.js"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
-
-[environment]
-NODE_VERSION = "22"
