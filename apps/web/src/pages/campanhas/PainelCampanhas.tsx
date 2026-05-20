@@ -3,8 +3,25 @@ import { AppLayout, PageHeader, DataTable, StatusBadge, Button, Card } from '@/c
 import { useCampaigns } from '@/hooks/useCampaigns';
 import { usePauseCampaign } from '@/hooks/usePauseCampaign';
 import { useAutomationFeed } from '@/hooks/useAutomationFeed';
+import type { CampaignData } from '@/types/campaigns';
+import {
+  formatConversions,
+  formatCpaBRL,
+  formatRoas,
+} from '@/lib/format-campaign-metrics';
 
 type FilterType = 'todos' | 'ativo' | 'pausado' | 'finalizado';
+
+// 🔧 ADICIONE ESTE COMPONENTE WRAPPER
+const StatusBadgeAdapter = ({ status }: { status: CampaignData['status'] }) => {
+  // Mapeia os status do seu sistema para os do componente StatusBadge
+  const mappedStatus = 
+    status === 'ativo' ? 'active' :
+    status === 'pausado' ? 'paused' :
+    status === 'finalizado' ? 'approved' : 'pending';
+  
+  return <StatusBadge status={mappedStatus} />;
+};
 
 export function PainelCampanhas() {
   const [filter, setFilter] = useState<FilterType>('todos');
@@ -43,7 +60,7 @@ export function PainelCampanhas() {
     [campaigns]
   );
 
-  const columns: any[] = [
+  const columns = [
     {
       key: 'name' as const,
       label: 'Nome da Campanha',
@@ -51,42 +68,53 @@ export function PainelCampanhas() {
     {
       key: 'status' as const,
       label: 'Status',
-      render: (value: any) => (
-        <StatusBadge status={value as any} />
+      render: (value: unknown) => (  // ← REMOVIDO parâmetro row não usado
+        <StatusBadgeAdapter status={value as CampaignData['status']} />
       ),
     },
     {
       key: 'investido' as const,
       label: 'Investido',
       align: 'right' as const,
-      render: (value: any) => `R$ ${value.toLocaleString('pt-BR')}`,
+      render: (value: unknown) =>
+        `R$ ${(value as number).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     },
     {
       key: 'roas' as const,
       label: 'ROAS',
       align: 'right' as const,
-      render: (value: any) => `${value.toFixed(2)}x`,
+      render: (value: unknown) => formatRoas(value as number | null),
     },
     {
       key: 'cpa' as const,
       label: 'CPA',
       align: 'right' as const,
-      render: (value: any) => (
-        <span className={value > 60 ? 'text-red-600 font-semibold' : 'text-text-primary'}>
-          R$ {value.toFixed(2)}
-        </span>
-      ),
+      render: (value: unknown) => {
+        const cpaValue = value as number | null;
+        return (
+          <span
+            className={
+              cpaValue != null && cpaValue > 60
+                ? 'text-red-600 font-semibold'
+                : 'text-text-primary'
+            }
+          >
+            {formatCpaBRL(cpaValue)}
+          </span>
+        );
+      },
     },
     {
       key: 'conversoes' as const,
       label: 'Conversões',
       align: 'right' as const,
+      render: (value: unknown) => formatConversions(value as number | null),
     },
     {
       key: 'id' as const,
       label: '',
       align: 'right' as const,
-      render: (_: any, row: any) => (
+      render: (_value: unknown, row: CampaignData) => (
         <div className="flex items-center gap-2">
           <button
             className="p-1 hover:bg-surface-secondary rounded-lg transition-colors disabled:opacity-50"

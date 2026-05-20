@@ -277,7 +277,7 @@ export function createCampaignSyncWorker(connection: IORedis) {
         let insightsResp: MetaInsightsResponse;
         try {
           insightsResp = await metaGetJson<MetaInsightsResponse>(
-            `/${encodeURIComponent(c.id)}/insights?fields=spend,impressions,clicks,ctr,cpm,cpp,actions&date_preset=last_7d`
+            `/${encodeURIComponent(c.id)}/insights?fields=spend,impressions,clicks,ctr,cpm,cpp,actions,purchase_roas,cost_per_action_type&date_preset=last_7d`
           );
         } catch (err) {
           const code = (err as MetaApiError).metaCode;

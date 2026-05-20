@@ -86,16 +86,18 @@ export class MockMetricsProvider implements IMetricsProvider {
 
       const aggregated = aggregateDailyMetrics(dailyInRange);
 
+      const spend = centavosToReais(aggregated.totalSpend);
       return {
         id: campaign.campaignId,
         name: campaign.name,
         status: campaign.status,
-        spend: centavosToReais(aggregated.totalSpend),
+        spend,
         roas: aggregated.avgRoas,
-        cpa: calculateCPA(
-          centavosToReais(aggregated.totalSpend),
-          aggregated.totalConversions
-        ),
+        cpa:
+          aggregated.totalConversions > 0
+            ? calculateCPA(spend, aggregated.totalConversions)
+            : null,
+        conversions: aggregated.totalConversions,
         impressions: aggregated.totalImpressions,
         clicks: aggregated.totalClicks,
       };

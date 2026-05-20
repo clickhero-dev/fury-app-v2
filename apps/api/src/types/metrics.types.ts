@@ -121,8 +121,9 @@ export interface CampaignResponse {
   name: string;
   status: 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
   spend: number;
-  roas: number;
-  cpa: number;
+  roas: number | null;
+  cpa: number | null;
+  conversions: number | null;
   impressions: number;
   clicks: number;
 }
