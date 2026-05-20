@@ -2,8 +2,8 @@ export interface StudioAsset {
   id: string;
   type: 'image' | 'copy' | 'video';
   url: string | null;
-  compliance_status: 'pending' | 'approved' | 'rejected';
-  name: string;
+  complianceStatus: 'pending' | 'pending_compliance' | 'approved' | 'rejected';
+  name?: string;
   createdAt?: string;
   description?: string;
 }
