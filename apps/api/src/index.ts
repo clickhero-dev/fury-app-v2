@@ -5,9 +5,10 @@ import { loggerMiddleware } from './middleware/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
 import { closeRedis, waitForRedisReady } from './lib/redis.js';
-import { closeComplianceQueue, closeStudioQueue, closeRedisConnection } from './lib/queue.js';
+import { closeComplianceQueue, closeStudioQueue, closeRedisConnection, closeFuryEngineQueue } from './lib/queue.js';
 import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
 import { startRuleEngine, stopRuleEngine } from './lib/rule-engine-manager.js';
+import { startFuryEngine, stopFuryEngine } from './lib/fury-engine-manager.js';
 import { ensureStudioAssetsDir, studioAssetsDir } from './lib/temp-storage.js';
 import { startStudioGenerationWorker, stopStudioGenerationWorker } from './workers/studio-generation.worker.js';
 import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
@@ -60,6 +61,9 @@ app.use((req, res) => {
       void startComplianceCheckWorker().catch((error) => {
         console.error('Failed to start Compliance check worker:', error);
       });
+      void startFuryEngine().catch((error) => {
+        console.error('Failed to start Fury engine:', error);
+      });
     });
 
     // Tratamento de encerramento (único handler)
@@ -70,8 +74,10 @@ app.use((req, res) => {
         await stopRuleEngine();
         await stopStudioGenerationWorker();
         await stopComplianceCheckWorker();
+        await stopFuryEngine();
         await closeStudioQueue();
         await closeComplianceQueue();
+        await closeFuryEngineQueue();
         await closeRedisConnection();
         await closeRedis();
         console.log('Server closed');

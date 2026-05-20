@@ -9,11 +9,16 @@ import {
   index,
   boolean,
   numeric,
+  integer,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member']);
+export const conditionFieldEnum = pgEnum('condition_field', ['cpc', 'ctr', 'roas', 'cpa', 'spend']);
+export const conditionOperatorEnum = pgEnum('condition_operator', ['gt', 'lt', 'eq']);
+export const ruleActionEnum = pgEnum('rule_action', ['pause_campaign', 'reduce_budget', 'notify', 'increase_budget']);
+export const performanceGradeEnum = pgEnum('performance_grade', ['A', 'B', 'C', 'D', 'F']);
 export const creativeTypeEnum = pgEnum('creative_type', ['image', 'video', 'copy']);
 export const complianceStatusEnum = pgEnum('compliance_status', [
   'pending',
@@ -185,6 +190,73 @@ export const automationRules = pgTable(
   })
 );
 
+// Performance rules table
+export const performanceRules = pgTable(
+  'performance_rules',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    conditionField: conditionFieldEnum('condition_field').notNull(),
+    conditionOperator: conditionOperatorEnum('condition_operator').notNull(),
+    conditionValue: numeric('condition_value').notNull(),
+    action: ruleActionEnum('action').notNull(),
+    actionValue: numeric('action_value'),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('performance_rules_tenant_id_idx').on(table.tenantId),
+  })
+);
+
+// Performance scores table
+export const performanceScores = pgTable(
+  'performance_scores',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    score: integer('score').notNull(),
+    grade: performanceGradeEnum('grade').notNull(),
+    computedAt: timestamp('computed_at', { withTimezone: true }).defaultNow().notNull(),
+    metricsSnapshot: jsonb('metrics_snapshot').default(sql`'{}'::jsonb`),
+  },
+  (table) => ({
+    campaignIdIdx: index('performance_scores_campaign_id_idx').on(table.campaignId),
+    tenantIdIdx: index('performance_scores_tenant_id_idx').on(table.tenantId),
+    computedAtIdx: index('performance_scores_computed_at_idx').on(table.computedAt),
+  })
+);
+
+// Rule executions table
+export const ruleExecutions = pgTable(
+  'rule_executions',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    ruleId: uuid('rule_id')
+      .notNull()
+      .references(() => performanceRules.id, { onDelete: 'cascade' }),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    triggeredAt: timestamp('triggered_at', { withTimezone: true }).defaultNow().notNull(),
+    actionTaken: varchar('action_taken', { length: 255 }).notNull(),
+    result: jsonb('result').default(sql`'{}'::jsonb`),
+  },
+  (table) => ({
+    ruleIdIdx: index('rule_executions_rule_id_idx').on(table.ruleId),
+    campaignIdIdx: index('rule_executions_campaign_id_idx').on(table.campaignId),
+    triggeredAtIdx: index('rule_executions_triggered_at_idx').on(table.triggeredAt),
+  })
+);
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -195,4 +267,7 @@ export const allTables = {
   clientGoals,
   furyInsights,
   automationRules,
+  performanceRules,
+  performanceScores,
+  ruleExecutions,
 };

@@ -1,15 +1,17 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { and, eq, gte } from 'drizzle-orm';
-import { db, clientGoals, campaigns, furyInsights } from '@fury/db';
+import { db, clientGoals, campaigns, furyInsights, performanceRules, performanceScores, ruleExecutions } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
 
-type CampaignMetrics = {
+export type CampaignMetrics = {
   spend?: number;
   roas?: number;
   cpa?: number;
   ctr?: number;
+  cpc?: number;
   impressions?: number;
   conversions?: number;
+  budget?: number;
 };
 
 type MoneyJson = { amount?: number };
@@ -213,4 +215,106 @@ ${previousTypes.length > 0 ? `NÃO repita estes tipos de insight já usados: ${p
     },
     insights: rawInsights,
   };
+}
+
+// ==================== Performance Scoring ====================
+
+export function calculateScore(metrics: CampaignMetrics): number {
+  const roas = metrics.roas ?? 0;
+  const ctr = metrics.ctr ?? 0;
+  const cpa = metrics.cpa ?? 0;
+  const spend = metrics.spend ?? 0;
+  const budget = metrics.budget ?? 0;
+
+  // ROAS: 40 pts (ROAS 4.0 = full score)
+  const roasScore = Math.min(roas / 4.0, 1) * 40;
+
+  // CTR: 30 pts (CTR 3.0% = full score)
+  const ctrScore = Math.min(ctr / 3.0, 1) * 30;
+
+  // CPA: 20 pts (lower is better; CPA ≤ R$50 = full score)
+  const cpaScore = cpa > 0 ? Math.max(0, Math.min(50 / cpa, 1)) * 20 : 0;
+
+  // Budget utilization: 10 pts (70–90% = full score)
+  let utilizationScore = 0;
+  if (budget > 0 && spend > 0) {
+    const utilization = spend / budget;
+    if (utilization >= 0.7 && utilization <= 0.9) {
+      utilizationScore = 10;
+    } else if (utilization > 0.5) {
+      utilizationScore = 5;
+    }
+  }
+
+  return Math.round(roasScore + ctrScore + cpaScore + utilizationScore);
+}
+
+export function getGrade(score: number): 'A' | 'B' | 'C' | 'D' | 'F' {
+  if (score >= 90) return 'A';
+  if (score >= 75) return 'B';
+  if (score >= 60) return 'C';
+  if (score >= 40) return 'D';
+  return 'F';
+}
+
+// ==================== Rule Evaluation ====================
+
+type RuleCondition = typeof performanceRules.$inferSelect;
+
+function evaluateCondition(field: string, operator: string, threshold: number, metrics: CampaignMetrics): boolean {
+  const value = metrics[field as keyof CampaignMetrics] ?? 0;
+  if (operator === 'gt') return (value as number) > threshold;
+  if (operator === 'lt') return (value as number) < threshold;
+  if (operator === 'eq') return (value as number) === threshold;
+  return false;
+}
+
+export async function evaluateRules(tenantId: string, campaignId: string, metrics: CampaignMetrics): Promise<void> {
+  const rules = await db.query.performanceRules.findMany({
+    where: and(
+      eq(performanceRules.tenantId, tenantId),
+      eq(performanceRules.isActive, true)
+    ),
+  });
+
+  for (const rule of rules) {
+    const threshold = parseFloat(rule.conditionValue.toString());
+    const triggered = evaluateCondition(rule.conditionField, rule.conditionOperator, threshold, metrics);
+
+    if (!triggered) continue;
+
+    const actionValue = rule.actionValue ? parseFloat(rule.actionValue.toString()) : null;
+
+    await db.insert(ruleExecutions).values({
+      ruleId: rule.id,
+      campaignId,
+      actionTaken: rule.action,
+      result: {
+        conditionField: rule.conditionField,
+        conditionOperator: rule.conditionOperator,
+        conditionValue: threshold,
+        metricValue: metrics[rule.conditionField as keyof CampaignMetrics],
+        actionValue,
+        metricsSnapshot: metrics,
+        triggeredAt: new Date().toISOString(),
+      },
+    });
+  }
+}
+
+// ==================== Score Persistence ====================
+
+export async function computeAndSaveScore(tenantId: string, campaignId: string, metrics: CampaignMetrics): Promise<{ score: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' }> {
+  const score = calculateScore(metrics);
+  const grade = getGrade(score);
+
+  await db.insert(performanceScores).values({
+    tenantId,
+    campaignId,
+    score,
+    grade,
+    metricsSnapshot: metrics as Record<string, unknown>,
+  });
+
+  return { score, grade };
 }
