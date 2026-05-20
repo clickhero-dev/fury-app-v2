@@ -257,6 +257,26 @@ export const ruleExecutions = pgTable(
   })
 );
 
+// FURY config table (per-tenant scoring benchmarks)
+export const furyConfig = pgTable(
+  'fury_config',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' })
+      .unique(),
+    targetRoas: numeric('target_roas', { precision: 10, scale: 2 }).notNull().default('4.00'),
+    targetCpa: numeric('target_cpa', { precision: 10, scale: 2 }).notNull().default('50.00'),
+    targetCtr: numeric('target_ctr', { precision: 10, scale: 2 }).notNull().default('3.00'),
+    targetBudgetUtilization: numeric('target_budget_utilization', { precision: 5, scale: 2 }).notNull().default('80.00'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('fury_config_tenant_id_idx').on(table.tenantId),
+  })
+);
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -270,4 +290,5 @@ export const allTables = {
   performanceRules,
   performanceScores,
   ruleExecutions,
+  furyConfig,
 };

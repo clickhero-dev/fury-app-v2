@@ -322,11 +322,11 @@ function ProgressChart({
               color: '#fff',
               fontSize: 12,
             }}
-            formatter={(val: number, name: string) => [
-              `${val.toLocaleString('pt-BR')} conv.`,
+            formatter={(val, name) => [
+              `${Number(val).toLocaleString('pt-BR')} conv.`,
               name === 'real' ? 'Real' : 'Ideal',
             ]}
-            labelFormatter={fmt}
+            labelFormatter={(label) => fmt(String(label))}
           />
           <ReferenceLine
             y={targetConversions}

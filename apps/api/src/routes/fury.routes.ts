@@ -1,13 +1,65 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { and, desc, eq } from 'drizzle-orm';
-import { db, performanceRules, performanceScores, ruleExecutions } from '@fury/db';
+import { db, performanceRules, performanceScores, ruleExecutions, furyConfig } from '@fury/db';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 const router = Router();
 router.use(authMiddleware, tenantMiddleware);
+
+// ==================== Config ====================
+
+const updateConfigSchema = z.object({
+  targetRoas: z.number().positive().optional(),
+  targetCpa: z.number().positive().optional(),
+  targetCtr: z.number().positive().optional(),
+  targetBudgetUtilization: z.number().min(10).max(100).optional(),
+});
+
+router.get('/config', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId } = req.tenant!;
+    let config = await db.query.furyConfig.findFirst({
+      where: eq(furyConfig.tenantId, tenantId),
+    });
+    if (!config) {
+      [config] = await db.insert(furyConfig).values({ tenantId }).returning();
+    }
+    res.json({ success: true, data: config, timestamp: new Date().toISOString() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/config', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId } = req.tenant!;
+    const payload = updateConfigSchema.parse(req.body);
+
+    const updates: Partial<typeof furyConfig.$inferInsert> = { updatedAt: new Date() };
+    if (payload.targetRoas !== undefined) updates.targetRoas = payload.targetRoas.toString();
+    if (payload.targetCpa !== undefined) updates.targetCpa = payload.targetCpa.toString();
+    if (payload.targetCtr !== undefined) updates.targetCtr = payload.targetCtr.toString();
+    if (payload.targetBudgetUtilization !== undefined) updates.targetBudgetUtilization = payload.targetBudgetUtilization.toString();
+
+    const existing = await db.query.furyConfig.findFirst({
+      where: eq(furyConfig.tenantId, tenantId),
+    });
+
+    let result;
+    if (existing) {
+      [result] = await db.update(furyConfig).set(updates).where(eq(furyConfig.tenantId, tenantId)).returning();
+    } else {
+      [result] = await db.insert(furyConfig).values({ tenantId, ...updates }).returning();
+    }
+
+    res.json({ success: true, data: result, timestamp: new Date().toISOString() });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // ==================== Validation schemas ====================
 

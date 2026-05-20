@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { and, eq, gte } from 'drizzle-orm';
-import { db, clientGoals, campaigns, furyInsights, performanceRules, performanceScores, ruleExecutions } from '@fury/db';
+import { db, clientGoals, campaigns, furyInsights, performanceRules, performanceScores, ruleExecutions, furyConfig } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
 
 export type CampaignMetrics = {
@@ -219,29 +219,44 @@ ${previousTypes.length > 0 ? `NÃO repita estes tipos de insight já usados: ${p
 
 // ==================== Performance Scoring ====================
 
-export function calculateScore(metrics: CampaignMetrics): number {
+export type ScoreConfig = {
+  targetRoas: number;
+  targetCpa: number;
+  targetCtr: number;
+  targetBudgetUtilization: number; // percentage 0–100, e.g. 80
+};
+
+export const DEFAULT_SCORE_CONFIG: ScoreConfig = {
+  targetRoas: 4.0,
+  targetCpa: 50.0,
+  targetCtr: 3.0,
+  targetBudgetUtilization: 80,
+};
+
+export function calculateScore(metrics: CampaignMetrics, config: ScoreConfig = DEFAULT_SCORE_CONFIG): number {
   const roas = metrics.roas ?? 0;
   const ctr = metrics.ctr ?? 0;
   const cpa = metrics.cpa ?? 0;
   const spend = metrics.spend ?? 0;
   const budget = metrics.budget ?? 0;
 
-  // ROAS: 40 pts (ROAS 4.0 = full score)
-  const roasScore = Math.min(roas / 4.0, 1) * 40;
+  // ROAS: 40 pts (target_roas = full score)
+  const roasScore = Math.min(roas / config.targetRoas, 1) * 40;
 
-  // CTR: 30 pts (CTR 3.0% = full score)
-  const ctrScore = Math.min(ctr / 3.0, 1) * 30;
+  // CTR: 30 pts (target_ctr = full score)
+  const ctrScore = Math.min(ctr / config.targetCtr, 1) * 30;
 
-  // CPA: 20 pts (lower is better; CPA ≤ R$50 = full score)
-  const cpaScore = cpa > 0 ? Math.max(0, Math.min(50 / cpa, 1)) * 20 : 0;
+  // CPA: 20 pts (lower is better; target_cpa = full score)
+  const cpaScore = cpa > 0 ? Math.max(0, Math.min(config.targetCpa / cpa, 1)) * 20 : 0;
 
-  // Budget utilization: 10 pts (70–90% = full score)
+  // Budget utilization: 10 pts (±10% of target = full score, ±20% = half)
   let utilizationScore = 0;
   if (budget > 0 && spend > 0) {
-    const utilization = spend / budget;
-    if (utilization >= 0.7 && utilization <= 0.9) {
+    const utilizationPct = (spend / budget) * 100;
+    const diff = Math.abs(utilizationPct - config.targetBudgetUtilization);
+    if (diff <= 10) {
       utilizationScore = 10;
-    } else if (utilization > 0.5) {
+    } else if (diff <= 20) {
       utilizationScore = 5;
     }
   }
@@ -305,7 +320,20 @@ export async function evaluateRules(tenantId: string, campaignId: string, metric
 // ==================== Score Persistence ====================
 
 export async function computeAndSaveScore(tenantId: string, campaignId: string, metrics: CampaignMetrics): Promise<{ score: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' }> {
-  const score = calculateScore(metrics);
+  const configRow = await db.query.furyConfig.findFirst({
+    where: eq(furyConfig.tenantId, tenantId),
+  });
+
+  const config: ScoreConfig = configRow
+    ? {
+        targetRoas: parseFloat(configRow.targetRoas.toString()),
+        targetCpa: parseFloat(configRow.targetCpa.toString()),
+        targetCtr: parseFloat(configRow.targetCtr.toString()),
+        targetBudgetUtilization: parseFloat(configRow.targetBudgetUtilization.toString()),
+      }
+    : DEFAULT_SCORE_CONFIG;
+
+  const score = calculateScore(metrics, config);
   const grade = getGrade(score);
 
   await db.insert(performanceScores).values({

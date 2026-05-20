@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout, PageHeader, Button, Card } from '@/components';
+import { FuryConfig } from './FuryConfig';
 
-type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento' | 'integracoes';
+type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento' | 'integracoes' | 'fury';
 
 interface SettingSection {
   id: TabType;
@@ -47,6 +48,12 @@ const plugIcon = (
   </svg>
 );
 
+const furyIcon = (
+  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+    <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
+  </svg>
+);
+
 export function Configuracoes() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>('geral');
@@ -58,6 +65,7 @@ export function Configuracoes() {
     { id: 'equipe', label: 'Equipe', icon: userIcon },
     { id: 'faturamento', label: 'Faturamento', icon: creditCardIcon },
     { id: 'integracoes', label: 'Integrações', icon: plugIcon },
+    { id: 'fury', label: 'FURY Engine', icon: furyIcon },
   ];
 
   return (
@@ -86,7 +94,7 @@ export function Configuracoes() {
                       if (tab.id === 'integracoes') {
                         navigate('/configuracoes/integracoes');
                       } else {
-                        setActiveTab(tab.id);
+                        setActiveTab(tab.id as TabType);
                       }
                     }}
                     className={`w-full px-4 py-3 flex items-center gap-3 font-semibold text-sm transition-colors ${
@@ -290,6 +298,9 @@ export function Configuracoes() {
                 </div>
               </Card>
             )}
+
+            {/* FURY Engine */}
+            {activeTab === 'fury' && <FuryConfig />}
 
             {/* Faturamento */}
             {activeTab === 'faturamento' && (
