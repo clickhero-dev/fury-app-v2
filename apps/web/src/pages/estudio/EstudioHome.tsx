@@ -7,7 +7,7 @@ import { MOCK_ASSETS } from '@/lib/studio-mock';
 import type { StudioAsset } from '@/types/studio';
 
 type AssetType = 'all' | 'image' | 'copy' | 'video';
-type ComplianceStatus = 'all' | 'pending' | 'approved' | 'rejected';
+type ComplianceStatus = 'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected';
 
 interface StudioAssetResponse {
   assets: StudioAsset[];
@@ -36,7 +36,7 @@ export function EstudioHome() {
   const filteredAssets = useMemo(() => {
     return assetList.filter((asset) => {
       const matchesType = filterType === 'all' || asset.type === filterType;
-      const matchesStatus = filterStatus === 'all' || asset.compliance_status === filterStatus;
+      const matchesStatus = filterStatus === 'all' || asset.complianceStatus === filterStatus;
       return matchesType && matchesStatus;
     });
   }, [assetList, filterType, filterStatus]);
@@ -51,6 +51,7 @@ export function EstudioHome() {
   const statusOptions: Array<{ value: ComplianceStatus; label: string }> = [
     { value: 'all', label: 'Todos' },
     { value: 'pending', label: 'Pendente' },
+    { value: 'pending_compliance', label: 'Pendência Compliance' },
     { value: 'approved', label: 'Aprovado' },
     { value: 'rejected', label: 'Reprovado' },
   ];
@@ -62,7 +63,7 @@ export function EstudioHome() {
 
   const getStatusCount = (status: ComplianceStatus) => {
     if (status === 'all') return assetList.length;
-    return assetList.filter((a) => a.compliance_status === status).length;
+    return assetList.filter((a) => a.complianceStatus === status).length;
   };
 
   const handleGenerateImageClick = () => {
@@ -211,7 +212,7 @@ export function EstudioHome() {
                     </h3>
                   </div>
 
-                  <StatusBadge status={asset.compliance_status} />
+                  <StatusBadge status={asset.complianceStatus} />
 
                   {/* Buttons */}
                   <div className="flex gap-2 pt-2">
