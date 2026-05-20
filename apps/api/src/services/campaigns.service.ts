@@ -1,6 +1,6 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { automationRules, campaigns, db, furyInsights, metaConnections } from '../lib/db.js';
-import { metaApiCall, decryptAccessToken, type MetaCampaignCreateResponse } from '../lib/meta-api.js';
+import { metaApiCall, decryptAccessToken, type MetaCampaignCreateResponse, type MetaInsightsResponse } from '../lib/meta-api.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export async function createCampaign(args: {
@@ -405,5 +405,394 @@ export async function getCampaignPanelDetail(args: {
       threshold: parseFloat(String(r.threshold)) || 0,
       action: r.action,
     })),
+  };
+}
+
+export interface CampaignListItem {
+  id: string;
+  name: string;
+  status: string;
+  objective: string | null;
+  budget: unknown;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  roas: number;
+  cpa: number;
+  conversions: number;
+}
+
+export async function getCampaigns(args: {
+  tenantId: string;
+  status?: string;
+  limit: number;
+  offset: number;
+}): Promise<{ items: CampaignListItem[]; total: number }> {
+  const filters = [eq(campaigns.tenantId, args.tenantId)];
+
+  if (args.status) {
+    filters.push(eq(campaigns.status, args.status as any));
+  }
+
+  const items = await db.query.campaigns.findMany({
+    where: and(...filters),
+    limit: args.limit,
+    offset: args.offset,
+    orderBy: [desc(campaigns.createdAt)],
+  });
+
+  const countResult = await db.query.campaigns.findMany({
+    where: and(...filters),
+  });
+
+  return {
+    items: items.map((c) => formatCampaignListItem(c)),
+    total: countResult.length,
+  };
+}
+
+function formatCampaignListItem(campaign: any): CampaignListItem {
+  const budgetObj = campaign.budget as Record<string, unknown> | null | undefined;
+  const metricsObj = campaign.metrics as Record<string, unknown> | null | undefined;
+  const objective =
+    budgetObj && typeof budgetObj.objective === 'string' ? budgetObj.objective : null;
+
+  const getMetric = (key: string): number => {
+    if (!metricsObj) return 0;
+    const val = metricsObj[key];
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const num = parseFloat(val);
+      return Number.isFinite(num) ? num : 0;
+    }
+    return 0;
+  };
+
+  return {
+    id: campaign.id,
+    name: campaign.name,
+    status: campaign.status,
+    objective,
+    budget: campaign.budget ?? {},
+    spend: getMetric('spend'),
+    impressions: getMetric('impressions'),
+    clicks: getMetric('clicks'),
+    ctr: getMetric('ctr'),
+    cpc: getMetric('cpc'),
+    roas: getMetric('roas'),
+    cpa: getMetric('cpa'),
+    conversions: getMetric('conversions'),
+  };
+}
+
+export async function updateCampaign(args: {
+  tenantId: string;
+  campaignId: string;
+  name?: string;
+  budget?: { amount: number; type: 'daily' | 'lifetime'; startDate?: string; endDate?: string };
+}) {
+  const campaign = await db.query.campaigns.findFirst({
+    where: eq(campaigns.id, args.campaignId),
+  });
+
+  if (!campaign) {
+    throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
+  }
+
+  if (campaign.tenantId !== args.tenantId) {
+    throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');
+  }
+
+  const metaConn = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, args.tenantId),
+  });
+
+  if (!metaConn) {
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
+  }
+
+  const accessToken = decryptAccessToken(metaConn.accessToken);
+  const updateBody: Record<string, unknown> = {};
+
+  if (args.name) {
+    updateBody.name = args.name;
+  }
+
+  if (args.budget) {
+    updateBody[args.budget.type === 'daily' ? 'daily_budget' : 'lifetime_budget'] = args.budget.amount;
+    if (args.budget.startDate) updateBody.start_date = args.budget.startDate;
+    if (args.budget.endDate) updateBody.end_date = args.budget.endDate;
+  }
+
+  try {
+    await metaApiCall(
+      `/${encodeURIComponent(campaign.metaCampaignId)}`,
+      accessToken,
+      {
+        method: 'POST',
+        body: updateBody,
+      }
+    );
+  } catch (err) {
+    const metaCode = (err as any).metaCode;
+    if (metaCode === 190) {
+      throw new AppError(
+        401,
+        'META_TOKEN_EXPIRED',
+        'Token Meta expirado. Reconecte sua conta em Configurações > Integrações'
+      );
+    }
+    throw err;
+  }
+
+  const budgetObj = campaign.budget as Record<string, unknown>;
+  const updatedBudget = { ...budgetObj };
+
+  if (args.name) {
+    const [updated] = await db
+      .update(campaigns)
+      .set({ name: args.name })
+      .where(eq(campaigns.id, args.campaignId))
+      .returning();
+    return updated;
+  }
+
+  if (args.budget) {
+    if (args.budget.type === 'daily') {
+      updatedBudget.daily_budget = args.budget.amount;
+    } else {
+      updatedBudget.lifetime_budget = args.budget.amount;
+    }
+    if (args.budget.startDate) updatedBudget.start_date = args.budget.startDate;
+    if (args.budget.endDate) updatedBudget.end_date = args.budget.endDate;
+
+    const [updated] = await db
+      .update(campaigns)
+      .set({ budget: updatedBudget })
+      .where(eq(campaigns.id, args.campaignId))
+      .returning();
+    return updated;
+  }
+
+  return campaign;
+}
+
+export async function updateCampaignStatus(args: {
+  tenantId: string;
+  campaignId: string;
+  status: 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
+  userId: string;
+}) {
+  const campaign = await db.query.campaigns.findFirst({
+    where: eq(campaigns.id, args.campaignId),
+  });
+
+  if (!campaign) {
+    throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
+  }
+
+  if (campaign.tenantId !== args.tenantId) {
+    throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');
+  }
+
+  const metaConn = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, args.tenantId),
+  });
+
+  if (!metaConn) {
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
+  }
+
+  const accessToken = decryptAccessToken(metaConn.accessToken);
+
+  try {
+    await metaApiCall(
+      `/${encodeURIComponent(campaign.metaCampaignId)}`,
+      accessToken,
+      {
+        method: 'POST',
+        body: { status: args.status },
+      }
+    );
+  } catch (err) {
+    const metaCode = (err as any).metaCode;
+    if (metaCode === 190) {
+      throw new AppError(
+        401,
+        'META_TOKEN_EXPIRED',
+        'Token Meta expirado. Reconecte sua conta em Configurações > Integrações'
+      );
+    }
+    throw err;
+  }
+
+  const localStatus = args.status === 'ACTIVE' ? 'active' : args.status === 'PAUSED' ? 'paused' : 'archived';
+
+  const [updated] = await db
+    .update(campaigns)
+    .set({ status: localStatus as any })
+    .where(eq(campaigns.id, args.campaignId))
+    .returning();
+
+  await db.insert(furyInsights).values({
+    tenantId: args.tenantId,
+    campaignId: args.campaignId,
+    suggestionType: `campaign_status_${args.status.toLowerCase()}`,
+    suggestionData: { userId: args.userId, timestamp: new Date().toISOString(), action: 'manual' },
+  });
+
+  return updated;
+}
+
+export async function softDeleteCampaign(args: { tenantId: string; campaignId: string; userId: string }) {
+  const campaign = await db.query.campaigns.findFirst({
+    where: eq(campaigns.id, args.campaignId),
+  });
+
+  if (!campaign) {
+    throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
+  }
+
+  if (campaign.tenantId !== args.tenantId) {
+    throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');
+  }
+
+  const metaConn = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, args.tenantId),
+  });
+
+  if (!metaConn) {
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
+  }
+
+  const accessToken = decryptAccessToken(metaConn.accessToken);
+
+  try {
+    await metaApiCall(
+      `/${encodeURIComponent(campaign.metaCampaignId)}`,
+      accessToken,
+      {
+        method: 'POST',
+        body: { status: 'ARCHIVED' },
+      }
+    );
+  } catch (err) {
+    const metaCode = (err as any).metaCode;
+    if (metaCode === 190) {
+      throw new AppError(
+        401,
+        'META_TOKEN_EXPIRED',
+        'Token Meta expirado. Reconecte sua conta em Configurações > Integrações'
+      );
+    }
+    throw err;
+  }
+
+  const [deleted] = await db
+    .update(campaigns)
+    .set({ status: 'archived' })
+    .where(eq(campaigns.id, args.campaignId))
+    .returning();
+
+  await db.insert(furyInsights).values({
+    tenantId: args.tenantId,
+    campaignId: args.campaignId,
+    suggestionType: 'campaign_archived',
+    suggestionData: { userId: args.userId, timestamp: new Date().toISOString(), action: 'manual' },
+  });
+
+  return deleted;
+}
+
+export async function getCampaignInsights(args: {
+  tenantId: string;
+  campaignId: string;
+  dateRange: 'last_7d' | 'last_30d' | 'last_90d' | 'custom';
+  startDate?: string;
+  endDate?: string;
+}) {
+  const campaign = await db.query.campaigns.findFirst({
+    where: and(eq(campaigns.id, args.campaignId), eq(campaigns.tenantId, args.tenantId)),
+  });
+
+  if (!campaign) {
+    throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
+  }
+
+  const metaConn = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, args.tenantId),
+  });
+
+  if (!metaConn) {
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
+  }
+
+  const accessToken = decryptAccessToken(metaConn.accessToken);
+
+  const { startDate, endDate } = calculateDateRange(args.dateRange, args.startDate, args.endDate);
+
+  try {
+    const response = await metaApiCall<MetaInsightsResponse>(
+      `/${encodeURIComponent(campaign.metaCampaignId)}/insights?` +
+        `date_preset=${args.dateRange === 'custom' ? 'custom' : 'last_' + args.dateRange.split('_')[1] + 'd'}` +
+        `&start_date=${startDate}&end_date=${endDate}&time_increment=1`,
+      accessToken
+    );
+
+    return {
+      campaign: {
+        id: campaign.id,
+        name: campaign.name,
+        metaCampaignId: campaign.metaCampaignId,
+      },
+      timeseries: (response.data || []).map((item) => ({
+        date: item.date_start || item.date_stop,
+        spend: parseFloat(item.spend || '0'),
+        impressions: parseInt(item.impressions || '0', 10),
+        clicks: parseInt(item.clicks || '0', 10),
+        ctr: parseFloat(item.ctr || '0'),
+        cpm: parseFloat(item.cpm || '0'),
+        conversions: item.actions
+          ?.filter((a) => a.action_type === 'purchase')
+          .reduce((sum, a) => sum + (typeof a.value === 'string' ? parseInt(a.value, 10) : (a.value as number)), 0) || 0,
+      })),
+    };
+  } catch (err) {
+    const metaCode = (err as any).metaCode;
+    if (metaCode === 190) {
+      throw new AppError(
+        401,
+        'META_TOKEN_EXPIRED',
+        'Token Meta expirado. Reconecte sua conta em Configurações > Integrações'
+      );
+    }
+    throw err;
+  }
+}
+
+function calculateDateRange(
+  dateRange: 'last_7d' | 'last_30d' | 'last_90d' | 'custom',
+  startDate?: string,
+  endDate?: string
+): { startDate: string; endDate: string } {
+  const today = new Date();
+  const end = new Date(today);
+  let start = new Date(today);
+
+  if (dateRange === 'last_7d') {
+    start.setDate(start.getDate() - 7);
+  } else if (dateRange === 'last_30d') {
+    start.setDate(start.getDate() - 30);
+  } else if (dateRange === 'last_90d') {
+    start.setDate(start.getDate() - 90);
+  } else if (dateRange === 'custom' && startDate && endDate) {
+    return { startDate, endDate };
+  }
+
+  return {
+    startDate: start.toISOString().split('T')[0],
+    endDate: end.toISOString().split('T')[0],
   };
 }
