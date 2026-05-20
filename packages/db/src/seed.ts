@@ -30,6 +30,7 @@ async function seedDatabase() {
     // Clear existing data
     console.log('🗑️  Limpando dados existentes...');
     await db.delete(schema.furyInsights);
+    await db.delete(schema.furyConfig);
     await db.delete(schema.clientGoals);
     await db.delete(schema.campaigns);
     await db.delete(schema.metaConnections);
@@ -59,6 +60,26 @@ async function seedDatabase() {
     )[0];
 
     console.log(`✅ Tenants criados: ${fashionTenant.name}, ${dentalTenant.name}`);
+
+    // Create fury configs
+    console.log('⚙️  Criando configurações FURY...');
+    await db.insert(schema.furyConfig).values([
+      {
+        tenantId: fashionTenant.id,
+        targetRoas: '4.00',
+        targetCpa: '50.00',
+        targetCtr: '3.00',
+        targetBudgetUtilization: '80.00',
+      },
+      {
+        tenantId: dentalTenant.id,
+        targetRoas: '3.00',
+        targetCpa: '150.00',
+        targetCtr: '2.00',
+        targetBudgetUtilization: '80.00',
+      },
+    ]);
+    console.log('✅ Configurações FURY criadas');
 
     // Create users with simple hash
     console.log('👤 Criando usuários...');

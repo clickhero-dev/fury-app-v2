@@ -10,6 +10,8 @@ import budgetRoutes from './budget.routes.js';
 
 
 
+import furyRoutes from './fury.routes.js';
+import goalsRoutes from './goals.routes.js';
 
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
@@ -25,5 +27,7 @@ router.use('/automation', automationRoutes);
 router.use('/studio', studioRoutes);
 router.use('/campaigns', authMiddleware, tenantMiddleware, campaignRoutes);
 router.use('/budget', budgetRoutes);
+router.use('/fury', furyRoutes);
+router.use('/goals', goalsRoutes);
 
 export default router;

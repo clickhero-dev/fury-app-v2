@@ -74,6 +74,12 @@ export type RuleEngineJobPayload = {
 
 export const RULE_ENGINE_QUEUE_NAME = 'rule-engine' as const;
 
+export type FuryEngineJobPayload = {
+  timestamp: string;
+};
+
+export const FURY_ENGINE_QUEUE_NAME = 'fury-engine' as const;
+
 // ==================== Funções para obter filas (lazy loading) ====================
 export async function createCampaignSyncQueue() {
   const connection = await getRedisConnection();
@@ -141,6 +147,29 @@ export async function closeComplianceQueue() {
   if (complianceQueueInstance) {
     await complianceQueueInstance.close();
     complianceQueueInstance = null;
+  }
+}
+
+// Fury engine queue
+let furyEngineQueueInstance: Queue<FuryEngineJobPayload> | null = null;
+export async function getFuryEngineQueue() {
+  if (!furyEngineQueueInstance) {
+    const connection = await getRedisConnection();
+    furyEngineQueueInstance = new Queue<FuryEngineJobPayload>(FURY_ENGINE_QUEUE_NAME, {
+      connection,
+      defaultJobOptions: {
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+      },
+    });
+  }
+  return furyEngineQueueInstance;
+}
+
+export async function closeFuryEngineQueue() {
+  if (furyEngineQueueInstance) {
+    await furyEngineQueueInstance.close();
+    furyEngineQueueInstance = null;
   }
 }
 

@@ -6,7 +6,8 @@ import api from '@/lib/api';
 import { MOCK_ASSETS } from '@/lib/studio-mock';
 import type { StudioAsset } from '@/types/studio';
 
-type FilterType = 'todos' | 'imagens' | 'copy' | 'pendente' | 'aprovado' | 'reprovado';
+type AssetType = 'all' | 'image' | 'copy' | 'video';
+type ComplianceStatus = 'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected';
 
 interface StudioAssetResponse {
   assets: StudioAsset[];
@@ -14,7 +15,8 @@ interface StudioAssetResponse {
 
 export function EstudioHome() {
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<FilterType>('todos');
+  const [filterType, setFilterType] = useState<AssetType>('all');
+  const [filterStatus, setFilterStatus] = useState<ComplianceStatus>('all');
 
   const { data, isLoading } = useQuery<StudioAssetResponse>({
     queryKey: ['studio/assets'],
@@ -29,27 +31,40 @@ export function EstudioHome() {
     retry: 2,
   });
 
-  const assets = useMemo(() => {
-    const assetList = data?.assets || MOCK_ASSETS;
+  const assetList = data?.assets || MOCK_ASSETS;
 
-    if (filter === 'todos') return assetList;
-    if (filter === 'imagens') return assetList.filter((a) => a.type === 'image');
-    if (filter === 'copy') return assetList.filter((a) => a.type === 'copy');
-    if (filter === 'pendente') return assetList.filter((a) => a.compliance_status === 'pending');
-    if (filter === 'aprovado') return assetList.filter((a) => a.compliance_status === 'approved');
-    if (filter === 'reprovado') return assetList.filter((a) => a.compliance_status === 'rejected');
+  const filteredAssets = useMemo(() => {
+    return assetList.filter((asset) => {
+      const matchesType = filterType === 'all' || asset.type === filterType;
+      const matchesStatus = filterStatus === 'all' || asset.complianceStatus === filterStatus;
+      return matchesType && matchesStatus;
+    });
+  }, [assetList, filterType, filterStatus]);
 
-    return assetList;
-  }, [data, filter]);
-
-  const filterOptions: Array<{ value: FilterType; label: string; count?: number }> = [
-    { value: 'todos', label: 'Todos', count: data?.assets?.length || MOCK_ASSETS.length },
-    { value: 'imagens', label: 'Imagens', count: (data?.assets || MOCK_ASSETS).filter((a) => a.type === 'image').length },
-    { value: 'copy', label: 'Copy', count: (data?.assets || MOCK_ASSETS).filter((a) => a.type === 'copy').length },
-    { value: 'pendente', label: 'Pendente', count: (data?.assets || MOCK_ASSETS).filter((a) => a.compliance_status === 'pending').length },
-    { value: 'aprovado', label: 'Aprovado', count: (data?.assets || MOCK_ASSETS).filter((a) => a.compliance_status === 'approved').length },
-    { value: 'reprovado', label: 'Reprovado', count: (data?.assets || MOCK_ASSETS).filter((a) => a.compliance_status === 'rejected').length },
+  const typeOptions: Array<{ value: AssetType; label: string }> = [
+    { value: 'all', label: 'Todos' },
+    { value: 'image', label: 'Imagens' },
+    { value: 'copy', label: 'Copy' },
+    { value: 'video', label: 'Vídeos' },
   ];
+
+  const statusOptions: Array<{ value: ComplianceStatus; label: string }> = [
+    { value: 'all', label: 'Todos' },
+    { value: 'pending', label: 'Pendente' },
+    { value: 'pending_compliance', label: 'Pendência Compliance' },
+    { value: 'approved', label: 'Aprovado' },
+    { value: 'rejected', label: 'Reprovado' },
+  ];
+
+  const getTypeCount = (type: AssetType) => {
+    if (type === 'all') return assetList.length;
+    return assetList.filter((a) => a.type === type).length;
+  };
+
+  const getStatusCount = (status: ComplianceStatus) => {
+    if (status === 'all') return assetList.length;
+    return assetList.filter((a) => a.complianceStatus === status).length;
+  };
 
   const handleGenerateImageClick = () => {
     navigate('/estudio/imagem');
@@ -92,24 +107,51 @@ export function EstudioHome() {
 
         {/* Filters */}
         <Card>
-          <div className="p-6">
-            <div className="flex flex-wrap gap-3">
-              {filterOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setFilter(option.value)}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-                    filter === option.value
-                      ? 'bg-[#E8631A] text-white'
-                      : 'bg-surface-secondary text-text-secondary hover:bg-border'
-                  }`}
-                >
-                  {option.label}
-                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 text-xs font-bold">
-                    {option.count}
-                  </span>
-                </button>
-              ))}
+          <div className="p-6 space-y-4">
+            {/* Type Filters */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-text-primary">Tipo</h3>
+              <div className="flex flex-wrap gap-2">
+                {typeOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setFilterType(option.value)}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+                      filterType === option.value
+                        ? 'bg-[#E8631A] text-white'
+                        : 'bg-surface-secondary text-text-secondary hover:bg-border'
+                    }`}
+                  >
+                    {option.label}
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 text-xs font-bold">
+                      {getTypeCount(option.value)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Status Filters */}
+            <div className="space-y-3 border-t border-border pt-4">
+              <h3 className="text-sm font-semibold text-text-primary">Status</h3>
+              <div className="flex flex-wrap gap-2">
+                {statusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setFilterStatus(option.value)}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+                      filterStatus === option.value
+                        ? 'bg-[#E8631A] text-white'
+                        : 'bg-surface-secondary text-text-secondary hover:bg-border'
+                    }`}
+                  >
+                    {option.label}
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 text-xs font-bold">
+                      {getStatusCount(option.value)}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </Card>
@@ -119,18 +161,18 @@ export function EstudioHome() {
           <div className="flex items-center justify-center py-12">
             <LoadingSpinner />
           </div>
-        ) : assets.length === 0 ? (
+        ) : filteredAssets.length === 0 ? (
           <EmptyState
-            title="Gere seu primeiro criativo com IA"
-            description="Clique no botão acima para começar a gerar criativos incríveis"
+            title={assetList.length === 0 ? 'Gere seu primeiro criativo com IA' : 'Nenhum ativo encontrado com os filtros aplicados'}
+            description={assetList.length === 0 ? 'Clique no botão acima para começar a gerar criativos incríveis' : 'Ajuste os filtros ou gere novos criativos'}
             action={{
               label: 'Gerar Novo Criativo',
               onClick: handleGenerateImageClick,
             }}
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {assets.map((asset) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {filteredAssets.map((asset) => (
               <div
                 key={asset.id}
                 className="bg-white rounded-lg border border-border overflow-hidden hover:shadow-lg transition-shadow"
@@ -170,7 +212,7 @@ export function EstudioHome() {
                     </h3>
                   </div>
 
-                  <StatusBadge status={asset.compliance_status} />
+                  <StatusBadge status={asset.complianceStatus} />
 
                   {/* Buttons */}
                   <div className="flex gap-2 pt-2">
