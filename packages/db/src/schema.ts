@@ -27,6 +27,12 @@ export const complianceStatusEnum = pgEnum('compliance_status', [
   'rejected',
 ]);
 export const campaignStatusEnum = pgEnum('campaign_status', ['draft', 'active', 'paused', 'archived']);
+export const budgetOptimizationStatusEnum = pgEnum('budget_optimization_status', [
+  'pending',
+  'applied',
+  'rejected',
+]);
+export const budgetModeEnum = pgEnum('budget_mode', ['suggestion', 'auto']);
 
 // Tenants table
 export const tenants = pgTable(
@@ -190,6 +196,9 @@ export const automationRules = pgTable(
   })
 );
 
+// Budget optimizations table
+export const budgetOptimizations = pgTable(
+  'budget_optimizations',
 // Performance rules table
 export const performanceRules = pgTable(
   'performance_rules',
@@ -198,6 +207,18 @@ export const performanceRules = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
+    totalBudget: numeric('total_budget').notNull(),
+    adjustments: jsonb('adjustments').default(sql`'[]'::jsonb`),
+    mode: budgetModeEnum('mode').notNull().default('suggestion'),
+    status: budgetOptimizationStatusEnum('status').notNull().default('pending'),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('budget_optimizations_tenant_id_idx').on(table.tenantId),
+    statusIdx: index('budget_optimizations_status_idx').on(table.status),
     name: varchar('name', { length: 255 }).notNull(),
     conditionField: conditionFieldEnum('condition_field').notNull(),
     conditionOperator: conditionOperatorEnum('condition_operator').notNull(),
@@ -287,6 +308,7 @@ export const allTables = {
   clientGoals,
   furyInsights,
   automationRules,
+  budgetOptimizations,
   performanceRules,
   performanceScores,
   ruleExecutions,
