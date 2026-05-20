@@ -33,6 +33,15 @@ export const budgetOptimizationStatusEnum = pgEnum('budget_optimization_status',
   'rejected',
 ]);
 export const budgetModeEnum = pgEnum('budget_mode', ['suggestion', 'auto']);
+export const planIntervalEnum = pgEnum('plan_interval', ['monthly', 'yearly']);
+export const subscriptionStatusEnum = pgEnum('subscription_status', [
+  'trial',
+  'active',
+  'past_due',
+  'cancelled',
+  'inactive',
+]);
+export const invoiceStatusEnum = pgEnum('invoice_status', ['pending', 'paid', 'overdue', 'cancelled']);
 
 // Tenants table
 export const tenants = pgTable(
@@ -186,10 +195,10 @@ export const automationRules = pgTable(
     enabled: text('enabled').notNull().default('true'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-    ruleType: text('rule_type').notNull(), // 'pause_high_cpa' | 'pause_low_roas' | 'pause_zero_conversions' | 'budget_limit'
+    ruleType: text('rule_type').notNull(),
     isActive: boolean('is_active').notNull().default(true),
     threshold: numeric('threshold').notNull(),
-    action: text('action').notNull().default('pause'), // 'pause' | 'notify' | 'reduce_budget'
+    action: text('action').notNull().default('pause'),
   },
   (table) => ({
     tenantIdIdx: index('automation_rules_tenant_id_idx').on(table.tenantId),
@@ -199,9 +208,6 @@ export const automationRules = pgTable(
 // Budget optimizations table
 export const budgetOptimizations = pgTable(
   'budget_optimizations',
-// Performance rules table
-export const performanceRules = pgTable(
-  'performance_rules',
   {
     id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
     tenantId: uuid('tenant_id')
@@ -219,6 +225,17 @@ export const performanceRules = pgTable(
   (table) => ({
     tenantIdIdx: index('budget_optimizations_tenant_id_idx').on(table.tenantId),
     statusIdx: index('budget_optimizations_status_idx').on(table.status),
+  })
+);
+
+// Performance rules table
+export const performanceRules = pgTable(
+  'performance_rules',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 255 }).notNull(),
     conditionField: conditionFieldEnum('condition_field').notNull(),
     conditionOperator: conditionOperatorEnum('condition_operator').notNull(),
@@ -298,6 +315,68 @@ export const furyConfig = pgTable(
   })
 );
 
+// ==================== Billing ====================
+
+// Plans table (global — not per-tenant)
+export const plans = pgTable('plans', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar('name', { length: 100 }).notNull(),
+  priceCents: integer('price_cents').notNull(),
+  interval: planIntervalEnum('interval').notNull().default('monthly'),
+  features: jsonb('features').notNull().default(sql`'{}'::jsonb`),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Subscriptions table
+export const subscriptions = pgTable(
+  'subscriptions',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    planId: uuid('plan_id')
+      .notNull()
+      .references(() => plans.id),
+    asaasSubscriptionId: varchar('asaas_subscription_id', { length: 255 }),
+    asaasCustomerId: varchar('asaas_customer_id', { length: 255 }),
+    status: subscriptionStatusEnum('status').notNull().default('trial'),
+    trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
+    currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('subscriptions_tenant_id_idx').on(table.tenantId),
+    statusIdx: index('subscriptions_status_idx').on(table.status),
+  })
+);
+
+// Invoices table
+export const invoices = pgTable(
+  'invoices',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => subscriptions.id, { onDelete: 'cascade' }),
+    asaasPaymentId: varchar('asaas_payment_id', { length: 255 }),
+    amountCents: integer('amount_cents').notNull(),
+    status: invoiceStatusEnum('status').notNull().default('pending'),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('invoices_tenant_id_idx').on(table.tenantId),
+    subscriptionIdIdx: index('invoices_subscription_id_idx').on(table.subscriptionId),
+    statusIdx: index('invoices_status_idx').on(table.status),
+  })
+);
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -313,4 +392,7 @@ export const allTables = {
   performanceScores,
   ruleExecutions,
   furyConfig,
+  plans,
+  subscriptions,
+  invoices,
 };

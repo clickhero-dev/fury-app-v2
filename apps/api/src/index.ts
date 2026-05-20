@@ -64,6 +64,7 @@ app.use((req, res) => {
       });
       void startBudgetOptimizerWorker().catch((error) => {
         console.error('Failed to start Budget optimizer worker:', error);
+      });
       void startFuryEngine().catch((error) => {
         console.error('Failed to start Fury engine:', error);
       });
