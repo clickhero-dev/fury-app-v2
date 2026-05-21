@@ -1,0 +1,274 @@
+import { Worker, Queue } from 'bullmq';
+import { eq } from 'drizzle-orm';
+import { db, budgetOptimizations } from '@fury/db';
+import { getRedis } from '../lib/redis.js';
+import { emitToTenant } from '../lib/sse.js';
+import {
+  optimizeBudget,
+  saveSuggestions,
+  getBudgetConfig,
+  BudgetOptimizerError,
+} from '../services/budget-optimizer.service.js';
+
+interface BudgetOptimizeJobData {
+  tenantId: string;
+  totalBudget: number;
+  force?: boolean;
+}
+
+let budgetOptimizerWorkerInstance: Worker<BudgetOptimizeJobData> | null = null;
+let budgetOptimizerQueueInstance: Queue<BudgetOptimizeJobData> | null = null;
+
+/**
+ * Create budget optimizer worker
+ * Runs daily budget optimization and emits SSE events
+ */
+const createBudgetOptimizerWorker = (): Worker<BudgetOptimizeJobData> => {
+  return new Worker<BudgetOptimizeJobData>(
+    'budget-optimize',
+    async (job) => {
+      const { tenantId, totalBudget, force } = job.data;
+
+      console.log(
+        `[BUDGET-OPTIMIZER] 📊 Starting optimization | Tenant: ${tenantId} | Budget: ${totalBudget} | Force: ${force || false}`,
+      );
+
+      try {
+        // 1. Get tenant budget configuration
+        const config = getBudgetConfig(tenantId);
+
+        if (!force && !config.autoApplyEnabled && config.mode === 'suggestion') {
+          console.log(
+            `[BUDGET-OPTIMIZER] ⏭️  Skipping tenant ${tenantId} (autoApply disabled)`,
+          );
+          return { skipped: true };
+        }
+
+        // 2. Calculate budget optimization
+        console.log(
+          `[BUDGET-OPTIMIZER] 🧮 Calculating suggestions for ${totalBudget}...`,
+        );
+        const suggestions = await optimizeBudget(tenantId, totalBudget);
+
+        if (suggestions.length === 0) {
+          console.warn(
+            `[BUDGET-OPTIMIZER] ⚠️  No campaigns found for tenant ${tenantId}`,
+          );
+          return { suggestionsCount: 0 };
+        }
+
+        // 3. Save suggestions with configured mode
+        const mode = config.mode || 'suggestion';
+        console.log(
+          `[BUDGET-OPTIMIZER] 💾 Saving ${suggestions.length} suggestions (mode: ${mode})...`,
+        );
+
+        const storedSuggestions = await saveSuggestions(
+          tenantId,
+          suggestions,
+          mode,
+        );
+
+        // 4. Persist to database
+        const dbRecord = await db
+          .insert(budgetOptimizations)
+          .values({
+            tenantId,
+            totalBudget: totalBudget.toString(),
+            adjustments: suggestions as any,
+            mode,
+            status: mode === 'auto' ? 'applied' : 'pending',
+            appliedAt: mode === 'auto' ? new Date() : undefined,
+          })
+          .returning();
+
+        console.log(
+          `[BUDGET-OPTIMIZER] ✅ Persisted to DB | ID: ${dbRecord[0]?.id}`,
+        );
+
+        // 5. Emit SSE event for UI
+        const ssePayload = {
+          event: 'budget:suggestion',
+          data: {
+            tenantId,
+            optimizationId: dbRecord[0]?.id,
+            totalBudget,
+            mode,
+            suggestionsCount: storedSuggestions.length,
+            suggestions: storedSuggestions.map((s) => ({
+              id: s.id,
+              campaignId: s.campaignId,
+              campaignName: s.campaignName,
+              currentBudget: s.currentBudget,
+              suggestedBudget: s.suggestedBudget,
+              change_pct: s.change_pct,
+              reason: s.reason,
+              status: s.status,
+            })),
+            timestamp: new Date().toISOString(),
+          },
+        };
+
+        console.log(`[BUDGET-OPTIMIZER] 📡 Emitting SSE event...`);
+        emitToTenant(tenantId, ssePayload.event, ssePayload.data);
+
+        console.log(
+          `[BUDGET-OPTIMIZER] 🎉 Completed successfully | Suggestions: ${storedSuggestions.length}`,
+        );
+
+        return {
+          success: true,
+          suggestionsCount: storedSuggestions.length,
+          optimizationId: dbRecord[0]?.id,
+          mode,
+          appliedCount:
+            mode === 'auto'
+              ? storedSuggestions.filter((s) => s.status === 'applied').length
+              : 0,
+        };
+      } catch (error) {
+        console.error(`[BUDGET-OPTIMIZER ERROR] Critical failure:`, error);
+
+        const errorMessage =
+          error instanceof BudgetOptimizerError
+            ? `${error.code}: ${error.message}`
+            : error instanceof Error
+              ? error.message
+              : 'Unknown error';
+
+        // Emit error SSE event
+        try {
+          emitToTenant(tenantId, 'budget:error', {
+            error: errorMessage,
+            tenantId,
+            timestamp: new Date().toISOString(),
+          });
+        } catch (sseError) {
+          console.error('[BUDGET-OPTIMIZER] Failed to emit SSE error:', sseError);
+        }
+
+        throw error;
+      }
+    },
+    {
+      connection: getRedis(),
+      concurrency: 3, // Max 3 concurrent optimizations
+    },
+  );
+};
+
+/**
+ * Create budget optimizer queue
+ * Used to schedule jobs
+ */
+const createBudgetOptimizerQueue = (): Queue<BudgetOptimizeJobData> => {
+  return new Queue('budget-optimize', { connection: getRedis() });
+};
+
+/**
+ * Start the budget optimizer worker
+ * Initializes queue with daily 6am scheduling (0 6 * * *)
+ */
+export async function startBudgetOptimizerWorker(): Promise<void> {
+  if (budgetOptimizerWorkerInstance) {
+    console.log(
+      '[BUDGET-OPTIMIZER] ℹ️  Worker already running, skipping init',
+    );
+    return;
+  }
+
+  budgetOptimizerWorkerInstance = createBudgetOptimizerWorker();
+  budgetOptimizerQueueInstance = createBudgetOptimizerQueue();
+
+  // Schedule daily job at 6:00 AM
+  // Pattern: minute hour day month day-of-week
+  // 0 6 * * * = every day at 6:00 AM
+  try {
+    await budgetOptimizerQueueInstance.add(
+      'daily-optimization',
+      { tenantId: 'system', totalBudget: 0 }, // Placeholder, real data comes from tenant config
+      {
+        repeat: {
+          pattern: '0 6 * * *', // Daily at 6:00 AM
+        },
+      },
+    );
+    console.log('[BUDGET-OPTIMIZER] ⏰ Daily job scheduled at 06:00');
+  } catch (err) {
+    console.error('[BUDGET-OPTIMIZER] Failed to schedule daily job:', err);
+  }
+
+  console.log('✅ Budget optimizer worker started');
+}
+
+/**
+ * Stop the budget optimizer worker
+ */
+export async function stopBudgetOptimizerWorker(): Promise<void> {
+  if (budgetOptimizerWorkerInstance) {
+    await budgetOptimizerWorkerInstance.close();
+    budgetOptimizerWorkerInstance = null;
+  }
+
+  if (budgetOptimizerQueueInstance) {
+    await budgetOptimizerQueueInstance.close();
+    budgetOptimizerQueueInstance = null;
+  }
+
+  console.log('🛑 Budget optimizer worker stopped');
+}
+
+/**
+ * Trigger immediate optimization for a tenant
+ * Used for manual triggers via API
+ */
+export async function triggerBudgetOptimization(
+  tenantId: string,
+  totalBudget: number,
+): Promise<string> {
+  if (!budgetOptimizerQueueInstance) {
+    throw new Error(
+      'Budget optimizer queue not initialized. Call startBudgetOptimizerWorker first.',
+    );
+  }
+
+  const job = await budgetOptimizerQueueInstance.add(
+    'manual-optimization',
+    { tenantId, totalBudget, force: true },
+    {
+      removeOnComplete: true,
+      removeOnFail: false,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 2000 },
+    },
+  );
+
+  console.log(
+    `[BUDGET-OPTIMIZER] 🎯 Manual optimization triggered | Job: ${job.id}`,
+  );
+  return job.id || '';
+}
+
+/**
+ * Get queue stats (for monitoring)
+ */
+export async function getBudgetOptimizerQueueStats(): Promise<{
+  waiting: number;
+  active: number;
+  completed: number;
+  failed: number;
+  delayed: number;
+} | null> {
+  if (!budgetOptimizerQueueInstance) {
+    return null;
+  }
+
+  const counts = await budgetOptimizerQueueInstance.getJobCounts();
+  return {
+    waiting: counts.waiting ?? 0,
+    active: counts.active ?? 0,
+    completed: counts.completed ?? 0,
+    failed: counts.failed ?? 0,
+    delayed: counts.delayed ?? 0,
+  };
+}

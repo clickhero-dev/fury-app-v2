@@ -1,1 +1,1 @@
-export * from '../../../../packages/db/src/index.js';
+export * from '@fury/db';

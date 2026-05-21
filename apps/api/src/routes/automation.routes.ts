@@ -9,14 +9,16 @@ const router = Router();
 
 router.use(authMiddleware, tenantMiddleware);
 
-router.post('/rules', automationController.createRule);
+router.post('/rules', automationController.createRuleHandler);
 
-router.get('/rules', automationController.getRules);
+router.get('/rules', automationController.getRulesHandler);
 
-router.delete('/rules/:id', automationController.deleteRule);
+router.delete('/rules/:id', automationController.deleteRuleHandler);
 
-router.get('/takedowns', automationController.getTakedowns);
+router.get('/takedowns', automationController.getTakedownsHandler);
 
-router.get('/feed', automationController.getSSEFeed);
+router.get('/feed', automationController.getSSEFeedHandler);
+
+router.post('/budget-smart', automationController.budgetSmartHandler);
 
 export default router;

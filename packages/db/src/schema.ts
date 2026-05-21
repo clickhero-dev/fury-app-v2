@@ -9,11 +9,16 @@ import {
   index,
   boolean,
   numeric,
+  integer,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member']);
+export const conditionFieldEnum = pgEnum('condition_field', ['cpc', 'ctr', 'roas', 'cpa', 'spend']);
+export const conditionOperatorEnum = pgEnum('condition_operator', ['gt', 'lt', 'eq']);
+export const ruleActionEnum = pgEnum('rule_action', ['pause_campaign', 'reduce_budget', 'notify', 'increase_budget']);
+export const performanceGradeEnum = pgEnum('performance_grade', ['A', 'B', 'C', 'D', 'F']);
 export const creativeTypeEnum = pgEnum('creative_type', ['image', 'video', 'copy']);
 export const complianceStatusEnum = pgEnum('compliance_status', [
   'pending',
@@ -22,6 +27,21 @@ export const complianceStatusEnum = pgEnum('compliance_status', [
   'rejected',
 ]);
 export const campaignStatusEnum = pgEnum('campaign_status', ['draft', 'active', 'paused', 'archived']);
+export const budgetOptimizationStatusEnum = pgEnum('budget_optimization_status', [
+  'pending',
+  'applied',
+  'rejected',
+]);
+export const budgetModeEnum = pgEnum('budget_mode', ['suggestion', 'auto']);
+export const planIntervalEnum = pgEnum('plan_interval', ['monthly', 'yearly']);
+export const subscriptionStatusEnum = pgEnum('subscription_status', [
+  'trial',
+  'active',
+  'past_due',
+  'cancelled',
+  'inactive',
+]);
+export const invoiceStatusEnum = pgEnum('invoice_status', ['pending', 'paid', 'overdue', 'cancelled']);
 
 // Tenants table
 export const tenants = pgTable(
@@ -175,13 +195,185 @@ export const automationRules = pgTable(
     enabled: text('enabled').notNull().default('true'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-    ruleType: text('rule_type').notNull(), // 'pause_high_cpa' | 'pause_low_roas' | 'pause_zero_conversions' | 'budget_limit'
+    ruleType: text('rule_type').notNull(),
     isActive: boolean('is_active').notNull().default(true),
     threshold: numeric('threshold').notNull(),
-    action: text('action').notNull().default('pause'), // 'pause' | 'notify' | 'reduce_budget'
+    action: text('action').notNull().default('pause'),
   },
   (table) => ({
     tenantIdIdx: index('automation_rules_tenant_id_idx').on(table.tenantId),
+  })
+);
+
+// Budget optimizations table
+export const budgetOptimizations = pgTable(
+  'budget_optimizations',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    totalBudget: numeric('total_budget').notNull(),
+    adjustments: jsonb('adjustments').default(sql`'[]'::jsonb`),
+    mode: budgetModeEnum('mode').notNull().default('suggestion'),
+    status: budgetOptimizationStatusEnum('status').notNull().default('pending'),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('budget_optimizations_tenant_id_idx').on(table.tenantId),
+    statusIdx: index('budget_optimizations_status_idx').on(table.status),
+  })
+);
+
+// Performance rules table
+export const performanceRules = pgTable(
+  'performance_rules',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    conditionField: conditionFieldEnum('condition_field').notNull(),
+    conditionOperator: conditionOperatorEnum('condition_operator').notNull(),
+    conditionValue: numeric('condition_value').notNull(),
+    action: ruleActionEnum('action').notNull(),
+    actionValue: numeric('action_value'),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('performance_rules_tenant_id_idx').on(table.tenantId),
+  })
+);
+
+// Performance scores table
+export const performanceScores = pgTable(
+  'performance_scores',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    score: integer('score').notNull(),
+    grade: performanceGradeEnum('grade').notNull(),
+    computedAt: timestamp('computed_at', { withTimezone: true }).defaultNow().notNull(),
+    metricsSnapshot: jsonb('metrics_snapshot').default(sql`'{}'::jsonb`),
+  },
+  (table) => ({
+    campaignIdIdx: index('performance_scores_campaign_id_idx').on(table.campaignId),
+    tenantIdIdx: index('performance_scores_tenant_id_idx').on(table.tenantId),
+    computedAtIdx: index('performance_scores_computed_at_idx').on(table.computedAt),
+  })
+);
+
+// Rule executions table
+export const ruleExecutions = pgTable(
+  'rule_executions',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    ruleId: uuid('rule_id')
+      .notNull()
+      .references(() => performanceRules.id, { onDelete: 'cascade' }),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    triggeredAt: timestamp('triggered_at', { withTimezone: true }).defaultNow().notNull(),
+    actionTaken: varchar('action_taken', { length: 255 }).notNull(),
+    result: jsonb('result').default(sql`'{}'::jsonb`),
+  },
+  (table) => ({
+    ruleIdIdx: index('rule_executions_rule_id_idx').on(table.ruleId),
+    campaignIdIdx: index('rule_executions_campaign_id_idx').on(table.campaignId),
+    triggeredAtIdx: index('rule_executions_triggered_at_idx').on(table.triggeredAt),
+  })
+);
+
+// FURY config table (per-tenant scoring benchmarks)
+export const furyConfig = pgTable(
+  'fury_config',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' })
+      .unique(),
+    targetRoas: numeric('target_roas', { precision: 10, scale: 2 }).notNull().default('4.00'),
+    targetCpa: numeric('target_cpa', { precision: 10, scale: 2 }).notNull().default('50.00'),
+    targetCtr: numeric('target_ctr', { precision: 10, scale: 2 }).notNull().default('3.00'),
+    targetBudgetUtilization: numeric('target_budget_utilization', { precision: 5, scale: 2 }).notNull().default('80.00'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('fury_config_tenant_id_idx').on(table.tenantId),
+  })
+);
+
+// ==================== Billing ====================
+
+// Plans table (global — not per-tenant)
+export const plans = pgTable('plans', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar('name', { length: 100 }).notNull(),
+  priceCents: integer('price_cents').notNull(),
+  interval: planIntervalEnum('interval').notNull().default('monthly'),
+  features: jsonb('features').notNull().default(sql`'{}'::jsonb`),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Subscriptions table
+export const subscriptions = pgTable(
+  'subscriptions',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    planId: uuid('plan_id')
+      .notNull()
+      .references(() => plans.id),
+    asaasSubscriptionId: varchar('asaas_subscription_id', { length: 255 }),
+    asaasCustomerId: varchar('asaas_customer_id', { length: 255 }),
+    status: subscriptionStatusEnum('status').notNull().default('trial'),
+    trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
+    currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('subscriptions_tenant_id_idx').on(table.tenantId),
+    statusIdx: index('subscriptions_status_idx').on(table.status),
+  })
+);
+
+// Invoices table
+export const invoices = pgTable(
+  'invoices',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => subscriptions.id, { onDelete: 'cascade' }),
+    asaasPaymentId: varchar('asaas_payment_id', { length: 255 }),
+    amountCents: integer('amount_cents').notNull(),
+    status: invoiceStatusEnum('status').notNull().default('pending'),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('invoices_tenant_id_idx').on(table.tenantId),
+    subscriptionIdIdx: index('invoices_subscription_id_idx').on(table.subscriptionId),
+    statusIdx: index('invoices_status_idx').on(table.status),
   })
 );
 
@@ -195,4 +387,12 @@ export const allTables = {
   clientGoals,
   furyInsights,
   automationRules,
+  budgetOptimizations,
+  performanceRules,
+  performanceScores,
+  ruleExecutions,
+  furyConfig,
+  plans,
+  subscriptions,
+  invoices,
 };

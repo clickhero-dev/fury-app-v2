@@ -7,8 +7,9 @@ import {
   createTestMetaConnection,
   cleanupDatabase,
   getAuthHeader,
+  type TestUser,
 } from './utils/test-helpers.js';
-import { db, campaigns } from '@fury/db';
+import { db, campaigns, furyInsights, automationRules } from '@fury/db';
 import { eq } from 'drizzle-orm';
 
 // Mock the meta-api
@@ -254,5 +255,100 @@ describe('PATCH /api/campaigns/:id/budget', () => {
     });
 
     expect(updatedCampaign?.budget).toHaveProperty('daily_budget', newBudget);
+  });
+});
+
+describe('GET /api/campaigns/:id', () => {
+  let testUser: TestUser;
+  let testTenant: { id: string };
+  let testCampaign: { id: string };
+
+  beforeEach(async () => {
+    await cleanupDatabase();
+    testTenant = await createTestTenant('tenant-camp-detail-' + Date.now());
+    testUser = await createTestUser(testTenant.id, 'detail@fury.test');
+    await createTestMetaConnection(testTenant.id);
+
+    const [campaign] = await db
+      .insert(campaigns)
+      .values({
+        tenantId: testTenant.id,
+        metaCampaignId: 'meta_detail_1',
+        name: 'Campanha Detalhe',
+        status: 'active',
+        budget: { daily_budget: 1000, objective: 'OUTCOME_SALES' },
+        metrics: { spend: 10, roas: 2, cpa: 5, ctr: 0.02, cpm: 3, conversions: 4, impressions: 1000 },
+      })
+      .returning();
+
+    testCampaign = campaign;
+
+    await db.insert(furyInsights).values({
+      tenantId: testTenant.id,
+      campaignId: testCampaign.id,
+      suggestionType: 'smart_takedown',
+      suggestionData: { reason: 'test', ruleType: 'pause_high_cpa' },
+    });
+
+    await db.insert(automationRules).values({
+      tenantId: testTenant.id,
+      name: 'pause_high_cpa',
+      trigger: 'pause_high_cpa',
+      ruleType: 'pause_high_cpa',
+      isActive: true,
+      threshold: '50',
+      action: 'pause',
+    });
+  });
+
+  afterEach(async () => {
+    await cleanupDatabase();
+  });
+
+  it('deve retornar campanha, takedowns e regras ativas', async () => {
+    const response = await request(app)
+      .get(`/api/campaigns/${testCampaign.id}`)
+      .set(getAuthHeader(testUser.token));
+
+    expect(response.status).toBe(200);
+    expect(response.body.campaign).toBeDefined();
+    expect(response.body.campaign.id).toBe(testCampaign.id);
+    expect(response.body.campaign.objective).toBe('OUTCOME_SALES');
+    expect(response.body.campaign.metrics).toMatchObject({
+      spend: 10,
+      roas: 2,
+      cpa: 5,
+      ctr: 0.02,
+      cpm: 3,
+      conversions: 4,
+      impressions: 1000,
+    });
+    expect(Array.isArray(response.body.recentTakedowns)).toBe(true);
+    expect(response.body.recentTakedowns.length).toBe(1);
+    expect(response.body.recentTakedowns[0].suggestionType).toBe('smart_takedown');
+    expect(Array.isArray(response.body.automationRules)).toBe(true);
+    expect(response.body.automationRules.length).toBe(1);
+    expect(response.body.automationRules[0].ruleType).toBe('pause_high_cpa');
+  });
+
+  it('deve retornar 404 para campanha de outro tenant', async () => {
+    const otherTenant = await createTestTenant('other-detail-' + Date.now());
+    const [otherCampaign] = await db
+      .insert(campaigns)
+      .values({
+        tenantId: otherTenant.id,
+        metaCampaignId: 'meta_other',
+        name: 'Outra',
+        status: 'active',
+        budget: {},
+      })
+      .returning();
+
+    const response = await request(app)
+      .get(`/api/campaigns/${otherCampaign.id}`)
+      .set(getAuthHeader(testUser.token));
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe('Campanha não encontrada');
   });
 });

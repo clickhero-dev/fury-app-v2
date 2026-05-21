@@ -3,14 +3,18 @@ import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { ConectarMetaPage } from './pages/onboarding/ConectarMetaPage';
 import { MetaAuthorizePage } from './pages/onboarding/MetaAuthorizePage';
+import { MetasPage } from './pages/onboarding/MetasPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Dashboard } from './pages/dashboard/Dashboard';
+import { Metas } from './pages/dashboard/Metas';
 import { PainelCampanhas } from './pages/campanhas/PainelCampanhas';
 import { RegrasCampanhas } from './pages/campanhas/RegrasCampanhas';
 import { EstudioCriativo } from './pages/estudio-criativo/EstudioCriativo';
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
+import { GeradorCopy } from './pages/estudio/GeradorCopy';
 import { Configuracoes } from './pages/configuracoes/Configuracoes';
+import { Integracoes } from './pages/configuracoes/Integracoes';
 import { ComponentsDemo } from './pages/ComponentsDemo';
 
 export const router = createBrowserRouter([
@@ -35,10 +39,26 @@ export const router = createBrowserRouter([
     element: <MetaAuthorizePage />,
   },
   {
+    path: '/onboarding/metas',
+    element: (
+      <ProtectedRoute>
+        <MetasPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: '/dashboard',
     element: (
       <ProtectedRoute>
         <Dashboard />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/dashboard/metas',
+    element: (
+      <ProtectedRoute>
+        <Metas />
       </ProtectedRoute>
     ),
   },
@@ -83,10 +103,26 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: '/estudio/copy',
+    element: (
+      <ProtectedRoute>
+        <GeradorCopy />
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: '/configuracoes',
     element: (
       <ProtectedRoute>
         <Configuracoes />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/configuracoes/integracoes',
+    element: (
+      <ProtectedRoute>
+        <Integracoes />
       </ProtectedRoute>
     ),
   },

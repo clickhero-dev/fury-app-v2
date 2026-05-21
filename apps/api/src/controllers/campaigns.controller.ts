@@ -5,7 +5,7 @@ import {
   pauseCampaign,
   resumeCampaign,
   updateCampaignBudget,
-  getCampaign,
+  getCampaignPanelDetail,
 } from '../services/campaigns.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -130,13 +130,13 @@ export async function getCampaignHandler(req: Request, res: Response, next: Next
       throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
     }
 
-    const campaign = await getCampaign({ tenantId, campaignId: id });
+    const detail = await getCampaignPanelDetail({ tenantId, campaignId: id });
 
-    res.json({
-      success: true,
-      data: campaign,
-      timestamp: new Date().toISOString(),
-    });
+    if (!detail) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+
+    return res.json(detail);
   } catch (err) {
     next(err);
   }

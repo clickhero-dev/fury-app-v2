@@ -29,12 +29,16 @@ async function seedDatabase() {
   try {
     // Clear existing data
     console.log('🗑️  Limpando dados existentes...');
+    await db.delete(schema.invoices);
+    await db.delete(schema.subscriptions);
     await db.delete(schema.furyInsights);
+    await db.delete(schema.furyConfig);
     await db.delete(schema.clientGoals);
     await db.delete(schema.campaigns);
     await db.delete(schema.metaConnections);
     await db.delete(schema.users);
     await db.delete(schema.tenants);
+    await db.delete(schema.plans);
 
     // Create tenants
     console.log('👥 Criando tenants...');
@@ -59,6 +63,26 @@ async function seedDatabase() {
     )[0];
 
     console.log(`✅ Tenants criados: ${fashionTenant.name}, ${dentalTenant.name}`);
+
+    // Create fury configs
+    console.log('⚙️  Criando configurações FURY...');
+    await db.insert(schema.furyConfig).values([
+      {
+        tenantId: fashionTenant.id,
+        targetRoas: '4.00',
+        targetCpa: '50.00',
+        targetCtr: '3.00',
+        targetBudgetUtilization: '80.00',
+      },
+      {
+        tenantId: dentalTenant.id,
+        targetRoas: '3.00',
+        targetCpa: '150.00',
+        targetCtr: '2.00',
+        targetBudgetUtilization: '80.00',
+      },
+    ]);
+    console.log('✅ Configurações FURY criadas');
 
     // Create users with simple hash
     console.log('👤 Criando usuários...');
@@ -366,6 +390,57 @@ async function seedDatabase() {
       .returning();
 
     console.log(`✅ ${fashionInsights.length + dentalInsights.length} Fury Insights criados`);
+
+    // Seed plans
+    console.log('💳 Criando planos...');
+    const seedPlans = await db
+      .insert(schema.plans)
+      .values([
+        {
+          name: 'Starter',
+          priceCents: 29700,
+          interval: 'monthly',
+          features: {
+            studio: true,
+            fury_engine: false,
+            smart_takedown: false,
+            analytics_advanced: false,
+            multi_accounts: false,
+            sla: false,
+          },
+          isActive: true,
+        },
+        {
+          name: 'Pro',
+          priceCents: 59700,
+          interval: 'monthly',
+          features: {
+            studio: true,
+            fury_engine: true,
+            smart_takedown: true,
+            analytics_advanced: false,
+            multi_accounts: false,
+            sla: false,
+          },
+          isActive: true,
+        },
+        {
+          name: 'Enterprise',
+          priceCents: 149700,
+          interval: 'monthly',
+          features: {
+            studio: true,
+            fury_engine: true,
+            smart_takedown: true,
+            analytics_advanced: true,
+            multi_accounts: true,
+            sla: true,
+          },
+          isActive: true,
+        },
+      ])
+      .returning();
+    console.log(`✅ ${seedPlans.length} planos criados`);
 
     console.log('\n✅ Seed completed successfully!');
     console.log('\n📊 Summary:');

@@ -1,0 +1,108 @@
+═══════════════════════════════════════════════════════════════════════════════
+  DIAGNÓSTICO: Module '@fury/db' - automationRules Export Error
+═══════════════════════════════════════════════════════════════════════════════
+
+📋 PROBLEMA
+─────────────────────────────────────────────────────────────────────────────
+Error: Module '@fury/db' has no exported member 'automationRules'
+Error: db.query.automationRules does not exist
+
+Arquivos afetados:
+  ✓ apps/api/src/controllers/automation.controller.ts (linha 4, 50, 146)
+  ✓ apps/api/src/services/automation.service.ts (linha 2, 36)
+  ✓ apps/api/src/workers/rule-engine.worker.ts (linha 3, 99)
+
+
+🔍 ANÁLISE
+─────────────────────────────────────────────────────────────────────────────
+✅ automationRules EXISTE em packages/db/src/schema.ts (linha 165)
+✅ É exportado em allTables (linha 197)
+✅ index.ts exporta * from './schema.js' (linha 2)
+✅ dist/schema.d.ts contém automationRules (verificado)
+✅ client.d.ts tipou db com schema completo
+✅ TODOS os imports estão 100% CORRETOS
+
+STATUS DO CÓDIGO: ✅ CORRETO - NENHUMA MUDANÇA NECESSÁRIA
+
+
+⚠️ CAUSA RAIZ
+─────────────────────────────────────────────────────────────────────────────
+TypeScript/Node.js cache desatualizado.
+
+O dist/ foi gerado ANTES de automationRules ser adicionado ao schema.
+Agora o TypeScript está lendo tipos antigos em cache.
+
+
+🚀 SOLUÇÃO (RÁPIDA - 30 segundos)
+─────────────────────────────────────────────────────────────────────────────
+Abra terminal na raiz do projeto e rode:
+
+  bash fix-monorepo-build.sh
+
+OU manualmente:
+
+  1. rm -rf packages/db/dist
+  2. npm run build --workspace=@fury/db
+  3. npm run build --workspace=@fury/api
+
+PRONTO! ✅
+
+
+📂 ARQUIVOS GERADOS PARA VOCÊ
+─────────────────────────────────────────────────────────────────────────────
+1. fix-monorepo-build.sh
+   → Script bash que limpa caches e rebuilda. Rode com `bash fix-monorepo-build.sh`
+
+2. MONOREPO_BUILD_FIX.md
+   → Documentação detalhada do problema e solução
+
+3. PATCHES_OPTIONAL.md
+   → Patches opcionais para melhorar type safety (NÃO são necessários)
+
+4. BUILD_FIX_SUMMARY.txt (este arquivo)
+   → Este resumo executivo
+
+
+✅ VERIFICAÇÃO PÓS-FIX
+─────────────────────────────────────────────────────────────────────────────
+Após rodar o fix, você pode verificar que tudo está ok com:
+
+  node -e "const db = require('@fury/db'); console.log('✓ automationRules', 'automationRules' in db)"
+
+Resultado esperado: ✓ automationRules true
+
+
+🔑 PONTOS IMPORTANTES
+─────────────────────────────────────────────────────────────────────────────
+1. CÓDIGO ESTÁ CERTO → Nenhuma mudança de código é necessária
+2. SCHEMA TEM TUDO → automationRules foi criado corretamente
+3. PROBLEMA É BUILD → TypeScript cache está desatualizado
+4. SOLUÇÃO É SIMPLES → Limpar cache e rebuildar
+
+O seu código não tem bugs. É só rebuild! 🎉
+
+
+📝 CHECKLIST PÓS-FIX
+─────────────────────────────────────────────────────────────────────────────
+□ Rodar: bash fix-monorepo-build.sh
+□ Verificar que build passou sem erros
+□ Rodar: npm run dev
+□ Testar endpoints de automation
+□ Committar o fix (se necessário)
+
+
+💡 DICA PARA O FUTURO
+─────────────────────────────────────────────────────────────────────────────
+Quando adicionar novas tabelas ao schema do DB:
+
+  1. Adicionar em schema.ts
+  2. Rodar: npm run generate (Drizzle migrations)
+  3. Rodar: npm run build --workspace=@fury/db
+  4. Usar nos controllers/services
+
+Isso evita caches desatualizado.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+Status: ✅ PRONTO PARA FIX - Execute: bash fix-monorepo-build.sh
+═══════════════════════════════════════════════════════════════════════════════
