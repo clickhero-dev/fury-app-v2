@@ -80,7 +80,10 @@ router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: Requ
       messages: [{ role: 'user', content: userPrompt }],
     });
 
-    const text = response?.content?.[0]?.text || '';
+    const content0 = (response as any)?.content?.[0];
+    const text = (content0 && typeof content0 === 'object' && 'text' in content0)
+      ? String((content0 as any).text)
+      : (typeof content0 === 'string' ? content0 : '');
     const cleaned = text.replace(/```json|```/g, '').trim();
 
     let parsed: any;
