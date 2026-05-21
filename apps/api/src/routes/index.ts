@@ -6,6 +6,7 @@ import metricsRoutes from './metrics.routes.js';
 import automationRoutes from './automation.routes.js';
 import studioRoutes from './studio.routes.js';
 import campaignRoutes from './campaigns.routes.js';
+import budgetRoutes from './budget.routes.js';
 
 
 
@@ -23,5 +24,6 @@ router.use('/metrics', authMiddleware, tenantMiddleware, metricsRoutes);
 router.use('/automation', automationRoutes);
 router.use('/studio', studioRoutes);
 router.use('/campaigns', authMiddleware, tenantMiddleware, campaignRoutes);
+router.use('/budget', budgetRoutes);
 
 export default router;
