@@ -1,9 +1,18 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
+import type { CampaignApiStatus } from '../types/campaigns';
 
 interface PauseCampaignRequest {
   id: string;
   action: 'pause' | 'resume';
+}
+
+export interface CampaignStatusUpdateResponse {
+  success: boolean;
+  data: {
+    status: CampaignApiStatus;
+  };
+  timestamp: string;
 }
 
 export function usePauseCampaign() {
@@ -11,13 +20,10 @@ export function usePauseCampaign() {
 
   return useMutation({
     mutationFn: async ({ id, action }: PauseCampaignRequest) => {
-      try {
-        const response = await api.patch(`/api/campaigns/${id}/${action}`);
-        return response.data;
-      } catch (error) {
-        console.warn(`Failed to ${action} campaign ${id}:`, error);
-        throw error;
-      }
+      const response = await api.patch<CampaignStatusUpdateResponse>(
+        `/campaigns/${id}/${action}`
+      );
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });

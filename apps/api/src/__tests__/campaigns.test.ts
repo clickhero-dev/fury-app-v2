@@ -122,6 +122,7 @@ describe('PATCH /api/campaigns/:id/pause', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
+    expect(response.body.data.status).toBe('PAUSED');
 
     const pausedCampaign = await db.query.campaigns.findFirst({
       where: eq(campaigns.id, testCampaign.id),
@@ -201,6 +202,7 @@ describe('PATCH /api/campaigns/:id/resume', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
+    expect(response.body.data.status).toBe('ACTIVE');
 
     const resumedCampaign = await db.query.campaigns.findFirst({
       where: eq(campaigns.id, testCampaign.id),
