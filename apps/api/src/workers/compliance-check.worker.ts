@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq';
-import Anthropic from '@anthropic-ai/sdk';
 import { db, creativeAssets } from '@fury/db';
 import { eq } from 'drizzle-orm';
+import { claude } from '../lib/claude.js';
 import { getRedis } from '../lib/redis.js';
 
 interface ComplianceJobData {
@@ -36,10 +36,15 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
 
         const asset = assets[0];
 
-        // Se não encontrar no banco, logamos mas não temos como atualizar o registro
+        // O worker depende de um creative_asset já salvo no banco.
         if (!asset) {
           console.error(`[COMPLIANCE] ❌ Asset não existe no banco: ${creativeAssetId}`);
-          return;
+          return await fallbackApprove(creativeAssetId, 'Creative asset nao encontrado no banco', 'rejected');
+        }
+
+        if (asset.tenantId !== tenantId) {
+          console.warn(`[COMPLIANCE] ⚠️ Asset ${creativeAssetId} nao pertence ao tenant ${tenantId}`);
+          return await fallbackApprove(creativeAssetId, 'Creative asset nao pertence ao tenant informado', 'rejected');
         }
 
         if (!asset.url) {
@@ -81,15 +86,12 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
           console.warn('[COMPLIANCE] ⚠️ ANTHROPIC_API_KEY ausente');
           return await fallbackApprove(
             creativeAssetId,
-            'Compliance automático indisponível — revisar manualmente',
+            'API Key da Anthropic não configurada',
             'approved'
           );
         }
 
         // 4. Chamada Claude Vision
-        const client = new Anthropic({
-          apiKey: process.env.ANTHROPIC_API_KEY,
-        });
 
         const systemPrompt = `Você é um especialista em políticas de publicidade do Facebook e Instagram.
 Analise esta imagem de anúncio e verifique se viola alguma política.
@@ -112,8 +114,8 @@ Verificar:
 
         console.log('[COMPLIANCE] 📤 Enviando para Claude API...');
 
-        const response = await client.messages.create({
-          model: 'claude-3-sonnet-20240229',
+        const response = await claude.messages.create({
+          model: 'claude-sonnet-4-20250514',
           max_tokens: 1024,
           system: systemPrompt,
           messages: [
@@ -154,9 +156,11 @@ Verificar:
 
         // 6. Atualizar Creative Asset no Banco
         const status = analysis.aprovado ? 'approved' : 'rejected';
+        const confidence = Number(analysis.confianca ?? analysis.score_confianca ?? 0);
         const notes = [
           ...(analysis.motivos_reprovacao || []),
-          analysis.observacoes
+          analysis.observacoes,
+          `Confiança: ${confidence}%`
         ].filter(Boolean).join(' | ');
 
         await db
@@ -169,7 +173,7 @@ Verificar:
 
         console.log(`[COMPLIANCE] 🚀 Status Atualizado: ${status.toUpperCase()} para Asset ${creativeAssetId}`);
 
-        return { success: true, status };
+        return { success: true, status, confianca: confidence };
       } catch (error) {
         console.error(`[COMPLIANCE ERROR] Falha crítica no Job:`, error);
         return await fallbackApprove(

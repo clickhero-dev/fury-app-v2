@@ -180,6 +180,8 @@ export interface MetaInsightsAction {
 export interface MetaInsightsData {
   date_start?: string;
   date_stop?: string;
+  campaign_id?: string;
+  campaign_name?: string;
   spend?: string;
   impressions?: string;
   clicks?: string;
@@ -187,6 +189,8 @@ export interface MetaInsightsData {
   cpm?: string;
   actions?: MetaInsightsAction[];
   action_values?: MetaInsightsAction[];
+  purchase_roas?: MetaInsightsAction[];
+  cost_per_action_type?: MetaInsightsAction[];
 }
 
 export interface MetaInsightsResponse {
@@ -255,6 +259,10 @@ export async function metaApiCall<T>(
               clicks: '250',
               actions: [{ action_type: 'purchase', value: '10' }],
               action_values: [{ action_type: 'purchase', value: '500' }],
+              purchase_roas: [{ action_type: 'omni_purchase', value: '3.45' }],
+              cost_per_action_type: [{ action_type: 'purchase', value: '12.50' }],
+              campaign_id: 'mock_campaign_1',
+              campaign_name: 'Mock Campaign',
             },
           ],
         } as T;
@@ -340,6 +348,8 @@ export async function getMetaInsights(params: {
   startDate: string;
   endDate: string;
   timeIncrement?: number;
+  /** Nível de agregação (ex.: campaign para listagem por campanha). */
+  level?: 'account' | 'campaign' | 'adset' | 'ad';
 }): Promise<MetaInsightsResponse> {
   const objectId = params.entityId ?? params.adAccountId;
   if (!objectId) {
@@ -347,10 +357,28 @@ export async function getMetaInsights(params: {
   }
 
   const path = `/${objectId}/insights`;
-  const fields = 'spend,impressions,clicks,ctr,cpm,actions,action_values,date_start,date_stop';
+  const fields = [
+    'spend',
+    'impressions',
+    'clicks',
+    'ctr',
+    'cpm',
+    'actions',
+    'action_values',
+    'purchase_roas',
+    'cost_per_action_type',
+    'date_start',
+    'date_stop',
+    'campaign_id',
+    'campaign_name',
+  ].join(',');
   const timeRange = JSON.stringify({ since: params.startDate, until: params.endDate });
 
   let fullPath = `${path}?fields=${fields}&time_range=${encodeURIComponent(timeRange)}`;
+
+  if (params.level) {
+    fullPath += `&level=${params.level}`;
+  }
 
   if (params.timeIncrement) {
     fullPath += `&time_increment=${params.timeIncrement}`;
