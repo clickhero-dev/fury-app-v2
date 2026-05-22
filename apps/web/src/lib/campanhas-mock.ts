@@ -1,14 +1,6 @@
-export interface CampaignData {
-  id: string;
-  name: string;
-  status: 'ativo' | 'pausado' | 'finalizado';
-  investido: number;
-  roas: number;
-  cpa: number;
-  conversoes: number;
-  startDate: string;
-  endDate: string;
-}
+import type { CampaignData } from '../types/campaigns';
+
+export type { CampaignData };
 
 export const campanhasMock: CampaignData[] = [
   {
@@ -17,7 +9,7 @@ export const campanhasMock: CampaignData[] = [
     status: 'ativo',
     investido: 8234,
     roas: 3.4,
-    cpa: 45.50,
+    cpa: 45.5,
     conversoes: 180,
     startDate: '01/01/2026',
     endDate: '31/03/2026',
@@ -28,7 +20,7 @@ export const campanhasMock: CampaignData[] = [
     status: 'ativo',
     investido: 1800,
     roas: 2.15,
-    cpa: 62.30,
+    cpa: 62.3,
     conversoes: 28,
     startDate: '15/01/2026',
     endDate: '31/05/2026',
@@ -39,7 +31,7 @@ export const campanhasMock: CampaignData[] = [
     status: 'ativo',
     investido: 6234,
     roas: 2.85,
-    cpa: 38.20,
+    cpa: 38.2,
     conversoes: 163,
     startDate: '05/02/2026',
     endDate: '30/04/2026',

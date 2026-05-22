@@ -11,6 +11,12 @@ import {
   calculateCPA,
   calculateCPM,
 } from '../../utils/metrics-formatter.js';
+import {
+  extractCampaignMetricsFromInsight,
+  parseConversionsFromActions,
+  parseCpaFromCostPerAction,
+  parseRoasFromPurchaseRoas,
+} from '../../utils/meta-insights-parser.js';
 import type {
   MetricsSummaryResponse,
   CampaignResponse,
@@ -88,14 +94,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         const impressions = parseInt(item.impressions || '0', 10);
         const clicks = parseInt(item.clicks || '0', 10);
 
-        const conversions = (item.actions || [])
-          .filter(
-            (a) =>
-              a.action_type === 'purchase' ||
-              a.action_type === 'lead' ||
-              a.action_type === 'offsite_conversion'
-          )
-          .reduce((sum, a) => sum + parseInt(String(a.value), 10), 0);
+        const conversions = parseConversionsFromActions(item.actions) ?? 0;
 
         const revenue = (item.action_values || [])
           .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
@@ -112,20 +111,27 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       { spend: 0, impressions: 0, clicks: 0, conversions: 0, revenue: 0 }
     );
 
+    const spendReais = centavosToReais(Math.round(summary.spend * 100));
     const ctr = calculateCTR(summary.clicks, summary.impressions);
     const cpm = calculateCPM(Math.round(summary.spend * 100), summary.impressions);
-    const cpa = calculateCPA(summary.spend, summary.conversions);
-    const roas = summary.spend > 0 ? summary.revenue / summary.spend : 0;
+    const cpa =
+      insights.reduce<number | null>((acc, item) => acc ?? parseCpaFromCostPerAction(item.cost_per_action_type), null) ??
+      (summary.conversions > 0 ? calculateCPA(spendReais, summary.conversions) : null);
+    const roas =
+      insights.reduce<number | null>((acc, item) => acc ?? parseRoasFromPurchaseRoas(item.purchase_roas), null) ??
+      (summary.spend > 0 && summary.revenue > 0
+        ? summary.revenue / summary.spend
+        : null);
 
     return {
-      spend: centavosToReais(Math.round(summary.spend * 100)),
+      spend: spendReais,
       impressions: summary.impressions,
       clicks: summary.clicks,
       conversions: summary.conversions,
       ctr,
       cpm,
-      cpa,
-      roas,
+      cpa: cpa ?? 0,
+      roas: roas ?? 0,
     };
   }
 
@@ -138,28 +144,16 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     const impressions = parseInt(item.impressions || '0', 10);
     const clicks = parseInt(item.clicks || '0', 10);
 
-    const conversions = (item.actions || [])
-      .filter(
-        (a) =>
-          a.action_type === 'purchase' ||
-          a.action_type === 'lead' ||
-          a.action_type === 'offsite_conversion'
-      )
-      .reduce((sum, a) => sum + parseInt(String(a.value), 10), 0);
-
-    const revenue = (item.action_values || [])
-      .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
-      .reduce((sum, a) => sum + parseFloat(String(a.value)), 0);
-
-    const roas = spend > 0 ? revenue / spend : 0;
+    const spendReais = centavosToReais(Math.round(spend * 100));
+    const { roas, conversions } = extractCampaignMetricsFromInsight(item, spendReais);
 
     return {
       date: item.date_start,
-      spend: centavosToReais(Math.round(spend * 100)),
+      spend: spendReais,
       impressions,
       clicks,
-      conversions,
-      roas,
+      conversions: conversions ?? 0,
+      roas: roas ?? 0,
     };
   }
 
@@ -240,16 +234,18 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
           { totalSpend: 0, totalImpressions: 0, totalClicks: 0, totalConversions: 0, avgRoas: 0 }
         );
 
+        const spend = centavosToReais(aggregated.totalSpend);
         return {
           id: campaign.campaignId,
           name: campaign.name,
           status: campaign.status,
-          spend: centavosToReais(aggregated.totalSpend),
+          spend,
           roas: aggregated.avgRoas,
-          cpa: calculateCPA(
-            centavosToReais(aggregated.totalSpend),
-            aggregated.totalConversions
-          ),
+          cpa:
+            aggregated.totalConversions > 0
+              ? calculateCPA(spend, aggregated.totalConversions)
+              : null,
+          conversions: aggregated.totalConversions,
           impressions: aggregated.totalImpressions,
           clicks: aggregated.totalClicks,
         };
@@ -290,54 +286,86 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         throw new AppError(400, 'NO_AD_ACCOUNT', 'Nenhuma conta de anuncios encontrada');
       }
 
+      type MetaCampaignRow = { id: string; name?: string; status?: string };
+
+      const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
+        `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,name,status')}`,
+        accessToken
+      );
+
       const response = await getMetaInsights({
         accessToken,
         adAccountId,
         startDate,
         endDate,
+        level: 'campaign',
       });
 
       const insights = response.data || [];
-      if (insights.length === 0) {
-        return {
-          data: [],
-          total: 0,
-          page,
-          pageSize: limit,
-        };
-      }
+      const campaignMeta = new Map(
+        (campaignsResp.data || []).map((c) => [c.id, c])
+      );
+      const insightByCampaignId = new Map(
+        insights
+          .filter((row) => row.campaign_id)
+          .map((row) => [row.campaign_id as string, row])
+      );
 
-      const campaigns: CampaignResponse[] = insights.map((insight) => {
+      const campaignIds = new Set([
+        ...campaignMeta.keys(),
+        ...insightByCampaignId.keys(),
+      ]);
+
+      const campaigns: CampaignResponse[] = [];
+
+      for (const campaignId of campaignIds) {
+        const meta = campaignMeta.get(campaignId);
+        const normalizedStatus = (meta?.status || 'ACTIVE').toUpperCase() as
+          | 'ACTIVE'
+          | 'PAUSED'
+          | 'ARCHIVED';
+
+        if (status && normalizedStatus !== status) {
+          continue;
+        }
+
+        const insight = insightByCampaignId.get(campaignId);
+        if (!insight) {
+          campaigns.push({
+            id: campaignId,
+            name: meta?.name || `Campaign ${campaignId}`,
+            status: normalizedStatus,
+            spend: 0,
+            roas: null,
+            cpa: null,
+            conversions: null,
+            impressions: 0,
+            clicks: 0,
+          });
+          continue;
+        }
+
         const spend = parseFloat(insight.spend || '0');
+        const spendReais = centavosToReais(Math.round(spend * 100));
         const impressions = parseInt(insight.impressions || '0', 10);
         const clicks = parseInt(insight.clicks || '0', 10);
+        const { roas, cpa, conversions } = extractCampaignMetricsFromInsight(
+          insight,
+          spendReais
+        );
 
-        const conversions = (insight.actions || [])
-          .filter(
-            (a) =>
-              a.action_type === 'purchase' ||
-              a.action_type === 'lead' ||
-              a.action_type === 'offsite_conversion'
-          )
-          .reduce((sum, a) => sum + parseInt(String(a.value), 10), 0);
-
-        const revenue = (insight.action_values || [])
-          .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
-          .reduce((sum, a) => sum + parseFloat(String(a.value)), 0);
-
-        const roas = spend > 0 ? revenue / spend : 0;
-
-        return {
-          id: `campaign_${Math.random().toString(36).substr(2, 9)}`,
-          name: `Campaign ${insight.date_start}`,
-          status: 'ACTIVE' as const,
-          spend: centavosToReais(Math.round(spend * 100)),
+        campaigns.push({
+          id: campaignId,
+          name: insight.campaign_name || meta?.name || `Campaign ${campaignId}`,
+          status: normalizedStatus,
+          spend: spendReais,
           roas,
-          cpa: calculateCPA(centavosToReais(Math.round(spend * 100)), conversions),
+          cpa,
+          conversions,
           impressions,
           clicks,
-        };
-      });
+        });
+      }
 
       campaigns.sort((a, b) => b.spend - a.spend);
 
