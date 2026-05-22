@@ -1,4 +1,9 @@
-type Message = { role: string; content: string };
+import Anthropic from '@anthropic-ai/sdk';
+
+type Message = {
+  role: string;
+  content: string | Array<unknown>;
+};
 
 export const claude = {
   messages: {
@@ -13,31 +18,17 @@ export const claude = {
         };
       }
 
-      const prompt = `${opts.system}\n\n${opts.messages.map(m => m.content).join('\n\n')}`;
-
       try {
-        const res = await fetch('https://api.anthropic.com/v1/complete', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01'
-          },
-          body: JSON.stringify({
-            model: opts.model || 'claude-2.1',
-            prompt: `\n\nHuman: ${prompt}\n\nAssistant:`,
-            max_tokens_to_sample: opts.max_tokens,
-          }),
+        const client = new Anthropic({ apiKey });
+        const data = await client.messages.create({
+          model: opts.model,
+          max_tokens: opts.max_tokens,
+          system: opts.system,
+          messages: opts.messages as any,
         });
 
-        if (!res.ok) {
-          console.error(`[CLAUDE ERROR] HTTP ${res.status} from Anthropic API`);
-          throw new Error(`API response: ${res.status}`);
-        }
-
-        const data = (await res.json()) as any;
         return {
-          content: [{ type: 'text', text: (data.completion || '').trim() }],
+          content: data.content,
           raw: data,
         };
       } catch (err) {

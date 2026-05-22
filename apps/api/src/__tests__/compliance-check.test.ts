@@ -49,18 +49,36 @@ vi.mock('bullmq', () => {
     }
   }
 
-  return { Worker: WorkerMock };
-});
+  class QueueMock {
+    name: string;
 
-vi.mock('@anthropic-ai/sdk', () => {
-  class AnthropicMock {
-    messages = {
-      create: state.anthropicCreate,
-    };
+    constructor(name: string) {
+      this.name = name;
+    }
+
+    async add() {
+      return { id: 'mock-job' };
+    }
+
+    async getJobCounts() {
+      return { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 };
+    }
+
+    async close() {
+      return undefined;
+    }
   }
 
-  return { default: AnthropicMock };
+  return { Worker: WorkerMock, Queue: QueueMock };
 });
+
+vi.mock('../lib/claude.js', () => ({
+  claude: {
+    messages: {
+      create: state.anthropicCreate,
+    },
+  },
+}));
 
 vi.mock('@fury/db', () => {
   const db = {
@@ -100,6 +118,7 @@ vi.mock('drizzle-orm', () => ({
 
 vi.mock('../lib/redis.js', () => ({
   getRedis: () => ({ mocked: true }),
+  waitForRedisReady: vi.fn().mockResolvedValue(undefined),
   closeRedis: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -119,8 +138,14 @@ vi.mock('../lib/temp-storage.js', () => ({
 }));
 
 vi.mock('../lib/queue.js', () => ({
+  createBullConnection: vi.fn().mockResolvedValue({}),
+  createCampaignSyncQueue: vi.fn().mockResolvedValue({ add: vi.fn() }),
+  createRuleEngineQueue: vi.fn().mockResolvedValue({ add: vi.fn() }),
+  getFuryEngineQueue: vi.fn().mockResolvedValue({ add: vi.fn() }),
   closeStudioQueue: vi.fn().mockResolvedValue(undefined),
   closeComplianceQueue: vi.fn().mockResolvedValue(undefined),
+  closeFuryEngineQueue: vi.fn().mockResolvedValue(undefined),
+  closeRedisConnection: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../middleware/logger.js', () => ({
@@ -185,7 +210,7 @@ afterEach(async () => {
 });
 
 describe('Compliance Check Worker', () => {
-  it('processa job e atualiza compliance_status no banco', async () => {
+  it('valida aprovação do worker ao analisar um asset permitido', async () => {
     const asset: FakeAsset = {
       id: 'asset-1',
       tenantId: 'tenant-1',
@@ -227,7 +252,7 @@ describe('Compliance Check Worker', () => {
     expect(asset.complianceNotes).toContain('Sem violações detectadas.');
   });
 
-  it('reprova imagens com texto excessivo com motivo claro', async () => {
+  it('valida rejeição do worker ao encontrar violação de política', async () => {
     const asset: FakeAsset = {
       id: 'asset-2',
       tenantId: 'tenant-1',
@@ -258,6 +283,7 @@ describe('Compliance Check Worker', () => {
     });
 
     await startComplianceCheckWorker();
+    expect(state.workerInstances).toHaveLength(1);
     await state.workerInstances[0].processor({
       data: { creativeAssetId: asset.id, tenantId: asset.tenantId },
     });
