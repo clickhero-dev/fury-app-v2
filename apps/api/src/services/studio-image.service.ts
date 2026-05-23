@@ -154,7 +154,7 @@ async function persistGeneratedImage(params: {
 
   const complianceQueue = await getComplianceQueue();
   await complianceQueue.add(
-    'studio:compliance-check',
+    'studio-compliance-check',
     { creativeAssetId: asset.id, tenantId: params.tenantId },
     {
       removeOnComplete: 1000,

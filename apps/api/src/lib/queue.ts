@@ -134,7 +134,7 @@ export async function closeStudioQueue() {
 }
 
 // Studio compliance queue
-export const STUDIO_COMPLIANCE_QUEUE_NAME = 'studio:compliance-check' as const;
+export const STUDIO_COMPLIANCE_QUEUE_NAME = 'studio-compliance-check' as const;
 
 let complianceQueueInstance: Queue | null = null;
 export async function getStudioComplianceQueue() {
