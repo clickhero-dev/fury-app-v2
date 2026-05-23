@@ -15,6 +15,48 @@
       "when": 1778268868197,
       "tag": "0001_tranquil_vance_astro",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1778268869197,
+      "tag": "0001_pending_compliance",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1778268870197,
+      "tag": "0002_add_compliance_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1778268871197,
+      "tag": "0002_automation_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1778268872197,
+      "tag": "0003_fury_config",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1778268873197,
+      "tag": "0004_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1778268874197,
+      "tag": "0004_fix_budget_optimizations",
+      "breakpoints": true
     }
   ]
 }

@@ -6,7 +6,10 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const connectionString = process.env.DATABASE_URL || 'postgresql://fury:fury_local@localhost:5432/fury_dev';
+const connectionString =
+  process.env.NODE_ENV === 'test'
+    ? process.env.TEST_DATABASE_URL || 'postgresql://fury:fury_local@localhost:5432/fury_test'
+    : process.env.DATABASE_URL || 'postgresql://fury:fury_local@localhost:5432/fury_dev';
 
 async function runMigrate() {
   const client = postgres(connectionString, { max: 1 });
