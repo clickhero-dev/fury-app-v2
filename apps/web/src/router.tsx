@@ -9,7 +9,7 @@ import { Dashboard } from './pages/dashboard/Dashboard';
 import { Metas } from './pages/dashboard/Metas';
 import { PainelCampanhas } from './pages/campanhas/PainelCampanhas';
 import { RegrasCampanhas } from './pages/campanhas/RegrasCampanhas';
-import { EstudioCriativo } from './pages/estudio-criativo/EstudioCriativo';
+import { CreativeStudio } from './pages/studio/CreativeStudio';
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
 import { GeradorCopy } from './pages/estudio/GeradorCopy';
@@ -82,7 +82,7 @@ export const router = createBrowserRouter([
     path: '/estudio-criativo',
     element: (
       <ProtectedRoute>
-        <EstudioCriativo />
+        <CreativeStudio />
       </ProtectedRoute>
     ),
   },

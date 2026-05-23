@@ -133,14 +133,20 @@ export async function closeStudioQueue() {
   }
 }
 
-// Compliance queue
+// Studio compliance queue
+export const STUDIO_COMPLIANCE_QUEUE_NAME = 'studio:compliance-check' as const;
+
 let complianceQueueInstance: Queue | null = null;
-export async function getComplianceQueue() {
+export async function getStudioComplianceQueue() {
   if (!complianceQueueInstance) {
     const connection = await getRedisConnection();
-    complianceQueueInstance = new Queue('compliance-check', { connection });
+    complianceQueueInstance = new Queue(STUDIO_COMPLIANCE_QUEUE_NAME, { connection });
   }
   return complianceQueueInstance;
+}
+
+export async function getComplianceQueue() {
+  return getStudioComplianceQueue();
 }
 
 export async function closeComplianceQueue() {
@@ -148,6 +154,10 @@ export async function closeComplianceQueue() {
     await complianceQueueInstance.close();
     complianceQueueInstance = null;
   }
+}
+
+export async function closeStudioComplianceQueue() {
+  await closeComplianceQueue();
 }
 
 // Fury engine queue

@@ -163,6 +163,7 @@ Ver `infra/.env.example` para todas as variáveis necessárias.
 - `REDIS_URL` - Conexão Redis
 - `JWT_SECRET` - Chave para assinar JWTs
 - `META_APP_ID` / `META_APP_SECRET` - Credenciais Meta Ads API
+- `OPENAI_API_KEY` - API key para geração de imagens com DALL-E 3
 - `ANTHROPIC_API_KEY` - API key para Claude/Anthropic
 - `PORT` - Porta do servidor (default: 3000)
 

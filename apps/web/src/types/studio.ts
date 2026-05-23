@@ -6,6 +6,8 @@ export interface StudioAsset {
   name?: string;
   createdAt?: string;
   description?: string;
+  complianceNotes?: string | null;
+  metaAssetId?: string | null;
 }
 
 export interface GenerateImagePayload {
@@ -21,6 +23,40 @@ export interface GenerateImageResponse {
   style: string;
   prompt: string;
   createdAt: string;
+}
+
+export interface StudioImageGenerationResponse {
+  creativeAssetId: string;
+  imageUrl: string;
+  prompt: string;
+  generatedAt: string;
+  status: 'pending_compliance';
+}
+
+export interface StudioComplianceStatusResponse {
+  assetId: string;
+  tenantId: string;
+  imageUrl: string;
+  complianceStatus: StudioAsset['complianceStatus'];
+  complianceNotes: string | null;
+  approved: boolean | null;
+  issues: string[];
+  textPercentage: number | null;
+  metaAssetId: string | null;
+  createdAt: string;
+}
+
+export interface StudioPublishResponse {
+  hash: string;
+  imageUrl: string;
+  metaAssetId: string;
+}
+
+export interface StudioTemplate {
+  id: string;
+  label: string;
+  niche: string;
+  prompt: string;
 }
 
 export interface CopyVariacao {
