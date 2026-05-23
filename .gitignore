@@ -141,3 +141,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+.DS_Store
+target_ctr
+target_roas
+.claude/settings.local.json
