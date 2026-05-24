@@ -138,6 +138,10 @@ vi.mock('../lib/temp-storage.js', () => ({
 }));
 
 vi.mock('../lib/queue.js', () => ({
+  CAMPAIGN_SYNC_QUEUE_NAME: 'campaign-sync',
+  RULE_ENGINE_QUEUE_NAME: 'rule-engine',
+  FURY_ENGINE_QUEUE_NAME: 'fury-engine',
+  STUDIO_COMPLIANCE_QUEUE_NAME: 'studio-compliance-check',
   createBullConnection: vi.fn().mockResolvedValue({}),
   createCampaignSyncQueue: vi.fn().mockResolvedValue({ add: vi.fn() }),
   createRuleEngineQueue: vi.fn().mockResolvedValue({ add: vi.fn() }),
@@ -231,10 +235,9 @@ describe('Compliance Check Worker', () => {
         {
           type: 'text',
           text: JSON.stringify({
-            aprovado: true,
-            motivos_reprovacao: [],
-            confianca: 98,
-            observacoes: 'Sem violações detectadas.',
+            approved: true,
+            issues: [],
+            text_percentage: 0,
           }),
         },
       ],
@@ -248,8 +251,8 @@ describe('Compliance Check Worker', () => {
     });
 
     expect(asset.complianceStatus).toBe('approved');
-    expect(asset.complianceNotes).toContain('Confiança: 98%');
-    expect(asset.complianceNotes).toContain('Sem violações detectadas.');
+    expect(asset.complianceNotes).toContain('approved=true');
+    expect(asset.complianceNotes).toContain('text_percentage=0');
   });
 
   it('valida rejeição do worker ao encontrar violação de política', async () => {
@@ -273,10 +276,9 @@ describe('Compliance Check Worker', () => {
         {
           type: 'text',
           text: JSON.stringify({
-            aprovado: false,
-            motivos_reprovacao: ['Texto excessivo detectado acima de 20% da imagem'],
-            confianca: 94,
-            observacoes: 'A imagem contém blocos de texto grandes e predominantes.',
+            approved: false,
+            issues: ['Texto excessivo detectado acima de 20% da imagem'],
+            text_percentage: 25,
           }),
         },
       ],
@@ -289,9 +291,9 @@ describe('Compliance Check Worker', () => {
     });
 
     expect(asset.complianceStatus).toBe('rejected');
+    expect(asset.complianceNotes).toContain('approved=false');
     expect(asset.complianceNotes).toContain('Texto excessivo detectado acima de 20% da imagem');
-    expect(asset.complianceNotes).toContain('Confiança: 94%');
-    expect(asset.complianceNotes).toContain('A imagem contém blocos de texto grandes e predominantes.');
+    expect(asset.complianceNotes).toContain('text_percentage=25');
   });
 
   it('usa fallback de aprovação manual quando não há API key', async () => {

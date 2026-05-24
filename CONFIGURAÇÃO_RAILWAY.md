@@ -11,6 +11,7 @@ As variáveis abaixo devem ser configuradas na aba **Variables** do serviço `@f
 | **META_USE_MOCK** | Ativa o modo de simulação (Mock) para geração de imagens e autenticação. | `true` |
 | **NODE_ENV** | Define o ambiente. Para testes com tokens mock, deve ser `development`. | `development` |
 | **OPENAI_API_KEY** | Chave da API OpenAI. Se vazia e META_USE_MOCK=true, usa imagens de teste. | *Opcional se Mock ativo* |
+| **ANTHROPIC_API_KEY** | Chave da Anthropic para o worker de compliance. | *Obrigatória para análise real* |
 | **DATABASE_URL** | URL de conexão com o PostgreSQL. | *Automático via Railway* |
 | **REDIS_URL** | URL de conexão com o Redis para as filas do BullMQ. | *Automático via Railway* |
 

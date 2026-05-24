@@ -3,6 +3,7 @@ import { db, creativeAssets } from '@fury/db';
 import { eq } from 'drizzle-orm';
 import { claude } from '../lib/claude.js';
 import { getRedis } from '../lib/redis.js';
+import { STUDIO_COMPLIANCE_QUEUE_NAME } from '../lib/queue.js';
 
 interface ComplianceJobData {
   creativeAssetId: string;
@@ -10,17 +11,16 @@ interface ComplianceJobData {
 }
 
 interface ComplianceAnalysis {
-  aprovado: boolean;
-  motivos_reprovacao: string[];
-  confianca: number;
-  observacoes: string;
+  approved: boolean;
+  issues: string[];
+  text_percentage: number;
 }
 
 let complianceWorkerInstance: Worker<ComplianceJobData> | null = null;
 
 const createComplianceWorker = (): Worker<ComplianceJobData> => {
   return new Worker<ComplianceJobData>(
-    'compliance-check',
+    STUDIO_COMPLIANCE_QUEUE_NAME,
     async (job) => {
       const { creativeAssetId, tenantId } = job.data;
       
@@ -93,29 +93,14 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
 
         // 4. Chamada Claude Vision
 
-        const systemPrompt = `Você é um especialista em políticas de publicidade do Facebook e Instagram.
-Analise esta imagem de anúncio e verifique se viola alguma política.
-Responda APENAS em JSON válido.`;
+        const systemPrompt = 'Você é um especialista em compliance de anúncios da Meta.';
 
-        const userPrompt = `Analise esta imagem e retorne:
-{
-  "aprovado": boolean,
-  "motivos_reprovacao": string[], // vazio se aprovado
-  "score_confianca": number,      // 0 a 100
-  "observacoes": string
-}
-
-Verificar:
-- Texto excessivo na imagem (mais de 20% da área)
-- Conteúdo enganoso ou sensacionalista
-- Imagens de 'antes e depois' para saúde/beleza
-- Linguagem discriminatória
-- Conteúdo adulto ou violento`;
+        const userPrompt = 'Analise esta imagem de anúncio. Identifique: 1) Texto proibido pelo Meta 2) Conteúdo enganoso 3) Proporção de texto (deve ser < 20%). Responda JSON: {approved: boolean, issues: string[], text_percentage: number}';
 
         console.log('[COMPLIANCE] 📤 Enviando para Claude API...');
 
         const response = await claude.messages.create({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-3-5-sonnet-20241022',
           max_tokens: 1024,
           system: systemPrompt,
           messages: [
@@ -145,23 +130,29 @@ Verificar:
           throw new Error('Claude não retornou texto');
         }
 
-        let analysis: any;
+        let analysis: ComplianceAnalysis;
         try {
-          const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
-          analysis = JSON.parse(jsonMatch ? jsonMatch[0] : textContent.text);
+          const cleaned = textContent.text.replace(/```json|```/g, '').trim();
+          const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+          const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : cleaned) as Partial<ComplianceAnalysis>;
+          analysis = {
+            approved: Boolean(parsed.approved),
+            issues: Array.isArray(parsed.issues) ? parsed.issues.map((issue) => String(issue)) : [],
+            text_percentage: Number(parsed.text_percentage ?? 0),
+          };
         } catch (parseErr) {
           console.error('[COMPLIANCE] Erro de Parse JSON Claude');
-          return await fallbackApprove(creativeAssetId, 'Erro no parse da análise do Claude', 'approved');
+          return await fallbackApprove(creativeAssetId, 'Erro no parse da análise do Claude', 'rejected');
         }
 
         // 6. Atualizar Creative Asset no Banco
-        const status = analysis.aprovado ? 'approved' : 'rejected';
-        const confidence = Number(analysis.confianca ?? analysis.score_confianca ?? 0);
-        const notes = [
-          ...(analysis.motivos_reprovacao || []),
-          analysis.observacoes,
-          `Confiança: ${confidence}%`
-        ].filter(Boolean).join(' | ');
+        const status = analysis.approved ? 'approved' : 'rejected';
+        const notesPayload = {
+          approved: analysis.approved,
+          issues: analysis.issues,
+          text_percentage: analysis.text_percentage,
+        };
+        const notes = `[COMPLIANCE] approved=${analysis.approved} | text_percentage=${analysis.text_percentage} | issues=${analysis.issues.join(' ; ')} | data=${JSON.stringify(notesPayload)}`;
 
         await db
           .update(creativeAssets)
@@ -173,13 +164,13 @@ Verificar:
 
         console.log(`[COMPLIANCE] 🚀 Status Atualizado: ${status.toUpperCase()} para Asset ${creativeAssetId}`);
 
-        return { success: true, status, confianca: confidence };
+        return { success: true, status, text_percentage: analysis.text_percentage };
       } catch (error) {
         console.error(`[COMPLIANCE ERROR] Falha crítica no Job:`, error);
         return await fallbackApprove(
           creativeAssetId,
           `Erro interno no worker: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
-          'approved'
+          'rejected'
         );
       }
     },
@@ -213,7 +204,11 @@ async function fallbackApprove(
       .update(creativeAssets)
       .set({
         complianceStatus: status as any,
-        complianceNotes: `[FALLBACK] ${reason}`,
+        complianceNotes: `[FALLBACK] ${reason} | data=${JSON.stringify({
+          approved: status === 'approved',
+          issues: [reason],
+          text_percentage: 0,
+        })}`,
       })
       .where(eq(creativeAssets.id, assetId));
 

@@ -8,6 +8,8 @@ import * as studioController from '../controllers/studio.controller.js';
 const router = Router();
 
 router.get('/assets', authMiddleware, tenantMiddleware, studioController.listAssets);
+router.get('/assets/:assetId', authMiddleware, tenantMiddleware, studioController.getAsset);
+router.get('/assets/:assetId/compliance-status', authMiddleware, tenantMiddleware, studioController.getComplianceStatus);
 
 const generateCopySchema = z.object({
   type: z.enum(['headline', 'descricao', 'cta', 'completo']),
@@ -76,7 +78,7 @@ router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: Requ
     const userPrompt = `Produto: ${body.produto}\nPúblico: ${body.publico}\nObjetivo: ${body.objetivo}\nTom: ${body.tom}\n\nGere ${quantidade} variações de ${type} em português, limite máximo ${limiteChars[type]} caracteres.\n\nRetorne APENAS:\n{"variacoes": [{"texto": "..."}]}`;
 
     const response = await claude.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 1000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
@@ -120,6 +122,7 @@ router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: Requ
 });
 
 router.post('/generate-image', authMiddleware, tenantMiddleware, studioController.generateImage);
+router.post('/publish/:assetId', authMiddleware, tenantMiddleware, studioController.publishAsset);
 router.post('/upload-to-meta', authMiddleware, tenantMiddleware, studioController.uploadToMeta);
 
 export default router;
