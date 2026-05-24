@@ -9,7 +9,7 @@ import { Dashboard } from './pages/dashboard/Dashboard';
 import { Metas } from './pages/dashboard/Metas';
 import { PainelCampanhas } from './pages/campanhas/PainelCampanhas';
 import { RegrasCampanhas } from './pages/campanhas/RegrasCampanhas';
-import { CreativeStudio } from './pages/studio/CreativeStudio';
+import { CreativeStudio } from './pages/estudio/CreativeStudio';
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
 import { GeradorCopy } from './pages/estudio/GeradorCopy';
