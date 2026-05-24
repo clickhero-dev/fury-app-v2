@@ -2,6 +2,14 @@
 export { Button } from './ui/button';
 export { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 export { Input } from './ui/input';
+export {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
 
 // Layout Components
 export { AuthLayout } from './AuthLayout';

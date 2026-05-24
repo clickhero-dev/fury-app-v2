@@ -1,3 +1,11 @@
+export function formatInvestidoBRL(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '-';
+  return `R$ ${value.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export function formatRoas(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '-';
   return `${value.toFixed(2)}x`;

@@ -133,7 +133,7 @@ export async function pauseCampaign(args: { tenantId: string; campaignId: string
       suggestionData: { reason: 'manual', autoApplied: false },
     });
 
-  return { success: true };
+  return { status: 'PAUSED' as const };
 }
 
 export async function resumeCampaign(args: { tenantId: string; campaignId: string }) {
@@ -196,7 +196,7 @@ export async function resumeCampaign(args: { tenantId: string; campaignId: strin
       suggestionData: { reason: 'manual', autoApplied: false },
     });
 
-  return { success: true };
+  return { status: 'ACTIVE' as const };
 }
 
 export async function updateCampaignBudget(args: {

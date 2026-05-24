@@ -34,21 +34,36 @@ export interface CampaignData {
   endDate: string;
 }
 
-export function mapApiStatus(status: CampaignApiStatus): CampaignData['status'] {
-  if (status === 'ACTIVE') return 'ativo';
-  if (status === 'PAUSED') return 'pausado';
+export function mapApiStatus(status: string | CampaignApiStatus): CampaignData['status'] {
+  const normalized = String(status).toUpperCase();
+  if (normalized === 'ACTIVE') return 'ativo';
+  if (normalized === 'PAUSED') return 'pausado';
   return 'finalizado';
 }
 
-export function mapCampaignApiToRow(item: CampaignApiItem): CampaignData {
+function toNumberOrNull(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const num = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+/** Normaliza payload da API (flat ou legado com `metrics`). */
+export function mapCampaignApiToRow(item: CampaignApiItem | Record<string, unknown>): CampaignData {
+  const metrics =
+    item.metrics && typeof item.metrics === 'object'
+      ? (item.metrics as Record<string, unknown>)
+      : null;
+
+  const spend = toNumberOrNull(item.spend ?? metrics?.spend) ?? 0;
+
   return {
-    id: item.id,
-    name: item.name,
-    status: mapApiStatus(item.status),
-    investido: item.spend,
-    roas: item.roas,
-    cpa: item.cpa,
-    conversoes: item.conversions,
+    id: String(item.id ?? ''),
+    name: String(item.name ?? 'Campanha'),
+    status: mapApiStatus(String(item.status ?? 'ARCHIVED')),
+    investido: spend,
+    roas: toNumberOrNull(item.roas ?? metrics?.roas),
+    cpa: toNumberOrNull(item.cpa ?? metrics?.cpa),
+    conversoes: toNumberOrNull(item.conversions ?? metrics?.conversions),
     startDate: '',
     endDate: '',
   };
