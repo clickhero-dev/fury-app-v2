@@ -1,5 +1,14 @@
 import { useState, useMemo } from 'react';
+import { Loader2, Pause, Play } from 'lucide-react';
 import { AppLayout, PageHeader, DataTable, StatusBadge, Button, Card } from '@/components';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useCampaigns } from '@/hooks/useCampaigns';
 import { usePauseCampaign } from '@/hooks/usePauseCampaign';
 import { useAutomationFeed } from '@/hooks/useAutomationFeed';
@@ -7,27 +16,48 @@ import type { CampaignData } from '@/types/campaigns';
 import {
   formatConversions,
   formatCpaBRL,
+  formatInvestidoBRL,
   formatRoas,
 } from '@/lib/format-campaign-metrics';
 
 type FilterType = 'todos' | 'ativo' | 'pausado' | 'finalizado';
 
-// 🔧 ADICIONE ESTE COMPONENTE WRAPPER
 const StatusBadgeAdapter = ({ status }: { status: CampaignData['status'] }) => {
-  // Mapeia os status do seu sistema para os do componente StatusBadge
-  const mappedStatus = 
-    status === 'ativo' ? 'active' :
-    status === 'pausado' ? 'paused' :
-    status === 'finalizado' ? 'approved' : 'pending';
-  
+  const mappedStatus =
+    status === 'ativo'
+      ? 'active'
+      : status === 'pausado'
+        ? 'paused'
+        : status === 'finalizado'
+          ? 'approved'
+          : 'pending';
+
   return <StatusBadge status={mappedStatus} />;
 };
 
 export function PainelCampanhas() {
   const [filter, setFilter] = useState<FilterType>('todos');
+  const [campaignToPause, setCampaignToPause] = useState<CampaignData | null>(null);
   const { data: campaigns = [], isLoading } = useCampaigns();
   const pauseMutation = usePauseCampaign();
   const { feed, isConnected } = useAutomationFeed();
+
+  const pendingCampaignId =
+    pauseMutation.isPending && pauseMutation.variables
+      ? pauseMutation.variables.id
+      : null;
+
+  const handleResume = (campaign: CampaignData) => {
+    pauseMutation.mutate({ id: campaign.id, action: 'resume' });
+  };
+
+  const handleConfirmPause = () => {
+    if (!campaignToPause) return;
+    pauseMutation.mutate(
+      { id: campaignToPause.id, action: 'pause' },
+      { onSettled: () => setCampaignToPause(null) }
+    );
+  };
 
   const filteredCampaigns = useMemo(() => {
     if (filter === 'todos') return campaigns;
@@ -68,7 +98,7 @@ export function PainelCampanhas() {
     {
       key: 'status' as const,
       label: 'Status',
-      render: (value: unknown) => (  // ← REMOVIDO parâmetro row não usado
+      render: (value: unknown) => (
         <StatusBadgeAdapter status={value as CampaignData['status']} />
       ),
     },
@@ -76,8 +106,7 @@ export function PainelCampanhas() {
       key: 'investido' as const,
       label: 'Investido',
       align: 'right' as const,
-      render: (value: unknown) =>
-        `R$ ${(value as number).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      render: (value: unknown) => formatInvestidoBRL(value as number | null),
     },
     {
       key: 'roas' as const,
@@ -112,40 +141,46 @@ export function PainelCampanhas() {
     },
     {
       key: 'id' as const,
-      label: '',
+      label: 'Ações',
       align: 'right' as const,
-      render: (_value: unknown, row: CampaignData) => (
-        <div className="flex items-center gap-2">
-          <button
-            className="p-1 hover:bg-surface-secondary rounded-lg transition-colors disabled:opacity-50"
-            title="Editar"
-            disabled={pauseMutation.isPending}
-          >
-            <svg className="w-4 h-4 text-text-secondary" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-            </svg>
-          </button>
-          <button
-            className="p-1 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-            title={row.status === 'ativo' ? 'Pausar' : 'Ativar'}
-            disabled={pauseMutation.isPending}
-            onClick={() => {
-              const action = row.status === 'ativo' ? 'pause' : 'resume';
-              const message = action === 'pause'
-                ? `Tem certeza que deseja pausar a campanha "${row.name}"?`
-                : `Tem certeza que deseja ativar a campanha "${row.name}"?`;
+      render: (_value: unknown, row: CampaignData) => {
+        const isRowPending = pendingCampaignId === row.id;
 
-              if (window.confirm(message)) {
-                pauseMutation.mutate({ id: row.id, action });
-              }
-            }}
-          >
-            <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-          </button>
-        </div>
-      ),
+        return (
+          <div className="flex items-center justify-end gap-2">
+            {row.status === 'ativo' && (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                disabled={pauseMutation.isPending}
+                onClick={() => setCampaignToPause(row)}
+              >
+                {isRowPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Pause className="w-4 h-4" />
+                )}
+                Pausar
+              </button>
+            )}
+            {row.status === 'pausado' && (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-green-700 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                disabled={pauseMutation.isPending}
+                onClick={() => handleResume(row)}
+              >
+                {isRowPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+                Ativar
+              </button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -166,7 +201,6 @@ export function PainelCampanhas() {
           description="Monitore e otimize o desempenho de todas as suas campanhas"
         />
 
-        {/* Filtros */}
         <Card>
           <div className="p-6">
             <div className="flex flex-wrap gap-3">
@@ -190,9 +224,7 @@ export function PainelCampanhas() {
           </div>
         </Card>
 
-        {/* Layout com Tabela e Feed */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Tabela */}
           <section className="lg:col-span-2">
             <DataTable
               columns={columns}
@@ -204,7 +236,6 @@ export function PainelCampanhas() {
             />
           </section>
 
-          {/* Feed SSE */}
           <section className="lg:col-span-1">
             <Card className="h-fit">
               <div className="p-6">
@@ -257,6 +288,50 @@ export function PainelCampanhas() {
           </section>
         </div>
       </div>
+
+      <Dialog
+        open={campaignToPause !== null}
+        onOpenChange={(open) => {
+          if (!open && !pauseMutation.isPending) {
+            setCampaignToPause(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Pausar campanha</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja pausar a campanha &quot;{campaignToPause?.name}&quot;? Ela
+              deixará de veicular anúncios até ser reativada.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pauseMutation.isPending}
+              onClick={() => setCampaignToPause(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={pauseMutation.isPending}
+              onClick={handleConfirmPause}
+            >
+              {pauseMutation.isPending ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Pausando...
+                </span>
+              ) : (
+                'Confirmar pausa'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

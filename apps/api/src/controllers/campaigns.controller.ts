@@ -55,10 +55,11 @@ export async function pauseCampaignHandler(req: Request, res: Response, next: Ne
       throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
     }
 
-    await pauseCampaign({ tenantId, campaignId: id });
+    const result = await pauseCampaign({ tenantId, campaignId: id });
 
     res.json({
       success: true,
+      data: result,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -78,10 +79,11 @@ export async function resumeCampaignHandler(req: Request, res: Response, next: N
       throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
     }
 
-    await resumeCampaign({ tenantId, campaignId: id });
+    const result = await resumeCampaign({ tenantId, campaignId: id });
 
     res.json({
       success: true,
+      data: result,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
