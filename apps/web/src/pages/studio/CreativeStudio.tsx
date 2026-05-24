@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, CheckCircle2, Copy, Loader2, Sparkles, Upload, Wand2, AlertTriangle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Copy, Loader2, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { AppLayout, Button, Card, CardContent, PageHeader, StatusBadge } from '@/components';
 import api from '@/lib/api';
 import type {
@@ -9,7 +9,6 @@ import type {
   StudioPublishResponse,
   StudioTemplate,
 } from '@/types/studio';
-import type { MetaConnection } from '@/types/meta';
 
 const TEMPLATES: StudioTemplate[] = [
   {
@@ -56,26 +55,18 @@ export function CreativeStudio() {
   const [selectedTemplateId, setSelectedTemplateId] = useState(TEMPLATES[0]?.id ?? 'fashion');
   const [currentAssetId, setCurrentAssetId] = useState<string | null>(null);
   const [pollStartedAt, setPollStartedAt] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [publishFeedback, setPublishFeedback] = useState<{ hash: string; imageUrl: string; adsManagerUrl: string } | null>(null);
-  const [adjustments, setAdjustments] = useState('');
 
-  // Fetch Meta connections
-  const metaConnectionsQuery = useQuery<MetaConnection[]>({
-    queryKey: ['meta', 'connections'],
-    queryFn: async () => {
-      try {
-        const response = await api.get<{ data: MetaConnection[] }>('/integrations/meta');
-        return response.data.data || [];
-      } catch {
-        return [];
-      }
-    },
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  });
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
 
-  const hasValidMetaConnection = (metaConnectionsQuery.data || []).some(
-    (conn) => conn.status === 'active' && conn.isTokenValid && conn.adAccounts.length > 0
-  );
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const activeTemplate = useMemo(
     () => TEMPLATES.find((template) => template.id === selectedTemplateId) ?? TEMPLATES[0],
@@ -136,7 +127,7 @@ export function CreativeStudio() {
   const currentCompliance = complianceQuery.data;
   const complianceStatus = getComplianceTone(currentCompliance?.complianceStatus);
   const isPollingActive = Boolean(currentAssetId && pollStartedAt && !currentCompliance);
-  const isWithinPollingWindow = Boolean(pollStartedAt && Date.now() - pollStartedAt < 30_000);
+  const isWithinPollingWindow = Boolean(pollStartedAt && nowMs - pollStartedAt < 30_000);
   const canPublish = currentCompliance?.complianceStatus === 'approved';
 
   const handleGenerate = () => {
@@ -150,20 +141,22 @@ export function CreativeStudio() {
 
   const handleRegenerate = () => {
     setPublishFeedback(null);
-    const finalPrompt = adjustments.trim() 
-      ? `${prompt}\n\n[AJUSTES]: ${adjustments}`
-      : prompt;
-    setAdjustments('');
-    generateMutation.mutate({ prompt: finalPrompt });
+    const basePrompt = prompt.trim();
+    const hasIssues = currentCompliance?.complianceStatus === 'rejected' && currentCompliance.issues.length > 0;
+
+    if (!hasIssues) {
+      handleGenerate();
+      return;
+    }
+
+    const adjustmentHint = `\n\nAjustes obrigatorios de compliance Meta:\n- ${currentCompliance.issues.join('\n- ')}\n\nRegere mantendo o conceito principal, removendo qualquer violacao e reduzindo texto para menos de 20%.`;
+    const adjustedPrompt = `${basePrompt}${adjustmentHint}`.slice(0, 1000);
+    setPrompt(adjustedPrompt);
+    generateMutation.mutate({ prompt: adjustedPrompt });
   };
 
   const handlePublish = async () => {
     if (!canPublish) return;
-
-    if (!hasValidMetaConnection) {
-      alert('⚠️ Você precisa conectar uma conta Meta antes de publicar. Acesse Integrações → Meta Ads Manager.');
-      return;
-    }
 
     const confirmed = window.confirm('Publicar este asset no Meta?');
     if (!confirmed) return;
@@ -271,17 +264,6 @@ export function CreativeStudio() {
                       </li>
                     ))}
                   </ul>
-
-                  <div className="mt-4 space-y-2">
-                    <label className="text-xs font-semibold text-red-700">Descreva os ajustes</label>
-                    <textarea
-                      value={adjustments}
-                      onChange={(e) => setAdjustments(e.target.value)}
-                      placeholder="Ex: Remova o texto da imagem, aumente o foco no produto, use cores mais quentes..."
-                      className="w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm text-red-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/10"
-                      rows={3}
-                    />
-                  </div>
                 </div>
               )}
             </CardContent>
@@ -402,35 +384,14 @@ export function CreativeStudio() {
                     </div>
                   )}
 
-                  {!hasValidMetaConnection && canPublish && (
-                    <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4">
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle className="mt-0.5 h-4 w-4 text-yellow-600 flex-shrink-0" />
-                        <div>
-                          <p className="text-sm font-semibold text-yellow-900">Conecte sua conta Meta</p>
-                          <p className="mt-1 text-xs text-yellow-800">Para publicar assets, você precisa conectar uma conta Meta válida.</p>
-                          <a href="/configuracoes/integracoes" className="mt-2 inline-flex text-xs font-semibold text-yellow-700 underline hover:text-yellow-900">
-                            Ir para Integrações →
-                          </a>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   <div className="flex flex-wrap gap-3">
-                    <Button 
-                      onClick={handleRegenerate} 
-                      disabled={generateMutation.isPending}
-                      variant="outline" 
-                      className="min-w-36"
-                    >
+                    <Button onClick={handleRegenerate} variant="outline" className="min-w-36">
                       <Wand2 className="mr-2 h-4 w-4" />
-                      {currentCompliance.complianceStatus === 'rejected' ? 'Regenerar com ajustes' : 'Regenerar'}
+                      Regenerar com ajustes
                     </Button>
                     <Button
                       onClick={handlePublish}
-                      disabled={!canPublish || !hasValidMetaConnection || publishMutation.isPending}
-                      title={!hasValidMetaConnection ? 'Conecte sua conta Meta antes de publicar' : ''}
+                      disabled={!canPublish || publishMutation.isPending}
                       className="min-w-44 bg-[#E8631A] hover:bg-[#D45714]"
                     >
                       {publishMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}

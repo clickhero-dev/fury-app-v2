@@ -27,8 +27,10 @@ export type StudioComplianceStatusResult = {
   createdAt: string;
 };
 
-const OPENAI_IMAGE_MODEL = 'gpt-image-1';
+const OPENAI_IMAGE_MODEL = 'dall-e-3';
 const STUDIO_IMAGE_SIZE = '1024x1024';
+const STUDIO_IMAGE_QUALITY = 'standard';
+const STUDIO_IMAGE_STYLE = 'vivid';
 
 function normalizePublicBaseUrl(publicBaseUrl: string) {
   return publicBaseUrl.replace(/\/+$/, '');
@@ -54,6 +56,8 @@ async function generateOpenAIImage(prompt: string): Promise<string> {
     model: OPENAI_IMAGE_MODEL,
     prompt,
     size: STUDIO_IMAGE_SIZE,
+    quality: STUDIO_IMAGE_QUALITY,
+    style: STUDIO_IMAGE_STYLE,
   });
 
   const generatedUrl = response.data?.[0]?.url;
@@ -150,7 +154,7 @@ async function persistGeneratedImage(params: {
 
   const complianceQueue = await getComplianceQueue();
   await complianceQueue.add(
-    'studio-compliance-check',
+    'studio:compliance-check',
     { creativeAssetId: asset.id, tenantId: params.tenantId },
     {
       removeOnComplete: 1000,
