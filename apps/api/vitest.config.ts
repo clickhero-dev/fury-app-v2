@@ -15,6 +15,8 @@ export default defineConfig({
     env: {
       META_USE_MOCK: 'true',
       NODE_ENV: 'test',
+      TEST_DATABASE_URL: process.env.DATABASE_URL || 'postgresql://fury:fury_local@localhost:5432/fury_test',
+      DATABASE_URL: process.env.DATABASE_URL || 'postgresql://fury:fury_local@localhost:5432/fury_test',
     },
     coverage: {
       provider: 'v8',

@@ -35,6 +35,7 @@ describe('Studio Generate Copy Endpoint', () => {
           { texto: `${produto} — transforme seu negócio hoje!`, caracteres: `${produto}`.length + 31, pontuacao: 7.0 },
           { texto: `Descubra ${produto} agora.`, caracteres: `Descubra ${produto} agora.`.length, pontuacao: 6.5 },
           { texto: `Solução perfeita em ${produto}`, caracteres: `Solução perfeita em ${produto}`.length, pontuacao: 8.0 },
+          { texto: `Experimente ${produto} sem compromisso`, caracteres: `Experimente ${produto} sem compromisso`.length, pontuacao: 7.2 },
         ].slice(0, quantidade);
 
         return res.json({ variacoes });

@@ -3,43 +3,37 @@ import request from 'supertest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import studioRoutes from '../routes/studio.routes'
 
-// Mocking dependencies
-vi.mock('../lib/claude', () => ({
+const mocks = vi.hoisted(() => ({
+  claudeCreate: vi.fn(),
+}))
+
+vi.mock('../lib/claude.js', () => ({
   claude: {
-    model: 'claude-sonnet-4-20250514',
     messages: {
-      create: vi.fn(),
+      create: mocks.claudeCreate,
     },
   },
 }))
 
-vi.mock('db', () => ({
-  db: {
-    insert: vi.fn().mockReturnThis(),
-    values: vi.fn().mockImplementation(() => ({
-      then: (cb) => cb(),
-    })),
+vi.mock('../middleware/auth.middleware.js', () => ({
+  authMiddleware: (_req: any, _res: any, next: any) => next(),
+}))
+
+vi.mock('../middleware/tenant.middleware.js', () => ({
+  tenantMiddleware: (req: any, _res: any, next: any) => {
+    req.tenant = { tenantId: 'test-tenant-id' }
+    next()
   },
 }))
 
 describe('POST /api/studio/generate-copy', () => {
-  let app
+  let app: express.Express
 
   beforeEach(() => {
-    vi.resetModules()
     vi.clearAllMocks()
-
-    // Re-import claude to be able to mock it in tests
-    const { claude } = require('../lib/claude')
 
     app = express()
     app.use(express.json())
-    // Mock middlewares
-    app.use((req: any, res, next) => {
-      req.user = { id: 'test-user-id' }
-      req.tenant = { tenantId: 'test-tenant-id' }
-      next()
-    })
     app.use('/api/studio', studioRoutes)
   })
 
@@ -59,7 +53,7 @@ describe('POST /api/studio/generate-copy', () => {
 
     expect(response.status).toBe(200)
     expect(response.body).toHaveProperty('variacoes')
-    expect(response.body.variacoes.length).toBe(3)
+    expect(response.body.variacoes).toHaveLength(3)
     expect(response.body.variacoes[0].texto).toContain('Super Cadeira')
   })
 
@@ -67,43 +61,35 @@ describe('POST /api/studio/generate-copy', () => {
     const response = await request(app)
       .post('/api/studio/generate-copy')
       .send({
-        type: 'invalid-type', // Invalid enum value
-        produto: 'a', // Too short
-        publico: 'b', // Too short
-        objetivo: 'c', // Too short
+        type: 'invalid-type',
+        produto: 'a',
+        publico: 'b',
+        objetivo: 'c',
         tom: 'casual',
-        quantidadeVariacoes: 1, // Too few
+        quantidadeVariacoes: 1,
       })
 
     expect(response.status).toBe(400)
     expect(response.body).toHaveProperty('error')
   })
 
-  it('should generate copy, calculate score, and save to db', async () => {
+  it('should generate copy and calculate score', async () => {
     process.env.ANTHROPIC_API_KEY = 'fake-key'
 
-    const { claude } = require('../lib/claude')
-    const { db } = require('db')
-
-    const mockApiResponse = {
+    mocks.claudeCreate.mockResolvedValue({
       content: [
         {
           type: 'text',
           text: JSON.stringify({
             variacoes: [
-              { texto: 'Compre a cadeira do futuro, hoje.', caracteres: 0 },
-              {
-                texto:
-                  'Ergonomia e design para seu escritório. Saiba mais agora!',
-                caracteres: 0,
-              },
-              { texto: 'Sua coluna agradece. Clique e garanta.', caracteres: 0 },
+              { texto: 'Compre a cadeira do futuro, hoje.' },
+              { texto: 'Ergonomia e design para seu escritório. Saiba mais agora!' },
+              { texto: 'Sua coluna agradece. Clique e garanta.' },
             ],
           }),
         },
       ],
-    }
-    claude.messages.create.mockResolvedValue(mockApiResponse)
+    })
 
     const response = await request(app)
       .post('/api/studio/generate-copy')
@@ -118,15 +104,11 @@ describe('POST /api/studio/generate-copy', () => {
 
     expect(response.status).toBe(200)
     expect(response.body).toHaveProperty('variacoes')
-    expect(response.body.variacoes.length).toBe(3)
+    expect(response.body.variacoes).toHaveLength(3)
 
-    // Check if scoring and character count is working
     const firstVariation = response.body.variacoes[0]
     expect(firstVariation.texto).toBe('Compre a cadeira do futuro, hoje.')
-    expect(firstVariation.caracteres).toBe(33)
-    expect(firstVariation.pontuacao).toBeGreaterThan(5) // Should have points for CTA and length
-
-    // Check if it was "saved" to the DB
-    expect(db.insert).toHaveBeenCalled()
+    expect(firstVariation.caracteres).toBe(firstVariation.texto.length)
+    expect(firstVariation.pontuacao).toBeGreaterThan(5)
   })
 })

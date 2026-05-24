@@ -120,6 +120,7 @@ export async function publishAsset(req: Request, res: Response, next: NextFuncti
       hash: result.hash,
       imageUrl: result.imageUrl,
       metaAssetId: result.metaAssetId,
+      adsManagerUrl: result.adsManagerUrl,
     });
   } catch (error) {
     next(error);

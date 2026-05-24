@@ -27,10 +27,8 @@ export type StudioComplianceStatusResult = {
   createdAt: string;
 };
 
-const OPENAI_IMAGE_MODEL = 'dall-e-3';
+const OPENAI_IMAGE_MODEL = 'gpt-image-1';
 const STUDIO_IMAGE_SIZE = '1024x1024';
-const STUDIO_IMAGE_QUALITY = 'standard';
-const STUDIO_IMAGE_STYLE = 'vivid';
 
 function normalizePublicBaseUrl(publicBaseUrl: string) {
   return publicBaseUrl.replace(/\/+$/, '');
@@ -47,7 +45,7 @@ function buildOpenAIClient() {
 }
 
 async function generateOpenAIImage(prompt: string): Promise<string> {
-  if (!process.env.OPENAI_API_KEY && process.env.META_USE_MOCK === 'true') {
+  if (process.env.META_USE_MOCK === 'true' || !process.env.OPENAI_API_KEY) {
     return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9mH9kAAAAASUVORK5CYII=';
   }
 
@@ -56,8 +54,6 @@ async function generateOpenAIImage(prompt: string): Promise<string> {
     model: OPENAI_IMAGE_MODEL,
     prompt,
     size: STUDIO_IMAGE_SIZE,
-    quality: STUDIO_IMAGE_QUALITY,
-    style: STUDIO_IMAGE_STYLE,
   });
 
   const generatedUrl = response.data?.[0]?.url;
@@ -225,7 +221,7 @@ export async function publishStudioAssetToMeta(params: {
   tenantId: string;
   assetId: string;
   adAccountId?: string;
-}): Promise<{ hash: string; imageUrl: string; metaAssetId: string }> {
+}): Promise<{ hash: string; imageUrl: string; metaAssetId: string; adsManagerUrl: string }> {
   const asset = await db.query.creativeAssets.findFirst({
     where: and(eq(creativeAssets.id, params.assetId), eq(creativeAssets.tenantId, params.tenantId)),
   });
@@ -283,9 +279,12 @@ export async function publishStudioAssetToMeta(params: {
     .set({ metaAssetId: hash, complianceStatus: 'approved' })
     .where(eq(creativeAssets.id, asset.id));
 
+  const adsManagerUrl = `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${selectedAdAccountId}&cid=${hash}`;
+
   return {
     hash,
     imageUrl: asset.url,
     metaAssetId: hash,
+    adsManagerUrl,
   };
 }

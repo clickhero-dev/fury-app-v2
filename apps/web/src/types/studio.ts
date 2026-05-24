@@ -50,6 +50,7 @@ export interface StudioPublishResponse {
   hash: string;
   imageUrl: string;
   metaAssetId: string;
+  adsManagerUrl: string;
 }
 
 export interface StudioTemplate {
