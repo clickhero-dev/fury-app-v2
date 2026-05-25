@@ -1,7 +1,8 @@
 {
 	"folders": [
 		{
-			"path": "apps/api"
+			"path": "."
 		}
-	]
+	],
+	"settings": {}
 }

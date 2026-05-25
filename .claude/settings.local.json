@@ -4,7 +4,14 @@
       "Bash(npm run *)",
       "Bash(npx tsc *)",
       "Bash(curl -s http://localhost:5173)",
-      "Bash(curl -s http://localhost:5174)"
+      "Bash(curl -s http://localhost:5174)",
+      "Bash(rtk npm *)",
+      "Bash(rtk tsc *)",
+      "Bash(grep -v \"^$\")",
+      "Bash(rtk git *)",
+      "Bash(npm install *)",
+      "Bash(rtk ls *)",
+      "Bash(rtk read *)"
     ]
   }
 }
