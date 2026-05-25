@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../index.js';
 import { db } from '@fury/db';
-import * as schema from '@fury/db/src/schema.js';
+import * as schema from '@fury/db';
 
 describe('Metrics Endpoints', () => {
   let accessToken: string;
