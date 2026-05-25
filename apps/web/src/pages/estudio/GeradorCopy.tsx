@@ -7,6 +7,11 @@ import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import type { CopyVariacao, CopyType, CopyTone, GenerateCopyPayload } from '@/types/studio';
 
+type CopyVariationCard = CopyVariacao & {
+  id?: string;
+  compliance_status?: string;
+};
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const COPY_LIMITS: Record<CopyType, number | null> = {
@@ -42,16 +47,10 @@ const COPY_TYPES: Array<{ value: CopyType; label: string }> = [
 ];
 
 const TONES: Array<{ value: CopyTone; label: string }> = [
-  { value: 'formal', label: 'Formal' },
-  { value: 'casual', label: 'Casual' },
+  { value: 'formal', label: 'Profissional' },
   { value: 'urgente', label: 'Urgente' },
-  { value: 'emocional', label: 'Emocional' },
-];
-
-const VARIACOES_COUNT: Array<{ value: 3 | 4 | 5; label: string }> = [
-  { value: 3, label: '3 variações' },
-  { value: 4, label: '4 variações' },
-  { value: 5, label: '5 variações' },
+  { value: 'casual', label: 'Casual' },
+  { value: 'emocional', label: 'Inspirador' },
 ];
 
 const INITIAL_FORM = {
@@ -60,7 +59,6 @@ const INITIAL_FORM = {
   publico: '',
   objetivo: '',
   tom: '' as CopyTone | '',
-  quantidadeVariacoes: 3 as 3 | 4 | 5,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -74,6 +72,34 @@ function getCharacterStatus(texto: string, type: CopyType): 'ok' | 'warning' {
 function isCharacterCountValid(texto: string, type: CopyType): boolean {
   const limit = COPY_LIMITS[type];
   return limit === null || texto.length <= limit;
+}
+
+function mapBackendVariations(data: any[], type: CopyType): CopyVariationCard[] {
+  const ctaWords = ['compre', 'acesse', 'saiba', 'clique', 'garanta'];
+  const forbidden = ['grátis excessivo', 'garantido 100%', 'melhor do mundo'];
+
+  return data.map((v: any) => {
+    const headline = String(v.headline || '');
+    const primary = String(v.primary_text || v.primaryText || '');
+    const cta = String(v.cta || '') || '';
+    const texto = type === 'headline' ? headline : type === 'descricao' ? primary : type === 'cta' ? cta : `${headline} ${primary} ${cta}`.trim();
+    const caracteres = texto.length;
+
+    let pontuacao = 3;
+    const limitMap: Record<CopyType, number | null> = { headline: 40, descricao: 125, cta: 20, completo: null };
+    const limit = limitMap[type] ?? 300;
+    if (caracteres <= (limit ?? 9999)) pontuacao += 3;
+    if (ctaWords.some(w => texto.toLowerCase().includes(w))) pontuacao += 2;
+    if (!forbidden.some(w => texto.toLowerCase().includes(w))) pontuacao += 2;
+
+    return {
+      texto,
+      caracteres,
+      pontuacao,
+      id: v.id,
+      compliance_status: v.compliance_status ?? v.complianceStatus ?? 'pending',
+    } as any;
+  });
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -141,7 +167,17 @@ function SelectField({
   );
 }
 
-function CopyCard({ variacao, type }: { variacao: CopyVariacao; type: CopyType }) {
+function CopyCard({
+  variacao,
+  type,
+  selected,
+  onSelect,
+}: {
+  variacao: CopyVariationCard;
+  type: CopyType;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const limit = COPY_LIMITS[type];
   const status = getCharacterStatus(variacao.texto, type);
@@ -166,10 +202,32 @@ function CopyCard({ variacao, type }: { variacao: CopyVariacao; type: CopyType }
   };
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
-      <p className="text-text-primary text-base leading-relaxed">{variacao.texto}</p>
+    <div className={cn(
+      'bg-surface border rounded-xl p-5 space-y-4 transition-all',
+      selected ? 'border-[#E8631A] ring-2 ring-[#E8631A]/15 shadow-sm' : 'border-border'
+    )}>
+      <div className="rounded-2xl border border-[#E9ECEF] bg-gradient-to-br from-white via-[#FFF8F2] to-[#F8FAFC] p-4 space-y-3">
+        <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-text-secondary">
+          <span>Sponsored</span>
+          <span>Meta Ads Preview</span>
+        </div>
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-text-primary leading-tight">{variacao.texto.split(' ')[0] ? variacao.texto : 'Preview da copy gerada'}</p>
+          <p className="text-sm text-text-secondary leading-relaxed">
+            {variacao.texto}
+          </p>
+        </div>
+        <button className="inline-flex items-center justify-center rounded-full bg-[#E8631A] px-4 py-2 text-xs font-semibold text-white">
+          Saiba mais
+        </button>
+      </div>
 
       <div className="flex items-center gap-2">
+        {variacao.compliance_status && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#F3F4F6] text-text-secondary">
+            {variacao.compliance_status === 'approved' ? '✅ Compliance OK' : variacao.compliance_status === 'rejected' ? '⛔ Rejeitado' : '⚠️ Pendente'}
+          </span>
+        )}
         <span
           className={cn(
             'inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg',
@@ -216,9 +274,21 @@ function CopyCard({ variacao, type }: { variacao: CopyVariacao; type: CopyType }
           aria-label={isValid ? 'Usar esta variação' : 'Número de caracteres excede o limite'}
           className="flex-1 px-3 py-2.5 bg-[#E8631A] text-white rounded-lg text-xs font-semibold hover:bg-[#D45714] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Usar variação
+          Usar esta
         </button>
       </div>
+
+      <button
+        onClick={onSelect}
+        className={cn(
+          'w-full px-3 py-2.5 border rounded-lg text-xs font-semibold transition-colors',
+          selected
+            ? 'bg-[#FEF0E7] border-[#E8631A] text-[#B54708]'
+            : 'border-[#E0E0E0] bg-white text-text-primary hover:bg-[#F6F8FA]'
+        )}
+      >
+        {selected ? 'Selecionada' : 'Usar esta'}
+      </button>
     </div>
   );
 }
@@ -227,7 +297,8 @@ function CopyCard({ variacao, type }: { variacao: CopyVariacao; type: CopyType }
 
 export function GeradorCopy() {
   const [form, setForm] = useState(INITIAL_FORM);
-  const [variacoes, setVariacoes] = useState<CopyVariacao[]>([]);
+  const [variacoes, setVariacoes] = useState<CopyVariationCard[]>([]);
+  const [selectedVariationId, setSelectedVariationId] = useState<string | null>(null);
 
   const isFormValid =
     form.type &&
@@ -239,14 +310,16 @@ export function GeradorCopy() {
   const mutation = useMutation({
     mutationFn: async (payload: GenerateCopyPayload) => {
       try {
-        const response = await api.post('/studio/generate-copy', payload);
-        return response.data.variacoes || MOCK_VARIACOES;
+        const response = await api.post('/studio/copy/generate', payload);
+        return response.data.variations || [];
       } catch {
-        return MOCK_VARIACOES;
+        return MOCK_VARIACOES as any;
       }
     },
     onSuccess: (data) => {
-      setVariacoes(data);
+      const mapped = mapBackendVariations(data, form.type as CopyType);
+      setVariacoes(mapped);
+      setSelectedVariationId(mapped[0]?.id ?? null);
     },
   });
 
@@ -259,7 +332,7 @@ export function GeradorCopy() {
       publico: form.publico,
       objetivo: form.objetivo,
       tom: form.tom as CopyTone,
-      quantidadeVariacoes: form.quantidadeVariacoes,
+      quantidadeVariacoes: 3,
     });
   };
 
@@ -270,6 +343,7 @@ export function GeradorCopy() {
 
   const isLoading = mutation.isPending;
   const showResult = variacoes.length > 0;
+  const selectedVariation = variacoes.find((variacao) => variacao.id === selectedVariationId) ?? variacoes[0] ?? null;
 
   return (
     <AppLayout>
@@ -296,7 +370,7 @@ export function GeradorCopy() {
                   Variações criadas com sucesso!
                 </p>
                 <p className="text-xs text-success/80 mt-0.5">
-                  {variacoes.length} opções geradas • Selecione a melhor para seu anúncio
+                  3 opções geradas • Selecione a melhor para seu anúncio
                 </p>
               </div>
             </div>
@@ -307,8 +381,35 @@ export function GeradorCopy() {
                   key={`${form.type}-${idx}`}
                   variacao={variacao}
                   type={form.type as CopyType}
+                  selected={variacao.id === selectedVariationId}
+                  onSelect={() => setSelectedVariationId(variacao.id ?? null)}
                 />
               ))}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border border-border rounded-xl bg-white p-4">
+              <div>
+                <p className="font-semibold text-text-primary">Publicar seleção no Meta</p>
+                <p className="text-sm text-text-secondary">
+                  {selectedVariation ? 'A variação selecionada será enviada pelo fluxo compartilhado do estúdio.' : 'Selecione uma variação para publicar.'}
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={!selectedVariation?.id || selectedVariation.compliance_status !== 'approved'}
+                onClick={async () => {
+                  if (!selectedVariation?.id) return;
+                  try {
+                    const response = await api.post(`/studio/publish/${selectedVariation.id}`, {});
+                    console.log('Published to Meta', response.data);
+                  } catch (error) {
+                    console.error('Erro ao publicar no Meta', error);
+                  }
+                }}
+              >
+                Publicar no Meta
+              </Button>
             </div>
           </div>
         )}
@@ -358,16 +459,6 @@ export function GeradorCopy() {
                 options={TONES}
               />
 
-              <SelectField
-                id="quantidade"
-                label="Quantidade de Variações"
-                value={String(form.quantidadeVariacoes)}
-                onChange={(value) =>
-                  setForm({ ...form, quantidadeVariacoes: parseInt(value) as 3 | 4 | 5 })
-                }
-                options={VARIACOES_COUNT.map(opt => ({ ...opt, value: String(opt.value) }))}
-              />
-
               <Button
                 variant="primary"
                 size="md"
@@ -375,7 +466,7 @@ export function GeradorCopy() {
                 onClick={handleGenerateCopy}
                 disabled={!isFormValid}
               >
-                Gerar Copy
+                Gerar Copies
               </Button>
             </div>
 

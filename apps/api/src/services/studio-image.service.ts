@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { and, eq } from 'drizzle-orm';
 import { db, creativeAssets, metaConnections } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
-import { decryptAccessToken, uploadAdImage } from '../lib/meta-api.js';
+import { createAdCreativeFromCopy, decryptAccessToken, uploadAdImage } from '../lib/meta-api.js';
 import { saveTemporaryStudioImage } from '../lib/temp-storage.js';
 import { getComplianceQueue } from '../lib/queue.js';
 
@@ -131,6 +131,32 @@ function parseComplianceNotes(complianceNotes: string | null) {
   }
 }
 
+function parseCopyAssetPayload(url: string): {
+  headline: string;
+  primary_text: string;
+  cta: string;
+} {
+  if (!url.startsWith('data:application/json;base64,')) {
+    throw new AppError(400, 'INVALID_COPY_ASSET', 'Formato do asset de copy invalido.');
+  }
+
+  const base64 = url.replace('data:application/json;base64,', '');
+  let parsed: any;
+
+  try {
+    const decoded = Buffer.from(base64, 'base64').toString('utf8');
+    parsed = JSON.parse(decoded);
+  } catch {
+    throw new AppError(400, 'INVALID_COPY_ASSET', 'Nao foi possivel ler o payload de copy.');
+  }
+
+  return {
+    headline: String(parsed?.headline || ''),
+    primary_text: String(parsed?.primary_text || ''),
+    cta: String(parsed?.cta || 'Saiba mais'),
+  };
+}
+
 async function persistGeneratedImage(params: {
   tenantId: string;
   prompt: string;
@@ -254,6 +280,43 @@ export async function publishStudioAssetToMeta(params: {
   }
 
   const accessToken = decryptAccessToken(connection.accessToken);
+
+  // Shared publishing flow: same endpoint and tenant/account resolution,
+  // with type-specific branch only for the final Meta API call.
+  if (asset.type === 'copy') {
+    const copy = parseCopyAssetPayload(asset.url);
+    const pageId = process.env.META_PAGE_ID;
+    const linkUrl = process.env.META_DEFAULT_LINK_URL || 'https://example.com';
+
+    if (!pageId && process.env.META_USE_MOCK !== 'true') {
+      throw new AppError(400, 'META_PAGE_ID_MISSING', 'META_PAGE_ID e obrigatoria para publicar copy no Meta.');
+    }
+
+    const creativeId = await createAdCreativeFromCopy({
+      adAccountId: selectedAdAccountId,
+      accessToken,
+      headline: copy.headline,
+      primaryText: copy.primary_text,
+      cta: copy.cta,
+      pageId: pageId || 'mock_page_id',
+      linkUrl,
+    });
+
+    await db
+      .update(creativeAssets)
+      .set({ metaAssetId: creativeId, complianceStatus: 'approved' })
+      .where(eq(creativeAssets.id, asset.id));
+
+    const adsManagerUrl = `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${selectedAdAccountId}&cid=${creativeId}`;
+
+    return {
+      hash: creativeId,
+      imageUrl: asset.url,
+      metaAssetId: creativeId,
+      adsManagerUrl,
+    };
+  }
+
   const response = await fetch(asset.url);
 
   if (!response.ok) {
