@@ -2,12 +2,39 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { and, desc, eq } from 'drizzle-orm';
 import { db, performanceRules, performanceScores, ruleExecutions, furyConfig } from '@fury/db';
-import { authMiddleware } from '../middleware/auth.middleware.js';
+import { authMiddleware, authSSEMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { registerSSEClient, emitToTenant } from '../lib/sse.js';
 
 const router = Router();
+
+router.get('/live-feed', authSSEMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId } = req.tenant!;
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    registerSSEClient(tenantId, res);
+    res.flushHeaders();
+
+    const pingInterval = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': ping\n\n');
+      }
+    }, 30000);
+
+    res.on('close', () => {
+      clearInterval(pingInterval);
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.use(authMiddleware, tenantMiddleware);
 
 // ==================== Config ====================
@@ -220,34 +247,6 @@ router.get('/history', async (req: Request, res: Response, next: NextFunction) =
     const filtered = executions.filter((e: typeof executions[number]) => tenantRuleIds.includes(e.ruleId));
 
     return res.json({ success: true, data: filtered, timestamp: new Date().toISOString() });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// ==================== Live Feed (SSE) ====================
-
-router.get('/live-feed', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { tenantId } = req.tenant!;
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-
-    registerSSEClient(tenantId, res);
-    res.flushHeaders();
-
-    const pingInterval = setInterval(() => {
-      if (!res.writableEnded) {
-        res.write(': ping\n\n');
-      }
-    }, 30000);
-
-    res.on('close', () => {
-      clearInterval(pingInterval);
-    });
   } catch (error) {
     next(error);
   }

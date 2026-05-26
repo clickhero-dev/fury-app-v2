@@ -13,7 +13,7 @@ export function useAutomationFeed() {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('fury_token') || localStorage.getItem('token');
+    const token = localStorage.getItem('token');
 
     if (!token) {
       console.warn('No token found, SSE feed disabled');

@@ -18,8 +18,7 @@ export function useFurySSE() {
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
-    const token =
-      localStorage.getItem('fury_token') || localStorage.getItem('token');
+    const token = localStorage.getItem('token');
     if (!token) return;
 
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';

@@ -25,7 +25,14 @@ export async function register(req: Request, res: Response, next: NextFunction) 
 
     res.status(201).json({
       success: true,
-      data: result,
+      data: {
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          role: result.user.role,
+          tenantId: result.user.tenantId,
+        },
+      },
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -40,7 +47,15 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
     res.status(200).json({
       success: true,
-      data: result,
+      data: {
+        token: result.tokens.accessToken,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          role: result.user.role,
+          tenantId: result.user.tenantId,
+        },
+      },
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
