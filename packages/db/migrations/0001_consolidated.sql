@@ -16,14 +16,17 @@ EXCEPTION
 END $$;
 ALTER TABLE "creative_assets" ALTER COLUMN "compliance_status" SET DEFAULT 'pending_compliance';ALTER TABLE "creative_assets"
 ADD COLUMN "compliance_notes" text;
-CREATE TABLE IF NOT EXISTS "automation_rules" (
+DROP TABLE IF EXISTS "automation_rules" CASCADE;
+CREATE TABLE "automation_rules" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"name" varchar(255) NOT NULL,
 	"description" text,
 	"trigger" varchar(255) NOT NULL,
-	"threshold" text NOT NULL,
-	"action" varchar(255) NOT NULL,
+	"rule_type" text NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
+	"threshold" numeric NOT NULL,
+	"action" text NOT NULL DEFAULT 'pause',
 	"enabled" text DEFAULT 'true' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,

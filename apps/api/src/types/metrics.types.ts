@@ -120,12 +120,14 @@ export interface CampaignResponse {
   id: string;
   name: string;
   status: 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
-  spend: number;
-  roas: number | null;
-  cpa: number | null;
-  conversions: number | null;
-  impressions: number;
-  clicks: number;
+  metrics: {
+    spend: number;
+    clicks: number;
+    impressions: number;
+    conversions: number | null;
+    roas: number | null;
+    cpa: number | null;
+  };
 }
 
 export interface DailyMetricsResponse {
@@ -192,7 +194,7 @@ export interface PaginatedResponse<T> {
   data: T[];
   pagination: {
     page: number;
-    pageSize: number;
+    limit: number;
     total: number;
   };
 }

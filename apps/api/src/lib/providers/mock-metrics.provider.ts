@@ -10,6 +10,7 @@ import type {
 } from '../../types/metrics.types.js';
 import {
   centavosToReais,
+  roundToDecimals,
   calculateCTR,
   calculateCPA,
   calculateCPM,
@@ -27,32 +28,37 @@ export class MockMetricsProvider implements IMetricsProvider {
     startDate: string,
     endDate: string
   ): Promise<MetricsSummaryResponse | null> {
-    const startDateObj = this.parseDate(startDate);
-    const endDateObj = this.parseDate(endDate);
+    const campaigns = await this.getCampaigns(tenantId, startDate, endDate, undefined, 1, 100);
 
-    const filteredDaily = mockMetrics.daily.filter(d => {
-      const d_date = this.parseDate(d.date);
-      return d_date >= startDateObj && d_date <= endDateObj;
-    });
-
-    if (filteredDaily.length === 0) {
+    if (campaigns.data.length === 0) {
       return null;
     }
 
-    const aggregated = aggregateDailyMetrics(filteredDaily);
+    let totalSpend = 0;
+    let totalImpressions = 0;
+    let totalClicks = 0;
+    let totalConversions = 0;
+    let totalRoas = 0;
+
+    for (const campaign of campaigns.data) {
+      totalSpend += campaign.metrics.spend;
+      totalImpressions += campaign.metrics.impressions;
+      totalClicks += campaign.metrics.clicks;
+      totalConversions += (campaign.metrics.conversions ?? 0);
+      totalRoas += (campaign.metrics.roas ?? 0);
+    }
+
+    const avgRoas = campaigns.data.length > 0 ? roundToDecimals(totalRoas / campaigns.data.length, 2) : 0;
 
     return {
-      spend: centavosToReais(aggregated.totalSpend),
-      impressions: aggregated.totalImpressions,
-      clicks: aggregated.totalClicks,
-      ctr: calculateCTR(aggregated.totalClicks, aggregated.totalImpressions),
-      cpm: calculateCPM(aggregated.totalSpend, aggregated.totalImpressions),
-      cpa: calculateCPA(
-        centavosToReais(aggregated.totalSpend),
-        aggregated.totalConversions
-      ),
-      roas: aggregated.avgRoas,
-      conversions: aggregated.totalConversions,
+      spend: totalSpend,
+      impressions: totalImpressions,
+      clicks: totalClicks,
+      conversions: totalConversions,
+      ctr: calculateCTR(totalClicks, totalImpressions),
+      cpm: calculateCPM(totalSpend * 100, totalImpressions),
+      cpa: calculateCPA(totalSpend, totalConversions),
+      roas: avgRoas,
     };
   }
 
@@ -65,9 +71,11 @@ export class MockMetricsProvider implements IMetricsProvider {
     limit: number = 10
   ): Promise<{
     data: CampaignResponse[];
-    total: number;
-    page: number;
-    pageSize: number;
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+    };
   }> {
     let filtered = mockMetrics.campaigns;
 
@@ -86,24 +94,26 @@ export class MockMetricsProvider implements IMetricsProvider {
 
       const aggregated = aggregateDailyMetrics(dailyInRange);
 
-      const spend = centavosToReais(aggregated.totalSpend);
+      const spend = roundToDecimals(centavosToReais(aggregated.totalSpend), 2);
       return {
         id: campaign.campaignId,
         name: campaign.name,
         status: campaign.status,
-        spend,
-        roas: aggregated.avgRoas,
-        cpa:
-          aggregated.totalConversions > 0
-            ? calculateCPA(spend, aggregated.totalConversions)
-            : null,
-        conversions: aggregated.totalConversions,
-        impressions: aggregated.totalImpressions,
-        clicks: aggregated.totalClicks,
+        metrics: {
+          spend,
+          clicks: aggregated.totalClicks,
+          impressions: aggregated.totalImpressions,
+          conversions: aggregated.totalConversions,
+          roas: aggregated.avgRoas,
+          cpa:
+            aggregated.totalConversions > 0
+              ? calculateCPA(spend, aggregated.totalConversions)
+              : null,
+        },
       };
     });
 
-    campaigns.sort((a, b) => b.spend - a.spend);
+    campaigns.sort((a, b) => b.metrics.spend - a.metrics.spend);
 
     const total = campaigns.length;
     const start = (page - 1) * limit;
@@ -111,9 +121,11 @@ export class MockMetricsProvider implements IMetricsProvider {
 
     return {
       data: paginated,
-      total,
-      page,
-      pageSize: limit,
+      pagination: {
+        page,
+        limit,
+        total,
+      },
     };
   }
 
