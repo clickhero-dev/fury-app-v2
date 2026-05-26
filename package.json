@@ -23,12 +23,11 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "esbuild": "0.28.0"
-  "optionalDependencies": {
-    "@rolldown/binding-win32-x64-msvc": "^1.0.2"
-  },
-  "dependencies": {
+    "esbuild": "0.28.0",
     "@tailwindcss/oxide-win32-x64-msvc": "^4.3.0",
     "lightningcss-win32-x64-msvc": "^1.32.0"
+  },
+  "optionalDependencies": {
+    "@rolldown/binding-win32-x64-msvc": "^1.0.2"
   }
 }

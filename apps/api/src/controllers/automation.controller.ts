@@ -6,18 +6,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { getAutomationRules } from '../services/automation.service.js';
 import { emitToTenant, registerSSEClient, removeSSEClient } from '../lib/sse.js';
 
-const createRuleSchema = z.object({
-  ruleType: z.string().min(1, 'Rule type is required'),
-  isActive: z.boolean().optional().default(true),
-  threshold: z
-    .string()
-    .or(z.number())
-    .refine((v) => !Number.isNaN(parseFloat(String(v))), 'Invalid threshold'),
-  action: z
-    .enum(['pause', 'notify', 'reduce_budget'])
-    .optional()
-    .default('pause'),
-});
+const createRuleSchema = z.object({ name: z.string().min(1, 'Name is required').optional(), description: z.string().optional(), trigger: z.string().min(1, 'Trigger is required').optional(), ruleType: z.string().min(1, 'Rule type is required').optional(), isActive: z.boolean().optional().default(true), enabled: z.boolean().optional().default(true), threshold: z.coerce .number({ invalid_type_error: 'Threshold must be a number', }) .min(0, 'Threshold must be greater than or equal to 0'), action: z .enum([ 'pause', 'notify', 'reduce_budget', 'pause_campaign', ]) .optional() .default('pause') .transform((v) => (v === 'pause_campaign' ? 'pause' : v)), });
 
 const deleteRuleSchema = z.object({
   id: z.string().uuid('Invalid rule ID'),
@@ -45,12 +34,14 @@ export async function createRuleHandler(
     }
 
     const payload = createRuleSchema.parse(req.body);
-    const threshold = parseFloat(String(payload.threshold));
+    const threshold = payload.threshold;
+    const ruleName = payload.name || payload.ruleType || 'Automation Rule';
+    const ruleTrigger = payload.trigger || payload.ruleType || 'metric_threshold';
 
     const existing = await db.query.automationRules.findFirst({
       where: and(
         eq(automationRules.tenantId, req.tenant.tenantId),
-        eq(automationRules.ruleType, payload.ruleType),
+        eq(automationRules.name, ruleName),
       ),
     });
 
@@ -58,11 +49,13 @@ export async function createRuleHandler(
       const updated = await db
         .update(automationRules)
         .set({
-          name: payload.ruleType,
-          trigger: payload.ruleType,
+          name: ruleName,
+          trigger: ruleTrigger,
           isActive: payload.isActive,
+          enabled: payload.enabled ? 'true' : 'false',
           threshold: threshold.toString(),
           action: payload.action,
+          description: payload.description,
         })
         .where(eq(automationRules.id, existing.id))
         .returning();
@@ -80,12 +73,14 @@ export async function createRuleHandler(
       .insert(automationRules)
       .values({
         tenantId: req.tenant.tenantId,
-        name: payload.ruleType,
-        trigger: payload.ruleType,
-        ruleType: payload.ruleType,
+        name: ruleName,
+        trigger: ruleTrigger,
+        ruleType: payload.ruleType || ruleTrigger,
         isActive: payload.isActive,
+        enabled: payload.enabled ? 'true' : 'false',
         threshold: threshold.toString(),
         action: payload.action,
+        description: payload.description,
       })
       .returning();
 
@@ -93,7 +88,7 @@ export async function createRuleHandler(
 
     return res.status(201).json({
       success: true,
-      data: created,
+      data: created[0],
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

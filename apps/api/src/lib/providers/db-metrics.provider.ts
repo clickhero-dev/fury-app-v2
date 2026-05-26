@@ -7,6 +7,7 @@ import { mockMetrics } from '../meta-mock.js';
 import { IMetricsProvider } from './metrics.provider.js';
 import {
   centavosToReais,
+  roundToDecimals,
   calculateCTR,
   calculateCPA,
   calculateCPM,
@@ -111,7 +112,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       { spend: 0, impressions: 0, clicks: 0, conversions: 0, revenue: 0 }
     );
 
-    const spendReais = centavosToReais(Math.round(summary.spend * 100));
+    const spendReais = roundToDecimals(centavosToReais(Math.round(summary.spend * 100)), 2);
     const ctr = calculateCTR(summary.clicks, summary.impressions);
     const cpm = calculateCPM(Math.round(summary.spend * 100), summary.impressions);
     const cpa =
@@ -203,9 +204,11 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     limit: number = 10
   ): Promise<{
     data: CampaignResponse[];
-    total: number;
-    page: number;
-    pageSize: number;
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+    };
   }> {
     if (process.env.META_USE_MOCK === 'true') {
       let filtered = mockMetrics.campaigns;
@@ -234,24 +237,26 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
           { totalSpend: 0, totalImpressions: 0, totalClicks: 0, totalConversions: 0, avgRoas: 0 }
         );
 
-        const spend = centavosToReais(aggregated.totalSpend);
+        const spend = roundToDecimals(centavosToReais(aggregated.totalSpend), 2);
         return {
           id: campaign.campaignId,
           name: campaign.name,
           status: campaign.status,
-          spend,
-          roas: aggregated.avgRoas,
-          cpa:
-            aggregated.totalConversions > 0
-              ? calculateCPA(spend, aggregated.totalConversions)
-              : null,
-          conversions: aggregated.totalConversions,
-          impressions: aggregated.totalImpressions,
-          clicks: aggregated.totalClicks,
+          metrics: {
+            spend,
+            clicks: aggregated.totalClicks,
+            impressions: aggregated.totalImpressions,
+            conversions: aggregated.totalConversions,
+            roas: aggregated.avgRoas,
+            cpa:
+              aggregated.totalConversions > 0
+                ? calculateCPA(spend, aggregated.totalConversions)
+                : null,
+          },
         };
       });
 
-      campaigns.sort((a, b) => b.spend - a.spend);
+      campaigns.sort((a, b) => b.metrics.spend - a.metrics.spend);
 
       const total = campaigns.length;
       const start = (page - 1) * limit;
@@ -259,9 +264,11 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
 
       return {
         data: paginated,
-        total,
-        page,
-        pageSize: limit,
+        pagination: {
+          page,
+          limit,
+          total,
+        },
       };
     }
 
@@ -335,12 +342,14 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
             id: campaignId,
             name: meta?.name || `Campaign ${campaignId}`,
             status: normalizedStatus,
-            spend: 0,
-            roas: null,
-            cpa: null,
-            conversions: null,
-            impressions: 0,
-            clicks: 0,
+            metrics: {
+              spend: 0,
+              clicks: 0,
+              impressions: 0,
+              conversions: null,
+              roas: null,
+              cpa: null,
+            },
           });
           continue;
         }
@@ -358,16 +367,18 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
           id: campaignId,
           name: insight.campaign_name || meta?.name || `Campaign ${campaignId}`,
           status: normalizedStatus,
-          spend: spendReais,
-          roas,
-          cpa,
-          conversions,
-          impressions,
-          clicks,
+          metrics: {
+            spend: spendReais,
+            clicks,
+            impressions,
+            conversions,
+            roas,
+            cpa,
+          },
         });
       }
 
-      campaigns.sort((a, b) => b.spend - a.spend);
+      campaigns.sort((a, b) => b.metrics.spend - a.metrics.spend);
 
       const total = campaigns.length;
       const start = (page - 1) * limit;
@@ -375,9 +386,11 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
 
       return {
         data: paginated,
-        total,
-        page,
-        pageSize: limit,
+        pagination: {
+          page,
+          limit,
+          total,
+        },
       };
     } catch (error) {
       if (error instanceof AppError) throw error;
