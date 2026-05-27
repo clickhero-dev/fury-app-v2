@@ -63,9 +63,9 @@ export class MetricsService {
     return {
       data: result.data,
       pagination: {
-        page: result.page,
-        pageSize: result.pageSize,
-        total: result.total,
+        page: result.pagination.page,
+        limit: result.pagination.limit,
+        total: result.pagination.total,
       },
     };
   }

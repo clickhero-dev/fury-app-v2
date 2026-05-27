@@ -23,9 +23,11 @@ export interface IMetricsProvider {
     limit?: number
   ): Promise<{
     data: CampaignResponse[];
-    total: number;
-    page: number;
-    pageSize: number;
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+    };
   }>;
 
   getCampaignInsights(

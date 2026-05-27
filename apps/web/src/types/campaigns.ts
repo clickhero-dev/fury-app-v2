@@ -50,7 +50,7 @@ function toNumberOrNull(value: unknown): number | null {
 /** Normaliza payload da API (flat ou legado com `metrics`). */
 export function mapCampaignApiToRow(item: CampaignApiItem | Record<string, unknown>): CampaignData {
   const metrics =
-    item.metrics && typeof item.metrics === 'object'
+    'metrics' in item && item.metrics && typeof item.metrics === 'object'
       ? (item.metrics as Record<string, unknown>)
       : null;
 

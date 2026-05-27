@@ -39,7 +39,7 @@ export class MetricsController {
 
       return res.status(200).json({
         success: true,
-        data: summary || {},
+        data: { summary: summary || {} },
       });
     } catch (error) {
       next(error);
@@ -79,8 +79,10 @@ export class MetricsController {
 
       return res.status(200).json({
         success: true,
-        data: result.data,
-        pagination: result.pagination,
+        data: {
+          campaigns: result.data,
+          pagination: result.pagination,
+        },
       });
     } catch (error) {
       next(error);

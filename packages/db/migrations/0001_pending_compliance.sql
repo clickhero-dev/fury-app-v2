@@ -1,1 +1,0 @@
-ALTER TABLE "creative_assets" ALTER COLUMN "compliance_status" SET DEFAULT 'pending_compliance';

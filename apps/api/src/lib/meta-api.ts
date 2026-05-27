@@ -242,6 +242,12 @@ export async function metaApiCall<T>(
       } as T;
     }
 
+    if (method === 'POST' && path.includes('/adcreatives')) {
+      return {
+        id: `meta_adcreative_${Date.now()}`,
+      } as T;
+    }
+
     if (method === 'POST' && path.match(/^\/[a-zA-Z0-9_-]+$/)) {
       return { success: true } as T;
     }
@@ -389,6 +395,68 @@ export async function getMetaInsights(params: {
 
 export interface MetaAdImageUploadResponse {
   images: Record<string, { hash: string; url?: string }>;
+}
+
+export interface MetaAdCreativeCreateResponse {
+  id: string;
+}
+
+function mapCtaToMetaType(rawCta: string): string {
+  const cta = rawCta.trim().toLowerCase();
+  if (!cta) return 'LEARN_MORE';
+  if (cta.includes('compr')) return 'SHOP_NOW';
+  if (cta.includes('cadast') || cta.includes('inscrev')) return 'SIGN_UP';
+  if (cta.includes('contat') || cta.includes('fale')) return 'CONTACT_US';
+  if (cta.includes('baix')) return 'DOWNLOAD';
+  return 'LEARN_MORE';
+}
+
+export async function createAdCreativeFromCopy(params: {
+  adAccountId: string;
+  accessToken: string;
+  headline: string;
+  primaryText: string;
+  cta: string;
+  pageId: string;
+  linkUrl: string;
+  imageHash?: string;
+}): Promise<string> {
+  const callToActionType = mapCtaToMetaType(params.cta);
+
+  const body: Record<string, unknown> = {
+    name: `FURY Copy Creative ${new Date().toISOString()}`,
+    object_story_spec: {
+      page_id: params.pageId,
+      link_data: {
+        message: params.primaryText,
+        name: params.headline,
+        link: params.linkUrl,
+        call_to_action: {
+          type: callToActionType,
+          value: { link: params.linkUrl },
+        },
+      },
+    },
+  };
+
+  if (params.imageHash) {
+    ((body.object_story_spec as any).link_data as any).image_hash = params.imageHash;
+  }
+
+  const response = await metaApiCall<MetaAdCreativeCreateResponse>(
+    `/${encodeURIComponent(params.adAccountId)}/adcreatives`,
+    params.accessToken,
+    {
+      method: 'POST',
+      body,
+    }
+  );
+
+  if (!response?.id) {
+    throw new AppError(502, 'META_AD_CREATIVE_FAILED', 'Meta nao retornou id do ad creative.');
+  }
+
+  return response.id;
 }
 
 export async function uploadAdImage(params: {

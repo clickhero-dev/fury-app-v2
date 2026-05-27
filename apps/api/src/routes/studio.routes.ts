@@ -4,6 +4,7 @@ import { claude } from '../lib/claude.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import * as studioController from '../controllers/studio.controller.js';
+import { studioCopyService } from '../services/studio-copy.service.js';
 
 const router = Router();
 
@@ -67,7 +68,7 @@ router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: Requ
     const quantidade = body.quantidadeVariacoes ?? 3;
 
     // Fallback/Mock se não houver chave
-    if (!process.env.ANTHROPIC_API_KEY || process.env.META_USE_MOCK === 'true') {
+    if (!process.env.ANTHROPIC_API_KEY) {
       return res.json({
         variacoes: getMockVariations(body, quantidade),
       });
@@ -118,6 +119,30 @@ router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: Requ
     }
     console.error('[GENERATE COPY ERROR]', error);
     return res.status(500).json({ error: 'Erro ao gerar copy' });
+  }
+});
+
+// New endpoint as requested: POST /api/studio/copy/generate
+router.post('/copy/generate', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = generateCopySchema.parse(req.body);
+
+    const input = {
+      objective: (body as any).objetivo ?? (body as any).objective,
+      product: (body as any).produto ?? (body as any).product,
+      audience: (body as any).publico ?? (body as any).audience,
+      tone: (body as any).tom ?? (body as any).tone,
+      quantity: (body as any).quantidadeVariacoes ?? (body as any).quantity ?? 3,
+    };
+
+    const tenantId = (req as any).tenant?.tenantId;
+    if (!tenantId) return res.status(401).json({ error: 'Tenant not found' });
+
+    const result = await studioCopyService.generateAdCopy(input, tenantId);
+    return res.status(200).json(result);
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
+    next(err as any);
   }
 });
 
