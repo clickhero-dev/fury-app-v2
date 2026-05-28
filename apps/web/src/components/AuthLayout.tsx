@@ -12,9 +12,8 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
       {/* Left Side - Premium Branding */}
       <div className="hidden lg:flex relative flex-col items-start justify-center px-16 py-24 space-y-16">
-        {/* Glow Background - Cinematographic */}
-        <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-[#FF6B35]/40 rounded-full blur-3xl opacity-60 pointer-events-none animate-pulse" style={{animationDuration: '4s'}} />
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#FF6B35]/5 to-transparent pointer-events-none" />
+        {/* Glow Background - Cinematographic (Logo only) */}
+        <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-[#FF6B35]/30 rounded-full blur-3xl opacity-40 pointer-events-none animate-pulse" style={{animationDuration: '4s'}} />
 
         <div className="relative space-y-12 z-10">
           {/* Logo with Cinematic Glow */}
@@ -31,12 +30,12 @@ export function AuthLayout({ children }: AuthLayoutProps) {
             <h1 className="text-9xl font-black text-white leading-none tracking-tighter" style={{letterSpacing: '-0.02em'}}>FURY</h1>
             <div className="space-y-2">
               <p className="text-3xl font-black text-[#FF6B35] uppercase tracking-wide">AUTOMAÇÃO DE TRÁFEGO PAGO</p>
-              <p className="text-2xl font-bold text-[#FF8C5A]">POWERED BY AI</p>
+              <p className="text-2xl font-bold text-white">POWERED BY AI</p>
             </div>
           </div>
 
           {/* Subheadline */}
-          <p className="text-lg text-zinc-300 font-medium leading-relaxed max-w-md">Automação inteligente de campanhas com resultados em tempo real. IA avançada que otimiza 24/7.</p>
+          <p className="text-lg text-zinc-200 font-medium leading-relaxed max-w-md">Automação inteligente de campanhas com resultados em tempo real. IA avançada que otimiza 24/7.</p>
 
           {/* Features List */}
           <div className="space-y-5 pt-6">
@@ -49,7 +48,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
                 </div>
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Automação Inteligente</h3>
+                <h3 className="text-base font-bold text-white tracking-tight">Automação Inteligente</h3>
                 <p className="text-zinc-400 mt-0.5 text-sm">Campanhas otimizadas automaticamente</p>
               </div>
             </div>
@@ -63,7 +62,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
                 </div>
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Resultados em Tempo Real</h3>
+                <h3 className="text-base font-bold text-white tracking-tight">Resultados em Tempo Real</h3>
                 <p className="text-zinc-400 mt-0.5 text-sm">Dashboard ao vivo com métricas</p>
               </div>
             </div>
@@ -77,7 +76,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
                 </div>
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">ROAS 3-5x Melhor</h3>
+                <h3 className="text-base font-bold text-white tracking-tight">ROAS 3-5x Melhor</h3>
                 <p className="text-zinc-400 mt-0.5 text-sm">Resultado comprovado em escala</p>
               </div>
             </div>
@@ -87,15 +86,15 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           <div className="grid grid-cols-3 gap-8 pt-12 border-t border-[#FF6B35]/20">
             <div className="space-y-2">
               <p className="text-4xl font-black text-[#FF6B35]">+400</p>
-              <p className="text-xs text-zinc-400 uppercase tracking-wider font-bold">Clientes</p>
+              <p className="text-xs text-zinc-300 uppercase tracking-wider font-bold">Clientes</p>
             </div>
             <div className="space-y-2">
               <p className="text-4xl font-black text-[#FF6B35]">24/7</p>
-              <p className="text-xs text-zinc-400 uppercase tracking-wider font-bold">Operação</p>
+              <p className="text-xs text-zinc-300 uppercase tracking-wider font-bold">Operação</p>
             </div>
             <div className="space-y-2">
               <p className="text-4xl font-black text-[#FF6B35]">3-5x</p>
-              <p className="text-xs text-zinc-400 uppercase tracking-wider font-bold">ROAS</p>
+              <p className="text-xs text-zinc-300 uppercase tracking-wider font-bold">ROAS</p>
             </div>
           </div>
         </div>

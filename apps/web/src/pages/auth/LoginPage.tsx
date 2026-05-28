@@ -52,7 +52,7 @@ export function LoginPage() {
         {/* Header */}
         <div className="space-y-3">
           <h2 className="text-3xl font-black text-white tracking-tight">Acesse sua conta FURY</h2>
-          <p className="text-zinc-400 text-sm font-medium">Automação de tráfego pago com IA</p>
+          <p className="text-zinc-300 text-sm font-medium">Automação de tráfego pago com IA</p>
         </div>
 
         {/* Form */}
@@ -110,13 +110,13 @@ export function LoginPage() {
             <div className="w-full border-t border-[#FF6B35]/20"></div>
           </div>
           <div className="relative flex justify-center text-xs">
-            <span className="px-3 bg-[#1A1A1E] text-zinc-400 font-medium">ou</span>
+            <span className="px-3 bg-[#1A1A1E] text-zinc-300 font-medium">ou</span>
           </div>
         </div>
 
         {/* Sign Up Link */}
         <div className="space-y-4">
-          <p className="text-center text-zinc-400 text-sm">
+          <p className="text-center text-zinc-300 text-sm">
             Não tem conta?{' '}
             <Link
               to="/cadastro"
@@ -133,14 +133,14 @@ export function LoginPage() {
               <span className="text-xs font-bold text-[#FF6B35] uppercase tracking-widest">Demo</span>
             </div>
 
-            <p className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Credenciais Demo</p>
+            <p className="text-xs font-bold text-zinc-200 uppercase tracking-widest">Credenciais Demo</p>
             <div className="space-y-2.5 pt-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-zinc-400">Email:</span>
+                <span className="text-sm text-zinc-300">Email:</span>
                 <code className="text-sm font-bold text-[#FF6B35] font-mono bg-[#0A0A0A]/50 px-2.5 py-1.5 rounded group-hover:bg-[#FF6B35]/20 transition-colors">{DEMO_CREDENTIALS.email}</code>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-zinc-400">Senha:</span>
+                <span className="text-sm text-zinc-300">Senha:</span>
                 <code className="text-sm font-bold text-[#FF6B35] font-mono bg-[#0A0A0A]/50 px-2.5 py-1.5 rounded group-hover:bg-[#FF6B35]/20 transition-colors">{DEMO_CREDENTIALS.password}</code>
               </div>
             </div>
