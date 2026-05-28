@@ -13,7 +13,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       {/* Left Side - Premium Branding */}
       <div className="hidden lg:flex relative flex-col items-start justify-center px-16 py-24 space-y-16">
         {/* Glow Background - Cinematographic (Logo only) */}
-        <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-[#FF6B35]/30 rounded-full blur-3xl opacity-40 pointer-events-none animate-pulse" style={{animationDuration: '4s'}} />
+        <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-[#FF6B35]/10 rounded-full blur-3xl opacity-15 pointer-events-none animate-pulse" style={{animationDuration: '4s'}} />
 
         <div className="relative space-y-12 z-10">
           {/* Logo with Cinematic Glow */}
