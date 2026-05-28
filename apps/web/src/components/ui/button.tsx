@@ -25,15 +25,15 @@ export function Button({
   return (
     <button
       className={cn(
-        'font-semibold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+        'font-semibold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed relative',
         !isPrimary && variant === 'default' &&
-          'bg-[#1C1C1E] text-white hover:bg-[#2a2a2d] active:bg-[#0f0f11] shadow-sm',
+          'bg-[#27272A] text-white hover:bg-[#36363A] active:bg-[#1F1F23] shadow-sm',
         isPrimary &&
-          'text-white shadow-md hover:shadow-lg active:shadow-sm hover:brightness-95 active:brightness-90',
+          'text-white shadow-lg hover:shadow-2xl hover:shadow-[#EA580C]/50 active:shadow-md hover:brightness-110 active:brightness-100',
         variant === 'outline' &&
-          'border-2 border-[#E0E0E0] text-[#1C1C1E] hover:bg-[#F6F8FA] active:bg-white font-medium',
+          'border-2 border-[#27272A] text-white hover:bg-[#27272A]/50 active:bg-[#27272A] font-medium',
         variant === 'ghost' &&
-          'text-[#1C1C1E] hover:bg-[#F6F8FA] active:bg-white',
+          'text-white hover:bg-[#27272A]/30 active:bg-[#27272A]',
         size === 'sm' && 'px-4 py-2.5 text-sm',
         size === 'md' && 'px-6 py-3.5 text-base font-semibold',
         size === 'lg' && 'px-8 py-4 text-lg',
