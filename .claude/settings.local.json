@@ -11,7 +11,10 @@
       "Bash(rtk git *)",
       "Bash(npm install *)",
       "Bash(rtk ls *)",
-      "Bash(rtk read *)"
+      "Bash(rtk read *)",
+      "Bash(npx rtk *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
