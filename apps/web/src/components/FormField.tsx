@@ -10,8 +10,8 @@ export function FormField({ label, error, id, ...props }: FormFieldProps) {
   const inputId = id || props.name;
 
   return (
-    <div className="space-y-2.5">
-      <label htmlFor={inputId} className="block text-sm font-semibold text-zinc-100">
+    <div className="space-y-2">
+      <label htmlFor={inputId} className="block text-sm font-bold text-white">
         {label}
       </label>
       <Input id={inputId} {...props} />

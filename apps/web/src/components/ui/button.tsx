@@ -25,17 +25,17 @@ export function Button({
   return (
     <button
       className={cn(
-        'font-semibold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed relative',
+        'font-bold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed relative',
         !isPrimary && variant === 'default' &&
-          'bg-[#27272A] text-white hover:bg-[#36363A] active:bg-[#1F1F23] shadow-sm',
+          'bg-[#2A2A2E] text-white hover:bg-[#36363A] active:bg-[#1F1F23] shadow-sm',
         isPrimary &&
-          'text-white shadow-lg hover:shadow-2xl hover:shadow-[#EA580C]/50 active:shadow-md hover:brightness-110 active:brightness-100',
+          'text-white shadow-xl hover:shadow-2xl hover:shadow-[#FF6B35]/60 active:shadow-lg hover:brightness-125 active:brightness-110',
         variant === 'outline' &&
-          'border-2 border-[#27272A] text-white hover:bg-[#27272A]/50 active:bg-[#27272A] font-medium',
+          'border-2 border-[#FF6B35]/40 text-white hover:bg-[#FF6B35]/10 active:bg-[#FF6B35]/20 font-bold',
         variant === 'ghost' &&
-          'text-white hover:bg-[#27272A]/30 active:bg-[#27272A]',
+          'text-white hover:bg-[#2A2A2E]/50 active:bg-[#2A2A2E]',
         size === 'sm' && 'px-4 py-2.5 text-sm',
-        size === 'md' && 'px-6 py-3.5 text-base font-semibold',
+        size === 'md' && 'px-6 py-3 text-base font-bold',
         size === 'lg' && 'px-8 py-4 text-lg',
         className
       )}
