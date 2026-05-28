@@ -21,8 +21,10 @@ export function useAutomationFeed() {
     }
 
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    // Remove trailing /api if present to avoid duplication
+    const baseUrl = apiUrl.endsWith('/api') ? apiUrl.slice(0, -4) : apiUrl;
     const eventSource = new EventSource(
-      `${apiUrl}/api/automation/feed?token=${token}`
+      `${baseUrl}/api/automation/feed?token=${token}`
     );
 
     const handleMessage = (event: MessageEvent) => {

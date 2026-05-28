@@ -44,6 +44,7 @@ const STEPS: MigrationStep[] = [
     },
   },
   { tag: '0001_consolidated' },
+  { tag: '0002_add_performance_rules' },
 ];
 
 async function runMigrate() {

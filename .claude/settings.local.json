@@ -6,7 +6,10 @@
       "Bash(curl -s http://localhost:5173)",
       "Bash(curl -s http://localhost:5174)",
       "Bash(cat)",
-      "Bash(bash /tmp/test-automation.sh)"
+      "Bash(bash /tmp/test-automation.sh)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Estudos\\\\Desktop\\\\fury-app-v2\\\\apps\\\\web\\\\src\" -Recurse -Name)",
+      "Bash(Select-String -Pattern \"automacao|automation|feed\")",
+      "Bash(Select-Object -First 20)"
     ]
   }
 }

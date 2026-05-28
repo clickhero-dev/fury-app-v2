@@ -22,7 +22,9 @@ export function useFurySSE() {
     if (!token) return;
 
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-    const es = new EventSource(`${apiUrl}/api/automation/feed?token=${token}`);
+    // Remove trailing /api if present to avoid duplication
+    const baseUrl = apiUrl.endsWith('/api') ? apiUrl.slice(0, -4) : apiUrl;
+    const es = new EventSource(`${baseUrl}/api/automation/feed?token=${token}`);
     esRef.current = es;
 
     es.addEventListener('open', () => setIsConnected(true));

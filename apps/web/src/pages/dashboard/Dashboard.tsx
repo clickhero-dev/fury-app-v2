@@ -131,10 +131,10 @@ function HeroCard({
           </div>
           <div className="flex justify-between mt-2 text-xs text-white/50">
             <span>
-              {goal.current_value.toLocaleString('pt-BR')} {goal.unit}
+              {(goal.current_value ?? 0).toLocaleString('pt-BR')} {goal.unit}
             </span>
             <span>
-              meta: {goal.target_value.toLocaleString('pt-BR')} {goal.unit}
+              meta: {(goal.target_value ?? 0).toLocaleString('pt-BR')} {goal.unit}
             </span>
           </div>
         </div>
@@ -156,7 +156,7 @@ function HeroCard({
           <span>
             Projeção:{' '}
             <span className="font-semibold text-white/70">
-              {goal.projected_value.toLocaleString('pt-BR')} {goal.unit}
+              {(goal.projected_value ?? 0).toLocaleString('pt-BR')} {goal.unit}
             </span>
           </span>
         </div>
@@ -198,10 +198,11 @@ const GOAL_ICONS = {
   roas: TrendingUp,
 } as const;
 
-function fmtVal(val: number, unit: string) {
-  if (unit === 'R$') return `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-  if (unit === 'x') return `${val.toFixed(1)}x`;
-  return `${val.toLocaleString('pt-BR')} ${unit}`;
+function fmtVal(val: number | undefined | null, unit: string) {
+  const v = val ?? 0;
+  if (unit === 'R$') return `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  if (unit === 'x') return `${v.toFixed(1)}x`;
+  return `${v.toLocaleString('pt-BR')} ${unit}`;
 }
 
 function GoalCard({ goal }: { goal: GoalItem }) {
@@ -323,7 +324,7 @@ function ProgressChart({
               fontSize: 12,
             }}
             formatter={(val, name) => [
-              `${Number(val).toLocaleString('pt-BR')} conv.`,
+              `${(Number(val) ?? 0).toLocaleString('pt-BR')} conv.`,
               name === 'real' ? 'Real' : 'Ideal',
             ]}
             labelFormatter={(label) => fmt(String(label))}
@@ -416,13 +417,13 @@ function FuryAlerts({
                 {alert.metric}{' '}
                 <span className="font-semibold text-text-primary">
                   {alert.metric === 'CPA'
-                    ? `R$ ${alert.current_value.toFixed(2)}`
-                    : `${alert.current_value.toFixed(1)}x`}
+                    ? `R$ ${(alert.current_value ?? 0).toFixed(2)}`
+                    : `${(alert.current_value ?? 0).toFixed(1)}x`}
                 </span>{' '}
                 · meta:{' '}
                 {alert.metric === 'CPA'
-                  ? `R$ ${alert.target_value.toFixed(2)}`
-                  : `${alert.target_value.toFixed(1)}x`}
+                  ? `R$ ${(alert.target_value ?? 0).toFixed(2)}`
+                  : `${(alert.target_value ?? 0).toFixed(1)}x`}
               </p>
             </div>
 
@@ -568,20 +569,20 @@ export function Dashboard() {
 
         {/* ── Metric Summary ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <MetricPill label="ROAS" value={`${s.roas.toFixed(1)}x`} icon={TrendingUp} />
+          <MetricPill label="ROAS" value={`${(s.roas ?? 0).toFixed(1)}x`} icon={TrendingUp} />
           <MetricPill
             label="CPA"
-            value={`R$ ${s.cpa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            value={`R$ ${(s.cpa ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             icon={Target}
           />
           <MetricPill
             label="Investido"
-            value={`R$ ${s.spend.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
+            value={`R$ ${(s.spend ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
             icon={DollarSign}
           />
           <MetricPill
             label="Conversões"
-            value={s.conversions.toLocaleString('pt-BR')}
+            value={(s.conversions ?? 0).toLocaleString('pt-BR')}
             icon={ShoppingCart}
           />
         </div>

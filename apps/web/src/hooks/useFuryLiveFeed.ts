@@ -48,7 +48,9 @@ export function useFuryLiveFeed() {
     setState((prev) => ({ ...prev, isConnecting: true, error: null }));
 
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-    const eventSource = new EventSource(`${apiUrl}/fury/live-feed?token=${token}`);
+    // Remove trailing /api if present to avoid duplication
+    const baseUrl = apiUrl.endsWith('/api') ? apiUrl : apiUrl;
+    const eventSource = new EventSource(`${baseUrl}/fury/live-feed?token=${token}`);
     eventSourceRef.current = eventSource;
 
     const handleMessage = (event: MessageEvent) => {
