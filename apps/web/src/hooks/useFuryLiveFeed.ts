@@ -56,20 +56,26 @@ export function useFuryLiveFeed() {
     const handleMessage = (event: MessageEvent) => {
       try {
         const parsed = JSON.parse(event.data) as FuryFeedEvent;
-        setState((prev) => ({
-          ...prev,
-          events: [parsed, ...prev.events].slice(0, 50),
-          isConnected: true,
-          isConnecting: false,
-          error: null,
-          reconnectAttempts: 0,
-        }));
+
+        // Only process fury:update and rule_triggered events
+        if (parsed.event === 'fury:update' || parsed.event === 'rule_triggered') {
+          console.log('[SSE] Event received:', parsed.event, parsed.data);
+          setState((prev) => ({
+            ...prev,
+            events: [parsed, ...prev.events].slice(0, 50),
+            isConnected: true,
+            isConnecting: false,
+            error: null,
+            reconnectAttempts: 0,
+          }));
+        }
       } catch (error) {
-        console.warn('Failed to parse SSE message:', error);
+        console.warn('[SSE] Failed to parse message:', error);
       }
     };
 
     const handleOpen = () => {
+      console.log('[SSE] Connected');
       setState((prev) => ({
         ...prev,
         isConnected: true,
@@ -80,6 +86,7 @@ export function useFuryLiveFeed() {
     };
 
     const handleError = () => {
+      console.warn('[SSE] Error - attempting to reconnect');
       eventSource.close();
       setState((prev) => {
         const attempts = prev.reconnectAttempts + 1;
@@ -92,8 +99,8 @@ export function useFuryLiveFeed() {
         return {
           ...prev,
           isConnected: false,
-          isConnecting: false,
-          error: `Reconectando em ${delay / 1000}s...`,
+          isConnecting: true,
+          error: null,
           reconnectAttempts: attempts,
         };
       });

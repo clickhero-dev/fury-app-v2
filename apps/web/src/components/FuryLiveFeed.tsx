@@ -8,7 +8,7 @@ function getEventIcon(event: string): string {
     rule_deleted: '🗑️',
     rule_executed: '⚡',
     rule_triggered: '🎯',
-    fury_update: '🔄',
+    'fury:update': '🔄',
     campaign_paused: '⏸️',
     campaign_resumed: '▶️',
     budget_reduced: '💰',
@@ -24,7 +24,7 @@ function getEventLabel(event: string): string {
     rule_deleted: 'Regra deletada',
     rule_executed: 'Regra executada',
     rule_triggered: 'Regra disparada',
-    fury_update: 'Update do FURY',
+    'fury:update': 'Update do FURY',
     campaign_paused: 'Campanha pausada',
     campaign_resumed: 'Campanha retomada',
     budget_reduced: 'Orçamento reduzido',
@@ -38,7 +38,7 @@ function getEventColor(event: string): string {
     return 'border-green-500/30 bg-green-500/5';
   if (event.includes('deleted') || event.includes('paused'))
     return 'border-red-500/30 bg-red-500/5';
-  if (event.includes('updated') || event.includes('executed') || event.includes('fury_update'))
+  if (event.includes('updated') || event.includes('executed') || event.includes('fury'))
     return 'border-blue-500/30 bg-blue-500/5';
   return 'border-gray-500/30 bg-gray-500/5';
 }

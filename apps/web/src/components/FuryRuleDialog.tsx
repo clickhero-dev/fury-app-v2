@@ -108,7 +108,7 @@ export function FuryRuleDialog({
               <label className="block text-sm font-semibold text-text-secondary">
                 Se
               </label>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {/* Métrica */}
                 <select
                   value={form.conditionField}
@@ -118,7 +118,7 @@ export function FuryRuleDialog({
                       conditionField: e.target.value as CreateFuryRulePayload['conditionField'],
                     })
                   }
-                  className="flex-1 px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
+                  className="w-full px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
                 >
                   {METRICS.map((m) => (
                     <option key={m.value} value={m.value}>
@@ -136,7 +136,7 @@ export function FuryRuleDialog({
                       conditionOperator: e.target.value as CreateFuryRulePayload['conditionOperator'],
                     })
                   }
-                  className="w-32 px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
+                  className="w-full px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
                 >
                   {OPERATORS.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -153,7 +153,7 @@ export function FuryRuleDialog({
                     setForm({ ...form, conditionValue: parseFloat(e.target.value) || 0 })
                   }
                   placeholder="0"
-                  className="w-24"
+                  className="w-full"
                 />
               </div>
             </div>
