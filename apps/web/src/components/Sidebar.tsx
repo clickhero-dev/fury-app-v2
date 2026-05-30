@@ -1,6 +1,7 @@
-import { LayoutDashboard, Megaphone, Palette, Settings, ChevronLeft, Zap } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Palette, Settings, ChevronLeft, Zap, CreditCard } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
+import { PlanBadge } from './PlanBadge';
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -13,6 +14,7 @@ const navItems = [
   { icon: Zap, label: 'Automação', path: '/automacao/minhas-regras' },
   { icon: Palette, label: 'Estúdio', path: '/estudio' },
   { icon: Settings, label: 'Configurações', path: '/configuracoes' },
+  { icon: CreditCard, label: 'Assinatura', path: '/assinatura' },
 ];
 
 export function Sidebar({ onToggle }: SidebarProps) {
@@ -60,18 +62,21 @@ export function Sidebar({ onToggle }: SidebarProps) {
         </ul>
       </nav>
 
-      <div className="p-3 border-t border-sidebar-hover">
-        <button
-          onClick={handleToggle}
-          className="w-full flex items-center justify-center px-3 py-2.5 rounded-lg text-white/85 hover:bg-sidebar-hover hover:text-white transition-colors"
-          title={collapsed ? 'Expandir' : 'Colapsar'}
-        >
-          <ChevronLeft
-            className={`w-5 h-5 transition-transform duration-300 ${
-              collapsed ? 'rotate-180' : ''
-            }`}
-          />
-        </button>
+      <div className="pb-3 space-y-2">
+        <PlanBadge collapsed={collapsed} />
+        <div className="px-3 border-t border-sidebar-hover pt-3">
+          <button
+            onClick={handleToggle}
+            className="w-full flex items-center justify-center px-3 py-2.5 rounded-lg text-white/85 hover:bg-sidebar-hover hover:text-white transition-colors"
+            title={collapsed ? 'Expandir' : 'Colapsar'}
+          >
+            <ChevronLeft
+              className={`w-5 h-5 transition-transform duration-300 ${
+                collapsed ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+        </div>
       </div>
     </aside>
   );
