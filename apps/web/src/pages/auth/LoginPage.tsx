@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/FormField';
 import { AuthLayout } from '@/components/AuthLayout';
 import { useLogin } from '@/hooks/useLogin';
-import { FURY_COLORS, DEMO_CREDENTIALS } from '@/lib/constants';
+import { DEMO_CREDENTIALS } from '@/lib/constants';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
