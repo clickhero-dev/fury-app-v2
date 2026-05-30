@@ -1,8 +1,14 @@
 import jwt from 'jsonwebtoken';
 import { AppError } from '../middleware/errorHandler.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-key';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'default-refresh-secret-key';
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`[FURY] ${name} env var is required`);
+  return value;
+}
+
+const JWT_SECRET = requireEnv('JWT_SECRET');
+const JWT_REFRESH_SECRET = requireEnv('JWT_REFRESH_SECRET');
 
 export interface AccessTokenPayload {
   userId: string;

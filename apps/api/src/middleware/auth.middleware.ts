@@ -34,7 +34,7 @@ function verifyTokenAndSetUser(token: string, req: Request): boolean {
     return true;
   } catch (jwtError) {
     const allowMockToken =
-      process.env.META_USE_MOCK === 'true' && process.env.NODE_ENV !== 'production';
+      process.env.AUTH_BYPASS_DEV === 'true' && process.env.NODE_ENV !== 'production';
     if (allowMockToken) {
       const mockPayload = tryParseMockQuickstartToken(token);
       if (mockPayload) {

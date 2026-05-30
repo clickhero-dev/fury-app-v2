@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174'],
+  origin: (process.env.CORS_ALLOWED_ORIGINS ?? 'http://localhost:5173,http://localhost:5174').split(','),
   credentials: true,
 }));
 
