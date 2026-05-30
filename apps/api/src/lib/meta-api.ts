@@ -4,7 +4,13 @@ import { AppError } from '../middleware/errorHandler.js';
 const META_API_VERSION = 'v20.0';
 const META_GRAPH_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
-const ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || 'fury-default-key';
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`[FURY] ${name} env var is required`);
+  return value;
+}
+
+const ENCRYPTION_KEY = requireEnv('TOKEN_ENCRYPTION_KEY');
 const ALGORITHM = 'aes-256-cbc';
 
 export function decryptAccessToken(encryptedToken: string): string {

@@ -17,6 +17,8 @@ import { Configuracoes } from './pages/configuracoes/Configuracoes';
 import { Integracoes } from './pages/configuracoes/Integracoes';
 import { MinhasRegras } from './pages/automacao/MinhasRegras';
 import { ComponentsDemo } from './pages/ComponentsDemo';
+import { Plans } from './pages/billing/Plans';
+import { Subscription } from './pages/billing/Subscription';
 
 export const router = createBrowserRouter([
   {
@@ -140,6 +142,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <Integracoes />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/planos',
+    element: (
+      <ProtectedRoute>
+        <Plans />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/assinatura',
+    element: (
+      <ProtectedRoute>
+        <Subscription />
       </ProtectedRoute>
     ),
   },

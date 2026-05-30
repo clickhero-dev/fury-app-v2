@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db, performanceRules, performanceScores, ruleExecutions, furyConfig } from '@fury/db';
 import { authMiddleware, authSSEMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
@@ -229,24 +229,17 @@ router.get('/history', async (req: Request, res: Response, next: NextFunction) =
       return res.json({ success: true, data: [], timestamp: new Date().toISOString() });
     }
 
-    const filters = [];
-    if (ruleId && tenantRuleIds.includes(String(ruleId))) {
-      filters.push(eq(ruleExecutions.ruleId, String(ruleId)));
-    } else {
-      // Only return executions belonging to this tenant's rules
-      // drizzle doesn't have inArray without sql helper in this pattern, filter in-memory after fetch
-    }
-    if (campaignId) filters.push(eq(ruleExecutions.campaignId, String(campaignId)));
-
     const executions = await db.query.ruleExecutions.findMany({
-      where: filters.length > 0 ? and(...filters) : undefined,
+      where: and(
+        inArray(ruleExecutions.ruleId, tenantRuleIds),
+        ...(ruleId ? [eq(ruleExecutions.ruleId, String(ruleId))] : []),
+        ...(campaignId ? [eq(ruleExecutions.campaignId, String(campaignId))] : []),
+      ),
       orderBy: [desc(ruleExecutions.triggeredAt)],
       limit: 100,
     });
 
-    const filtered = executions.filter((e: typeof executions[number]) => tenantRuleIds.includes(e.ruleId));
-
-    return res.json({ success: true, data: filtered, timestamp: new Date().toISOString() });
+    return res.json({ success: true, data: executions, timestamp: new Date().toISOString() });
   } catch (error) {
     next(error);
   }

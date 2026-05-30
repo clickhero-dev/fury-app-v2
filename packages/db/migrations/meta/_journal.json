@@ -15,6 +15,27 @@
       "when": 1778268868197,
       "tag": "0001_consolidated",
       "breakpoints": false
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1778268869197,
+      "tag": "0002_add_performance_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1780099200000,
+      "tag": "0005_performance_scores",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1780099201000,
+      "tag": "0006_remove_automation_rules_enabled",
+      "breakpoints": false
     }
   ]
 }

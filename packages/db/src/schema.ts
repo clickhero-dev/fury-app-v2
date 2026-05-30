@@ -192,7 +192,6 @@ export const automationRules = pgTable(
     name: varchar('name', { length: 255 }).notNull(),
     description: text('description'),
     trigger: varchar('trigger', { length: 255 }).notNull(),
-    enabled: text('enabled').notNull().default('true'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     ruleType: text('rule_type').notNull(),

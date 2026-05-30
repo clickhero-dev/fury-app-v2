@@ -61,13 +61,6 @@ export async function closeRedisConnection(): Promise<void> {
 }
 
 // ==================== Definição de tipos ====================
-export type CampaignSyncJobPayload = {
-  tenantId: string;
-  metaConnectionId: string;
-};
-
-export const CAMPAIGN_SYNC_QUEUE_NAME = 'campaign-sync' as const;
-
 export type RuleEngineJobPayload = {
   timestamp: string;
 };
@@ -81,17 +74,6 @@ export type FuryEngineJobPayload = {
 export const FURY_ENGINE_QUEUE_NAME = 'fury-engine' as const;
 
 // ==================== Funções para obter filas (lazy loading) ====================
-export async function createCampaignSyncQueue() {
-  const connection = await getRedisConnection();
-  return new Queue<CampaignSyncJobPayload>(CAMPAIGN_SYNC_QUEUE_NAME, {
-    connection,
-    defaultJobOptions: {
-      removeOnComplete: 1000,
-      removeOnFail: 5000,
-    },
-  });
-}
-
 export async function createRuleEngineQueue() {
   const connection = await getRedisConnection();
   return new Queue<RuleEngineJobPayload>(RULE_ENGINE_QUEUE_NAME, {
