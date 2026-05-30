@@ -2,11 +2,39 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { and, desc, eq } from 'drizzle-orm';
 import { db, performanceRules, performanceScores, ruleExecutions, furyConfig } from '@fury/db';
-import { authMiddleware } from '../middleware/auth.middleware.js';
+import { authMiddleware, authSSEMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { registerSSEClient, emitToTenant } from '../lib/sse.js';
 
 const router = Router();
+
+router.get('/live-feed', authSSEMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId } = req.tenant!;
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    registerSSEClient(tenantId, res);
+    res.flushHeaders();
+
+    const pingInterval = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': ping\n\n');
+      }
+    }, 30000);
+
+    res.on('close', () => {
+      clearInterval(pingInterval);
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.use(authMiddleware, tenantMiddleware);
 
 // ==================== Config ====================
@@ -106,6 +134,8 @@ router.post('/rules', async (req: Request, res: Response, next: NextFunction) =>
       isActive: payload.isActive,
     }).returning();
 
+    emitToTenant(tenantId, 'rule_created', created);
+
     res.status(201).json({ success: true, data: created, timestamp: new Date().toISOString() });
   } catch (error) {
     next(error);
@@ -133,6 +163,9 @@ router.patch('/rules/:id', async (req: Request, res: Response, next: NextFunctio
     if (payload.isActive !== undefined) updates.isActive = payload.isActive;
 
     const [updated] = await db.update(performanceRules).set(updates).where(eq(performanceRules.id, id)).returning();
+
+    emitToTenant(tenantId, 'rule_updated', updated);
+
     res.json({ success: true, data: updated, timestamp: new Date().toISOString() });
   } catch (error) {
     next(error);
@@ -150,6 +183,9 @@ router.delete('/rules/:id', async (req: Request, res: Response, next: NextFuncti
     if (!existing) throw new AppError(404, 'NOT_FOUND', 'Rule not found');
 
     await db.delete(performanceRules).where(eq(performanceRules.id, id));
+
+    emitToTenant(tenantId, 'rule_deleted', { id });
+
     res.json({ success: true, data: null, timestamp: new Date().toISOString() });
   } catch (error) {
     next(error);

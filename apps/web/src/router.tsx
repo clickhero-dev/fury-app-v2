@@ -15,6 +15,7 @@ import { GeradorImagem } from './pages/estudio/GeradorImagem';
 import { GeradorCopy } from './pages/estudio/GeradorCopy';
 import { Configuracoes } from './pages/configuracoes/Configuracoes';
 import { Integracoes } from './pages/configuracoes/Integracoes';
+import { MinhasRegras } from './pages/automacao/MinhasRegras';
 import { ComponentsDemo } from './pages/ComponentsDemo';
 
 export const router = createBrowserRouter([
@@ -75,6 +76,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <RegrasCampanhas />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/automacao',
+    element: (
+      <ProtectedRoute>
+        <MinhasRegras />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/automacao/minhas-regras',
+    element: (
+      <ProtectedRoute>
+        <MinhasRegras />
       </ProtectedRoute>
     ),
   },

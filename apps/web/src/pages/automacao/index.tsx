@@ -1,0 +1,1 @@
+export { MinhasRegras } from './MinhasRegras';

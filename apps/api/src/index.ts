@@ -1,6 +1,7 @@
 /// <reference path="./types/express.d.ts" />
 import 'dotenv/config';
 import express from 'express';
+import cors from 'cors';
 import { loggerMiddleware } from './middleware/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
@@ -14,9 +15,15 @@ import { startStudioGenerationWorker, stopStudioGenerationWorker } from './worke
 import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
 
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://localhost:5174'],
+  credentials: true,
+}));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

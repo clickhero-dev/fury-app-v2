@@ -19,7 +19,7 @@ export interface RegisterRequest {
   name: string;
   email: string;
   password: string;
-  company: string;
+  companyName: string;
 }
 
 export interface RegisterResponse {

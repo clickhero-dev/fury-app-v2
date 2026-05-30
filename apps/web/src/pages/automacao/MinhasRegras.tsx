@@ -1,0 +1,218 @@
+import { useState } from 'react';
+import { AppLayout, PageHeader, Button, DataTable, FuryLiveFeed } from '@/components';
+import { FuryRuleDialog } from '@/components/FuryRuleDialog';
+import {
+  useGetFuryRules,
+  useCreateFuryRule,
+  useUpdateFuryRule,
+  useDeleteFuryRule,
+  type FuryRule,
+  type CreateFuryRulePayload,
+} from '@/hooks/useFuryRules';
+
+export function MinhasRegras() {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedRule, setSelectedRule] = useState<FuryRule | undefined>();
+
+  const { data, isLoading } = useGetFuryRules();
+  const createMutation = useCreateFuryRule();
+  const updateMutation = useUpdateFuryRule();
+  const deleteMutation = useDeleteFuryRule();
+
+  const rules = data?.data || [];
+
+  const handleOpenDialog = (rule?: FuryRule) => {
+    setSelectedRule(rule);
+    setIsDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    setIsDialogOpen(false);
+    setSelectedRule(undefined);
+  };
+
+  const handleSave = async (payload: CreateFuryRulePayload) => {
+    try {
+      if (selectedRule) {
+        await updateMutation.mutateAsync({
+          id: selectedRule.id,
+          payload,
+        });
+      } else {
+        await createMutation.mutateAsync(payload);
+      }
+      handleCloseDialog();
+    } catch (error) {
+      console.error('Error saving rule:', error);
+    }
+  };
+
+  const handleToggleActive = async (rule: FuryRule) => {
+    try {
+      await updateMutation.mutateAsync({
+        id: rule.id,
+        payload: { isActive: !rule.isActive },
+      });
+    } catch (error) {
+      console.error('Error toggling rule:', error);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm('Tem certeza que deseja deletar esta regra?')) {
+      try {
+        await deleteMutation.mutateAsync(id);
+      } catch (error) {
+        console.error('Error deleting rule:', error);
+      }
+    }
+  };
+
+  const getMetricLabel = (field: string) => {
+    const metrics: Record<string, string> = {
+      cpc: 'CPC',
+      ctr: 'CTR',
+      roas: 'ROAS',
+      cpa: 'CPA',
+      spend: 'Spend',
+    };
+    return metrics[field] || field;
+  };
+
+  const getOperatorLabel = (op: string) => {
+    const operators: Record<string, string> = {
+      gt: '>',
+      lt: '<',
+      eq: '=',
+    };
+    return operators[op] || op;
+  };
+
+  const getActionLabel = (action: string) => {
+    const actions: Record<string, string> = {
+      pause_campaign: 'Pausar Campanha',
+      reduce_budget: 'Reduzir Orçamento',
+      notify: 'Notificar',
+      increase_budget: 'Aumentar Orçamento',
+    };
+    return actions[action] || action;
+  };
+
+  const columns = [
+    {
+      key: 'name' as const,
+      label: 'Nome',
+      render: (value: string | boolean | undefined) => <span className="font-medium">{value}</span>,
+    },
+    {
+      key: 'conditionField' as const,
+      label: 'Condição',
+      render: (_: string | boolean | undefined, row: FuryRule) => (
+        <span className="text-text-secondary text-sm">
+          {getMetricLabel(row.conditionField)} {getOperatorLabel(row.conditionOperator)}{' '}
+          {row.conditionValue}
+        </span>
+      ),
+    },
+    {
+      key: 'action' as const,
+      label: 'Ação',
+      render: (value: string | boolean | undefined) => <span className="text-sm">{getActionLabel(String(value))}</span>,
+    },
+    {
+      key: 'isActive' as const,
+      label: 'Status',
+      align: 'center' as const,
+      render: (_: string | boolean | undefined, row: FuryRule) => (
+        <button
+          onClick={() => handleToggleActive(row)}
+          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+            row.isActive
+              ? 'bg-green-500/10 text-green-400'
+              : 'bg-gray-500/10 text-gray-400'
+          }`}
+        >
+          {row.isActive ? '✓ Ativa' : '○ Inativa'}
+        </button>
+      ),
+    },
+    {
+      key: 'updatedAt' as const,
+      label: 'Última atualização',
+      align: 'right' as const,
+      render: (value: string | boolean | undefined) => {
+        const date = new Date(String(value));
+        const isValid = !isNaN(date.getTime());
+        return (
+          <span className="text-text-secondary text-sm">
+            {isValid ? date.toLocaleDateString('pt-BR') : '—'}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'id' as const,
+      label: 'Ações',
+      align: 'right' as const,
+      render: (_: string | boolean | undefined, row: FuryRule) => (
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={() => handleOpenDialog(row)}
+            className="text-accent hover:text-accent/80 text-sm font-semibold transition-colors"
+          >
+            Editar
+          </button>
+          <button
+            onClick={() => handleDelete(row.id)}
+            className="text-red-400 hover:text-red-300 text-sm font-semibold transition-colors"
+          >
+            Deletar
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <AppLayout
+      header={
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-text-primary">Minhas Regras</h2>
+          <Button variant="primary" size="md" onClick={() => handleOpenDialog()}>
+            + Nova Regra
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-6">
+        <PageHeader
+          title="Minhas Regras"
+          description="Crie e gerencie regras automáticas para otimizar suas campanhas"
+        />
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <DataTable
+              columns={columns}
+              data={rules}
+              keyField="id"
+              isLoading={isLoading}
+              emptyMessage="Nenhuma regra criada ainda. Clique em 'Nova Regra' para começar."
+            />
+          </div>
+          <div className="lg:col-span-1">
+            <FuryLiveFeed />
+          </div>
+        </div>
+      </div>
+
+      <FuryRuleDialog
+        isOpen={isDialogOpen}
+        onClose={handleCloseDialog}
+        onSave={handleSave}
+        rule={selectedRule}
+        isPending={createMutation.isPending || updateMutation.isPending}
+      />
+    </AppLayout>
+  );
+}

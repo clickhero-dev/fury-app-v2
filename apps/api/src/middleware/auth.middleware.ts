@@ -2,10 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, type AccessTokenPayload } from '../lib/jwt.js';
 import { AppError } from './errorHandler.js';
 
-/**
- * Quickstart / local mock: base64 JSON `{"userId":"..."}` (see quickstart_metrics.md).
- * Only allowed when META_USE_MOCK=true and not in production.
- */
 function tryParseMockQuickstartToken(rawToken: string): AccessTokenPayload | null {
   const token = rawToken.trim();
   try {
@@ -26,15 +22,7 @@ function tryParseMockQuickstartToken(rawToken: string): AccessTokenPayload | nul
   return null;
 }
 
-export function authMiddleware(req: Request, _res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return next(new AppError(401, 'UNAUTHORIZED', 'Missing or invalid authorization header'));
-  }
-
-  const token = authHeader.substring(7).trim();
-
+function verifyTokenAndSetUser(token: string, req: Request): boolean {
   try {
     const payload = verifyAccessToken(token);
     req.user = {
@@ -43,7 +31,7 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
       email: payload.email,
       role: payload.role,
     };
-    return next();
+    return true;
   } catch (jwtError) {
     const allowMockToken =
       process.env.META_USE_MOCK === 'true' && process.env.NODE_ENV !== 'production';
@@ -56,9 +44,41 @@ export function authMiddleware(req: Request, _res: Response, next: NextFunction)
           email: mockPayload.email,
           role: mockPayload.role,
         };
-        return next();
+        return true;
       }
     }
+    throw jwtError;
+  }
+}
+
+export function authMiddleware(req: Request, _res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next(new AppError(401, 'UNAUTHORIZED', 'Missing or invalid authorization header'));
+  }
+
+  const token = authHeader.substring(7).trim();
+
+  try {
+    verifyTokenAndSetUser(token, req);
+    return next();
+  } catch (jwtError) {
+    next(jwtError);
+  }
+}
+
+export function authSSEMiddleware(req: Request, _res: Response, next: NextFunction) {
+  const token = (req.query.token as string) || req.headers.authorization?.substring(7).trim();
+
+  if (!token) {
+    return next(new AppError(401, 'UNAUTHORIZED', 'Missing token in query parameter or Authorization header'));
+  }
+
+  try {
+    verifyTokenAndSetUser(token, req);
+    return next();
+  } catch (jwtError) {
     next(jwtError);
   }
 }

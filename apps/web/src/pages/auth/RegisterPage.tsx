@@ -13,7 +13,7 @@ const registerSchema = z.object({
   name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
   email: z.string().email('Email inválido'),
   password: z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
-  company: z.string().min(2, 'Nome da empresa é obrigatório'),
+  companyName: z.string().min(2, 'Nome da empresa é obrigatório'),
 });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
@@ -33,7 +33,7 @@ export function RegisterPage() {
       name: '',
       email: '',
       password: '',
-      company: '',
+      companyName: '',
     },
   });
 
@@ -84,8 +84,8 @@ export function RegisterPage() {
           <FormField
             label="Empresa"
             placeholder="Nome da sua empresa"
-            error={errors.company?.message}
-            {...register('company')}
+            error={errors.companyName?.message}
+            {...register('companyName')}
           />
 
           {error && (

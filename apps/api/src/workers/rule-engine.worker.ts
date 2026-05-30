@@ -1,12 +1,12 @@
 import { Worker, type Job } from 'bullmq';
 import { and, eq } from 'drizzle-orm';
-import { db, automationRules, campaigns, furyInsights, tenants } from '@fury/db';
+import { db, performanceRules, campaigns, furyInsights, tenants } from '@fury/db';
 import { emitToTenant } from '../lib/sse.js';
 import { createBullConnection, RULE_ENGINE_QUEUE_NAME, type RuleEngineJobPayload } from '../lib/queue.js';
 
 interface RuleCheckResult {
   ruleId: string;
-  ruleType: string;
+  ruleName: string;
   campaignId: string;
   campaignName: string;
   triggered: boolean;
@@ -22,48 +22,38 @@ interface ProcessingStats {
 }
 
 async function checkCampaignAgainstRule(
-  rule: typeof automationRules.$inferSelect,
+  rule: typeof performanceRules.$inferSelect,
   campaign: typeof campaigns.$inferSelect
 ): Promise<RuleCheckResult> {
   const metrics = campaign.metrics as Record<string, unknown> || {};
-  const threshold = parseFloat(rule.threshold.toString());
+  const conditionValue = parseFloat(rule.conditionValue.toString());
 
   const result: RuleCheckResult = {
     ruleId: rule.id,
-    ruleType: rule.ruleType,
+    ruleName: rule.name,
     campaignId: campaign.id,
     campaignName: campaign.name,
     triggered: false,
     metrics,
   };
 
-  if (rule.ruleType === 'pause_high_cpa') {
-    const cpa = typeof metrics.cpa === 'number' ? metrics.cpa : parseFloat(String(metrics.cpa || 0));
-    if (cpa > threshold) {
-      result.triggered = true;
-      result.reason = `CPA ${cpa.toFixed(2)} exceeds threshold ${threshold.toFixed(2)}`;
-    }
-  } else if (rule.ruleType === 'pause_low_roas') {
-    const roas = typeof metrics.roas === 'number' ? metrics.roas : parseFloat(String(metrics.roas || 0));
-    if (roas < threshold) {
-      result.triggered = true;
-      result.reason = `ROAS ${roas.toFixed(2)} below threshold ${threshold.toFixed(2)}`;
-    }
-  } else if (rule.ruleType === 'pause_zero_conversions') {
-    const conversions = typeof metrics.conversions === 'number' ? metrics.conversions : parseInt(String(metrics.conversions || 0), 10);
-    if (conversions === 0) {
-      result.triggered = true;
-      result.reason = 'Zero conversions detected';
-    }
-  } else if (rule.ruleType === 'budget_limit') {
-    const spend = typeof metrics.spend === 'number' ? metrics.spend : parseFloat(String(metrics.spend || 0));
-    const budget = campaign.budget as Record<string, unknown> || {};
-    const dailyBudget = typeof budget.dailyBudget === 'number' ? budget.dailyBudget : parseFloat(String(budget.dailyBudget || 0));
+  const fieldValue = typeof metrics[rule.conditionField] === 'number'
+    ? (metrics[rule.conditionField] as number)
+    : parseFloat(String(metrics[rule.conditionField] || 0));
 
-    if (dailyBudget > 0 && spend > dailyBudget * 1.1) {
-      result.triggered = true;
-      result.reason = `Spend ${spend.toFixed(2)} exceeds budget limit ${(dailyBudget * 1.1).toFixed(2)}`;
-    }
+  let conditionMet = false;
+
+  if (rule.conditionOperator === 'gt') {
+    conditionMet = fieldValue > conditionValue;
+  } else if (rule.conditionOperator === 'lt') {
+    conditionMet = fieldValue < conditionValue;
+  } else if (rule.conditionOperator === 'eq') {
+    conditionMet = fieldValue === conditionValue;
+  }
+
+  if (conditionMet) {
+    result.triggered = true;
+    result.reason = `${rule.conditionField} ${fieldValue.toFixed(2)} ${rule.conditionOperator} ${conditionValue.toFixed(2)}`;
   }
 
   return result;
@@ -73,7 +63,7 @@ async function recordInsight(
   tenantId: string,
   campaignId: string,
   ruleId: string,
-  ruleType: string,
+  ruleName: string,
   reason: string,
   metrics: Record<string, unknown>
 ): Promise<void> {
@@ -83,7 +73,7 @@ async function recordInsight(
     suggestionType: 'smart_takedown',
     suggestionData: {
       ruleId,
-      ruleType,
+      ruleName,
       reason,
       metrics,
       detectedAt: new Date().toISOString(),
@@ -96,10 +86,10 @@ async function processTenant(
   stats: ProcessingStats
 ): Promise<void> {
   try {
-    const rules = await db.query.automationRules.findMany({
+    const rules = await db.query.performanceRules.findMany({
       where: and(
-        eq(automationRules.tenantId, tenantId),
-        eq(automationRules.isActive, true)
+        eq(performanceRules.tenantId, tenantId),
+        eq(performanceRules.isActive, true)
       ),
     });
 
@@ -126,7 +116,7 @@ async function processTenant(
             tenantId,
             campaign.id,
             rule.id,
-            rule.ruleType,
+            rule.name,
             checkResult.reason,
             checkResult.metrics || {}
           );
@@ -134,14 +124,12 @@ async function processTenant(
           const insight = {
             id: crypto.randomUUID(),
             ruleId: rule.id,
-            ruleType: rule.ruleType,
+            ruleName: rule.name,
             campaignId: campaign.id,
             campaignName: campaign.name,
             reason: checkResult.reason,
             action: rule.action,
             timestamp: new Date().toISOString(),
-            // TODO: Integrate with PATCH /api/campaigns/:id/pause endpoint when available
-            // Currently only emitting notification and recording insight
           };
 
           emitToTenant(tenantId, 'rule_triggered', insight);
@@ -149,7 +137,7 @@ async function processTenant(
           console.info('Rule triggered', {
             tenantId,
             ruleId: rule.id,
-            ruleType: rule.ruleType,
+            ruleName: rule.name,
             campaignId: campaign.id,
             campaignName: campaign.name,
             reason: checkResult.reason,
