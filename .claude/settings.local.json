@@ -5,12 +5,16 @@
       "Bash(npx tsc *)",
       "Bash(curl -s http://localhost:5173)",
       "Bash(curl -s http://localhost:5174)",
-      "Bash(cat)",
-      "Bash(bash /tmp/test-automation.sh)",
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Estudos\\\\Desktop\\\\fury-app-v2\\\\apps\\\\web\\\\src\" -Recurse -Name)",
-      "Bash(Select-String -Pattern \"automacao|automation|feed\")",
-      "Bash(Select-Object -First 20)",
-      "Bash(git add *)"
+      "Bash(rtk npm *)",
+      "Bash(rtk tsc *)",
+      "Bash(grep -v \"^$\")",
+      "Bash(rtk git *)",
+      "Bash(npm install *)",
+      "Bash(rtk ls *)",
+      "Bash(rtk read *)",
+      "Bash(npx rtk *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
