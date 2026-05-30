@@ -80,6 +80,14 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: '/automacao',
+    element: (
+      <ProtectedRoute>
+        <MinhasRegras />
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: '/automacao/minhas-regras',
     element: (
       <ProtectedRoute>

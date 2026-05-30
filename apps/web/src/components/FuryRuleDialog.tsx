@@ -181,6 +181,24 @@ export function FuryRuleDialog({
               </select>
             </div>
 
+            {/* Action Value (opcional para reduce_budget e increase_budget) */}
+            {(form.action === 'reduce_budget' || form.action === 'increase_budget') && (
+              <div>
+                <label className="block text-sm font-semibold text-text-secondary mb-2">
+                  Valor da Ação (%)
+                </label>
+                <Input
+                  type="number"
+                  value={form.actionValue || ''}
+                  onChange={(e) =>
+                    setForm({ ...form, actionValue: e.target.value ? parseFloat(e.target.value) : undefined })
+                  }
+                  placeholder="Ex: 20"
+                  className="w-full"
+                />
+              </div>
+            )}
+
             {/* Status */}
             <div className="flex items-center gap-3">
               <input

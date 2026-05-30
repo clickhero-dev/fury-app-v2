@@ -9,7 +9,8 @@
       "Bash(bash /tmp/test-automation.sh)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Estudos\\\\Desktop\\\\fury-app-v2\\\\apps\\\\web\\\\src\" -Recurse -Name)",
       "Bash(Select-String -Pattern \"automacao|automation|feed\")",
-      "Bash(Select-Object -First 20)"
+      "Bash(Select-Object -First 20)",
+      "Bash(git add *)"
     ]
   }
 }

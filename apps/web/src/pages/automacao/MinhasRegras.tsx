@@ -140,11 +140,15 @@ export function MinhasRegras() {
       key: 'updatedAt' as const,
       label: 'Última atualização',
       align: 'right' as const,
-      render: (value: string | boolean | undefined) => (
-        <span className="text-text-secondary text-sm">
-          {new Date(String(value)).toLocaleDateString('pt-BR')}
-        </span>
-      ),
+      render: (value: string | boolean | undefined) => {
+        const date = new Date(String(value));
+        const isValid = !isNaN(date.getTime());
+        return (
+          <span className="text-text-secondary text-sm">
+            {isValid ? date.toLocaleDateString('pt-BR') : '—'}
+          </span>
+        );
+      },
     },
     {
       key: 'id' as const,

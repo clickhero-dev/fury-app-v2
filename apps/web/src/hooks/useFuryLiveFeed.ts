@@ -14,27 +14,44 @@ interface FuryLiveFeedState {
   reconnectAttempts: number;
 }
 
-function getInitialState(): FuryLiveFeedState {
-  const token = localStorage.getItem('token');
-  return {
-    events: [],
-    isConnected: false,
-    isConnecting: !token,
-    error: token ? null : 'Token não encontrado. Faça login novamente.',
-    reconnectAttempts: 0,
-  };
+const RECONNECT_DELAYS = [1000, 2000, 5000, 10000];
+const TOKEN_WAIT_TIMEOUT = 3000;
+
+async function waitForToken(timeoutMs: number): Promise<string | null> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    const token = localStorage.getItem('token');
+    if (token) {
+      console.log('[SSE] Token found after waiting');
+      return token;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  console.warn(`[SSE] Token not found after ${timeoutMs}ms`);
+  return null;
 }
 
-const RECONNECT_DELAYS = [1000, 2000, 5000, 10000];
-
 export function useFuryLiveFeed() {
-  const [state, setState] = useState<FuryLiveFeedState>(getInitialState);
+  const [state, setState] = useState<FuryLiveFeedState>({
+    events: [],
+    isConnected: false,
+    isConnecting: true,
+    error: null,
+    reconnectAttempts: 0,
+  });
+
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
 
-  const connect = () => {
-    const token = localStorage.getItem('token');
+  const connect = async () => {
+    if (!isMountedRef.current) return;
+
+    console.log('[SSE] Attempting to connect...');
+
+    const token = await waitForToken(TOKEN_WAIT_TIMEOUT);
     if (!token) {
+      if (!isMountedRef.current) return;
       setState({
         events: [],
         isConnected: false,
@@ -45,29 +62,33 @@ export function useFuryLiveFeed() {
       return;
     }
 
+    if (!isMountedRef.current) return;
     setState((prev) => ({ ...prev, isConnecting: true, error: null }));
 
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-    // Remove trailing /api if present to avoid duplication
-    const baseUrl = apiUrl.endsWith('/api') ? apiUrl : apiUrl;
-    const eventSource = new EventSource(`${baseUrl}/fury/live-feed?token=${token}`);
+    const eventSource = new EventSource(`/api/fury/live-feed?token=${token}`);
     eventSourceRef.current = eventSource;
 
     const handleMessage = (event: MessageEvent) => {
       try {
         const parsed = JSON.parse(event.data) as FuryFeedEvent;
 
-        // Only process fury:update and rule_triggered events
         if (parsed.event === 'fury:update' || parsed.event === 'rule_triggered') {
-          console.log('[SSE] Event received:', parsed.event, parsed.data);
-          setState((prev) => ({
-            ...prev,
-            events: [parsed, ...prev.events].slice(0, 50),
-            isConnected: true,
-            isConnecting: false,
-            error: null,
-            reconnectAttempts: 0,
-          }));
+          console.log('[SSE] Event received:', parsed.event);
+          if (isMountedRef.current) {
+            setState((prev) => {
+              if (!prev.isConnected) {
+                console.log('[SSE] Connection established - first message received');
+              }
+              return {
+                ...prev,
+                events: [parsed, ...prev.events].slice(0, 50),
+                isConnected: true,
+                isConnecting: false,
+                error: null,
+                reconnectAttempts: 0,
+              };
+            });
+          }
         }
       } catch (error) {
         console.warn('[SSE] Failed to parse message:', error);
@@ -75,25 +96,37 @@ export function useFuryLiveFeed() {
     };
 
     const handleOpen = () => {
-      console.log('[SSE] Connected');
-      setState((prev) => ({
-        ...prev,
-        isConnected: true,
-        isConnecting: false,
-        error: null,
-        reconnectAttempts: 0,
-      }));
+      console.log('[SSE] EventSource opened');
+      if (isMountedRef.current) {
+        setState((prev) => ({
+          ...prev,
+          isConnected: true,
+          isConnecting: false,
+          error: null,
+          reconnectAttempts: 0,
+        }));
+      }
     };
 
     const handleError = () => {
-      console.warn('[SSE] Error - attempting to reconnect');
-      eventSource.close();
+      console.warn('[SSE] EventSource error - will attempt to reconnect');
+      try {
+        eventSource.close();
+      } catch (e) {
+        console.warn('[SSE] Error closing EventSource:', e);
+      }
+
+      if (!isMountedRef.current) return;
+
       setState((prev) => {
         const attempts = prev.reconnectAttempts + 1;
         const delay = RECONNECT_DELAYS[Math.min(attempts - 1, RECONNECT_DELAYS.length - 1)];
+        console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${attempts})`);
 
         reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
+          if (isMountedRef.current) {
+            connect();
+          }
         }, delay);
 
         return {
@@ -112,11 +145,17 @@ export function useFuryLiveFeed() {
   };
 
   useEffect(() => {
+    isMountedRef.current = true;
     connect();
 
     return () => {
+      isMountedRef.current = false;
       if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+        try {
+          eventSourceRef.current.close();
+        } catch (e) {
+          console.warn('[SSE] Error closing EventSource on unmount:', e);
+        }
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
