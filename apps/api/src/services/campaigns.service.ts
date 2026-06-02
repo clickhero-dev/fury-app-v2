@@ -397,7 +397,7 @@ export async function getCampaignPanelDetail(args: {
       name: r.name,
       description: r.description,
       trigger: r.trigger,
-      enabled: r.enabled === 'true',
+      enabled: r.isActive,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
       ruleType: r.ruleType,

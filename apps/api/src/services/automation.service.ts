@@ -25,7 +25,7 @@ export async function createAutomationRule(args: {
       ruleType: args.trigger,
       threshold: args.threshold.toString(),
       action: args.action,
-      enabled: args.enabled ? 'true' : 'false',
+      isActive: args.enabled ?? true,
     })
     .returning();
 
@@ -40,6 +40,6 @@ export async function getAutomationRules(tenantId: string) {
   return rules.map((rule) => ({
     ...rule,
     threshold: parseInt(rule.threshold, 10),
-    enabled: rule.enabled === 'true',
+    enabled: rule.isActive,
   }));
 }
