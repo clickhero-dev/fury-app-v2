@@ -3,13 +3,13 @@ import type { LoginResponse, RegisterResponse, User } from '../types/auth';
 const mockUser: User = {
   id: '1',
   name: 'Test User',
-  email: 'test@fury.com',
+  email: 'dev.fashion@fury.test',
   company: 'Test Company',
 };
 
 export const authMock = {
   login: async (email: string, _password: string): Promise<LoginResponse> => {
-    if (email === 'test@fury.com') {
+    if (email === 'dev.fashion@fury.test') {
       return {
         token: `mock-token-${Date.now()}`,
         user: mockUser,

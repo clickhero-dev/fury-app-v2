@@ -4,6 +4,6 @@ export const FURY_COLORS = {
 };
 
 export const DEMO_CREDENTIALS = {
-  email: 'test@fury.com',
-  password: '123456',
+  email: 'dev.fashion@fury.test',
+  password: 'Dev@12345',
 };
