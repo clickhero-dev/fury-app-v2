@@ -1,33 +1,31 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
-  AreaChart,
-  Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
-  ReferenceLine,
 } from 'recharts';
 import {
-  Target,
+  Users,
   DollarSign,
   TrendingUp,
-  ShoppingCart,
-  Brain,
-  AlertTriangle,
+  ShoppingBag,
+  Radio,
+  Pause,
+  BellRing,
+  ArrowDownRight,
+  ArrowUpRight,
+  Activity,
   Wifi,
   WifiOff,
-  ArrowUpRight,
-  ArrowDownRight,
-  Radio,
 } from 'lucide-react';
 import { AppLayout, PageHeader } from '@/components';
 import api from '@/lib/api';
-import { useGoalsProgress, translateObjective, type GoalItem, type FuryAlert } from '@/hooks/useGoalsProgress';
+import { useGoalsProgress, translateObjective } from '@/hooks/useGoalsProgress';
 import { useFurySSE } from '@/hooks/useFurySSE';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,48 +37,85 @@ interface MetricsSummary {
   conversions: number;
 }
 
-const EMPTY_SUMMARY: MetricsSummary = { spend: 0, roas: 0, cpa: 0, conversions: 0 };
+interface DailyMetric {
+  date: string;
+  spend: number;
+  conversions: number;
+  roas: number;
+  clicks: number;
+  impressions: number;
+}
+
+interface RuleExecution {
+  id: string;
+  ruleId: string;
+  campaignId: string;
+  triggeredAt: string;
+  actionTaken: string;
+  result: unknown;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const ACTION_LABELS: Record<string, string> = {
+  pause_campaign: 'Campanha pausada automaticamente',
+  reduce_budget: 'Orçamento reduzido pelo FURY',
+  increase_budget: 'Orçamento aumentado pelo FURY',
+  notify: 'Notificação gerada',
+};
+
+const ACTION_ICONS: Record<string, React.ElementType> = {
+  pause_campaign: Pause,
+  reduce_budget: ArrowDownRight,
+  increase_budget: ArrowUpRight,
+  notify: BellRing,
+};
+
+function getActionLabel(action: string) {
+  return ACTION_LABELS[action] ?? action;
+}
+
+function getActionIcon(action: string): React.ElementType {
+  return ACTION_ICONS[action] ?? Activity;
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'agora mesmo';
+  if (mins < 60) return `há ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `há ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `há ${days}d`;
+}
+
+function isoDateRange(daysBack: number): { startDate: string; endDate: string } {
+  const today = new Date();
+  const start = new Date(today);
+  start.setDate(start.getDate() - daysBack);
+  return {
+    startDate: start.toISOString().split('T')[0],
+    endDate: today.toISOString().split('T')[0],
+  };
+}
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-  on_track: {
-    label: 'No caminho',
-    bg: 'bg-[#dff3e4]',
-    text: 'text-[#2ea043]',
-    bar: '#2ea043',
-    dot: 'bg-[#2ea043]',
-  },
-  at_risk: {
-    label: 'Em risco',
-    bg: 'bg-[#fff4d6]',
-    text: 'text-[#e8a317]',
-    bar: '#e8a317',
-    dot: 'bg-[#e8a317]',
-  },
-  off_track: {
-    label: 'Fora da meta',
-    bg: 'bg-[#fde8e7]',
-    text: 'text-[#da3633]',
-    bar: '#da3633',
-    dot: 'bg-[#da3633]',
-  },
+  on_track: { label: 'No caminho', bg: 'bg-[#dff3e4]', text: 'text-[#2ea043]', bar: '#2ea043' },
+  at_risk:  { label: 'Em risco',   bg: 'bg-[#fff4d6]', text: 'text-[#e8a317]', bar: '#e8a317' },
+  off_track: { label: 'Fora da meta', bg: 'bg-[#fde8e7]', text: 'text-[#da3633]', bar: '#da3633' },
 } as const;
 
-const NO_DATA_CFG = {
-  label: 'Sem dados',
-  bg: 'bg-gray-100',
-  text: 'text-gray-500',
-  bar: '#d1d5db',
-  dot: 'bg-gray-400',
-};
+const NO_DATA_CFG = { label: 'Sem dados', bg: 'bg-gray-100', text: 'text-gray-500', bar: '#d1d5db' };
 
 // ─── Meta Banner ──────────────────────────────────────────────────────────────
 
 function MetaBanner() {
   return (
-    <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
-      <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center shrink-0 mt-0.5">
+    <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+      <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
         <Radio className="w-4 h-4 text-blue-600" />
       </div>
       <div className="flex-1 min-w-0">
@@ -93,7 +128,7 @@ function MetaBanner() {
       </div>
       <Link
         to="/configuracoes/integracoes"
-        className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors"
+        className="shrink-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors"
       >
         Conectar agora
       </Link>
@@ -101,16 +136,16 @@ function MetaBanner() {
   );
 }
 
-// ─── Hero Card ────────────────────────────────────────────────────────────────
+// ─── Compact Hero Strip ───────────────────────────────────────────────────────
 
-function HeroCard({
+function HeroStrip({
   goal,
   objective,
   daysRemaining,
   isConnected,
   hasRealData,
 }: {
-  goal: GoalItem;
+  goal: NonNullable<ReturnType<typeof useGoalsProgress>['data']>['primary_goal'];
   objective: string;
   daysRemaining: number;
   isConnected: boolean;
@@ -120,302 +155,157 @@ function HeroCard({
   const pct = hasRealData ? Math.min(100, goal.progress_pct ?? 0) : 0;
 
   return (
-    <div className="relative overflow-hidden bg-gradient-to-br from-[#1c1c1e] to-[#2d2d30] rounded-2xl p-7 text-white">
-      {/* Background accent */}
-      <div className="absolute top-0 right-0 w-64 h-64 bg-accent/10 rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-
-      <div className="relative space-y-5">
-        {/* Header row */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-white/60 text-sm font-medium mb-1">Progresso do mês</p>
-            <h2 className="text-4xl font-black leading-none">
-              {hasRealData ? pct : <span className="text-white/40">--</span>}
-              <span className="text-2xl font-bold text-white/70">%</span>
-            </h2>
-            <p className="mt-2 text-white/80 text-base font-medium">
-              do caminho para{' '}
-              <span className="text-accent font-bold">{translateObjective(objective)}</span>
-            </p>
-          </div>
-
-          <div className="flex flex-col items-end gap-2 shrink-0">
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${cfg.bg} ${cfg.text}`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-              {cfg.label}
-            </span>
-            <span className="text-white/50 text-xs">{daysRemaining} dias restantes</span>
-          </div>
-        </div>
-
-        {/* Progress bar */}
-        <div>
-          <div className="h-3 bg-white/10 rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-700 ease-out"
-              style={{
-                width: `${pct}%`,
-                backgroundColor: cfg.bar,
-                boxShadow: pct > 0 ? `0 0 12px ${cfg.bar}80` : 'none',
-                minWidth: '0px',
-              }}
-            />
-          </div>
-          <div className="flex justify-between mt-2 text-xs text-white/50">
-            <span>
-              {hasRealData
-                ? `${(goal.current_value ?? 0).toLocaleString('pt-BR')} ${goal.unit}`
-                : '--'}
-            </span>
-            <span>
-              meta:{' '}
-              {hasRealData
-                ? `${(goal.target_value ?? 0).toLocaleString('pt-BR')} ${goal.unit}`
-                : '--'}
-            </span>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center gap-3 text-xs text-white/40">
-          {isConnected ? (
-            <span className="flex items-center gap-1.5">
-              <Wifi className="w-3.5 h-3.5 text-[#2ea043]" />
-              <span className="text-[#2ea043]">Tempo real</span>
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5">
-              <WifiOff className="w-3.5 h-3.5" />
-              Atualiza a cada 5 min
-            </span>
-          )}
-          <span>·</span>
-          <span>
-            Projeção:{' '}
-            <span className="font-semibold text-white/70">
-              {hasRealData
-                ? `${(goal.projected_value ?? 0).toLocaleString('pt-BR')} ${goal.unit}`
-                : '--'}
-            </span>
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Sparkline ────────────────────────────────────────────────────────────────
-
-function Sparkline({
-  data,
-  color,
-}: {
-  data: { date: string; value: number }[];
-  color: string;
-}) {
-  return (
-    <ResponsiveContainer width="100%" height={40}>
-      <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-        <Line
-          type="monotone"
-          dataKey="value"
-          stroke={color}
-          strokeWidth={2}
-          dot={false}
-          isAnimationActive={false}
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
-// ─── Goal Card ────────────────────────────────────────────────────────────────
-
-const GOAL_ICONS = {
-  conversions: Target,
-  spend: DollarSign,
-  roas: TrendingUp,
-} as const;
-
-function fmtVal(val: number | undefined | null, unit: string) {
-  const v = val ?? 0;
-  if (unit === 'R$') return `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-  if (unit === 'x') return `${v.toFixed(1)}x`;
-  return `${v.toLocaleString('pt-BR')} ${unit}`;
-}
-
-function GoalCard({ goal, hasRealData }: { goal: GoalItem; hasRealData: boolean }) {
-  const cfg = hasRealData ? STATUS_CONFIG[goal.status] : NO_DATA_CFG;
-  const Icon = GOAL_ICONS[goal.metric as keyof typeof GOAL_ICONS] ?? Target;
-  const pct = hasRealData ? goal.progress_pct : 0;
-
-  return (
-    <div className="bg-surface border border-border rounded-2xl p-5 space-y-4 hover:shadow-lg transition-shadow">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-surface-secondary flex items-center justify-center">
-            <Icon className="w-4 h-4 text-text-secondary" />
-          </div>
-          <p className="text-sm font-semibold text-text-secondary">{goal.name}</p>
-        </div>
-        <span
-          className={`text-xs font-bold px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.text}`}
-        >
-          {cfg.label}
+    <div className="bg-gradient-to-r from-[#1c1c1e] to-[#2a2a2e] rounded-xl px-5 py-3.5 flex items-center gap-5 flex-wrap sm:flex-nowrap">
+      {/* Percentage + objetivo */}
+      <div className="flex items-baseline gap-2 shrink-0">
+        <span className="text-3xl font-black text-white leading-none">
+          {hasRealData ? pct : <span className="text-white/40">--</span>}
         </span>
+        <span className="text-lg font-bold text-white/50">%</span>
       </div>
 
-      {/* Main value */}
-      <div>
-        <div className="text-2xl font-black text-text-primary">
-          {hasRealData ? fmtVal(goal.current_value, goal.unit) : '--'}
-        </div>
-        <div className="text-xs text-text-secondary mt-0.5">
-          meta: {fmtVal(goal.target_value, goal.unit)}
-        </div>
-      </div>
-
-      {/* Progress bar */}
-      <div className="space-y-1.5">
-        <div className="h-1.5 bg-surface-secondary rounded-full overflow-hidden">
+      {/* Bar + label */}
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-white/50 mb-1.5 truncate">
+          {translateObjective(objective)}
+        </p>
+        <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
           <div
-            className="h-full rounded-full transition-all duration-500"
+            className="h-full rounded-full transition-all duration-700 ease-out"
             style={{ width: `${pct}%`, backgroundColor: cfg.bar }}
           />
         </div>
-        <div className="flex justify-between text-xs text-text-tertiary">
-          <span>{hasRealData ? `${pct}% concluído` : '--'}</span>
-          <span>proj: {hasRealData ? fmtVal(goal.projected_value, goal.unit) : '--'}</span>
-        </div>
       </div>
 
-      {/* Sparkline — only when real data exists */}
-      {hasRealData && goal.sparkline.length > 1 && (
-        <Sparkline data={goal.sparkline} color={cfg.bar} />
-      )}
+      {/* Meta / projeção */}
+      <div className="flex items-center gap-5 shrink-0 text-xs text-white/50">
+        <span>
+          Projeção:{' '}
+          <strong className="text-white/80 font-bold">
+            {hasRealData
+              ? `${(goal.projected_value ?? 0).toLocaleString('pt-BR')} ${goal.unit}`
+              : '--'}
+          </strong>
+        </span>
+        <span>{daysRemaining} dias restantes</span>
+      </div>
+
+      {/* Status badge + conexão */}
+      <div className="flex items-center gap-3 shrink-0">
+        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${cfg.bg} ${cfg.text}`}>
+          {cfg.label}
+        </span>
+        {isConnected ? (
+          <span title="SSE ativo" className="flex items-center gap-1 text-[#2ea043] text-xs">
+            <Wifi className="w-3.5 h-3.5" />
+          </span>
+        ) : (
+          <span title="Atualiza a cada 5 min" className="text-white/30">
+            <WifiOff className="w-3.5 h-3.5" />
+          </span>
+        )}
+      </div>
     </div>
   );
 }
 
-// ─── Progress Chart ───────────────────────────────────────────────────────────
+// ─── Metric Card ─────────────────────────────────────────────────────────────
 
-function buildFallbackChartData(daysElapsed: number, targetConversions: number, daysInMonth: number) {
-  return Array.from({ length: Math.max(2, daysElapsed) }, (_, i) => {
-    const now = new Date();
-    const d = new Date(now.getFullYear(), now.getMonth(), i + 1);
-    return {
-      date: d.toISOString().split('T')[0],
-      real: 0,
-      ideal: Math.round((targetConversions / daysInMonth) * (i + 1) * 10) / 10,
-    };
-  });
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex items-center gap-3">
+      <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
+        <Icon className="w-5 h-5 text-gray-400" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-gray-500 truncate">{label}</p>
+        <p className="text-xl font-black text-gray-900 leading-tight">{value}</p>
+      </div>
+    </div>
+  );
 }
 
-function ProgressChart({
+// ─── Weekly Performance Chart ─────────────────────────────────────────────────
+
+function WeeklyChart({
   data,
-  targetConversions,
   hasRealData,
 }: {
-  data: { date: string; real: number; ideal: number }[];
-  targetConversions: number;
+  data: DailyMetric[];
   hasRealData: boolean;
 }) {
   const fmt = (d: string) => {
-    const [, , day] = d.split('-');
-    return `Dia ${parseInt(day, 10)}`;
+    const [, m, day] = d.split('-');
+    return `${parseInt(day, 10)}/${m}`;
   };
 
+  const isEmpty = !hasRealData || data.length === 0;
+
   return (
-    <div className="bg-surface border border-border rounded-2xl p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-base font-bold text-text-primary">Progresso vs. Meta Ideal</h3>
-          <p className="text-xs text-text-secondary mt-0.5">Conversões acumuladas no mês</p>
-        </div>
-        <div className="flex items-center gap-4 text-xs">
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-0.5 bg-accent inline-block rounded" />
-            Real
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-0.5 border-t-2 border-dashed border-[#9ca3af] inline-block" />
-            Ideal
-          </span>
-        </div>
+    <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm space-y-4 h-full">
+      <div>
+        <h3 className="text-sm font-bold text-gray-900">Desempenho da Semana</h3>
+        <p className="text-xs text-gray-400 mt-0.5">Clientes conquistados nos últimos 7 dias</p>
       </div>
 
-      <div className="relative">
-        <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-            <defs>
-              <linearGradient id="realGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#e8631a" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="#e8631a" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+      <div className="relative" style={{ height: 200 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart
+            data={isEmpty ? Array.from({ length: 7 }, (_, i) => ({ date: `dia ${i + 1}`, conversions: 0 })) : data}
+            margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
             <XAxis
               dataKey="date"
-              tickFormatter={fmt}
+              tickFormatter={isEmpty ? (v) => v : fmt}
               tick={{ fontSize: 11, fill: '#9ca3af' }}
-              interval="preserveStartEnd"
               tickLine={false}
               axisLine={false}
+              interval="preserveStartEnd"
             />
             <YAxis
               tick={{ fontSize: 11, fill: '#9ca3af' }}
               tickLine={false}
               axisLine={false}
+              allowDecimals={false}
             />
-            <Tooltip
-              contentStyle={{
-                background: '#1c1c1e',
-                border: 'none',
-                borderRadius: 8,
-                color: '#fff',
-                fontSize: 12,
-              }}
-              formatter={(val, name) => [
-                `${(Number(val) ?? 0).toLocaleString('pt-BR')} conv.`,
-                name === 'real' ? 'Real' : 'Ideal',
-              ]}
-              labelFormatter={(label) => fmt(String(label))}
-            />
-            <ReferenceLine
-              y={targetConversions}
-              strokeDasharray="4 4"
-              stroke="#9ca3af"
-              strokeWidth={1.5}
-            />
-            <Area
+            {!isEmpty && (
+              <Tooltip
+                contentStyle={{
+                  background: '#1c1c1e',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: '#fff',
+                  fontSize: 12,
+                }}
+                formatter={(val) => [`${Number(val).toLocaleString('pt-BR')} clientes`, 'Clientes']}
+                labelFormatter={(label) => fmt(String(label))}
+              />
+            )}
+            <Line
               type="monotone"
-              dataKey="ideal"
-              stroke="#9ca3af"
-              strokeWidth={1.5}
-              strokeDasharray="5 4"
-              fill="none"
-              dot={false}
+              dataKey="conversions"
+              stroke={isEmpty ? '#e5e7eb' : '#e8631a'}
+              strokeWidth={isEmpty ? 1.5 : 2.5}
+              dot={isEmpty ? false : { r: 3, fill: '#e8631a', strokeWidth: 0 }}
+              activeDot={isEmpty ? false : { r: 5, fill: '#e8631a', strokeWidth: 0 }}
+              isAnimationActive={!isEmpty}
             />
-            <Area
-              type="monotone"
-              dataKey="real"
-              stroke={hasRealData ? '#e8631a' : '#d1d5db'}
-              strokeWidth={hasRealData ? 2.5 : 1.5}
-              fill={hasRealData ? 'url(#realGrad)' : 'none'}
-              dot={false}
-              activeDot={hasRealData ? { r: 5, fill: '#e8631a', strokeWidth: 0 } : false}
-            />
-          </AreaChart>
+          </LineChart>
         </ResponsiveContainer>
 
-        {/* Empty state overlay */}
-        {!hasRealData && (
+        {isEmpty && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="bg-white/90 border border-gray-200 rounded-lg px-4 py-2 text-center shadow-sm">
-              <p className="text-xs font-semibold text-gray-500">Aguardando dados do Meta Ads</p>
+            <div className="bg-white/90 border border-gray-200 rounded-lg px-4 py-2 shadow-sm text-center">
+              <p className="text-xs font-semibold text-gray-400">Aguardando dados do Meta Ads</p>
             </div>
           </div>
         )}
@@ -424,145 +314,52 @@ function ProgressChart({
   );
 }
 
-// ─── FURY Alerts ──────────────────────────────────────────────────────────────
+// ─── Recent Activity ──────────────────────────────────────────────────────────
 
-function FuryAlerts({
-  alerts,
-  sseUpdate,
-}: {
-  alerts: FuryAlert[];
-  sseUpdate: { timestamp: string; scores: { campaignId: string; campaignName: string; score: number; grade: string }[] } | null;
-}) {
-  const allAlerts = [...alerts];
+function RecentActivity({ executions }: { executions: RuleExecution[] }) {
+  const items = executions.slice(0, 5);
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-lg bg-[#FEF0E7] flex items-center justify-center shrink-0">
-          <Brain className="w-4 h-4 text-accent" />
-        </div>
-        <div>
-          <h3 className="text-base font-bold text-text-primary">Alertas do FURY</h3>
-          <p className="text-xs text-text-secondary">Campanhas com desvio crítico em relação à meta</p>
-        </div>
-        {sseUpdate && (
-          <span className="ml-auto text-xs text-[#2ea043] flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#2ea043] animate-pulse" />
-            Atualizado agora
-          </span>
-        )}
+    <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm space-y-4 h-full">
+      <div>
+        <h3 className="text-sm font-bold text-gray-900">Atividade Recente</h3>
+        <p className="text-xs text-gray-400 mt-0.5">Automações executadas pelo FURY</p>
       </div>
 
-      {allAlerts.length === 0 && !sseUpdate && (
-        <div className="bg-[#dff3e4] border border-[#2ea043]/20 rounded-xl p-4 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#2ea043]/10 flex items-center justify-center shrink-0">
-            <TrendingUp className="w-4 h-4 text-[#2ea043]" />
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center">
+            <Activity className="w-5 h-5 text-gray-300" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-[#2ea043]">Todas as campanhas dentro da meta</p>
-            <p className="text-xs text-[#2ea043]/70">Nenhum desvio crítico detectado pelo FURY</p>
+            <p className="text-sm font-semibold text-gray-400">Nenhuma atividade registrada</p>
+            <p className="text-xs text-gray-300 mt-0.5">
+              As automações do FURY aparecerão aqui
+            </p>
           </div>
         </div>
-      )}
-
-      {allAlerts.map((alert) => {
-        const isCpaHigh = alert.type === 'cpa_high';
-        return (
-          <div
-            key={`${alert.campaignId}-${alert.metric}`}
-            className="bg-surface border border-border rounded-xl p-4 flex items-center gap-4"
-          >
-            <div className="w-9 h-9 rounded-xl bg-[#fde8e7] flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-4 h-4 text-[#da3633]" />
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-text-primary truncate">{alert.campaignName}</p>
-              <p className="text-xs text-text-secondary mt-0.5">
-                {alert.metric}{' '}
-                <span className="font-semibold text-text-primary">
-                  {alert.metric === 'CPA'
-                    ? `R$ ${(alert.current_value ?? 0).toFixed(2)}`
-                    : `${(alert.current_value ?? 0).toFixed(1)}x`}
-                </span>{' '}
-                · meta:{' '}
-                {alert.metric === 'CPA'
-                  ? `R$ ${(alert.target_value ?? 0).toFixed(2)}`
-                  : `${(alert.target_value ?? 0).toFixed(1)}x`}
-              </p>
-            </div>
-
-            <div className="shrink-0 flex items-center gap-1">
-              {isCpaHigh ? (
-                <ArrowUpRight className="w-4 h-4 text-[#da3633]" />
-              ) : (
-                <ArrowDownRight className="w-4 h-4 text-[#da3633]" />
-              )}
-              <span className="text-sm font-black text-[#da3633]">
-                {Math.abs(alert.deviation_pct)}%
-              </span>
-            </div>
-          </div>
-        );
-      })}
-
-      {sseUpdate && sseUpdate.scores.length > 0 && (
-        <div className="bg-surface-secondary border border-border rounded-xl p-4">
-          <p className="text-xs font-semibold text-text-secondary mb-3 uppercase tracking-wider">
-            Scores FURY — atualização em tempo real
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {sseUpdate.scores.slice(0, 6).map((s) => (
-              <div
-                key={s.campaignId}
-                className="bg-surface rounded-lg p-3 border border-border"
-              >
-                <p className="text-xs text-text-secondary truncate">{s.campaignName}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-lg font-black text-text-primary">{s.score}</span>
-                  <span
-                    className={`text-xs font-bold px-1.5 py-0.5 rounded ${
-                      s.grade === 'A'
-                        ? 'bg-[#dff3e4] text-[#2ea043]'
-                        : s.grade === 'B'
-                          ? 'bg-[#dff3e4] text-[#2ea043]'
-                          : s.grade === 'C'
-                            ? 'bg-[#fff4d6] text-[#e8a317]'
-                            : 'bg-[#fde8e7] text-[#da3633]'
-                    }`}
-                  >
-                    {s.grade}
-                  </span>
+      ) : (
+        <div className="space-y-3">
+          {items.map((ex) => {
+            const Icon = getActionIcon(ex.actionTaken);
+            return (
+              <div key={ex.id} className="flex items-start gap-3">
+                <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center shrink-0 mt-0.5">
+                  <Icon className="w-3.5 h-3.5 text-accent" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-gray-800 leading-snug">
+                    {getActionLabel(ex.actionTaken)}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {formatRelativeTime(ex.triggeredAt)}
+                  </p>
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       )}
-    </div>
-  );
-}
-
-// ─── Metric Summary Row ───────────────────────────────────────────────────────
-
-function MetricPill({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: React.ElementType;
-}) {
-  return (
-    <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-3">
-      <div className="w-9 h-9 rounded-lg bg-surface-secondary flex items-center justify-center shrink-0">
-        <Icon className="w-4 h-4 text-text-secondary" />
-      </div>
-      <div>
-        <p className="text-xs text-text-secondary font-medium">{label}</p>
-        <p className="text-base font-black text-text-primary">{value}</p>
-      </div>
     </div>
   );
 }
@@ -571,8 +368,9 @@ function MetricPill({
 
 export function Dashboard() {
   const { data: goalsData, isFetching: fetchingGoals } = useGoalsProgress();
-  const { lastUpdate: sseUpdate, isConnected } = useFurySSE();
+  const { isConnected } = useFurySSE();
 
+  // Metrics summary
   const { data: summaryRaw } = useQuery<MetricsSummary | null>({
     queryKey: ['metrics-summary'],
     queryFn: async () => {
@@ -587,42 +385,66 @@ export function Dashboard() {
     placeholderData: null,
   });
 
+  // Daily metrics for weekly chart
+  const { startDate, endDate } = isoDateRange(6);
+  const { data: dailyData = [] } = useQuery<DailyMetric[]>({
+    queryKey: ['metrics-daily-week', startDate, endDate],
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ success: boolean; data: DailyMetric[] }>('/metrics/daily', {
+          params: { startDate, endDate },
+        });
+        return res.data.data ?? [];
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 5 * 60 * 1000,
+    placeholderData: [],
+  });
+
+  // Fury rule execution history (recent activity)
+  const { data: activityData = [] } = useQuery<RuleExecution[]>({
+    queryKey: ['fury-history-dashboard'],
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ success: boolean; data: RuleExecution[] }>('/fury/history');
+        return res.data.data ?? [];
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 2 * 60 * 1000,
+    placeholderData: [],
+  });
+
   const g = goalsData;
   const primaryGoal = g?.primary_goal ?? g?.goals?.[0];
   const objective = g?.objective ?? 'gerar_leads';
 
-  // True when at least one goal has a real non-zero metric from Meta
   const hasRealData = (g?.goals ?? []).some((goal) => goal.current_value > 0);
 
-  const s = (summaryRaw && (summaryRaw.spend > 0 || summaryRaw.roas > 0 || summaryRaw.conversions > 0))
-    ? summaryRaw
-    : EMPTY_SUMMARY;
-
-  // Chart data — always present, fallback to flat ideal line when no real data
-  const chartData =
-    g?.ideal_line && g.ideal_line.length > 1
-      ? g.ideal_line
-      : buildFallbackChartData(
-          g?.days_elapsed ?? new Date().getDate(),
-          g?.primary_goal?.target_value ?? 0,
-          g?.days_in_month ?? 30
-        );
+  const s = summaryRaw ?? { spend: 0, roas: 0, cpa: 0, conversions: 0 };
 
   return (
     <AppLayout>
-      <div className="space-y-6 pb-8">
+      <div className="space-y-5 pb-8">
         <PageHeader
           title="Dashboard"
-          description={`Objetivo: ${translateObjective(objective)} · ${g?.days_remaining ?? '—'} dias restantes no mês`}
-          actions={fetchingGoals ? <span className="text-xs text-text-tertiary animate-pulse">Atualizando…</span> : undefined}
+          description={`${g?.days_remaining ?? '—'} dias restantes no mês`}
+          actions={
+            fetchingGoals
+              ? <span className="text-xs text-text-tertiary animate-pulse">Atualizando…</span>
+              : undefined
+          }
         />
 
         {/* ── Meta connection banner ───────────────────────────────────────── */}
         {!hasRealData && <MetaBanner />}
 
-        {/* ── Hero Card ───────────────────────────────────────────────────── */}
+        {/* ── Hero strip ──────────────────────────────────────────────────── */}
         {primaryGoal && (
-          <HeroCard
+          <HeroStrip
             goal={primaryGoal}
             objective={objective}
             daysRemaining={g?.days_remaining ?? 0}
@@ -631,51 +453,50 @@ export function Dashboard() {
           />
         )}
 
-        {/* ── Goals Grid ──────────────────────────────────────────────────── */}
-        {g?.goals && g.goals.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {g.goals.map((goal) => (
-              <GoalCard key={goal.id} goal={goal} hasRealData={hasRealData} />
-            ))}
-          </div>
-        )}
-
-        {/* ── Progress Chart — always rendered ────────────────────────────── */}
-        <ProgressChart
-          data={chartData}
-          targetConversions={g?.primary_goal?.target_value ?? 0}
-          hasRealData={hasRealData}
-        />
-
-        {/* ── Metric Summary ──────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <MetricPill
-            label="ROAS"
-            value={hasRealData ? `${s.roas.toFixed(1)}x` : '--'}
-            icon={TrendingUp}
-          />
-          <MetricPill
-            label="CPA"
-            value={hasRealData ? `R$ ${s.cpa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--'}
-            icon={Target}
-          />
-          <MetricPill
-            label="Investido"
-            value={hasRealData ? `R$ ${s.spend.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '--'}
-            icon={DollarSign}
-          />
-          <MetricPill
-            label="Conversões"
+        {/* ── Metrics grid ─────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <MetricCard
+            icon={Users}
+            label="Clientes"
             value={hasRealData ? s.conversions.toLocaleString('pt-BR') : '--'}
-            icon={ShoppingCart}
+          />
+          <MetricCard
+            icon={DollarSign}
+            label="Investimento Total"
+            value={
+              hasRealData
+                ? `R$ ${s.spend.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                : '--'
+            }
+          />
+          <MetricCard
+            icon={ShoppingBag}
+            label="Custo por Venda"
+            value={
+              hasRealData
+                ? `R$ ${s.cpa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : '--'
+            }
+          />
+          <MetricCard
+            icon={TrendingUp}
+            label="Retorno do Investimento"
+            value={hasRealData ? `${s.roas.toFixed(1)}x` : '--'}
           />
         </div>
 
-        {/* ── FURY Alerts ─────────────────────────────────────────────────── */}
-        <FuryAlerts
-          alerts={g?.alerts ?? []}
-          sseUpdate={sseUpdate}
-        />
+        {/* ── Bottom section: chart + activity ─────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+          {/* Weekly performance chart (60% = 3 of 5 cols) */}
+          <div className="lg:col-span-3">
+            <WeeklyChart data={dailyData} hasRealData={hasRealData} />
+          </div>
+
+          {/* Recent activity (40% = 2 of 5 cols) */}
+          <div className="lg:col-span-2">
+            <RecentActivity executions={activityData} />
+          </div>
+        </div>
       </div>
     </AppLayout>
   );
