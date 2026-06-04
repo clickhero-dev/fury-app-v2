@@ -7,6 +7,7 @@ export function useLogout() {
 
   return () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     queryClient.clear();
     navigate('/login', { replace: true });

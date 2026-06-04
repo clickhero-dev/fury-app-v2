@@ -49,6 +49,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       success: true,
       data: {
         token: result.tokens.accessToken,
+        refreshToken: result.tokens.refreshToken,
         user: {
           id: result.user.id,
           email: result.user.email,

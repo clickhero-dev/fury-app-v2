@@ -7,7 +7,7 @@ import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '.
 import { AppError } from '../middleware/errorHandler.js';
 import type { UserDTO } from '../lib/shared.js';
 
-const REFRESH_TOKEN_TTL = 30 * 24 * 60 * 60; // 30 days in seconds
+const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 
 function generateSlug(companyName: string): string {
   return companyName
