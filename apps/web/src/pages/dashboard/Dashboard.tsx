@@ -15,17 +15,14 @@ import {
   TrendingUp,
   ShoppingBag,
   Radio,
-  Pause,
-  BellRing,
-  ArrowDownRight,
-  ArrowUpRight,
-  Activity,
   Wifi,
   WifiOff,
+  ShieldCheck,
+  AlertTriangle,
 } from 'lucide-react';
 import { AppLayout, PageHeader } from '@/components';
 import api from '@/lib/api';
-import { useGoalsProgress, translateObjective } from '@/hooks/useGoalsProgress';
+import { useGoalsProgress, translateObjective, type FuryAlert } from '@/hooks/useGoalsProgress';
 import { useFurySSE } from '@/hooks/useFurySSE';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -46,49 +43,9 @@ interface DailyMetric {
   impressions: number;
 }
 
-interface RuleExecution {
-  id: string;
-  ruleId: string;
-  campaignId: string;
-  triggeredAt: string;
-  actionTaken: string;
-  result: unknown;
-}
+type Sparkline = { date: string; value: number }[];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const ACTION_LABELS: Record<string, string> = {
-  pause_campaign: 'Campanha pausada automaticamente',
-  reduce_budget: 'Orçamento reduzido pelo FURY',
-  increase_budget: 'Orçamento aumentado pelo FURY',
-  notify: 'Notificação gerada',
-};
-
-const ACTION_ICONS: Record<string, React.ElementType> = {
-  pause_campaign: Pause,
-  reduce_budget: ArrowDownRight,
-  increase_budget: ArrowUpRight,
-  notify: BellRing,
-};
-
-function getActionLabel(action: string) {
-  return ACTION_LABELS[action] ?? action;
-}
-
-function getActionIcon(action: string): React.ElementType {
-  return ACTION_ICONS[action] ?? Activity;
-}
-
-function formatRelativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'agora mesmo';
-  if (mins < 60) return `há ${mins} min`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `há ${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `há ${days}d`;
-}
 
 function isoDateRange(daysBack: number): { startDate: string; endDate: string } {
   const today = new Date();
@@ -98,6 +55,11 @@ function isoDateRange(daysBack: number): { startDate: string; endDate: string } 
     startDate: start.toISOString().split('T')[0],
     endDate: today.toISOString().split('T')[0],
   };
+}
+
+function formatAlertValue(type: FuryAlert['type'], value: number) {
+  if (type === 'roas_low') return `${value.toFixed(1)}x`;
+  return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 // ─── Status config ────────────────────────────────────────────────────────────
@@ -215,19 +177,45 @@ function MetricCard({
   icon: Icon,
   label,
   value,
+  sparkline,
+  hasRealData,
 }: {
   icon: React.ElementType;
   label: string;
   value: string;
+  sparkline?: Sparkline;
+  hasRealData?: boolean;
 }) {
+  const showSpark = hasRealData && sparkline && sparkline.length >= 2;
+  const sparkColor =
+    showSpark && sparkline![sparkline!.length - 1].value >= sparkline![0].value
+      ? '#e8631a'
+      : '#da3633';
+
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex items-center gap-3">
       <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
         <Icon className="w-5 h-5 text-gray-400" />
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-gray-500 truncate">{label}</p>
         <p className="text-xl font-black text-gray-900 leading-tight">{value}</p>
+        {showSpark && (
+          <div style={{ height: 40 }} className="mt-1 -mx-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={sparkline} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke={sparkColor}
+                  strokeWidth={1.5}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -314,46 +302,52 @@ function WeeklyChart({
   );
 }
 
-// ─── Recent Activity ──────────────────────────────────────────────────────────
+// ─── Fury Alerts ─────────────────────────────────────────────────────────────
 
-function RecentActivity({ executions }: { executions: RuleExecution[] }) {
-  const items = executions.slice(0, 5);
+const ALERT_CONFIG: Record<FuryAlert['type'], { bg: string; icon: string }> = {
+  cpa_high:  { bg: 'bg-orange-50', icon: 'text-orange-500' },
+  roas_low:  { bg: 'bg-red-50',    icon: 'text-red-500'    },
+  spend_low: { bg: 'bg-orange-50', icon: 'text-orange-500' },
+};
+
+function FuryAlerts({ alerts }: { alerts: FuryAlert[] }) {
+  const items = alerts.slice(0, 5);
 
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm space-y-4 h-full">
       <div>
-        <h3 className="text-sm font-bold text-gray-900">Atividade Recente</h3>
-        <p className="text-xs text-gray-400 mt-0.5">Automações executadas pelo FURY</p>
+        <h3 className="text-sm font-bold text-gray-900">Alertas do FURY</h3>
+        <p className="text-xs text-gray-400 mt-0.5">Desvios detectados nas campanhas</p>
       </div>
 
       {items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center">
-            <Activity className="w-5 h-5 text-gray-300" />
+          <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-green-400" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-gray-400">Nenhuma atividade registrada</p>
+            <p className="text-sm font-semibold text-gray-400">Nenhum alerta ativo</p>
             <p className="text-xs text-gray-300 mt-0.5">
-              As automações do FURY aparecerão aqui
+              Todas as campanhas estão dentro das metas
             </p>
           </div>
         </div>
       ) : (
         <div className="space-y-3">
-          {items.map((ex) => {
-            const Icon = getActionIcon(ex.actionTaken);
+          {items.map((alert) => {
+            const cfg = ALERT_CONFIG[alert.type];
+            const sign = alert.deviation_pct >= 0 ? '+' : '';
+            const description = `${alert.metric} ${formatAlertValue(alert.type, alert.current_value)} · meta ${formatAlertValue(alert.type, alert.target_value)} · ${sign}${Math.round(alert.deviation_pct)}%`;
             return (
-              <div key={ex.id} className="flex items-start gap-3">
-                <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center shrink-0 mt-0.5">
-                  <Icon className="w-3.5 h-3.5 text-accent" />
+              <div key={`${alert.campaignId}-${alert.type}`} className="flex items-start gap-3">
+                <div className={`w-7 h-7 rounded-lg ${cfg.bg} flex items-center justify-center shrink-0 mt-0.5`}>
+                  <AlertTriangle className={`w-3.5 h-3.5 ${cfg.icon}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-gray-800 leading-snug">
-                    {getActionLabel(ex.actionTaken)}
+                  <p className="text-xs font-semibold text-gray-800 leading-snug truncate">
+                    {alert.campaignName}
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {formatRelativeTime(ex.triggeredAt)}
-                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">{description}</p>
                 </div>
               </div>
             );
@@ -403,21 +397,6 @@ export function Dashboard() {
     placeholderData: [],
   });
 
-  // Fury rule execution history (recent activity)
-  const { data: activityData = [] } = useQuery<RuleExecution[]>({
-    queryKey: ['fury-history-dashboard'],
-    queryFn: async () => {
-      try {
-        const res = await api.get<{ success: boolean; data: RuleExecution[] }>('/fury/history');
-        return res.data.data ?? [];
-      } catch {
-        return [];
-      }
-    },
-    staleTime: 2 * 60 * 1000,
-    placeholderData: [],
-  });
-
   const g = goalsData;
   const primaryGoal = g?.primary_goal ?? g?.goals?.[0];
   const objective = g?.objective ?? 'gerar_leads';
@@ -425,6 +404,13 @@ export function Dashboard() {
   const hasRealData = (g?.goals ?? []).some((goal) => goal.current_value > 0);
 
   const s = summaryRaw ?? { spend: 0, roas: 0, cpa: 0, conversions: 0 };
+
+  // Sparkline data per goal metric
+  const sparkConversions = g?.goals?.find((goal) => goal.metric === 'conversions')?.sparkline;
+  const sparkBudget      = g?.goals?.find((goal) => goal.metric === 'spend')?.sparkline;
+  const sparkRoas        = g?.goals?.find((goal) => goal.metric === 'roas')?.sparkline;
+
+  const alerts = g?.alerts ?? [];
 
   if (loadingGoals) {
     return (
@@ -480,6 +466,8 @@ export function Dashboard() {
             icon={Users}
             label="Clientes"
             value={hasRealData ? s.conversions.toLocaleString('pt-BR') : '--'}
+            sparkline={sparkConversions}
+            hasRealData={hasRealData}
           />
           <MetricCard
             icon={DollarSign}
@@ -489,6 +477,8 @@ export function Dashboard() {
                 ? `R$ ${s.spend.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
                 : '--'
             }
+            sparkline={sparkBudget}
+            hasRealData={hasRealData}
           />
           <MetricCard
             icon={ShoppingBag}
@@ -503,19 +493,21 @@ export function Dashboard() {
             icon={TrendingUp}
             label="Retorno do Investimento"
             value={hasRealData ? `${s.roas.toFixed(1)}x` : '--'}
+            sparkline={sparkRoas}
+            hasRealData={hasRealData}
           />
         </div>
 
-        {/* ── Bottom section: chart + activity ─────────────────────────────── */}
+        {/* ── Bottom section: chart + alerts ───────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
           {/* Weekly performance chart (60% = 3 of 5 cols) */}
           <div className="lg:col-span-3">
             <WeeklyChart data={dailyData} hasRealData={hasRealData} />
           </div>
 
-          {/* Recent activity (40% = 2 of 5 cols) */}
+          {/* Fury alerts (40% = 2 of 5 cols) */}
           <div className="lg:col-span-2">
-            <RecentActivity executions={activityData} />
+            <FuryAlerts alerts={alerts} />
           </div>
         </div>
       </div>
