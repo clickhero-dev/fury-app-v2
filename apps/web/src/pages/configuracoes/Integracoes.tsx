@@ -12,48 +12,6 @@ interface MetaAuthUrlResponse {
   data: { authUrl: string };
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const MOCK_CONNECTIONS: MetaConnection[] = [
-  {
-    id: 'conn-001',
-    accountName: 'Loja Principal',
-    businessAccountId: 'act_123456789',
-    adAccounts: [
-      {
-        id: 'act_123456789',
-        name: 'Anúncios Loja Principal',
-        status: 'ACTIVE',
-      },
-      {
-        id: 'act_987654321',
-        name: 'Anúncios Teste',
-        status: 'ACTIVE',
-      },
-    ],
-    status: 'active' as const,
-    connectedAt: '2026-03-15T10:30:00Z',
-    tokenExpiredAt: '2026-06-15T10:30:00Z',
-    isTokenValid: true,
-  },
-  {
-    id: 'conn-002',
-    accountName: 'Loja Secundária',
-    businessAccountId: 'act_111222333',
-    adAccounts: [
-      {
-        id: 'act_111222333',
-        name: 'Anúncios Loja Secundária',
-        status: 'ACTIVE',
-      },
-    ],
-    status: 'active' as const,
-    connectedAt: '2026-02-10T14:20:00Z',
-    tokenExpiredAt: '2026-05-10T14:20:00Z',
-    isTokenValid: false,
-  },
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(dateString: string): string {
@@ -198,7 +156,7 @@ export function Integracoes() {
         return [];
       }
     },
-    placeholderData: MOCK_CONNECTIONS,
+    placeholderData: [],
   });
 
   const connectMutation = useMutation({
