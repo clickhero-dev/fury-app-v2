@@ -32,7 +32,8 @@ export async function authCallback(req: Request, res: Response, next: NextFuncti
   try {
     const query = callbackQuerySchema.parse(req.query);
     await metaService.handleMetaOAuthCallback(query.code, query.state);
-    res.redirect('/dashboard?connected=true');
+    const frontendUrl = process.env.FRONTEND_URL ?? 'https://fury-app-v2-web.vercel.app';
+    res.redirect(`${frontendUrl}/dashboard?connected=true`);
   } catch (error) {
     next(error);
   }
