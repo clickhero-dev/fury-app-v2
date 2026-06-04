@@ -8,7 +8,8 @@ import type { MetaConnection } from '@/types/meta';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface MetaAuthUrlResponse {
-  authUrl: string;
+  success: boolean;
+  data: { authUrl: string };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -204,7 +205,7 @@ export function Integracoes() {
     mutationFn: async () => {
       try {
         const response = await api.get<MetaAuthUrlResponse>('/meta/auth/url');
-        return response.data.authUrl;
+        return response.data.data.authUrl;
       } catch (error) {
         throw new Error('Falha ao obter URL de autenticação. Tente novamente.');
       }
