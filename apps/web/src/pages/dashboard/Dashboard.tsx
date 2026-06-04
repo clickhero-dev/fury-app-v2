@@ -445,6 +445,23 @@ export function Dashboard() {
     }
   }, [location.search, queryClient]);
 
+  // Meta connection status
+  const { data: metaConnections } = useQuery<{ id: string }[]>({
+    queryKey: ['meta-connections'],
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ success: boolean; data: { id: string }[] }>('/meta/connections');
+        return Array.isArray(res.data.data) ? res.data.data : (Array.isArray(res.data) ? res.data as { id: string }[] : []);
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 30 * 1000,
+    refetchOnMount: true,
+  });
+
+  const isMetaConnected = (metaConnections?.length ?? 0) > 0;
+
   // Metrics summary
   const { data: summaryRaw } = useQuery<MetricsSummary | null>({
     queryKey: ['metrics-summary'],
@@ -533,7 +550,7 @@ export function Dashboard() {
         />
 
         {/* ── Meta connection banner ───────────────────────────────────────── */}
-        {!hasRealData && <MetaBanner />}
+        {!isMetaConnected && <MetaBanner />}
 
         {/* ── Hero strip ──────────────────────────────────────────────────── */}
         {primaryGoal && (
