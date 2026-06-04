@@ -17,10 +17,16 @@ export function useSubscription() {
   return useQuery({
     queryKey: ['billing', 'subscription'],
     queryFn: async (): Promise<Subscription | null> => {
-      const res = await api.get<BillingApiResponse<Subscription | null>>('/billing/subscription');
-      return res.data.data;
+      try {
+        const res = await api.get<BillingApiResponse<Subscription | null>>('/billing/subscription');
+        return res.data.data;
+      } catch {
+        return null;
+      }
     },
     staleTime: 60 * 1000,
+    placeholderData: null,
+    retry: false,
   });
 }
 
