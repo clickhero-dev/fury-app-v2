@@ -36,6 +36,13 @@
       "when": 1780099201000,
       "tag": "0006_remove_automation_rules_enabled",
       "breakpoints": false
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1748995200000,
+      "tag": "0007_add_billing_tables",
+      "breakpoints": true
     }
   ]
 }
