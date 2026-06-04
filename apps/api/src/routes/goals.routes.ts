@@ -5,6 +5,7 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import { MockMetricsProvider } from '../lib/providers/mock-metrics.provider.js';
 import { DatabaseMetricsProvider } from '../lib/providers/db-metrics.provider.js';
+import type { DailyMetricsResponse } from '../types/metrics.types.js';
 
 const provider =
   process.env.META_USE_MOCK === 'true'
@@ -58,7 +59,14 @@ router.get(
       const today = now.toISOString().split('T')[0];
 
       // ── 1. Current-month summary ──────────────────────────────────────────
-      const summary = await provider.getSummary(tenantId, monthStart, today);
+      // Wrapped in try/catch: META_NOT_CONNECTED (no integration) should not
+      // crash the endpoint — return zero metrics so the layout stays stable.
+      let summary = null;
+      try {
+        summary = await provider.getSummary(tenantId, monthStart, today);
+      } catch {
+        // No Meta connection or provider error — proceed with zero defaults
+      }
 
       const currentSpend = summary?.spend ?? 0;
       const currentConversions = summary?.conversions ?? 0;
@@ -68,11 +76,16 @@ router.get(
       // ── 2. Sparkline data (last 7 days) ───────────────────────────────────
       const sparkStart = new Date(now);
       sparkStart.setDate(sparkStart.getDate() - 6);
-      const daily7 = await provider.getDailyMetrics(
-        tenantId,
-        sparkStart.toISOString().split('T')[0],
-        today
-      );
+      let daily7: DailyMetricsResponse[] = [];
+      try {
+        daily7 = await provider.getDailyMetrics(
+          tenantId,
+          sparkStart.toISOString().split('T')[0],
+          today
+        );
+      } catch {
+        // No Meta connection — empty sparklines
+      }
 
       // ── 3. Client goals (DB, with fallback) ──────────────────────────────
       let targetCpa = 50;
@@ -154,7 +167,12 @@ router.get(
       ];
 
       // ── 6. Ideal vs Real chart (full month so far) ────────────────────────
-      const fullMonthDaily = await provider.getDailyMetrics(tenantId, monthStart, today);
+      let fullMonthDaily: DailyMetricsResponse[] = [];
+      try {
+        fullMonthDaily = await provider.getDailyMetrics(tenantId, monthStart, today);
+      } catch {
+        // No Meta connection — empty chart
+      }
       const sorted = [...fullMonthDaily].sort((a, b) => a.date.localeCompare(b.date));
 
       let cumReal = 0;
