@@ -1,4 +1,4 @@
-import { LayoutDashboard, Megaphone, Palette, Settings, ChevronLeft, Zap, CreditCard, X, LogOut } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Palette, Settings, ChevronLeft, Zap, CreditCard, X, LogOut, Target } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { PlanBadge } from './PlanBadge';
@@ -12,6 +12,7 @@ interface SidebarProps {
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+  { icon: Target, label: 'Metas', path: '/onboarding/metas' },
   { icon: Megaphone, label: 'Campanhas', path: '/campanhas' },
   { icon: Zap, label: 'Automação', path: '/automacao/minhas-regras' },
   { icon: Palette, label: 'Estúdio', path: '/estudio' },

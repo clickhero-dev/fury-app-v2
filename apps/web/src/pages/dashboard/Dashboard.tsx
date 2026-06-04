@@ -173,24 +173,39 @@ function HeroStrip({
 
 // ─── Metric Card ─────────────────────────────────────────────────────────────
 
+const PROGRESS_COLORS: Record<'on_track' | 'at_risk' | 'off_track', string> = {
+  on_track: '#2ea043',
+  at_risk:  '#e8a317',
+  off_track: '#da3633',
+};
+
 function MetricCard({
   icon: Icon,
   label,
   value,
   sparkline,
   hasRealData,
+  progressPct,
+  progressStatus,
+  progressLabel,
 }: {
   icon: React.ElementType;
   label: string;
   value: string;
   sparkline?: Sparkline;
   hasRealData?: boolean;
+  progressPct?: number;
+  progressStatus?: 'on_track' | 'at_risk' | 'off_track';
+  progressLabel?: string;
 }) {
   const showSpark = hasRealData && sparkline && sparkline.length >= 2;
   const sparkColor =
     showSpark && sparkline![sparkline!.length - 1].value >= sparkline![0].value
       ? '#e8631a'
       : '#da3633';
+  const showProgress = hasRealData && progressPct !== undefined && progressStatus !== undefined;
+  const barColor = showProgress ? PROGRESS_COLORS[progressStatus!] : '#d1d5db';
+  const barWidth = showProgress ? Math.min(100, progressPct!) : 0;
 
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex items-center gap-3">
@@ -200,7 +215,20 @@ function MetricCard({
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-gray-500 truncate">{label}</p>
         <p className="text-xl font-black text-gray-900 leading-tight">{value}</p>
-        {showSpark && (
+        {showProgress && (
+          <div className="mt-1.5 space-y-1">
+            {progressLabel && (
+              <p className="text-xs text-gray-400">{progressLabel}</p>
+            )}
+            <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${barWidth}%`, backgroundColor: barColor }}
+              />
+            </div>
+          </div>
+        )}
+        {showSpark && !showProgress && (
           <div style={{ height: 40 }} className="mt-1 -mx-1">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={sparkline} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
@@ -223,12 +251,16 @@ function MetricCard({
 
 // ─── Weekly Performance Chart ─────────────────────────────────────────────────
 
+type IdealLinePoint = { date: string; real: number; ideal: number };
+
 function WeeklyChart({
   data,
   hasRealData,
+  idealLine,
 }: {
   data: DailyMetric[];
   hasRealData: boolean;
+  idealLine?: IdealLinePoint[];
 }) {
   const fmt = (d: string) => {
     const [, m, day] = d.split('-');
@@ -236,6 +268,15 @@ function WeeklyChart({
   };
 
   const isEmpty = !hasRealData || data.length === 0;
+  const hasIdealLine = !isEmpty && idealLine && idealLine.length > 0;
+
+  // When ideal_line data is available use it as source (fields: date, real, ideal)
+  // Otherwise fall back to dailyData with field "conversions"
+  const chartData = hasIdealLine
+    ? idealLine!
+    : isEmpty
+      ? Array.from({ length: 7 }, (_, i) => ({ date: `dia ${i + 1}`, conversions: 0 }))
+      : data;
 
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm space-y-4 h-full">
@@ -247,7 +288,7 @@ function WeeklyChart({
       <div className="relative" style={{ height: 200 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
-            data={isEmpty ? Array.from({ length: 7 }, (_, i) => ({ date: `dia ${i + 1}`, conversions: 0 })) : data}
+            data={chartData}
             margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
@@ -274,19 +315,33 @@ function WeeklyChart({
                   color: '#fff',
                   fontSize: 12,
                 }}
-                formatter={(val) => [`${Number(val).toLocaleString('pt-BR')} clientes`, 'Clientes']}
+                formatter={(val, name) => [
+                  `${Number(val).toLocaleString('pt-BR')} clientes`,
+                  name === 'ideal' ? 'Projeção ideal' : 'Realizado',
+                ]}
                 labelFormatter={(label) => fmt(String(label))}
               />
             )}
             <Line
               type="monotone"
-              dataKey="conversions"
+              dataKey={hasIdealLine ? 'real' : 'conversions'}
               stroke={isEmpty ? '#e5e7eb' : '#e8631a'}
               strokeWidth={isEmpty ? 1.5 : 2.5}
               dot={isEmpty ? false : { r: 3, fill: '#e8631a', strokeWidth: 0 }}
               activeDot={isEmpty ? false : { r: 5, fill: '#e8631a', strokeWidth: 0 }}
               isAnimationActive={!isEmpty}
             />
+            {hasIdealLine && (
+              <Line
+                type="monotone"
+                dataKey="ideal"
+                stroke="#d1d5db"
+                strokeWidth={1.5}
+                strokeDasharray="4 4"
+                dot={false}
+                isAnimationActive={false}
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
 
@@ -298,6 +353,19 @@ function WeeklyChart({
           </div>
         )}
       </div>
+
+      {hasIdealLine && (
+        <div className="flex items-center gap-4 pt-1">
+          <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="w-3 h-0.5 rounded-full bg-[#e8631a] inline-block" />
+            Realizado
+          </span>
+          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+            <span className="w-3 border-t border-dashed border-gray-400 inline-block" />
+            Projeção ideal
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -405,12 +473,17 @@ export function Dashboard() {
 
   const s = summaryRaw ?? { spend: 0, roas: 0, cpa: 0, conversions: 0 };
 
-  // Sparkline data per goal metric
-  const sparkConversions = g?.goals?.find((goal) => goal.metric === 'conversions')?.sparkline;
-  const sparkBudget      = g?.goals?.find((goal) => goal.metric === 'spend')?.sparkline;
-  const sparkRoas        = g?.goals?.find((goal) => goal.metric === 'roas')?.sparkline;
+  // Sparkline + progress per goal metric
+  const goalConversions = g?.goals?.find((goal) => goal.metric === 'conversions');
+  const goalBudget      = g?.goals?.find((goal) => goal.metric === 'spend');
+  const goalRoas        = g?.goals?.find((goal) => goal.metric === 'roas');
 
-  const alerts = g?.alerts ?? [];
+  const sparkConversions = goalConversions?.sparkline;
+  const sparkBudget      = goalBudget?.sparkline;
+  const sparkRoas        = goalRoas?.sparkline;
+
+  const alerts   = g?.alerts ?? [];
+  const idealLine = g?.ideal_line;
 
   if (loadingGoals) {
     return (
@@ -468,6 +541,9 @@ export function Dashboard() {
             value={hasRealData ? s.conversions.toLocaleString('pt-BR') : '--'}
             sparkline={sparkConversions}
             hasRealData={hasRealData}
+            progressPct={goalConversions?.progress_pct}
+            progressStatus={goalConversions?.status}
+            progressLabel={goalConversions ? `${Math.round(goalConversions.progress_pct)}% da meta mensal` : undefined}
           />
           <MetricCard
             icon={DollarSign}
@@ -479,6 +555,9 @@ export function Dashboard() {
             }
             sparkline={sparkBudget}
             hasRealData={hasRealData}
+            progressPct={goalBudget?.progress_pct}
+            progressStatus={goalBudget?.status}
+            progressLabel={goalBudget ? `${Math.round(goalBudget.progress_pct)}% do orçamento` : undefined}
           />
           <MetricCard
             icon={ShoppingBag}
@@ -495,6 +574,9 @@ export function Dashboard() {
             value={hasRealData ? `${s.roas.toFixed(1)}x` : '--'}
             sparkline={sparkRoas}
             hasRealData={hasRealData}
+            progressPct={goalRoas?.progress_pct}
+            progressStatus={goalRoas?.status}
+            progressLabel={goalRoas ? `${Math.round(goalRoas.progress_pct)}% da meta de ROAS` : undefined}
           />
         </div>
 
@@ -502,7 +584,7 @@ export function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
           {/* Weekly performance chart (60% = 3 of 5 cols) */}
           <div className="lg:col-span-3">
-            <WeeklyChart data={dailyData} hasRealData={hasRealData} />
+            <WeeklyChart data={dailyData} hasRealData={hasRealData} idealLine={idealLine} />
           </div>
 
           {/* Fury alerts (40% = 2 of 5 cols) */}
