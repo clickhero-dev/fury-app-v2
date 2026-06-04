@@ -272,7 +272,7 @@ function WeeklyChart({
 
   // When ideal_line data is available use it as source (fields: date, real, ideal)
   // Otherwise fall back to dailyData with field "conversions"
-  const chartData = hasIdealLine
+  const chartData: object[] = hasIdealLine
     ? idealLine!
     : isEmpty
       ? Array.from({ length: 7 }, (_, i) => ({ date: `dia ${i + 1}`, conversions: 0 }))
