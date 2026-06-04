@@ -156,20 +156,14 @@ const MOCK_DATA: GoalsProgressData = {
 };
 
 export function useGoalsProgress() {
-  return useQuery<GoalsProgressData>({
+  return useQuery<GoalsProgressData | null>({
     queryKey: ['goals-progress-v2'],
     queryFn: async () => {
       const res = await api.get<{ data: GoalsProgressData }>('/goals/progress');
-      return res.data.data;
+      return res.data.data ?? null;
     },
     refetchInterval: 5 * 60 * 1000,
-    // Durante refetch mantém os dados anteriores visíveis em vez de undefined
-    placeholderData: (previousData) => previousData ?? MOCK_DATA,
+    placeholderData: (previousData) => previousData,
     retry: 1,
-    // Fallback se a API retornar dados vazios ou sem metas configuradas
-    select: (data) => {
-      if (!data || (!data.goals?.length && !data.primary_goal)) return MOCK_DATA;
-      return data;
-    },
   });
 }

@@ -367,7 +367,7 @@ function RecentActivity({ executions }: { executions: RuleExecution[] }) {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function Dashboard() {
-  const { data: goalsData, isFetching: fetchingGoals } = useGoalsProgress();
+  const { data: goalsData, isFetching: fetchingGoals, isLoading: loadingGoals } = useGoalsProgress();
   const { isConnected } = useFurySSE();
 
   // Metrics summary
@@ -425,6 +425,23 @@ export function Dashboard() {
   const hasRealData = (g?.goals ?? []).some((goal) => goal.current_value > 0);
 
   const s = summaryRaw ?? { spend: 0, roas: 0, cpa: 0, conversions: 0 };
+
+  if (loadingGoals) {
+    return (
+      <AppLayout>
+        <div className="space-y-5 pb-8 animate-pulse">
+          <PageHeader title="Dashboard" description="Carregando…" />
+          <div className="h-14 bg-gray-100 rounded-xl" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-20 bg-gray-100 rounded-xl" />
+            ))}
+          </div>
+          <div className="h-64 bg-gray-100 rounded-xl" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
