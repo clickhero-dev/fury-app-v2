@@ -1,6 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm install --include=dev && npm run build --workspace=@fury/shared && npm run build --workspace=@fury/db && (npm run build --workspace=@fury/api || true)"
+buildCommand = "npm install --include=dev && npm run build --workspace=@fury/shared && npm run build --workspace=@fury/db && npm run build --workspace=@fury/api"
 
 [deploy]
 startCommand = "node apps/api/dist/index.js"
