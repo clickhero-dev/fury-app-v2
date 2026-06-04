@@ -157,6 +157,7 @@ export function Integracoes() {
       }
     },
     placeholderData: [],
+    refetchOnMount: true,
   });
 
   const connectMutation = useMutation({

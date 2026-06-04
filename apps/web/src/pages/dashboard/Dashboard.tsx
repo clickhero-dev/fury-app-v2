@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useLocation } from 'react-router-dom';
 import {
   LineChart,
   Line,
@@ -431,6 +432,18 @@ function FuryAlerts({ alerts }: { alerts: FuryAlert[] }) {
 export function Dashboard() {
   const { data: goalsData, isFetching: fetchingGoals, isLoading: loadingGoals } = useGoalsProgress();
   const { isConnected } = useFurySSE();
+  const queryClient = useQueryClient();
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('connected') === 'true') {
+      queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
+      queryClient.invalidateQueries({ queryKey: ['goals-progress-v2'] });
+      queryClient.invalidateQueries({ queryKey: ['metrics-summary'] });
+      window.history.replaceState({}, '', '/dashboard');
+    }
+  }, [location.search, queryClient]);
 
   // Metrics summary
   const { data: summaryRaw } = useQuery<MetricsSummary | null>({
