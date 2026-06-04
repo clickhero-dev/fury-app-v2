@@ -23,8 +23,13 @@ function formatDate(dateString: string): string {
   });
 }
 
-function getTokenStatus(isTokenValid: boolean): 'active' | 'paused' {
-  return isTokenValid ? 'active' : 'paused';
+function isTokenValid(tokenExpiresAt: string | null): boolean {
+  if (!tokenExpiresAt) return false;
+  return new Date(tokenExpiresAt) > new Date();
+}
+
+function getTokenStatus(valid: boolean): 'active' | 'paused' {
+  return valid ? 'active' : 'paused';
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -38,9 +43,10 @@ function ConnectionCard({
   onDisconnect: (id: string) => void;
   isDeleting: boolean;
 }) {
-  const handleDisconnect = () => {
-    const message = `Tem certeza que deseja desconectar a conta "${connection.accountName}"? Esta ação não pode ser desfeita.`;
+  const tokenValid = isTokenValid(connection.tokenExpiresAt);
 
+  const handleDisconnect = () => {
+    const message = `Tem certeza que deseja desconectar a conta Meta "${connection.metaUserId}"? Esta ação não pode ser desfeita.`;
     if (window.confirm(message)) {
       onDisconnect(connection.id);
     }
@@ -52,13 +58,10 @@ function ConnectionCard({
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <h3 className="font-bold text-text-primary text-base line-clamp-1">
-            {connection.accountName}
+            Conta Meta · {connection.metaUserId}
           </h3>
-          <p className="text-sm text-text-secondary mt-1">
-            ID da conta: {connection.businessAccountId}
-          </p>
         </div>
-        <StatusBadge status={getTokenStatus(connection.isTokenValid)} />
+        <StatusBadge status={getTokenStatus(tokenValid)} />
       </div>
 
       {/* Ad Accounts */}
@@ -78,7 +81,12 @@ function ConnectionCard({
                 </p>
                 <p className="text-xs text-text-tertiary mt-0.5">{adAccount.id}</p>
               </div>
-              <div className="flex-shrink-0 w-2 h-2 rounded-full bg-success" />
+              <div
+                className={cn(
+                  'flex-shrink-0 w-2 h-2 rounded-full',
+                  adAccount.account_status === 1 ? 'bg-success' : 'bg-gray-300'
+                )}
+              />
             </div>
           ))}
         </div>
@@ -88,33 +96,30 @@ function ConnectionCard({
       <div
         className={cn(
           'flex items-center gap-3 p-3 rounded-lg text-sm',
-          connection.isTokenValid
-            ? 'bg-success-light text-success'
-            : 'bg-warning-light text-warning'
+          tokenValid ? 'bg-success-light text-success' : 'bg-warning-light text-warning'
         )}
       >
-        <span className="text-lg">
-          {connection.isTokenValid ? '✅' : '⚠️'}
-        </span>
+        <span className="text-lg">{tokenValid ? '✅' : '⚠️'}</span>
         <div>
           <p className="font-semibold text-xs">
-            {connection.isTokenValid ? 'Token válido' : 'Token expirado'}
+            {tokenValid ? 'Token válido' : 'Token expirado'}
           </p>
           <p className="text-xs opacity-80 mt-0.5">
-            {connection.isTokenValid ? 'Expira em' : 'Expirou em'}{' '}
-            {formatDate(connection.tokenExpiredAt)}
+            {connection.tokenExpiresAt
+              ? `${tokenValid ? 'Expira em' : 'Expirou em'} ${formatDate(connection.tokenExpiresAt)}`
+              : 'Validade desconhecida'}
           </p>
         </div>
       </div>
 
       {/* Metadata */}
       <div className="flex items-center justify-between text-xs text-text-tertiary pt-2">
-        <span>Conectado em {formatDate(connection.connectedAt)}</span>
+        <span>Conectado em {formatDate(connection.createdAt)}</span>
       </div>
 
       {/* Actions */}
       <div className="flex gap-2 pt-2">
-        {!connection.isTokenValid && (
+        {!tokenValid && (
           <Button
             variant="outline"
             size="sm"
@@ -150,8 +155,8 @@ export function Integracoes() {
     queryKey: ['meta-connections'],
     queryFn: async () => {
       try {
-        const response = await api.get('/meta/connections');
-        return Array.isArray(response.data) ? response.data : [];
+        const response = await api.get<{ success: boolean; data: MetaConnection[] }>('/meta/connections');
+        return Array.isArray(response.data.data) ? response.data.data : [];
       } catch {
         return [];
       }

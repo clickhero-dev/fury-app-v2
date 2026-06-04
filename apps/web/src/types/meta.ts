@@ -5,18 +5,16 @@ export interface MetaAuthResponse {
 export interface MetaAdAccount {
   id: string;
   name: string;
-  status: 'ACTIVE' | 'PAUSED' | 'DISABLED';
+  account_status: number; // 1 = active, 2 = disabled
+  currency?: string;
 }
 
 export interface MetaConnection {
   id: string;
-  accountId?: string;
-  businessAccountId: string;
-  accountName: string;
-  connected?: boolean;
+  tenantId: string;
+  metaUserId: string;
+  accessToken: string;
+  tokenExpiresAt: string | null;
   adAccounts: MetaAdAccount[];
-  status: 'active' | 'inactive';
-  connectedAt: string;
-  tokenExpiredAt: string;
-  isTokenValid: boolean;
+  createdAt: string;
 }
