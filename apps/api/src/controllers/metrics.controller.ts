@@ -31,15 +31,20 @@ export class MetricsController {
         });
       }
 
-      const summary = await this.metricsService.getSummary(
-        tenantId,
-        validation.data.startDate,
-        validation.data.endDate
-      );
+      let summary = null;
+      try {
+        summary = await this.metricsService.getSummary(
+          tenantId,
+          validation.data.startDate,
+          validation.data.endDate
+        );
+      } catch {
+        // META_NOT_CONNECTED or provider error — return empty summary
+      }
 
       return res.status(200).json({
         success: true,
-        data: { summary: summary || {} },
+        data: { summary: summary ?? {} },
       });
     } catch (error) {
       next(error);
@@ -68,14 +73,19 @@ export class MetricsController {
         });
       }
 
-      const result = await this.metricsService.getCampaigns(
-        tenantId,
-        validation.data.startDate,
-        validation.data.endDate,
-        validation.data.status,
-        validation.data.page,
-        validation.data.limit
-      );
+      let result = { data: [] as import('../types/metrics.types.js').CampaignResponse[], pagination: { page: 1, limit: 10, total: 0 } };
+      try {
+        result = await this.metricsService.getCampaigns(
+          tenantId,
+          validation.data.startDate,
+          validation.data.endDate,
+          validation.data.status,
+          validation.data.page,
+          validation.data.limit
+        );
+      } catch {
+        // META_NOT_CONNECTED or provider error — return empty list
+      }
 
       return res.status(200).json({
         success: true,
@@ -173,15 +183,20 @@ export class MetricsController {
         });
       }
 
-      const daily = await this.metricsService.getDailyMetrics(
-        tenantId,
-        validation.data.startDate,
-        validation.data.endDate
-      );
+      let daily = null;
+      try {
+        daily = await this.metricsService.getDailyMetrics(
+          tenantId,
+          validation.data.startDate,
+          validation.data.endDate
+        );
+      } catch {
+        // META_NOT_CONNECTED or provider error — return empty list
+      }
 
       return res.status(200).json({
         success: true,
-        data: daily || [],
+        data: daily ?? [],
       });
     } catch (error) {
       next(error);
