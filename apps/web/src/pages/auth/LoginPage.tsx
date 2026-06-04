@@ -3,8 +3,11 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { Eye, EyeOff } from 'lucide-react';
+import { isAxiosError } from 'axios';
 import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/FormField';
+import { Input } from '@/components/ui/input';
 import { AuthLayout } from '@/components/AuthLayout';
 import { useLogin } from '@/hooks/useLogin';
 import { DEMO_CREDENTIALS } from '@/lib/constants';
@@ -16,10 +19,23 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
+function getFriendlyError(err: unknown): string {
+  if (isAxiosError(err)) {
+    if (err.response?.status === 401) {
+      return 'E-mail ou senha incorretos. Verifique suas credenciais e tente novamente.';
+    }
+    if (!err.response || err.code === 'ERR_NETWORK') {
+      return 'Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.';
+    }
+  }
+  return 'Ocorreu um erro inesperado. Tente novamente em alguns instantes.';
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const loginMutation = useLogin();
   const [error, setError] = useState<string>('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -42,7 +58,7 @@ export function LoginPage() {
       });
       navigate('/dashboard');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao fazer login');
+      setError(getFriendlyError(err));
     }
   };
 
@@ -51,8 +67,8 @@ export function LoginPage() {
       <div className="space-y-7">
         {/* Header */}
         <div className="space-y-3">
-          <h2 className="text-3xl font-black text-white tracking-tight">Acesse sua conta FURY</h2>
-          <p className="text-zinc-300 text-sm font-medium">Automação de tráfego pago com IA</p>
+          <h2 className="text-3xl font-black !text-white tracking-tight">Acesse sua conta FURY</h2>
+          <p className="!text-zinc-300 text-sm font-medium">Automação de tráfego pago com IA</p>
         </div>
 
         {/* Form */}
@@ -65,13 +81,28 @@ export function LoginPage() {
             {...register('email')}
           />
 
-          <FormField
-            label="Senha"
-            placeholder="••••••••"
-            type="password"
-            error={errors.password?.message}
-            {...register('password')}
-          />
+          {/* Password field with show/hide toggle */}
+          <div className="space-y-2">
+            <label className="block text-sm font-bold !text-white">Senha</label>
+            <div className="relative">
+              <Input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                {...register('password')}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors cursor-pointer"
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+            {errors.password?.message && (
+              <p className="text-xs font-semibold text-red-400 mt-1">{errors.password.message}</p>
+            )}
+          </div>
 
           {error && (
             <div className="bg-red-950/50 border border-red-900/60 rounded-lg p-4 flex gap-3 items-start">
@@ -116,7 +147,7 @@ export function LoginPage() {
 
         {/* Sign Up Link */}
         <div className="space-y-4">
-          <p className="text-center text-zinc-300 text-sm">
+          <p className="text-center !text-zinc-300 text-sm">
             Não tem conta?{' '}
             <Link
               to="/cadastro"
