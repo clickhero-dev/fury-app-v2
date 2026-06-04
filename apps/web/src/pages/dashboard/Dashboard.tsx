@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import {
   AreaChart,
   Area,
@@ -22,6 +23,7 @@ import {
   WifiOff,
   ArrowUpRight,
   ArrowDownRight,
+  Radio,
 } from 'lucide-react';
 import { AppLayout, PageHeader } from '@/components';
 import api from '@/lib/api';
@@ -37,12 +39,7 @@ interface MetricsSummary {
   conversions: number;
 }
 
-const MOCK_SUMMARY: MetricsSummary = {
-  spend: 4850,
-  roas: 3.2,
-  cpa: 48.5,
-  conversions: 94,
-};
+const EMPTY_SUMMARY: MetricsSummary = { spend: 0, roas: 0, cpa: 0, conversions: 0 };
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -70,6 +67,40 @@ const STATUS_CONFIG = {
   },
 } as const;
 
+const NO_DATA_CFG = {
+  label: 'Sem dados',
+  bg: 'bg-gray-100',
+  text: 'text-gray-500',
+  bar: '#d1d5db',
+  dot: 'bg-gray-400',
+};
+
+// ─── Meta Banner ──────────────────────────────────────────────────────────────
+
+function MetaBanner() {
+  return (
+    <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
+      <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center shrink-0 mt-0.5">
+        <Radio className="w-4 h-4 text-blue-600" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-blue-900">
+          Conecte sua conta Meta Ads para ver seus dados reais
+        </p>
+        <p className="text-xs text-blue-600 mt-0.5">
+          Os valores abaixo refletem apenas as metas configuradas — sem métricas reais ainda.
+        </p>
+      </div>
+      <Link
+        to="/configuracoes/integracoes"
+        className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors"
+      >
+        Conectar agora
+      </Link>
+    </div>
+  );
+}
+
 // ─── Hero Card ────────────────────────────────────────────────────────────────
 
 function HeroCard({
@@ -77,14 +108,16 @@ function HeroCard({
   objective,
   daysRemaining,
   isConnected,
+  hasRealData,
 }: {
   goal: GoalItem;
   objective: string;
   daysRemaining: number;
   isConnected: boolean;
+  hasRealData: boolean;
 }) {
-  const cfg = STATUS_CONFIG[goal.status];
-  const pct = Math.min(100, goal.progress_pct);
+  const cfg = hasRealData ? STATUS_CONFIG[goal.status] : NO_DATA_CFG;
+  const pct = hasRealData ? Math.min(100, goal.progress_pct ?? 0) : 0;
 
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-[#1c1c1e] to-[#2d2d30] rounded-2xl p-7 text-white">
@@ -97,7 +130,7 @@ function HeroCard({
           <div>
             <p className="text-white/60 text-sm font-medium mb-1">Progresso do mês</p>
             <h2 className="text-4xl font-black leading-none">
-              {pct}
+              {hasRealData ? pct : <span className="text-white/40">--</span>}
               <span className="text-2xl font-bold text-white/70">%</span>
             </h2>
             <p className="mt-2 text-white/80 text-base font-medium">
@@ -125,16 +158,22 @@ function HeroCard({
               style={{
                 width: `${pct}%`,
                 backgroundColor: cfg.bar,
-                boxShadow: `0 0 12px ${cfg.bar}80`,
+                boxShadow: pct > 0 ? `0 0 12px ${cfg.bar}80` : 'none',
+                minWidth: '0px',
               }}
             />
           </div>
           <div className="flex justify-between mt-2 text-xs text-white/50">
             <span>
-              {(goal.current_value ?? 0).toLocaleString('pt-BR')} {goal.unit}
+              {hasRealData
+                ? `${(goal.current_value ?? 0).toLocaleString('pt-BR')} ${goal.unit}`
+                : '--'}
             </span>
             <span>
-              meta: {(goal.target_value ?? 0).toLocaleString('pt-BR')} {goal.unit}
+              meta:{' '}
+              {hasRealData
+                ? `${(goal.target_value ?? 0).toLocaleString('pt-BR')} ${goal.unit}`
+                : '--'}
             </span>
           </div>
         </div>
@@ -156,7 +195,9 @@ function HeroCard({
           <span>
             Projeção:{' '}
             <span className="font-semibold text-white/70">
-              {(goal.projected_value ?? 0).toLocaleString('pt-BR')} {goal.unit}
+              {hasRealData
+                ? `${(goal.projected_value ?? 0).toLocaleString('pt-BR')} ${goal.unit}`
+                : '--'}
             </span>
           </span>
         </div>
@@ -205,11 +246,10 @@ function fmtVal(val: number | undefined | null, unit: string) {
   return `${v.toLocaleString('pt-BR')} ${unit}`;
 }
 
-function GoalCard({ goal }: { goal: GoalItem }) {
-  const cfg = STATUS_CONFIG[goal.status];
+function GoalCard({ goal, hasRealData }: { goal: GoalItem; hasRealData: boolean }) {
+  const cfg = hasRealData ? STATUS_CONFIG[goal.status] : NO_DATA_CFG;
   const Icon = GOAL_ICONS[goal.metric as keyof typeof GOAL_ICONS] ?? Target;
-  const pct = goal.progress_pct;
-  const sparkColor = cfg.bar;
+  const pct = hasRealData ? goal.progress_pct : 0;
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-5 space-y-4 hover:shadow-lg transition-shadow">
@@ -231,7 +271,7 @@ function GoalCard({ goal }: { goal: GoalItem }) {
       {/* Main value */}
       <div>
         <div className="text-2xl font-black text-text-primary">
-          {fmtVal(goal.current_value, goal.unit)}
+          {hasRealData ? fmtVal(goal.current_value, goal.unit) : '--'}
         </div>
         <div className="text-xs text-text-secondary mt-0.5">
           meta: {fmtVal(goal.target_value, goal.unit)}
@@ -247,14 +287,14 @@ function GoalCard({ goal }: { goal: GoalItem }) {
           />
         </div>
         <div className="flex justify-between text-xs text-text-tertiary">
-          <span>{pct}% concluído</span>
-          <span>proj: {fmtVal(goal.projected_value, goal.unit)}</span>
+          <span>{hasRealData ? `${pct}% concluído` : '--'}</span>
+          <span>proj: {hasRealData ? fmtVal(goal.projected_value, goal.unit) : '--'}</span>
         </div>
       </div>
 
-      {/* Sparkline */}
-      {goal.sparkline.length > 1 && (
-        <Sparkline data={goal.sparkline} color={sparkColor} />
+      {/* Sparkline — only when real data exists */}
+      {hasRealData && goal.sparkline.length > 1 && (
+        <Sparkline data={goal.sparkline} color={cfg.bar} />
       )}
     </div>
   );
@@ -262,12 +302,26 @@ function GoalCard({ goal }: { goal: GoalItem }) {
 
 // ─── Progress Chart ───────────────────────────────────────────────────────────
 
+function buildFallbackChartData(daysElapsed: number, targetConversions: number, daysInMonth: number) {
+  return Array.from({ length: Math.max(2, daysElapsed) }, (_, i) => {
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth(), i + 1);
+    return {
+      date: d.toISOString().split('T')[0],
+      real: 0,
+      ideal: Math.round((targetConversions / daysInMonth) * (i + 1) * 10) / 10,
+    };
+  });
+}
+
 function ProgressChart({
   data,
   targetConversions,
+  hasRealData,
 }: {
   data: { date: string; real: number; ideal: number }[];
   targetConversions: number;
+  hasRealData: boolean;
 }) {
   const fmt = (d: string) => {
     const [, , day] = d.split('-');
@@ -293,68 +347,79 @@ function ProgressChart({
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={220}>
-        <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-          <defs>
-            <linearGradient id="realGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#e8631a" stopOpacity={0.25} />
-              <stop offset="95%" stopColor="#e8631a" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis
-            dataKey="date"
-            tickFormatter={fmt}
-            tick={{ fontSize: 11, fill: '#9ca3af' }}
-            interval="preserveStartEnd"
-            tickLine={false}
-            axisLine={false}
-          />
-          <YAxis
-            tick={{ fontSize: 11, fill: '#9ca3af' }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <Tooltip
-            contentStyle={{
-              background: '#1c1c1e',
-              border: 'none',
-              borderRadius: 8,
-              color: '#fff',
-              fontSize: 12,
-            }}
-            formatter={(val, name) => [
-              `${(Number(val) ?? 0).toLocaleString('pt-BR')} conv.`,
-              name === 'real' ? 'Real' : 'Ideal',
-            ]}
-            labelFormatter={(label) => fmt(String(label))}
-          />
-          <ReferenceLine
-            y={targetConversions}
-            strokeDasharray="4 4"
-            stroke="#9ca3af"
-            strokeWidth={1.5}
-          />
-          <Area
-            type="monotone"
-            dataKey="ideal"
-            stroke="#9ca3af"
-            strokeWidth={1.5}
-            strokeDasharray="5 4"
-            fill="none"
-            dot={false}
-          />
-          <Area
-            type="monotone"
-            dataKey="real"
-            stroke="#e8631a"
-            strokeWidth={2.5}
-            fill="url(#realGrad)"
-            dot={false}
-            activeDot={{ r: 5, fill: '#e8631a', strokeWidth: 0 }}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+      <div className="relative">
+        <ResponsiveContainer width="100%" height={220}>
+          <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+            <defs>
+              <linearGradient id="realGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#e8631a" stopOpacity={0.25} />
+                <stop offset="95%" stopColor="#e8631a" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis
+              dataKey="date"
+              tickFormatter={fmt}
+              tick={{ fontSize: 11, fill: '#9ca3af' }}
+              interval="preserveStartEnd"
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              tick={{ fontSize: 11, fill: '#9ca3af' }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <Tooltip
+              contentStyle={{
+                background: '#1c1c1e',
+                border: 'none',
+                borderRadius: 8,
+                color: '#fff',
+                fontSize: 12,
+              }}
+              formatter={(val, name) => [
+                `${(Number(val) ?? 0).toLocaleString('pt-BR')} conv.`,
+                name === 'real' ? 'Real' : 'Ideal',
+              ]}
+              labelFormatter={(label) => fmt(String(label))}
+            />
+            <ReferenceLine
+              y={targetConversions}
+              strokeDasharray="4 4"
+              stroke="#9ca3af"
+              strokeWidth={1.5}
+            />
+            <Area
+              type="monotone"
+              dataKey="ideal"
+              stroke="#9ca3af"
+              strokeWidth={1.5}
+              strokeDasharray="5 4"
+              fill="none"
+              dot={false}
+            />
+            <Area
+              type="monotone"
+              dataKey="real"
+              stroke={hasRealData ? '#e8631a' : '#d1d5db'}
+              strokeWidth={hasRealData ? 2.5 : 1.5}
+              fill={hasRealData ? 'url(#realGrad)' : 'none'}
+              dot={false}
+              activeDot={hasRealData ? { r: 5, fill: '#e8631a', strokeWidth: 0 } : false}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+
+        {/* Empty state overlay */}
+        {!hasRealData && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="bg-white/90 border border-gray-200 rounded-lg px-4 py-2 text-center shadow-sm">
+              <p className="text-xs font-semibold text-gray-500">Aguardando dados do Meta Ads</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -508,25 +573,40 @@ export function Dashboard() {
   const { data: goalsData, isFetching: fetchingGoals } = useGoalsProgress();
   const { lastUpdate: sseUpdate, isConnected } = useFurySSE();
 
-  const { data: summary } = useQuery<MetricsSummary>({
+  const { data: summaryRaw } = useQuery<MetricsSummary | null>({
     queryKey: ['metrics-summary'],
     queryFn: async () => {
       try {
-        const res = await api.get<{ data: MetricsSummary }>('/metrics/summary');
-        return res.data.data;
+        const res = await api.get<{ success: boolean; data: { summary: MetricsSummary } }>('/metrics/summary');
+        return res.data.data.summary ?? null;
       } catch {
-        return MOCK_SUMMARY;
+        return null;
       }
     },
     refetchInterval: 5 * 60 * 1000,
-    placeholderData: MOCK_SUMMARY,
+    placeholderData: null,
   });
 
-  const s = summary ?? MOCK_SUMMARY;
   const g = goalsData;
-
   const primaryGoal = g?.primary_goal ?? g?.goals?.[0];
   const objective = g?.objective ?? 'gerar_leads';
+
+  // True when at least one goal has a real non-zero metric from Meta
+  const hasRealData = (g?.goals ?? []).some((goal) => goal.current_value > 0);
+
+  const s = (summaryRaw && (summaryRaw.spend > 0 || summaryRaw.roas > 0 || summaryRaw.conversions > 0))
+    ? summaryRaw
+    : EMPTY_SUMMARY;
+
+  // Chart data — always present, fallback to flat ideal line when no real data
+  const chartData =
+    g?.ideal_line && g.ideal_line.length > 1
+      ? g.ideal_line
+      : buildFallbackChartData(
+          g?.days_elapsed ?? new Date().getDate(),
+          g?.primary_goal?.target_value ?? 0,
+          g?.days_in_month ?? 30
+        );
 
   return (
     <AppLayout>
@@ -537,6 +617,9 @@ export function Dashboard() {
           actions={fetchingGoals ? <span className="text-xs text-text-tertiary animate-pulse">Atualizando…</span> : undefined}
         />
 
+        {/* ── Meta connection banner ───────────────────────────────────────── */}
+        {!hasRealData && <MetaBanner />}
+
         {/* ── Hero Card ───────────────────────────────────────────────────── */}
         {primaryGoal && (
           <HeroCard
@@ -544,6 +627,7 @@ export function Dashboard() {
             objective={objective}
             daysRemaining={g?.days_remaining ?? 0}
             isConnected={isConnected}
+            hasRealData={hasRealData}
           />
         )}
 
@@ -551,35 +635,38 @@ export function Dashboard() {
         {g?.goals && g.goals.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {g.goals.map((goal) => (
-              <GoalCard key={goal.id} goal={goal} />
+              <GoalCard key={goal.id} goal={goal} hasRealData={hasRealData} />
             ))}
           </div>
         )}
 
-        {/* ── Progress Chart ──────────────────────────────────────────────── */}
-        {g?.ideal_line && g.ideal_line.length > 1 && (
-          <ProgressChart
-            data={g.ideal_line}
-            targetConversions={g.primary_goal?.target_value ?? 0}
-          />
-        )}
+        {/* ── Progress Chart — always rendered ────────────────────────────── */}
+        <ProgressChart
+          data={chartData}
+          targetConversions={g?.primary_goal?.target_value ?? 0}
+          hasRealData={hasRealData}
+        />
 
         {/* ── Metric Summary ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <MetricPill label="ROAS" value={`${(s.roas ?? 0).toFixed(1)}x`} icon={TrendingUp} />
+          <MetricPill
+            label="ROAS"
+            value={hasRealData ? `${s.roas.toFixed(1)}x` : '--'}
+            icon={TrendingUp}
+          />
           <MetricPill
             label="CPA"
-            value={`R$ ${(s.cpa ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            value={hasRealData ? `R$ ${s.cpa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--'}
             icon={Target}
           />
           <MetricPill
             label="Investido"
-            value={`R$ ${(s.spend ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
+            value={hasRealData ? `R$ ${s.spend.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '--'}
             icon={DollarSign}
           />
           <MetricPill
             label="Conversões"
-            value={(s.conversions ?? 0).toLocaleString('pt-BR')}
+            value={hasRealData ? s.conversions.toLocaleString('pt-BR') : '--'}
             icon={ShoppingCart}
           />
         </div>
