@@ -12,6 +12,7 @@ export const authMock = {
     if (email === 'dev.fashion@fury.test') {
       return {
         token: `mock-token-${Date.now()}`,
+        refreshToken: 'mock-refresh-token',
         user: mockUser,
       };
     }
