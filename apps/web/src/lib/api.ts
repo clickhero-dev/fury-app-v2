@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
+import { queryClient } from './query-client';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'https://fury-app-v2-production.up.railway.app/api';
 
@@ -25,6 +26,7 @@ api.interceptors.response.use(
       if (err.response?.status === 401 && isAuthPath) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        queryClient.clear();
         window.location.href = '/login';
       }
     }

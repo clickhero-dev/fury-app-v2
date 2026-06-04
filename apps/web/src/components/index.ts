@@ -29,3 +29,4 @@ export { InsightCard } from './InsightCard';
 export { ProgressGoal } from './ProgressGoal';
 export { FuryRuleDialog } from './FuryRuleDialog';
 export { FuryLiveFeed } from './FuryLiveFeed';
+export { ErrorBoundary } from './ErrorBoundary';

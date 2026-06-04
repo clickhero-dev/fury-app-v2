@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LogOut, ExternalLink } from 'lucide-react';
-import { AppLayout, PageHeader, EmptyState, LoadingSpinner, Button, StatusBadge } from '@/components';
+import { AppLayout, PageHeader, EmptyState, LoadingSpinner, Button, StatusBadge, ErrorBoundary } from '@/components';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import type { MetaConnection } from '@/types/meta';
@@ -105,10 +105,10 @@ function ConnectionCard({
       {/* Ad Accounts */}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
-          Contas de Anúncios ({connection.adAccounts.length})
+          Contas de Anúncios ({(connection.adAccounts ?? []).length})
         </p>
         <div className="space-y-1.5">
-          {connection.adAccounts.map((adAccount) => (
+          {(connection.adAccounts ?? []).map((adAccount) => (
             <div
               key={adAccount.id}
               className="flex items-center justify-between gap-3 p-3 bg-surface-secondary rounded-lg"
@@ -192,9 +192,9 @@ export function Integracoes() {
     queryFn: async () => {
       try {
         const response = await api.get('/meta/connections');
-        return response.data;
+        return Array.isArray(response.data) ? response.data : [];
       } catch {
-        return MOCK_CONNECTIONS;
+        return [];
       }
     },
     placeholderData: MOCK_CONNECTIONS,
@@ -253,6 +253,7 @@ export function Integracoes() {
   }
 
   return (
+    <ErrorBoundary>
     <AppLayout>
       <div className="space-y-8">
         <PageHeader
@@ -309,5 +310,6 @@ export function Integracoes() {
         )}
       </div>
     </AppLayout>
+    </ErrorBoundary>
   );
 }
