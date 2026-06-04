@@ -11,7 +11,8 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 
-function getInitials(name: string): string {
+function getInitials(name?: string | null): string {
+  if (!name) return '?';
   return name
     .split(' ')
     .filter(Boolean)
@@ -21,10 +22,10 @@ function getInitials(name: string): string {
 }
 
 export function UserMenu() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const logout = useLogout();
 
-  if (!user) return null;
+  if (isLoading || !user) return null;
 
   return (
     <DropdownMenu>
@@ -35,7 +36,7 @@ export function UserMenu() {
         >
           <Avatar>
             <AvatarFallback className="bg-orange-600 text-white">
-              {getInitials(user.name)}
+              {getInitials(user?.name)}
             </AvatarFallback>
           </Avatar>
         </button>
@@ -43,8 +44,8 @@ export function UserMenu() {
 
       <DropdownMenuContent align="end">
         <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <span className="font-semibold text-gray-900">{user.name}</span>
-          <span className="text-xs font-normal text-gray-500">{user.email}</span>
+          <span className="font-semibold text-gray-900">{user?.name ?? '—'}</span>
+          <span className="text-xs font-normal text-gray-500">{user?.email ?? '—'}</span>
         </DropdownMenuLabel>
 
         <DropdownMenuSeparator />
