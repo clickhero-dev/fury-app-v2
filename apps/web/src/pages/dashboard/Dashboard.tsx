@@ -23,7 +23,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
 } from 'lucide-react';
-import { AppLayout, PageHeader, LoadingSpinner } from '@/components';
+import { AppLayout, PageHeader } from '@/components';
 import api from '@/lib/api';
 import { useGoalsProgress, translateObjective, type GoalItem, type FuryAlert } from '@/hooks/useGoalsProgress';
 import { useFurySSE } from '@/hooks/useFurySSE';
@@ -505,7 +505,7 @@ function MetricPill({
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function Dashboard() {
-  const { data: goalsData, isLoading: loadingGoals } = useGoalsProgress();
+  const { data: goalsData, isFetching: fetchingGoals } = useGoalsProgress();
   const { lastUpdate: sseUpdate, isConnected } = useFurySSE();
 
   const { data: summary } = useQuery<MetricsSummary>({
@@ -534,21 +534,18 @@ export function Dashboard() {
         <PageHeader
           title="Dashboard"
           description={`Objetivo: ${translateObjective(objective)} · ${g?.days_remaining ?? '—'} dias restantes no mês`}
+          actions={fetchingGoals ? <span className="text-xs text-text-tertiary animate-pulse">Atualizando…</span> : undefined}
         />
 
         {/* ── Hero Card ───────────────────────────────────────────────────── */}
-        {loadingGoals ? (
-          <div className="flex justify-center py-8">
-            <LoadingSpinner size="lg" />
-          </div>
-        ) : primaryGoal ? (
+        {primaryGoal && (
           <HeroCard
             goal={primaryGoal}
             objective={objective}
             daysRemaining={g?.days_remaining ?? 0}
             isConnected={isConnected}
           />
-        ) : null}
+        )}
 
         {/* ── Goals Grid ──────────────────────────────────────────────────── */}
         {g?.goals && g.goals.length > 0 && (

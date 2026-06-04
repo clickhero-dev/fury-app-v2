@@ -163,8 +163,13 @@ export function useGoalsProgress() {
       return res.data.data;
     },
     refetchInterval: 5 * 60 * 1000,
-    placeholderData: MOCK_DATA,
+    // Durante refetch mantém os dados anteriores visíveis em vez de undefined
+    placeholderData: (previousData) => previousData ?? MOCK_DATA,
     retry: 1,
-    select: (data) => data ?? MOCK_DATA,
+    // Fallback se a API retornar dados vazios ou sem metas configuradas
+    select: (data) => {
+      if (!data || (!data.goals?.length && !data.primary_goal)) return MOCK_DATA;
+      return data;
+    },
   });
 }
