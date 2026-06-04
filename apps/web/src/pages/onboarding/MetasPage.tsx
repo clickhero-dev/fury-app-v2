@@ -4,12 +4,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Loader2, ChevronRight, ChevronLeft, Target } from 'lucide-react';
+import { CheckCircle2, Loader2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
+import { AppLayout, PageHeader } from '@/components';
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -146,7 +147,7 @@ export function MetasPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-[#F6F8FA] to-white flex items-center justify-center px-4 py-12">
+    <AppLayout>
       {/* Toast */}
       {toast && (
         <div
@@ -161,21 +162,15 @@ export function MetasPage() {
         </div>
       )}
 
-      <div className="w-full max-w-lg">
-        {/* Brand header */}
-        <div className="text-center mb-8 space-y-2">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-[#E8631A] mb-3">
-            <Target className="w-6 h-6 text-white" />
-          </div>
-          <h1 className="text-3xl font-black text-[#1C1C1E]">
-            {isEditing ? 'Atualizar Metas' : 'Configurar Metas'}
-          </h1>
-          <p className="text-[#6E7681]">
-            {isEditing
+      <div className="max-w-lg space-y-6 pb-8">
+        <PageHeader
+          title={isEditing ? 'Atualizar Metas' : 'Configurar Metas'}
+          description={
+            isEditing
               ? 'Revise e atualize seus objetivos de campanha'
-              : 'Defina seus objetivos para que a IA possa otimizar suas campanhas'}
-          </p>
-        </div>
+              : 'Defina seus objetivos para que a IA possa otimizar suas campanhas'
+          }
+        />
 
         <Card>
           <CardContent className="pt-8">
@@ -388,7 +383,7 @@ export function MetasPage() {
           </p>
         )}
       </div>
-    </div>
+    </AppLayout>
   );
 }
 
