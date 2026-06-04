@@ -448,7 +448,11 @@ export function Dashboard() {
       <div className="space-y-5 pb-8">
         <PageHeader
           title="Dashboard"
-          description={`${g?.days_remaining ?? '—'} dias restantes no mês`}
+          description={
+            g?.objective
+              ? `Objetivo: ${translateObjective(g.objective)} · ${g.days_remaining} dias restantes no mês`
+              : `${g?.days_remaining ?? '—'} dias restantes no mês`
+          }
           actions={
             fetchingGoals
               ? <span className="text-xs text-text-tertiary animate-pulse">Atualizando…</span>
