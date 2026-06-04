@@ -196,19 +196,38 @@ router.get('/subscription', async (req: Request, res: Response, next: NextFuncti
   try {
     const { tenantId } = req.tenant!;
 
-    const sub = await db.query.subscriptions.findFirst({
-      where: eq(subscriptions.tenantId, tenantId),
-      orderBy: [desc(subscriptions.createdAt)],
-    });
+    let sub;
+    try {
+      sub = await db.query.subscriptions.findFirst({
+        where: eq(subscriptions.tenantId, tenantId),
+        orderBy: [desc(subscriptions.createdAt)],
+      });
+    } catch (dbErr: any) {
+      // Table may not exist (migration not applied) or DB error — treat as no subscription
+      console.error('[billing] subscriptions query failed:', dbErr?.message ?? dbErr);
+      return res.json({ success: true, data: null, timestamp: new Date().toISOString() });
+    }
 
     if (!sub) return res.json({ success: true, data: null, timestamp: new Date().toISOString() });
 
-    const plan = await db.query.plans.findFirst({ where: eq(plans.id, sub.planId) });
-    const recentInvoices = await db.query.invoices.findMany({
-      where: eq(invoices.subscriptionId, sub.id),
-      orderBy: [desc(invoices.createdAt)],
-      limit: 12,
-    });
+    let plan = null;
+    let recentInvoices: unknown[] = [];
+
+    try {
+      plan = await db.query.plans.findFirst({ where: eq(plans.id, sub.planId) });
+    } catch (dbErr: any) {
+      console.error('[billing] plans query failed:', dbErr?.message ?? dbErr);
+    }
+
+    try {
+      recentInvoices = await db.query.invoices.findMany({
+        where: eq(invoices.subscriptionId, sub.id),
+        orderBy: [desc(invoices.createdAt)],
+        limit: 12,
+      });
+    } catch (dbErr: any) {
+      console.error('[billing] invoices query failed:', dbErr?.message ?? dbErr);
+    }
 
     res.json({
       success: true,
