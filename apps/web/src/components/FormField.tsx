@@ -11,11 +11,11 @@ export function FormField({ label, error, id, ...props }: FormFieldProps) {
 
   return (
     <div className="space-y-2">
-      <label htmlFor={inputId} className="block text-sm font-bold text-white">
+      <label htmlFor={inputId} className="block text-sm font-bold text-text-primary">
         {label}
       </label>
       <Input id={inputId} {...props} />
-      {error && <p className="text-xs font-semibold text-red-300 mt-1">{error}</p>}
+      {error && <p className="text-xs font-semibold text-red-600 mt-1">{error}</p>}
     </div>
   );
 }

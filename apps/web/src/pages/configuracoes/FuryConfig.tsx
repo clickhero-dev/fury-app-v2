@@ -32,11 +32,11 @@ function calcPreviewScore(config: {
 }
 
 function getGradeLabel(score: number): { grade: string; color: string } {
-  if (score >= 90) return { grade: 'A', color: 'text-green-400' };
-  if (score >= 75) return { grade: 'B', color: 'text-blue-400' };
-  if (score >= 60) return { grade: 'C', color: 'text-yellow-400' };
-  if (score >= 40) return { grade: 'D', color: 'text-orange-400' };
-  return { grade: 'F', color: 'text-red-400' };
+  if (score >= 90) return { grade: 'A', color: 'text-green-700' };
+  if (score >= 75) return { grade: 'B', color: 'text-blue-600' };
+  if (score >= 60) return { grade: 'C', color: 'text-yellow-700' };
+  if (score >= 40) return { grade: 'D', color: 'text-orange-600' };
+  return { grade: 'F', color: 'text-red-600' };
 }
 
 // ──────────────────────────────────────────────
@@ -249,12 +249,12 @@ export function FuryConfig() {
 
       {/* Feedback & actions */}
       {isSuccess && (
-        <div className="px-4 py-3 rounded-lg border border-green-500/30 bg-green-500/10 text-green-400 text-sm font-semibold">
+        <div className="px-4 py-3 rounded-lg border border-green-200 bg-green-50 text-green-700 text-sm font-semibold">
           Configurações salvas com sucesso.
         </div>
       )}
       {isError && (
-        <div className="px-4 py-3 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 text-sm font-semibold">
+        <div className="px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm font-semibold">
           Erro ao salvar. Verifique os valores e tente novamente.
         </div>
       )}

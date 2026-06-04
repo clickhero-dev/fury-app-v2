@@ -128,8 +128,8 @@ export function MinhasRegras() {
           onClick={() => handleToggleActive(row)}
           className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
             row.isActive
-              ? 'bg-green-500/10 text-green-400'
-              : 'bg-gray-500/10 text-gray-400'
+              ? 'bg-green-50 text-green-700'
+              : 'bg-gray-100 text-gray-600'
           }`}
         >
           {row.isActive ? '✓ Ativa' : '○ Inativa'}
@@ -164,7 +164,7 @@ export function MinhasRegras() {
           </button>
           <button
             onClick={() => handleDelete(row.id)}
-            className="text-red-400 hover:text-red-300 text-sm font-semibold transition-colors"
+            className="text-red-600 hover:text-red-700 text-sm font-semibold transition-colors"
           >
             Deletar
           </button>

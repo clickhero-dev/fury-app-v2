@@ -13,11 +13,11 @@ function getRelativeTime(dateString: string): string {
 }
 
 function getActionBadgeColor(action: string): string {
-  if (action === 'pause_campaign') return 'bg-red-500/20 text-red-400 border border-red-500/30';
-  if (action === 'reduce_budget') return 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30';
-  if (action === 'increase_budget') return 'bg-green-500/20 text-green-400 border border-green-500/30';
-  if (action === 'notify') return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
-  return 'bg-gray-500/20 text-gray-400 border border-gray-500/30';
+  if (action === 'pause_campaign') return 'bg-red-50 text-red-600 border border-red-200';
+  if (action === 'reduce_budget') return 'bg-yellow-50 text-yellow-700 border border-yellow-200';
+  if (action === 'increase_budget') return 'bg-green-50 text-green-700 border border-green-200';
+  if (action === 'notify') return 'bg-blue-50 text-blue-600 border border-blue-200';
+  return 'bg-gray-100 text-gray-600 border border-gray-200';
 }
 
 function getActionLabel(action: string): string {

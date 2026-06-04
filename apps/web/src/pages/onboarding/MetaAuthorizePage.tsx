@@ -34,7 +34,7 @@ export function MetaAuthorizePage() {
 
         <div className="pt-4 border-t border-gray-100">
           <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">Demo</p>
-          <p className="text-xs text-gray-400 mt-2">Simulação de autorização OAuth</p>
+          <p className="text-xs text-gray-500 mt-2">Simulação de autorização OAuth</p>
         </div>
       </div>
     </div>
