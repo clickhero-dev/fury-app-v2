@@ -48,17 +48,30 @@ router.get(
       const { tenantId } = req.tenant!;
       const now = new Date();
 
-      const total = daysInMonth(now);
-      const elapsed = Math.max(1, now.getDate());
-      const remaining = total - elapsed;
-      const deadline = endOfMonth(now);
+      // Allow optional startDate/endDate query params; default to current month
+      const qStart = typeof req.query.startDate === 'string' ? req.query.startDate : null;
+      const qEnd   = typeof req.query.endDate   === 'string' ? req.query.endDate   : null;
 
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+      const defaultMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
         .toISOString()
         .split('T')[0];
-      const today = now.toISOString().split('T')[0];
+      const defaultToday = now.toISOString().split('T')[0];
 
-      // ── 1. Current-month summary ──────────────────────────────────────────
+      const monthStart = qStart ?? defaultMonthStart;
+      const today      = qEnd   ?? defaultToday;
+
+      // Derive period metadata from the resolved dates
+      const periodStart = new Date(monthStart);
+      const periodEnd   = new Date(today);
+      const periodDays  = Math.max(1, Math.round((periodEnd.getTime() - periodStart.getTime()) / 86_400_000) + 1);
+
+      // For projection we always use the current calendar month's shape
+      const total    = daysInMonth(now);
+      const elapsed  = Math.max(1, Math.min(periodDays, total));
+      const remaining = Math.max(0, total - now.getDate());
+      const deadline  = endOfMonth(now);
+
+      // ── 1. Period summary ────────────────────────────────────────────────
       // Wrapped in try/catch: META_NOT_CONNECTED (no integration) should not
       // crash the endpoint — return zero metrics so the layout stays stable.
       let summary = null;
@@ -73,16 +86,14 @@ router.get(
       const currentRoas = summary?.roas ?? 0;
       const currentCpa = summary?.cpa ?? 0;
 
-      // ── 2. Sparkline data (last 7 days) ───────────────────────────────────
-      const sparkStart = new Date(now);
+      // ── 2. Sparkline data (last 7 days of the period) ────────────────────
+      const sparkEnd   = new Date(today);
+      const sparkStart = new Date(sparkEnd);
       sparkStart.setDate(sparkStart.getDate() - 6);
+      const sparkStartStr = sparkStart < periodStart ? monthStart : sparkStart.toISOString().split('T')[0];
       let daily7: DailyMetricsResponse[] = [];
       try {
-        daily7 = await provider.getDailyMetrics(
-          tenantId,
-          sparkStart.toISOString().split('T')[0],
-          today
-        );
+        daily7 = await provider.getDailyMetrics(tenantId, sparkStartStr, today);
       } catch {
         // No Meta connection — empty sparklines
       }

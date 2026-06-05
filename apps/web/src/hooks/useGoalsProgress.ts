@@ -54,12 +54,14 @@ export function translateObjective(key?: string) {
   return (key && OBJECTIVES[key]) ?? key ?? 'Seu Objetivo';
 }
 
-
-export function useGoalsProgress() {
+export function useGoalsProgress(startDate?: string, endDate?: string) {
   return useQuery<GoalsProgressData | null>({
-    queryKey: ['goals-progress-v2'],
+    queryKey: ['goals-progress-v2', startDate, endDate],
     queryFn: async () => {
-      const res = await api.get<{ data: GoalsProgressData }>('/goals/progress');
+      const params: Record<string, string> = {};
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+      const res = await api.get<{ data: GoalsProgressData }>('/goals/progress', { params });
       return res.data.data ?? null;
     },
     refetchInterval: 5 * 60 * 1000,

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -26,6 +26,82 @@ import api from '@/lib/api';
 import { useGoalsProgress, translateObjective, type FuryAlert } from '@/hooks/useGoalsProgress';
 import { useFurySSE } from '@/hooks/useFurySSE';
 
+// ─── Period ───────────────────────────────────────────────────────────────────
+
+type Period = 'today' | 'last_7d' | 'this_month' | 'last_month';
+
+function toYMD(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
+function getPeriodDates(period: Period): { startDate: string; endDate: string } {
+  const now = new Date();
+  const today = toYMD(now);
+
+  if (period === 'today') {
+    return { startDate: today, endDate: today };
+  }
+  if (period === 'last_7d') {
+    const start = new Date(now);
+    start.setDate(start.getDate() - 6);
+    return { startDate: toYMD(start), endDate: today };
+  }
+  if (period === 'last_month') {
+    const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastOfLastMonth  = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { startDate: toYMD(firstOfLastMonth), endDate: toYMD(lastOfLastMonth) };
+  }
+  // this_month
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  return { startDate: toYMD(firstOfMonth), endDate: today };
+}
+
+function formatPeriodLabel(startDate: string, endDate: string): string {
+  const fmt = (iso: string) =>
+    new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  if (startDate === endDate) return fmt(startDate);
+  const s = new Date(startDate + 'T12:00:00');
+  const e = new Date(endDate + 'T12:00:00');
+  const sameYear  = s.getFullYear() === e.getFullYear();
+  const sameMonth = sameYear && s.getMonth() === e.getMonth();
+  const sDay = s.toLocaleDateString('pt-BR', { day: 'numeric', month: sameMonth ? undefined : 'long' });
+  const eDay = e.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+  return `${sDay} · ${eDay}`;
+}
+
+// ─── Period Selector ──────────────────────────────────────────────────────────
+
+const PERIOD_LABELS: Record<Period, string> = {
+  today:      'Hoje',
+  last_7d:    '7 dias',
+  this_month: 'Este mês',
+  last_month: 'Mês anterior',
+};
+
+function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {(Object.keys(PERIOD_LABELS) as Period[]).map((p) => (
+        <button
+          key={p}
+          onClick={() => onChange(p)}
+          className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+            value === p
+              ? 'bg-[#EA580C] text-white'
+              : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-400'
+          }`}
+        >
+          {PERIOD_LABELS[p]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface MetricsSummary {
@@ -47,16 +123,6 @@ interface DailyMetric {
 type Sparkline = { date: string; value: number }[];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function isoDateRange(daysBack: number): { startDate: string; endDate: string } {
-  const today = new Date();
-  const start = new Date(today);
-  start.setDate(start.getDate() - daysBack);
-  return {
-    startDate: start.toISOString().split('T')[0],
-    endDate: today.toISOString().split('T')[0],
-  };
-}
 
 function formatAlertValue(type: FuryAlert['type'], value: number) {
   if (type === 'roas_low') return `${value.toFixed(1)}x`;
@@ -453,7 +519,10 @@ function FuryAlerts({ alerts }: { alerts: FuryAlert[] }) {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function Dashboard() {
-  const { data: goalsData, isFetching: fetchingGoals, isLoading: loadingGoals } = useGoalsProgress();
+  const [period, setPeriod] = useState<Period>('this_month');
+  const { startDate, endDate } = getPeriodDates(period);
+
+  const { data: goalsData, isFetching: fetchingGoals, isLoading: loadingGoals } = useGoalsProgress(startDate, endDate);
   const { isConnected } = useFurySSE();
   const queryClient = useQueryClient();
   const location = useLocation();
@@ -487,10 +556,12 @@ export function Dashboard() {
 
   // Metrics summary
   const { data: summaryRaw } = useQuery<MetricsSummary | null>({
-    queryKey: ['metrics-summary'],
+    queryKey: ['metrics-summary', startDate, endDate],
     queryFn: async () => {
       try {
-        const res = await api.get<{ success: boolean; data: { summary: MetricsSummary } }>('/metrics/summary');
+        const res = await api.get<{ success: boolean; data: { summary: MetricsSummary } }>('/metrics/summary', {
+          params: { startDate, endDate },
+        });
         return res.data.data.summary ?? null;
       } catch {
         return null;
@@ -500,8 +571,7 @@ export function Dashboard() {
     placeholderData: null,
   });
 
-  // Daily metrics for weekly chart
-  const { startDate, endDate } = isoDateRange(6);
+  // Daily metrics for chart
   const { data: dailyData = [] } = useQuery<DailyMetric[]>({
     queryKey: ['metrics-daily-week', startDate, endDate],
     queryFn: async () => {
@@ -566,11 +636,15 @@ export function Dashboard() {
               : `${g?.days_remaining ?? '—'} dias restantes no mês`
           }
           actions={
-            fetchingGoals
-              ? <span className="text-xs text-text-tertiary animate-pulse">Atualizando…</span>
-              : undefined
+            <div className="flex items-center gap-3">
+              {fetchingGoals && (
+                <span className="text-xs text-text-tertiary animate-pulse">Atualizando…</span>
+              )}
+              <PeriodSelector value={period} onChange={setPeriod} />
+            </div>
           }
         />
+        <p className="text-xs text-gray-400 -mt-3">{formatPeriodLabel(startDate, endDate)}</p>
 
         {/* ── Meta connection banner ───────────────────────────────────────── */}
         {!isMetaConnected && <MetaBanner />}
