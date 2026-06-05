@@ -35,8 +35,11 @@ const StatusBadgeAdapter = ({ status }: { status: CampaignData['status'] }) => {
   return <StatusBadge status={mappedStatus} />;
 };
 
+const PAGE_SIZE = 10;
+
 export function PainelCampanhas() {
-  const [filter, setFilter] = useState<FilterType>('todos');
+  const [filter, setFilter] = useState<FilterType>('ativo');
+  const [page, setPage] = useState(1);
   const [campaignToPause, setCampaignToPause] = useState<CampaignData | null>(null);
   const { data: campaigns = [], isLoading } = useCampaigns();
   const pauseMutation = usePauseCampaign();
@@ -63,6 +66,14 @@ export function PainelCampanhas() {
     if (filter === 'todos') return campaigns;
     return campaigns.filter((c) => c.status === filter);
   }, [filter, campaigns]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCampaigns.length / PAGE_SIZE));
+  const pagedCampaigns = filteredCampaigns.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const handleFilterChange = (value: FilterType) => {
+    setFilter(value);
+    setPage(1);
+  };
 
   const filterOptions: Array<{ value: FilterType; label: string; count: number }> = useMemo(
     () => [
@@ -212,7 +223,7 @@ export function PainelCampanhas() {
               {filterOptions.map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => setFilter(option.value)}
+                  onClick={() => handleFilterChange(option.value)}
                   className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
                     filter === option.value
                       ? 'bg-[#E8631A] text-white'
@@ -230,15 +241,41 @@ export function PainelCampanhas() {
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <section className="lg:col-span-2">
+          <section className="lg:col-span-2 space-y-3">
             <DataTable
               columns={columns}
-              data={filteredCampaigns}
+              data={pagedCampaigns}
               keyField="id"
               isLoading={isLoading}
               isEmpty={filteredCampaigns.length === 0 && !isLoading}
               emptyMessage="Nenhuma campanha encontrada para o filtro selecionado"
             />
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-1 text-sm text-text-secondary">
+                <span>
+                  {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredCampaigns.length)} de {filteredCampaigns.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage((p) => p - 1)}
+                    disabled={page === 1}
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    ‹ Anterior
+                  </button>
+                  <span className="font-medium text-text-primary">
+                    {page} / {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={page === totalPages}
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Próxima ›
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="lg:col-span-1">
