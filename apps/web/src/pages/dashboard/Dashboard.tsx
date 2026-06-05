@@ -197,7 +197,7 @@ function HeroStrip({
 
       {/* Bar + label */}
       <div className="flex-1 min-w-0">
-        <p className="text-xs text-white mb-1.5 truncate">
+        <p className="text-xs mb-1.5 truncate" style={{ color: '#ffffff' }}>
           {translateObjective(objective)}
         </p>
         <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
