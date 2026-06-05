@@ -208,7 +208,7 @@ export function EstudioHome() {
                 <div className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="font-semibold text-text-primary text-sm flex-1 line-clamp-2">
-                      {asset.name}
+                      {asset.name ?? `Criativo de ${asset.type === 'image' ? 'imagem' : asset.type}`}
                     </h3>
                   </div>
 
