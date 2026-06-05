@@ -70,34 +70,6 @@ function ConnectionCard({
         <StatusBadge status={getTokenStatus(tokenValid)} />
       </div>
 
-      {/* Ad Accounts */}
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
-          Contas de Anúncios ({(connection.adAccounts ?? []).length})
-        </p>
-        <div className="space-y-1.5">
-          {(connection.adAccounts ?? []).map((adAccount) => (
-            <div
-              key={adAccount.id}
-              className="flex items-center justify-between gap-3 p-3 bg-surface-secondary rounded-lg"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-text-primary line-clamp-1">
-                  {adAccount.name}
-                </p>
-                <p className="text-xs text-text-tertiary mt-0.5">{adAccount.id}</p>
-              </div>
-              <div
-                className={cn(
-                  'flex-shrink-0 w-2 h-2 rounded-full',
-                  adAccount.account_status === 1 ? 'bg-success' : 'bg-gray-300'
-                )}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Active account selector */}
       {activeAdAccounts.length > 0 && (
         <div className="space-y-1.5">
@@ -153,6 +125,34 @@ function ConnectionCard({
       {/* Metadata */}
       <div className="flex items-center justify-between text-xs text-text-tertiary pt-2">
         <span>Conectado em {formatDate(connection.createdAt)}</span>
+      </div>
+
+      {/* Ad Accounts */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
+          Contas de Anúncios ({(connection.adAccounts ?? []).length})
+        </p>
+        <div className="space-y-1.5">
+          {(connection.adAccounts ?? []).map((adAccount) => (
+            <div
+              key={adAccount.id}
+              className="flex items-center justify-between gap-3 p-3 bg-surface-secondary rounded-lg"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-text-primary line-clamp-1">
+                  {adAccount.name}
+                </p>
+                <p className="text-xs text-text-tertiary mt-0.5">{adAccount.id}</p>
+              </div>
+              <div
+                className={cn(
+                  'flex-shrink-0 w-2 h-2 rounded-full',
+                  adAccount.account_status === 1 ? 'bg-success' : 'bg-gray-300'
+                )}
+              />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Actions */}
