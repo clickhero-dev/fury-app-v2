@@ -71,21 +71,22 @@ function buildSvgOverlay(headline: string, cta: string, brandColor: string): Buf
 
   let headlineEl: string;
   if (lines.length === 1) {
-    headlineEl = `<text x="540" y="730" font-family="Arial, sans-serif" font-size="56" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${lines[0]}</text>`;
+    headlineEl = `<text x="540" y="180" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${lines[0]}</text>`;
   } else {
     headlineEl = `
-<text x="540" y="700" font-family="Arial, sans-serif" font-size="56" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${lines[0]}</text>
-<text x="540" y="765" font-family="Arial, sans-serif" font-size="56" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${lines[1]}</text>`;
+<text x="540" y="140" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${lines[0]}</text>
+<text x="540" y="215" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${lines[1]}</text>`;
   }
 
-  const ctaY = lines.length === 1 ? 850 : 890;
+  const ctaY = lines.length === 1 ? 325 : 365;
   const ctaPillTop = ctaY - 36;
 
-  const svg = `<svg width="1080" height="1080" xmlns="http://www.w3.org/2000/svg">
-  <rect x="0" y="600" width="1080" height="480" fill="rgba(0,0,0,0.82)"/>
+  // SVG is 1080×480 — composited at top:600 so coordinates are strip-local
+  const svg = `<svg width="1080" height="480" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1080" height="480" fill="${brandColor}" opacity="0.85"/>
   ${headlineEl}
-  <rect x="290" y="${ctaPillTop}" width="500" height="72" rx="36" fill="${brandColor}"/>
-  <text x="540" y="${ctaY}" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${ctaText}</text>
+  <rect x="290" y="${ctaPillTop}" width="500" height="72" rx="36" fill="rgba(0,0,0,0.25)"/>
+  <text x="540" y="${ctaY}" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${ctaText}</text>
 </svg>`;
 
   return Buffer.from(svg);
@@ -113,7 +114,7 @@ export async function renderCreative(input: RenderCreativeInput): Promise<Render
   })
     .composite([
       { input: productResized, top: 0, left: 0 },
-      { input: svgOverlay, top: 0, left: 0 },
+      { input: svgOverlay, top: 600, left: 0 },
     ])
     .jpeg({ quality: 90 })
     .toBuffer();
