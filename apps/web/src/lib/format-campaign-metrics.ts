@@ -7,7 +7,7 @@ export function formatInvestidoBRL(value: number | null | undefined): string {
 }
 
 export function formatRoas(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '-';
+  if (value == null || !Number.isFinite(value) || value === 0) return '-';
   return `${value.toFixed(2)}x`;
 }
 

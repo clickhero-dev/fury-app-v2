@@ -94,6 +94,11 @@ export function PainelCampanhas() {
     {
       key: 'name' as const,
       label: 'Nome da Campanha',
+      render: (value: unknown) => (
+        <span className="block truncate max-w-[200px]" title={String(value)}>
+          {String(value)}
+        </span>
+      ),
     },
     {
       key: 'status' as const,

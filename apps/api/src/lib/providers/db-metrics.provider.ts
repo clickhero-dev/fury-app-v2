@@ -682,7 +682,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
             .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
             .reduce((sum, a) => sum + parseFloat(String(a.value)), 0);
 
-          const roas = spend > 0 ? revenue / spend : 0;
+          const roas = spend > 0 && revenue > 0 ? roundToDecimals(revenue / spend, 2) : 0;
 
           return {
             date: item.date_start!,
