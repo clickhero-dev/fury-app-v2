@@ -193,6 +193,7 @@ export interface MetaInsightsData {
   clicks?: string;
   ctr?: string;
   cpm?: string;
+  cpc?: string;
   actions?: MetaInsightsAction[];
   action_values?: MetaInsightsAction[];
   purchase_roas?: MetaInsightsAction[];
@@ -375,6 +376,7 @@ export async function getMetaInsights(params: {
     'clicks',
     'ctr',
     'cpm',
+    'cpc',
     'actions',
     'action_values',
     'purchase_roas',

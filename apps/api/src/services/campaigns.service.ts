@@ -1,7 +1,13 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { automationRules, campaigns, db, furyInsights, metaConnections } from '../lib/db.js';
-import { metaApiCall, type MetaCampaignCreateResponse, type MetaInsightsResponse } from '../lib/meta-api.js';
+import { metaApiCall, getMetaInsights, type MetaCampaignCreateResponse } from '../lib/meta-api.js';
 import { decryptMetaToken } from '../utils/crypto.js';
+import {
+  parseConversionsFromActions,
+  parseRoasFromPurchaseRoas,
+  parseCpaFromCostPerAction,
+} from '../utils/meta-insights-parser.js';
+import { roundToDecimals } from '../utils/metrics-formatter.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export async function createCampaign(args: {
@@ -739,28 +745,44 @@ export async function getCampaignInsights(args: {
   const { startDate, endDate } = calculateDateRange(args.dateRange, args.startDate, args.endDate);
 
   try {
-    const response = await metaApiCall<MetaInsightsResponse>(
-      `/${encodeURIComponent(args.campaignId)}/insights?` +
-        `date_preset=${args.dateRange === 'custom' ? 'custom' : 'last_' + args.dateRange.split('_')[1] + 'd'}` +
-        `&start_date=${startDate}&end_date=${endDate}&time_increment=1`,
-      accessToken
-    );
+    const response = await getMetaInsights({
+      accessToken,
+      entityId: args.campaignId,
+      startDate,
+      endDate,
+      timeIncrement: 1,
+    });
 
-    return {
-      campaign: campaignBlock,
-      timeseries: (response.data || []).map((item) => ({
-        date: item.date_start || item.date_stop,
-        spend: parseFloat(item.spend || '0'),
-        impressions: parseInt(item.impressions || '0', 10),
-        clicks: parseInt(item.clicks || '0', 10),
-        ctr: parseFloat(item.ctr || '0'),
-        cpm: parseFloat(item.cpm || '0'),
-        conversions: item.actions
-          ?.filter((a) => a.action_type === 'purchase')
-          .reduce((sum, a) => sum + (typeof a.value === 'string' ? parseInt(a.value, 10) : (a.value as number)), 0) || 0,
-      })),
-    };
+    const timeseries = (response.data || []).map((item) => {
+      const spend = parseFloat(item.spend || '0');
+      const impressions = parseInt(item.impressions || '0', 10);
+      const clicks = parseInt(item.clicks || '0', 10);
+      const ctr = parseFloat(item.ctr || '0');
+      const cpc = parseFloat(item.cpc || '0');
+      const cpm = parseFloat(item.cpm || '0');
+      const conversions = parseConversionsFromActions(item.actions) ?? 0;
+      const roas = parseRoasFromPurchaseRoas(item.purchase_roas) ?? null;
+      const cpa =
+        parseCpaFromCostPerAction(item.cost_per_action_type) ??
+        (conversions > 0 ? roundToDecimals(spend / conversions, 2) : null);
+
+      return {
+        date: item.date_start || item.date_stop || '',
+        spend,
+        impressions,
+        clicks,
+        ctr,
+        cpc,
+        cpm,
+        roas,
+        cpa,
+        conversions,
+      };
+    });
+
+    return { campaign: campaignBlock, timeseries };
   } catch (err) {
+    console.error('[getCampaignInsights] Meta API error:', err);
     const metaCode = (err as any).metaCode;
     if (metaCode === 190) {
       throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
