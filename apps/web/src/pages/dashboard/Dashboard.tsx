@@ -101,6 +101,18 @@ function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Peri
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface ActiveCampaign {
+  id: string;
+  name: string;
+  status: string;
+  metrics: {
+    spend: number;
+    conversions: number | null;
+    roas: number | null;
+    cpa: number | null;
+  };
+}
+
 interface MetricsSummary {
   spend: number;
   roas: number;
@@ -522,6 +534,101 @@ function FuryAlerts({ alerts }: { alerts: FuryAlert[] }) {
   );
 }
 
+// ─── Active Campaigns Table ───────────────────────────────────────────────────
+
+function fmtBRL(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '-';
+  return `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function fmtRoas(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v) || v === 0) return '-';
+  return `${v.toFixed(2)}x`;
+}
+
+function fmtInt(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '-';
+  return Math.round(v).toLocaleString('pt-BR');
+}
+
+function ActiveCampaignsTable({
+  campaigns,
+}: {
+  campaigns: ActiveCampaign[];
+}) {
+  const sorted = [...campaigns]
+    .sort((a, b) => (b.metrics.conversions ?? -1) - (a.metrics.conversions ?? -1))
+    .slice(0, 10);
+
+  const topId = sorted[0]?.id;
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-sm font-bold text-gray-900">Campanhas Ativas</h3>
+          <p className="text-xs text-gray-400 mt-0.5">Ordenadas por performance</p>
+        </div>
+        <Link to="/campanhas" className="text-xs text-[#EA580C] font-medium hover:underline">
+          Ver todas →
+        </Link>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="py-8 text-center">
+          <p className="text-sm text-gray-400 mb-2">Nenhuma campanha ativa no momento</p>
+          <Link to="/campanhas" className="text-xs text-[#EA580C] font-medium hover:underline">
+            Criar campanha →
+          </Link>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px] text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="pb-2 text-left text-xs font-semibold text-gray-400">Campanha</th>
+                <th className="pb-2 text-right text-xs font-semibold text-gray-400">Investido</th>
+                <th className="pb-2 text-right text-xs font-semibold text-gray-400">Clientes</th>
+                <th className="pb-2 text-right text-xs font-semibold text-gray-400">Custo/Cliente</th>
+                <th className="pb-2 text-right text-xs font-semibold text-gray-400">Retorno</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((c) => {
+                const isTop = c.id === topId && (c.metrics.conversions ?? 0) > 0;
+                return (
+                  <tr
+                    key={c.id}
+                    className={`border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors ${isTop ? 'bg-orange-50' : ''}`}
+                  >
+                    <td className="py-2.5 pr-4">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="truncate max-w-[200px] block text-gray-800"
+                          title={c.name}
+                        >
+                          {c.name}
+                        </span>
+                        {isTop && (
+                          <span className="shrink-0 text-xs text-[#EA580C] font-semibold">⭐ Top</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-2.5 text-right text-gray-700">{fmtBRL(c.metrics.spend)}</td>
+                    <td className="py-2.5 text-right text-gray-700">{fmtInt(c.metrics.conversions)}</td>
+                    <td className="py-2.5 text-right text-gray-700">{fmtBRL(c.metrics.cpa)}</td>
+                    <td className="py-2.5 text-right text-gray-700">{fmtRoas(c.metrics.roas)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function Dashboard() {
@@ -574,6 +681,24 @@ export function Dashboard() {
     },
     refetchInterval: 5 * 60 * 1000,
     placeholderData: null,
+  });
+
+  // Active campaigns for dashboard table
+  const { data: activeCampaigns = [] } = useQuery<ActiveCampaign[]>({
+    queryKey: ['campaigns-active-dashboard', startDate, endDate],
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ success: boolean; data: { campaigns: ActiveCampaign[] } }>(
+          '/metrics/campaigns',
+          { params: { status: 'ACTIVE', startDate, endDate, limit: 10 } }
+        );
+        return res.data.data.campaigns ?? [];
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 5 * 60 * 1000,
+    placeholderData: [],
   });
 
   // Daily metrics for chart
@@ -727,6 +852,11 @@ export function Dashboard() {
           <div className="lg:col-span-2">
             <FuryAlerts alerts={alerts} />
           </div>
+        </div>
+
+        {/* ── Active campaigns table ────────────────────────────────────────── */}
+        <div className="mt-5">
+          <ActiveCampaignsTable campaigns={activeCampaigns} />
         </div>
       </div>
     </AppLayout>
