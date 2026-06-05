@@ -492,7 +492,7 @@ function FuryAlerts({ alerts }: { alerts: FuryAlert[] }) {
           <div>
             <p className="text-sm font-semibold text-gray-400">Nenhum alerta ativo</p>
             <p className="text-xs text-gray-300 mt-0.5">
-              Todas as campanhas estão dentro das metas
+              Nenhum desvio detectado nas campanhas
             </p>
           </div>
         </div>
