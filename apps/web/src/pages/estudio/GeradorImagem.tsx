@@ -55,6 +55,7 @@ export function GeradorImagem() {
   const [creativeAssetId, setCreativeAssetId] = useState<string | null>(null);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+  const [imageLoadError, setImageLoadError] = useState(false);
 
   const {
     register,
@@ -80,8 +81,9 @@ export function GeradorImagem() {
     },
     onSuccess: (data) => {
       setCreativeAssetId(data.creativeAssetId);
-      setGeneratedImageUrl(data.imageUrl);
+      setGeneratedImageUrl(data.imageUrl ?? null);
       setPublishedUrl(null);
+      setImageLoadError(false);
     },
   });
 
@@ -113,6 +115,7 @@ export function GeradorImagem() {
     setCreativeAssetId(null);
     setGeneratedImageUrl(null);
     setPublishedUrl(null);
+    setImageLoadError(false);
     generateMutation.reset();
     publishMutation.reset();
   };
@@ -241,13 +244,26 @@ export function GeradorImagem() {
               ) : generatedImageUrl ? (
                 <Card>
                   <div className="space-y-0">
-                    <div className="w-full bg-surface-secondary rounded-t-xl overflow-hidden aspect-video">
-                      <img
-                        src={generatedImageUrl}
-                        alt="Criativo gerado"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
+                    {/* Use compliance.imageUrl as authoritative source when available */}
+                    {(() => {
+                      const src = compliance?.imageUrl || generatedImageUrl;
+                      return imageLoadError || !src ? (
+                        <div className="w-full rounded-t-xl bg-[#FEF0E7] aspect-video flex items-center justify-center px-6">
+                          <p className="text-sm text-center text-[#EA580C] font-medium">
+                            Imagem gerada — clique em Publicar no Meta para usar esta imagem
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="w-full bg-surface-secondary rounded-t-xl overflow-hidden aspect-video">
+                          <img
+                            src={src}
+                            alt="Criativo gerado"
+                            className="w-full h-full object-cover"
+                            onError={() => setImageLoadError(true)}
+                          />
+                        </div>
+                      );
+                    })()}
 
                     <div className="p-6 space-y-4">
                       <div className="text-xs text-text-secondary space-y-1">
