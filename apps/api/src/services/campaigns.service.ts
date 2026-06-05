@@ -74,8 +74,9 @@ export async function createCampaign(args: {
 }
 
 export async function pauseCampaign(args: { tenantId: string; campaignId: string }) {
+  // campaignId is the Meta campaign ID (e.g. "120212984741310287"), not the DB UUID.
   const campaign = await db.query.campaigns.findFirst({
-    where: eq(campaigns.id, args.campaignId),
+    where: eq(campaigns.metaCampaignId, args.campaignId),
   });
 
   if (!campaign) {
@@ -122,13 +123,13 @@ export async function pauseCampaign(args: { tenantId: string; campaignId: string
   await db
     .update(campaigns)
     .set({ status: 'paused' })
-    .where(eq(campaigns.id, args.campaignId));
+    .where(eq(campaigns.id, campaign.id));
 
   await db
     .insert(furyInsights)
     .values({
       tenantId: args.tenantId,
-      campaignId: args.campaignId,
+      campaignId: campaign.id,
       suggestionType: 'campaign_pause',
       suggestionData: { reason: 'manual', autoApplied: false },
     });
@@ -137,8 +138,9 @@ export async function pauseCampaign(args: { tenantId: string; campaignId: string
 }
 
 export async function resumeCampaign(args: { tenantId: string; campaignId: string }) {
+  // campaignId is the Meta campaign ID (e.g. "120212984741310287"), not the DB UUID.
   const campaign = await db.query.campaigns.findFirst({
-    where: eq(campaigns.id, args.campaignId),
+    where: eq(campaigns.metaCampaignId, args.campaignId),
   });
 
   if (!campaign) {
@@ -185,13 +187,13 @@ export async function resumeCampaign(args: { tenantId: string; campaignId: strin
   await db
     .update(campaigns)
     .set({ status: 'active' })
-    .where(eq(campaigns.id, args.campaignId));
+    .where(eq(campaigns.id, campaign.id));
 
   await db
     .insert(furyInsights)
     .values({
       tenantId: args.tenantId,
-      campaignId: args.campaignId,
+      campaignId: campaign.id,
       suggestionType: 'campaign_resume',
       suggestionData: { reason: 'manual', autoApplied: false },
     });

@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useCampaigns } from '@/hooks/useCampaigns';
-import { usePauseCampaign } from '@/hooks/usePauseCampaign';
+import { usePauseCampaign, getFriendlyPauseError } from '@/hooks/usePauseCampaign';
 import type { CampaignData } from '@/types/campaigns';
 import {
   formatConversions,
@@ -43,6 +43,7 @@ export function PainelCampanhas() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [campaignToPause, setCampaignToPause] = useState<CampaignData | null>(null);
+  const [actionError, setActionError] = useState<string>('');
 
   const { data: campaigns = [], isLoading } = useCampaigns();
   const pauseMutation = usePauseCampaign();
@@ -53,14 +54,22 @@ export function PainelCampanhas() {
       : null;
 
   const handleResume = (campaign: CampaignData) => {
-    pauseMutation.mutate({ id: campaign.id, action: 'resume' });
+    setActionError('');
+    pauseMutation.mutate(
+      { id: campaign.id, action: 'resume' },
+      { onError: (err) => setActionError(getFriendlyPauseError(err)) }
+    );
   };
 
   const handleConfirmPause = () => {
     if (!campaignToPause) return;
+    setActionError('');
     pauseMutation.mutate(
       { id: campaignToPause.id, action: 'pause' },
-      { onSettled: () => setCampaignToPause(null) }
+      {
+        onSettled: () => setCampaignToPause(null),
+        onError: (err) => setActionError(getFriendlyPauseError(err)),
+      }
     );
   };
 
@@ -184,6 +193,22 @@ export function PainelCampanhas() {
           title="Gerenciamento de Campanhas"
           description="Monitore e otimize o desempenho de todas as suas campanhas"
         />
+
+        {/* Action error banner */}
+        {actionError && (
+          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+            <span className="shrink-0 mt-0.5">⚠️</span>
+            <span className="flex-1">{actionError}</span>
+            <button
+              type="button"
+              onClick={() => setActionError('')}
+              className="shrink-0 text-red-400 hover:text-red-600 transition-colors text-lg leading-none"
+              aria-label="Fechar"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Toolbar: search + status filter */}
         <div className="flex flex-col sm:flex-row gap-3">
