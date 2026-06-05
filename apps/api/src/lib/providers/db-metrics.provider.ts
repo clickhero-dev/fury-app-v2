@@ -18,6 +18,7 @@ import {
   parseCpaFromCostPerAction,
   parseRoasFromPurchaseRoas,
 } from '../../utils/meta-insights-parser.js';
+import { isConversionEvent } from '../../utils/meta-conversion-events.js';
 import type {
   MetricsSummaryResponse,
   CampaignResponse,
@@ -674,12 +675,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
           const clicks = parseInt(item.clicks || '0', 10);
 
           const conversions = (item.actions || [])
-            .filter(
-              (a) =>
-                a.action_type === 'purchase' ||
-                a.action_type === 'lead' ||
-                a.action_type === 'offsite_conversion'
-            )
+            .filter((a) => isConversionEvent(a.action_type))
             .reduce((sum, a) => sum + parseInt(String(a.value), 10), 0);
 
           const revenue = (item.action_values || [])

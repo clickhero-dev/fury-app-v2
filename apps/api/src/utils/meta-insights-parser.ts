@@ -1,11 +1,6 @@
 import type { MetaInsightsAction, MetaInsightsData } from '../lib/meta-api.js';
 import { calculateCPA, roundToDecimals } from './metrics-formatter.js';
-
-const CONVERSION_ACTION_TYPES = new Set([
-  'purchase',
-  'lead',
-  'offsite_conversion',
-]);
+import { isConversionEvent } from './meta-conversion-events.js';
 
 const ROAS_ACTION_TYPES = ['omni_purchase', 'purchase'] as const;
 const CPA_ACTION_TYPES = ['purchase', 'omni_purchase'] as const;
@@ -35,7 +30,7 @@ export function parseConversionsFromActions(
   if (!actions) return null;
 
   return actions
-    .filter((a) => CONVERSION_ACTION_TYPES.has(a.action_type))
+    .filter((a) => isConversionEvent(a.action_type))
     .reduce((sum, a) => sum + parseInt(String(a.value), 10), 0);
 }
 
