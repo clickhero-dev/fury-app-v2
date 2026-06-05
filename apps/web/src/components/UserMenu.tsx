@@ -11,14 +11,17 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 
-function getInitials(name?: string | null): string {
-  if (!name) return '?';
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0].toUpperCase())
-    .join('');
+function getInitials(name?: string | null, email?: string | null): string {
+  if (name) {
+    return name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0].toUpperCase())
+      .join('');
+  }
+  if (email) return email[0].toUpperCase();
+  return '?';
 }
 
 export function UserMenu() {
@@ -36,7 +39,7 @@ export function UserMenu() {
         >
           <Avatar>
             <AvatarFallback className="bg-orange-600 text-white">
-              {getInitials(user?.name)}
+              {getInitials(user?.name, user?.email)}
             </AvatarFallback>
           </Avatar>
         </button>

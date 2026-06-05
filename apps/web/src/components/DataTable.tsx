@@ -49,10 +49,9 @@ export function DataTable<T extends Record<string, any>>({
   }
 
   return (
-    <div className={cn('bg-surface rounded-xl border border-border overflow-hidden', className)}>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
+    <div className={cn('bg-surface rounded-xl border border-border overflow-x-auto', className)}>
+      <table className="w-full">
+        <thead>
             <tr className="border-b border-border bg-surface-secondary">
               {columns.map((column) => (
                 <th
@@ -93,9 +92,8 @@ export function DataTable<T extends Record<string, any>>({
                 ))}
               </tr>
             ))}
-          </tbody>
-        </table>
-      </div>
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -706,7 +706,7 @@ export function Dashboard() {
           <MetricCard
             icon={TrendingUp}
             label="Retorno do Investimento"
-            value={hasRealData ? `${s.roas.toFixed(1)}x` : '--'}
+            value={hasRealData && s.roas > 0 ? `${s.roas.toFixed(1)}x` : '--'}
             sparkline={sparkRoas}
             hasRealData={hasRealData}
             hasGoals={hasGoals}
