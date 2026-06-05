@@ -2,7 +2,8 @@ import { and, count, desc, eq, or, type SQL } from 'drizzle-orm';
 import { db, creativeAssets, metaConnections } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
 import { getComplianceQueue } from '../lib/queue.js';
-import { decryptAccessToken, uploadAdImage } from '../lib/meta-api.js';
+import { uploadAdImage } from '../lib/meta-api.js';
+import { decryptMetaToken } from '../utils/crypto.js';
 import { saveTemporaryStudioImage } from '../lib/temp-storage.js';
 import { claude } from '../lib/claude.js';
 
@@ -214,7 +215,7 @@ export async function uploadCreativeAssetToMeta(params: {
     throw new AppError(403, 'AD_ACCOUNT_NOT_FOUND', 'Conta de anuncio nao pertence ao seu tenant.');
   }
 
-  const accessToken = decryptAccessToken(metaConn.accessToken);
+  const accessToken = decryptMetaToken(metaConn.accessToken);
 
   let imageResponse: Response | undefined;
   try {

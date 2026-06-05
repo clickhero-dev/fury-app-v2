@@ -1,8 +1,8 @@
-import crypto from 'crypto';
 import { db, metaConnections } from '../db.js';
 import { eq } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler.js';
 import { getMetaInsights, metaApiCall, type MetaInsightsData } from '../meta-api.js';
+import { decryptMetaToken } from '../../utils/crypto.js';
 import { IMetricsProvider } from './metrics.provider.js';
 import {
   centavosToReais,
@@ -29,27 +29,6 @@ import type {
 import { getClientGoals } from '../../services/goal-service.js';
 
 export class DatabaseMetricsProvider implements IMetricsProvider {
-  private decryptToken(encryptedPayload: string): string {
-    const [ivHex, authTagHex, encryptedHex] = encryptedPayload.split(':');
-    if (!ivHex || !authTagHex || !encryptedHex) {
-      throw new AppError(500, 'TOKEN_DECRYPT_ERROR', 'Formato de token criptografado invalido.');
-    }
-
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
-      throw new AppError(500, 'MISSING_ENV', 'JWT_SECRET nao configurada.');
-    }
-
-    const key = crypto.createHash('sha256').update(jwtSecret).digest();
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
-    decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
-    const decrypted = Buffer.concat([
-      decipher.update(Buffer.from(encryptedHex, 'hex')),
-      decipher.final(),
-    ]);
-    return decrypted.toString('utf8');
-  }
-
   private async fetchMetaInsights(params: {
     tenantId: string;
     startDate: string;
@@ -69,7 +48,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       );
     }
 
-    const accessToken = this.decryptToken(connection.accessToken);
+    const accessToken = decryptMetaToken(connection.accessToken);
     const adAccounts = (connection.adAccounts as any[]) || [];
     const adAccountId =
       params.adAccountId ||
@@ -223,7 +202,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         );
       }
 
-      const accessToken = this.decryptToken(connection.accessToken);
+      const accessToken = decryptMetaToken(connection.accessToken);
       const adAccounts = (connection.adAccounts as any[]) || [];
       const adAccountId =
         (connection as any).selectedAdAccountId ||
@@ -358,7 +337,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         );
       }
 
-      const accessToken = this.decryptToken(connection.accessToken);
+      const accessToken = decryptMetaToken(connection.accessToken);
 
       let campaignBlock: CampaignInsightsResponse['campaign'] = {
         id: campaignId,
@@ -438,7 +417,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         );
       }
 
-      const accessToken = this.decryptToken(connection.accessToken);
+      const accessToken = decryptMetaToken(connection.accessToken);
 
       const fields = encodeURIComponent(
         'id,name,status,daily_budget,targeting,insights{spend,clicks,ctr,cpm}'

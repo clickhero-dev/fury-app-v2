@@ -1,6 +1,7 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { automationRules, campaigns, db, furyInsights, metaConnections } from '../lib/db.js';
-import { metaApiCall, decryptAccessToken, type MetaCampaignCreateResponse, type MetaInsightsResponse } from '../lib/meta-api.js';
+import { metaApiCall, type MetaCampaignCreateResponse, type MetaInsightsResponse } from '../lib/meta-api.js';
+import { decryptMetaToken } from '../utils/crypto.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export async function createCampaign(args: {
@@ -25,7 +26,7 @@ export async function createCampaign(args: {
     throw new AppError(403, 'AD_ACCOUNT_NOT_FOUND', 'Ad account does not belong to this tenant');
   }
 
-  const accessToken = decryptAccessToken(metaConn.accessToken);
+  const accessToken = decryptMetaToken(metaConn.accessToken);
 
   try {
     const response = await metaApiCall<MetaCampaignCreateResponse>(
@@ -82,7 +83,7 @@ export async function pauseCampaign(args: { tenantId: string; campaignId: string
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
   }
 
-  const accessToken = decryptAccessToken(metaConn.accessToken);
+  const accessToken = decryptMetaToken(metaConn.accessToken);
 
   // Verify the campaign belongs to one of this tenant's ad accounts
   try {
@@ -135,7 +136,7 @@ export async function resumeCampaign(args: { tenantId: string; campaignId: strin
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
   }
 
-  const accessToken = decryptAccessToken(metaConn.accessToken);
+  const accessToken = decryptMetaToken(metaConn.accessToken);
 
   // Verify the campaign belongs to one of this tenant's ad accounts
   try {
@@ -204,7 +205,7 @@ export async function updateCampaignBudget(args: {
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
   }
 
-  const accessToken = decryptAccessToken(metaConn.accessToken);
+  const accessToken = decryptMetaToken(metaConn.accessToken);
 
   try {
     await metaApiCall(
@@ -493,7 +494,7 @@ export async function updateCampaign(args: {
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
   }
 
-  const accessToken = decryptAccessToken(metaConn.accessToken);
+  const accessToken = decryptMetaToken(metaConn.accessToken);
   const updateBody: Record<string, unknown> = {};
 
   if (args.name) {
@@ -585,7 +586,7 @@ export async function updateCampaignStatus(args: {
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
   }
 
-  const accessToken = decryptAccessToken(metaConn.accessToken);
+  const accessToken = decryptMetaToken(metaConn.accessToken);
 
   try {
     await metaApiCall(
@@ -647,7 +648,7 @@ export async function softDeleteCampaign(args: { tenantId: string; campaignId: s
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
   }
 
-  const accessToken = decryptAccessToken(metaConn.accessToken);
+  const accessToken = decryptMetaToken(metaConn.accessToken);
 
   try {
     await metaApiCall(
@@ -709,7 +710,7 @@ export async function getCampaignInsights(args: {
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
   }
 
-  const accessToken = decryptAccessToken(metaConn.accessToken);
+  const accessToken = decryptMetaToken(metaConn.accessToken);
 
   const { startDate, endDate } = calculateDateRange(args.dateRange, args.startDate, args.endDate);
 

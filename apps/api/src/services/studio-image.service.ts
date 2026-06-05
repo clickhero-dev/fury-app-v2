@@ -2,7 +2,8 @@ import OpenAI from 'openai';
 import { and, eq } from 'drizzle-orm';
 import { db, creativeAssets, metaConnections } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
-import { createAdCreativeFromCopy, decryptAccessToken, uploadAdImage } from '../lib/meta-api.js';
+import { createAdCreativeFromCopy, uploadAdImage } from '../lib/meta-api.js';
+import { decryptMetaToken } from '../utils/crypto.js';
 import { saveTemporaryStudioImage } from '../lib/temp-storage.js';
 import { getComplianceQueue } from '../lib/queue.js';
 
@@ -279,7 +280,7 @@ export async function publishStudioAssetToMeta(params: {
     throw new AppError(400, 'AD_ACCOUNT_MISSING', 'Nenhuma ad account disponivel para publicar o asset.');
   }
 
-  const accessToken = decryptAccessToken(connection.accessToken);
+  const accessToken = decryptMetaToken(connection.accessToken);
 
   // Shared publishing flow: same endpoint and tenant/account resolution,
   // with type-specific branch only for the final Meta API call.

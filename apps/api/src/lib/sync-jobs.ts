@@ -1,8 +1,9 @@
-import { createDecipheriv, createHash, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
 import { and, eq } from 'drizzle-orm';
 import { db, metaConnections } from './db.js';
 import type { MetaAdAccount } from './meta-api.js';
 import { getUserAdAccounts } from './meta-api.js';
+import { decryptMetaToken } from '../utils/crypto.js';
 import { getRedis, waitForRedisReady } from './redis.js';
 
 export interface AddSyncJobParams {
@@ -47,23 +48,6 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
-function decryptToken(encryptedPayload: string): string {
-  const [ivHex, authTagHex, encryptedHex] = encryptedPayload.split(':');
-  if (!ivHex || !authTagHex || !encryptedHex) {
-    throw new Error('Formato de token criptografado invalido.');
-  }
-
-  const jwtSecret = getRequiredEnv('JWT_SECRET');
-  const key = createHash('sha256').update(jwtSecret).digest();
-  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
-  decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(encryptedHex, 'hex')),
-    decipher.final(),
-  ]);
-  return decrypted.toString('utf8');
-}
-
 async function processSyncJob(job: SyncJobRecord): Promise<void> {
   const connection = await db.query.metaConnections.findFirst({
     where: and(
@@ -81,7 +65,7 @@ async function processSyncJob(job: SyncJobRecord): Promise<void> {
     return;
   }
 
-  const accessToken = decryptToken(connection.accessToken);
+  const accessToken = decryptMetaToken(connection.accessToken);
   const refreshedAdAccounts = await getUserAdAccounts(accessToken);
 
   await db
