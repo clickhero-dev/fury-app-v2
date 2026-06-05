@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { claude } from '../lib/claude.js';
+import OpenAI from 'openai';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import * as studioController from '../controllers/studio.controller.js';
@@ -68,7 +68,7 @@ router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: Requ
     const quantidade = body.quantidadeVariacoes ?? 3;
 
     // Fallback/Mock se não houver chave
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!process.env.OPENAI_API_KEY) {
       return res.json({
         variacoes: getMockVariations(body, quantidade),
       });
@@ -78,17 +78,17 @@ router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: Requ
     const systemPrompt = `Você é um especialista em copywriting para anúncios digitais no Facebook e Instagram. Gere variações de copy persuasivas, claras e em português brasileiro. Respeite RIGOROSAMENTE os limites de caracteres especificados. Responda APENAS em JSON válido sem texto adicional.`;
     const userPrompt = `Produto: ${body.produto}\nPúblico: ${body.publico}\nObjetivo: ${body.objetivo}\nTom: ${body.tom}\n\nGere ${quantidade} variações de ${type} em português, limite máximo ${limiteChars[type]} caracteres.\n\nRetorne APENAS:\n{"variacoes": [{"texto": "..."}]}`;
 
-    const response = await claude.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const chatResponse = await openai.chat.completions.create({
+      model: 'gpt-4o',
       max_tokens: 1000,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
     });
 
-    const content0 = (response as any)?.content?.[0];
-    const text = (content0 && typeof content0 === 'object' && 'text' in content0)
-      ? String((content0 as any).text)
-      : (typeof content0 === 'string' ? content0 : '');
+    const text = chatResponse.choices[0]?.message?.content ?? '';
     const cleaned = text.replace(/```json|```/g, '').trim();
 
     let parsed: any;

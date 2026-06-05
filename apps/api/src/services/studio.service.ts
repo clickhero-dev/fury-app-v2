@@ -1,11 +1,11 @@
 import { and, count, desc, eq, or, type SQL } from 'drizzle-orm';
+import OpenAI from 'openai';
 import { db, creativeAssets, metaConnections } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
 import { getComplianceQueue } from '../lib/queue.js';
 import { uploadAdImage } from '../lib/meta-api.js';
 import { decryptMetaToken } from '../utils/crypto.js';
 import { saveTemporaryStudioImage } from '../lib/temp-storage.js';
-import { claude } from '../lib/claude.js';
 
 const CHAR_LIMITS = {
   headline: 40,
@@ -114,18 +114,21 @@ function buildUserPrompt(input: any) {
 }
 
 export async function generateCopy(input: any) {
-  if (!process.env.ANTHROPIC_API_KEY || process.env.META_USE_MOCK === 'true') {
+  if (!process.env.OPENAI_API_KEY || process.env.META_USE_MOCK === 'true') {
     return { variacoes: buildMockVariations(input) };
   }
 
-  const response = await claude.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const chatResponse = await client.chat.completions.create({
+    model: 'gpt-4o',
     max_tokens: 1000,
-    system: buildSystemPrompt(),
-    messages: [{ role: 'user', content: buildUserPrompt(input) }],
+    messages: [
+      { role: 'system', content: buildSystemPrompt() },
+      { role: 'user', content: buildUserPrompt(input) },
+    ],
   });
 
-  const responseText = (response as any).content?.[0]?.type === 'text' ? (response as any).content[0].text : '';
+  const responseText = chatResponse.choices[0]?.message?.content ?? '';
   const cleaned = responseText.replace(/```json|```/g, '').trim();
 
   let parsed: any = null;

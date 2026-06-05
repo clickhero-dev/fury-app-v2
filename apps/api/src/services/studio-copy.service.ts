@@ -1,5 +1,5 @@
+import OpenAI from 'openai';
 import { db, creativeAssets } from '@fury/db';
-import { claude } from '../lib/claude.js';
 
 type AdCopyInput = {
   objective?: string;
@@ -19,8 +19,12 @@ function buildUserPrompt(input: AdCopyInput) {
   return `Você é copywriter especialista em Meta Ads. Gere ${qty} variações com o seguinte formato por item: {"headline":"...","primary_text":"...","cta":"...","reasoning":"..."}.\n\nObjetivo: ${input.objective || ''} | Produto: ${input.product || ''} | Público: ${input.audience || ''} | Tom: ${input.tone || ''} | BrandVoice: ${input.brandVoice || ''} \n\nRegras: Headline máximo 40 chars; Texto primário máximo 125 chars; CTA máximo 20 chars. Responda APENAS um JSON com um array no corpo principal, por exemplo: [{"headline":"...","primary_text":"...","cta":"...","reasoning":"..."}]`;
 }
 
+function buildOpenAIClient() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
 async function runTextComplianceCheck(text: string) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.OPENAI_API_KEY) {
     return { approved: true, issues: [] };
   }
 
@@ -28,26 +32,31 @@ async function runTextComplianceCheck(text: string) {
   const user = `Analise este texto do anúncio e responda APENAS JSON: {"approved": boolean, "issues": string[]}. Texto: ${text}`;
 
   try {
-    const response = await claude.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+    const client = buildOpenAIClient();
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o',
       max_tokens: 512,
-      system,
-      messages: [{ role: 'user', content: user }],
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
     });
 
-    const content0 = (response as any)?.content?.[0];
-    const textResp = (content0 && typeof content0 === 'object' && 'text' in content0) ? String((content0 as any).text) : String(content0 || '');
-    const cleaned = textResp.replace(/```json|```/g, '').trim();
+    const rawText = response.choices[0]?.message?.content ?? '';
+    const cleaned = rawText.replace(/```json|```/g, '').trim();
     let parsed: any = {};
     try {
       const match = cleaned.match(/\{[\s\S]*\}/);
       parsed = match ? JSON.parse(match[0]) : JSON.parse(cleaned);
-    } catch (err) {
+    } catch {
       return { approved: true, issues: ['compliance: parse_error'] };
     }
 
-    return { approved: Boolean(parsed.approved), issues: Array.isArray(parsed.issues) ? parsed.issues.map(String) : [] };
-  } catch (err) {
+    return {
+      approved: Boolean(parsed.approved),
+      issues: Array.isArray(parsed.issues) ? parsed.issues.map(String) : [],
+    };
+  } catch {
     return { approved: true, issues: ['compliance: error_calling_api'] };
   }
 }
@@ -55,18 +64,14 @@ async function runTextComplianceCheck(text: string) {
 export async function generateAdCopy(input: AdCopyInput, tenantId: string) {
   const qty = Math.min(Math.max(input.quantity ?? 3, 3), 5);
 
-  // If no API key or mock, create simple mock variations
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.OPENAI_API_KEY) {
     const mocked = Array.from({ length: qty }, (_, i) => ({
-      id: null,
       headline: `${input.product || 'Produto'} - variação ${i + 1}`,
       primary_text: `Texto primário para ${input.product || 'produto'} direcionado a ${input.audience || 'público'}.`,
       cta: 'Saiba mais',
       reasoning: 'Fallback mock',
-      compliance_status: 'approved',
     }));
 
-    // persist mocks as assets
     const results = [] as any[];
     for (const v of mocked) {
       const payload = JSON.stringify({ headline: v.headline, primary_text: v.primary_text, cta: v.cta, reasoning: v.reasoning });
@@ -77,31 +82,32 @@ export async function generateAdCopy(input: AdCopyInput, tenantId: string) {
     return { variations: results };
   }
 
+  const client = buildOpenAIClient();
   const system = buildSystemPrompt();
   const user = buildUserPrompt({ ...input, quantity: qty });
 
-  const response = await claude.messages.create({
-    model: 'claude-sonnet-4-20250514',
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o',
     max_tokens: 1200,
-    system,
-    messages: [{ role: 'user', content: user }],
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
   });
 
-  const content0 = (response as any)?.content?.[0];
-  const text = (content0 && typeof content0 === 'object' && 'text' in content0) ? String((content0 as any).text) : String(content0 || '');
+  const text = response.choices[0]?.message?.content ?? '';
   const cleaned = text.replace(/```json|```/g, '').trim();
 
   let parsed: any[] = [];
   try {
-    // Try to parse either array or object wrapping array
     const match = cleaned.match(/\[[\s\S]*\]/);
     if (match) parsed = JSON.parse(match[0]);
     else {
       const maybe = JSON.parse(cleaned);
-      if (Array.isArray(maybe)) parsed = maybe; else if (Array.isArray(maybe?.variations)) parsed = maybe.variations;
+      if (Array.isArray(maybe)) parsed = maybe;
+      else if (Array.isArray(maybe?.variations)) parsed = maybe.variations;
     }
-  } catch (err) {
-    // fallback empty
+  } catch {
     parsed = [];
   }
 

@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq';
+import OpenAI from 'openai';
 import { db, creativeAssets } from '@fury/db';
 import { eq } from 'drizzle-orm';
-import { claude } from '../lib/claude.js';
 import { getRedis } from '../lib/redis.js';
 import { STUDIO_COMPLIANCE_QUEUE_NAME } from '../lib/queue.js';
 
@@ -23,11 +23,11 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
     STUDIO_COMPLIANCE_QUEUE_NAME,
     async (job) => {
       const { creativeAssetId, tenantId } = job.data;
-      
+
       console.log(`[COMPLIANCE] 🔍 Iniciando análise do asset: ${creativeAssetId} | Tenant: ${tenantId}`);
 
       try {
-        // 1. Buscar asset no banco de dados (Drizzle)
+        // 1. Buscar asset no banco
         const assets = await db
           .select()
           .from(creativeAssets)
@@ -36,20 +36,19 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
 
         const asset = assets[0];
 
-        // O worker depende de um creative_asset já salvo no banco.
         if (!asset) {
           console.error(`[COMPLIANCE] ❌ Asset não existe no banco: ${creativeAssetId}`);
-          return await fallbackApprove(creativeAssetId, 'Creative asset nao encontrado no banco', 'rejected');
+          return await setComplianceResult(creativeAssetId, 'rejected', 'Creative asset nao encontrado no banco', { approved: false, issues: [], text_percentage: 0 });
         }
 
         if (asset.tenantId !== tenantId) {
           console.warn(`[COMPLIANCE] ⚠️ Asset ${creativeAssetId} nao pertence ao tenant ${tenantId}`);
-          return await fallbackApprove(creativeAssetId, 'Creative asset nao pertence ao tenant informado', 'rejected');
+          return await setComplianceResult(creativeAssetId, 'rejected', 'Creative asset nao pertence ao tenant informado', { approved: false, issues: [], text_percentage: 0 });
         }
 
         if (!asset.url) {
           console.warn(`[COMPLIANCE] ⚠️ Asset sem URL: ${creativeAssetId}`);
-          return await fallbackApprove(creativeAssetId, 'Asset sem URL de imagem', 'rejected');
+          return await setComplianceResult(creativeAssetId, 'pending_compliance', 'Não foi possível verificar o compliance. Tente novamente.', { approved: false, issues: [], text_percentage: 0 });
         }
 
         // 2. Download e conversão para Base64
@@ -57,120 +56,111 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
         let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg';
 
         try {
-          const response = await fetch(asset.url);
-          
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status} ao baixar imagem`);
+          const fetchRes = await fetch(asset.url);
+
+          if (!fetchRes.ok) {
+            throw new Error(`HTTP ${fetchRes.status} ao baixar imagem`);
           }
 
-          const contentType = response.headers.get('content-type') || 'image/jpeg';
+          const contentType = fetchRes.headers.get('content-type') || 'image/jpeg';
           if (contentType.includes('png')) mediaType = 'image/png';
           else if (contentType.includes('gif')) mediaType = 'image/gif';
           else if (contentType.includes('webp')) mediaType = 'image/webp';
 
-          const arrayBuffer = await response.arrayBuffer();
+          const arrayBuffer = await fetchRes.arrayBuffer();
           base64Image = Buffer.from(arrayBuffer).toString('base64');
 
           console.log(`[COMPLIANCE] ✅ Imagem baixada (${mediaType})`);
         } catch (err) {
           console.error(`[COMPLIANCE] ❌ Erro no download:`, err);
-          return await fallbackApprove(
+          return await setComplianceResult(
             creativeAssetId,
-            `Erro no download: ${err instanceof Error ? err.message : 'Erro desconhecido'}`,
-            'approved'
+            'pending_compliance',
+            'Não foi possível verificar o compliance. Tente novamente.',
+            { approved: false, issues: [], text_percentage: 0 }
           );
         }
 
-        // 3. Fallback se API Key não existir
-        if (!process.env.ANTHROPIC_API_KEY) {
-          console.warn('[COMPLIANCE] ⚠️ ANTHROPIC_API_KEY ausente');
-          return await fallbackApprove(
+        // 3. Verificar OPENAI_API_KEY
+        if (!process.env.OPENAI_API_KEY) {
+          console.warn('[COMPLIANCE] ⚠️ OPENAI_API_KEY ausente — aprovando automaticamente');
+          return await setComplianceResult(
             creativeAssetId,
-            'API Key da Anthropic não configurada',
-            'approved'
+            'approved',
+            'API Key OpenAI nao configurada',
+            { approved: true, issues: [], text_percentage: 0 }
           );
         }
 
-        // 4. Chamada Claude Vision
+        // 4. Chamada GPT-4o Vision
+        const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
         const systemPrompt = 'Você é um especialista em compliance de anúncios da Meta.';
+        const userPrompt = 'Analise esta imagem de anúncio. Identifique: 1) Texto proibido pelo Meta 2) Conteúdo enganoso 3) Proporção de texto (deve ser < 20%). Responda JSON: {"approved": boolean, "issues": string[], "text_percentage": number}';
 
-        const userPrompt = 'Analise esta imagem de anúncio. Identifique: 1) Texto proibido pelo Meta 2) Conteúdo enganoso 3) Proporção de texto (deve ser < 20%). Responda JSON: {approved: boolean, issues: string[], text_percentage: number}';
+        console.log('[COMPLIANCE] 📤 Enviando para OpenAI GPT-4o...');
 
-        console.log('[COMPLIANCE] 📤 Enviando para Claude API...');
-
-        const response = await claude.messages.create({
-          model: 'claude-3-5-sonnet-20241022',
+        const chatResponse = await client.chat.completions.create({
+          model: 'gpt-4o',
           max_tokens: 1024,
-          system: systemPrompt,
           messages: [
+            { role: 'system', content: systemPrompt },
             {
               role: 'user',
               content: [
                 {
-                  type: 'image',
-                  source: {
-                    type: 'base64',
-                    media_type: mediaType,
-                    data: base64Image,
-                  },
+                  type: 'image_url',
+                  image_url: { url: `data:${mediaType};base64,${base64Image}` },
                 },
-                {
-                  type: 'text',
-                  text: userPrompt,
-                },
+                { type: 'text', text: userPrompt },
               ],
             },
           ],
         });
 
-        // 5. Parsear Resposta
-        const textContent = response.content.find((block) => block.type === 'text');
-        if (!textContent || textContent.type !== 'text') {
-          throw new Error('Claude não retornou texto');
+        // 5. Parsear resposta
+        const rawText = chatResponse.choices[0]?.message?.content ?? '';
+
+        if (!rawText) {
+          console.error('[COMPLIANCE] GPT-4o não retornou texto');
+          return await setComplianceResult(
+            creativeAssetId,
+            'pending_compliance',
+            'Não foi possível verificar o compliance. Tente novamente.',
+            { approved: false, issues: [], text_percentage: 0 }
+          );
         }
 
         let analysis: ComplianceAnalysis;
         try {
-          const cleaned = textContent.text.replace(/```json|```/g, '').trim();
+          const cleaned = rawText.replace(/```json|```/g, '').trim();
           const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
           const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : cleaned) as Partial<ComplianceAnalysis>;
           analysis = {
             approved: Boolean(parsed.approved),
-            issues: Array.isArray(parsed.issues) ? parsed.issues.map((issue) => String(issue)) : [],
+            issues: Array.isArray(parsed.issues) ? parsed.issues.map((i) => String(i)) : [],
             text_percentage: Number(parsed.text_percentage ?? 0),
           };
         } catch (parseErr) {
-          console.error('[COMPLIANCE] Erro de Parse JSON Claude');
-          return await fallbackApprove(creativeAssetId, 'Erro no parse da análise do Claude', 'rejected');
+          console.error('[COMPLIANCE] Erro de parse JSON GPT-4o');
+          return await setComplianceResult(
+            creativeAssetId,
+            'pending_compliance',
+            'Não foi possível verificar o compliance. Tente novamente.',
+            { approved: false, issues: [], text_percentage: 0 }
+          );
         }
 
-        // 6. Atualizar Creative Asset no Banco
+        // 6. Salvar resultado
         const status = analysis.approved ? 'approved' : 'rejected';
-        const notesPayload = {
-          approved: analysis.approved,
-          issues: analysis.issues,
-          text_percentage: analysis.text_percentage,
-        };
-        const notes = `[COMPLIANCE] approved=${analysis.approved} | text_percentage=${analysis.text_percentage} | issues=${analysis.issues.join(' ; ')} | data=${JSON.stringify(notesPayload)}`;
-
-        await db
-          .update(creativeAssets)
-          .set({
-            complianceStatus: status as any,
-            complianceNotes: notes,
-          })
-          .where(eq(creativeAssets.id, creativeAssetId));
-
-        console.log(`[COMPLIANCE] 🚀 Status Atualizado: ${status.toUpperCase()} para Asset ${creativeAssetId}`);
-
-        return { success: true, status, text_percentage: analysis.text_percentage };
+        return await setComplianceResult(creativeAssetId, status, null, analysis);
       } catch (error) {
         console.error(`[COMPLIANCE ERROR] Falha crítica no Job:`, error);
-        return await fallbackApprove(
+        return await setComplianceResult(
           creativeAssetId,
-          `Erro interno no worker: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
-          'rejected'
+          'pending_compliance',
+          'Não foi possível verificar o compliance. Tente novamente.',
+          { approved: false, issues: [], text_percentage: 0 }
         );
       }
     },
@@ -180,6 +170,36 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
     }
   );
 };
+
+async function setComplianceResult(
+  assetId: string,
+  status: 'approved' | 'rejected' | 'pending_compliance',
+  message: string | null,
+  analysis: ComplianceAnalysis
+): Promise<{ success: boolean }> {
+  const notesPayload = {
+    approved: analysis.approved,
+    issues: analysis.issues,
+    text_percentage: analysis.text_percentage,
+  };
+
+  const notes = message
+    ? `[FALLBACK] ${message} | data=${JSON.stringify(notesPayload)}`
+    : `[COMPLIANCE] approved=${analysis.approved} | text_percentage=${analysis.text_percentage} | issues=${analysis.issues.join(' ; ')} | data=${JSON.stringify(notesPayload)}`;
+
+  try {
+    await db
+      .update(creativeAssets)
+      .set({ complianceStatus: status as any, complianceNotes: notes })
+      .where(eq(creativeAssets.id, assetId));
+
+    console.log(`[COMPLIANCE] 🚀 Status: ${status.toUpperCase()} para Asset ${assetId}`);
+    return { success: true };
+  } catch (err) {
+    console.error(`[COMPLIANCE] 💥 Erro ao salvar resultado:`, err);
+    return { success: false };
+  }
+}
 
 export async function startComplianceCheckWorker(): Promise<void> {
   if (complianceWorkerInstance) return;
@@ -192,30 +212,4 @@ export async function stopComplianceCheckWorker(): Promise<void> {
   await complianceWorkerInstance.close();
   complianceWorkerInstance = null;
   console.log('🛑 Compliance check worker stopped');
-}
-
-async function fallbackApprove(
-  assetId: string,
-  reason: string,
-  status: 'approved' | 'rejected' = 'approved'
-): Promise<{ success: boolean; fallback: boolean }> {
-  try {
-    await db
-      .update(creativeAssets)
-      .set({
-        complianceStatus: status as any,
-        complianceNotes: `[FALLBACK] ${reason} | data=${JSON.stringify({
-          approved: status === 'approved',
-          issues: [reason],
-          text_percentage: 0,
-        })}`,
-      })
-      .where(eq(creativeAssets.id, assetId));
-
-    console.log(`[COMPLIANCE] 🔄 Fallback aplicado: ${status} | Motivo: ${reason}`);
-    return { success: true, fallback: true };
-  } catch (err) {
-    console.error(`[COMPLIANCE] 💥 Erro crítico no fallback:`, err);
-    return { success: false, fallback: true };
-  }
 }

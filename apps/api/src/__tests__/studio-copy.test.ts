@@ -4,16 +4,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import studioRoutes from '../routes/studio.routes'
 
 const mocks = vi.hoisted(() => ({
-  claudeCreate: vi.fn(),
+  chatCreate: vi.fn(),
 }))
 
-vi.mock('../lib/claude.js', () => ({
-  claude: {
-    messages: {
-      create: mocks.claudeCreate,
-    },
-  },
-}))
+vi.mock('openai', () => {
+  return {
+    default: vi.fn().mockImplementation(() => ({
+      chat: {
+        completions: {
+          create: mocks.chatCreate,
+        },
+      },
+    })),
+  }
+})
 
 vi.mock('../middleware/auth.middleware.js', () => ({
   authMiddleware: (_req: any, _res: any, next: any) => next(),
@@ -37,8 +41,8 @@ describe('POST /api/studio/generate-copy', () => {
     app.use('/api/studio', studioRoutes)
   })
 
-  it('should return fallback variations when ANTHROPIC_API_KEY is not set', async () => {
-    delete process.env.ANTHROPIC_API_KEY
+  it('should return fallback variations when OPENAI_API_KEY is not set', async () => {
+    delete process.env.OPENAI_API_KEY
 
     const response = await request(app)
       .post('/api/studio/generate-copy')
@@ -74,19 +78,20 @@ describe('POST /api/studio/generate-copy', () => {
   })
 
   it('should generate copy and calculate score', async () => {
-    process.env.ANTHROPIC_API_KEY = 'fake-key'
+    process.env.OPENAI_API_KEY = 'fake-key'
 
-    mocks.claudeCreate.mockResolvedValue({
-      content: [
+    mocks.chatCreate.mockResolvedValue({
+      choices: [
         {
-          type: 'text',
-          text: JSON.stringify({
-            variacoes: [
-              { texto: 'Compre a cadeira do futuro, hoje.' },
-              { texto: 'Ergonomia e design para seu escritório. Saiba mais agora!' },
-              { texto: 'Sua coluna agradece. Clique e garanta.' },
-            ],
-          }),
+          message: {
+            content: JSON.stringify({
+              variacoes: [
+                { texto: 'Compre a cadeira do futuro, hoje.' },
+                { texto: 'Ergonomia e design para seu escritório. Saiba mais agora!' },
+                { texto: 'Sua coluna agradece. Clique e garanta.' },
+              ],
+            }),
+          },
         },
       ],
     })
