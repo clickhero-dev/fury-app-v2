@@ -129,9 +129,10 @@ function formatAlertValue(type: FuryAlert['type'], value: number) {
 // ─── Status config ────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-  on_track: { label: 'No caminho', bg: 'bg-[#dff3e4]', text: 'text-[#2ea043]', bar: '#2ea043' },
-  at_risk:  { label: 'Em risco',   bg: 'bg-[#fff4d6]', text: 'text-[#e8a317]', bar: '#e8a317' },
-  off_track: { label: 'Fora da meta', bg: 'bg-[#fde8e7]', text: 'text-[#da3633]', bar: '#da3633' },
+  on_track:  { label: 'No caminho',    bg: 'bg-[#dff3e4]', text: 'text-[#2ea043]', bar: '#2ea043' },
+  at_risk:   { label: 'Em risco',      bg: 'bg-[#fff4d6]', text: 'text-[#e8a317]', bar: '#e8a317' },
+  off_track: { label: 'Fora da meta',  bg: 'bg-[#fde8e7]', text: 'text-[#da3633]', bar: '#da3633' },
+  no_goals:  { label: 'Sem metas',     bg: 'bg-gray-100',  text: 'text-gray-500',  bar: '#d1d5db' },
 } as const;
 
 const NO_DATA_CFG = { label: 'Sem dados', bg: 'bg-gray-100', text: 'text-gray-500', bar: '#d1d5db' };
@@ -169,14 +170,17 @@ function HeroStrip({
   objective,
   daysRemaining,
   hasRealData,
+  hasGoals,
 }: {
   goal: NonNullable<ReturnType<typeof useGoalsProgress>['data']>['primary_goal'];
   objective: string;
   daysRemaining: number;
   hasRealData: boolean;
+  hasGoals: boolean;
 }) {
-  const cfg = hasRealData ? STATUS_CONFIG[goal.status] : NO_DATA_CFG;
-  const pct = hasRealData ? Math.min(100, goal.progress_pct ?? 0) : 0;
+  const statusKey = !hasRealData ? 'no_goals' : (goal.status === 'no_goals' ? 'no_goals' : goal.status);
+  const cfg = STATUS_CONFIG[statusKey] ?? NO_DATA_CFG;
+  const pct = hasGoals && hasRealData ? Math.min(100, goal.progress_pct ?? 0) : 0;
 
   return (
     <div className="bg-gradient-to-r from-[#1a0a00] via-[#2d1200] to-[#1c1c1e] rounded-xl px-5 py-3.5 flex items-center gap-5 flex-wrap sm:flex-nowrap border-l-4 border-[#EA580C]">
@@ -184,23 +188,26 @@ function HeroStrip({
       <div className="flex items-baseline gap-2 shrink-0">
         <span
           className="text-3xl font-black leading-none"
-          style={{ color: hasRealData && pct > 0 ? '#EA580C' : undefined }}
+          style={{ color: hasGoals && hasRealData && pct > 0 ? '#EA580C' : undefined }}
         >
-          {hasRealData ? (
-            <span className={pct > 0 ? '' : 'text-white/40'}>{pct}</span>
-          ) : (
-            <span className="text-white/40">--</span>
-          )}
+          <span className={hasGoals && hasRealData && pct > 0 ? '' : 'text-white/40'}>
+            {pct}
+          </span>
         </span>
         <span className="text-lg font-bold text-white/50">%</span>
       </div>
 
       {/* Bar + label */}
       <div className="flex-1 min-w-0">
-        <p className="text-xs mb-1.5 truncate" style={{ color: '#ffffff' }}>
+        <p className="text-xs mb-1 truncate" style={{ color: '#ffffff' }}>
           {translateObjective(objective)}
         </p>
-        <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+        {!hasGoals && (
+          <Link to="/onboarding/metas" className="text-xs text-[#EA580C] underline">
+            Configurar metas →
+          </Link>
+        )}
+        <div className="h-1.5 bg-white/10 rounded-full overflow-hidden mt-1.5">
           <div
             className="h-full rounded-full transition-all duration-700 ease-out"
             style={{
@@ -217,7 +224,7 @@ function HeroStrip({
         <span>
           <span className="text-white/70">Projeção:{' '}</span>
           <strong className="text-white/80 font-bold">
-            {hasRealData
+            {hasGoals && hasRealData
               ? `${(goal.projected_value ?? 0).toLocaleString('pt-BR')} ${goal.unit}`
               : '--'}
           </strong>
@@ -237,10 +244,11 @@ function HeroStrip({
 
 // ─── Metric Card ─────────────────────────────────────────────────────────────
 
-const PROGRESS_COLORS: Record<'on_track' | 'at_risk' | 'off_track', string> = {
-  on_track: '#2ea043',
-  at_risk:  '#e8a317',
+const PROGRESS_COLORS: Record<'on_track' | 'at_risk' | 'off_track' | 'no_goals', string> = {
+  on_track:  '#2ea043',
+  at_risk:   '#e8a317',
   off_track: '#da3633',
+  no_goals:  '#d1d5db',
 };
 
 function MetricCard({
@@ -249,6 +257,7 @@ function MetricCard({
   value,
   sparkline,
   hasRealData,
+  hasGoals,
   progressPct,
   progressStatus,
   progressLabel,
@@ -258,8 +267,9 @@ function MetricCard({
   value: string;
   sparkline?: Sparkline;
   hasRealData?: boolean;
+  hasGoals?: boolean;
   progressPct?: number;
-  progressStatus?: 'on_track' | 'at_risk' | 'off_track';
+  progressStatus?: 'on_track' | 'at_risk' | 'off_track' | 'no_goals';
   progressLabel?: string;
 }) {
   const showSpark = hasRealData && sparkline && sparkline.length >= 2;
@@ -268,10 +278,12 @@ function MetricCard({
       ? '#e8631a'
       : '#da3633';
   const showProgress = hasRealData && progressPct !== undefined && progressStatus !== undefined;
-  const barColor = showProgress ? PROGRESS_COLORS[progressStatus!] : '#d1d5db';
+  const isNoGoals = progressStatus === 'no_goals' || !hasGoals;
+  const barColor = showProgress && !isNoGoals ? PROGRESS_COLORS[progressStatus!] : '#d1d5db';
   const barWidth = showProgress ? Math.min(100, progressPct!) : 0;
 
-  const statusColor = hasRealData && progressStatus ? PROGRESS_COLORS[progressStatus] : undefined;
+  // no_goals: no border color, no dot, no icon color
+  const statusColor = hasRealData && progressStatus && !isNoGoals ? PROGRESS_COLORS[progressStatus] : undefined;
 
   return (
     <div
@@ -297,9 +309,13 @@ function MetricCard({
         </p>
         {showProgress && (
           <div className="mt-1.5 space-y-1">
-            {progressLabel && (
+            {isNoGoals ? (
+              <Link to="/onboarding/metas" className="text-xs text-[#EA580C] underline cursor-pointer">
+                Defina uma meta →
+              </Link>
+            ) : progressLabel ? (
               <p className="text-xs text-gray-400">{progressLabel}</p>
-            )}
+            ) : null}
             <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-700"
@@ -582,6 +598,7 @@ export function Dashboard() {
   const objective = g?.objective ?? 'gerar_leads';
 
   const hasRealData = (g?.goals ?? []).some((goal) => goal.current_value > 0);
+  const hasGoals = g?.hasGoals ?? false;
 
   const s = summaryRaw ?? { spend: 0, roas: 0, cpa: 0, conversions: 0 };
 
@@ -645,6 +662,7 @@ export function Dashboard() {
             objective={objective}
             daysRemaining={g?.days_remaining ?? 0}
             hasRealData={hasRealData}
+            hasGoals={hasGoals}
           />
         )}
 
@@ -656,9 +674,10 @@ export function Dashboard() {
             value={hasRealData ? s.conversions.toLocaleString('pt-BR') : '--'}
             sparkline={sparkConversions}
             hasRealData={hasRealData}
+            hasGoals={hasGoals}
             progressPct={goalConversions?.progress_pct}
             progressStatus={goalConversions?.status}
-            progressLabel={goalConversions ? `${Math.round(goalConversions.progress_pct)}% da meta mensal` : undefined}
+            progressLabel={hasGoals && goalConversions ? `${Math.round(goalConversions.progress_pct)}% da meta mensal` : undefined}
           />
           <MetricCard
             icon={DollarSign}
@@ -670,9 +689,10 @@ export function Dashboard() {
             }
             sparkline={sparkBudget}
             hasRealData={hasRealData}
+            hasGoals={hasGoals}
             progressPct={goalBudget?.progress_pct}
             progressStatus={goalBudget?.status}
-            progressLabel={goalBudget ? `${Math.round(goalBudget.progress_pct)}% do orçamento` : undefined}
+            progressLabel={hasGoals && goalBudget ? `${Math.round(goalBudget.progress_pct)}% do orçamento` : undefined}
           />
           <MetricCard
             icon={ShoppingBag}
@@ -689,9 +709,10 @@ export function Dashboard() {
             value={hasRealData ? `${s.roas.toFixed(1)}x` : '--'}
             sparkline={sparkRoas}
             hasRealData={hasRealData}
+            hasGoals={hasGoals}
             progressPct={goalRoas?.progress_pct}
             progressStatus={goalRoas?.status}
-            progressLabel={goalRoas ? `${Math.round(goalRoas.progress_pct)}% da meta de retorno` : undefined}
+            progressLabel={hasGoals && goalRoas ? `${Math.round(goalRoas.progress_pct)}% da meta de retorno` : undefined}
           />
         </div>
 

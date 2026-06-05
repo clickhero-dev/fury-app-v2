@@ -98,44 +98,53 @@ router.get(
         // No Meta connection — empty sparklines
       }
 
-      // ── 3. Client goals (DB, with fallback) ──────────────────────────────
-      let targetCpa = 50;
-      let targetBudget = 10_000;
-      let targetRoas = 3.0;
+      // ── 3. Client goals (DB) ─────────────────────────────────────────────
+      let targetCpa = 0;
+      let targetBudget = 0;
+      let targetRoas = 0;
       let objective = 'aumentar_vendas';
+      let hasGoals = false;
 
       try {
         const goalsRow = await db.query.clientGoals.findFirst({
           where: eq(clientGoals.tenantId, tenantId),
         });
         if (goalsRow) {
+          hasGoals = true;
           targetCpa = parseMoneyJson(goalsRow.targetCpa, 50);
           targetBudget = parseMoneyJson(goalsRow.monthlyBudget, 10_000);
+          targetRoas = 3.0;
           objective = goalsRow.objective ?? 'aumentar_vendas';
         }
       } catch {
-        // no DB — use fallbacks
+        // no DB — hasGoals stays false
       }
 
-      const targetConversions = targetBudget / targetCpa;
+      const targetConversions = hasGoals && targetCpa > 0 ? targetBudget / targetCpa : 0;
 
-      // ── 4. Projections ───────────────────────────────────────────────────
-      const projConversions = (currentConversions / elapsed) * total;
-      const projSpend = (currentSpend / elapsed) * total;
+      // ── 4. Projections (only meaningful when goals exist) ────────────────
+      const projConversions = hasGoals ? (currentConversions / elapsed) * total : 0;
+      const projSpend = hasGoals ? (currentSpend / elapsed) * total : 0;
 
-      const convProjPct = targetConversions > 0
+      const convProjPct = hasGoals && targetConversions > 0
         ? (projConversions / targetConversions) * 100
         : 0;
-      const budgetProjPct = targetBudget > 0
+      const budgetProjPct = hasGoals && targetBudget > 0
         ? (projSpend / targetBudget) * 100
         : 0;
-      // ROAS is a rate — compare current value directly to target
-      const roasProjPct = targetRoas > 0
+      const roasProjPct = hasGoals && targetRoas > 0
         ? Math.min(100, (currentRoas / targetRoas) * 100)
         : 0;
 
+      type GoalStatus = 'on_track' | 'at_risk' | 'off_track' | 'no_goals';
+
       // ── 5. Goals array ────────────────────────────────────────────────────
-      const goals = [
+      const goals: {
+        id: string; name: string; metric: string; unit: string;
+        target_value: number; current_value: number; progress_pct: number;
+        projected_value: number; deadline: string; status: GoalStatus;
+        sparkline: { date: string; value: number }[];
+      }[] = [
         {
           id: 'conversions',
           name: 'Conversões',
@@ -143,10 +152,10 @@ router.get(
           unit: 'conv.',
           target_value: Math.round(targetConversions),
           current_value: currentConversions,
-          progress_pct: Math.min(100, Math.round((currentConversions / Math.max(1, targetConversions)) * 100)),
+          progress_pct: hasGoals ? Math.min(100, Math.round((currentConversions / Math.max(1, targetConversions)) * 100)) : 0,
           projected_value: Math.round(projConversions),
           deadline,
-          status: getStatus(convProjPct),
+          status: hasGoals ? getStatus(convProjPct) : 'no_goals',
           sparkline: daily7.map((d) => ({ date: d.date, value: d.conversions })),
         },
         {
@@ -156,10 +165,10 @@ router.get(
           unit: 'R$',
           target_value: targetBudget,
           current_value: Math.round(currentSpend * 100) / 100,
-          progress_pct: Math.min(100, Math.round((currentSpend / Math.max(1, targetBudget)) * 100)),
+          progress_pct: hasGoals ? Math.min(100, Math.round((currentSpend / Math.max(1, targetBudget)) * 100)) : 0,
           projected_value: Math.round(projSpend * 100) / 100,
           deadline,
-          status: getStatus(budgetProjPct),
+          status: hasGoals ? getStatus(budgetProjPct) : 'no_goals',
           sparkline: daily7.map((d) => ({ date: d.date, value: Math.round(d.spend) })),
         },
         {
@@ -169,10 +178,10 @@ router.get(
           unit: 'x',
           target_value: targetRoas,
           current_value: Math.round(currentRoas * 100) / 100,
-          progress_pct: Math.min(100, Math.round(roasProjPct)),
+          progress_pct: hasGoals ? Math.min(100, Math.round(roasProjPct)) : 0,
           projected_value: Math.round(currentRoas * 100) / 100,
           deadline,
-          status: getStatus(roasProjPct),
+          status: hasGoals ? getStatus(roasProjPct) : 'no_goals',
           sparkline: daily7.map((d) => ({ date: d.date, value: Math.round(d.roas * 100) / 100 })),
         },
       ];
@@ -261,13 +270,14 @@ router.get(
       res.json({
         success: true,
         data: {
+          hasGoals,
           objective,
           goals,
           primary_goal: goals[0],
           days_elapsed: elapsed,
           days_remaining: remaining,
           days_in_month: total,
-          ideal_line: idealLine,
+          ideal_line: hasGoals ? idealLine : [],
           alerts,
         },
         timestamp: new Date().toISOString(),

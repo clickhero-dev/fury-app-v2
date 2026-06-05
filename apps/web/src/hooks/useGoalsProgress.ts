@@ -11,7 +11,7 @@ export interface GoalItem {
   progress_pct: number;
   projected_value: number;
   deadline: string;
-  status: 'on_track' | 'at_risk' | 'off_track';
+  status: 'on_track' | 'at_risk' | 'off_track' | 'no_goals';
   sparkline: { date: string; value: number }[];
 }
 
@@ -32,6 +32,7 @@ export interface IdealLinePoint {
 }
 
 export interface GoalsProgressData {
+  hasGoals: boolean;
   objective: string;
   goals: GoalItem[];
   primary_goal: GoalItem;
