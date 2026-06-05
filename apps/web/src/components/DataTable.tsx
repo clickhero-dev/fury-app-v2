@@ -50,7 +50,7 @@ export function DataTable<T extends Record<string, any>>({
 
   return (
     <div className={cn('bg-surface rounded-xl border border-border overflow-x-auto', className)}>
-      <table className="w-full">
+      <table className="w-full min-w-[700px]">
         <thead>
             <tr className="border-b border-border bg-surface-secondary">
               {columns.map((column) => (

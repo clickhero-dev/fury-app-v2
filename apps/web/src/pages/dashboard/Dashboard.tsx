@@ -712,7 +712,7 @@ export function Dashboard() {
             hasGoals={hasGoals}
             progressPct={goalRoas?.progress_pct}
             progressStatus={goalRoas?.status}
-            progressLabel={hasGoals && goalRoas ? `${Math.round(goalRoas.progress_pct)}% da meta de retorno` : undefined}
+            progressLabel={hasGoals && goalRoas && s.roas > 0 ? `${Math.round(goalRoas.progress_pct)}% da meta de retorno` : undefined}
           />
         </div>
 
