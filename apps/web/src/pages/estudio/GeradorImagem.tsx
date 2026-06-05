@@ -77,13 +77,9 @@ export function GeradorImagem() {
         format: values.format,
         style: values.style,
       });
-      console.log('[GeradorImagem] generate response:', res.data);
       return res.data;
     },
     onSuccess: (data) => {
-      console.log('[GeradorImagem] onSuccess data:', data);
-      console.log('[GeradorImagem] creativeAssetId:', data?.creativeAssetId);
-      console.log('[GeradorImagem] imageUrl:', data?.imageUrl);
       setCreativeAssetId(data?.creativeAssetId ?? null);
       setGeneratedImageUrl(data?.imageUrl ?? null);
       setPublishedUrl(null);
@@ -95,7 +91,6 @@ export function GeradorImagem() {
     queryKey: ['studio-asset', creativeAssetId],
     queryFn: async () => {
       const res = await api.get<StudioComplianceStatusResponse>(`/studio/assets/${creativeAssetId}`);
-      console.log('[GeradorImagem] compliance poll:', res.data);
       return res.data;
     },
     enabled: !!creativeAssetId,
@@ -142,18 +137,6 @@ export function GeradorImagem() {
 
   // Use creativeAssetId as the primary gate — more reliable than imageUrl presence
   const showCard = !!creativeAssetId || generateMutation.isSuccess;
-
-  console.log('[GeradorImagem] render state:', {
-    creativeAssetId,
-    generatedImageUrl,
-    imageUrl,
-    imageLoadError,
-    isPending: generateMutation.isPending,
-    isError: generateMutation.isError,
-    isSuccess: generateMutation.isSuccess,
-    showCard,
-    complianceStatus,
-  });
 
   return (
     <AppLayout
@@ -277,10 +260,7 @@ export function GeradorImagem() {
                         src={imageUrl}
                         alt="Criativo gerado"
                         className="w-full h-full object-cover"
-                        onError={() => {
-                          console.log('[GeradorImagem] img onError — URL failed:', imageUrl);
-                          setImageLoadError(true);
-                        }}
+                        onError={() => setImageLoadError(true)}
                       />
                     </div>
                   ) : (

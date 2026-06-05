@@ -48,8 +48,8 @@ function buildOpenAIClient() {
 }
 
 async function generateOpenAIImage(prompt: string): Promise<string> {
-  if (process.env.META_USE_MOCK === 'true' || !process.env.OPENAI_API_KEY) {
-    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9mH9kAAAAASUVORK5CYII=';
+  if (!process.env.OPENAI_API_KEY) {
+    throw new AppError(500, 'OPENAI_API_KEY_MISSING', 'OPENAI_API_KEY nao configurada.');
   }
 
   const client = buildOpenAIClient();
@@ -164,8 +164,19 @@ async function persistGeneratedImage(params: {
   publicBaseUrl: string;
 }): Promise<StudioImageGenerationResult> {
   const sourceUrl = await generateOpenAIImage(params.prompt);
-  const { fileName } = await saveTemporaryStudioImage(sourceUrl);
-  const imageUrl = `${normalizePublicBaseUrl(params.publicBaseUrl)}/studio-assets/${fileName}`;
+
+  // OpenAI returns a temporary CDN URL — use it directly so the browser can
+  // display the image immediately. The compliance worker re-downloads it
+  // independently during analysis. Only fall back to local storage for
+  // base64 data URLs (future-proofing if response_format changes).
+  let imageUrl: string;
+  if (sourceUrl.startsWith('http')) {
+    imageUrl = sourceUrl;
+  } else {
+    const { fileName } = await saveTemporaryStudioImage(sourceUrl);
+    imageUrl = `${normalizePublicBaseUrl(params.publicBaseUrl)}/studio-assets/${fileName}`;
+  }
+
   const generatedAt = new Date().toISOString();
 
   const [asset] = await db
