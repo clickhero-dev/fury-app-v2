@@ -118,11 +118,18 @@ function HeroStrip({
   const pct = hasRealData ? Math.min(100, goal.progress_pct ?? 0) : 0;
 
   return (
-    <div className="bg-gradient-to-r from-[#1c1c1e] to-[#2a2a2e] rounded-xl px-5 py-3.5 flex items-center gap-5 flex-wrap sm:flex-nowrap">
+    <div className="bg-gradient-to-r from-[#1a0a00] via-[#2d1200] to-[#1c1c1e] rounded-xl px-5 py-3.5 flex items-center gap-5 flex-wrap sm:flex-nowrap border-l-[3px] border-l-[#EA580C]">
       {/* Percentage + objetivo */}
       <div className="flex items-baseline gap-2 shrink-0">
-        <span className="text-3xl font-black text-white leading-none">
-          {hasRealData ? pct : <span className="text-white/40">--</span>}
+        <span
+          className="text-3xl font-black leading-none"
+          style={{ color: hasRealData && pct > 0 ? '#EA580C' : undefined }}
+        >
+          {hasRealData ? (
+            <span className={pct > 0 ? '' : 'text-white/40'}>{pct}</span>
+          ) : (
+            <span className="text-white/40">--</span>
+          )}
         </span>
         <span className="text-lg font-bold text-white/50">%</span>
       </div>
@@ -135,7 +142,11 @@ function HeroStrip({
         <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-700 ease-out"
-            style={{ width: `${pct}%`, backgroundColor: cfg.bar }}
+            style={{
+              width: `${pct}%`,
+              backgroundColor: cfg.bar,
+              boxShadow: pct > 0 ? `0 0 8px ${cfg.bar}40` : undefined,
+            }}
           />
         </div>
       </div>
@@ -208,10 +219,22 @@ function MetricCard({
   const barColor = showProgress ? PROGRESS_COLORS[progressStatus!] : '#d1d5db';
   const barWidth = showProgress ? Math.min(100, progressPct!) : 0;
 
+  const statusColor = hasRealData && progressStatus ? PROGRESS_COLORS[progressStatus] : undefined;
+  const borderTopStyle = statusColor ? { borderTopColor: statusColor } : undefined;
+
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex items-center gap-3">
+    <div
+      className={`bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex items-center gap-3 relative${statusColor ? ' border-t-2' : ''}`}
+      style={borderTopStyle}
+    >
+      {statusColor && (
+        <span
+          className="absolute top-3 right-3 w-2 h-2 rounded-full"
+          style={{ backgroundColor: statusColor }}
+        />
+      )}
       <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
-        <Icon className="w-5 h-5 text-gray-400" />
+        <Icon className="w-5 h-5" style={{ color: statusColor ?? '#9ca3af' }} />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-gray-500 truncate">{label}</p>
