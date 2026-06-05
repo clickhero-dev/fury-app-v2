@@ -114,9 +114,8 @@ export function InsightsCampanha() {
 
   const chartData = (data?.timeseries ?? []).map((d) => ({
     date: fmtDate(d.date),
-    'Gasto (R$)': parseFloat(d.spend.toFixed(2)),
+    'Investimento (R$)': parseFloat(d.spend.toFixed(2)),
     Cliques: d.clicks,
-    Conversões: d.conversions,
   }));
 
   return (
@@ -154,7 +153,7 @@ export function InsightsCampanha() {
         {/* Error */}
         {isError && !isLoading && (
           <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
-            Não foi possível carregar os insights desta campanha. Tente novamente.
+            Não foi possível carregar os dados desta campanha. Tente novamente.
           </div>
         )}
 
@@ -162,12 +161,11 @@ export function InsightsCampanha() {
         {data && totals && (
           <>
             {/* Metric cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <Card label="Gasto Total" value={fmtBRL(totals.spend)} />
-              <Card label="ROAS" value="--" />
-              <Card label="CPA" value={totals.cpa != null ? fmtBRL(totals.cpa) : '--'} />
-              <Card label="CTR" value={fmtPct(totals.ctr)} />
-              <Card label="Conversões" value={fmtInt(totals.conversions)} />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <Card label="Investimento" value={fmtBRL(totals.spend)} />
+              <Card label="Retorno sobre Investimento" value="--" />
+              <Card label="Custo por Resultado" value={totals.cpa != null ? fmtBRL(totals.cpa) : '--'} />
+              <Card label="Resultados" value={fmtInt(totals.conversions)} />
               <Card label="Cliques" value={fmtInt(totals.clicks)} />
             </div>
 
@@ -239,7 +237,7 @@ export function InsightsCampanha() {
                     <Area
                       yAxisId="spend"
                       type="monotone"
-                      dataKey="Gasto (R$)"
+                      dataKey="Investimento (R$)"
                       stroke="#EA580C"
                       strokeWidth={2}
                       fill="url(#colorSpend)"
