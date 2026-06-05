@@ -9,6 +9,7 @@ import { Dashboard } from './pages/dashboard/Dashboard';
 import { Metas } from './pages/dashboard/Metas';
 import { PainelCampanhas } from './pages/campanhas/PainelCampanhas';
 import { RegrasCampanhas } from './pages/campanhas/RegrasCampanhas';
+import { InsightsCampanha } from './pages/campanhas/InsightsCampanha';
 import { CreativeStudio } from './pages/estudio/CreativeStudio';
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
@@ -78,6 +79,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <RegrasCampanhas />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/campanhas/:id/insights',
+    element: (
+      <ProtectedRoute>
+        <InsightsCampanha />
       </ProtectedRoute>
     ),
   },

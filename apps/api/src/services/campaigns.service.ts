@@ -689,19 +689,11 @@ export async function softDeleteCampaign(args: { tenantId: string; campaignId: s
 
 export async function getCampaignInsights(args: {
   tenantId: string;
-  campaignId: string;
+  campaignId: string; // Meta campaign ID
   dateRange: 'last_7d' | 'last_30d' | 'last_90d' | 'custom';
   startDate?: string;
   endDate?: string;
 }) {
-  const campaign = await db.query.campaigns.findFirst({
-    where: and(eq(campaigns.id, args.campaignId), eq(campaigns.tenantId, args.tenantId)),
-  });
-
-  if (!campaign) {
-    throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
-  }
-
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, args.tenantId),
   });
@@ -712,22 +704,50 @@ export async function getCampaignInsights(args: {
 
   const accessToken = decryptMetaToken(metaConn.accessToken);
 
+  // Try DB for cached name/status, fall back to Meta API
+  const dbCampaign = await db.query.campaigns.findFirst({
+    where: and(eq(campaigns.metaCampaignId, args.campaignId), eq(campaigns.tenantId, args.tenantId)),
+  });
+
+  let campaignBlock: { id: string; name: string; status: string } = {
+    id: args.campaignId,
+    name: `Campaign ${args.campaignId}`,
+    status: 'ACTIVE',
+  };
+
+  if (dbCampaign) {
+    const statusMap: Record<string, string> = { ativo: 'ACTIVE', pausado: 'PAUSED', arquivado: 'ARCHIVED' };
+    campaignBlock = {
+      id: dbCampaign.metaCampaignId,
+      name: dbCampaign.name,
+      status: statusMap[dbCampaign.status] ?? dbCampaign.status.toUpperCase(),
+    };
+  } else {
+    try {
+      const meta = await metaApiCall<{ name?: string; status?: string }>(
+        `/${encodeURIComponent(args.campaignId)}?fields=name,status`,
+        accessToken
+      );
+      campaignBlock = {
+        id: args.campaignId,
+        name: meta.name || `Campaign ${args.campaignId}`,
+        status: (meta.status || 'ACTIVE').toUpperCase(),
+      };
+    } catch { /* keep defaults */ }
+  }
+
   const { startDate, endDate } = calculateDateRange(args.dateRange, args.startDate, args.endDate);
 
   try {
     const response = await metaApiCall<MetaInsightsResponse>(
-      `/${encodeURIComponent(campaign.metaCampaignId)}/insights?` +
+      `/${encodeURIComponent(args.campaignId)}/insights?` +
         `date_preset=${args.dateRange === 'custom' ? 'custom' : 'last_' + args.dateRange.split('_')[1] + 'd'}` +
         `&start_date=${startDate}&end_date=${endDate}&time_increment=1`,
       accessToken
     );
 
     return {
-      campaign: {
-        id: campaign.id,
-        name: campaign.name,
-        metaCampaignId: campaign.metaCampaignId,
-      },
+      campaign: campaignBlock,
       timeseries: (response.data || []).map((item) => ({
         date: item.date_start || item.date_stop,
         spend: parseFloat(item.spend || '0'),
@@ -743,11 +763,7 @@ export async function getCampaignInsights(args: {
   } catch (err) {
     const metaCode = (err as any).metaCode;
     if (metaCode === 190) {
-      throw new AppError(
-        401,
-        'META_TOKEN_EXPIRED',
-        'Token Meta expirado. Reconecte sua conta em Configurações > Integrações'
-      );
+      throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
     }
     throw err;
   }

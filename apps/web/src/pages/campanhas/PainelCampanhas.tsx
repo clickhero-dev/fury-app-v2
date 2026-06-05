@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Search, Loader2, Pause, Play } from 'lucide-react';
 import { AppLayout, PageHeader, DataTable, StatusBadge, Button } from '@/components';
 import {
@@ -97,10 +98,14 @@ export function PainelCampanhas() {
     {
       key: 'name' as const,
       label: 'Nome da Campanha',
-      render: (value: unknown) => (
-        <span className="block truncate max-w-[260px]" title={String(value)}>
+      render: (value: unknown, row: CampaignData) => (
+        <Link
+          to={`/campanhas/${row.id}/insights`}
+          className="block truncate max-w-[260px] font-medium text-text-primary hover:text-accent hover:underline transition-colors"
+          title={String(value)}
+        >
           {String(value)}
-        </span>
+        </Link>
       ),
     },
     {
