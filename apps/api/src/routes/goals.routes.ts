@@ -8,7 +8,7 @@ import { DatabaseMetricsProvider } from '../lib/providers/db-metrics.provider.js
 import type { DailyMetricsResponse } from '../types/metrics.types.js';
 
 const provider =
-  process.env.META_USE_MOCK === 'true'
+  process.env.META_USE_MOCK === 'true' && process.env.NODE_ENV !== 'production'
     ? new MockMetricsProvider()
     : new DatabaseMetricsProvider();
 

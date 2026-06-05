@@ -3,7 +3,6 @@ import { db, metaConnections } from '../db.js';
 import { eq } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler.js';
 import { getMetaInsights, metaApiCall, type MetaInsightsData } from '../meta-api.js';
-import { mockMetrics } from '../meta-mock.js';
 import { IMetricsProvider } from './metrics.provider.js';
 import {
   centavosToReais,
@@ -173,10 +172,6 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     startDate: string,
     endDate: string
   ): Promise<MetricsSummaryResponse | null> {
-    if (process.env.META_USE_MOCK === 'true') {
-      return mockMetrics.summary;
-    }
-
     try {
       const insights = await this.fetchMetaInsights({
         tenantId,
@@ -215,68 +210,6 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       total: number;
     };
   }> {
-    if (process.env.META_USE_MOCK === 'true') {
-      let filtered = mockMetrics.campaigns;
-
-      if (status) {
-        filtered = filtered.filter(c => c.status === status);
-      }
-
-      const startDateObj = this.parseDate(startDate);
-      const endDateObj = this.parseDate(endDate);
-
-      const campaigns: CampaignResponse[] = filtered.map(campaign => {
-        const dailyInRange = campaign.daily.filter(d => {
-          const d_date = this.parseDate(d.date);
-          return d_date >= startDateObj && d_date <= endDateObj;
-        });
-
-        const aggregated = dailyInRange.reduce(
-          (acc, d) => ({
-            totalSpend: acc.totalSpend + d.spend,
-            totalImpressions: acc.totalImpressions + d.impressions,
-            totalClicks: acc.totalClicks + d.clicks,
-            totalConversions: acc.totalConversions + d.conversions,
-            avgRoas: dailyInRange.length > 0 ? dailyInRange.reduce((sum, x) => sum + x.roas, 0) / dailyInRange.length : 0,
-          }),
-          { totalSpend: 0, totalImpressions: 0, totalClicks: 0, totalConversions: 0, avgRoas: 0 }
-        );
-
-        const spend = roundToDecimals(centavosToReais(aggregated.totalSpend), 2);
-        return {
-          id: campaign.campaignId,
-          name: campaign.name,
-          status: campaign.status,
-          metrics: {
-            spend,
-            clicks: aggregated.totalClicks,
-            impressions: aggregated.totalImpressions,
-            conversions: aggregated.totalConversions,
-            roas: aggregated.avgRoas,
-            cpa:
-              aggregated.totalConversions > 0
-                ? calculateCPA(spend, aggregated.totalConversions)
-                : null,
-          },
-        };
-      });
-
-      campaigns.sort((a, b) => b.metrics.spend - a.metrics.spend);
-
-      const total = campaigns.length;
-      const start = (page - 1) * limit;
-      const paginated = campaigns.slice(start, start + limit);
-
-      return {
-        data: paginated,
-        pagination: {
-          page,
-          limit,
-          total,
-        },
-      };
-    }
-
     try {
       const connection = await db.query.metaConnections.findFirst({
         where: eq(metaConnections.tenantId, tenantId),
@@ -412,79 +345,6 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     startDate: string,
     endDate: string
   ): Promise<CampaignInsightsResponse> {
-    if (process.env.META_USE_MOCK === 'true') {
-      const campaign = mockMetrics.campaigns.find(c => c.campaignId === campaignId);
-
-      if (!campaign) {
-        return {
-          campaign: null,
-          summary: null,
-          daily: [],
-          creatives: [],
-        };
-      }
-
-      const startDateObj = this.parseDate(startDate);
-      const endDateObj = this.parseDate(endDate);
-
-      const filteredDaily = campaign.daily.filter(d => {
-        const d_date = this.parseDate(d.date);
-        return d_date >= startDateObj && d_date <= endDateObj;
-      });
-
-      let summary: MetricsSummaryResponse | null = null;
-      if (filteredDaily.length > 0) {
-        const aggregated = filteredDaily.reduce(
-          (acc, d) => ({
-            totalSpend: acc.totalSpend + d.spend,
-            totalImpressions: acc.totalImpressions + d.impressions,
-            totalClicks: acc.totalClicks + d.clicks,
-            totalConversions: acc.totalConversions + d.conversions,
-            avgRoas: filteredDaily.reduce((sum, x) => sum + x.roas, 0) / filteredDaily.length,
-          }),
-          { totalSpend: 0, totalImpressions: 0, totalClicks: 0, totalConversions: 0, avgRoas: 0 }
-        );
-
-        summary = {
-          spend: centavosToReais(aggregated.totalSpend),
-          impressions: aggregated.totalImpressions,
-          clicks: aggregated.totalClicks,
-          ctr: calculateCTR(aggregated.totalClicks, aggregated.totalImpressions),
-          cpm: calculateCPM(aggregated.totalSpend, aggregated.totalImpressions),
-          cpa: calculateCPA(
-            centavosToReais(aggregated.totalSpend),
-            aggregated.totalConversions
-          ),
-          roas: aggregated.avgRoas,
-          conversions: aggregated.totalConversions,
-        };
-      }
-
-      const daily: DailyMetricsResponse[] = this.capDailySeries(
-        filteredDaily.map(d => ({
-          date: d.date,
-          spend: centavosToReais(d.spend),
-          impressions: d.impressions,
-          clicks: d.clicks,
-          conversions: d.conversions,
-          roas: d.roas,
-        })),
-        30
-      );
-
-      return {
-        campaign: {
-          id: campaign.campaignId,
-          name: campaign.name,
-          status: campaign.status,
-          objective: 'OUTCOME_SALES',
-        },
-        summary,
-        daily,
-        creatives: [],
-      };
-    }
-
     try {
       const connection = await db.query.metaConnections.findFirst({
         where: eq(metaConnections.tenantId, tenantId),
@@ -565,23 +425,6 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
   }
 
   async getCampaignAdsets(tenantId: string, campaignId: string): Promise<AdsetResponse[]> {
-    if (process.env.META_USE_MOCK === 'true') {
-      return [
-        {
-          id: 'mock_adset_1',
-          name: 'Conjunto mock',
-          status: 'ACTIVE',
-          dailyBudget: centavosToReais(50000),
-          metrics: {
-            spend: 120.5,
-            clicks: 400,
-            ctr: 2.5,
-            cpm: 15.2,
-          },
-        },
-      ];
-    }
-
     try {
       const connection = await db.query.metaConnections.findFirst({
         where: eq(metaConnections.tenantId, tenantId),
@@ -640,25 +483,6 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     startDate: string,
     endDate: string
   ): Promise<DailyMetricsResponse[]> {
-    if (process.env.META_USE_MOCK === 'true') {
-      const startDateObj = this.parseDate(startDate);
-      const endDateObj = this.parseDate(endDate);
-
-      const filtered = mockMetrics.daily.filter(d => {
-        const d_date = this.parseDate(d.date);
-        return d_date >= startDateObj && d_date <= endDateObj;
-      });
-
-      return filtered.map(d => ({
-        date: d.date,
-        spend: centavosToReais(d.spend),
-        impressions: d.impressions,
-        clicks: d.clicks,
-        conversions: d.conversions,
-        roas: d.roas,
-      }));
-    }
-
     try {
       const insights = await this.fetchMetaInsights({
         tenantId,
@@ -700,20 +524,6 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
   }
 
   async getGoalsProgress(tenantId: string): Promise<GoalsProgressResponse> {
-    if (process.env.META_USE_MOCK === 'true') {
-      return {
-        goal: {
-          id: 'mock_goal',
-          targetCpa: 50,
-          targetRoas: null,
-          monthlyBudget: 10000,
-        },
-        current: 42,
-        progressPercent: 65,
-        onTrack: true,
-      };
-    }
-
     try {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);

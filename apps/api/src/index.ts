@@ -53,6 +53,22 @@ app.use((req, res) => {
     const server = app.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
       console.log(`📝 Environment: ${NODE_ENV}`);
+
+      // Debug: print all registered routes
+      const printRoutes = (stack: any[], prefix = '') => {
+        for (const layer of stack) {
+          if (layer.route) {
+            const methods = Object.keys(layer.route.methods).join(',').toUpperCase();
+            console.log(`  ${methods.padEnd(8)} ${prefix}${layer.route.path}`);
+          } else if (layer.handle?.stack) {
+            const m = layer.regexp?.source?.match(/^\^\\\/([^\\?$]+)/);
+            const seg = m ? `/${m[1].replace(/\\\//g, '/')}` : '';
+            printRoutes(layer.handle.stack, prefix + seg);
+          }
+        }
+      };
+      console.log('📋 Registered routes:');
+      printRoutes((app as any)._router.stack);
       
       void ensureStudioAssetsDir().catch((error) => {
         console.error('Failed to prepare studio assets dir:', error);

@@ -4,9 +4,10 @@ import { MetricsService } from '../services/metrics.service.js';
 import { MockMetricsProvider } from '../lib/providers/mock-metrics.provider.js';
 import { DatabaseMetricsProvider } from '../lib/providers/db-metrics.provider.js';
 
-const provider = process.env.META_USE_MOCK === 'true'
-  ? new MockMetricsProvider()
-  : new DatabaseMetricsProvider();
+const provider =
+  process.env.META_USE_MOCK === 'true' && process.env.NODE_ENV !== 'production'
+    ? new MockMetricsProvider()
+    : new DatabaseMetricsProvider();
 
 const metricsService = new MetricsService(provider);
 const metricsController = new MetricsController(metricsService);
