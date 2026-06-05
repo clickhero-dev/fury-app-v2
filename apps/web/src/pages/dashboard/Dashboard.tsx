@@ -16,15 +16,12 @@ import {
   TrendingUp,
   ShoppingBag,
   Radio,
-  Wifi,
-  WifiOff,
   ShieldCheck,
   AlertTriangle,
 } from 'lucide-react';
 import { AppLayout, PageHeader } from '@/components';
 import api from '@/lib/api';
 import { useGoalsProgress, translateObjective, type FuryAlert } from '@/hooks/useGoalsProgress';
-import { useFurySSE } from '@/hooks/useFurySSE';
 
 // ─── Period ───────────────────────────────────────────────────────────────────
 
@@ -171,20 +168,18 @@ function HeroStrip({
   goal,
   objective,
   daysRemaining,
-  isConnected,
   hasRealData,
 }: {
   goal: NonNullable<ReturnType<typeof useGoalsProgress>['data']>['primary_goal'];
   objective: string;
   daysRemaining: number;
-  isConnected: boolean;
   hasRealData: boolean;
 }) {
   const cfg = hasRealData ? STATUS_CONFIG[goal.status] : NO_DATA_CFG;
   const pct = hasRealData ? Math.min(100, goal.progress_pct ?? 0) : 0;
 
   return (
-    <div className="bg-gradient-to-r from-[#1a0a00] via-[#2d1200] to-[#1c1c1e] rounded-xl px-5 py-3.5 flex items-center gap-5 flex-wrap sm:flex-nowrap border-l-[3px] border-l-[#EA580C]">
+    <div className="bg-gradient-to-r from-[#1a0a00] via-[#2d1200] to-[#1c1c1e] rounded-xl px-5 py-3.5 flex items-center gap-5 flex-wrap sm:flex-nowrap border-l-4 border-[#EA580C]">
       {/* Percentage + objetivo */}
       <div className="flex items-baseline gap-2 shrink-0">
         <span
@@ -202,7 +197,7 @@ function HeroStrip({
 
       {/* Bar + label */}
       <div className="flex-1 min-w-0">
-        <p className="text-xs text-white/50 mb-1.5 truncate">
+        <p className="text-xs text-white mb-1.5 truncate">
           {translateObjective(objective)}
         </p>
         <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -218,9 +213,9 @@ function HeroStrip({
       </div>
 
       {/* Meta / projeção */}
-      <div className="flex items-center gap-5 shrink-0 text-xs text-white/50">
+      <div className="flex items-center gap-5 shrink-0 text-xs text-white">
         <span>
-          Projeção:{' '}
+          <span className="text-white/70">Projeção:{' '}</span>
           <strong className="text-white/80 font-bold">
             {hasRealData
               ? `${(goal.projected_value ?? 0).toLocaleString('pt-BR')} ${goal.unit}`
@@ -230,20 +225,11 @@ function HeroStrip({
         <span>{daysRemaining} dias restantes</span>
       </div>
 
-      {/* Status badge + conexão */}
-      <div className="flex items-center gap-3 shrink-0">
+      {/* Status badge */}
+      <div className="flex items-center shrink-0">
         <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${cfg.bg} ${cfg.text}`}>
           {cfg.label}
         </span>
-        {isConnected ? (
-          <span title="SSE ativo" className="flex items-center gap-1 text-[#2ea043] text-xs">
-            <Wifi className="w-3.5 h-3.5" />
-          </span>
-        ) : (
-          <span title="Atualiza a cada 5 min" className="text-white/30">
-            <WifiOff className="w-3.5 h-3.5" />
-          </span>
-        )}
       </div>
     </div>
   );
@@ -286,12 +272,11 @@ function MetricCard({
   const barWidth = showProgress ? Math.min(100, progressPct!) : 0;
 
   const statusColor = hasRealData && progressStatus ? PROGRESS_COLORS[progressStatus] : undefined;
-  const borderTopStyle = statusColor ? { borderTopColor: statusColor } : undefined;
 
   return (
     <div
-      className={`bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex items-center gap-3 relative${statusColor ? ' border-t-2' : ''}`}
-      style={borderTopStyle}
+      className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex items-center gap-3 relative"
+      style={statusColor ? { borderTopColor: statusColor, borderTopWidth: 2 } : undefined}
     >
       {statusColor && (
         <span
@@ -304,7 +289,12 @@ function MetricCard({
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-gray-500 truncate">{label}</p>
-        <p className="text-xl font-black text-gray-900 leading-tight">{value}</p>
+        <p
+          className="text-xl font-black leading-tight"
+          style={{ color: hasRealData ? '#EA580C' : '#111827' }}
+        >
+          {value}
+        </p>
         {showProgress && (
           <div className="mt-1.5 space-y-1">
             {progressLabel && (
@@ -523,7 +513,6 @@ export function Dashboard() {
   const { startDate, endDate } = getPeriodDates(period);
 
   const { data: goalsData, isFetching: fetchingGoals, isLoading: loadingGoals } = useGoalsProgress(startDate, endDate);
-  const { isConnected } = useFurySSE();
   const queryClient = useQueryClient();
   const location = useLocation();
 
@@ -655,7 +644,6 @@ export function Dashboard() {
             goal={primaryGoal}
             objective={objective}
             daysRemaining={g?.days_remaining ?? 0}
-            isConnected={isConnected}
             hasRealData={hasRealData}
           />
         )}
@@ -703,7 +691,7 @@ export function Dashboard() {
             hasRealData={hasRealData}
             progressPct={goalRoas?.progress_pct}
             progressStatus={goalRoas?.status}
-            progressLabel={goalRoas ? `${Math.round(goalRoas.progress_pct)}% da meta de ROAS` : undefined}
+            progressLabel={goalRoas ? `${Math.round(goalRoas.progress_pct)}% da meta de retorno` : undefined}
           />
         </div>
 
