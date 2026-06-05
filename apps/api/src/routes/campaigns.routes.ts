@@ -14,15 +14,20 @@ import {
 
 const router = Router();
 
+// Static and collection routes first
 router.get('/', getCampaignsHandler);
 router.post('/create', createCampaignHandler);
-router.get('/:id', getCampaignHandler);
-router.patch('/:id', updateCampaignHandler);
-router.patch('/:id/status', updateCampaignStatusHandler);
-router.delete('/:id', softDeleteCampaignHandler);
-router.get('/:id/insights', getCampaignInsightsHandler);
+
+// Specific sub-resource routes before generic /:id to avoid Express matching /:id first
 router.patch('/:id/pause', pauseCampaignHandler);
 router.patch('/:id/resume', resumeCampaignHandler);
+router.patch('/:id/status', updateCampaignStatusHandler);
 router.patch('/:id/budget', updateBudgetHandler);
+router.get('/:id/insights', getCampaignInsightsHandler);
+
+// Generic /:id routes last
+router.get('/:id', getCampaignHandler);
+router.patch('/:id', updateCampaignHandler);
+router.delete('/:id', softDeleteCampaignHandler);
 
 export default router;
