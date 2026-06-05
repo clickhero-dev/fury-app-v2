@@ -20,9 +20,6 @@ function fmtBRL(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function fmtPct(value: number): string {
-  return `${value.toFixed(2)}%`;
-}
 
 function fmtInt(value: number): string {
   return value.toLocaleString('pt-BR');
