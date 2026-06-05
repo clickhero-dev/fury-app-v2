@@ -281,6 +281,18 @@ export async function uploadCreativeAssetToMeta(params: {
   return { metaAssetId };
 }
 
+export async function deleteStudioAsset(params: { tenantId: string; assetId: string }): Promise<void> {
+  const asset = await db.query.creativeAssets.findFirst({
+    where: and(eq(creativeAssets.id, params.assetId), eq(creativeAssets.tenantId, params.tenantId)),
+  });
+
+  if (!asset) {
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+  }
+
+  await db.delete(creativeAssets).where(eq(creativeAssets.id, params.assetId));
+}
+
 export type StudioAssetListItem = {
   id: string;
   type: 'image' | 'video' | 'copy';

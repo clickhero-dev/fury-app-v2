@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Loader2, CheckCircle2, XCircle, ArrowLeft, Send, Upload, ImageIcon } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ArrowLeft, Upload, ImageIcon, Save } from 'lucide-react';
 import { AppLayout, PageHeader, Button, Card } from '@/components';
 import api from '@/lib/api';
 import type {
@@ -437,7 +437,7 @@ export function GeradorImagem() {
                 <div>
                   <p className="text-sm font-semibold text-text-primary mb-1">Preview do seu criativo</p>
                   <p className="text-xs text-text-secondary">
-                    Antes de publicar, revisamos o compliance com as políticas do Meta.
+                    Antes de salvar, verificamos o compliance com as políticas do Meta.
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -483,12 +483,19 @@ export function GeradorImagem() {
                 )}
 
                 {publishedUrl ? (
-                  <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    Publicado no Meta!{' '}
-                    <a href={publishedUrl} target="_blank" rel="noreferrer" className="underline font-medium">
-                      Ver no Ads Manager
-                    </a>
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-3 rounded-lg">
+                      <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>Criativo salvo na biblioteca! Você pode usá-lo ao criar uma campanha.</span>
+                    </div>
+                    <div className="flex gap-3">
+                      <Button type="button" variant="outline" onClick={() => navigate('/estudio')} className="flex-1">
+                        Ver biblioteca
+                      </Button>
+                      <Button type="button" variant="outline" onClick={handleReset} className="flex-1">
+                        Criar novo criativo
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex gap-3">
@@ -502,12 +509,12 @@ export function GeradorImagem() {
                         {publishMutation.isPending ? (
                           <span className="inline-flex items-center gap-2">
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Publicando...
+                            Salvando...
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-2">
-                            <Send className="w-4 h-4" />
-                            Publicar no Meta
+                            <Save className="w-4 h-4" />
+                            Salvar Criativo
                           </span>
                         )}
                       </Button>

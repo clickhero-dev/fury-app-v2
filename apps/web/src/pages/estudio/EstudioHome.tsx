@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Trash2 } from 'lucide-react';
 import { AppLayout, PageHeader, Button, Card, StatusBadge, EmptyState, LoadingSpinner } from '@/components';
 import api from '@/lib/api';
 import { MOCK_ASSETS } from '@/lib/studio-mock';
@@ -15,8 +16,23 @@ interface StudioAssetResponse {
 
 export function EstudioHome() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [filterType, setFilterType] = useState<AssetType>('all');
   const [filterStatus, setFilterStatus] = useState<ComplianceStatus>('all');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (assetId: string) => {
+      await api.delete(`/studio/assets/${assetId}`);
+    },
+    onSuccess: () => {
+      setDeletingId(null);
+      queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+    },
+    onError: () => {
+      setDeletingId(null);
+    },
+  });
 
   const { data, isLoading } = useQuery<StudioAssetResponse>({
     queryKey: ['studio/assets'],
@@ -210,19 +226,50 @@ export function EstudioHome() {
                     <h3 className="font-semibold text-text-primary text-sm flex-1 line-clamp-2">
                       {asset.name ?? `Criativo de ${asset.type === 'image' ? 'imagem' : asset.type}`}
                     </h3>
+                    <button
+                      type="button"
+                      onClick={() => setDeletingId(asset.id)}
+                      className="shrink-0 p-1 rounded text-text-secondary hover:text-red-500 hover:bg-red-50 transition-colors"
+                      title="Excluir criativo"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
 
                   <StatusBadge status={asset.complianceStatus} />
 
-                  {/* Buttons */}
-                  <div className="flex gap-2 pt-2">
-                    <button className="flex-1 px-3 py-2 border border-[#E8631A] text-[#E8631A] rounded-lg text-xs font-semibold hover:bg-[#FEF0E7] transition-colors">
-                      Usar em campanha
-                    </button>
-                    <button className="flex-1 px-3 py-2 bg-[#E8631A] text-white rounded-lg text-xs font-semibold hover:bg-[#D45714] transition-colors">
-                      Ver detalhes
-                    </button>
-                  </div>
+                  {/* Buttons or delete confirm */}
+                  {deletingId === asset.id ? (
+                    <div className="space-y-2 pt-1">
+                      <p className="text-xs text-red-600 font-medium">Excluir este criativo?</p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => deleteMutation.mutate(asset.id)}
+                          disabled={deleteMutation.isPending}
+                          className="flex-1 px-3 py-2 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors disabled:opacity-50"
+                        >
+                          {deleteMutation.isPending ? 'Excluindo...' : 'Confirmar'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingId(null)}
+                          className="flex-1 px-3 py-2 border border-border rounded-lg text-xs font-semibold hover:bg-surface-secondary transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 pt-2">
+                      <button className="flex-1 px-3 py-2 border border-[#E8631A] text-[#E8631A] rounded-lg text-xs font-semibold hover:bg-[#FEF0E7] transition-colors">
+                        Usar em campanha
+                      </button>
+                      <button className="flex-1 px-3 py-2 bg-[#E8631A] text-white rounded-lg text-xs font-semibold hover:bg-[#D45714] transition-colors">
+                        Ver detalhes
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

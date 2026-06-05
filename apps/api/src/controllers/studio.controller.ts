@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
 import {
   listStudioAssetsForTenant,
+  deleteStudioAsset,
 } from '../services/studio.service.js';
 import {
   generateImage as generateStudioImage,
@@ -155,6 +156,21 @@ export async function renderCreative(req: Request, res: Response, next: NextFunc
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation error', details: error.errors });
     }
+    next(error);
+  }
+}
+
+export async function deleteAsset(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+
+    const assetId = z.string().min(1).parse(req.params.assetId);
+    await deleteStudioAsset({ tenantId: req.tenant.tenantId, assetId });
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
     next(error);
   }
 }

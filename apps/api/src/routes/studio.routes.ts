@@ -9,6 +9,7 @@ import { studioCopyService } from '../services/studio-copy.service.js';
 const router = Router();
 
 router.get('/assets', authMiddleware, tenantMiddleware, studioController.listAssets);
+router.delete('/assets/:assetId', authMiddleware, tenantMiddleware, studioController.deleteAsset);
 router.get('/assets/:assetId', authMiddleware, tenantMiddleware, studioController.getAsset);
 router.get('/assets/:assetId/compliance-status', authMiddleware, tenantMiddleware, studioController.getComplianceStatus);
 
