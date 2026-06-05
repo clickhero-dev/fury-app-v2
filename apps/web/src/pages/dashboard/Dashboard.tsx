@@ -696,7 +696,7 @@ export function Dashboard() {
           />
           <MetricCard
             icon={ShoppingBag}
-            label="Custo por Venda"
+            label="Custo por Cliente"
             value={
               hasRealData
                 ? `R$ ${s.cpa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
