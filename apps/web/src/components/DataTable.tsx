@@ -16,6 +16,8 @@ interface DataTableProps<T> {
   isEmpty?: boolean;
   emptyMessage?: string;
   className?: string;
+  theadRowClassName?: string;
+  thClassName?: string;
 }
 
 export function DataTable<T extends Record<string, any>>({
@@ -26,6 +28,8 @@ export function DataTable<T extends Record<string, any>>({
   isEmpty = false,
   emptyMessage = 'Nenhum dado disponível',
   className,
+  theadRowClassName,
+  thClassName,
 }: DataTableProps<T>) {
   if (isLoading) {
     return (
@@ -50,48 +54,49 @@ export function DataTable<T extends Record<string, any>>({
 
   return (
     <div className={cn('bg-surface rounded-xl border border-border overflow-x-auto', className)}>
-      <table className="w-full min-w-[700px]">
+      <table className="w-full">
         <thead>
-            <tr className="border-b border-border bg-surface-secondary">
+          <tr className={cn('border-b border-border bg-surface-secondary', theadRowClassName)}>
+            {columns.map((column) => (
+              <th
+                key={String(column.key)}
+                className={cn(
+                  'px-6 py-4 text-left font-semibold text-text-secondary text-sm',
+                  column.align === 'center' && 'text-center',
+                  column.align === 'right' && 'text-right',
+                  thClassName
+                )}
+              >
+                {column.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, index) => (
+            <tr
+              key={String(row[keyField])}
+              className={cn(
+                'border-b border-border hover:bg-surface-secondary transition-colors',
+                index === data.length - 1 && 'border-b-0'
+              )}
+            >
               {columns.map((column) => (
-                <th
+                <td
                   key={String(column.key)}
                   className={cn(
-                    'px-6 py-4 text-left font-semibold text-text-secondary text-sm',
+                    'px-6 py-4 text-text-primary text-sm',
                     column.align === 'center' && 'text-center',
                     column.align === 'right' && 'text-right'
                   )}
                 >
-                  {column.label}
-                </th>
+                  {column.render
+                    ? column.render(row[column.key], row)
+                    : String(row[column.key])}
+                </td>
               ))}
             </tr>
-          </thead>
-          <tbody>
-            {data.map((row, index) => (
-              <tr
-                key={String(row[keyField])}
-                className={cn(
-                  'border-b border-border hover:bg-surface-secondary transition-colors',
-                  index === data.length - 1 && 'border-b-0'
-                )}
-              >
-                {columns.map((column) => (
-                  <td
-                    key={String(column.key)}
-                    className={cn(
-                      'px-6 py-4 text-text-primary text-sm',
-                      column.align === 'center' && 'text-center',
-                      column.align === 'right' && 'text-right'
-                    )}
-                  >
-                    {column.render
-                      ? column.render(row[column.key], row)
-                      : String(row[column.key])}
-                  </td>
-                ))}
-              </tr>
-            ))}
+          ))}
         </tbody>
       </table>
     </div>
