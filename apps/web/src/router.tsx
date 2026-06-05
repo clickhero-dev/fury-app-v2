@@ -13,7 +13,6 @@ import { InsightsCampanha } from './pages/campanhas/InsightsCampanha';
 import { CreativeStudio } from './pages/estudio/CreativeStudio';
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
-import { GeradorCopy } from './pages/estudio/GeradorCopy';
 import { Configuracoes } from './pages/configuracoes/Configuracoes';
 import { Integracoes } from './pages/configuracoes/Integracoes';
 import { MinhasRegras } from './pages/automacao/MinhasRegras';
@@ -127,14 +126,6 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <GeradorImagem />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/estudio/copy',
-    element: (
-      <ProtectedRoute>
-        <GeradorCopy />
       </ProtectedRoute>
     ),
   },

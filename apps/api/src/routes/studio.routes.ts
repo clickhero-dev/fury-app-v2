@@ -62,6 +62,7 @@ function getMockVariations(body: any, quantidade: number): any[] {
   });
 }
 
+// TODO Sprint 4: mover geração de copy para o wizard de campanhas
 router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = generateCopySchema.parse(req.body);
@@ -123,7 +124,7 @@ router.post('/generate-copy', authMiddleware, tenantMiddleware, async (req: Requ
   }
 });
 
-// New endpoint as requested: POST /api/studio/copy/generate
+// TODO Sprint 4: mover geração de copy para o wizard de campanhas
 router.post('/copy/generate', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = generateCopySchema.parse(req.body);

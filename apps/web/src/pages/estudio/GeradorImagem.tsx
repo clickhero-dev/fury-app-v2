@@ -41,7 +41,7 @@ function StepIndicator({ step }: { step: WizardStep }) {
   const steps: { key: WizardStep; label: string }[] = [
     { key: 'form', label: 'Criar' },
     { key: 'preview', label: 'Preview' },
-    { key: 'compliance', label: 'Publicar' },
+    { key: 'compliance', label: 'Salvar' },
   ];
   const idx = steps.findIndex((s) => s.key === step);
 
@@ -514,7 +514,7 @@ export function GeradorImagem() {
                         ) : (
                           <span className="inline-flex items-center gap-2">
                             <Save className="w-4 h-4" />
-                            Salvar Criativo
+                            Salvar na Biblioteca
                           </span>
                         )}
                       </Button>

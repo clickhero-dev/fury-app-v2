@@ -7,7 +7,7 @@ import api from '@/lib/api';
 import { MOCK_ASSETS } from '@/lib/studio-mock';
 import type { StudioAsset } from '@/types/studio';
 
-type AssetType = 'all' | 'image' | 'copy' | 'video';
+type AssetType = 'all' | 'image' | 'video';
 type ComplianceStatus = 'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected';
 
 interface StudioAssetResponse {
@@ -60,7 +60,6 @@ export function EstudioHome() {
   const typeOptions: Array<{ value: AssetType; label: string }> = [
     { value: 'all', label: 'Todos' },
     { value: 'image', label: 'Imagens' },
-    { value: 'copy', label: 'Copy' },
     { value: 'video', label: 'Vídeos' },
   ];
 
@@ -86,23 +85,12 @@ export function EstudioHome() {
     navigate('/estudio/imagem');
   };
 
-  const handleGenerateCopyClick = () => {
-    navigate('/estudio/copy');
-  };
-
   return (
     <AppLayout
       header={
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-text-primary">Estúdio Criativo</h2>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleGenerateCopyClick}
-            >
-              + Gerar Copy
-            </Button>
             <Button
               variant="primary"
               size="sm"
