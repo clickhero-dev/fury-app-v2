@@ -74,131 +74,109 @@ export async function createCampaign(args: {
 }
 
 export async function pauseCampaign(args: { tenantId: string; campaignId: string }) {
-  // campaignId is the Meta campaign ID (e.g. "120212984741310287"), not the DB UUID.
-  const campaign = await db.query.campaigns.findFirst({
-    where: eq(campaigns.metaCampaignId, args.campaignId),
-  });
-
-  if (!campaign) {
-    throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
-  }
-
-  if (campaign.tenantId !== args.tenantId) {
-    throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');
-  }
-
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, args.tenantId),
   });
 
   if (!metaConn) {
-    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
   }
 
   const accessToken = decryptAccessToken(metaConn.accessToken);
 
+  // Verify the campaign belongs to one of this tenant's ad accounts
   try {
-    await metaApiCall(
-      `/${encodeURIComponent(campaign.metaCampaignId)}`,
-      accessToken,
-      {
-        method: 'POST',
-        body: { status: 'PAUSED' },
-      }
+    const campaignMeta = await metaApiCall<{ account_id?: string }>(
+      `/${encodeURIComponent(args.campaignId)}?fields=account_id`,
+      accessToken
     );
-  } catch (err) {
-    const metaCode = (err as any).metaCode;
-
-    if (metaCode === 190) {
-      throw new AppError(
-        401,
-        'META_TOKEN_EXPIRED',
-        'Token Meta expirado. Reconecte sua conta em Configurações > Integrações'
+    if (campaignMeta.account_id) {
+      const normalize = (id: string) => id.replace(/^act_/, '');
+      const adAccounts = (metaConn.adAccounts as { id: string }[]) || [];
+      const owned = adAccounts.some(
+        (acc) => normalize(acc.id) === normalize(campaignMeta.account_id!)
       );
+      if (!owned) {
+        throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');
+      }
     }
-
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    const metaCode = (err as any).metaCode;
+    if (metaCode === 190) {
+      throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
+    }
     throw err;
   }
 
-  await db
-    .update(campaigns)
-    .set({ status: 'paused' })
-    .where(eq(campaigns.id, campaign.id));
+  try {
+    await metaApiCall(
+      `/${encodeURIComponent(args.campaignId)}`,
+      accessToken,
+      { method: 'POST', body: { status: 'PAUSED' } }
+    );
+  } catch (err) {
+    const metaCode = (err as any).metaCode;
+    if (metaCode === 190) {
+      throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
+    }
+    throw err;
+  }
 
-  await db
-    .insert(furyInsights)
-    .values({
-      tenantId: args.tenantId,
-      campaignId: campaign.id,
-      suggestionType: 'campaign_pause',
-      suggestionData: { reason: 'manual', autoApplied: false },
-    });
-
-  return { status: 'PAUSED' as const };
+  return { campaignId: args.campaignId, status: 'PAUSED' as const };
 }
 
 export async function resumeCampaign(args: { tenantId: string; campaignId: string }) {
-  // campaignId is the Meta campaign ID (e.g. "120212984741310287"), not the DB UUID.
-  const campaign = await db.query.campaigns.findFirst({
-    where: eq(campaigns.metaCampaignId, args.campaignId),
-  });
-
-  if (!campaign) {
-    throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
-  }
-
-  if (campaign.tenantId !== args.tenantId) {
-    throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');
-  }
-
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, args.tenantId),
   });
 
   if (!metaConn) {
-    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
   }
 
   const accessToken = decryptAccessToken(metaConn.accessToken);
 
+  // Verify the campaign belongs to one of this tenant's ad accounts
   try {
-    await metaApiCall(
-      `/${encodeURIComponent(campaign.metaCampaignId)}`,
-      accessToken,
-      {
-        method: 'POST',
-        body: { status: 'ACTIVE' },
-      }
+    const campaignMeta = await metaApiCall<{ account_id?: string }>(
+      `/${encodeURIComponent(args.campaignId)}?fields=account_id`,
+      accessToken
     );
-  } catch (err) {
-    const metaCode = (err as any).metaCode;
-
-    if (metaCode === 190) {
-      throw new AppError(
-        401,
-        'META_TOKEN_EXPIRED',
-        'Token Meta expirado. Reconecte sua conta em Configurações > Integrações'
+    if (campaignMeta.account_id) {
+      const normalize = (id: string) => id.replace(/^act_/, '');
+      const adAccounts = (metaConn.adAccounts as { id: string }[]) || [];
+      const owned = adAccounts.some(
+        (acc) => normalize(acc.id) === normalize(campaignMeta.account_id!)
       );
+      if (!owned) {
+        throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');
+      }
     }
-
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    const metaCode = (err as any).metaCode;
+    if (metaCode === 190) {
+      throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
+    }
     throw err;
   }
 
-  await db
-    .update(campaigns)
-    .set({ status: 'active' })
-    .where(eq(campaigns.id, campaign.id));
+  try {
+    await metaApiCall(
+      `/${encodeURIComponent(args.campaignId)}`,
+      accessToken,
+      { method: 'POST', body: { status: 'ACTIVE' } }
+    );
+  } catch (err) {
+    const metaCode = (err as any).metaCode;
+    if (metaCode === 190) {
+      throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
+    }
+    throw err;
+  }
 
-  await db
-    .insert(furyInsights)
-    .values({
-      tenantId: args.tenantId,
-      campaignId: campaign.id,
-      suggestionType: 'campaign_resume',
-      suggestionData: { reason: 'manual', autoApplied: false },
-    });
-
-  return { status: 'ACTIVE' as const };
+  return { campaignId: args.campaignId, status: 'ACTIVE' as const };
 }
 
 export async function updateCampaignBudget(args: {
