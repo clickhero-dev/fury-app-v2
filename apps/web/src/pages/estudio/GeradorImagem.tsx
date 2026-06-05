@@ -72,6 +72,55 @@ function StepIndicator({ step }: { step: WizardStep }) {
   );
 }
 
+// CSS text overlay aligned to the image geometry:
+//   strip top  = 55.56%  (600 / 1080)
+//   cta top    = 84.44%  (912 / 1080), height 6.67% (72 / 1080)
+//   cta left   = 26.85%  (290 / 1080), same on right (symmetric)
+function CreativePreview({
+  imageUrl,
+  headline,
+  cta,
+}: {
+  imageUrl: string;
+  headline: string;
+  cta: string;
+}) {
+  return (
+    <div className="relative" style={{ aspectRatio: '1/1' }}>
+      <img src={imageUrl} alt="Criativo gerado" className="w-full h-full block object-cover" />
+      {/* Headline — vertically centered in the brand strip above the CTA pill */}
+      <div
+        className="absolute inset-x-0 flex items-center justify-center px-8 pointer-events-none"
+        style={{ top: '55.6%', height: '28.84%' }}
+      >
+        <p
+          className="text-white font-bold text-center leading-snug"
+          style={{
+            fontSize: 'clamp(14px, 5.9vw, 40px)',
+            textShadow: '0 2px 8px rgba(0,0,0,0.5)',
+          }}
+        >
+          {headline}
+        </p>
+      </div>
+      {/* CTA text — centered inside the pill shape */}
+      <div
+        className="absolute flex items-center justify-center text-white font-bold pointer-events-none"
+        style={{
+          top: '84.44%',
+          height: '6.67%',
+          left: '26.85%',
+          right: '26.85%',
+          fontSize: 'clamp(11px, 3vw, 20px)',
+          textShadow: '0 1px 4px rgba(0,0,0,0.4)',
+        }}
+      >
+        {cta}
+      </div>
+    </div>
+  );
+}
+
 export function GeradorImagem() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -382,12 +431,7 @@ export function GeradorImagem() {
           <div className="max-w-2xl mx-auto space-y-6">
             <Card>
               <div className="overflow-hidden rounded-t-2xl">
-                <img
-                  src={renderedImageUrl}
-                  alt="Preview do criativo"
-                  className="w-full object-cover"
-                  style={{ aspectRatio: '1/1' }}
-                />
+                <CreativePreview imageUrl={renderedImageUrl} headline={headline} cta={cta} />
               </div>
               <div className="p-6 space-y-4">
                 <div>
@@ -422,12 +466,7 @@ export function GeradorImagem() {
             <Card>
               {renderedImageUrl && (
                 <div className="overflow-hidden rounded-t-2xl">
-                  <img
-                    src={renderedImageUrl}
-                    alt="Criativo gerado"
-                    className="w-full object-cover"
-                    style={{ aspectRatio: '1/1' }}
-                  />
+                  <CreativePreview imageUrl={renderedImageUrl} headline={headline} cta={cta} />
                 </div>
               )}
               <div className="p-6 space-y-4">

@@ -14,6 +14,9 @@ export type RenderCreativeInput = {
 export type RenderCreativeResult = {
   creativeAssetId: string;
   imageUrl: string;
+  headline: string;
+  cta: string;
+  brandColor: string;
 };
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -39,57 +42,13 @@ async function fetchImageBuffer(imageUrl: string): Promise<Buffer> {
   return Buffer.from(await res.arrayBuffer());
 }
 
-function escapeSvg(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function wrapWords(text: string, maxChars: number): string[] {
-  const words = text.split(' ');
-  const lines: string[] = [];
-  let current = '';
-  for (const word of words) {
-    if (!current) {
-      current = word;
-    } else if (current.length + 1 + word.length <= maxChars) {
-      current += ` ${word}`;
-    } else {
-      lines.push(current);
-      current = word;
-    }
-  }
-  if (current) lines.push(current);
-  return lines.slice(0, 2);
-}
-
-function buildSvgOverlay(headline: string, cta: string, brandColor: string): Buffer {
-  const lines = wrapWords(escapeSvg(headline), 28);
-  const ctaText = escapeSvg(cta);
-
-  let headlineEl: string;
-  if (lines.length === 1) {
-    headlineEl = `<text x="540" y="180" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${lines[0]}</text>`;
-  } else {
-    headlineEl = `
-<text x="540" y="140" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${lines[0]}</text>
-<text x="540" y="215" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${lines[1]}</text>`;
-  }
-
-  const ctaY = lines.length === 1 ? 325 : 365;
-  const ctaPillTop = ctaY - 36;
-
-  // SVG is 1080×480 — composited at top:600 so coordinates are strip-local
-  const svg = `<svg width="1080" height="480" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1080" height="480" fill="${brandColor}" opacity="0.85"/>
-  ${headlineEl}
-  <rect x="290" y="${ctaPillTop}" width="500" height="72" rx="36" fill="rgba(0,0,0,0.25)"/>
-  <text x="540" y="${ctaY}" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${ctaText}</text>
-</svg>`;
-
-  return Buffer.from(svg);
+// Rounded rect for the CTA button — shape only, zero text, zero font dependency
+function buildCtaShapeSvg(): Buffer {
+  return Buffer.from(
+    '<svg width="500" height="72" xmlns="http://www.w3.org/2000/svg">' +
+      '<rect width="500" height="72" rx="36" fill="black" fill-opacity="0.25"/>' +
+      '</svg>'
+  );
 }
 
 export async function renderCreative(input: RenderCreativeInput): Promise<RenderCreativeResult> {
@@ -99,22 +58,34 @@ export async function renderCreative(input: RenderCreativeInput): Promise<Render
   if (!cta.trim()) throw new AppError(400, 'INVALID_CTA', 'CTA é obrigatório.');
   if (!imageUrl) throw new AppError(400, 'INVALID_IMAGE', 'Imagem do produto é obrigatória.');
 
-  const brandRgb = hexToRgb(brandColor || '#E8631A');
+  const color = brandColor || '#E8631A';
+  const brandRgb = hexToRgb(color);
 
   const productBuffer = await fetchImageBuffer(imageUrl);
 
+  // Top 600px: product photo, cover crop
   const productResized = await sharp(productBuffer)
     .resize(1080, 600, { fit: 'cover', position: 'centre' })
+    .png()
     .toBuffer();
 
-  const svgOverlay = buildSvgOverlay(headline, cta, brandColor || '#E8631A');
+  // Bottom 480px: solid brand color strip (no SVG, no fonts)
+  const stripBuffer = await sharp({
+    create: { width: 1080, height: 480, channels: 3, background: brandRgb },
+  })
+    .png()
+    .toBuffer();
+
+  // CTA pill shape at y=912 (80% of strip height from strip top)
+  const ctaShape = buildCtaShapeSvg();
 
   const finalBuffer = await sharp({
-    create: { width: 1080, height: 1080, channels: 3, background: brandRgb },
+    create: { width: 1080, height: 1080, channels: 3, background: { r: 255, g: 255, b: 255 } },
   })
     .composite([
       { input: productResized, top: 0, left: 0 },
-      { input: svgOverlay, top: 600, left: 0 },
+      { input: stripBuffer, top: 600, left: 0 },
+      { input: ctaShape, top: 912, left: 290 },
     ])
     .jpeg({ quality: 90 })
     .toBuffer();
@@ -131,7 +102,7 @@ export async function renderCreative(input: RenderCreativeInput): Promise<Render
       complianceNotes: JSON.stringify({
         headline,
         cta,
-        brandColor,
+        brandColor: color,
         generatedAt: new Date().toISOString(),
       }),
     })
@@ -144,5 +115,5 @@ export async function renderCreative(input: RenderCreativeInput): Promise<Render
     { removeOnComplete: 1000, removeOnFail: 5000 }
   );
 
-  return { creativeAssetId: asset.id, imageUrl: dataUrl };
+  return { creativeAssetId: asset.id, imageUrl: dataUrl, headline, cta, brandColor: color };
 }

@@ -92,4 +92,7 @@ export interface RenderCreativePayload {
 export interface RenderCreativeResponse {
   creativeAssetId: string;
   imageUrl: string;
+  headline: string;
+  cta: string;
+  brandColor: string;
 }
