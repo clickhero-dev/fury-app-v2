@@ -147,6 +147,7 @@ router.post('/copy/generate', authMiddleware, tenantMiddleware, async (req: Requ
 });
 
 router.post('/generate-image', authMiddleware, tenantMiddleware, studioController.generateImage);
+router.post('/render-creative', authMiddleware, tenantMiddleware, studioController.renderCreative);
 router.post('/publish/:assetId', authMiddleware, tenantMiddleware, studioController.publishAsset);
 router.post('/upload-to-meta', authMiddleware, tenantMiddleware, studioController.uploadToMeta);
 

@@ -56,21 +56,33 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
         let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg';
 
         try {
-          const fetchRes = await fetch(asset.url);
+          if (asset.url.startsWith('data:')) {
+            const match = asset.url.match(/^data:([^;]+);base64,(.+)$/s);
+            if (!match) throw new Error('Invalid data URL format');
+            const [, mimeStr, b64] = match;
+            base64Image = b64;
+            if (mimeStr.includes('png')) mediaType = 'image/png';
+            else if (mimeStr.includes('webp')) mediaType = 'image/webp';
+            else if (mimeStr.includes('gif')) mediaType = 'image/gif';
+            else mediaType = 'image/jpeg';
+            console.log(`[COMPLIANCE] ✅ Imagem extraída do data URL (${mediaType})`);
+          } else {
+            const fetchRes = await fetch(asset.url);
 
-          if (!fetchRes.ok) {
-            throw new Error(`HTTP ${fetchRes.status} ao baixar imagem`);
+            if (!fetchRes.ok) {
+              throw new Error(`HTTP ${fetchRes.status} ao baixar imagem`);
+            }
+
+            const contentType = fetchRes.headers.get('content-type') || 'image/jpeg';
+            if (contentType.includes('png')) mediaType = 'image/png';
+            else if (contentType.includes('gif')) mediaType = 'image/gif';
+            else if (contentType.includes('webp')) mediaType = 'image/webp';
+
+            const arrayBuffer = await fetchRes.arrayBuffer();
+            base64Image = Buffer.from(arrayBuffer).toString('base64');
+
+            console.log(`[COMPLIANCE] ✅ Imagem baixada (${mediaType})`);
           }
-
-          const contentType = fetchRes.headers.get('content-type') || 'image/jpeg';
-          if (contentType.includes('png')) mediaType = 'image/png';
-          else if (contentType.includes('gif')) mediaType = 'image/gif';
-          else if (contentType.includes('webp')) mediaType = 'image/webp';
-
-          const arrayBuffer = await fetchRes.arrayBuffer();
-          base64Image = Buffer.from(arrayBuffer).toString('base64');
-
-          console.log(`[COMPLIANCE] ✅ Imagem baixada (${mediaType})`);
         } catch (err) {
           console.error(`[COMPLIANCE] ❌ Erro no download:`, err);
           return await setComplianceResult(

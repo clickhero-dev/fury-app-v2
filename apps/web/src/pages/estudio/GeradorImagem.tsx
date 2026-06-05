@@ -1,29 +1,16 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Loader2, CheckCircle2, XCircle, ArrowLeft, Send } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ArrowLeft, Send, Upload, ImageIcon } from 'lucide-react';
 import { AppLayout, PageHeader, Button, Card } from '@/components';
 import api from '@/lib/api';
-import type { StudioImageGenerationResponse, StudioComplianceStatusResponse } from '@/types/studio';
+import type {
+  RenderCreativePayload,
+  RenderCreativeResponse,
+  StudioComplianceStatusResponse,
+} from '@/types/studio';
 
-const FORMAT_OPTIONS = [
-  { value: 'feed', label: 'Feed 1:1' },
-  { value: 'stories', label: 'Stories 9:16' },
-  { value: 'banner', label: 'Banner 1.91:1' },
-];
-
-const STYLE_OPTIONS = [
-  { value: 'fotografico', label: 'Fotográfico' },
-  { value: 'ilustracao', label: 'Ilustração' },
-  { value: 'minimalista', label: 'Minimalista' },
-];
-
-interface FormValues {
-  prompt: string;
-  format: 'feed' | 'stories' | 'banner';
-  style: 'fotografico' | 'ilustracao' | 'minimalista';
-}
+type WizardStep = 'form' | 'preview' | 'compliance';
 
 function ComplianceBadge({ status, approved }: { status: string; approved: boolean | null }) {
   if (status === 'pending_compliance') {
@@ -50,40 +37,93 @@ function ComplianceBadge({ status, approved }: { status: string; approved: boole
   );
 }
 
+function StepIndicator({ step }: { step: WizardStep }) {
+  const steps: { key: WizardStep; label: string }[] = [
+    { key: 'form', label: 'Criar' },
+    { key: 'preview', label: 'Preview' },
+    { key: 'compliance', label: 'Publicar' },
+  ];
+  const idx = steps.findIndex((s) => s.key === step);
+
+  return (
+    <div className="flex items-center gap-2">
+      {steps.map((s, i) => (
+        <div key={s.key} className="flex items-center gap-2">
+          <div
+            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+              i < idx
+                ? 'bg-[#E8631A] text-white'
+                : i === idx
+                  ? 'bg-[#E8631A] text-white ring-4 ring-[#E8631A]/20'
+                  : 'bg-gray-100 text-gray-400'
+            }`}
+          >
+            {i < idx ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
+          </div>
+          <span className={`text-sm font-medium ${i === idx ? 'text-text-primary' : 'text-text-secondary'}`}>
+            {s.label}
+          </span>
+          {i < steps.length - 1 && (
+            <div className={`w-8 h-px ${i < idx ? 'bg-[#E8631A]' : 'bg-gray-200'}`} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function GeradorImagem() {
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [step, setStep] = useState<WizardStep>('form');
+
+  // Form state
+  const [productImageDataUrl, setProductImageDataUrl] = useState<string | null>(null);
+  const [headline, setHeadline] = useState('');
+  const [cta, setCta] = useState('Saiba mais');
+  const [brandColor, setBrandColor] = useState('#E8631A');
+
+  // Result state
   const [creativeAssetId, setCreativeAssetId] = useState<string | null>(null);
-  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [renderedImageUrl, setRenderedImageUrl] = useState<string | null>(null);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
-  const [imageLoadError, setImageLoadError] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    watch,
-    formState: { errors },
-  } = useForm<FormValues>({
-    defaultValues: { prompt: '', format: 'feed', style: 'fotografico' },
-  });
+  // Validation errors
+  const [errors, setErrors] = useState<{ headline?: string; cta?: string; image?: string }>({});
 
-  const prompt = watch('prompt');
-  const format = watch('format');
-  const style = watch('style');
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProductImageDataUrl(reader.result as string);
+      setErrors((prev) => ({ ...prev, image: undefined }));
+    };
+    reader.readAsDataURL(file);
+  }
 
-  const generateMutation = useMutation({
-    mutationFn: async (values: FormValues) => {
-      const res = await api.post<StudioImageGenerationResponse>('/studio/generate-image', {
-        prompt: values.prompt,
-        format: values.format,
-        style: values.style,
-      });
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProductImageDataUrl(reader.result as string);
+      setErrors((prev) => ({ ...prev, image: undefined }));
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const renderMutation = useMutation({
+    mutationFn: async (payload: RenderCreativePayload) => {
+      const res = await api.post<RenderCreativeResponse>('/studio/render-creative', payload);
       return res.data;
     },
     onSuccess: (data) => {
-      setCreativeAssetId(data?.creativeAssetId ?? null);
-      setGeneratedImageUrl(data?.imageUrl ?? null);
-      setPublishedUrl(null);
-      setImageLoadError(false);
+      setCreativeAssetId(data.creativeAssetId);
+      setRenderedImageUrl(data.imageUrl);
+      setStep('preview');
     },
   });
 
@@ -93,7 +133,7 @@ export function GeradorImagem() {
       const res = await api.get<StudioComplianceStatusResponse>(`/studio/assets/${creativeAssetId}`);
       return res.data;
     },
-    enabled: !!creativeAssetId,
+    enabled: !!creativeAssetId && step === 'compliance',
     refetchInterval: (query) => {
       const d = query.state.data;
       if (!d) return 2000;
@@ -111,32 +151,37 @@ export function GeradorImagem() {
     },
   });
 
-  // Only clear local state — do NOT call generateMutation.reset() before mutate()
-  const onSubmit = (values: FormValues) => {
-    setCreativeAssetId(null);
-    setGeneratedImageUrl(null);
-    setPublishedUrl(null);
-    setImageLoadError(false);
-    generateMutation.mutate(values);
-  };
+  function validate() {
+    const next: typeof errors = {};
+    if (!productImageDataUrl) next.image = 'Adicione uma foto do produto';
+    if (!headline.trim()) next.headline = 'Headline é obrigatória';
+    else if (headline.length > 80) next.headline = 'Máximo 80 caracteres';
+    if (!cta.trim()) next.cta = 'CTA é obrigatório';
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
 
-  const handleDiscard = () => {
+  function handleGenerate() {
+    if (!validate()) return;
+    renderMutation.mutate({
+      headline: headline.trim(),
+      cta: cta.trim(),
+      brandColor,
+      imageUrl: productImageDataUrl!,
+    });
+  }
+
+  function handleReset() {
+    setStep('form');
     setCreativeAssetId(null);
-    setGeneratedImageUrl(null);
+    setRenderedImageUrl(null);
     setPublishedUrl(null);
-    setImageLoadError(false);
-    generateMutation.reset();
+    renderMutation.reset();
     publishMutation.reset();
-  };
-
-  // Resolve the best available image URL: compliance DB value > initial generate response
-  const imageUrl = compliance?.imageUrl || generatedImageUrl || '';
+  }
 
   const complianceStatus = compliance?.complianceStatus ?? (creativeAssetId ? 'pending_compliance' : null);
   const isApproved = compliance?.approved === true || complianceStatus === 'approved';
-
-  // Use creativeAssetId as the primary gate — more reliable than imageUrl presence
-  const showCard = !!creativeAssetId || generateMutation.isSuccess;
 
   return (
     <AppLayout
@@ -155,207 +200,288 @@ export function GeradorImagem() {
         </div>
       }
     >
-      <div className="space-y-8">
-        <PageHeader
-          title="Gerador de Imagens com IA"
-          description="Descreva a imagem que você deseja gerar e escolha o formato e estilo"
-        />
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <PageHeader
+            title="Gerador de Criativos com IA"
+            description="Monte seu anúncio em 3 passos: foto, texto e publicação"
+          />
+          <StepIndicator step={step} />
+        </div>
 
-        <form onSubmit={handleSubmit(onSubmit)}>
+        {/* STEP 1: FORM */}
+        {step === 'form' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left: Form */}
-            <div className="lg:col-span-1">
+            {/* Photo upload */}
+            <div className="lg:col-span-1 space-y-4">
               <Card>
-                <div className="p-6 space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-text-primary">
-                      Descreva sua criação <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      {...register('prompt', {
-                        required: 'A descrição é obrigatória',
-                        minLength: { value: 10, message: 'Mínimo 10 caracteres' },
-                        maxLength: { value: 1000, message: 'Máximo 1000 caracteres' },
-                      })}
-                      placeholder="Ex: Uma mulher jovem usando roupa de verão na praia com pôr do sol, fotografia profissional"
-                      className={`w-full px-3 py-2 rounded-lg border text-sm resize-none h-24 focus:outline-none transition-colors ${
-                        errors.prompt
-                          ? 'border-red-500 focus:ring-2 focus:ring-red-200'
-                          : 'border-border focus:ring-2 focus:ring-[#E8631A]/20'
-                      }`}
-                    />
-                    {errors.prompt && (
-                      <p className="text-xs text-red-500">{errors.prompt.message}</p>
-                    )}
-                    <p className="text-xs text-text-secondary">{prompt.length}/1000 caracteres</p>
-                  </div>
+                <div className="p-6 space-y-5">
+                  <p className="text-sm font-semibold text-text-primary">
+                    Foto do Produto <span className="text-red-500">*</span>
+                  </p>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-text-primary">Formato</label>
-                    <select
-                      {...register('format')}
-                      className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[#E8631A]/20 bg-white"
-                    >
-                      {FORMAT_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-text-primary">Estilo</label>
-                    <select
-                      {...register('style')}
-                      className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-[#E8631A]/20 bg-white"
-                    >
-                      {STYLE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    disabled={generateMutation.isPending}
-                    className="w-full bg-[#E8631A] hover:bg-[#D45714] disabled:opacity-50"
+                  <div
+                    className={`relative rounded-xl border-2 border-dashed transition-colors cursor-pointer ${
+                      errors.image ? 'border-red-400 bg-red-50' : 'border-border hover:border-[#E8631A]/50 bg-gray-50'
+                    }`}
+                    style={{ minHeight: '180px' }}
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={handleDrop}
                   >
-                    {generateMutation.isPending ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Gerando...
-                      </span>
-                    ) : 'Gerar'}
-                  </Button>
+                    {productImageDataUrl ? (
+                      <img
+                        src={productImageDataUrl}
+                        alt="Produto"
+                        className="w-full h-full object-cover rounded-xl"
+                        style={{ maxHeight: '220px' }}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4">
+                        <div className="w-12 h-12 bg-white rounded-xl border border-border flex items-center justify-center">
+                          <Upload className="w-5 h-5 text-text-secondary" />
+                        </div>
+                        <p className="text-sm text-text-secondary text-center">
+                          Clique ou arraste a foto aqui
+                        </p>
+                        <p className="text-xs text-text-secondary">JPG, PNG, WebP</p>
+                      </div>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                  </div>
+                  {errors.image && <p className="text-xs text-red-500">{errors.image}</p>}
+                  {productImageDataUrl && (
+                    <button
+                      type="button"
+                      onClick={() => { setProductImageDataUrl(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                      className="text-xs text-text-secondary hover:text-red-500 transition-colors"
+                    >
+                      Remover foto
+                    </button>
+                  )}
                 </div>
               </Card>
             </div>
 
-            {/* Right: Preview */}
+            {/* Text + color */}
             <div className="lg:col-span-2">
-              {generateMutation.isPending ? (
-                <Card>
-                  <div className="p-12 flex flex-col items-center justify-center gap-4 text-center min-h-[300px]">
-                    <Loader2 className="w-10 h-10 text-[#E8631A] animate-spin" />
-                    <p className="text-sm font-medium text-text-primary">Gerando sua criação com IA...</p>
-                    <p className="text-xs text-text-secondary">Isso pode levar alguns segundos</p>
+              <Card>
+                <div className="p-6 space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-text-primary">
+                      Headline <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={headline}
+                      onChange={(e) => {
+                        setHeadline(e.target.value);
+                        if (errors.headline) setErrors((p) => ({ ...p, headline: undefined }));
+                      }}
+                      placeholder="Ex: Cadeira ergonômica que transforma seu home office"
+                      className={`w-full px-3 py-2 rounded-lg border text-sm resize-none h-20 focus:outline-none transition-colors ${
+                        errors.headline
+                          ? 'border-red-500 focus:ring-2 focus:ring-red-200'
+                          : 'border-border focus:ring-2 focus:ring-[#E8631A]/20'
+                      }`}
+                      maxLength={80}
+                    />
+                    <div className="flex justify-between">
+                      {errors.headline ? (
+                        <p className="text-xs text-red-500">{errors.headline}</p>
+                      ) : (
+                        <span />
+                      )}
+                      <p className="text-xs text-text-secondary">{headline.length}/80</p>
+                    </div>
                   </div>
-                </Card>
-              ) : generateMutation.isError ? (
-                <Card>
-                  <div className="p-8 flex flex-col items-center justify-center gap-3 text-center min-h-[300px]">
-                    <XCircle className="w-10 h-10 text-red-400" />
-                    <p className="text-sm font-semibold text-red-700">Erro ao gerar imagem</p>
-                    <p className="text-xs text-text-secondary">Verifique sua conexão e tente novamente.</p>
-                    <Button variant="outline" size="sm" onClick={handleDiscard}>
-                      Tentar novamente
-                    </Button>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-text-primary">
+                      CTA (botão de chamada) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={cta}
+                      onChange={(e) => {
+                        setCta(e.target.value);
+                        if (errors.cta) setErrors((p) => ({ ...p, cta: undefined }));
+                      }}
+                      placeholder="Ex: Saiba mais, Compre agora, Acesse"
+                      className={`w-full px-3 py-2 rounded-lg border text-sm focus:outline-none transition-colors ${
+                        errors.cta
+                          ? 'border-red-500 focus:ring-2 focus:ring-red-200'
+                          : 'border-border focus:ring-2 focus:ring-[#E8631A]/20'
+                      }`}
+                      maxLength={40}
+                    />
+                    {errors.cta && <p className="text-xs text-red-500">{errors.cta}</p>}
                   </div>
-                </Card>
-              ) : showCard ? (
-                <Card>
-                  {/* Image area: show image if URL available, fallback otherwise */}
-                  {imageUrl && !imageLoadError ? (
-                    <div className="w-full bg-gray-100 rounded-t-2xl overflow-hidden" style={{ aspectRatio: '16/9' }}>
-                      <img
-                        src={imageUrl}
-                        alt="Criativo gerado"
-                        className="w-full h-full object-cover"
-                        onError={() => setImageLoadError(true)}
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-text-primary">Cor da marca</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={brandColor}
+                        onChange={(e) => setBrandColor(e.target.value)}
+                        className="w-10 h-10 rounded-lg border border-border cursor-pointer p-0.5 bg-white"
                       />
+                      <input
+                        type="text"
+                        value={brandColor}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (/^#[0-9A-Fa-f]{0,6}$/.test(v)) setBrandColor(v);
+                        }}
+                        className="w-28 px-3 py-2 rounded-lg border border-border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#E8631A]/20"
+                        maxLength={7}
+                      />
+                      <p className="text-xs text-text-secondary">Usada no fundo e botão CTA</p>
                     </div>
-                  ) : (
-                    <div
-                      className="w-full rounded-t-2xl flex items-center justify-center px-8 py-12"
-                      style={{ background: '#FEF0E7', minHeight: '200px', aspectRatio: '16/9' }}
+                  </div>
+
+                  <div className="pt-2">
+                    <Button
+                      type="button"
+                      onClick={handleGenerate}
+                      disabled={renderMutation.isPending}
+                      className="w-full bg-[#E8631A] hover:bg-[#D45714] disabled:opacity-50"
                     >
-                      <p
-                        className="text-base font-semibold text-center"
-                        style={{ color: '#C2410C' }}
-                      >
-                        Imagem gerada com sucesso. Clique em Publicar no Meta para usar este criativo.
+                      {renderMutation.isPending ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Montando criativo...
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <ImageIcon className="w-4 h-4" />
+                          Gerar Preview
+                        </span>
+                      )}
+                    </Button>
+                    {renderMutation.isError && (
+                      <p className="text-xs text-red-500 mt-2 text-center">
+                        Erro ao montar criativo. Verifique a imagem e tente novamente.
                       </p>
-                    </div>
-                  )}
-
-                  {/* Details + compliance + actions */}
-                  <div className="p-6 space-y-4">
-                    <div className="text-xs text-text-secondary space-y-1">
-                      <p><span className="font-medium">Formato:</span> {FORMAT_OPTIONS.find((o) => o.value === format)?.label}</p>
-                      <p><span className="font-medium">Estilo:</span> {STYLE_OPTIONS.find((o) => o.value === style)?.label}</p>
-                    </div>
-
-                    {complianceStatus && (
-                      <ComplianceBadge status={complianceStatus} approved={compliance?.approved ?? null} />
-                    )}
-
-                    {compliance?.issues && compliance.issues.length > 0 && (
-                      <ul className="text-xs text-red-600 space-y-1 pl-4 list-disc">
-                        {compliance.issues.map((issue, i) => (
-                          <li key={i}>{issue}</li>
-                        ))}
-                      </ul>
-                    )}
-
-                    {publishedUrl ? (
-                      <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
-                        <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        Publicado no Meta!{' '}
-                        <a href={publishedUrl} target="_blank" rel="noreferrer" className="underline font-medium">
-                          Ver no Ads Manager
-                        </a>
-                      </div>
-                    ) : (
-                      <div className="flex gap-3">
-                        {isApproved && (
-                          <Button
-                            type="button"
-                            onClick={() => publishMutation.mutate()}
-                            disabled={publishMutation.isPending}
-                            className="flex-1 bg-[#E8631A] hover:bg-[#D45714] text-white"
-                          >
-                            {publishMutation.isPending ? (
-                              <span className="inline-flex items-center gap-2">
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Publicando...
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-2">
-                                <Send className="w-4 h-4" />
-                                Publicar no Meta
-                              </span>
-                            )}
-                          </Button>
-                        )}
-                        <Button type="submit" variant="outline" className="flex-1">
-                          Gerar novamente
-                        </Button>
-                        <Button type="button" variant="outline" className="px-3" onClick={handleDiscard}>
-                          <XCircle className="w-4 h-4" />
-                        </Button>
-                      </div>
                     )}
                   </div>
-                </Card>
-              ) : (
-                <Card>
-                  <div className="p-12 flex flex-col items-center justify-center text-center space-y-4 min-h-[300px]">
-                    <div className="w-16 h-16 bg-[#FEF0E7] rounded-2xl flex items-center justify-center">
-                      <svg className="w-8 h-8 text-[#E8631A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-text-primary mb-1">Pronto para criar?</h3>
-                      <p className="text-sm text-text-secondary">
-                        Preencha os detalhes ao lado e clique em "Gerar" para criar sua primeira imagem
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              )}
+                </div>
+              </Card>
             </div>
           </div>
-        </form>
+        )}
+
+        {/* STEP 2: PREVIEW */}
+        {step === 'preview' && renderedImageUrl && (
+          <div className="max-w-2xl mx-auto space-y-6">
+            <Card>
+              <div className="overflow-hidden rounded-t-2xl">
+                <img
+                  src={renderedImageUrl}
+                  alt="Preview do criativo"
+                  className="w-full object-cover"
+                  style={{ aspectRatio: '1/1' }}
+                />
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-text-primary mb-1">Preview do seu criativo</p>
+                  <p className="text-xs text-text-secondary">
+                    Antes de publicar, revisamos o compliance com as políticas do Meta.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    onClick={() => setStep('compliance')}
+                    className="flex-1 bg-[#E8631A] hover:bg-[#D45714] text-white"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Parece bom! Continuar
+                    </span>
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleReset} className="flex-1">
+                    Recomeçar
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* STEP 3: COMPLIANCE + PUBLISH */}
+        {step === 'compliance' && (
+          <div className="max-w-2xl mx-auto space-y-6">
+            <Card>
+              {renderedImageUrl && (
+                <div className="overflow-hidden rounded-t-2xl">
+                  <img
+                    src={renderedImageUrl}
+                    alt="Criativo gerado"
+                    className="w-full object-cover"
+                    style={{ aspectRatio: '1/1' }}
+                  />
+                </div>
+              )}
+              <div className="p-6 space-y-4">
+                {complianceStatus && (
+                  <ComplianceBadge status={complianceStatus} approved={compliance?.approved ?? null} />
+                )}
+
+                {compliance?.issues && compliance.issues.length > 0 && (
+                  <ul className="text-xs text-red-600 space-y-1 pl-4 list-disc">
+                    {compliance.issues.map((issue, i) => (
+                      <li key={i}>{issue}</li>
+                    ))}
+                  </ul>
+                )}
+
+                {publishedUrl ? (
+                  <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    Publicado no Meta!{' '}
+                    <a href={publishedUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+                      Ver no Ads Manager
+                    </a>
+                  </div>
+                ) : (
+                  <div className="flex gap-3">
+                    {isApproved && (
+                      <Button
+                        type="button"
+                        onClick={() => publishMutation.mutate()}
+                        disabled={publishMutation.isPending}
+                        className="flex-1 bg-[#E8631A] hover:bg-[#D45714] text-white"
+                      >
+                        {publishMutation.isPending ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Publicando...
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-2">
+                            <Send className="w-4 h-4" />
+                            Publicar no Meta
+                          </span>
+                        )}
+                      </Button>
+                    )}
+                    <Button type="button" variant="outline" onClick={handleReset} className="flex-1">
+                      Criar novo
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     </AppLayout>
   );

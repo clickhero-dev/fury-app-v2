@@ -15,7 +15,7 @@ const state = vi.hoisted(() => ({
     options: { connection: unknown; concurrency: number };
     handlers: Record<string, (...args: unknown[]) => unknown>;
   }>,
-  anthropicCreate: vi.fn(),
+  chatCreate: vi.fn(),
   assets: new Map<string, FakeAsset>(),
   updateCalls: [] as Array<{ id: string; data: Partial<FakeAsset> }>,
   fetchImpl: vi.fn(),
@@ -72,12 +72,14 @@ vi.mock('bullmq', () => {
   return { Worker: WorkerMock, Queue: QueueMock };
 });
 
-vi.mock('../lib/claude.js', () => ({
-  claude: {
-    messages: {
-      create: state.anthropicCreate,
+vi.mock('openai', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    chat: {
+      completions: {
+        create: state.chatCreate,
+      },
     },
-  },
+  })),
 }));
 
 vi.mock('@fury/db', () => {
@@ -132,6 +134,21 @@ vi.mock('../lib/sync-jobs.js', () => ({
   stopSyncJobsWorker: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../lib/rule-engine-manager.js', () => ({
+  startRuleEngine: vi.fn().mockResolvedValue(undefined),
+  stopRuleEngine: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../lib/fury-engine-manager.js', () => ({
+  startFuryEngine: vi.fn().mockResolvedValue(undefined),
+  stopFuryEngine: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../workers/budget-optimizer.worker.js', () => ({
+  startBudgetOptimizerWorker: vi.fn().mockResolvedValue(undefined),
+  stopBudgetOptimizerWorker: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../lib/temp-storage.js', () => ({
   ensureStudioAssetsDir: vi.fn().mockResolvedValue(undefined),
   studioAssetsDir: '/tmp/studio-assets',
@@ -167,6 +184,7 @@ vi.mock('../routes/index.js', () => ({
 vi.mock('express', () => {
   const app = {
     use: vi.fn(),
+    _router: { stack: [] },
     listen: vi.fn((_port: number, callback?: () => void) => {
       callback?.();
       return {
@@ -201,9 +219,9 @@ beforeEach(async () => {
   state.workerInstances.length = 0;
   state.assets.clear();
   state.updateCalls.length = 0;
-  state.anthropicCreate.mockReset();
+  state.chatCreate.mockReset();
   state.fetchImpl.mockReset();
-  process.env.ANTHROPIC_API_KEY = 'test-anthropic-key';
+  process.env.OPENAI_API_KEY = 'test-openai-key';
   globalThis.fetch = state.fetchImpl;
 
   ({ startComplianceCheckWorker, stopComplianceCheckWorker } = await import('../workers/compliance-check.worker.js'));
@@ -230,15 +248,16 @@ describe('Compliance Check Worker', () => {
       arrayBuffer: async () => new TextEncoder().encode('fake-image').buffer,
     });
 
-    state.anthropicCreate.mockResolvedValue({
-      content: [
+    state.chatCreate.mockResolvedValue({
+      choices: [
         {
-          type: 'text',
-          text: JSON.stringify({
-            approved: true,
-            issues: [],
-            text_percentage: 0,
-          }),
+          message: {
+            content: JSON.stringify({
+              approved: true,
+              issues: [],
+              text_percentage: 0,
+            }),
+          },
         },
       ],
     });
@@ -271,15 +290,16 @@ describe('Compliance Check Worker', () => {
       arrayBuffer: async () => new TextEncoder().encode('fake-image').buffer,
     });
 
-    state.anthropicCreate.mockResolvedValue({
-      content: [
+    state.chatCreate.mockResolvedValue({
+      choices: [
         {
-          type: 'text',
-          text: JSON.stringify({
-            approved: false,
-            issues: ['Texto excessivo detectado acima de 20% da imagem'],
-            text_percentage: 25,
-          }),
+          message: {
+            content: JSON.stringify({
+              approved: false,
+              issues: ['Texto excessivo detectado acima de 20% da imagem'],
+              text_percentage: 25,
+            }),
+          },
         },
       ],
     });
@@ -297,7 +317,7 @@ describe('Compliance Check Worker', () => {
   });
 
   it('usa fallback de aprovação manual quando não há API key', async () => {
-    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
 
     const asset: FakeAsset = {
       id: 'asset-3',
@@ -321,7 +341,7 @@ describe('Compliance Check Worker', () => {
 
     expect(asset.complianceStatus).toBe('approved');
     expect(asset.complianceNotes).toContain('[FALLBACK]');
-    expect(asset.complianceNotes).toContain('API Key da Anthropic não configurada');
+    expect(asset.complianceNotes).toContain('API Key OpenAI nao configurada');
   });
 
   it('inicializa junto com o servidor em modo production', async () => {
@@ -339,6 +359,8 @@ describe('Compliance Check Worker', () => {
 
     try {
       await import('../index.js');
+      // Allow the async IIFE in index.ts to resume after its awaited promises
+      await new Promise((r) => setImmediate(r));
 
       expect(startComplianceCheckWorkerMock).toHaveBeenCalledTimes(1);
     } finally {

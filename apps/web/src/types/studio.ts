@@ -81,3 +81,15 @@ export interface GenerateCopyPayload {
 export interface GenerateCopyResponse {
   variacoes: CopyVariacao[];
 }
+
+export interface RenderCreativePayload {
+  headline: string;
+  cta: string;
+  brandColor: string;
+  imageUrl: string;
+}
+
+export interface RenderCreativeResponse {
+  creativeAssetId: string;
+  imageUrl: string;
+}
