@@ -12,6 +12,10 @@ const connectionIdSchema = z.object({
   id: z.string().uuid('ID da conexao invalido'),
 });
 
+const selectAdAccountBodySchema = z.object({
+  adAccountId: z.string().min(1, 'adAccountId obrigatorio'),
+});
+
 export async function getAuthUrl(req: Request, res: Response, next: NextFunction) {
   try {
     if (!req.user?.tenantId) {
@@ -48,6 +52,28 @@ export async function getConnections(req: Request, res: Response, next: NextFunc
     res.status(200).json({
       success: true,
       data: connections,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function selectAdAccount(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const params = connectionIdSchema.parse(req.params);
+    const body = selectAdAccountBodySchema.parse(req.body);
+    const selectedAdAccountId = await metaService.selectAdAccount(
+      req.tenant.tenantId,
+      params.id,
+      body.adAccountId,
+    );
+    res.status(200).json({
+      success: true,
+      data: { selectedAdAccountId },
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

@@ -88,6 +88,7 @@ export const metaConnections = pgTable(
     accessToken: text('access_token').notNull(),
     tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
     adAccounts: jsonb('ad_accounts').default(sql`'[]'::jsonb`),
+    selectedAdAccountId: varchar('selected_ad_account_id', { length: 255 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({

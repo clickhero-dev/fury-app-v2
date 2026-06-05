@@ -26,6 +26,7 @@ interface StoredMetaConnection {
   accessToken: string;
   tokenExpiresAt: Date | null;
   adAccounts: MetaAdAccount[];
+  selectedAdAccountId: string | null;
   createdAt: Date;
 }
 
@@ -174,6 +175,7 @@ export async function getTenantMetaConnections(tenantId: string): Promise<Stored
     accessToken: maskToken(connection.accessToken),
     tokenExpiresAt: connection.tokenExpiresAt,
     adAccounts: (connection.adAccounts as MetaAdAccount[]) || [],
+    selectedAdAccountId: connection.selectedAdAccountId ?? null,
     createdAt: connection.createdAt,
   }));
 }
@@ -188,4 +190,31 @@ export async function deleteTenantMetaConnection(tenantId: string, connectionId:
   }
 
   await db.delete(metaConnections).where(eq(metaConnections.id, connectionId));
+}
+
+export async function selectAdAccount(
+  tenantId: string,
+  connectionId: string,
+  adAccountId: string,
+): Promise<string> {
+  const connection = await db.query.metaConnections.findFirst({
+    where: and(eq(metaConnections.id, connectionId), eq(metaConnections.tenantId, tenantId)),
+  });
+
+  if (!connection) {
+    throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Conexao Meta nao encontrada para este tenant.');
+  }
+
+  const adAccounts = (connection.adAccounts as MetaAdAccount[]) ?? [];
+  const exists = adAccounts.some((a) => a.id === adAccountId);
+  if (!exists) {
+    throw new AppError(400, 'AD_ACCOUNT_NOT_FOUND', 'Conta de anuncios nao pertence a esta conexao.');
+  }
+
+  await db
+    .update(metaConnections)
+    .set({ selectedAdAccountId: adAccountId })
+    .where(eq(metaConnections.id, connectionId));
+
+  return adAccountId;
 }

@@ -71,7 +71,11 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
 
     const accessToken = this.decryptToken(connection.accessToken);
     const adAccounts = (connection.adAccounts as any[]) || [];
-    const adAccountId = params.adAccountId || adAccounts[0]?.id;
+    const adAccountId =
+      params.adAccountId ||
+      (connection as any).selectedAdAccountId ||
+      adAccounts.find((a: any) => a.account_status === 1)?.id ||
+      adAccounts[0]?.id;
 
     if (!adAccountId) {
       throw new AppError(400, 'NO_AD_ACCOUNT', 'Nenhuma conta de anuncios encontrada');
@@ -287,7 +291,10 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
 
       const accessToken = this.decryptToken(connection.accessToken);
       const adAccounts = (connection.adAccounts as any[]) || [];
-      const adAccountId = adAccounts[0]?.id;
+      const adAccountId =
+        (connection as any).selectedAdAccountId ||
+        adAccounts.find((a: any) => a.account_status === 1)?.id ||
+        adAccounts[0]?.id;
 
       if (!adAccountId) {
         throw new AppError(400, 'NO_AD_ACCOUNT', 'Nenhuma conta de anuncios encontrada');

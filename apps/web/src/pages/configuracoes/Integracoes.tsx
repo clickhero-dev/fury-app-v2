@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LogOut, ExternalLink } from 'lucide-react';
 import { AppLayout, PageHeader, EmptyState, LoadingSpinner, Button, StatusBadge, ErrorBoundary } from '@/components';
@@ -38,12 +39,17 @@ function ConnectionCard({
   connection,
   onDisconnect,
   isDeleting,
+  onSelectAccount,
+  isSelectingAccount,
 }: {
   connection: MetaConnection;
   onDisconnect: (id: string) => void;
   isDeleting: boolean;
+  onSelectAccount: (connectionId: string, adAccountId: string) => void;
+  isSelectingAccount: boolean;
 }) {
   const tokenValid = isTokenValid(connection.tokenExpiresAt);
+  const activeAdAccounts = (connection.adAccounts ?? []).filter((a) => a.account_status === 1);
 
   const handleDisconnect = () => {
     const message = `Tem certeza que deseja desconectar a conta Meta "${connection.metaUserId}"? Esta ação não pode ser desfeita.`;
@@ -91,6 +97,38 @@ function ConnectionCard({
           ))}
         </div>
       </div>
+
+      {/* Active account selector */}
+      {activeAdAccounts.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
+            Conta ativa para métricas
+          </p>
+          <div className="relative">
+            <select
+              value={connection.selectedAdAccountId ?? activeAdAccounts[0]?.id ?? ''}
+              onChange={(e) => onSelectAccount(connection.id, e.target.value)}
+              disabled={isSelectingAccount}
+              className="w-full appearance-none bg-surface-secondary border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-[#E8631A]/30 focus:border-[#E8631A] disabled:opacity-50 cursor-pointer pr-8"
+            >
+              {activeAdAccounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name} · {acc.id}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center">
+              {isSelectingAccount ? (
+                <span className="w-3.5 h-3.5 border-2 border-[#E8631A]/30 border-t-[#E8631A] rounded-full animate-spin inline-block" />
+              ) : (
+                <svg className="w-3.5 h-3.5 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Token Status */}
       <div
@@ -150,6 +188,12 @@ function ConnectionCard({
 
 export function Integracoes() {
   const queryClient = useQueryClient();
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  }
 
   const { data: connections = [], isLoading } = useQuery<MetaConnection[]>({
     queryKey: ['meta-connections'],
@@ -192,12 +236,33 @@ export function Integracoes() {
     },
   });
 
+  const selectAccountMutation = useMutation({
+    mutationFn: async ({ connectionId, adAccountId }: { connectionId: string; adAccountId: string }) => {
+      const response = await api.patch(`/meta/connections/${connectionId}/select-account`, { adAccountId });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
+      queryClient.invalidateQueries({ queryKey: ['metrics-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['goals-progress-v2'] });
+      queryClient.invalidateQueries({ queryKey: ['metrics-daily-week'] });
+      showToast('Conta ativa atualizada');
+    },
+    onError: (error) => {
+      console.error('Erro ao selecionar conta:', error);
+    },
+  });
+
   const handleAddConnection = () => {
     connectMutation.mutate();
   };
 
   const handleDisconnect = (connectionId: string) => {
     disconnectMutation.mutate(connectionId);
+  };
+
+  const handleSelectAccount = (connectionId: string, adAccountId: string) => {
+    selectAccountMutation.mutate({ connectionId, adAccountId });
   };
 
   if (isLoading) {
@@ -220,6 +285,11 @@ export function Integracoes() {
   return (
     <ErrorBoundary>
     <AppLayout>
+      {toast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold bg-[#2EA043] text-white transition-all duration-300">
+          ✅ {toast}
+        </div>
+      )}
       <div className="space-y-8">
         <PageHeader
           title="Integrações"
@@ -268,6 +338,11 @@ export function Integracoes() {
                 isDeleting={
                   disconnectMutation.isPending &&
                   disconnectMutation.variables === connection.id
+                }
+                onSelectAccount={handleSelectAccount}
+                isSelectingAccount={
+                  selectAccountMutation.isPending &&
+                  selectAccountMutation.variables?.connectionId === connection.id
                 }
               />
             ))}

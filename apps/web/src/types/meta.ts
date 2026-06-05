@@ -16,5 +16,6 @@ export interface MetaConnection {
   accessToken: string;
   tokenExpiresAt: string | null;
   adAccounts: MetaAdAccount[];
+  selectedAdAccountId: string | null;
   createdAt: string;
 }
