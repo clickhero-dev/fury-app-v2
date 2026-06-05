@@ -77,11 +77,15 @@ export function GeradorImagem() {
         format: values.format,
         style: values.style,
       });
+      console.log('[GeradorImagem] generate response:', res.data);
       return res.data;
     },
     onSuccess: (data) => {
-      setCreativeAssetId(data.creativeAssetId);
-      setGeneratedImageUrl(data.imageUrl ?? null);
+      console.log('[GeradorImagem] onSuccess data:', data);
+      console.log('[GeradorImagem] creativeAssetId:', data?.creativeAssetId);
+      console.log('[GeradorImagem] imageUrl:', data?.imageUrl);
+      setCreativeAssetId(data?.creativeAssetId ?? null);
+      setGeneratedImageUrl(data?.imageUrl ?? null);
       setPublishedUrl(null);
       setImageLoadError(false);
     },
@@ -91,6 +95,7 @@ export function GeradorImagem() {
     queryKey: ['studio-asset', creativeAssetId],
     queryFn: async () => {
       const res = await api.get<StudioComplianceStatusResponse>(`/studio/assets/${creativeAssetId}`);
+      console.log('[GeradorImagem] compliance poll:', res.data);
       return res.data;
     },
     enabled: !!creativeAssetId,
@@ -107,9 +112,18 @@ export function GeradorImagem() {
       return res.data;
     },
     onSuccess: (data) => {
-      setPublishedUrl(data.adsManagerUrl ?? null);
+      setPublishedUrl(data?.adsManagerUrl ?? null);
     },
   });
+
+  // Only clear local state — do NOT call generateMutation.reset() before mutate()
+  const onSubmit = (values: FormValues) => {
+    setCreativeAssetId(null);
+    setGeneratedImageUrl(null);
+    setPublishedUrl(null);
+    setImageLoadError(false);
+    generateMutation.mutate(values);
+  };
 
   const handleDiscard = () => {
     setCreativeAssetId(null);
@@ -120,13 +134,26 @@ export function GeradorImagem() {
     publishMutation.reset();
   };
 
-  const onSubmit = (values: FormValues) => {
-    handleDiscard();
-    generateMutation.mutate(values);
-  };
+  // Resolve the best available image URL: compliance DB value > initial generate response
+  const imageUrl = compliance?.imageUrl || generatedImageUrl || '';
 
   const complianceStatus = compliance?.complianceStatus ?? (creativeAssetId ? 'pending_compliance' : null);
   const isApproved = compliance?.approved === true || complianceStatus === 'approved';
+
+  // Use creativeAssetId as the primary gate — more reliable than imageUrl presence
+  const showCard = !!creativeAssetId || generateMutation.isSuccess;
+
+  console.log('[GeradorImagem] render state:', {
+    creativeAssetId,
+    generatedImageUrl,
+    imageUrl,
+    imageLoadError,
+    isPending: generateMutation.isPending,
+    isError: generateMutation.isError,
+    isSuccess: generateMutation.isSuccess,
+    showCard,
+    complianceStatus,
+  });
 
   return (
     <AppLayout
@@ -241,87 +268,92 @@ export function GeradorImagem() {
                     </Button>
                   </div>
                 </Card>
-              ) : generatedImageUrl ? (
+              ) : showCard ? (
                 <Card>
-                  <div className="space-y-0">
-                    {/* Use compliance.imageUrl as authoritative source when available */}
-                    {(() => {
-                      const src = compliance?.imageUrl || generatedImageUrl;
-                      return imageLoadError || !src ? (
-                        <div className="w-full rounded-t-xl bg-[#FEF0E7] aspect-video flex items-center justify-center px-6">
-                          <p className="text-sm text-center text-[#EA580C] font-medium">
-                            Imagem gerada — clique em Publicar no Meta para usar esta imagem
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="w-full bg-surface-secondary rounded-t-xl overflow-hidden aspect-video">
-                          <img
-                            src={src}
-                            alt="Criativo gerado"
-                            className="w-full h-full object-cover"
-                            onError={() => setImageLoadError(true)}
-                          />
-                        </div>
-                      );
-                    })()}
-
-                    <div className="p-6 space-y-4">
-                      <div className="text-xs text-text-secondary space-y-1">
-                        <p><span className="font-medium">Formato:</span> {FORMAT_OPTIONS.find((o) => o.value === format)?.label}</p>
-                        <p><span className="font-medium">Estilo:</span> {STYLE_OPTIONS.find((o) => o.value === style)?.label}</p>
-                      </div>
-
-                      {complianceStatus && (
-                        <ComplianceBadge status={complianceStatus} approved={compliance?.approved ?? null} />
-                      )}
-
-                      {compliance?.issues && compliance.issues.length > 0 && (
-                        <ul className="text-xs text-red-600 space-y-1 pl-4 list-disc">
-                          {compliance.issues.map((issue, i) => (
-                            <li key={i}>{issue}</li>
-                          ))}
-                        </ul>
-                      )}
-
-                      {publishedUrl ? (
-                        <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
-                          <CheckCircle2 className="w-4 h-4 shrink-0" />
-                          Publicado no Meta!{' '}
-                          <a href={publishedUrl} target="_blank" rel="noreferrer" className="underline font-medium">
-                            Ver no Ads Manager
-                          </a>
-                        </div>
-                      ) : (
-                        <div className="flex gap-3">
-                          {isApproved && (
-                            <Button
-                              type="button"
-                              onClick={() => publishMutation.mutate()}
-                              disabled={publishMutation.isPending}
-                              className="flex-1 bg-[#E8631A] hover:bg-[#D45714] text-white"
-                            >
-                              {publishMutation.isPending ? (
-                                <span className="inline-flex items-center gap-2">
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                  Publicando...
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-2">
-                                  <Send className="w-4 h-4" />
-                                  Publicar no Meta
-                                </span>
-                              )}
-                            </Button>
-                          )}
-                          <Button type="submit" variant="outline" className="flex-1">
-                            Gerar novamente
-                          </Button>
-                          <Button type="button" variant="outline" className="px-3" onClick={handleDiscard}>
-                            <XCircle className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      )}
+                  {/* Image area: show image if URL available, fallback otherwise */}
+                  {imageUrl && !imageLoadError ? (
+                    <div className="w-full bg-gray-100 rounded-t-2xl overflow-hidden" style={{ aspectRatio: '16/9' }}>
+                      <img
+                        src={imageUrl}
+                        alt="Criativo gerado"
+                        className="w-full h-full object-cover"
+                        onError={() => {
+                          console.log('[GeradorImagem] img onError — URL failed:', imageUrl);
+                          setImageLoadError(true);
+                        }}
+                      />
                     </div>
+                  ) : (
+                    <div
+                      className="w-full rounded-t-2xl flex items-center justify-center px-8 py-12"
+                      style={{ background: '#FEF0E7', minHeight: '200px', aspectRatio: '16/9' }}
+                    >
+                      <p
+                        className="text-base font-semibold text-center"
+                        style={{ color: '#C2410C' }}
+                      >
+                        Imagem gerada com sucesso. Clique em Publicar no Meta para usar este criativo.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Details + compliance + actions */}
+                  <div className="p-6 space-y-4">
+                    <div className="text-xs text-text-secondary space-y-1">
+                      <p><span className="font-medium">Formato:</span> {FORMAT_OPTIONS.find((o) => o.value === format)?.label}</p>
+                      <p><span className="font-medium">Estilo:</span> {STYLE_OPTIONS.find((o) => o.value === style)?.label}</p>
+                    </div>
+
+                    {complianceStatus && (
+                      <ComplianceBadge status={complianceStatus} approved={compliance?.approved ?? null} />
+                    )}
+
+                    {compliance?.issues && compliance.issues.length > 0 && (
+                      <ul className="text-xs text-red-600 space-y-1 pl-4 list-disc">
+                        {compliance.issues.map((issue, i) => (
+                          <li key={i}>{issue}</li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {publishedUrl ? (
+                      <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        Publicado no Meta!{' '}
+                        <a href={publishedUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+                          Ver no Ads Manager
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="flex gap-3">
+                        {isApproved && (
+                          <Button
+                            type="button"
+                            onClick={() => publishMutation.mutate()}
+                            disabled={publishMutation.isPending}
+                            className="flex-1 bg-[#E8631A] hover:bg-[#D45714] text-white"
+                          >
+                            {publishMutation.isPending ? (
+                              <span className="inline-flex items-center gap-2">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Publicando...
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-2">
+                                <Send className="w-4 h-4" />
+                                Publicar no Meta
+                              </span>
+                            )}
+                          </Button>
+                        )}
+                        <Button type="submit" variant="outline" className="flex-1">
+                          Gerar novamente
+                        </Button>
+                        <Button type="button" variant="outline" className="px-3" onClick={handleDiscard}>
+                          <XCircle className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </Card>
               ) : (
