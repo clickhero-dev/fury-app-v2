@@ -18,8 +18,8 @@ const schema = z.object({
   objective: z.string().min(1, 'Selecione um objetivo'),
   niche: z.string().min(3, 'Mínimo de 3 caracteres'),
   mainProduct: z.string().min(5, 'Mínimo de 5 caracteres'),
-  monthlyBudget: z.preprocess((val) => Number(val), z.number().min(300, 'O orçamento mínimo é R$300/mês')),
-  targetCpa: z.preprocess((val) => Number(val), z.number().positive('Informe um valor válido')),
+  monthlyBudget: z.coerce.number().min(300, 'O orçamento mínimo é R$300/mês'),
+  targetCpa: z.coerce.number().positive('Informe um valor válido'),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -67,7 +67,7 @@ export function MetasPage() {
     formState: { errors },
   } = useForm<{ objective: string; niche: string; mainProduct: string; monthlyBudget: number; targetCpa: number }>({
     resolver: zodResolver(schema),
-    defaultValues: { objective: '', niche: '', mainProduct: '', monthlyBudget: 0, targetCpa: 0 },
+    defaultValues: { objective: '', niche: '', mainProduct: '', monthlyBudget: undefined, targetCpa: undefined },
   });
 
   // ── Prefill from existing goals ───────────────────────────────────────────
