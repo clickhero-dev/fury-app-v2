@@ -14,7 +14,19 @@
       "Bash(rtk read *)",
       "Bash(npx rtk *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(rtk grep *)",
+      "Bash(node *)",
+      "Bash(rtk find *)",
+      "Bash(rtk tree *)",
+      "Bash(railway --version)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(grep -v \"pgTable\\\\|\\\\.references\\\\|\\\\.notNull\\\\|varchar\\\\|uuid\\\\|timestamp\\\\|boolean\\\\|jsonb\\\\|integer\\\\|index\\\\|\\\\.id\\\\|tenantId\\\\|planId\\\\|subscriptionId\\\\|asaas\\\\|priceCents\\\\|interval\\\\|status\\\\|trial\\\\|current\\\\|created\\\\|updated\\\\|amount\\\\|paid\\\\|\\\\.default\\\\|sql\\\\`\")",
+      "Bash(rtk pnpm *)",
+      "Bash(vercel ls *)",
+      "Bash(vercel teams *)",
+      "Bash(vercel project *)"
     ]
   }
 }
