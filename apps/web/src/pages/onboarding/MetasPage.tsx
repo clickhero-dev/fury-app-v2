@@ -67,7 +67,7 @@ export function MetasPage() {
     formState: { errors },
   } = useForm<{ objective: string; niche: string; mainProduct: string; monthlyBudget: number; targetCpa: number }>({
     resolver: zodResolver(schema),
-    defaultValues: { objective: '', niche: '', mainProduct: '', monthlyBudget: undefined, targetCpa: undefined },
+    defaultValues: { objective: '', niche: '', mainProduct: '', monthlyBudget: 0, targetCpa: 0 },
   });
 
   // ── Prefill from existing goals ───────────────────────────────────────────
