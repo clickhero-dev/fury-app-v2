@@ -13,22 +13,23 @@ router.get('/live-feed', authSSEMiddleware, tenantMiddleware, async (req: Reques
   try {
     const { tenantId } = req.tenant!;
 
+    res.setHeader('X-Accel-Buffering', 'no');
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Access-Control-Allow-Origin', '*');
-
-    registerSSEClient(tenantId, res);
     res.flushHeaders();
 
-    const pingInterval = setInterval(() => {
+    registerSSEClient(tenantId, res);
+
+    const heartbeat = setInterval(() => {
       if (!res.writableEnded) {
         res.write(': ping\n\n');
       }
     }, 30000);
 
     res.on('close', () => {
-      clearInterval(pingInterval);
+      clearInterval(heartbeat);
     });
   } catch (error) {
     next(error);

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AppLayout, PageHeader, Button, DataTable, FuryLiveFeed } from '@/components';
+import { AppLayout, PageHeader, Button, DataTable, FuryLiveFeed, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components';
 import { FuryRuleDialog } from '@/components/FuryRuleDialog';
 import {
   useGetFuryRules,
@@ -13,6 +13,7 @@ import {
 export function MinhasRegras() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedRule, setSelectedRule] = useState<FuryRule | undefined>();
+  const [deleteRuleId, setDeleteRuleId] = useState<string | null>(null);
 
   const { data, isLoading } = useGetFuryRules();
   const createMutation = useCreateFuryRule();
@@ -58,13 +59,18 @@ export function MinhasRegras() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Tem certeza que deseja deletar esta regra?')) {
-      try {
-        await deleteMutation.mutateAsync(id);
-      } catch (error) {
-        console.error('Error deleting rule:', error);
-      }
+  const handleDelete = (id: string) => {
+    setDeleteRuleId(id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteRuleId) return;
+    try {
+      await deleteMutation.mutateAsync(deleteRuleId);
+    } catch (error) {
+      console.error('Error deleting rule:', error);
+    } finally {
+      setDeleteRuleId(null);
     }
   };
 
@@ -125,11 +131,12 @@ export function MinhasRegras() {
       align: 'center' as const,
       render: (_: string | boolean | undefined, row: FuryRule) => (
         <button
-          onClick={() => handleToggleActive(row)}
-          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+          type="button"
+          onClick={(e) => { e.stopPropagation(); handleToggleActive(row); }}
+          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
             row.isActive
-              ? 'bg-green-50 text-green-700'
-              : 'bg-gray-100 text-gray-600'
+              ? 'bg-green-50 text-green-700 hover:bg-green-100'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
           {row.isActive ? '✓ Ativa' : '○ Inativa'}
@@ -213,6 +220,30 @@ export function MinhasRegras() {
         rule={selectedRule}
         isPending={createMutation.isPending || updateMutation.isPending}
       />
+
+      <Dialog open={deleteRuleId !== null} onOpenChange={(open) => { if (!open) setDeleteRuleId(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Deletar regra</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja deletar esta regra? Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteRuleId(null)} disabled={deleteMutation.isPending}>
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleConfirmDelete}
+              disabled={deleteMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 focus-visible:ring-red-600"
+            >
+              {deleteMutation.isPending ? 'Deletando...' : 'Deletar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

@@ -56,7 +56,7 @@ export function FuryRuleDialog({
         conditionValue: parseFloat(rule.conditionValue),
         action: rule.action,
         actionValue: rule.actionValue ? parseFloat(rule.actionValue) : undefined,
-        isActive: rule.isActive,
+        isActive: Boolean(rule.isActive),
       });
     } else {
       setForm({
