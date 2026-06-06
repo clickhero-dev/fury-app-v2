@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AppLayout, PageHeader, Button, DataTable, FuryLiveFeed, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components';
+import { AppLayout, PageHeader, Button, DataTable, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components';
 import { FuryRuleDialog } from '@/components/FuryRuleDialog';
 import {
   useGetFuryRules,
@@ -197,20 +197,13 @@ export function MinhasRegras() {
           description="Crie e gerencie regras automáticas para otimizar suas campanhas"
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <DataTable
-              columns={columns}
-              data={rules}
-              keyField="id"
-              isLoading={isLoading}
-              emptyMessage="Nenhuma regra criada ainda. Clique em 'Nova Regra' para começar."
-            />
-          </div>
-          <div className="lg:col-span-1">
-            <FuryLiveFeed />
-          </div>
-        </div>
+        <DataTable
+          columns={columns}
+          data={rules}
+          keyField="id"
+          isLoading={isLoading}
+          emptyMessage="Nenhuma regra criada ainda. Clique em 'Nova Regra' para começar."
+        />
       </div>
 
       <FuryRuleDialog
