@@ -110,7 +110,7 @@ function SubscribeDialog({ plan, open, onOpenChange, defaultName, defaultEmail }
     e.preventDefault();
     setError('');
     subscribe.mutate(
-      { planId: plan.id, billingType, customerName: name, customerEmail: email, customerCpfCnpj: cpfCnpj || undefined },
+      { planId: plan.id, billingType, customerName: name, customerEmail: email, customerCpfCnpj: cpfCnpj },
       {
         onSuccess: (data) => {
           onOpenChange(false);
@@ -163,12 +163,14 @@ function SubscribeDialog({ plan, open, onOpenChange, defaultName, defaultEmail }
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-text-primary">CPF / CNPJ (opcional)</label>
+            <label className="text-sm font-medium text-text-primary">CPF / CNPJ</label>
             <input
               className="w-full rounded-lg border border-border bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-[#EA580C]"
               placeholder="000.000.000-00"
               value={cpfCnpj}
               onChange={(e) => setCpfCnpj(e.target.value)}
+              required
+              minLength={11}
             />
           </div>
 

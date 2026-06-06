@@ -121,7 +121,10 @@ const subscribeSchema = z.object({
   billingType: z.enum(['BOLETO', 'PIX', 'CREDIT_CARD']).default('PIX'),
   customerName: z.string().min(2),
   customerEmail: z.string().email(),
-  customerCpfCnpj: z.string().optional(),
+  customerCpfCnpj: z
+    .string()
+    .min(11, 'CPF ou CNPJ é obrigatório')
+    .transform((v) => v.replace(/\D/g, '')),
 });
 
 router.post('/subscribe', async (req: Request, res: Response, next: NextFunction) => {
