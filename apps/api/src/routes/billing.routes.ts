@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db, plans, subscriptions, invoices } from '@fury/db';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
@@ -254,7 +254,7 @@ router.delete('/subscription', async (req: Request, res: Response, next: NextFun
     const sub = await db.query.subscriptions.findFirst({
       where: and(
         eq(subscriptions.tenantId, tenantId),
-        eq(subscriptions.status, 'active')
+        inArray(subscriptions.status, ['active', 'trial'])
       ),
     });
     if (!sub) throw new AppError(404, 'SUBSCRIPTION_NOT_FOUND', 'Assinatura ativa não encontrada');
