@@ -49,6 +49,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0006_remove_automation_rules_enabled' },
   { tag: '0007_add_billing_tables' },
   { tag: '0008_add_selected_ad_account' },
+  { tag: '0009_add_main_product_to_goals' },
 ];
 
 async function runMigrate() {
