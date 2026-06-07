@@ -2,6 +2,15 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LogOut, ExternalLink } from 'lucide-react';
 import { AppLayout, PageHeader, EmptyState, LoadingSpinner, Button, StatusBadge, ErrorBoundary } from '@/components';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import type { MetaConnection } from '@/types/meta';
@@ -50,13 +59,6 @@ function ConnectionCard({
 }) {
   const tokenValid = isTokenValid(connection.tokenExpiresAt);
   const activeAdAccounts = (connection.adAccounts ?? []).filter((a) => a.account_status === 1);
-
-  const handleDisconnect = () => {
-    const message = `Tem certeza que deseja desconectar a conta Meta "${connection.metaUserId}"? Esta ação não pode ser desfeita.`;
-    if (window.confirm(message)) {
-      onDisconnect(connection.id);
-    }
-  };
 
   return (
     <div className="bg-surface border border-border rounded-xl p-6 space-y-5">
@@ -167,7 +169,7 @@ function ConnectionCard({
           </Button>
         )}
         <button
-          onClick={handleDisconnect}
+          onClick={() => onDisconnect(connection.id)}
           disabled={isDeleting}
           className={cn(
             'flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all',
@@ -184,11 +186,60 @@ function ConnectionCard({
   );
 }
 
+// ─── Disconnect Confirm Dialog ─────────────────────────────────────────────────
+
+function DisconnectDialog({
+  open,
+  accountId,
+  onCancel,
+  onConfirm,
+  isPending,
+}: {
+  open: boolean;
+  accountId: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onCancel(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Desconectar conta Meta</DialogTitle>
+          <DialogDescription>
+            Tem certeza que deseja desconectar a conta Meta{' '}
+            <span className="font-semibold text-text-primary">{accountId}</span>? Esta ação não
+            pode ser desfeita.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 rounded-lg text-sm font-semibold border border-border text-text-secondary hover:bg-surface-secondary transition-colors"
+            >
+              Cancelar
+            </button>
+          </DialogClose>
+          <button
+            onClick={onConfirm}
+            disabled={isPending}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isPending ? 'Desconectando...' : 'Desconectar'}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function Integracoes() {
   const queryClient = useQueryClient();
   const [toast, setToast] = useState<string | null>(null);
+  const [pendingDisconnect, setPendingDisconnect] = useState<{ id: string; accountId: string } | null>(null);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -230,9 +281,11 @@ export function Integracoes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
+      setPendingDisconnect(null);
     },
     onError: (error) => {
       console.error('Erro ao desconectar:', error);
+      setPendingDisconnect(null);
     },
   });
 
@@ -257,8 +310,15 @@ export function Integracoes() {
     connectMutation.mutate();
   };
 
-  const handleDisconnect = (connectionId: string) => {
-    disconnectMutation.mutate(connectionId);
+  const handleDisconnectRequest = (connectionId: string) => {
+    const connection = connections.find((c) => c.id === connectionId);
+    setPendingDisconnect({ id: connectionId, accountId: connection?.metaUserId ?? connectionId });
+  };
+
+  const handleDisconnectConfirm = () => {
+    if (pendingDisconnect) {
+      disconnectMutation.mutate(pendingDisconnect.id);
+    }
   };
 
   const handleSelectAccount = (connectionId: string, adAccountId: string) => {
@@ -284,72 +344,81 @@ export function Integracoes() {
 
   return (
     <ErrorBoundary>
-    <AppLayout>
-      {toast && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold bg-[#2EA043] text-white transition-all duration-300">
-          ✅ {toast}
-        </div>
-      )}
-      <div className="space-y-8">
-        <PageHeader
-          title="Integrações"
-          description="Gerencie suas contas de anúncios conectadas"
-          actions={
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleAddConnection}
-              disabled={connectMutation.isPending}
-              className="flex items-center gap-2"
-            >
-              {connectMutation.isPending ? (
-                <>
-                  <span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Conectando...
-                </>
-              ) : (
-                <>
-                  <ExternalLink className="w-4 h-4" />
-                  Adicionar conta Meta
-                </>
-              )}
-            </Button>
-          }
-        />
-
-        {connections.length === 0 ? (
-          <div className="border border-border rounded-xl">
-            <EmptyState
-              title="Conecte sua conta Meta para começar"
-              description="Integre sua conta Meta para gerenciar campanhas e acessar insights diretamente do FURY"
-              action={{
-                label: 'Conectar conta Meta',
-                onClick: handleAddConnection,
-              }}
-            />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {connections.map((connection) => (
-              <ConnectionCard
-                key={connection.id}
-                connection={connection}
-                onDisconnect={handleDisconnect}
-                isDeleting={
-                  disconnectMutation.isPending &&
-                  disconnectMutation.variables === connection.id
-                }
-                onSelectAccount={handleSelectAccount}
-                isSelectingAccount={
-                  selectAccountMutation.isPending &&
-                  selectAccountMutation.variables?.connectionId === connection.id
-                }
-              />
-            ))}
+      <AppLayout>
+        {toast && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold bg-[#2EA043] text-white transition-all duration-300">
+            ✅ {toast}
           </div>
         )}
-      </div>
-    </AppLayout>
+
+        <DisconnectDialog
+          open={!!pendingDisconnect}
+          accountId={pendingDisconnect?.accountId ?? ''}
+          onCancel={() => setPendingDisconnect(null)}
+          onConfirm={handleDisconnectConfirm}
+          isPending={disconnectMutation.isPending}
+        />
+
+        <div className="space-y-8">
+          <PageHeader
+            title="Integrações"
+            description="Gerencie suas contas de anúncios conectadas"
+            actions={
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleAddConnection}
+                disabled={connectMutation.isPending}
+                className="flex items-center gap-2"
+              >
+                {connectMutation.isPending ? (
+                  <>
+                    <span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Conectando...
+                  </>
+                ) : (
+                  <>
+                    <ExternalLink className="w-4 h-4" />
+                    Adicionar conta Meta
+                  </>
+                )}
+              </Button>
+            }
+          />
+
+          {connections.length === 0 ? (
+            <div className="border border-border rounded-xl">
+              <EmptyState
+                title="Conecte sua conta Meta para começar"
+                description="Integre sua conta Meta para gerenciar campanhas e acessar insights diretamente do FURY"
+                action={{
+                  label: 'Conectar conta Meta',
+                  onClick: handleAddConnection,
+                }}
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {connections.map((connection) => (
+                <ConnectionCard
+                  key={connection.id}
+                  connection={connection}
+                  onDisconnect={handleDisconnectRequest}
+                  isDeleting={
+                    disconnectMutation.isPending &&
+                    disconnectMutation.variables === connection.id
+                  }
+                  onSelectAccount={handleSelectAccount}
+                  isSelectingAccount={
+                    selectAccountMutation.isPending &&
+                    selectAccountMutation.variables?.connectionId === connection.id
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </AppLayout>
     </ErrorBoundary>
   );
 }
