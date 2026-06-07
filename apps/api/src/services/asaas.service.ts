@@ -89,6 +89,13 @@ export async function findCustomerByExternalReference(ref: string): Promise<Asaa
   return res.data?.[0] ?? null;
 }
 
+export async function updateCustomer(
+  id: string,
+  data: Partial<{ name: string; email: string; cpfCnpj: string }>
+): Promise<AsaasCustomer> {
+  return asaasRequest<AsaasCustomer>('PUT', `/customers/${id}`, data);
+}
+
 // ──────────────────────────────────────────────
 // Subscription
 // ──────────────────────────────────────────────

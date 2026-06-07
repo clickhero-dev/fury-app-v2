@@ -7,6 +7,7 @@ import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import { AppError } from '../middleware/errorHandler.js';
 import {
   createCustomer,
+  updateCustomer,
   findCustomerByExternalReference,
   createSubscription,
   cancelSubscription,
@@ -147,7 +148,7 @@ router.post('/subscribe', async (req: Request, res: Response, next: NextFunction
     });
     if (existing) throw new AppError(409, 'ALREADY_SUBSCRIBED', 'Tenant já possui assinatura ativa');
 
-    // Get or create Asaas customer
+    // Get or create Asaas customer; patch CPF if missing
     let asaasCustomer = await findCustomerByExternalReference(tenantId);
     if (!asaasCustomer) {
       asaasCustomer = await createCustomer({
@@ -155,6 +156,10 @@ router.post('/subscribe', async (req: Request, res: Response, next: NextFunction
         email: payload.customerEmail,
         cpfCnpj: payload.customerCpfCnpj,
         externalReference: tenantId,
+      });
+    } else if (!asaasCustomer.cpfCnpj && payload.customerCpfCnpj) {
+      asaasCustomer = await updateCustomer(asaasCustomer.id, {
+        cpfCnpj: payload.customerCpfCnpj,
       });
     }
 
