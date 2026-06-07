@@ -17,6 +17,7 @@ const META_SCOPES = ['ads_read', 'ads_management', 'business_management'];
 
 interface OAuthStatePayload {
   tenantId: string;
+  returnUrl?: string;
 }
 
 interface StoredMetaConnection {
@@ -74,10 +75,10 @@ function signOAuthState(payload: OAuthStatePayload): string {
   return jwt.sign(payload, secret, { expiresIn: '10m' });
 }
 
-function verifyOAuthState(state: string): OAuthStatePayload {
+function verifyOAuthState(state: string): OAuthStatePayload & { returnUrl?: string } {
   try {
     const secret = getRequiredEnv('JWT_SECRET');
-    return jwt.verify(state, secret) as OAuthStatePayload;
+    return jwt.verify(state, secret) as OAuthStatePayload & { returnUrl?: string };
   } catch {
     throw new AppError(401, 'INVALID_OAUTH_STATE', 'State OAuth invalido ou expirado.');
   }
@@ -98,8 +99,10 @@ function getTokenExpiration(expiresIn: number): Date | null {
 
 export function generateMetaAuthUrl(tenantId: string): string {
   const appId = getRequiredEnv('META_APP_ID');
-  const redirectUri = getRequiredEnv('META_REDIRECT_URI');
-  const state = signOAuthState({ tenantId });
+  const redirectUri =
+    process.env.META_REDIRECT_URI ??
+    'https://fury-app-v2-production.up.railway.app/api/meta/auth/callback';
+  const state = signOAuthState({ tenantId, returnUrl: '/onboarding/conectar-meta?connected=true' });
 
   const authUrl = new URL(META_OAUTH_URL);
   authUrl.searchParams.set('client_id', appId);
@@ -110,13 +113,18 @@ export function generateMetaAuthUrl(tenantId: string): string {
   return authUrl.toString();
 }
 
-export async function handleMetaOAuthCallback(code: string, state: string): Promise<void> {
+export async function handleMetaOAuthCallback(
+  code: string,
+  state: string,
+): Promise<{ tenantId: string }> {
   console.log('[Meta Service] handleMetaOAuthCallback iniciado, state length:', state?.length);
   const { tenantId } = verifyOAuthState(state);
   console.log('[Meta Service] tenantId extraído do state:', tenantId);
   const appId = getRequiredEnv('META_APP_ID');
   const appSecret = getRequiredEnv('META_APP_SECRET');
-  const redirectUri = getRequiredEnv('META_REDIRECT_URI');
+  const redirectUri =
+    process.env.META_REDIRECT_URI ??
+    'https://fury-app-v2-production.up.railway.app/api/meta/auth/callback';
   const shortToken = await exchangeCodeForToken({
     clientId: appId,
     clientSecret: appSecret,
@@ -150,7 +158,7 @@ export async function handleMetaOAuthCallback(code: string, state: string): Prom
       })
       .where(eq(metaConnections.id, existing.id));
     await addSyncJob({ tenantId, metaUserId, adAccounts });
-    return;
+    return { tenantId };
   }
 
   await db.insert(metaConnections).values({
@@ -163,6 +171,7 @@ export async function handleMetaOAuthCallback(code: string, state: string): Prom
 
   console.log('[Meta Service] meta_connections salvo para tenantId:', tenantId);
   await addSyncJob({ tenantId, metaUserId, adAccounts });
+  return { tenantId };
 }
 
 export async function getTenantMetaConnections(tenantId: string): Promise<StoredMetaConnection[]> {

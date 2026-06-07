@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 
 const steps = [
@@ -76,6 +78,13 @@ export function ConectarMetaPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isConnected = searchParams.get('connected') === 'true';
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (isConnected) {
+      queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
+    }
+  }, [isConnected, queryClient]);
 
   const currentStep = isConnected ? 1 : 0;
 

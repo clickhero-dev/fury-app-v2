@@ -20,7 +20,7 @@ export function AuthenticatedShell() {
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const shouldCheck = !!token && !isOnboarding && !isExempt;
 
-  const { data: connections } = useQuery({
+  const { data: connections, isLoading } = useQuery({
     queryKey: ['meta-connections'],
     queryFn: async () => {
       const res = await api.get<{ data: unknown[] }>('/meta/connections');
@@ -31,12 +31,11 @@ export function AuthenticatedShell() {
     retry: false,
   });
 
-  // TODO: reativar após confirmar que OAuth salva corretamente
-  // useEffect(() => {
-  //   if (shouldCheck && Array.isArray(connections) && connections.length === 0) {
-  //     navigate('/onboarding/conectar-meta', { replace: true });
-  //   }
-  // }, [connections, shouldCheck, navigate]);
+  useEffect(() => {
+    if (!isLoading && shouldCheck && Array.isArray(connections) && connections.length === 0) {
+      navigate('/onboarding/conectar-meta', { replace: true });
+    }
+  }, [connections, isLoading, shouldCheck, navigate]);
 
   if (!token) return <Navigate to="/login" replace />;
 

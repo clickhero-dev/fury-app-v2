@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import jwt from 'jsonwebtoken';
 import { AppError } from '../middleware/errorHandler.js';
 import * as metaService from '../services/meta.service.js';
 
@@ -34,15 +35,30 @@ export async function getAuthUrl(req: Request, res: Response, next: NextFunction
 
 export async function authCallback(req: Request, res: Response, next: NextFunction) {
   try {
+    console.log('=== META CALLBACK HIT ===', { query: req.query });
     const query = callbackQuerySchema.parse(req.query);
     console.log('[OAuth Callback] code recebido, state:', query.state?.substring(0, 20));
 
-    await metaService.handleMetaOAuthCallback(query.code, query.state);
+    const { tenantId } = await metaService.handleMetaOAuthCallback(query.code, query.state);
 
     console.log('[OAuth Callback] handleMetaOAuthCallback concluído com sucesso');
 
+    let returnUrl = '/onboarding/conectar-meta?connected=true';
+    try {
+      const secret = process.env.JWT_SECRET;
+      if (secret) {
+        const decoded = jwt.verify(query.state, secret) as { returnUrl?: string };
+        if (decoded.returnUrl) {
+          returnUrl = decoded.returnUrl;
+        }
+      }
+    } catch {
+      // fallback to default returnUrl
+    }
+
     const frontendUrl = process.env.FRONTEND_URL ?? 'https://fury-app-v2-web.vercel.app';
-    res.redirect(`${frontendUrl}/onboarding/conectar-meta?connected=true`);
+    console.log('=== META CALLBACK SUCCESS ===', { tenantId, returnUrl });
+    res.redirect(`${frontendUrl}${returnUrl}`);
   } catch (error) {
     console.error('[OAuth Callback] ERRO:', error);
     next(error);
