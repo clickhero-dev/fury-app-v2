@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
 import type { BillingApiResponse, Plan, SubscribePayload, Subscription } from '../types/billing';
 
@@ -25,7 +25,7 @@ export function useSubscription() {
       }
     },
     staleTime: 60 * 1000,
-    placeholderData: null,
+    placeholderData: keepPreviousData,
     retry: false,
   });
 }

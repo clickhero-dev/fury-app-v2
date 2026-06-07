@@ -45,9 +45,13 @@ export function PlanBadge({ collapsed }: PlanBadgeProps) {
   }
 
   return (
-    <div className="mx-3 rounded-lg px-3 py-1.5 bg-black/30 border border-white/20">
-      <p className="text-[10px] text-white/70 uppercase tracking-widest mb-0.5">Plano atual</p>
-      <p className="text-xs font-bold tracking-wider text-white">{config.label}</p>
+    <div className="mx-3 rounded-lg px-3 py-2 bg-black/40">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-white opacity-70 mb-0.5">
+        Plano atual
+      </p>
+      <p className="text-sm font-bold text-white">
+        {config.label}
+      </p>
     </div>
   );
 }

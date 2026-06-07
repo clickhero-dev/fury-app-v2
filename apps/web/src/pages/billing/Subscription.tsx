@@ -92,21 +92,7 @@ export function Subscription() {
     });
   };
 
-  if (isLoading) {
-    return (
-      <AppLayout
-        header={
-          <div className="px-6 py-4">
-            <PageHeader title="Minha Assinatura" description="Gerencie sua assinatura FURY" />
-          </div>
-        }
-      >
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="w-8 h-8 animate-spin text-[#EA580C]" />
-        </div>
-      </AppLayout>
-    );
-  }
+  if (isLoading) return null;
 
   if (!subscription || subscription.status === 'cancelled') {
     return (

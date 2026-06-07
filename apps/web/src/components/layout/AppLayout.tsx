@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Menu } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 import { UserMenu } from '../UserMenu';
+import { useSubscription } from '@/hooks/useBilling';
 import type { ShellContext } from './AuthenticatedShell';
 
 interface AppLayoutProps {
@@ -12,6 +13,11 @@ interface AppLayoutProps {
 
 export function AppLayout({ children, header, className }: AppLayoutProps) {
   const { setMobileOpen } = useOutletContext<ShellContext>();
+  const { data: subscription } = useSubscription();
+  const planLabel =
+    subscription?.status !== 'cancelled' && subscription?.status !== 'inactive'
+      ? subscription?.plan?.name?.toUpperCase() ?? null
+      : null;
 
   return (
     <main className="flex-1 min-w-0 transition-all duration-300">
@@ -25,6 +31,11 @@ export function AppLayout({ children, header, className }: AppLayoutProps) {
         </button>
         <span className="md:hidden ml-3 font-bold text-text-primary tracking-wider">FURY</span>
         <div className="flex-1" />
+        {planLabel && (
+          <span className="text-xs font-bold text-white bg-black/30 px-2 py-0.5 rounded-full mr-2">
+            {planLabel}
+          </span>
+        )}
         <UserMenu />
       </div>
 
