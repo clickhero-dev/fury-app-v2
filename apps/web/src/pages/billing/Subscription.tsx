@@ -108,7 +108,7 @@ export function Subscription() {
     );
   }
 
-  if (!subscription) {
+  if (!subscription || subscription.status === 'cancelled') {
     return (
       <AppLayout
         header={

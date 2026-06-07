@@ -1,12 +1,12 @@
 import { useSubscription } from '@/hooks/useBilling';
 import type { SubscriptionStatus } from '@/types/billing';
 
-const BADGE_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
-  active_starter: { label: 'STARTER', bg: 'bg-indigo-500/20', text: 'text-indigo-300' },
-  active_pro: { label: 'PRO', bg: 'bg-[#EA580C]/20', text: 'text-[#EA580C]' },
-  active_enterprise: { label: 'ENTERPRISE', bg: 'bg-emerald-500/20', text: 'text-emerald-400' },
-  trial: { label: 'TRIAL', bg: 'bg-warning/20', text: 'text-warning' },
-  past_due: { label: 'ATRASADO', bg: 'bg-error/20', text: 'text-error' },
+const BADGE_CONFIG: Record<string, { label: string }> = {
+  active_starter: { label: 'STARTER' },
+  active_pro: { label: 'PRO' },
+  active_enterprise: { label: 'ENTERPRISE' },
+  trial: { label: 'TRIAL' },
+  past_due: { label: 'ATRASADO' },
 };
 
 function getPlanKey(planName: string, status: SubscriptionStatus): string {
@@ -36,7 +36,7 @@ export function PlanBadge({ collapsed }: PlanBadgeProps) {
   if (collapsed) {
     return (
       <div
-        className={`mx-auto flex items-center justify-center w-8 h-8 rounded-lg text-[10px] font-black ${config.bg} ${config.text}`}
+        className="mx-auto flex items-center justify-center w-8 h-8 rounded-lg text-[10px] font-black bg-white/10 text-white"
         title={config.label}
       >
         {config.label[0]}
@@ -45,9 +45,9 @@ export function PlanBadge({ collapsed }: PlanBadgeProps) {
   }
 
   return (
-    <div className={`mx-3 rounded-lg px-3 py-1.5 ${config.bg}`}>
-      <p className="text-[10px] text-white/50 uppercase tracking-widest mb-0.5">Plano atual</p>
-      <p className={`text-xs font-black tracking-wider ${config.text}`}>{config.label}</p>
+    <div className="mx-3 rounded-lg px-3 py-1.5 bg-white/10">
+      <p className="text-[10px] text-white/60 uppercase tracking-widest mb-0.5">Plano atual</p>
+      <p className="text-xs font-bold tracking-wider text-white">{config.label}</p>
     </div>
   );
 }
