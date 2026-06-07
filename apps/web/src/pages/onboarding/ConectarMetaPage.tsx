@@ -145,8 +145,8 @@ export function ConectarMetaPage() {
               <div className="w-full bg-[#FFF7F4] border border-[#FDDCCC] rounded-2xl p-5 text-left">
                 <ul className="space-y-3">
                   {[
-                    'Acesso somente leitura e gerenciamento de campanhas',
-                    'Dados atualizados em tempo real',
+                    'Gerencie e automatize suas campanhas com IA',
+                    'Dados e métricas atualizados em tempo real',
                     'Você pode revogar o acesso a qualquer momento',
                   ].map((item) => (
                     <li key={item} className="flex gap-3 items-start">
