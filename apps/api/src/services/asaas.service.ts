@@ -1,3 +1,5 @@
+import { AppError } from '../middleware/errorHandler.js';
+
 const BASE_URL =
   process.env.ASAAS_ENV === 'production'
     ? 'https://api.asaas.com/v3'
@@ -27,7 +29,7 @@ async function asaasRequest<T>(method: string, path: string, body?: unknown): Pr
       const json = JSON.parse(text) as { errors?: { description: string }[] };
       if (json.errors?.length) message = json.errors.map((e) => e.description).join('; ');
     } catch {}
-    throw new Error(message);
+    throw new AppError(502, 'ASAAS_ERROR', message);
   }
 
   return JSON.parse(text) as T;
