@@ -31,11 +31,12 @@ export function AuthenticatedShell() {
     retry: false,
   });
 
-  useEffect(() => {
-    if (shouldCheck && Array.isArray(connections) && connections.length === 0) {
-      navigate('/onboarding/conectar-meta', { replace: true });
-    }
-  }, [connections, shouldCheck, navigate]);
+  // TODO: reativar após confirmar que OAuth salva corretamente
+  // useEffect(() => {
+  //   if (shouldCheck && Array.isArray(connections) && connections.length === 0) {
+  //     navigate('/onboarding/conectar-meta', { replace: true });
+  //   }
+  // }, [connections, shouldCheck, navigate]);
 
   if (!token) return <Navigate to="/login" replace />;
 
