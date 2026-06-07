@@ -126,14 +126,6 @@ export function ConectarMetaPage() {
                   Definir minha meta
                 </Button>
 
-                <div className="text-center">
-                  <button
-                    onClick={() => navigate('/dashboard')}
-                    className="text-sm text-[#6E7681] hover:text-[#1C1C1E] transition-colors"
-                  >
-                    Pular por agora
-                  </button>
-                </div>
               </div>
             </div>
           ) : (
@@ -185,17 +177,6 @@ export function ConectarMetaPage() {
                   Conectar com Meta
                 </Button>
 
-                <div className="text-center space-y-1">
-                  <button
-                    onClick={() => navigate('/dashboard')}
-                    className="text-sm text-[#6E7681] hover:text-[#1C1C1E] transition-colors"
-                  >
-                    Fazer isso depois
-                  </button>
-                  <p className="text-xs text-[#9CA3AF]">
-                    Algumas funcionalidades estarão limitadas
-                  </p>
-                </div>
               </div>
             </div>
           )}
