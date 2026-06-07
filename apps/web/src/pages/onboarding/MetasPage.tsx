@@ -28,7 +28,7 @@ type FormData = z.infer<typeof schema>;
 
 const OBJECTIVES = [
   { value: 'aumentar_vendas', label: 'Aumentar Vendas' },
-  { value: 'gerar_leads', label: 'Gerar Leads' },
+  { value: 'gerar_leads', label: 'Atrair Clientes' },
   { value: 'aumentar_trafego', label: 'Aumentar Tráfego' },
   { value: 'reconhecimento_marca', label: 'Reconhecimento de Marca' },
 ];
