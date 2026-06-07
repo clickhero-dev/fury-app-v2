@@ -1,7 +1,6 @@
 import { LayoutDashboard, Megaphone, Palette, Settings, ChevronLeft, Zap, CreditCard, X, LogOut, Target } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { PlanBadge } from './PlanBadge';
 import { useAuth } from '@/hooks/useAuth';
 import { useLogout } from '@/hooks/useLogout';
 
@@ -96,7 +95,6 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           </button>
         </div>
 
-        <PlanBadge collapsed={collapsed} />
         <div className="px-3 border-t border-sidebar-hover pt-3">
           <button
             onClick={() => setCollapsed(!collapsed)}
