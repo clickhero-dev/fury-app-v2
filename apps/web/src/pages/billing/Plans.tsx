@@ -356,7 +356,7 @@ export function Plans() {
               <PlanCard
                 key={plan.id || plan.name}
                 plan={plan}
-                isCurrentPlan={subscription?.planId === plan.id && plan.id !== ''}
+                isCurrentPlan={subscription?.planId === plan.id && plan.id !== '' && subscription?.status !== 'cancelled'}
                 onSubscribe={() => setSelectedPlan(plan)}
               />
             ))}
