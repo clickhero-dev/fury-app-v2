@@ -12,7 +12,8 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children, header, className }: AppLayoutProps) {
-  const { setMobileOpen } = useOutletContext<ShellContext>();
+  const context = useOutletContext<ShellContext | null>();
+  const setMobileOpen = context?.setMobileOpen ?? (() => {});
   const { data: subscription } = useSubscription();
   const planLabel =
     subscription?.status !== 'cancelled' && subscription?.status !== 'inactive'
