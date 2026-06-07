@@ -40,6 +40,28 @@ const STEP_FIELDS: Record<number, (keyof FormData)[]> = {
 
 const STEP_LABELS = ['Sobre o negócio', 'Orçamento e metas', 'Revisão'];
 
+function getObjectiveLabels(objective: string) {
+  if (objective === 'leads' || objective === 'clientes' || objective === 'gerar_leads') {
+    return {
+      label: 'Quanto você quer pagar por cliente?',
+      description: 'Este é o valor máximo que você aceita pagar por um novo cliente',
+      conversion: 'cliente',
+    };
+  }
+  if (objective === 'vendas' || objective === 'conversions' || objective === 'aumentar_vendas') {
+    return {
+      label: 'Quanto você quer pagar por venda?',
+      description: 'Este é o valor máximo que você aceita pagar por cada venda',
+      conversion: 'venda',
+    };
+  }
+  return {
+    label: 'Quanto você quer pagar por resultado?',
+    description: 'Este é o valor máximo que você aceita pagar por cada resultado',
+    conversion: 'resultado',
+  };
+}
+
 function translateObjective(value?: string) {
   return OBJECTIVES.find((o) => o.value === value)?.label ?? value ?? '—';
 }
@@ -162,7 +184,7 @@ export function MetasPage() {
         </div>
       )}
 
-      <div className="max-w-lg space-y-6 pb-8">
+      <div className="max-w-lg mx-auto space-y-6 pb-8">
         <PageHeader
           title={isEditing ? 'Atualizar Metas' : 'Configurar Metas'}
           description={
@@ -186,28 +208,6 @@ export function MetasPage() {
                     className="bg-[#E8631A] h-2 rounded-full transition-all duration-500"
                     style={{ width: `${progressPct}%` }}
                   />
-                </div>
-                {/* Step dots */}
-                <div className="flex justify-between px-1 pt-1">
-                  {STEP_LABELS.map((label, i) => (
-                    <div key={i} className="flex flex-col items-center gap-1">
-                      <div
-                        className={cn(
-                          'w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-all duration-300',
-                          i + 1 < step
-                            ? 'bg-[#2EA043] text-white'
-                            : i + 1 === step
-                              ? 'bg-[#E8631A] text-white shadow-md shadow-[#E8631A]/30'
-                              : 'bg-[#F0F0F0] text-[#9CA3AF]'
-                        )}
-                      >
-                        {i + 1 < step ? <CheckCircle2 className="w-3.5 h-3.5" /> : i + 1}
-                      </div>
-                      <span className={cn('text-[10px] font-medium hidden sm:block', i + 1 === step ? 'text-[#E8631A]' : 'text-[#9CA3AF]')}>
-                        {label}
-                      </span>
-                    </div>
-                  ))}
                 </div>
               </div>
 
@@ -261,8 +261,8 @@ export function MetasPage() {
               {step === 2 && (
                 <div className="space-y-5">
                   <Field
-                    label="Orçamento mensal total (R$)"
-                    hint="Valor total que você investe em anúncios por mês"
+                    label="Orçamento mensal total"
+                    hint="Valor total que clientes por mês"
                     error={errors.monthlyBudget?.message}
                   >
                     <div className="relative">
@@ -278,32 +278,39 @@ export function MetasPage() {
                     </div>
                   </Field>
 
-                  <Field
-                    label="CPA alvo — quanto você quer pagar por conversão (R$)"
-                    hint="Custo Por Aquisição: valor máximo aceitável para cada venda ou lead"
-                    error={errors.targetCpa?.message}
-                  >
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6E7681] font-semibold text-sm">R$</span>
-                      <Input
-                        type="number"
-                        min={1}
-                        step={1}
-                        placeholder="50"
-                        {...register('targetCpa', { valueAsNumber: true })}
-                        className={cn('pl-10', errors.targetCpa ? 'border-red-400 focus:border-red-400 focus:ring-red-400/20' : '')}
-                      />
-                    </div>
-                  </Field>
+                  {(() => {
+                    const objLabels = getObjectiveLabels(values.objective ?? '');
+                    return (
+                      <>
+                        <Field
+                          label={objLabels.label}
+                          hint={objLabels.description}
+                          error={errors.targetCpa?.message}
+                        >
+                          <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6E7681] font-semibold text-sm">R$</span>
+                            <Input
+                              type="number"
+                              min={1}
+                              step={1}
+                              placeholder="50"
+                              {...register('targetCpa', { valueAsNumber: true })}
+                              className={cn('pl-10', errors.targetCpa ? 'border-red-400 focus:border-red-400 focus:ring-red-400/20' : '')}
+                            />
+                          </div>
+                        </Field>
 
-                  {values.monthlyBudget > 0 && values.targetCpa > 0 && values.targetCpa <= values.monthlyBudget && (
-                    <div className="bg-[#E8631A]/8 border border-[#E8631A]/20 rounded-xl px-4 py-3 text-sm text-[#1C1C1E]">
-                      Com esse orçamento e CPA, você pode atingir até{' '}
-                      <span className="font-bold text-[#E8631A]">
-                        {Math.floor(values.monthlyBudget / values.targetCpa)} conversões/mês
-                      </span>
-                    </div>
-                  )}
+                        {values.monthlyBudget > 0 && values.targetCpa > 0 && values.targetCpa <= values.monthlyBudget && (
+                          <div className="bg-[#E8631A]/8 border border-[#E8631A]/20 rounded-xl px-4 py-3 text-sm text-[#1C1C1E]">
+                            Com esse orçamento, você pode atingir até{' '}
+                            <span className="font-bold text-[#E8631A]">
+                              {Math.floor(values.monthlyBudget / values.targetCpa)} {objLabels.conversion}s por mês
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 
