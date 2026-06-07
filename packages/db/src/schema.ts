@@ -152,6 +152,7 @@ export const clientGoals = pgTable(
     monthlyBudget: jsonb('monthly_budget').default(sql`'{}'::jsonb`),
     targetCpa: jsonb('target_cpa').default(sql`'{}'::jsonb`),
     niche: varchar('niche', { length: 255 }),
+    mainProduct: varchar('main_product', { length: 500 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

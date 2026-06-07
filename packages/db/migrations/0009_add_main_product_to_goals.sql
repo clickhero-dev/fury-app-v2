@@ -1,0 +1,1 @@
+ALTER TABLE client_goals ADD COLUMN IF NOT EXISTS main_product VARCHAR(500);

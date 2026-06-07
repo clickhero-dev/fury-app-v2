@@ -96,7 +96,7 @@ export function MetasPage() {
 
   const { data: existingGoals } = useQuery({
     queryKey: ['goals'],
-    queryFn: () => api.get('/goals').then((r) => r.data).catch(() => null),
+    queryFn: () => api.get('/goals').then((r) => r.data.data).catch(() => null),
     staleTime: 0,
   });
 
@@ -324,7 +324,7 @@ export function MetasPage() {
                     <ReviewRow label="Nicho" value={values.niche} />
                     <ReviewRow label="Produto principal" value={values.mainProduct} />
                     <ReviewRow label="Orçamento mensal" value={fmtBRL(values.monthlyBudget)} />
-                    <ReviewRow label="CPA alvo" value={fmtBRL(values.targetCpa)} />
+                    <ReviewRow label={getObjectiveLabels(values.objective ?? '').label} value={fmtBRL(values.targetCpa)} />
                   </div>
                 </div>
               )}

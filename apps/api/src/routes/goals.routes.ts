@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { eq } from 'drizzle-orm';
+import { z } from 'zod';
 import { db, clientGoals, campaigns } from '@fury/db';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
@@ -38,6 +39,140 @@ function parseMoneyJson(json: unknown, fallback: number): number {
   const raw = Number(obj?.amount ?? 0);
   return Number.isNaN(raw) || raw === 0 ? fallback : raw / 100;
 }
+
+// ── Shared ────────────────────────────────────────────────────────────────────
+
+const goalBodySchema = z.object({
+  objective: z.string().min(1),
+  niche: z.string().min(1),
+  mainProduct: z.string().min(1),
+  monthlyBudget: z.number().positive(),
+  targetCpa: z.number().positive(),
+});
+
+function toMoney(v: number) {
+  return { amount: Math.round(v * 100) };
+}
+
+function fromMoney(json: unknown): number {
+  const obj = json as { amount?: unknown } | null;
+  const raw = Number(obj?.amount ?? 0);
+  return Number.isNaN(raw) ? 0 : raw / 100;
+}
+
+function serializeGoal(row: typeof clientGoals.$inferSelect) {
+  return {
+    ...row,
+    monthlyBudget: fromMoney(row.monthlyBudget),
+    targetCpa: fromMoney(row.targetCpa),
+  };
+}
+
+// ── GET /api/goals ────────────────────────────────────────────────────────────
+
+router.get(
+  '/',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { tenantId } = req.tenant!;
+      const row = await db.query.clientGoals.findFirst({
+        where: eq(clientGoals.tenantId, tenantId),
+      });
+      res.status(200).json({
+        success: true,
+        data: row ? serializeGoal(row) : null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ── POST /api/goals/setup ─────────────────────────────────────────────────────
+
+router.post(
+  '/setup',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { tenantId } = req.tenant!;
+      const body = goalBodySchema.parse(req.body);
+
+      const existing = await db.query.clientGoals.findFirst({
+        where: eq(clientGoals.tenantId, tenantId),
+      });
+
+      let row: typeof clientGoals.$inferSelect;
+      if (existing) {
+        [row] = await db
+          .update(clientGoals)
+          .set({
+            objective: body.objective,
+            niche: body.niche,
+            mainProduct: body.mainProduct,
+            monthlyBudget: toMoney(body.monthlyBudget),
+            targetCpa: toMoney(body.targetCpa),
+            updatedAt: new Date(),
+          })
+          .where(eq(clientGoals.tenantId, tenantId))
+          .returning();
+      } else {
+        [row] = await db
+          .insert(clientGoals)
+          .values({
+            tenantId,
+            objective: body.objective,
+            niche: body.niche,
+            mainProduct: body.mainProduct,
+            monthlyBudget: toMoney(body.monthlyBudget),
+            targetCpa: toMoney(body.targetCpa),
+          })
+          .returning();
+      }
+
+      res.status(200).json({
+        success: true,
+        data: serializeGoal(row),
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ── PUT /api/goals ────────────────────────────────────────────────────────────
+
+router.put(
+  '/',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { tenantId } = req.tenant!;
+      const body = goalBodySchema.parse(req.body);
+
+      const [row] = await db
+        .update(clientGoals)
+        .set({
+          objective: body.objective,
+          niche: body.niche,
+          mainProduct: body.mainProduct,
+          monthlyBudget: toMoney(body.monthlyBudget),
+          targetCpa: toMoney(body.targetCpa),
+          updatedAt: new Date(),
+        })
+        .where(eq(clientGoals.tenantId, tenantId))
+        .returning();
+
+      res.status(200).json({
+        success: true,
+        data: row ? serializeGoal(row) : null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 // ── GET /api/goals/progress ───────────────────────────────────────────────────
 
