@@ -111,7 +111,9 @@ export function generateMetaAuthUrl(tenantId: string): string {
 }
 
 export async function handleMetaOAuthCallback(code: string, state: string): Promise<void> {
+  console.log('[Meta Service] handleMetaOAuthCallback iniciado, state length:', state?.length);
   const { tenantId } = verifyOAuthState(state);
+  console.log('[Meta Service] tenantId extraído do state:', tenantId);
   const appId = getRequiredEnv('META_APP_ID');
   const appSecret = getRequiredEnv('META_APP_SECRET');
   const redirectUri = getRequiredEnv('META_REDIRECT_URI');
@@ -159,6 +161,7 @@ export async function handleMetaOAuthCallback(code: string, state: string): Prom
     adAccounts,
   });
 
+  console.log('[Meta Service] meta_connections salvo para tenantId:', tenantId);
   await addSyncJob({ tenantId, metaUserId, adAccounts });
 }
 

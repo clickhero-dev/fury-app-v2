@@ -35,10 +35,16 @@ export async function getAuthUrl(req: Request, res: Response, next: NextFunction
 export async function authCallback(req: Request, res: Response, next: NextFunction) {
   try {
     const query = callbackQuerySchema.parse(req.query);
+    console.log('[OAuth Callback] code recebido, state:', query.state?.substring(0, 20));
+
     await metaService.handleMetaOAuthCallback(query.code, query.state);
+
+    console.log('[OAuth Callback] handleMetaOAuthCallback concluído com sucesso');
+
     const frontendUrl = process.env.FRONTEND_URL ?? 'https://fury-app-v2-web.vercel.app';
     res.redirect(`${frontendUrl}/onboarding/conectar-meta?connected=true`);
   } catch (error) {
+    console.error('[OAuth Callback] ERRO:', error);
     next(error);
   }
 }
