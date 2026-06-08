@@ -1,10 +1,20 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import { randomUUID } from 'crypto';
+import { mkdir, writeFile } from 'fs/promises';
+import { join } from 'path';
 import OpenAI from 'openai';
+import { eq } from 'drizzle-orm';
+import { db, creativeAssets, tenants, clientGoals } from '@fury/db';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import * as studioController from '../controllers/studio.controller.js';
 import { studioCopyService } from '../services/studio-copy.service.js';
+import { deepseekService } from '../services/deepseek.service.js';
+import { buildCreativePrompt, buildRegeneratePrompt, type CreativeContext } from '../prompts/creative-studio.prompt.js';
+import { generateCreativeHTML } from '../services/creative-generator.service.js';
+import { convertHTMLToPNG } from '../services/html-to-png.service.js';
+import { studioAssetsDir } from '../lib/temp-storage.js';
 
 const router = Router();
 
@@ -152,5 +162,180 @@ router.post('/generate-image', authMiddleware, tenantMiddleware, studioControlle
 router.post('/render-creative', authMiddleware, tenantMiddleware, studioController.renderCreative);
 router.post('/publish/:assetId', authMiddleware, tenantMiddleware, studioController.publishAsset);
 router.post('/upload-to-meta', authMiddleware, tenantMiddleware, studioController.uploadToMeta);
+
+const generateCreativeSchema = z.object({
+  product: z.string().min(2),
+  promise: z.string().min(2),
+  offer: z.string().optional(),
+  audience: z.string().min(2),
+  hasProductImage: z.boolean().default(false),
+  productImageUrl: z.string().url().optional(),
+});
+
+async function savePNG(buffer: Buffer): Promise<{ fileName: string }> {
+  await mkdir(studioAssetsDir, { recursive: true });
+  const fileName = `${randomUUID()}.png`;
+  await writeFile(join(studioAssetsDir, fileName), buffer);
+  return { fileName };
+}
+
+async function getTenantContext(tenantId: string): Promise<{ businessName: string; objective: string }> {
+  const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
+  const goal = await db.query.clientGoals.findFirst({ where: eq(clientGoals.tenantId, tenantId) });
+  return {
+    businessName: tenant?.name ?? 'Meu Negócio',
+    objective: goal?.objective ?? 'gerar leads',
+  };
+}
+
+function parseCreativeJSON(raw: string) {
+  const cleaned = raw.replace(/```json|```/g, '').trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  return JSON.parse(match ? match[0] : cleaned);
+}
+
+async function runGenerate(context: CreativeContext, productImageUrl: string | undefined, tenantId: string, publicBaseUrl: string) {
+  const prompt = buildCreativePrompt(context);
+  const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.8 });
+  const creativeData = parseCreativeJSON(raw);
+
+  const html = generateCreativeHTML({
+    headline: creativeData.headline,
+    primary_text: creativeData.primary_text,
+    cta: creativeData.cta,
+    subheadline: creativeData.subheadline,
+    layout: creativeData.layout,
+    color_scheme: creativeData.color_scheme,
+    productImageUrl,
+    businessName: context.businessName,
+  });
+
+  const pngBuffer = await convertHTMLToPNG(html);
+  const { fileName } = await savePNG(pngBuffer);
+  const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
+
+  const metadata = JSON.stringify({ ...creativeData, context });
+
+  const [asset] = await db.insert(creativeAssets).values({
+    tenantId,
+    type: 'image',
+    url: imageUrl,
+    complianceStatus: 'pending_compliance',
+    complianceNotes: metadata,
+  }).returning();
+
+  return {
+    assetId: asset.id,
+    imageUrl,
+    creativeData: {
+      headline: creativeData.headline,
+      primary_text: creativeData.primary_text,
+      cta: creativeData.cta,
+      subheadline: creativeData.subheadline,
+      layout: creativeData.layout,
+      color_scheme: creativeData.color_scheme,
+    },
+  };
+}
+
+router.post('/creative/generate', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = generateCreativeSchema.parse(req.body);
+    const tenantId = (req as any).tenant?.tenantId as string;
+    const publicBaseUrl = process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
+
+    const { businessName, objective } = await getTenantContext(tenantId);
+
+    const context: CreativeContext = {
+      product: body.product,
+      promise: body.promise,
+      offer: body.offer,
+      audience: body.audience,
+      hasProductImage: body.hasProductImage,
+      productImageUrl: body.productImageUrl,
+      businessName,
+      objective,
+    };
+
+    const result = await runGenerate(context, body.productImageUrl, tenantId, publicBaseUrl);
+    return res.status(201).json(result);
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
+    next(err);
+  }
+});
+
+router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { assetId, feedback } = z.object({ assetId: z.string().uuid(), feedback: z.string().min(1) }).parse(req.body);
+    const tenantId = (req as any).tenant?.tenantId as string;
+    const publicBaseUrl = process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
+
+    const asset = await db.query.creativeAssets.findFirst({
+      where: eq(creativeAssets.id, assetId),
+    });
+
+    if (!asset || asset.tenantId !== tenantId) {
+      return res.status(404).json({ error: 'Asset não encontrado' });
+    }
+
+    let savedContext: CreativeContext | undefined;
+    try {
+      const meta = JSON.parse(asset.complianceNotes ?? '{}');
+      savedContext = meta.context as CreativeContext;
+    } catch {
+      // context not recoverable
+    }
+
+    if (!savedContext) {
+      return res.status(400).json({ error: 'Contexto original do criativo não encontrado' });
+    }
+
+    const prompt = buildRegeneratePrompt(savedContext, feedback);
+    const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.9 });
+    const creativeData = parseCreativeJSON(raw);
+
+    const html = generateCreativeHTML({
+      headline: creativeData.headline,
+      primary_text: creativeData.primary_text,
+      cta: creativeData.cta,
+      subheadline: creativeData.subheadline,
+      layout: creativeData.layout,
+      color_scheme: creativeData.color_scheme,
+      productImageUrl: savedContext.productImageUrl,
+      businessName: savedContext.businessName,
+    });
+
+    const pngBuffer = await convertHTMLToPNG(html);
+    const { fileName } = await savePNG(pngBuffer);
+    const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
+
+    const metadata = JSON.stringify({ ...creativeData, context: savedContext, feedback });
+
+    const [newAsset] = await db.insert(creativeAssets).values({
+      tenantId,
+      type: 'image',
+      url: imageUrl,
+      complianceStatus: 'pending_compliance',
+      complianceNotes: metadata,
+    }).returning();
+
+    return res.status(201).json({
+      assetId: newAsset.id,
+      imageUrl,
+      creativeData: {
+        headline: creativeData.headline,
+        primary_text: creativeData.primary_text,
+        cta: creativeData.cta,
+        subheadline: creativeData.subheadline,
+        layout: creativeData.layout,
+        color_scheme: creativeData.color_scheme,
+      },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
+    next(err);
+  }
+});
 
 export default router;
