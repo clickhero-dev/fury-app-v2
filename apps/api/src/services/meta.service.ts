@@ -157,6 +157,7 @@ export async function handleMetaOAuthCallback(
         adAccounts,
       })
       .where(eq(metaConnections.id, existing.id));
+    console.log('=== META CONNECTION SAVED ===', { tenantId, accountsCount: adAccounts.length, action: 'update' });
     await addSyncJob({ tenantId, metaUserId, adAccounts });
     return { tenantId };
   }
@@ -169,7 +170,7 @@ export async function handleMetaOAuthCallback(
     adAccounts,
   });
 
-  console.log('[Meta Service] meta_connections salvo para tenantId:', tenantId);
+  console.log('=== META CONNECTION SAVED ===', { tenantId, accountsCount: adAccounts.length, action: 'insert' });
   await addSyncJob({ tenantId, metaUserId, adAccounts });
   return { tenantId };
 }
