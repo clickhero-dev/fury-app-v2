@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppLayout, PageHeader, Button, Card } from '@/components';
 import { FuryConfig } from './FuryConfig';
+import { IntegracoesContent } from './IntegracoesContent';
 import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
 import api from '@/lib/api';
 import {
@@ -189,13 +190,7 @@ export function Configuracoes() {
                 {settingsTabs.map((tab) => (
                   <button
                     key={tab.id}
-                    onClick={() => {
-                      if (tab.id === 'integracoes') {
-                        navigate('/configuracoes/integracoes');
-                      } else {
-                        setActiveTab(tab.id as TabType);
-                      }
-                    }}
+                    onClick={() => setActiveTab(tab.id as TabType)}
                     className={`w-full px-4 py-3 flex items-center gap-3 font-semibold text-sm transition-colors ${
                       activeTab === tab.id
                         ? 'bg-accent-light/10 text-accent'
@@ -423,6 +418,15 @@ export function Configuracoes() {
 
             {/* FURY Engine */}
             {activeTab === 'fury' && <FuryConfig />}
+
+            {/* Integrações */}
+            {activeTab === 'integracoes' && (
+              <Card>
+                <div className="p-6">
+                  <IntegracoesContent />
+                </div>
+              </Card>
+            )}
 
             {/* Faturamento */}
             {activeTab === 'faturamento' && (
