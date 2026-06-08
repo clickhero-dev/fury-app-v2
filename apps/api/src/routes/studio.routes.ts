@@ -11,7 +11,7 @@ import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import * as studioController from '../controllers/studio.controller.js';
 import { studioCopyService } from '../services/studio-copy.service.js';
 import { deepseekService } from '../services/deepseek.service.js';
-import { buildCreativePrompt, buildRegeneratePrompt, type CreativeContext } from '../prompts/creative-studio.prompt.js';
+import { buildCreativePrompt, buildRegeneratePrompt, buildValidationPrompt, type CreativeContext } from '../prompts/creative-studio.prompt.js';
 import { generateCreativeHTML } from '../services/creative-generator.service.js';
 import { convertHTMLToPNG } from '../services/html-to-png.service.js';
 import { studioAssetsDir } from '../lib/temp-storage.js';
@@ -163,6 +163,37 @@ router.post('/render-creative', authMiddleware, tenantMiddleware, studioControll
 router.post('/publish/:assetId', authMiddleware, tenantMiddleware, studioController.publishAsset);
 router.post('/upload-to-meta', authMiddleware, tenantMiddleware, studioController.uploadToMeta);
 
+const validateContextSchema = z.object({
+  product: z.string().min(1),
+  promise: z.string().min(1),
+  offer: z.string().optional(),
+  audience: z.string().min(1),
+  templateStyle: z.string().optional(),
+});
+
+router.post('/creative/validate-context', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = validateContextSchema.parse(req.body);
+    const tenantId = (req as any).tenant?.tenantId as string;
+    const { businessName } = await getTenantContext(tenantId);
+
+    const prompt = buildValidationPrompt({
+      businessName,
+      product: body.product,
+      promise: body.promise,
+      offer: body.offer,
+      audience: body.audience,
+    });
+
+    const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.2, max_tokens: 600 });
+    const result = parseCreativeJSON(raw);
+    return res.json(result);
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
+    next(err);
+  }
+});
+
 const generateCreativeSchema = z.object({
   product: z.string().min(2),
   promise: z.string().min(2),
@@ -170,6 +201,7 @@ const generateCreativeSchema = z.object({
   audience: z.string().min(2),
   hasProductImage: z.boolean().default(false),
   productImageUrl: z.string().url().optional(),
+  adaptiveAnswers: z.record(z.string()).optional(),
 });
 
 async function savePNG(buffer: Buffer): Promise<{ fileName: string }> {
@@ -245,12 +277,13 @@ router.post('/creative/generate', authMiddleware, tenantMiddleware, async (req: 
     const publicBaseUrl = process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
 
     const { businessName, objective } = await getTenantContext(tenantId);
+    const adaptive = body.adaptiveAnswers ?? {};
 
     const context: CreativeContext = {
-      product: body.product,
-      promise: body.promise,
-      offer: body.offer,
-      audience: body.audience,
+      product: adaptive.product || body.product,
+      promise: adaptive.promise || body.promise,
+      offer: adaptive.offer || body.offer,
+      audience: adaptive.audience || body.audience,
       hasProductImage: body.hasProductImage,
       productImageUrl: body.productImageUrl,
       businessName,

@@ -39,6 +39,59 @@ Responda SOMENTE em JSON válido com esta estrutura exata:
 Não inclua explicações fora do JSON.`;
 }
 
+export interface ValidationContext {
+  businessName: string;
+  product: string;
+  promise: string;
+  offer?: string;
+  audience: string;
+}
+
+export function buildValidationPrompt(ctx: ValidationContext): string {
+  return `Você é um especialista em criação de anúncios para Meta Ads.
+
+Analise o contexto abaixo e determine se há informações suficientes para criar um anúncio de alta performance.
+
+CONTEXTO FORNECIDO:
+- Negócio: ${ctx.businessName}
+- O que será anunciado: ${ctx.product}
+- Promessa/resultado: ${ctx.promise}
+- Oferta/condição: ${ctx.offer || 'não informado'}
+- Público-alvo: ${ctx.audience}
+
+CRITÉRIOS DE AVALIAÇÃO:
+1. Nome do produto ou serviço está claro?
+2. Existe uma oferta concreta (preço, desconto, condição, prazo) ou benefício específico?
+3. O público-alvo tem pelo menos uma característica identificável?
+4. A promessa de resultado está clara?
+
+Se TODOS os critérios estiverem atendidos, retorne:
+{ "sufficient": true, "missing": [] }
+
+Se algum critério estiver ausente, retorne:
+{
+  "sufficient": false,
+  "missing": ["lista dos critérios ausentes"],
+  "questions": [
+    {
+      "id": "identificador_unico",
+      "question": "pergunta direta e simples em português informal",
+      "placeholder": "exemplo de resposta esperada",
+      "field": "campo que essa resposta vai preencher (product|offer|audience|promise)"
+    }
+  ]
+}
+
+IMPORTANTE:
+- Máximo 2 perguntas por vez
+- Linguagem simples e direta, sem jargões
+- Perguntas específicas com base no que foi informado (não genéricas)
+- Se o produto foi mencionado vagamente, pergunte pelo nome específico
+- Nunca pergunte sobre nicho (já temos essa informação)
+
+Responda SOMENTE em JSON válido.`;
+}
+
 export function buildRegeneratePrompt(context: CreativeContext, feedback: string): string {
   return `${buildCreativePrompt(context)}
 

@@ -104,6 +104,28 @@ export interface GenerateCreativePayload {
   audience: string;
   hasProductImage: boolean;
   productImageUrl?: string;
+  adaptiveAnswers?: Record<string, string>;
+}
+
+export interface AdaptiveQuestion {
+  id: string;
+  question: string;
+  placeholder: string;
+  field: string;
+}
+
+export interface ValidateContextPayload {
+  product: string;
+  promise: string;
+  offer?: string;
+  audience: string;
+  templateStyle?: string;
+}
+
+export interface ValidateContextResponse {
+  sufficient: boolean;
+  missing: string[];
+  questions?: AdaptiveQuestion[];
 }
 
 export interface GenerateCreativeResponse {

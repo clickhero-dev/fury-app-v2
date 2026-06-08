@@ -1,7 +1,14 @@
 import { useState, useRef } from 'react';
-import { ArrowLeft, ArrowRight, ImageIcon, Upload, Wand2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ImageIcon, Loader2, Upload, Wand2, X } from 'lucide-react';
 import { Button } from '@/components';
-import type { GenerateCreativePayload, StyleTemplate } from '@/types/studio';
+import api from '@/lib/api';
+import type {
+  AdaptiveQuestion,
+  GenerateCreativePayload,
+  StyleTemplate,
+  ValidateContextResponse,
+} from '@/types/studio';
+import { AdaptiveQuestions } from './AdaptiveQuestions';
 import { TemplateGallery } from './TemplateGallery';
 
 interface WizardData {
@@ -43,11 +50,16 @@ interface Props {
   onBack: () => void;
 }
 
+type InternalState = 'steps' | 'validating' | 'questions';
+
 export function CreativeWizard({ onGenerate, onBack }: Props) {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<WizardData>(INITIAL_DATA);
   const [selectedTemplate, setSelectedTemplate] = useState<StyleTemplate | null>(null);
   const [visible, setVisible] = useState(true);
+  const [internalState, setInternalState] = useState<InternalState>('steps');
+  const [adaptiveQuestions, setAdaptiveQuestions] = useState<AdaptiveQuestion[]>([]);
+  const [pendingPayload, setPendingPayload] = useState<GenerateCreativePayload | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const transition = (fn: () => void) => {
@@ -90,19 +102,78 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
     }
   };
 
-  const handleSubmit = () => {
-    onGenerate({
-      product: data.product.trim(),
-      promise: data.promise.trim(),
-      offer: data.hasOffer ? data.offer.trim() : undefined,
-      audience: data.audience.trim(),
-      hasProductImage: false,
-    });
+  const buildPayload = (): GenerateCreativePayload => ({
+    product: data.product.trim(),
+    promise: data.promise.trim(),
+    offer: data.hasOffer ? data.offer.trim() : undefined,
+    audience: data.audience.trim(),
+    hasProductImage: false,
+  });
+
+  const handleSubmit = async () => {
+    const payload = buildPayload();
+    setPendingPayload(payload);
+    setInternalState('validating');
+
+    try {
+      const res = await api.post<ValidateContextResponse>('/studio/creative/validate-context', {
+        product: payload.product,
+        promise: payload.promise,
+        offer: payload.offer,
+        audience: payload.audience,
+        templateStyle: selectedTemplate?.id,
+      });
+
+      if (res.data.sufficient || !res.data.questions?.length) {
+        onGenerate(payload);
+      } else {
+        setAdaptiveQuestions(res.data.questions);
+        setInternalState('questions');
+      }
+    } catch {
+      onGenerate(payload);
+    }
+  };
+
+  const handleAdaptiveComplete = (answers: Record<string, string>) => {
+    const base = pendingPayload!;
+    const merged: GenerateCreativePayload = {
+      ...base,
+      product: answers.product || base.product,
+      promise: answers.promise || base.promise,
+      offer: answers.offer || base.offer,
+      audience: answers.audience || base.audience,
+      adaptiveAnswers: answers,
+    };
+    onGenerate(merged);
   };
 
   const step0ButtonLabel = selectedTemplate
     ? `Continuar com ${selectedTemplate.name}`
     : 'Selecione um estilo para continuar';
+
+  if (internalState === 'validating') {
+    return (
+      <div className="max-w-xl mx-auto flex min-h-[300px] flex-col items-center justify-center text-center space-y-4">
+        <div className="rounded-full bg-[#FFF4ED] p-4">
+          <Loader2 className="h-8 w-8 animate-spin text-[#EA580C]" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-[#101828]">Analisando suas informações...</p>
+          <p className="text-sm text-[#667085] mt-1">A IA está verificando se temos tudo para criar seu anúncio</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (internalState === 'questions') {
+    return (
+      <AdaptiveQuestions
+        questions={adaptiveQuestions}
+        onComplete={handleAdaptiveComplete}
+      />
+    );
+  }
 
   return (
     <div className="max-w-xl mx-auto space-y-6">
@@ -315,7 +386,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
             </Button>
           ) : (
             <Button
-              onClick={handleSubmit}
+              onClick={() => void handleSubmit()}
               className="flex-1 inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white"
             >
               <Wand2 className="h-4 w-4" />
