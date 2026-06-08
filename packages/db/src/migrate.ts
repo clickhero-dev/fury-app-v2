@@ -50,6 +50,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0007_add_billing_tables' },
   { tag: '0008_add_selected_ad_account' },
   { tag: '0009_add_main_product_to_goals' },
+  { tag: '0010_add_name_to_users' },
 ];
 
 async function runMigrate() {

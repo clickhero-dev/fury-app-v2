@@ -84,6 +84,7 @@ export interface FuryInsight {
 export interface UserDTO {
   id: string;
   tenantId: string;
+  name: string | null;
   email: string;
   role: UserRole;
   createdAt: Date;

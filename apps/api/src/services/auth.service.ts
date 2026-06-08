@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { db } from '../lib/db.js';
 import { tenants, users } from '../lib/db.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { getRedis } from '../lib/redis.js';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../lib/jwt.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -40,6 +40,7 @@ async function ensureUniqueSlug(baseSlug: string): Promise<string> {
 function userToDTO(user: any): UserDTO {
   return {
     id: user.id,
+    name: user.name ?? null,
     email: user.email,
     role: user.role,
     tenantId: user.tenantId,
@@ -220,7 +221,7 @@ export async function logout(userId: string): Promise<void> {
   await revokeRefreshToken(userId);
 }
 
-export async function getMe(userId: string): Promise<UserDTO> {
+export async function getMe(userId: string): Promise<UserDTO & { tenantName: string }> {
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
   });
@@ -229,5 +230,32 @@ export async function getMe(userId: string): Promise<UserDTO> {
     throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
   }
 
-  return userToDTO(user);
+  const tenant = await db.query.tenants.findFirst({
+    where: eq(tenants.id, user.tenantId),
+  });
+
+  return { ...userToDTO(user), tenantName: tenant?.name ?? '' };
+}
+
+export async function updateMe(
+  userId: string,
+  data: { name?: string; tenantName?: string },
+): Promise<UserDTO & { tenantName: string }> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+  });
+
+  if (!user) {
+    throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+  }
+
+  if (data.name !== undefined) {
+    await db.update(users).set({ name: data.name }).where(eq(users.id, userId));
+  }
+
+  if (data.tenantName !== undefined) {
+    await db.update(tenants).set({ name: data.tenantName }).where(eq(tenants.id, user.tenantId));
+  }
+
+  return getMe(userId);
 }

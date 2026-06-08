@@ -2,6 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as authService from '../services/auth.service.js';
 
+const updateMeSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  tenantName: z.string().min(1).max(255).optional(),
+});
+
 const registerSchema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email(),
@@ -104,6 +109,25 @@ export async function getMe(req: Request, res: Response, next: NextFunction) {
     }
 
     const user = await authService.getMe(req.user.userId);
+
+    res.status(200).json({
+      success: true,
+      data: user,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateMe(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.user) {
+      throw new Error('User not found in request');
+    }
+
+    const body = updateMeSchema.parse(req.body);
+    const user = await authService.updateMe(req.user.userId, body);
 
     res.status(200).json({
       success: true,

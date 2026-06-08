@@ -1,8 +1,11 @@
 export interface User {
   id: string;
-  name: string;
+  name: string | null;
   email: string;
-  company: string;
+  company?: string;
+  tenantName?: string;
+  tenantId?: string;
+  role?: string;
 }
 
 export interface LoginRequest {
