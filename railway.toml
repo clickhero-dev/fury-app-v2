@@ -6,3 +6,7 @@ buildCommand = "npm install --include=dev && npm run build --workspace=@fury/sha
 startCommand = "node apps/api/dist/index.js"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
+
+[variables]
+PUPPETEER_SKIP_DOWNLOAD = "true"
+PUPPETEER_EXECUTABLE_PATH = "/usr/bin/chromium"

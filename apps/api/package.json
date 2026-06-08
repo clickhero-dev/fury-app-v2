@@ -25,6 +25,9 @@
     "typescript": "^5.3.3",
     "vitest": "^1.6.1"
   },
+  "puppeteer": {
+    "skipDownload": true
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
     "@fury/db": "*",

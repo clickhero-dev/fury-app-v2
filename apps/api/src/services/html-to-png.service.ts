@@ -10,6 +10,7 @@ export async function convertHTMLToPNG(html: string): Promise<Buffer> {
   await writeFile(tmpPath, html, 'utf-8');
 
   const browser = await puppeteer.launch({
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   });
