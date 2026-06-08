@@ -162,9 +162,9 @@ export function EstudioHome() {
 
               <Button
                 onClick={handleStartWizard}
-                className="bg-[#EA580C] hover:bg-[#C2410C] text-white px-8 py-3 text-base font-semibold rounded-2xl h-auto"
+                className="inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white px-8 py-3 text-base font-semibold rounded-2xl h-auto"
               >
-                <Sparkles className="mr-2 h-5 w-5" />
+                <Sparkles size={18} />
                 Criar Novo Anúncio
               </Button>
             </div>
