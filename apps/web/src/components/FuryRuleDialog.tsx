@@ -82,7 +82,7 @@ export function FuryRuleDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-md">
         <div className="p-6">
           <h2 className="text-lg font-bold text-text-primary mb-6">

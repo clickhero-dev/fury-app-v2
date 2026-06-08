@@ -192,10 +192,10 @@ export function Campanhas() {
   return (
     <AppLayout
       header={
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <h2 className="text-lg font-bold text-text-primary">Campanhas</h2>
           <Button variant="primary" size="sm">
-            + Nova Campanha
+            +<span className="hidden sm:inline"> Nova Campanha</span>
           </Button>
         </div>
       }

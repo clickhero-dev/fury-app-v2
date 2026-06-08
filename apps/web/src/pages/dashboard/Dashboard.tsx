@@ -312,9 +312,9 @@ function MetricCard({
         <Icon className="w-5 h-5" style={{ color: statusColor ?? '#9ca3af' }} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-gray-500 truncate">{label}</p>
+        <p className="text-xs font-medium text-gray-500 leading-tight">{label}</p>
         <p
-          className="text-xl font-black leading-tight"
+          className="text-lg md:text-xl font-black leading-tight"
           style={{ color: hasRealData ? '#EA580C' : '#111827' }}
         >
           {value}
@@ -326,7 +326,7 @@ function MetricCard({
                 Defina uma meta →
               </Link>
             ) : progressLabel ? (
-              <p className="text-xs text-gray-400">{progressLabel}</p>
+              <p className="text-xs text-muted-foreground">{progressLabel}</p>
             ) : null}
             <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
               <div

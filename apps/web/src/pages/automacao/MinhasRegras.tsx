@@ -183,10 +183,10 @@ export function MinhasRegras() {
   return (
     <AppLayout
       header={
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <h2 className="text-lg font-bold text-text-primary">Minhas Regras</h2>
           <Button variant="primary" size="md" onClick={() => handleOpenDialog()}>
-            + Nova Regra
+            +<span className="hidden sm:inline"> Nova Regra</span>
           </Button>
         </div>
       }
