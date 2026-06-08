@@ -1,5 +1,3 @@
-import { Button } from '@/components';
-import { Sparkles } from 'lucide-react';
 import type { StyleTemplate } from '@/types/studio';
 
 const STYLE_TEMPLATES: StyleTemplate[] = [
@@ -160,54 +158,36 @@ function TemplateSVG({ id }: { id: string }) {
 
 interface Props {
   selectedTemplate: StyleTemplate | null;
-  onSelect: (template: StyleTemplate) => void;
-  onStartWizard: () => void;
+  onSelect: (template: StyleTemplate | null) => void;
 }
 
-export function TemplateGallery({ selectedTemplate, onSelect, onStartWizard }: Props) {
+export function TemplateGallery({ selectedTemplate, onSelect }: Props) {
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E8631A]">Estilo do criativo</p>
-          <h2 className="text-xl font-bold text-[#101828]">Escolha um estilo de referência</h2>
-          <p className="text-sm text-[#667085] mt-0.5">Opcional — clique para inspirar o visual do seu anúncio</p>
-        </div>
-        <Button
-          onClick={onStartWizard}
-          className="bg-[#E8631A] hover:bg-[#D45714] shrink-0"
-        >
-          <Sparkles className="mr-2 h-4 w-4" />
-          Criar Novo Anúncio
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {STYLE_TEMPLATES.map((template) => {
-          const isSelected = selectedTemplate?.id === template.id;
-          return (
-            <button
-              key={template.id}
-              onClick={() => onSelect(isSelected ? (null as unknown as StyleTemplate) : template)}
-              className={`group rounded-2xl border-2 overflow-hidden text-left transition-all focus:outline-none ${
-                isSelected
-                  ? 'border-[#E8631A] shadow-[0_0_0_4px_rgba(232,99,26,0.12)]'
-                  : 'border-[#E6E8EC] hover:border-[#F0B48E]'
-              }`}
-            >
-              <div className="aspect-[4/5] bg-[#f8fafc] overflow-hidden">
-                <TemplateSVG id={template.id} />
-              </div>
-              <div className="p-2.5 bg-white">
-                <p className="text-xs font-semibold text-[#101828] leading-tight">{template.name}</p>
-                <span className={`inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${CATEGORY_COLORS[template.category]}`}>
-                  {template.category}
-                </span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {STYLE_TEMPLATES.map((template) => {
+        const isSelected = selectedTemplate?.id === template.id;
+        return (
+          <button
+            key={template.id}
+            onClick={() => onSelect(isSelected ? null : template)}
+            className={`group rounded-2xl border-2 overflow-hidden text-left transition-all focus:outline-none ${
+              isSelected
+                ? 'border-[#EA580C] shadow-[0_0_0_4px_rgba(234,88,12,0.12)]'
+                : 'border-[#E6E8EC] hover:border-[#F0B48E]'
+            }`}
+          >
+            <div className="aspect-[4/5] bg-[#f8fafc] overflow-hidden">
+              <TemplateSVG id={template.id} />
+            </div>
+            <div className="p-2.5 bg-white">
+              <p className="text-xs font-semibold text-[#101828] leading-tight">{template.name}</p>
+              <span className={`inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${CATEGORY_COLORS[template.category]}`}>
+                {template.category}
+              </span>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }

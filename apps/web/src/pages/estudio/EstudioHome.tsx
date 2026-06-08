@@ -1,16 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, Loader2, Sparkles, Trash2 } from 'lucide-react';
-import { AppLayout, PageHeader, Button, Card, StatusBadge, EmptyState, LoadingSpinner } from '@/components';
+import { AppLayout, Button, Card, StatusBadge, EmptyState, LoadingSpinner } from '@/components';
 import api from '@/lib/api';
 import { MOCK_ASSETS } from '@/lib/studio-mock';
-import type {
-  StudioAsset,
-  GenerateCreativePayload,
-  GenerateCreativeResponse,
-  StyleTemplate,
-} from '@/types/studio';
-import { TemplateGallery } from './components/TemplateGallery';
+import type { StudioAsset, GenerateCreativePayload, GenerateCreativeResponse } from '@/types/studio';
 import { CreativeWizard } from './components/CreativeWizard';
 import { CreativeResult } from './components/CreativeResult';
 
@@ -25,7 +19,6 @@ interface StudioAssetResponse {
 export function EstudioHome() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<ViewState>('library');
-  const [selectedTemplate, setSelectedTemplate] = useState<StyleTemplate | null>(null);
   const [generationResult, setGenerationResult] = useState<GenerateCreativeResponse | null>(null);
   const [filterType, setFilterType] = useState<AssetType>('all');
   const [filterStatus, setFilterStatus] = useState<ComplianceStatus>('all');
@@ -107,24 +100,15 @@ export function EstudioHome() {
     { value: 'rejected', label: 'Reprovado' },
   ];
 
-  const getTypeCount = (type: AssetType) => (type === 'all' ? assetList.length : assetList.filter((a) => a.type === type).length);
-  const getStatusCount = (status: ComplianceStatus) => (status === 'all' ? assetList.length : assetList.filter((a) => a.complianceStatus === status).length);
+  const getTypeCount = (type: AssetType) =>
+    type === 'all' ? assetList.length : assetList.filter((a) => a.type === type).length;
+  const getStatusCount = (status: ComplianceStatus) =>
+    status === 'all' ? assetList.length : assetList.filter((a) => a.complianceStatus === status).length;
 
   const header = (
     <div className="flex items-center justify-between">
       {view === 'library' ? (
-        <>
-          <h2 className="text-lg font-bold text-text-primary">Estúdio Criativo</h2>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleStartWizard}
-            className="bg-[#E8631A] hover:bg-[#D45714]"
-          >
-            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-            Criar Novo Anúncio
-          </Button>
-        </>
+        <h2 className="text-lg font-bold text-text-primary">Estúdio Criativo</h2>
       ) : (
         <>
           <button
@@ -147,25 +131,51 @@ export function EstudioHome() {
 
   return (
     <AppLayout header={header}>
-      <div className="space-y-8">
+      <div className="space-y-10">
+
         {/* LIBRARY VIEW */}
         {view === 'library' && (
           <>
-            <PageHeader
-              title="Estúdio Criativo"
-              description="Crie anúncios com IA em minutos — do briefing ao criativo final"
-            />
+            {/* Hero */}
+            <div className="flex flex-col items-center text-center pt-8 pb-4 space-y-6">
+              <div className="space-y-2">
+                <h1 className="text-3xl font-bold text-[#101828]">Estúdio Criativo</h1>
+                <p className="text-base text-[#667085]">Crie anúncios de alta performance em minutos com IA</p>
+              </div>
 
-            <TemplateGallery
-              selectedTemplate={selectedTemplate}
-              onSelect={setSelectedTemplate}
-              onStartWizard={handleStartWizard}
-            />
+              <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-sm text-[#667085]">
+                <span className="flex items-center gap-2">
+                  <span className="text-base">🎯</span>
+                  Responda 5 perguntas rápidas
+                </span>
+                <span className="text-[#D1D5DB] hidden sm:block">→</span>
+                <span className="flex items-center gap-2">
+                  <span className="text-base">🤖</span>
+                  A IA cria o criativo por você
+                </span>
+                <span className="text-[#D1D5DB] hidden sm:block">→</span>
+                <span className="flex items-center gap-2">
+                  <span className="text-base">📤</span>
+                  Publique direto no Meta
+                </span>
+              </div>
 
+              <Button
+                onClick={handleStartWizard}
+                className="bg-[#EA580C] hover:bg-[#C2410C] text-white px-8 py-3 text-base font-semibold rounded-2xl h-auto"
+              >
+                <Sparkles className="mr-2 h-5 w-5" />
+                Criar Novo Anúncio
+              </Button>
+            </div>
+
+            {/* Library */}
             <div className="border-t border-[#E6E8EC] pt-8 space-y-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-base font-bold text-[#101828]">Biblioteca de Criativos</h3>
-                <span className="text-sm text-[#667085]">{assetList.length} ativo{assetList.length !== 1 ? 's' : ''}</span>
+                <span className="text-sm text-[#667085]">
+                  {assetList.length} ativo{assetList.length !== 1 ? 's' : ''}
+                </span>
               </div>
 
               <Card>
@@ -179,7 +189,7 @@ export function EstudioHome() {
                           onClick={() => setFilterType(option.value)}
                           className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
                             filterType === option.value
-                              ? 'bg-[#E8631A] text-white'
+                              ? 'bg-[#EA580C] text-white'
                               : 'bg-surface-secondary text-text-secondary hover:bg-border'
                           }`}
                         >
@@ -201,7 +211,7 @@ export function EstudioHome() {
                           onClick={() => setFilterStatus(option.value)}
                           className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
                             filterStatus === option.value
-                              ? 'bg-[#E8631A] text-white'
+                              ? 'bg-[#EA580C] text-white'
                               : 'bg-surface-secondary text-text-secondary hover:bg-border'
                           }`}
                         >
@@ -223,7 +233,11 @@ export function EstudioHome() {
               ) : filteredAssets.length === 0 ? (
                 <EmptyState
                   title={assetList.length === 0 ? 'Gere seu primeiro criativo com IA' : 'Nenhum ativo com esses filtros'}
-                  description={assetList.length === 0 ? 'Clique em "Criar Novo Anúncio" para começar' : 'Ajuste os filtros ou crie novos criativos'}
+                  description={
+                    assetList.length === 0
+                      ? 'Clique em "Criar Novo Anúncio" para começar'
+                      : 'Ajuste os filtros ou crie novos criativos'
+                  }
                   action={{ label: 'Criar Novo Anúncio', onClick: handleStartWizard }}
                 />
               ) : (
@@ -248,15 +262,10 @@ export function EstudioHome() {
         {/* WIZARD VIEW */}
         {view === 'wizard' && (
           <>
-            <PageHeader
-              title="Novo Anúncio"
-              description="Responda as perguntas abaixo — o FURY cria o criativo completo para você"
-            />
-            <CreativeWizard
-              selectedTemplate={selectedTemplate}
-              onGenerate={handleGenerate}
-              onBack={handleBackToLibrary}
-            />
+            <div className="pt-2">
+              <p className="text-sm text-[#667085]">Responda as perguntas abaixo — o FURY cria o criativo completo para você</p>
+            </div>
+            <CreativeWizard onGenerate={handleGenerate} onBack={handleBackToLibrary} />
           </>
         )}
 
@@ -264,7 +273,7 @@ export function EstudioHome() {
         {view === 'loading' && (
           <div className="flex min-h-[60vh] flex-col items-center justify-center text-center space-y-5">
             <div className="rounded-full bg-[#FFF4ED] p-5">
-              <Loader2 className="h-10 w-10 animate-spin text-[#E8631A]" />
+              <Loader2 className="h-10 w-10 animate-spin text-[#EA580C]" />
             </div>
             <div>
               <h2 className="text-2xl font-bold text-[#101828]">O FURY está criando seu anúncio...</h2>
@@ -281,10 +290,9 @@ export function EstudioHome() {
         {/* RESULT VIEW */}
         {view === 'result' && generationResult && (
           <>
-            <PageHeader
-              title="Seu Criativo Está Pronto"
-              description="Edite os textos, regenere ou publique direto no Meta"
-            />
+            <div className="pt-2">
+              <p className="text-sm text-[#667085]">Edite os textos, regenere ou publique direto no Meta</p>
+            </div>
             <CreativeResult
               result={generationResult}
               onBack={handleBackToLibrary}
@@ -304,7 +312,7 @@ export function EstudioHome() {
               <p className="mt-2 text-sm text-[#667085]">Verifique sua conexão e tente novamente</p>
             </div>
             <div className="flex gap-3">
-              <Button onClick={() => setView('wizard')} className="bg-[#E8631A] hover:bg-[#D45714]">
+              <Button onClick={() => setView('wizard')} className="bg-[#EA580C] hover:bg-[#C2410C] text-white">
                 Tentar novamente
               </Button>
               <Button variant="outline" onClick={handleBackToLibrary}>
@@ -336,7 +344,7 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
         </div>
       ) : (
         <div className="w-full aspect-square bg-gradient-to-br from-[#FEF0E7] to-[#FFE8D6] flex items-center justify-center">
-          <Sparkles className="w-10 h-10 text-[#E8631A]/40" />
+          <Sparkles className="w-10 h-10 text-[#EA580C]/40" />
         </div>
       )}
 
@@ -380,10 +388,10 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
           </div>
         ) : (
           <div className="flex gap-2 pt-2">
-            <button className="flex-1 px-3 py-2 border border-[#E8631A] text-[#E8631A] rounded-lg text-xs font-semibold hover:bg-[#FEF0E7] transition-colors">
+            <button className="flex-1 px-3 py-2 border border-[#EA580C] text-[#EA580C] rounded-lg text-xs font-semibold hover:bg-[#FEF0E7] transition-colors">
               Usar em campanha
             </button>
-            <button className="flex-1 px-3 py-2 bg-[#E8631A] text-white rounded-lg text-xs font-semibold hover:bg-[#D45714] transition-colors">
+            <button className="flex-1 px-3 py-2 bg-[#EA580C] text-white rounded-lg text-xs font-semibold hover:bg-[#C2410C] transition-colors">
               Ver detalhes
             </button>
           </div>
