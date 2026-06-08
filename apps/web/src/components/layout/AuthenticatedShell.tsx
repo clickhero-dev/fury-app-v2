@@ -20,22 +20,30 @@ export function AuthenticatedShell() {
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const shouldCheck = !!token && !isOnboarding && !isExempt;
 
-  const { data: connections, isLoading } = useQuery({
+  const { data: connections, isLoading, isFetched } = useQuery({
     queryKey: ['meta-connections'],
     queryFn: async () => {
       const res = await api.get<{ data: unknown[] }>('/meta/connections');
-      return res.data.data;
+      const data = res.data.data;
+      if (Array.isArray(data) && data.length > 0) {
+        localStorage.setItem('fury-meta-connected', 'true');
+      }
+      return data;
     },
     staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     enabled: shouldCheck,
     retry: false,
+    placeholderData: localStorage.getItem('fury-meta-connected') === 'true'
+      ? [{ id: 'cached' }]
+      : undefined,
   });
 
   useEffect(() => {
-    if (!isLoading && shouldCheck && Array.isArray(connections) && connections.length === 0) {
+    if (!isLoading && isFetched && shouldCheck && Array.isArray(connections) && connections.length === 0) {
       navigate('/onboarding/conectar-meta', { replace: true });
     }
-  }, [connections, isLoading, shouldCheck, navigate]);
+  }, [connections, isLoading, isFetched, shouldCheck, navigate]);
 
   if (!token) return <Navigate to="/login" replace />;
 
