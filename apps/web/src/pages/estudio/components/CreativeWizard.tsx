@@ -68,7 +68,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
   };
 
   const canAdvance = (() => {
-    if (step === 0) return true; // template is optional
+    if (step === 0) return selectedTemplate !== null;
     if (step === 1) return data.product.trim().length >= 5;
     if (step === 2) return data.promise.trim().length >= 5;
     if (step === 3) return !data.hasOffer || data.offer.trim().length >= 3;
@@ -100,11 +100,9 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
     });
   };
 
-  const primaryButtonLabel = (() => {
-    if (step === 0) return selectedTemplate ? 'Continuar com este estilo' : 'Pular';
-    if (step === TOTAL_STEPS - 1) return null; // uses "Gerar Criativo" button
-    return 'Continuar';
-  })();
+  const step0ButtonLabel = selectedTemplate
+    ? `Continuar com ${selectedTemplate.name}`
+    : 'Selecione um estilo para continuar';
 
   return (
     <div className="max-w-xl mx-auto space-y-6">
@@ -140,15 +138,9 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
           <div className="space-y-4">
             <div>
               <h2 className="text-xl font-bold text-[#101828]">Escolha o estilo do seu anúncio</h2>
-              <p className="text-sm text-[#667085] mt-1">Opcional — escolha um estilo de referência ou pule para continuar</p>
+              <p className="text-sm text-[#667085] mt-1">Selecione o visual que melhor representa sua marca</p>
             </div>
             <TemplateGallery selectedTemplate={selectedTemplate} onSelect={setSelectedTemplate} />
-            {selectedTemplate && (
-              <div className="flex items-center gap-2 rounded-xl border border-[#EA580C]/30 bg-[#FFF4ED] px-3 py-2 text-sm text-[#7A4A27]">
-                <span className="text-[#EA580C]">●</span>
-                Estilo selecionado: <strong>{selectedTemplate.name}</strong>
-              </div>
-            )}
           </div>
         )}
 
@@ -297,30 +289,41 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
       </div>
 
       {/* Navigation */}
-      <div className="flex items-center gap-3">
-        <Button variant="outline" onClick={retreat} className="w-10 h-10 p-0 shrink-0">
-          <ArrowLeft className="h-4 w-4" />
+      {step === 0 ? (
+        <Button
+          onClick={advance}
+          disabled={!canAdvance}
+          className={`w-full inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white font-semibold ${!canAdvance ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          {step0ButtonLabel}
+          {canAdvance && <ArrowRight className="h-4 w-4" />}
         </Button>
+      ) : (
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={retreat} className="w-10 h-10 p-0 shrink-0">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
 
-        {step < TOTAL_STEPS - 1 ? (
-          <Button
-            onClick={advance}
-            disabled={!canAdvance}
-            className="flex-1 bg-[#EA580C] hover:bg-[#C2410C] text-white disabled:opacity-50"
-          >
-            {primaryButtonLabel}
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        ) : (
-          <Button
-            onClick={handleSubmit}
-            className="flex-1 bg-[#EA580C] hover:bg-[#C2410C] text-white"
-          >
-            <Wand2 className="mr-2 h-4 w-4" />
-            Gerar Criativo
-          </Button>
-        )}
-      </div>
+          {step < TOTAL_STEPS - 1 ? (
+            <Button
+              onClick={advance}
+              disabled={!canAdvance}
+              className="flex-1 inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white disabled:opacity-50"
+            >
+              Continuar
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSubmit}
+              className="flex-1 inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white"
+            >
+              <Wand2 className="h-4 w-4" />
+              Gerar Criativo
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
