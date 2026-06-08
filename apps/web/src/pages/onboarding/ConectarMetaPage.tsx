@@ -121,18 +121,18 @@ export function ConectarMetaPage() {
                   Ótimo! Conta conectada com sucesso 🎉
                 </h1>
                 <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Agora defina sua meta de desempenho para que a FURY possa otimizar suas campanhas automaticamente.
+                  Agora selecione a conta de anúncios que você quer gerenciar com a FURY.
                 </p>
               </div>
 
               <div className="w-full space-y-4">
                 <Button
-                  onClick={() => navigate('/onboarding/metas')}
+                  onClick={() => navigate('/onboarding/selecionar-conta')}
                   variant="primary"
                   size="md"
                   className="w-full"
                 >
-                  Definir minha meta
+                  Selecionar conta de anúncios
                 </Button>
 
               </div>
