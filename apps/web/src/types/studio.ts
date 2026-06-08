@@ -96,3 +96,31 @@ export interface RenderCreativeResponse {
   cta: string;
   brandColor: string;
 }
+
+export interface GenerateCreativePayload {
+  product: string;
+  promise: string;
+  offer?: string;
+  audience: string;
+  hasProductImage: boolean;
+  productImageUrl?: string;
+}
+
+export interface GenerateCreativeResponse {
+  assetId: string;
+  imageUrl: string;
+  creativeData: {
+    headline: string;
+    primary_text: string;
+    cta: string;
+    subheadline: string;
+    layout: string;
+    color_scheme: string;
+  };
+}
+
+export interface StyleTemplate {
+  id: string;
+  name: string;
+  category: 'Vendas' | 'Lead' | 'Conteúdo' | 'Branding';
+}
