@@ -37,6 +37,8 @@ async function ensureUniqueSlug(baseSlug: string): Promise<string> {
   }
 }
 
+const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
+
 function userToDTO(user: any): UserDTO {
   return {
     id: user.id,
@@ -44,6 +46,7 @@ function userToDTO(user: any): UserDTO {
     email: user.email,
     role: user.role,
     tenantId: user.tenantId,
+    notificationPrefs: (user.notificationPrefs as UserDTO['notificationPrefs']) ?? DEFAULT_NOTIFICATION_PREFS,
     createdAt: user.createdAt,
   };
 }
@@ -239,7 +242,7 @@ export async function getMe(userId: string): Promise<UserDTO & { tenantName: str
 
 export async function updateMe(
   userId: string,
-  data: { name?: string; tenantName?: string },
+  data: { name?: string; tenantName?: string; notificationPrefs?: UserDTO['notificationPrefs'] },
 ): Promise<UserDTO & { tenantName: string }> {
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
@@ -249,8 +252,12 @@ export async function updateMe(
     throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
   }
 
-  if (data.name !== undefined) {
-    await db.update(users).set({ name: data.name }).where(eq(users.id, userId));
+  const userUpdates: Record<string, unknown> = {};
+  if (data.name !== undefined) userUpdates.name = data.name;
+  if (data.notificationPrefs !== undefined) userUpdates.notificationPrefs = data.notificationPrefs;
+
+  if (Object.keys(userUpdates).length > 0) {
+    await db.update(users).set(userUpdates).where(eq(users.id, userId));
   }
 
   if (data.tenantName !== undefined) {

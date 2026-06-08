@@ -5,6 +5,11 @@ import * as authService from '../services/auth.service.js';
 const updateMeSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   tenantName: z.string().min(1).max(255).optional(),
+  notificationPrefs: z.object({
+    campanhas: z.boolean(),
+    performance: z.boolean(),
+    equipe: z.boolean(),
+  }).optional(),
 });
 
 const registerSchema = z.object({

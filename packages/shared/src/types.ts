@@ -81,12 +81,19 @@ export interface FuryInsight {
 }
 
 // DTO types (for API requests/responses without sensitive fields)
+export interface NotificationPrefs {
+  campanhas: boolean;
+  performance: boolean;
+  equipe: boolean;
+}
+
 export interface UserDTO {
   id: string;
   tenantId: string;
   name: string | null;
   email: string;
   role: UserRole;
+  notificationPrefs: NotificationPrefs;
   createdAt: Date;
 }
 

@@ -34,6 +34,20 @@
   --color-error-light: #fde8e7;
 }
 
+html.dark {
+  --color-surface: #1c2028;
+  --color-surface-secondary: #252b36;
+  --color-background: #141820;
+  --color-text-primary: #e4e8f0;
+  --color-text-secondary: #8b96a8;
+  --color-text-tertiary: #6b7785;
+  --color-border: #2d3748;
+  --color-border-light: #3a4556;
+  --color-success-light: #0d2e1a;
+  --color-warning-light: #2e2200;
+  --color-error-light: #2e0d0d;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, sans-serif;

@@ -5,6 +5,7 @@ import { AppLayout, PageHeader, Button, Card } from '@/components';
 import { FuryConfig } from './FuryConfig';
 import { IntegracoesContent } from './IntegracoesContent';
 import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
+import { useTheme } from '@/hooks/useTheme';
 import api from '@/lib/api';
 import {
   Dialog,
@@ -22,6 +23,12 @@ interface SettingSection {
   icon: React.ReactNode;
 }
 
+interface NotificationPrefs {
+  campanhas: boolean;
+  performance: boolean;
+  equipe: boolean;
+}
+
 interface MeResponse {
   id: string;
   name: string | null;
@@ -29,6 +36,7 @@ interface MeResponse {
   tenantName: string;
   role: string;
   tenantId: string;
+  notificationPrefs: NotificationPrefs;
 }
 
 const cogIcon = (
@@ -103,6 +111,9 @@ export function Configuracoes() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
 
+  // ── Dark mode ────────────────────────────────────────────────────────────────
+  const { isDark, setDark } = useTheme();
+
   // ── Aba Geral ────────────────────────────────────────────────────────────────
   const { data: meData, isLoading: meLoading } = useQuery<MeResponse>({
     queryKey: ['auth', 'me'],
@@ -131,6 +142,32 @@ export function Configuracoes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       showToast('Alterações salvas com sucesso!', 'success');
+    },
+    onError: () => {
+      showToast('Erro ao salvar. Tente novamente.', 'error');
+    },
+  });
+
+  // ── Aba Notificações ─────────────────────────────────────────────────────────
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPrefs>({
+    campanhas: true,
+    performance: true,
+    equipe: false,
+  });
+
+  useEffect(() => {
+    if (meData?.notificationPrefs) {
+      setNotifPrefs(meData.notificationPrefs);
+    }
+  }, [meData]);
+
+  const saveNotifMutation = useMutation({
+    mutationFn: async (prefs: NotificationPrefs) => {
+      await api.patch('/auth/me', { notificationPrefs: prefs });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      showToast('Preferências salvas com sucesso!', 'success');
     },
     onError: () => {
       showToast('Erro ao salvar. Tente novamente.', 'error');
@@ -262,7 +299,12 @@ export function Configuracoes() {
                     <h3 className="text-lg font-bold text-text-primary mb-4">Preferências</h3>
                     <div className="space-y-4">
                       <label className="flex items-center gap-3 cursor-pointer">
-                        <input type="checkbox" defaultChecked className="w-4 h-4" />
+                        <input
+                          type="checkbox"
+                          checked={isDark}
+                          onChange={(e) => setDark(e.target.checked)}
+                          className="w-4 h-4"
+                        />
                         <span className="text-sm font-semibold text-text-primary">Modo Escuro</span>
                       </label>
                       <label className="flex items-center gap-3 cursor-pointer">
@@ -302,34 +344,49 @@ export function Configuracoes() {
                 <div className="p-6 space-y-6">
                   <div>
                     <h3 className="text-lg font-bold text-text-primary mb-4">Preferências de Notificação</h3>
-                    <div className="space-y-4">
-                      <label className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-surface-secondary transition-colors cursor-pointer">
-                        <div>
-                          <p className="font-semibold text-text-primary">Campanhas</p>
-                          <p className="text-sm text-text-secondary">Notificações sobre campanhas ativas</p>
-                        </div>
-                        <input type="checkbox" defaultChecked className="w-5 h-5" />
-                      </label>
-                      <label className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-surface-secondary transition-colors cursor-pointer">
-                        <div>
-                          <p className="font-semibold text-text-primary">Performance</p>
-                          <p className="text-sm text-text-secondary">Alertas de performance e relatórios</p>
-                        </div>
-                        <input type="checkbox" defaultChecked className="w-5 h-5" />
-                      </label>
-                      <label className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-surface-secondary transition-colors cursor-pointer">
-                        <div>
-                          <p className="font-semibold text-text-primary">Equipe</p>
-                          <p className="text-sm text-text-secondary">Notificações da atividade da equipe</p>
-                        </div>
-                        <input type="checkbox" className="w-5 h-5" />
-                      </label>
-                    </div>
+                    {meLoading ? (
+                      <div className="flex justify-center py-8">
+                        <span className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {(
+                          [
+                            { key: 'campanhas', label: 'Campanhas', desc: 'Notificações sobre campanhas ativas' },
+                            { key: 'performance', label: 'Performance', desc: 'Alertas de performance e relatórios' },
+                            { key: 'equipe', label: 'Equipe', desc: 'Notificações da atividade da equipe' },
+                          ] as const
+                        ).map(({ key, label, desc }) => (
+                          <label
+                            key={key}
+                            className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-surface-secondary transition-colors cursor-pointer"
+                          >
+                            <div>
+                              <p className="font-semibold text-text-primary">{label}</p>
+                              <p className="text-sm text-text-secondary">{desc}</p>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={notifPrefs[key]}
+                              onChange={(e) =>
+                                setNotifPrefs((prev) => ({ ...prev, [key]: e.target.checked }))
+                              }
+                              className="w-5 h-5"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex justify-end gap-3 pt-4 border-t border-border">
-                    <Button variant="primary" size="md">
-                      Salvar Preferências
+                    <Button
+                      variant="primary"
+                      size="md"
+                      disabled={saveNotifMutation.isPending}
+                      onClick={() => saveNotifMutation.mutate(notifPrefs)}
+                    >
+                      {saveNotifMutation.isPending ? 'Salvando...' : 'Salvar Preferências'}
                     </Button>
                   </div>
                 </div>
