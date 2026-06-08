@@ -98,7 +98,7 @@ export function CreativeWizard({ selectedTemplate, onGenerate, onBack }: Props) 
     <div className="max-w-xl mx-auto space-y-6">
       {/* Stepper */}
       <div className="flex items-center gap-2">
-        {STEPS.map((label, i) => (
+        {STEPS.map((_label, i) => (
           <div key={i} className="flex items-center gap-2 min-w-0">
             <div
               className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
