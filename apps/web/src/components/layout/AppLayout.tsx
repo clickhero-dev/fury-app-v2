@@ -15,10 +15,13 @@ export function AppLayout({ children, header, className }: AppLayoutProps) {
   const context = useOutletContext<ShellContext | null>();
   const setMobileOpen = context?.setMobileOpen ?? (() => {});
   const { data: subscription } = useSubscription();
-  const planLabel =
-    subscription?.status !== 'cancelled' && subscription?.status !== 'inactive'
-      ? subscription?.plan?.name?.toUpperCase() ?? null
-      : null;
+  const planLabel = (() => {
+    const s = subscription?.status;
+    if (!s || s === 'cancelled' || s === 'inactive') return null;
+    if (s === 'trial') return 'TRIAL';
+    if (s === 'active' || s === 'past_due') return subscription?.plan?.name?.toUpperCase() ?? null;
+    return null;
+  })();
 
   return (
     <main className="flex-1 min-w-0 transition-all duration-300">

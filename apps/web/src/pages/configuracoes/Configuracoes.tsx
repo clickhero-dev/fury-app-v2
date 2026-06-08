@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AppLayout, PageHeader, Button, Card } from '@/components';
+import { AppLayout, Button, Card } from '@/components';
 import { FuryConfig } from './FuryConfig';
 import { IntegracoesContent } from './IntegracoesContent';
 import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
@@ -174,13 +174,7 @@ export function Configuracoes() {
     >
       {toast && <Toast message={toast.message} type={toast.type} />}
 
-      <div className="space-y-6">
-        <PageHeader
-          title="Configurações"
-          description="Gerencie as preferências da sua conta e da sua organização"
-        />
-
-        <Tabs value={activeTab} onValueChange={setTab}>
+      <Tabs value={activeTab} onValueChange={setTab}>
           <TabsList>
             {TAB_LABELS.map(({ value, label }) => (
               <TabsTrigger key={value} value={value}>
@@ -539,7 +533,6 @@ export function Configuracoes() {
             <FuryConfig />
           </TabsContent>
         </Tabs>
-      </div>
     </AppLayout>
   );
 }
