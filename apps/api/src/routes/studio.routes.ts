@@ -242,6 +242,7 @@ async function runGenerate(context: CreativeContext, productImageUrl: string | u
   });
   const { fileName } = await savePNG(pngBuffer);
   const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
+  console.log('=== CREATIVE imageUrl:', imageUrl);
 
   const metadata = JSON.stringify({ ...creativeData, context });
 
@@ -271,7 +272,7 @@ router.post('/creative/generate', authMiddleware, tenantMiddleware, async (req: 
   try {
     const body = generateCreativeSchema.parse(req.body);
     const tenantId = (req as any).tenant?.tenantId as string;
-    const publicBaseUrl = process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
+    const publicBaseUrl = process.env.APP_URL ?? process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
 
     const { businessName, objective } = await getTenantContext(tenantId);
     const adaptive = body.adaptiveAnswers ?? {};
@@ -299,7 +300,7 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
   try {
     const { assetId, feedback } = z.object({ assetId: z.string().uuid(), feedback: z.string().min(1) }).parse(req.body);
     const tenantId = (req as any).tenant?.tenantId as string;
-    const publicBaseUrl = process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
+    const publicBaseUrl = process.env.APP_URL ?? process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
 
     const asset = await db.query.creativeAssets.findFirst({
       where: eq(creativeAssets.id, assetId),
@@ -337,6 +338,7 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
     });
     const { fileName } = await savePNG(pngBuffer);
     const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
+    console.log('=== CREATIVE regenerate imageUrl:', imageUrl);
 
     const metadata = JSON.stringify({ ...creativeData, context: savedContext, feedback });
 

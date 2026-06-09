@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, BookmarkCheck, Loader2, RefreshCw, Upload } from 'lucide-react';
-import { Button, StatusBadge } from '@/components';
+import { Button } from '@/components';
 import api from '@/lib/api';
 import type { GenerateCreativeResponse, StudioPublishResponse } from '@/types/studio';
 
@@ -73,16 +73,18 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
         {/* Image preview */}
-        <div className="overflow-hidden rounded-2xl border border-[#E6E8EC] bg-[#101828]">
+        <div className="overflow-hidden rounded-2xl border border-[#E6E8EC] bg-gray-100">
           <div className="relative aspect-square">
             <img
               src={currentResult.imageUrl}
               alt="Criativo gerado"
               className="h-full w-full object-cover"
+              onError={(e) => {
+                console.error('=== Image failed to load:', currentResult.imageUrl);
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+              onLoad={() => console.log('=== Rendering image:', currentResult.imageUrl)}
             />
-            <div className="absolute left-3 top-3">
-              <StatusBadge status="pending_compliance" />
-            </div>
           </div>
         </div>
 
