@@ -10,3 +10,4 @@ restartPolicyMaxRetries = 3
 [variables]
 PUPPETEER_SKIP_DOWNLOAD = "true"
 PUPPETEER_EXECUTABLE_PATH = "/usr/bin/chromium"
+APP_URL = "https://fury-app-v2-production.up.railway.app"

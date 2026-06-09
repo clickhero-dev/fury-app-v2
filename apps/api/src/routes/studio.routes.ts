@@ -277,7 +277,7 @@ router.post('/creative/generate', authMiddleware, tenantMiddleware, async (req: 
   try {
     const body = generateCreativeSchema.parse(req.body);
     const tenantId = (req as any).tenant?.tenantId as string;
-    const publicBaseUrl = process.env.APP_URL ?? process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
+    const publicBaseUrl = process.env.APP_URL ?? process.env.PUBLIC_BASE_URL ?? 'https://fury-app-v2-production.up.railway.app';
 
     const { businessName, objective } = await getTenantContext(tenantId);
     const adaptive = body.adaptiveAnswers ?? {};
@@ -305,7 +305,7 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
   try {
     const { assetId, feedback } = z.object({ assetId: z.string().uuid(), feedback: z.string().min(1) }).parse(req.body);
     const tenantId = (req as any).tenant?.tenantId as string;
-    const publicBaseUrl = process.env.APP_URL ?? process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
+    const publicBaseUrl = process.env.APP_URL ?? process.env.PUBLIC_BASE_URL ?? 'https://fury-app-v2-production.up.railway.app';
 
     const asset = await db.query.creativeAssets.findFirst({
       where: eq(creativeAssets.id, assetId),
