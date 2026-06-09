@@ -16,7 +16,32 @@ import { buildCreativePrompt, buildRegeneratePrompt, buildValidationPrompt, type
 import { convertHTMLToPNG } from '../services/html-to-png.service.js';
 import { studioAssetsDir } from '../lib/temp-storage.js';
 
+console.log('=== STUDIO studioAssetsDir:', studioAssetsDir);
+
 const router = Router();
+
+router.get('/storage-check', async (_req, res) => {
+  const testFile = join(studioAssetsDir, 'test.txt');
+  let writeOk = false;
+  let error: string | null = null;
+  try {
+    if (!fs.existsSync(studioAssetsDir)) {
+      fs.mkdirSync(studioAssetsDir, { recursive: true });
+    }
+    fs.writeFileSync(testFile, 'test');
+    writeOk = fs.existsSync(testFile);
+    fs.unlinkSync(testFile);
+  } catch (err: any) {
+    error = err.message;
+  }
+  res.json({
+    studioAssetsDir,
+    dirExists: fs.existsSync(studioAssetsDir),
+    writeOk,
+    error,
+    files: fs.existsSync(studioAssetsDir) ? fs.readdirSync(studioAssetsDir).slice(0, 5) : [],
+  });
+});
 
 router.get('/assets', authMiddleware, tenantMiddleware, studioController.listAssets);
 router.delete('/assets/:assetId', authMiddleware, tenantMiddleware, studioController.deleteAsset);
@@ -205,13 +230,27 @@ const generateCreativeSchema = z.object({
 });
 
 async function savePNG(buffer: Buffer): Promise<{ fileName: string; filePath: string }> {
-  await mkdir(studioAssetsDir, { recursive: true });
+  console.log('=== STUDIO [1] PNG buffer size:', buffer?.length ?? 0);
+
+  const dir = studioAssetsDir;
+  if (!fs.existsSync(dir)) {
+    console.log('=== STUDIO creating dir:', dir);
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  console.log('=== STUDIO [2] Dir exists:', fs.existsSync(dir));
+
   const fileName = `${randomUUID()}.png`;
-  const filePath = join(studioAssetsDir, fileName);
-  await writeFile(filePath, buffer);
-  console.log('=== STUDIO savePNG dir:', studioAssetsDir);
-  console.log('=== STUDIO savePNG filePath:', filePath);
-  console.log('=== STUDIO file exists:', fs.existsSync(filePath));
+  const filePath = join(dir, fileName);
+  console.log('=== STUDIO [2] Saving to:', filePath);
+
+  try {
+    fs.writeFileSync(filePath, buffer);
+    console.log('=== STUDIO [3] File saved OK, size:', fs.statSync(filePath).size);
+  } catch (err) {
+    console.error('=== STUDIO [3] SAVE FAILED:', err);
+    throw err;
+  }
+
   return { fileName, filePath };
 }
 
@@ -247,7 +286,7 @@ async function runGenerate(context: CreativeContext, productImageUrl: string | u
   });
   const { fileName } = await savePNG(pngBuffer);
   const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
-  console.log('=== STUDIO imageUrl returned:', imageUrl);
+  console.log('=== STUDIO [4] imageUrl:', imageUrl);
 
   const metadata = JSON.stringify({ ...creativeData, context });
 
@@ -343,7 +382,7 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
     });
     const { fileName } = await savePNG(pngBuffer);
     const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
-    console.log('=== STUDIO regenerate imageUrl returned:', imageUrl);
+    console.log('=== STUDIO [4] regenerate imageUrl:', imageUrl);
 
     const metadata = JSON.stringify({ ...creativeData, context: savedContext, feedback });
 
