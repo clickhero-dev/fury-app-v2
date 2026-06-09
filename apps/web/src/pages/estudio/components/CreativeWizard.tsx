@@ -217,12 +217,12 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
 
         {/* STEP 1 — Product */}
         {step === 1 && (
-          <StepCard title="O que você vai anunciar?" hint="Seja específico: produto, serviço, nicho, oferta principal.">
+          <StepCard title="O que você vai anunciar?" hint="Descreva o que você quer mostrar para as pessoas">
             <textarea
               autoFocus
               value={data.product}
               onChange={(e) => setData((d) => ({ ...d, product: e.target.value }))}
-              placeholder="Ex: Curso online de confeitaria, Clínica de estética, Loja de roupas femininas..."
+              placeholder="Ex: Corte de cabelo masculino, Banho e tosa para cães, Aulas de natação..."
               className="w-full min-h-[120px] rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] px-4 py-3 text-sm text-[#101828] outline-none transition focus:border-[#EA580C] focus:ring-2 focus:ring-[#EA580C]/10 resize-none"
             />
           </StepCard>
@@ -230,12 +230,12 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
 
         {/* STEP 2 — Promise */}
         {step === 2 && (
-          <StepCard title="Por que um cliente vai escolher você?" hint="Pense no principal motivo que faz alguém vir até o seu negócio">
+          <StepCard title="O que você oferece de especial?" hint="Pode ser um preço, uma condição, um atendimento diferente ou um resultado garantido">
             <textarea
               autoFocus
               value={data.promise}
               onChange={(e) => setData((d) => ({ ...d, promise: e.target.value }))}
-              placeholder="Ex: Corte masculino por R$ 35 com agendamento pelo WhatsApp, Banho e tosa com busca e entrega, Primeira consulta gratuita, Academia 24h com mensalidade de R$ 89..."
+              placeholder="Ex: Corte por R$ 35 com agendamento fácil pelo WhatsApp, Tosa com busca e entrega no bairro, Primeira consulta sem custo, Marmita por R$ 18 com entrega em 30 minutos..."
               className="w-full min-h-[120px] rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] px-4 py-3 text-sm text-[#101828] outline-none transition focus:border-[#EA580C] focus:ring-2 focus:ring-[#EA580C]/10 resize-none"
             />
           </StepCard>
@@ -243,11 +243,11 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
 
         {/* STEP 3 — Offer */}
         {step === 3 && (
-          <StepCard title="Tem alguma oferta especial?" hint="Promoções, preços especiais ou condições aumentam a conversão.">
+          <StepCard title="Tem alguma promoção ou condição especial?" hint="Desconto, preço especial ou condição por tempo limitado aumentam muito os resultados">
             <div className="space-y-4">
               <div className="flex gap-3">
-                {(['Sim', 'Não'] as const).map((opt) => {
-                  const isYes = opt === 'Sim';
+                {(['Sim, tenho', 'Não agora'] as const).map((opt) => {
+                  const isYes = opt === 'Sim, tenho';
                   const active = data.hasOffer === isYes;
                   return (
                     <button
@@ -267,7 +267,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
                   autoFocus
                   value={data.offer}
                   onChange={(e) => setData((d) => ({ ...d, offer: e.target.value }))}
-                  placeholder="Ex: R$ 97 por tempo limitado, 50% de desconto até domingo..."
+                  placeholder="Ex: 20% de desconto essa semana, Leve 2 pague 1, Mensalidade por R$ 89 no primeiro mês, Frete grátis para o bairro..."
                   className="w-full min-h-[100px] rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] px-4 py-3 text-sm text-[#101828] outline-none transition focus:border-[#EA580C] focus:ring-2 focus:ring-[#EA580C]/10 resize-none"
                 />
               )}
@@ -277,12 +277,12 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
 
         {/* STEP 4 — Audience */}
         {step === 4 && (
-          <StepCard title="Para quem é esse anúncio?" hint="Quanto mais específico o público, mais certeiro o criativo.">
+          <StepCard title="Quem você quer atingir?" hint="Quanto mais específico, mais certeiro o anúncio — pode ser simples">
             <textarea
               autoFocus
               value={data.audience}
               onChange={(e) => setData((d) => ({ ...d, audience: e.target.value }))}
-              placeholder="Ex: Mulheres de 25 a 45 anos que querem aprender confeitaria em casa..."
+              placeholder="Ex: Homens da região que cuidam da aparência, Mães que precisam de praticidade na alimentação, Pessoas que querem emagrecer com saúde..."
               className="w-full min-h-[120px] rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] px-4 py-3 text-sm text-[#101828] outline-none transition focus:border-[#EA580C] focus:ring-2 focus:ring-[#EA580C]/10 resize-none"
             />
           </StepCard>
@@ -290,7 +290,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
 
         {/* STEP 5 — Image */}
         {step === 5 && (
-          <StepCard title="Você tem alguma imagem para usar?" hint="Usar uma imagem do seu produto aumenta a identidade da marca.">
+          <StepCard title="Você tem uma foto para usar?" hint="Uma foto do seu produto, serviço ou espaço deixa o anúncio muito mais real e confiável">
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -313,7 +313,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
                   }`}
                 >
                   <Wand2 className="mx-auto mb-2 h-5 w-5 text-[#EA580C]" />
-                  <p className="text-sm font-semibold text-[#101828]">Gerar sem imagem</p>
+                  <p className="text-sm font-semibold text-[#101828]">Continuar sem foto</p>
                 </button>
               </div>
 
@@ -390,7 +390,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
               className="flex-1 inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white"
             >
               <Wand2 className="h-4 w-4" />
-              Gerar Criativo
+              Criar meu anúncio
             </Button>
           )}
         </div>

@@ -144,5 +144,5 @@ export interface GenerateCreativeResponse {
 export interface StyleTemplate {
   id: string;
   name: string;
-  category: 'Vendas' | 'Lead' | 'Conteúdo' | 'Branding';
+  category: 'Geral' | 'Promoção' | 'Resultado' | 'Confiança' | 'Marca' | 'Conteúdo';
 }

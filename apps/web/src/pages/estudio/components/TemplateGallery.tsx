@@ -1,21 +1,23 @@
 import type { StyleTemplate } from '@/types/studio';
 
 const STYLE_TEMPLATES: StyleTemplate[] = [
-  { id: 'product-focus', name: 'Produto em Destaque', category: 'Vendas' },
-  { id: 'irresistible-offer', name: 'Oferta Irresistível', category: 'Vendas' },
-  { id: 'transformation', name: 'Resultado & Transformação', category: 'Lead' },
-  { id: 'social-proof', name: 'Depoimento Social', category: 'Lead' },
-  { id: 'minimal-premium', name: 'Minimalista Premium', category: 'Branding' },
-  { id: 'bold-direct', name: 'Bold & Direto', category: 'Vendas' },
-  { id: 'educational', name: 'Educacional', category: 'Conteúdo' },
-  { id: 'institutional', name: 'Institucional', category: 'Branding' },
+  { id: 'product-focus', name: 'Meu Produto ou Serviço', category: 'Geral' },
+  { id: 'irresistible-offer', name: 'Promoção Especial', category: 'Promoção' },
+  { id: 'transformation', name: 'Antes e Depois', category: 'Resultado' },
+  { id: 'social-proof', name: 'O que os clientes dizem', category: 'Confiança' },
+  { id: 'minimal-premium', name: 'Simples e Elegante', category: 'Marca' },
+  { id: 'bold-direct', name: 'Direto ao Ponto', category: 'Promoção' },
+  { id: 'educational', name: 'Passo a Passo', category: 'Conteúdo' },
+  { id: 'institutional', name: 'Minha Marca', category: 'Marca' },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Vendas: 'bg-orange-100 text-orange-700',
-  Lead: 'bg-blue-100 text-blue-700',
-  Conteúdo: 'bg-green-100 text-green-700',
-  Branding: 'bg-purple-100 text-purple-700',
+  Geral: 'bg-gray-100 text-gray-700',
+  Promoção: 'bg-orange-100 text-orange-700',
+  Resultado: 'bg-blue-100 text-blue-700',
+  Confiança: 'bg-green-100 text-green-700',
+  Marca: 'bg-purple-100 text-purple-700',
+  Conteúdo: 'bg-teal-100 text-teal-700',
 };
 
 function TemplateSVG({ id }: { id: string }) {
