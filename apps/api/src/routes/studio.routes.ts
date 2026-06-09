@@ -12,7 +12,6 @@ import * as studioController from '../controllers/studio.controller.js';
 import { studioCopyService } from '../services/studio-copy.service.js';
 import { deepseekService } from '../services/deepseek.service.js';
 import { buildCreativePrompt, buildRegeneratePrompt, buildValidationPrompt, type CreativeContext } from '../prompts/creative-studio.prompt.js';
-import { generateCreativeHTML } from '../services/creative-generator.service.js';
 import { convertHTMLToPNG } from '../services/html-to-png.service.js';
 import { studioAssetsDir } from '../lib/temp-storage.js';
 
@@ -231,7 +230,7 @@ async function runGenerate(context: CreativeContext, productImageUrl: string | u
   const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.8 });
   const creativeData = parseCreativeJSON(raw);
 
-  const html = generateCreativeHTML({
+  const pngBuffer = await convertHTMLToPNG({
     headline: creativeData.headline,
     primary_text: creativeData.primary_text,
     cta: creativeData.cta,
@@ -241,8 +240,6 @@ async function runGenerate(context: CreativeContext, productImageUrl: string | u
     productImageUrl,
     businessName: context.businessName,
   });
-
-  const pngBuffer = await convertHTMLToPNG(html);
   const { fileName } = await savePNG(pngBuffer);
   const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
 
@@ -328,7 +325,7 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
     const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.9 });
     const creativeData = parseCreativeJSON(raw);
 
-    const html = generateCreativeHTML({
+    const pngBuffer = await convertHTMLToPNG({
       headline: creativeData.headline,
       primary_text: creativeData.primary_text,
       cta: creativeData.cta,
@@ -338,8 +335,6 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
       productImageUrl: savedContext.productImageUrl,
       businessName: savedContext.businessName,
     });
-
-    const pngBuffer = await convertHTMLToPNG(html);
     const { fileName } = await savePNG(pngBuffer);
     const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
 

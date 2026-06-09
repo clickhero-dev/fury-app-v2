@@ -25,13 +25,11 @@
     "typescript": "^5.3.3",
     "vitest": "^1.6.1"
   },
-  "puppeteer": {
-    "skipDownload": true
-  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
     "@fury/db": "*",
     "@fury/shared": "*",
+    "@napi-rs/canvas": "^1.0.0",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.58.5",
     "cors": "^2.8.6",
@@ -40,7 +38,6 @@
     "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.2",
     "openai": "^6.37.0",
-    "puppeteer": "^25.1.0",
     "sharp": "^0.33.5",
     "zod": "^3.22.4"
   }
