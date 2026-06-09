@@ -230,12 +230,12 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
 
         {/* STEP 2 — Promise */}
         {step === 2 && (
-          <StepCard title="Qual a promessa para quem ver esse anúncio?" hint="Qual transformação ou resultado o cliente vai ter?">
+          <StepCard title="Por que um cliente vai escolher você?" hint="Pense no principal motivo que faz alguém vir até o seu negócio">
             <textarea
               autoFocus
               value={data.promise}
               onChange={(e) => setData((d) => ({ ...d, promise: e.target.value }))}
-              placeholder="Ex: Aprenda a fazer bolos profissionais em 30 dias, Perca 5kg em 6 semanas..."
+              placeholder="Ex: Corte masculino por R$ 35 com agendamento pelo WhatsApp, Banho e tosa com busca e entrega, Primeira consulta gratuita, Academia 24h com mensalidade de R$ 89..."
               className="w-full min-h-[120px] rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] px-4 py-3 text-sm text-[#101828] outline-none transition focus:border-[#EA580C] focus:ring-2 focus:ring-[#EA580C]/10 resize-none"
             />
           </StepCard>
