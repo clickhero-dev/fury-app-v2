@@ -26,7 +26,19 @@
       "Bash(rtk pnpm *)",
       "Bash(vercel ls *)",
       "Bash(vercel teams *)",
-      "Bash(vercel project *)"
+      "Bash(vercel project *)",
+      "Bash(rtk curl *)",
+      "Bash(curl -s -X POST https://fury-app-v2-production.up.railway.app/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"dev.fashion@fury.test\",\"password\":\"Dev@12345\"}')",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_Wkp3Dl1OQMVG@ep-tiny-unit-an9xoof9-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require\" rtk npx tsx apps/api/src/scripts/seed-plans.ts)",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_Wkp3Dl1OQMVG@ep-tiny-unit-an9xoof9-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require\" node_modules/.bin/tsx apps/api/src/scripts/seed-plans.ts)",
+      "Bash(date -v+1d '+%Y-%m-%d')",
+      "Bash(curl -s -w '\\\\n--- HTTP %{http_code} ---' -X POST https://sandbox.asaas.com/api/v3/subscriptions -H 'Content-Type: application/json' -H 'access_token: $aact_hmlg_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OjZlYjE1N2U3LTgwNWYtNDdkZi1hZWU0LTI3NjE5ZDRhNzBmMjo6JGFhY2hfYmU5OTY4ZjYtYmRmOC00MTg2LWExMzYtZWUyMWU2NTM1Nzkx' -d '{\"customer\":\"cus_000008101540\",\"billingType\":\"PIX\",\"cycle\":\"MONTHLY\",\"value\":297.00,\"nextDueDate\":\"__TRACKED_VAR__\",\"description\":\"FURY Starter\",\"externalReference\":\"test-tenant-123\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(p['id'], p['name'], p['priceCents']\\) for p in d['data']]\")",
+      "Bash(python3 -c \"import sys,json; d=json.loads\\(sys.stdin.read\\(\\).replace\\('\\\\n','\\\\\\\\\\\\\\\\n'\\)\\); [print\\(p['id'], p['name'], p['priceCents']\\) for p in d['data']]\")",
+      "Bash(railway logs *)",
+      "Bash(jq)",
+      "Bash(railway variables *)",
+      "Bash(claude update *)"
     ]
   }
 }

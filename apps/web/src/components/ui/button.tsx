@@ -36,7 +36,7 @@ export function Button({
           'text-gray-700 hover:bg-gray-100 active:bg-gray-200',
         size === 'sm' && 'px-4 py-2.5 text-sm',
         size === 'md' && 'px-6 py-3 text-base font-bold',
-        size === 'lg' && 'px-8 py-4 text-lg',
+        size === 'lg' && 'px-8 py-3 text-lg',
         className
       )}
       style={buttonStyle}

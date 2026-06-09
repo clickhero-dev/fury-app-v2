@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
+    "@aws-sdk/client-s3": "^3.1064.0",
     "@fury/db": "*",
     "@fury/shared": "*",
     "@napi-rs/canvas": "^1.0.0",

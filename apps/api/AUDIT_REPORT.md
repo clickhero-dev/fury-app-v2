@@ -483,3 +483,4 @@ packages/db/src/*.js
 3. Adicionar CORS via env var → `apps/api/src/index.ts:24`
 4. Deletar lixo da raiz (20+ arquivos/dirs) → `rm` + `.gitignore`
 5. Resolver worker órfão → inicializar ou deletar `campaign-sync.worker.ts`
+

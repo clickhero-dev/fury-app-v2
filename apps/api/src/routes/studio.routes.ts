@@ -15,6 +15,7 @@ import { deepseekService } from '../services/deepseek.service.js';
 import { buildCreativePrompt, buildRegeneratePrompt, buildValidationPrompt, type CreativeContext } from '../prompts/creative-studio.prompt.js';
 import { convertHTMLToPNG } from '../services/html-to-png.service.js';
 import { studioAssetsDir } from '../lib/temp-storage.js';
+import { uploadAsset } from '../services/storage.service.js';
 
 console.log('=== STUDIO studioAssetsDir:', studioAssetsDir);
 
@@ -234,20 +235,17 @@ async function savePNG(buffer: Buffer): Promise<{ fileName: string; filePath: st
 
   const dir = studioAssetsDir;
   if (!fs.existsSync(dir)) {
-    console.log('=== STUDIO creating dir:', dir);
     fs.mkdirSync(dir, { recursive: true });
   }
-  console.log('=== STUDIO [2] Dir exists:', fs.existsSync(dir));
 
   const fileName = `${randomUUID()}.png`;
   const filePath = join(dir, fileName);
-  console.log('=== STUDIO [2] Saving to:', filePath);
 
   try {
     fs.writeFileSync(filePath, buffer);
-    console.log('=== STUDIO [3] File saved OK, size:', fs.statSync(filePath).size);
+    console.log('=== STUDIO [3] File saved locally, size:', fs.statSync(filePath).size);
   } catch (err) {
-    console.error('=== STUDIO [3] SAVE FAILED:', err);
+    console.error('=== STUDIO [3] LOCAL SAVE FAILED:', err);
     throw err;
   }
 
@@ -284,9 +282,16 @@ async function runGenerate(context: CreativeContext, productImageUrl: string | u
     productImageUrl,
     businessName: context.businessName,
   });
-  const { fileName } = await savePNG(pngBuffer);
-  const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
-  console.log('=== STUDIO [4] imageUrl:', imageUrl);
+  let imageUrl: string;
+  if (process.env.R2_ENDPOINT && process.env.R2_PUBLIC_URL) {
+    const fileName = `${randomUUID()}.png`;
+    imageUrl = await uploadAsset(pngBuffer, fileName);
+    console.log('=== STUDIO [4] imageUrl (R2):', imageUrl);
+  } else {
+    const { fileName } = await savePNG(pngBuffer);
+    imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
+    console.log('=== STUDIO [4] imageUrl (local):', imageUrl);
+  }
 
   const metadata = JSON.stringify({ ...creativeData, context });
 
@@ -380,9 +385,16 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
       productImageUrl: savedContext.productImageUrl,
       businessName: savedContext.businessName,
     });
-    const { fileName } = await savePNG(pngBuffer);
-    const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
-    console.log('=== STUDIO [4] regenerate imageUrl:', imageUrl);
+    let imageUrl: string;
+    if (process.env.R2_ENDPOINT && process.env.R2_PUBLIC_URL) {
+      const fileName = `${randomUUID()}.png`;
+      imageUrl = await uploadAsset(pngBuffer, fileName);
+      console.log('=== STUDIO [4] regenerate imageUrl (R2):', imageUrl);
+    } else {
+      const { fileName } = await savePNG(pngBuffer);
+      imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
+      console.log('=== STUDIO [4] regenerate imageUrl (local):', imageUrl);
+    }
 
     const metadata = JSON.stringify({ ...creativeData, context: savedContext, feedback });
 

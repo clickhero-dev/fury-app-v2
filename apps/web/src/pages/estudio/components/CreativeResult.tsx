@@ -150,12 +150,12 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
                 <Button
                   onClick={() => regenerateMutation.mutate({ assetId: currentResult.assetId, feedbackText: feedback })}
                   disabled={feedback.trim().length < 3 || regenerateMutation.isPending}
-                  className="flex-1 bg-[#E8631A] hover:bg-[#D45714] text-sm"
+                  className="flex-1 flex items-center justify-center gap-2 bg-[#E8631A] hover:bg-[#D45714] text-white text-sm"
                 >
-                  {regenerateMutation.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                  {regenerateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                   Regenerar
                 </Button>
-                <Button variant="outline" onClick={() => setShowRegenerateForm(false)} className="text-sm">
+                <Button variant="outline" onClick={() => setShowRegenerateForm(false)} className="flex items-center justify-center gap-2 text-sm">
                   Cancelar
                 </Button>
               </div>
