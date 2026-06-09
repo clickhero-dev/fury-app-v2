@@ -1,5 +1,28 @@
-import { createCanvas } from '@napi-rs/canvas';
+import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
+import fs from 'fs';
 import type { CreativeData } from './creative-generator.service.js';
+
+// Register system fonts installed via nixpacks (fonts-open-sans, fonts-dejavu-core)
+const FONT_CANDIDATES = [
+  // Open Sans (installed via apt fonts-open-sans)
+  { path: '/usr/share/fonts/truetype/open-sans/OpenSans-Regular.ttf',    family: 'AppFont', weight: 'normal' },
+  { path: '/usr/share/fonts/truetype/open-sans/OpenSans-Bold.ttf',       family: 'AppFont', weight: 'bold' },
+  // DejaVu fallback (installed via apt fonts-dejavu-core)
+  { path: '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',             family: 'AppFont', weight: 'normal' },
+  { path: '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',        family: 'AppFont', weight: 'bold' },
+];
+
+let fontFamily = 'sans-serif';
+
+for (const f of FONT_CANDIDATES) {
+  if (fs.existsSync(f.path)) {
+    GlobalFonts.registerFromPath(f.path, f.family);
+    fontFamily = f.family;
+    console.log('=== CANVAS registered font:', f.path);
+  }
+}
+
+console.log('=== CANVAS using font family:', fontFamily);
 
 const W = 1080;
 const H = 1080;
@@ -96,14 +119,14 @@ export async function convertHTMLToPNG(data: CreativeData): Promise<Buffer> {
   ctx.fillRect(0, H - BAR_H, W, BAR_H);
 
   // Business name
-  ctx.font = 'bold 32px sans-serif';
+  ctx.font = `bold 32px ${fontFamily}`;
   ctx.fillStyle = colors.primary;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillText((data.businessName ?? '').toUpperCase(), cx, 120);
 
   // Headline
-  ctx.font = 'bold 80px sans-serif';
+  ctx.font = `bold 80px ${fontFamily}`;
   ctx.fillStyle = colors.textPrimary;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
@@ -112,7 +135,7 @@ export async function convertHTMLToPNG(data: CreativeData): Promise<Buffer> {
   // Subheadline
   let subBottom = headlineBottom + 20;
   if (data.subheadline) {
-    ctx.font = '40px sans-serif';
+    ctx.font = `40px ${fontFamily}`;
     ctx.fillStyle = colors.textSecondary;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -125,7 +148,7 @@ export async function convertHTMLToPNG(data: CreativeData): Promise<Buffer> {
   ctx.fillRect(cx - 300, sepY, 600, 3);
 
   // Primary text
-  ctx.font = '34px sans-serif';
+  ctx.font = `34px ${fontFamily}`;
   ctx.fillStyle = colors.textSecondary;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
@@ -141,7 +164,7 @@ export async function convertHTMLToPNG(data: CreativeData): Promise<Buffer> {
   ctx.fillStyle = colors.primary;
   ctx.fill();
 
-  ctx.font = 'bold 36px sans-serif';
+  ctx.font = `bold 36px ${fontFamily}`;
   ctx.fillStyle = '#FFFFFF';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

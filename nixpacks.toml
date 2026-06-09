@@ -1,0 +1,2 @@
+[phases.setup]
+aptPkgs = ["fonts-open-sans", "fonts-dejavu-core", "fontconfig"]
