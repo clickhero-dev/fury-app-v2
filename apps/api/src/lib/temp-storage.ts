@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
-import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
+import { mkdir, writeFile } from 'fs/promises';
 
-export const studioAssetsDir = join(process.cwd(), 'tmp', 'studio-assets');
+export const studioAssetsDir = process.env.STUDIO_ASSETS_DIR ?? '/tmp/studio-assets';
 
 export async function ensureStudioAssetsDir(): Promise<void> {
   await mkdir(studioAssetsDir, { recursive: true });
