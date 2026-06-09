@@ -188,33 +188,36 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
             {!showRegenerateForm && (
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => setShowRegenerateForm(true)}
                 disabled={regenerateMutation.isPending}
-                className="w-full justify-center"
+                className="w-full flex items-center justify-center gap-2"
               >
-                <RefreshCw className="mr-2 h-4 w-4" />
+                <RefreshCw className="h-4 w-4 shrink-0" />
                 Regenerar com ajuste
               </Button>
             )}
 
             <Button
               variant="outline"
+              size="sm"
               onClick={handleSaveToLibrary}
-              className="w-full justify-center"
+              className="w-full flex items-center justify-center gap-2"
             >
-              <BookmarkCheck className="mr-2 h-4 w-4" />
+              <BookmarkCheck className="h-4 w-4 shrink-0" />
               Salvar na Biblioteca
             </Button>
 
             <Button
+              size="sm"
               onClick={() => publishMutation.mutate(currentResult.assetId)}
               disabled={publishMutation.isPending || !!publishFeedback}
-              className="w-full justify-center bg-[#E8631A] hover:bg-[#D45714]"
+              className="w-full flex items-center justify-center gap-2 bg-[#E8631A] hover:bg-[#D45714] text-white"
             >
               {publishMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
               ) : (
-                <Upload className="mr-2 h-4 w-4" />
+                <Upload className="h-4 w-4 shrink-0" />
               )}
               Publicar no Meta
             </Button>
