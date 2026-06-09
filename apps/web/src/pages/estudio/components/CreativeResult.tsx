@@ -16,22 +16,45 @@ const CTA_OPTIONS = [
   'Baixe Grátis',
 ];
 
+interface EditedTexts {
+  headline: string;
+  subheadline: string;
+  primary_text: string;
+}
+
 interface Props {
   result: GenerateCreativeResponse;
+  hasProductImage?: boolean;
   onBack: () => void;
   onNewCreative: () => void;
 }
 
-export function CreativeResult({ result, onBack, onNewCreative }: Props) {
+export function CreativeResult({ result, hasProductImage = false, onBack, onNewCreative }: Props) {
   const queryClient = useQueryClient();
-  const [headline, setHeadline] = useState(result.creativeData.headline ?? '');
-  const [primaryText, setPrimaryText] = useState(result.creativeData.primary_text ?? '');
+  const [currentResult, setCurrentResult] = useState(result);
+  const [editedTexts, setEditedTexts] = useState<EditedTexts>({
+    headline: result.creativeData.headline ?? '',
+    subheadline: result.creativeData.subheadline ?? '',
+    primary_text: result.creativeData.primary_text ?? '',
+  });
   const [cta, setCta] = useState(result.creativeData.cta ?? CTA_OPTIONS[0]);
-  const [subheadline, setSubheadline] = useState(result.creativeData.subheadline ?? '');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editError, setEditError] = useState(false);
   const [showRegenerateForm, setShowRegenerateForm] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [publishFeedback, setPublishFeedback] = useState<StudioPublishResponse | null>(null);
-  const [currentResult, setCurrentResult] = useState(result);
+
+  const syncResult = (data: GenerateCreativeResponse) => {
+    setCurrentResult(data);
+    setEditedTexts({
+      headline: data.creativeData.headline ?? '',
+      subheadline: data.creativeData.subheadline ?? '',
+      primary_text: data.creativeData.primary_text ?? '',
+    });
+    setCta(data.creativeData.cta ?? CTA_OPTIONS[0]);
+    setPublishFeedback(null);
+    void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+  };
 
   const regenerateMutation = useMutation({
     mutationFn: async ({ assetId, feedbackText }: { assetId: string; feedbackText: string }) => {
@@ -42,15 +65,28 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
       return res.data;
     },
     onSuccess: (data) => {
-      setCurrentResult(data);
-      setHeadline(data.creativeData.headline ?? '');
-      setPrimaryText(data.creativeData.primary_text ?? '');
-      setCta(data.creativeData.cta ?? CTA_OPTIONS[0]);
-      setSubheadline(data.creativeData.subheadline ?? '');
+      syncResult(data);
       setShowRegenerateForm(false);
       setFeedback('');
-      setPublishFeedback(null);
-      void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+    },
+  });
+
+  const editConfirmMutation = useMutation({
+    mutationFn: async (assetId: string) => {
+      const feedbackText = `Mantenha o estilo visual e as cores, mas use EXATAMENTE estes textos sem modificar as palavras: Headline: "${editedTexts.headline}". Subheadline: "${editedTexts.subheadline}". Texto principal: "${editedTexts.primary_text}".`;
+      const res = await api.post<GenerateCreativeResponse>('/studio/creative/regenerate', {
+        assetId,
+        feedback: feedbackText,
+      });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      syncResult(data);
+      setIsEditing(false);
+      setEditError(false);
+    },
+    onError: () => {
+      setEditError(true);
     },
   });
 
@@ -69,22 +105,163 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
     onBack();
   };
 
+  const handleConfirmEdit = () => {
+    setEditError(false);
+    editConfirmMutation.mutate(currentResult.assetId);
+  };
+
+  const headlineTop = hasProductImage ? '54%' : '22%';
+  const subheadlineTop = hasProductImage ? '71%' : '42%';
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
-        {/* Image preview */}
-        <div className="overflow-hidden rounded-2xl border border-[#E6E8EC] bg-gray-100">
-          <div className="relative aspect-square">
+
+        {/* Image with edit overlay */}
+        <div className="overflow-hidden rounded-2xl border border-[#E6E8EC]">
+          <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1' }}>
             <img
               src={currentResult.imageUrl}
               alt="Criativo gerado"
-              className="h-full w-full object-cover"
+              style={{
+                width: '100%', height: '100%', objectFit: 'cover',
+                display: 'block', borderRadius: '8px',
+                opacity: editConfirmMutation.isPending ? 0.5 : 1,
+                transition: 'opacity 0.2s',
+              }}
               onError={(e) => {
                 console.error('=== Image failed to load:', currentResult.imageUrl);
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
               onLoad={() => console.log('=== Rendering image:', currentResult.imageUrl)}
             />
+
+            {/* Loading overlay while confirming edit */}
+            {editConfirmMutation.isPending && (
+              <div style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: '8px',
+              }}>
+                <div style={{
+                  background: 'rgba(0,0,0,0.6)', borderRadius: '12px',
+                  padding: '16px 24px', display: 'flex', alignItems: 'center', gap: '10px',
+                  color: 'white', fontSize: '14px',
+                }}>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Aplicando edições...
+                </div>
+              </div>
+            )}
+
+            {/* Edit button — visible when not editing */}
+            {!isEditing && !editConfirmMutation.isPending && (
+              <button
+                onClick={() => setIsEditing(true)}
+                style={{
+                  position: 'absolute', bottom: '12px', right: '12px',
+                  background: 'rgba(0,0,0,0.65)', color: 'white',
+                  border: 'none', borderRadius: '6px',
+                  padding: '6px 14px', fontSize: '13px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                }}
+              >
+                ✏️ Editar textos
+              </button>
+            )}
+
+            {/* Edit overlay */}
+            {isEditing && (
+              <div style={{
+                position: 'absolute', inset: 0, borderRadius: '8px',
+                background: 'rgba(0,0,0,0.35)',
+              }}>
+                {/* Headline textarea */}
+                <textarea
+                  value={editedTexts.headline}
+                  onChange={(e) => setEditedTexts(prev => ({ ...prev, headline: e.target.value }))}
+                  rows={2}
+                  style={{
+                    position: 'absolute',
+                    top: headlineTop,
+                    left: '50%', transform: 'translateX(-50%)',
+                    width: '80%', textAlign: 'center',
+                    fontSize: 'clamp(16px, 3.5vw, 28px)', fontWeight: 'bold',
+                    color: 'white', cursor: 'text',
+                    outline: 'none', resize: 'none',
+                    border: '2px dashed rgba(255,255,255,0.7)',
+                    padding: '4px 8px', borderRadius: '4px',
+                    background: 'rgba(0,0,0,0.2)',
+                    lineHeight: '1.3',
+                    fontFamily: 'inherit',
+                  }}
+                />
+
+                {/* Subheadline textarea */}
+                <textarea
+                  value={editedTexts.subheadline}
+                  onChange={(e) => setEditedTexts(prev => ({ ...prev, subheadline: e.target.value }))}
+                  rows={1}
+                  style={{
+                    position: 'absolute',
+                    top: subheadlineTop,
+                    left: '50%', transform: 'translateX(-50%)',
+                    width: '80%', textAlign: 'center',
+                    fontSize: 'clamp(12px, 2.2vw, 18px)', fontWeight: 'normal',
+                    color: 'rgba(255,255,255,0.9)', cursor: 'text',
+                    outline: 'none', resize: 'none',
+                    border: '2px dashed rgba(255,255,255,0.5)',
+                    padding: '4px 8px', borderRadius: '4px',
+                    background: 'rgba(0,0,0,0.2)',
+                    lineHeight: '1.3',
+                    fontFamily: 'inherit',
+                  }}
+                />
+
+                {/* Edit error */}
+                {editError && (
+                  <div style={{
+                    position: 'absolute', bottom: '56px',
+                    left: '50%', transform: 'translateX(-50%)',
+                    background: 'rgba(220,38,38,0.85)', color: 'white',
+                    borderRadius: '6px', padding: '4px 12px', fontSize: '12px',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    Erro ao aplicar edição. Tente novamente.
+                  </div>
+                )}
+
+                {/* Edit action buttons */}
+                <div style={{
+                  position: 'absolute', bottom: '12px',
+                  left: '50%', transform: 'translateX(-50%)',
+                  display: 'flex', gap: '8px',
+                }}>
+                  <button
+                    onClick={() => { setIsEditing(false); setEditError(false); }}
+                    style={{
+                      background: 'rgba(0,0,0,0.65)', color: 'white',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '6px', padding: '6px 14px',
+                      fontSize: '13px', cursor: 'pointer',
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleConfirmEdit}
+                    style={{
+                      background: '#EA580C', color: 'white',
+                      border: 'none', borderRadius: '6px',
+                      padding: '6px 14px', fontSize: '13px',
+                      cursor: 'pointer', fontWeight: '500',
+                    }}
+                  >
+                    ✓ Confirmar edição
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -98,24 +275,24 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
           <div className="space-y-3">
             <Field label="Headline">
               <input
-                value={headline}
-                onChange={(e) => setHeadline(e.target.value)}
+                value={editedTexts.headline}
+                onChange={(e) => setEditedTexts(prev => ({ ...prev, headline: e.target.value }))}
                 className="w-full rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] px-3 py-2.5 text-sm text-[#101828] outline-none transition focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/10"
               />
             </Field>
 
             <Field label="Subheadline">
               <input
-                value={subheadline}
-                onChange={(e) => setSubheadline(e.target.value)}
+                value={editedTexts.subheadline}
+                onChange={(e) => setEditedTexts(prev => ({ ...prev, subheadline: e.target.value }))}
                 className="w-full rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] px-3 py-2.5 text-sm text-[#101828] outline-none transition focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/10"
               />
             </Field>
 
             <Field label="Texto Primário">
               <textarea
-                value={primaryText}
-                onChange={(e) => setPrimaryText(e.target.value)}
+                value={editedTexts.primary_text}
+                onChange={(e) => setEditedTexts(prev => ({ ...prev, primary_text: e.target.value }))}
                 rows={4}
                 className="w-full rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] px-3 py-2.5 text-sm text-[#101828] outline-none transition focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/10 resize-none"
               />

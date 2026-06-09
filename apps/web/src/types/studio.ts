@@ -105,6 +105,7 @@ export interface GenerateCreativePayload {
   hasProductImage: boolean;
   productImageUrl?: string;
   adaptiveAnswers?: Record<string, string>;
+  templateStyle?: string;
 }
 
 export interface AdaptiveQuestion {

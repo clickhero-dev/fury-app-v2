@@ -228,6 +228,7 @@ const generateCreativeSchema = z.object({
   hasProductImage: z.boolean().default(false),
   productImageUrl: z.string().optional(), // accepts data URLs and regular URLs
   adaptiveAnswers: z.record(z.string()).optional(),
+  templateStyle: z.string().optional(),
 });
 
 async function savePNG(buffer: Buffer): Promise<{ fileName: string; filePath: string }> {
@@ -267,10 +268,28 @@ function parseCreativeJSON(raw: string) {
   return JSON.parse(match ? match[0] : cleaned);
 }
 
+const TEMPLATE_LAYOUT_MAP: Record<string, { layout: string; color_scheme: string }> = {
+  'product-focus':      { layout: 'product_hero',       color_scheme: 'brand_orange' },
+  'irresistible-offer': { layout: 'offer_highlight',    color_scheme: 'bold_contrast' },
+  'transformation':     { layout: 'text_focus',         color_scheme: 'clean_white' },
+  'social-proof':       { layout: 'testimonial_style',  color_scheme: 'clean_white' },
+  'minimal-premium':    { layout: 'text_focus',         color_scheme: 'dark_premium' },
+  'bold-direct':        { layout: 'text_focus',         color_scheme: 'bold_contrast' },
+  'educational':        { layout: 'text_focus',         color_scheme: 'clean_white' },
+  'institutional':      { layout: 'product_hero',       color_scheme: 'clean_white' },
+};
+
 async function runGenerate(context: CreativeContext, productImageUrl: string | undefined, tenantId: string, publicBaseUrl: string) {
   const prompt = buildCreativePrompt(context);
   const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.8 });
   const creativeData = parseCreativeJSON(raw);
+
+  // Force layout/color_scheme from template — never trust the LLM when template is selected
+  if (context.templateStyle && TEMPLATE_LAYOUT_MAP[context.templateStyle]) {
+    const forced = TEMPLATE_LAYOUT_MAP[context.templateStyle];
+    creativeData.layout = forced.layout;
+    creativeData.color_scheme = forced.color_scheme;
+  }
 
   const pngBuffer = await convertHTMLToPNG({
     headline: creativeData.headline,
@@ -335,6 +354,7 @@ router.post('/creative/generate', authMiddleware, tenantMiddleware, async (req: 
       productImageUrl: body.productImageUrl,
       businessName,
       objective,
+      templateStyle: body.templateStyle,
     };
 
     const result = await runGenerate(context, body.productImageUrl, tenantId, publicBaseUrl);

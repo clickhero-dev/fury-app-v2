@@ -121,6 +121,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
     audience: data.audience.trim(),
     hasProductImage: !!data.imageBase64,
     productImageUrl: data.imageBase64 ?? undefined,
+    templateStyle: selectedTemplate?.id,
   });
 
   const handleSubmit = async () => {

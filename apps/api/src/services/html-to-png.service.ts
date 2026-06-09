@@ -1,4 +1,4 @@
-import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
+import { createCanvas, GlobalFonts, loadImage } from '@napi-rs/canvas';
 import fs from 'fs';
 import type { CreativeData } from './creative-generator.service.js';
 
@@ -106,69 +106,146 @@ export async function convertHTMLToPNG(data: CreativeData): Promise<Buffer> {
   const PAD_X = 80;
   const CONTENT_W = W - PAD_X * 2;
 
-  // Background
-  ctx.fillStyle = colors.bg;
-  ctx.fillRect(0, 0, W, H);
+  if (data.productImageUrl) {
+    // ── Layout COM imagem ─────────────────────────────────────────────────
+    // Top half: product image with cover crop
+    const img = await loadImage(data.productImageUrl);
+    const IMG_H = 540;
 
-  // Top bar
-  ctx.fillStyle = colors.primary;
-  ctx.fillRect(0, 0, W, BAR_H);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, W, IMG_H);
+    ctx.clip();
+    const scale = Math.max(W / img.width, IMG_H / img.height);
+    const sw = img.width * scale;
+    const sh = img.height * scale;
+    ctx.drawImage(img, (W - sw) / 2, (IMG_H - sh) / 2, sw, sh);
+    ctx.restore();
 
-  // Bottom bar
-  ctx.fillStyle = colors.primary;
-  ctx.fillRect(0, H - BAR_H, W, BAR_H);
+    // Dark overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(0, 0, W, IMG_H);
 
-  // Business name
-  ctx.font = `bold 32px ${fontFamily}`;
-  ctx.fillStyle = colors.primary;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  ctx.fillText((data.businessName ?? '').toUpperCase(), cx, 120);
+    // Bottom half background
+    ctx.fillStyle = colors.bg;
+    ctx.fillRect(0, IMG_H, W, H - IMG_H);
 
-  // Headline
-  ctx.font = `bold 80px ${fontFamily}`;
-  ctx.fillStyle = colors.textPrimary;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  const headlineBottom = wrapText(ctx, data.headline ?? '', cx, 260, CONTENT_W, 92, 2);
+    // Gradient fade between image and background
+    const grad = ctx.createLinearGradient(0, IMG_H - 40, 0, IMG_H + 40);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, colors.bg);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, IMG_H - 40, W, 80);
 
-  // Subheadline
-  let subBottom = headlineBottom + 20;
-  if (data.subheadline) {
-    ctx.font = `40px ${fontFamily}`;
+    // Bottom bar
+    ctx.fillStyle = colors.primary;
+    ctx.fillRect(0, H - BAR_H, W, BAR_H);
+
+    // Business name                                        y=558
+    ctx.font = `bold 28px ${fontFamily}`;
+    ctx.fillStyle = colors.primary;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText((data.businessName ?? '').toUpperCase(), cx, 558);
+
+    // Headline                                             y=608
+    ctx.font = `bold 68px ${fontFamily}`;
+    ctx.fillStyle = colors.textPrimary;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const headlineBottom = wrapText(ctx, data.headline ?? '', cx, 608, CONTENT_W, 80, 2);
+
+    // Subheadline                                          y=max(headlineBottom+16, 790)
+    const subY = Math.max(headlineBottom + 16, 790);
+    if (data.subheadline) {
+      ctx.font = `34px ${fontFamily}`;
+      ctx.fillStyle = colors.textSecondary;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      wrapText(ctx, data.subheadline, cx, subY, CONTENT_W, 44, 1);
+    }
+
+    // CTA button                                          y=960
+    const BTN_W = 480;
+    const BTN_H = 80;
+    const BTN_X = cx - BTN_W / 2;
+    const BTN_Y = 960;
+
+    drawRoundRect(ctx, BTN_X, BTN_Y, BTN_W, BTN_H, 14);
+    ctx.fillStyle = colors.primary;
+    ctx.fill();
+
+    ctx.font = `bold 34px ${fontFamily}`;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText((data.cta ?? 'Saiba Mais').toUpperCase(), cx, BTN_Y + BTN_H / 2);
+
+  } else {
+    // ── Layout SEM imagem (original) ─────────────────────────────────────
+    ctx.fillStyle = colors.bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Top bar
+    ctx.fillStyle = colors.primary;
+    ctx.fillRect(0, 0, W, BAR_H);
+
+    // Bottom bar
+    ctx.fillStyle = colors.primary;
+    ctx.fillRect(0, H - BAR_H, W, BAR_H);
+
+    // Business name                                        y=120
+    ctx.font = `bold 32px ${fontFamily}`;
+    ctx.fillStyle = colors.primary;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText((data.businessName ?? '').toUpperCase(), cx, 120);
+
+    // Headline                                             y=260
+    ctx.font = `bold 80px ${fontFamily}`;
+    ctx.fillStyle = colors.textPrimary;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const headlineBottom = wrapText(ctx, data.headline ?? '', cx, 260, CONTENT_W, 92, 2);
+
+    // Subheadline
+    let subBottom = headlineBottom + 20;
+    if (data.subheadline) {
+      ctx.font = `40px ${fontFamily}`;
+      ctx.fillStyle = colors.textSecondary;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      subBottom = wrapText(ctx, data.subheadline, cx, headlineBottom + 20, CONTENT_W, 52, 2);
+    }
+
+    // Separator line                                       y=max(subBottom+20, 680)
+    const sepY = Math.max(subBottom + 20, 680);
+    ctx.fillStyle = colors.primary;
+    ctx.fillRect(cx - 300, sepY, 600, 3);
+
+    // Primary text                                         y=sepY+40
+    ctx.font = `34px ${fontFamily}`;
     ctx.fillStyle = colors.textSecondary;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    subBottom = wrapText(ctx, data.subheadline, cx, headlineBottom + 20, CONTENT_W, 52, 2);
+    wrapText(ctx, data.primary_text ?? '', cx, sepY + 40, CONTENT_W, 46, 2);
+
+    // CTA button                                           y=860
+    const BTN_W = 480;
+    const BTN_H = 88;
+    const BTN_X = cx - BTN_W / 2;
+    const BTN_Y = 860;
+
+    drawRoundRect(ctx, BTN_X, BTN_Y, BTN_W, BTN_H, 14);
+    ctx.fillStyle = colors.primary;
+    ctx.fill();
+
+    ctx.font = `bold 36px ${fontFamily}`;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText((data.cta ?? 'Saiba Mais').toUpperCase(), cx, BTN_Y + BTN_H / 2);
   }
-
-  // Separator line
-  const sepY = Math.max(subBottom + 20, 680);
-  ctx.fillStyle = colors.primary;
-  ctx.fillRect(cx - 300, sepY, 600, 3);
-
-  // Primary text
-  ctx.font = `34px ${fontFamily}`;
-  ctx.fillStyle = colors.textSecondary;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  wrapText(ctx, data.primary_text ?? '', cx, sepY + 40, CONTENT_W, 46, 2);
-
-  // CTA button
-  const BTN_W = 480;
-  const BTN_H = 88;
-  const BTN_X = cx - BTN_W / 2;
-  const BTN_Y = 860;
-
-  drawRoundRect(ctx, BTN_X, BTN_Y, BTN_W, BTN_H, 14);
-  ctx.fillStyle = colors.primary;
-  ctx.fill();
-
-  ctx.font = `bold 36px ${fontFamily}`;
-  ctx.fillStyle = '#FFFFFF';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText((data.cta ?? 'Saiba Mais').toUpperCase(), cx, BTN_Y + BTN_H / 2);
 
   const buffer = canvas.toBuffer('image/png');
   console.log('=== CANVAS generated buffer size:', buffer.length);

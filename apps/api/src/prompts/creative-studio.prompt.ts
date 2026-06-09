@@ -8,9 +8,26 @@ export interface CreativeContext {
   businessName: string;
   objective: string;
   tone?: string;
+  templateStyle?: string;
 }
 
+const TEMPLATE_MAP: Record<string, { layout: string; color_scheme: string }> = {
+  'product-focus':      { layout: 'product_hero',       color_scheme: 'brand_orange' },
+  'irresistible-offer': { layout: 'offer_highlight',    color_scheme: 'bold_contrast' },
+  'transformation':     { layout: 'text_focus',         color_scheme: 'clean_white' },
+  'social-proof':       { layout: 'testimonial_style',  color_scheme: 'clean_white' },
+  'minimal-premium':    { layout: 'text_focus',         color_scheme: 'dark_premium' },
+  'bold-direct':        { layout: 'text_focus',         color_scheme: 'bold_contrast' },
+  'educational':        { layout: 'text_focus',         color_scheme: 'clean_white' },
+  'institutional':      { layout: 'product_hero',       color_scheme: 'clean_white' },
+};
+
 export function buildCreativePrompt(context: CreativeContext): string {
+  const forced = context.templateStyle ? TEMPLATE_MAP[context.templateStyle] : null;
+  const layoutInstruction = forced
+    ? `Use EXATAMENTE: "layout": "${forced.layout}", "color_scheme": "${forced.color_scheme}"`
+    : `"layout": "um de: product_hero | text_focus | offer_highlight | testimonial_style",\n  "color_scheme": "um de: brand_orange | dark_premium | clean_white | bold_contrast"`;
+
   return `Você é um especialista em criativos de alta performance para Meta Ads no mercado brasileiro.
 
 Com base no contexto abaixo, gere um criativo de anúncio completo.
@@ -23,6 +40,7 @@ ${context.offer ? `OFERTA: ${context.offer}` : ''}
 PÚBLICO: ${context.audience}
 TOM DE VOZ: ${context.tone || 'profissional e direto'}
 ${context.hasProductImage ? 'O usuário forneceu imagem do produto — posicione-a como elemento principal.' : ''}
+${forced ? `ESTILO VISUAL OBRIGATÓRIO: layout="${forced.layout}", color_scheme="${forced.color_scheme}" — não altere esses valores.` : ''}
 
 Responda SOMENTE em JSON válido com esta estrutura exata:
 {
@@ -30,8 +48,7 @@ Responda SOMENTE em JSON válido com esta estrutura exata:
   "primary_text": "texto principal do anúncio com máximo 125 caracteres, focado na promessa",
   "cta": "um de: Saiba Mais | Comprar Agora | Cadastre-se | Falar com Especialista | Ver Oferta",
   "subheadline": "frase de apoio com máximo 60 caracteres",
-  "layout": "um de: product_hero | text_focus | offer_highlight | testimonial_style",
-  "color_scheme": "um de: brand_orange | dark_premium | clean_white | bold_contrast",
+  ${layoutInstruction},
   "visual_elements": ["lista de elementos visuais sugeridos como strings"],
   "compliance_notes": "observações sobre compliance Meta se houver"
 }

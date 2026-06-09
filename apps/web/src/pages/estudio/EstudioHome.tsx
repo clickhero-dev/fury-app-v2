@@ -20,6 +20,7 @@ export function EstudioHome() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<ViewState>('library');
   const [generationResult, setGenerationResult] = useState<GenerateCreativeResponse | null>(null);
+  const [lastHasProductImage, setLastHasProductImage] = useState(false);
   const [filterType, setFilterType] = useState<AssetType>('all');
   const [filterStatus, setFilterStatus] = useState<ComplianceStatus>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -29,8 +30,9 @@ export function EstudioHome() {
       const res = await api.post<GenerateCreativeResponse>('/studio/creative/generate', payload);
       return res.data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, payload) => {
       setGenerationResult(data);
+      setLastHasProductImage(payload.hasProductImage);
       setView('result');
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
@@ -93,6 +95,7 @@ export function EstudioHome() {
       if (meta.headline) creativeData = { headline: meta.headline, primary_text: meta.primary_text ?? '', cta: meta.cta ?? '', subheadline: meta.subheadline ?? '', layout: meta.layout ?? '', color_scheme: meta.color_scheme ?? '' };
     } catch { /* use empty fallback */ }
     setGenerationResult({ assetId: asset.id, imageUrl: asset.url ?? '', creativeData });
+    setLastHasProductImage(false);
     setView('result');
   };
 
@@ -291,6 +294,7 @@ export function EstudioHome() {
             </div>
             <CreativeResult
               result={generationResult}
+              hasProductImage={lastHasProductImage}
               onBack={handleBackToLibrary}
               onNewCreative={handleNewCreative}
             />
