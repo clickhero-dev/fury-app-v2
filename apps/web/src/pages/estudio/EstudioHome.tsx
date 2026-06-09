@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, Loader2, Sparkles, Trash2 } from 'lucide-react';
-import { AppLayout, Button, Card, EmptyState, LoadingSpinner } from '@/components';
+import { AppLayout, Button, EmptyState, LoadingSpinner } from '@/components';
 import api from '@/lib/api';
 import { MOCK_ASSETS } from '@/lib/studio-mock';
 import type { StudioAsset, GenerateCreativePayload, GenerateCreativeResponse } from '@/types/studio';
@@ -135,12 +135,7 @@ export function EstudioHome() {
         {view === 'library' && (
           <>
             {/* Hero */}
-            <div className="flex flex-col items-center text-center pt-8 pb-4 space-y-6">
-              <div className="space-y-2">
-                <h1 className="text-3xl font-bold text-[#101828]">Estúdio Criativo</h1>
-                <p className="text-base text-[#667085]">Crie anúncios de alta performance em minutos com IA</p>
-              </div>
-
+            <div className="flex flex-col items-center text-center pt-4 pb-2 space-y-4">
               <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-sm text-[#667085]">
                 <span className="flex items-center gap-2">
                   <span className="text-base">🎯</span>
@@ -176,53 +171,45 @@ export function EstudioHome() {
                 </span>
               </div>
 
-              <Card>
-                <div className="p-6 space-y-4">
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-semibold text-text-primary">Tipo</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {typeOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => setFilterType(option.value)}
-                          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-                            filterType === option.value
-                              ? 'bg-[#EA580C] text-white'
-                              : 'bg-surface-secondary text-text-secondary hover:bg-border'
-                          }`}
-                        >
-                          {option.label}
-                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 text-xs font-bold">
-                            {getTypeCount(option.value)}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+              <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-white border border-[#E6E8EC] rounded-xl">
+                <span className="text-xs font-semibold text-[#667085] shrink-0">Tipo:</span>
+                {typeOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setFilterType(option.value)}
+                    className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md font-semibold text-xs transition-all ${
+                      filterType === option.value
+                        ? 'bg-[#EA580C] text-white'
+                        : 'bg-[#F2F4F7] text-[#667085] hover:bg-[#E6E8EC]'
+                    }`}
+                  >
+                    {option.label}
+                    <span className={`text-[10px] font-bold ${filterType === option.value ? 'opacity-80' : 'opacity-60'}`}>
+                      {getTypeCount(option.value)}
+                    </span>
+                  </button>
+                ))}
 
-                  <div className="space-y-3 border-t border-border pt-4">
-                    <h4 className="text-sm font-semibold text-text-primary">Status</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {statusOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => setFilterStatus(option.value)}
-                          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-                            filterStatus === option.value
-                              ? 'bg-[#EA580C] text-white'
-                              : 'bg-surface-secondary text-text-secondary hover:bg-border'
-                          }`}
-                        >
-                          {option.label}
-                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 text-xs font-bold">
-                            {getStatusCount(option.value)}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </Card>
+                <span className="border-l border-[#E6E8EC] self-stretch mx-1" />
+
+                <span className="text-xs font-semibold text-[#667085] shrink-0">Status:</span>
+                {statusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setFilterStatus(option.value)}
+                    className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md font-semibold text-xs transition-all ${
+                      filterStatus === option.value
+                        ? 'bg-[#EA580C] text-white'
+                        : 'bg-[#F2F4F7] text-[#667085] hover:bg-[#E6E8EC]'
+                    }`}
+                  >
+                    {option.label}
+                    <span className={`text-[10px] font-bold ${filterStatus === option.value ? 'opacity-80' : 'opacity-60'}`}>
+                      {getStatusCount(option.value)}
+                    </span>
+                  </button>
+                ))}
+              </div>
 
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
