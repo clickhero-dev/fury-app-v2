@@ -86,6 +86,16 @@ export function EstudioHome() {
     setView('wizard');
   };
 
+  const handleViewDetails = (asset: StudioAsset) => {
+    let creativeData = { headline: '', primary_text: '', cta: '', subheadline: '', layout: '', color_scheme: '' };
+    try {
+      const meta = JSON.parse(asset.complianceNotes ?? '{}');
+      if (meta.headline) creativeData = { headline: meta.headline, primary_text: meta.primary_text ?? '', cta: meta.cta ?? '', subheadline: meta.subheadline ?? '', layout: meta.layout ?? '', color_scheme: meta.color_scheme ?? '' };
+    } catch { /* use empty fallback */ }
+    setGenerationResult({ assetId: asset.id, imageUrl: asset.url ?? '', creativeData });
+    setView('result');
+  };
+
   const typeOptions: Array<{ value: AssetType; label: string }> = [
     { value: 'all', label: 'Todos' },
     { value: 'image', label: 'Imagens' },
@@ -236,6 +246,7 @@ export function EstudioHome() {
                       onDeleteRequest={() => setDeletingId(asset.id)}
                       onDeleteConfirm={() => deleteMutation.mutate(asset.id)}
                       onDeleteCancel={() => setDeletingId(null)}
+                      onViewDetails={() => handleViewDetails(asset)}
                     />
                   ))}
                 </div>
@@ -318,6 +329,7 @@ interface AssetCardProps {
   onDeleteRequest: () => void;
   onDeleteConfirm: () => void;
   onDeleteCancel: () => void;
+  onViewDetails: () => void;
 }
 
 const BACKEND_URL = 'https://fury-app-v2-production.up.railway.app';
@@ -327,7 +339,7 @@ function resolveAssetUrl(url: string | null | undefined): string | null {
   return url.startsWith('http') ? url : `${BACKEND_URL}${url}`;
 }
 
-function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDeleteConfirm, onDeleteCancel }: AssetCardProps) {
+function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDeleteConfirm, onDeleteCancel, onViewDetails }: AssetCardProps) {
   const imageUrl = resolveAssetUrl(asset.url);
   return (
     <div className="bg-white rounded-lg border border-border overflow-hidden hover:shadow-lg transition-shadow">
@@ -390,7 +402,10 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
             <button className="flex-1 px-3 py-2 border border-[#EA580C] text-[#EA580C] rounded-lg text-xs font-semibold hover:bg-[#FEF0E7] transition-colors">
               Usar em campanha
             </button>
-            <button className="flex-1 px-3 py-2 bg-[#EA580C] text-white rounded-lg text-xs font-semibold hover:bg-[#C2410C] transition-colors">
+            <button
+              onClick={onViewDetails}
+              className="flex-1 px-3 py-2 bg-[#EA580C] text-white rounded-lg text-xs font-semibold hover:bg-[#C2410C] transition-colors"
+            >
               Ver detalhes
             </button>
           </div>
