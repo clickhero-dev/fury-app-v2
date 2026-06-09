@@ -209,7 +209,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
           <div className="space-y-4">
             <div>
               <h2 className="text-xl font-bold text-[#101828]">Escolha o estilo do seu anúncio</h2>
-              <p className="text-sm text-[#667085] mt-1">Selecione o visual que melhor representa sua marca</p>
+              <p className="text-sm text-[#667085] mt-1">Selecione o visual do anúncio que você quer que o FURY crie pra você</p>
             </div>
             <TemplateGallery selectedTemplate={selectedTemplate} onSelect={setSelectedTemplate} />
           </div>
