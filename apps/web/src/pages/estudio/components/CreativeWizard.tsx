@@ -20,6 +20,7 @@ interface WizardData {
   imageChoice: 'none' | 'upload';
   imageFile: File | null;
   imagePreviewUrl: string | null;
+  imageBase64: string | null;
 }
 
 const INITIAL_DATA: WizardData = {
@@ -31,6 +32,7 @@ const INITIAL_DATA: WizardData = {
   imageChoice: 'none',
   imageFile: null,
   imagePreviewUrl: null,
+  imageBase64: null,
 };
 
 // Step 0 = template gallery; steps 1-5 = briefing questions
@@ -90,8 +92,18 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
 
   const handleFileChange = (file: File | null) => {
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setData((d) => ({ ...d, imageFile: file, imagePreviewUrl: url, imageChoice: 'upload' }));
+    const previewUrl = URL.createObjectURL(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setData((d) => ({
+        ...d,
+        imageFile: file,
+        imagePreviewUrl: previewUrl,
+        imageBase64: e.target?.result as string,
+        imageChoice: 'upload',
+      }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -107,7 +119,8 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
     promise: data.promise.trim(),
     offer: data.hasOffer ? data.offer.trim() : undefined,
     audience: data.audience.trim(),
-    hasProductImage: false,
+    hasProductImage: !!data.imageBase64,
+    productImageUrl: data.imageBase64 ?? undefined,
   });
 
   const handleSubmit = async () => {
@@ -305,7 +318,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
                   <p className="text-sm font-semibold text-[#101828]">Usar minha imagem</p>
                 </button>
                 <button
-                  onClick={() => setData((d) => ({ ...d, imageChoice: 'none', imageFile: null, imagePreviewUrl: null }))}
+                  onClick={() => setData((d) => ({ ...d, imageChoice: 'none', imageFile: null, imagePreviewUrl: null, imageBase64: null }))}
                   className={`rounded-xl border-2 p-4 text-center transition-all ${
                     data.imageChoice === 'none'
                       ? 'border-[#EA580C] bg-[#FFF4ED]'
@@ -327,7 +340,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
                         className="w-full max-h-48 object-contain rounded-xl border border-[#E6E8EC]"
                       />
                       <button
-                        onClick={() => setData((d) => ({ ...d, imageFile: null, imagePreviewUrl: null }))}
+                        onClick={() => setData((d) => ({ ...d, imageFile: null, imagePreviewUrl: null, imageBase64: null }))}
                         className="absolute top-2 right-2 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
                       >
                         <X className="h-3.5 w-3.5" />

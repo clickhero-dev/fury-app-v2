@@ -225,7 +225,7 @@ const generateCreativeSchema = z.object({
   offer: z.string().optional(),
   audience: z.string().min(2),
   hasProductImage: z.boolean().default(false),
-  productImageUrl: z.string().url().optional(),
+  productImageUrl: z.string().optional(), // accepts data URLs and regular URLs
   adaptiveAnswers: z.record(z.string()).optional(),
 });
 
