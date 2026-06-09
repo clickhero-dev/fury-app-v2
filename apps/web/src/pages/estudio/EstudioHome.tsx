@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, Loader2, Sparkles, Trash2 } from 'lucide-react';
-import { AppLayout, Button, Card, StatusBadge, EmptyState, LoadingSpinner } from '@/components';
+import { AppLayout, Button, Card, EmptyState, LoadingSpinner } from '@/components';
 import api from '@/lib/api';
 import { MOCK_ASSETS } from '@/lib/studio-mock';
 import type { StudioAsset, GenerateCreativePayload, GenerateCreativeResponse } from '@/types/studio';
@@ -94,10 +94,8 @@ export function EstudioHome() {
 
   const statusOptions: Array<{ value: ComplianceStatus; label: string }> = [
     { value: 'all', label: 'Todos' },
-    { value: 'pending', label: 'Pendente' },
-    { value: 'pending_compliance', label: 'Em Compliance' },
-    { value: 'approved', label: 'Aprovado' },
-    { value: 'rejected', label: 'Reprovado' },
+    { value: 'pending_compliance', label: 'Gerado' },
+    { value: 'approved', label: 'Pronto' },
   ];
 
   const getTypeCount = (type: AssetType) =>
@@ -335,12 +333,28 @@ interface AssetCardProps {
   onDeleteCancel: () => void;
 }
 
+const BACKEND_URL = 'https://fury-app-v2-production.up.railway.app';
+
+function resolveAssetUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  return url.startsWith('http') ? url : `${BACKEND_URL}${url}`;
+}
+
 function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDeleteConfirm, onDeleteCancel }: AssetCardProps) {
+  const imageUrl = resolveAssetUrl(asset.url);
   return (
     <div className="bg-white rounded-lg border border-border overflow-hidden hover:shadow-lg transition-shadow">
-      {asset.url && asset.type === 'image' ? (
-        <div className="relative w-full aspect-square bg-surface-secondary overflow-hidden">
-          <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />
+      {imageUrl && asset.type === 'image' ? (
+        <div className="relative w-full aspect-square bg-gray-100 overflow-hidden">
+          <img
+            src={imageUrl}
+            alt={asset.name}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              console.error('=== AssetCard image failed:', imageUrl);
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
         </div>
       ) : (
         <div className="w-full aspect-square bg-gradient-to-br from-[#FEF0E7] to-[#FFE8D6] flex items-center justify-center">
@@ -362,8 +376,6 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
-
-        <StatusBadge status={asset.complianceStatus} />
 
         {isDeleting ? (
           <div className="space-y-2 pt-1">

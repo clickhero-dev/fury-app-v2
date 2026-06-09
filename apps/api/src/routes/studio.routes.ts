@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
+import fs from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import OpenAI from 'openai';
@@ -203,11 +204,15 @@ const generateCreativeSchema = z.object({
   adaptiveAnswers: z.record(z.string()).optional(),
 });
 
-async function savePNG(buffer: Buffer): Promise<{ fileName: string }> {
+async function savePNG(buffer: Buffer): Promise<{ fileName: string; filePath: string }> {
   await mkdir(studioAssetsDir, { recursive: true });
   const fileName = `${randomUUID()}.png`;
-  await writeFile(join(studioAssetsDir, fileName), buffer);
-  return { fileName };
+  const filePath = join(studioAssetsDir, fileName);
+  await writeFile(filePath, buffer);
+  console.log('=== STUDIO savePNG dir:', studioAssetsDir);
+  console.log('=== STUDIO savePNG filePath:', filePath);
+  console.log('=== STUDIO file exists:', fs.existsSync(filePath));
+  return { fileName, filePath };
 }
 
 async function getTenantContext(tenantId: string): Promise<{ businessName: string; objective: string }> {
@@ -242,7 +247,7 @@ async function runGenerate(context: CreativeContext, productImageUrl: string | u
   });
   const { fileName } = await savePNG(pngBuffer);
   const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
-  console.log('=== CREATIVE imageUrl:', imageUrl);
+  console.log('=== STUDIO imageUrl returned:', imageUrl);
 
   const metadata = JSON.stringify({ ...creativeData, context });
 
@@ -338,7 +343,7 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
     });
     const { fileName } = await savePNG(pngBuffer);
     const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
-    console.log('=== CREATIVE regenerate imageUrl:', imageUrl);
+    console.log('=== STUDIO regenerate imageUrl returned:', imageUrl);
 
     const metadata = JSON.stringify({ ...creativeData, context: savedContext, feedback });
 
