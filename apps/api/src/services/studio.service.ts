@@ -355,6 +355,7 @@ export async function listStudioAssetsForTenant(params: {
       type: r.type,
       url: r.url,
       complianceStatus: r.complianceStatus,
+      complianceNotes: r.complianceNotes ?? null,
       metaAssetId: r.metaAssetId ?? null,
       createdAt: r.createdAt.toISOString(),
     })),

@@ -273,7 +273,7 @@ export function CreativeResult({ result, hasProductImage = false, onBack, onNewC
           </div>
 
           <div className="space-y-3">
-            <Field label="Headline">
+            <Field label="Título do anúncio">
               <input
                 value={editedTexts.headline}
                 onChange={(e) => setEditedTexts(prev => ({ ...prev, headline: e.target.value }))}
@@ -281,7 +281,7 @@ export function CreativeResult({ result, hasProductImage = false, onBack, onNewC
               />
             </Field>
 
-            <Field label="Subheadline">
+            <Field label="Chamada de apoio">
               <input
                 value={editedTexts.subheadline}
                 onChange={(e) => setEditedTexts(prev => ({ ...prev, subheadline: e.target.value }))}
@@ -289,7 +289,7 @@ export function CreativeResult({ result, hasProductImage = false, onBack, onNewC
               />
             </Field>
 
-            <Field label="Texto Primário">
+            <Field label="Descrição">
               <textarea
                 value={editedTexts.primary_text}
                 onChange={(e) => setEditedTexts(prev => ({ ...prev, primary_text: e.target.value }))}
@@ -298,7 +298,7 @@ export function CreativeResult({ result, hasProductImage = false, onBack, onNewC
               />
             </Field>
 
-            <Field label="CTA">
+            <Field label="Botão de ação">
               <select
                 value={cta}
                 onChange={(e) => setCta(e.target.value)}
