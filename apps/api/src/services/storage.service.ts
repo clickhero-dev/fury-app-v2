@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 const r2 = new S3Client({
   region: 'auto',
@@ -21,4 +21,15 @@ export async function uploadAsset(buffer: Buffer, fileName: string, mimeType = '
   }));
 
   return `${PUBLIC_URL}/${fileName}`;
+}
+
+export async function deleteAsset(urlOrKey: string): Promise<void> {
+  const key = PUBLIC_URL && urlOrKey.startsWith(`${PUBLIC_URL}/`)
+    ? urlOrKey.slice(`${PUBLIC_URL}/`.length)
+    : urlOrKey;
+
+  await r2.send(new DeleteObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+  }));
 }

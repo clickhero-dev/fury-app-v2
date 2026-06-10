@@ -6,14 +6,14 @@ import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import OpenAI from 'openai';
 import { eq } from 'drizzle-orm';
-import { db, creativeAssets, tenants, clientGoals } from '@fury/db';
+import { db, creativeAssets, tenants, clientGoals, brandKits } from '@fury/db';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import * as studioController from '../controllers/studio.controller.js';
 import { studioCopyService } from '../services/studio-copy.service.js';
 import { deepseekService } from '../services/deepseek.service.js';
 import { buildCreativePrompt, buildRegeneratePrompt, buildValidationPrompt, type CreativeContext } from '../prompts/creative-studio.prompt.js';
-import { convertHTMLToPNG } from '../services/html-to-png.service.js';
+import { convertHTMLToPNG, type BrandColors } from '../services/html-to-png.service.js';
 import { studioAssetsDir } from '../lib/temp-storage.js';
 import { uploadAsset } from '../services/storage.service.js';
 
@@ -262,6 +262,27 @@ async function getTenantContext(tenantId: string): Promise<{ businessName: strin
   };
 }
 
+const VOICE_TONE_LABELS: Record<string, string> = {
+  professional: 'Profissional',
+  casual: 'Casual',
+  urgent: 'Urgente',
+  premium: 'Premium/Sofisticado',
+};
+
+async function getBrandKitContext(tenantId: string): Promise<{ tone?: string; colors?: BrandColors }> {
+  const brandKit = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, tenantId) });
+  if (!brandKit) return {};
+
+  return {
+    tone: brandKit.voiceTone
+      ? `Tom de voz da marca: ${VOICE_TONE_LABELS[brandKit.voiceTone]}. Escreva o copy seguindo esse tom.`
+      : undefined,
+    colors: brandKit.primaryColor
+      ? { primary: brandKit.primaryColor, secondary: brandKit.secondaryColor }
+      : undefined,
+  };
+}
+
 function parseCreativeJSON(raw: string) {
   const cleaned = raw.replace(/```json|```/g, '').trim();
   const match = cleaned.match(/\{[\s\S]*\}/);
@@ -279,7 +300,7 @@ const TEMPLATE_LAYOUT_MAP: Record<string, { layout: string; color_scheme: string
   'institutional':      { layout: 'product_hero',       color_scheme: 'clean_white' },
 };
 
-async function runGenerate(context: CreativeContext, productImageUrl: string | undefined, tenantId: string, publicBaseUrl: string) {
+async function runGenerate(context: CreativeContext, productImageUrl: string | undefined, tenantId: string, publicBaseUrl: string, brandColors?: BrandColors) {
   const prompt = buildCreativePrompt(context);
   const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.8 });
   const creativeData = parseCreativeJSON(raw);
@@ -300,7 +321,7 @@ async function runGenerate(context: CreativeContext, productImageUrl: string | u
     color_scheme: creativeData.color_scheme,
     productImageUrl,
     businessName: context.businessName,
-  });
+  }, brandColors);
   let imageUrl: string;
   if (process.env.R2_ENDPOINT && process.env.R2_PUBLIC_URL) {
     const fileName = `${randomUUID()}.png`;
@@ -343,6 +364,7 @@ router.post('/creative/generate', authMiddleware, tenantMiddleware, async (req: 
     const publicBaseUrl = process.env.APP_URL ?? process.env.PUBLIC_BASE_URL ?? 'https://fury-app-v2-production.up.railway.app';
 
     const { businessName, objective } = await getTenantContext(tenantId);
+    const brandKitContext = await getBrandKitContext(tenantId);
     const adaptive = body.adaptiveAnswers ?? {};
 
     const context: CreativeContext = {
@@ -354,10 +376,11 @@ router.post('/creative/generate', authMiddleware, tenantMiddleware, async (req: 
       productImageUrl: body.productImageUrl,
       businessName,
       objective,
+      tone: brandKitContext.tone,
       templateStyle: body.templateStyle,
     };
 
-    const result = await runGenerate(context, body.productImageUrl, tenantId, publicBaseUrl);
+    const result = await runGenerate(context, body.productImageUrl, tenantId, publicBaseUrl, brandKitContext.colors);
     return res.status(201).json(result);
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
@@ -395,6 +418,8 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
     const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.9 });
     const creativeData = parseCreativeJSON(raw);
 
+    const brandKitContext = await getBrandKitContext(tenantId);
+
     const pngBuffer = await convertHTMLToPNG({
       headline: creativeData.headline,
       primary_text: creativeData.primary_text,
@@ -404,7 +429,7 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
       color_scheme: creativeData.color_scheme,
       productImageUrl: savedContext.productImageUrl,
       businessName: savedContext.businessName,
-    });
+    }, brandKitContext.colors);
     let imageUrl: string;
     if (process.env.R2_ENDPOINT && process.env.R2_PUBLIC_URL) {
       const fileName = `${randomUUID()}.png`;

@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
-import { ArrowLeft, ArrowRight, ImageIcon, Loader2, Upload, Wand2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ImageIcon, Loader2, Images, Upload, Wand2, X } from 'lucide-react';
 import { Button } from '@/components';
 import api from '@/lib/api';
+import { useBrandKit } from '@/hooks/useBrandKit';
 import type {
   AdaptiveQuestion,
   GenerateCreativePayload,
@@ -17,10 +18,11 @@ interface WizardData {
   hasOffer: boolean;
   offer: string;
   audience: string;
-  imageChoice: 'none' | 'upload';
+  imageChoice: 'none' | 'upload' | 'library';
   imageFile: File | null;
   imagePreviewUrl: string | null;
   imageBase64: string | null;
+  libraryImageUrl: string | null;
 }
 
 const INITIAL_DATA: WizardData = {
@@ -33,6 +35,7 @@ const INITIAL_DATA: WizardData = {
   imageFile: null,
   imagePreviewUrl: null,
   imageBase64: null,
+  libraryImageUrl: null,
 };
 
 // Step 0 = template gallery; steps 1-5 = briefing questions
@@ -63,6 +66,8 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
   const [adaptiveQuestions, setAdaptiveQuestions] = useState<AdaptiveQuestion[]>([]);
   const [pendingPayload, setPendingPayload] = useState<GenerateCreativePayload | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { brandKit } = useBrandKit();
+  const libraryPhotos = brandKit?.photo_urls ?? [];
 
   const transition = (fn: () => void) => {
     setVisible(false);
@@ -87,7 +92,8 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
     if (step === 2) return data.promise.trim().length >= 5;
     if (step === 3) return !data.hasOffer || data.offer.trim().length >= 3;
     if (step === 4) return data.audience.trim().length >= 5;
-    return true; // step 5
+    if (step === 5) return data.imageChoice !== 'library' || !!data.libraryImageUrl;
+    return true;
   })();
 
   const handleFileChange = (file: File | null) => {
@@ -114,15 +120,20 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
     }
   };
 
-  const buildPayload = (): GenerateCreativePayload => ({
-    product: data.product.trim(),
-    promise: data.promise.trim(),
-    offer: data.hasOffer ? data.offer.trim() : undefined,
-    audience: data.audience.trim(),
-    hasProductImage: !!data.imageBase64,
-    productImageUrl: data.imageBase64 ?? undefined,
-    templateStyle: selectedTemplate?.id,
-  });
+  const buildPayload = (): GenerateCreativePayload => {
+    const productImageUrl =
+      data.imageChoice === 'library' ? data.libraryImageUrl ?? undefined : data.imageBase64 ?? undefined;
+
+    return {
+      product: data.product.trim(),
+      promise: data.promise.trim(),
+      offer: data.hasOffer ? data.offer.trim() : undefined,
+      audience: data.audience.trim(),
+      hasProductImage: !!productImageUrl,
+      productImageUrl,
+      templateStyle: selectedTemplate?.id,
+    };
+  };
 
   const handleSubmit = async () => {
     const payload = buildPayload();
@@ -306,9 +317,22 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
         {step === 5 && (
           <StepCard title="Você tem uma foto para usar?" hint="Uma foto do seu produto, serviço ou espaço deixa o anúncio muito mais real e confiável">
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className={`grid gap-3 ${libraryPhotos.length > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                {libraryPhotos.length > 0 && (
+                  <button
+                    onClick={() => setData((d) => ({ ...d, imageChoice: 'library', imageFile: null, imagePreviewUrl: null, imageBase64: null }))}
+                    className={`rounded-xl border-2 p-4 text-center transition-all ${
+                      data.imageChoice === 'library'
+                        ? 'border-[#EA580C] bg-[#FFF4ED]'
+                        : 'border-[#E6E8EC] hover:border-[#F0B48E]'
+                    }`}
+                  >
+                    <Images className="mx-auto mb-2 h-5 w-5 text-[#EA580C]" />
+                    <p className="text-sm font-semibold text-[#101828]">Escolher da biblioteca</p>
+                  </button>
+                )}
                 <button
-                  onClick={() => setData((d) => ({ ...d, imageChoice: 'upload' }))}
+                  onClick={() => setData((d) => ({ ...d, imageChoice: 'upload', libraryImageUrl: null }))}
                   className={`rounded-xl border-2 p-4 text-center transition-all ${
                     data.imageChoice === 'upload'
                       ? 'border-[#EA580C] bg-[#FFF4ED]'
@@ -316,10 +340,10 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
                   }`}
                 >
                   <Upload className="mx-auto mb-2 h-5 w-5 text-[#EA580C]" />
-                  <p className="text-sm font-semibold text-[#101828]">Usar minha imagem</p>
+                  <p className="text-sm font-semibold text-[#101828]">{libraryPhotos.length > 0 ? 'Fazer novo upload' : 'Usar minha imagem'}</p>
                 </button>
                 <button
-                  onClick={() => setData((d) => ({ ...d, imageChoice: 'none', imageFile: null, imagePreviewUrl: null, imageBase64: null }))}
+                  onClick={() => setData((d) => ({ ...d, imageChoice: 'none', imageFile: null, imagePreviewUrl: null, imageBase64: null, libraryImageUrl: null }))}
                   className={`rounded-xl border-2 p-4 text-center transition-all ${
                     data.imageChoice === 'none'
                       ? 'border-[#EA580C] bg-[#FFF4ED]'
@@ -330,6 +354,24 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
                   <p className="text-sm font-semibold text-[#101828]">Continuar sem foto</p>
                 </button>
               </div>
+
+              {data.imageChoice === 'library' && (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                  {libraryPhotos.map((url) => (
+                    <button
+                      key={url}
+                      onClick={() => setData((d) => ({ ...d, libraryImageUrl: url }))}
+                      className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all ${
+                        data.libraryImageUrl === url
+                          ? 'border-[#EA580C] ring-2 ring-[#EA580C]/30'
+                          : 'border-[#E6E8EC] hover:border-[#F0B48E]'
+                      }`}
+                    >
+                      <img src={url} alt="Foto da biblioteca" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {data.imageChoice === 'upload' && (
                 <div className="space-y-3">
@@ -401,7 +443,8 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
           ) : (
             <Button
               onClick={() => void handleSubmit()}
-              className="flex-1 inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white"
+              disabled={!canAdvance}
+              className="flex-1 inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white disabled:opacity-50"
             >
               <Wand2 className="h-4 w-4" />
               Criar meu anúncio

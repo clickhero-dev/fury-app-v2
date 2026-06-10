@@ -181,6 +181,13 @@ export function Configuracoes() {
                 {label}
               </TabsTrigger>
             ))}
+            <button
+              type="button"
+              onClick={() => navigate('/configuracoes/brand-kit')}
+              className="flex items-center gap-2 px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors border-transparent text-text-secondary hover:text-text-primary hover:border-border"
+            >
+              Brand Kit
+            </button>
           </TabsList>
 
           {/* Geral */}

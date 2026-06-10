@@ -42,6 +42,7 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', [
   'inactive',
 ]);
 export const invoiceStatusEnum = pgEnum('invoice_status', ['pending', 'paid', 'overdue', 'cancelled']);
+export const voiceToneEnum = pgEnum('voice_tone', ['professional', 'casual', 'urgent', 'premium']);
 
 // Tenants table
 export const tenants = pgTable(
@@ -380,6 +381,28 @@ export const invoices = pgTable(
   })
 );
 
+// Brand kits table
+export const brandKits = pgTable(
+  'brand_kits',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .unique()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    logoUrl: text('logo_url'),
+    primaryColor: varchar('primary_color', { length: 7 }),
+    secondaryColor: varchar('secondary_color', { length: 7 }),
+    voiceTone: voiceToneEnum('voice_tone'),
+    photoUrls: jsonb('photo_urls').default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('brand_kits_tenant_id_idx').on(table.tenantId),
+  })
+);
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -398,4 +421,5 @@ export const allTables = {
   plans,
   subscriptions,
   invoices,
+  brandKits,
 };

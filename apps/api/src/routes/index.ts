@@ -13,6 +13,7 @@ import budgetRoutes from './budget.routes.js';
 import furyRoutes from './fury.routes.js';
 import goalsRoutes from './goals.routes.js';
 import billingRoutes from './billing.routes.js';
+import brandKitRoutes from './brand-kit.routes.js';
 
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
@@ -31,5 +32,6 @@ router.use('/budget', budgetRoutes);
 router.use('/fury', furyRoutes);
 router.use('/goals', goalsRoutes);
 router.use('/billing', billingRoutes);
+router.use('/brand-kit', authMiddleware, tenantMiddleware, brandKitRoutes);
 
 export default router;

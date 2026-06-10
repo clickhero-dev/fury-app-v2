@@ -96,10 +96,18 @@ function drawRoundRect(ctx: Ctx, x: number, y: number, width: number, height: nu
   ctx.closePath();
 }
 
-export async function convertHTMLToPNG(data: CreativeData): Promise<Buffer> {
+export type BrandColors = {
+  primary?: string | null;
+  secondary?: string | null;
+};
+
+export async function convertHTMLToPNG(data: CreativeData, brandColors?: BrandColors): Promise<Buffer> {
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
-  const colors = COLOR_SCHEMES[data.color_scheme] ?? COLOR_SCHEMES.brand_orange;
+  const colors = { ...(COLOR_SCHEMES[data.color_scheme] ?? COLOR_SCHEMES.brand_orange) };
+
+  if (brandColors?.primary) colors.primary = brandColors.primary;
+  if (brandColors?.secondary) colors.textSecondary = brandColors.secondary;
 
   const cx = W / 2;
   const BAR_H = 12;
