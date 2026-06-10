@@ -148,10 +148,18 @@ export function SelecionarContaPage() {
             </div>
           ) : allAccounts.length === 0 ? (
             <div className="bg-[#FFF7F4] border border-[#FDDCCC] rounded-2xl p-6 text-center">
-              <p className="text-[#1C1C1E] font-semibold">Nenhuma conta de anúncios encontrada</p>
+              <p className="text-[#1C1C1E] font-semibold">Nenhuma conta de anúncio encontrada</p>
               <p className="text-sm text-[#6E7681] mt-1">
                 Certifique-se de que sua conta Meta tem acesso a pelo menos uma conta de anúncios.
               </p>
+              <a
+                href="https://business.facebook.com/settings/ad-accounts"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mt-4 text-sm font-semibold text-[#EA580C] hover:underline"
+              >
+                Criar conta de anúncios no Meta
+              </a>
             </div>
           ) : (
             <div className="space-y-3">
@@ -184,7 +192,10 @@ export function SelecionarContaPage() {
                     {/* Account info */}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-[#1C1C1E] truncate">{account.name}</p>
-                      <p className="text-xs text-[#6E7681] mt-0.5">{account.id}</p>
+                      <p className="text-xs text-[#6E7681] mt-0.5">
+                        {account.id}
+                        {account.currency ? ` · ${account.currency}` : ''}
+                      </p>
                     </div>
 
                     {/* Status badge */}

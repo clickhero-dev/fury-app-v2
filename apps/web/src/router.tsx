@@ -52,9 +52,16 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: '/onboarding/selecionar-conta',
+    element: (
+      <ProtectedRoute>
+        <SelecionarContaPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
     element: <AuthenticatedShell />,
     children: [
-      { path: '/onboarding/selecionar-conta', element: <SelecionarContaPage /> },
       { path: '/dashboard', element: <Dashboard /> },
       { path: '/dashboard/metas', element: <Metas /> },
       { path: '/campanhas', element: <PainelCampanhas /> },

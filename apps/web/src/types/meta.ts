@@ -7,6 +7,7 @@ export interface MetaAdAccount {
   name: string;
   account_status: number; // 1 = active, 2 = disabled
   currency?: string;
+  timezone_name?: string;
 }
 
 export interface MetaConnection {

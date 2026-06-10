@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
-import type { BillingApiResponse, Plan, SubscribePayload, Subscription } from '../types/billing';
+import type { BillingApiResponse, InvoiceHistoryItem, Plan, SubscribePayload, Subscription } from '../types/billing';
 
 export function usePlans() {
   return useQuery({
@@ -27,6 +27,17 @@ export function useSubscription() {
     staleTime: 60 * 1000,
     placeholderData: keepPreviousData,
     retry: false,
+  });
+}
+
+export function useInvoices() {
+  return useQuery({
+    queryKey: ['billing', 'invoices'],
+    queryFn: async (): Promise<InvoiceHistoryItem[]> => {
+      const res = await api.get<BillingApiResponse<InvoiceHistoryItem[]>>('/billing/invoices');
+      return res.data.data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }
 

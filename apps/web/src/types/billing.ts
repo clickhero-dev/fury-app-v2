@@ -17,6 +17,16 @@ export interface Invoice {
   createdAt: string;
 }
 
+export interface InvoiceHistoryItem {
+  id: string;
+  amountCents: number;
+  status: 'pending' | 'paid' | 'overdue' | 'cancelled';
+  paidAt: string | null;
+  asaasPaymentId: string | null;
+  createdAt: string;
+  invoiceUrl: string | null;
+}
+
 export type SubscriptionStatus = 'trial' | 'active' | 'past_due' | 'cancelled' | 'inactive';
 
 export interface Subscription {

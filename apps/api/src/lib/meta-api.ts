@@ -71,6 +71,7 @@ export interface MetaAdAccount {
   name: string;
   account_status: number;
   currency: string;
+  timezone_name: string;
 }
 
 export interface MetaAdAccountsResponse {
@@ -148,7 +149,7 @@ export async function exchangeForLongLivedToken(params: {
 
 export async function getUserAdAccounts(accessToken: string): Promise<MetaAdAccount[]> {
   const url = new URL(`${META_GRAPH_BASE_URL}/me/adaccounts`);
-  url.searchParams.set('fields', 'id,name,account_status,currency');
+  url.searchParams.set('fields', 'id,name,account_status,currency,timezone_name');
   url.searchParams.set('access_token', accessToken);
 
   const response = await fetch(url, { method: 'GET' });

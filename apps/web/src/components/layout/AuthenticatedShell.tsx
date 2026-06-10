@@ -23,7 +23,7 @@ export function AuthenticatedShell() {
   const { data: connections, isLoading, isFetched } = useQuery({
     queryKey: ['meta-connections'],
     queryFn: async () => {
-      const res = await api.get<{ data: unknown[] }>('/meta/connections');
+      const res = await api.get<{ data: Array<{ selectedAdAccountId: string | null }> }>('/meta/connections');
       const data = res.data.data;
       if (Array.isArray(data) && data.length > 0) {
         localStorage.setItem('fury-meta-connected', 'true');
@@ -35,13 +35,17 @@ export function AuthenticatedShell() {
     enabled: shouldCheck,
     retry: false,
     placeholderData: localStorage.getItem('fury-meta-connected') === 'true'
-      ? [{ id: 'cached' }]
+      ? [{ selectedAdAccountId: 'cached' }]
       : undefined,
   });
 
   useEffect(() => {
-    if (!isLoading && isFetched && shouldCheck && Array.isArray(connections) && connections.length === 0) {
-      navigate('/onboarding/conectar-meta', { replace: true });
+    if (!isLoading && isFetched && shouldCheck && Array.isArray(connections)) {
+      if (connections.length === 0) {
+        navigate('/onboarding/conectar-meta', { replace: true });
+      } else if (!connections.some((conn) => conn.selectedAdAccountId)) {
+        navigate('/onboarding/selecionar-conta', { replace: true });
+      }
     }
   }, [connections, isLoading, isFetched, shouldCheck, navigate]);
 

@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, CreditCard, Calendar, AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { Loader2, CreditCard, Calendar, AlertTriangle, CheckCircle2, Clock, XCircle, Receipt, ExternalLink } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Badge, type BadgeVariant } from '@/components/ui/badge';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { EmptyState } from '@/components/EmptyState';
 import {
   Dialog,
   DialogContent,
@@ -12,8 +15,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
-import type { SubscriptionStatus, Invoice } from '@/types/billing';
+import { useSubscription, useCancelSubscription, useInvoices } from '@/hooks/useBilling';
+import type { SubscriptionStatus, InvoiceHistoryItem } from '@/types/billing';
 
 const STATUS_CONFIG: Record<SubscriptionStatus, {
   label: string;
@@ -53,11 +56,11 @@ const STATUS_CONFIG: Record<SubscriptionStatus, {
   },
 };
 
-const INVOICE_STATUS_CONFIG: Record<Invoice['status'], { label: string; color: string }> = {
-  paid: { label: 'Pago', color: 'text-success bg-success/10' },
-  pending: { label: 'Pendente', color: 'text-warning bg-warning/10' },
-  overdue: { label: 'Atrasado', color: 'text-error bg-error/10' },
-  cancelled: { label: 'Cancelado', color: 'text-text-secondary bg-border' },
+const INVOICE_STATUS_CONFIG: Record<InvoiceHistoryItem['status'], { label: string; variant: BadgeVariant }> = {
+  paid: { label: 'Pago', variant: 'success' },
+  pending: { label: 'Pendente', variant: 'warning' },
+  overdue: { label: 'Vencido', variant: 'error' },
+  cancelled: { label: 'Cancelado', variant: 'default' },
 };
 
 function formatCurrency(cents: number): string {
@@ -75,6 +78,7 @@ function formatDate(dateStr: string | null): string {
 
 export function Subscription() {
   const { data: subscription, isLoading } = useSubscription();
+  const { data: invoices, isLoading: isInvoicesLoading } = useInvoices();
   const cancelSubscription = useCancelSubscription();
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelError, setCancelError] = useState('');
@@ -187,37 +191,63 @@ export function Subscription() {
           )}
         </div>
 
-        {subscription.invoices && subscription.invoices.length > 0 && (
-          <div className="rounded-2xl border border-border bg-surface">
-            <div className="px-7 py-5 border-b border-border">
-              <h3 className="font-bold text-text-primary">Histórico de faturas</h3>
-            </div>
-            <div className="divide-y divide-border">
-              {subscription.invoices.map((invoice) => {
-                const invoiceStatus = INVOICE_STATUS_CONFIG[invoice.status];
-                return (
-                  <div key={invoice.id} className="flex items-center justify-between px-7 py-4">
-                    <div>
-                      <p className="text-sm font-medium text-text-primary">
-                        {formatCurrency(invoice.amountCents)}
-                      </p>
-                      <p className="text-xs text-text-secondary mt-0.5">
-                        {invoice.paidAt
-                          ? `Pago em ${formatDate(invoice.paidAt)}`
-                          : `Emitido em ${formatDate(invoice.createdAt)}`}
-                      </p>
-                    </div>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${invoiceStatus.color}`}
-                    >
-                      {invoiceStatus.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+        <div className="rounded-2xl border border-border bg-surface">
+          <div className="px-7 py-5 border-b border-border">
+            <h3 className="font-bold text-text-primary">Histórico de Faturas</h3>
           </div>
-        )}
+
+          {isInvoicesLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-text-secondary" />
+            </div>
+          ) : !invoices || invoices.length === 0 ? (
+            <EmptyState
+              icon={<Receipt className="w-6 h-6 text-[#EA580C]" />}
+              title="Nenhuma fatura encontrada ainda"
+              description="Suas faturas aparecerão aqui assim que forem geradas."
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Valor (R$)</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {invoices.map((invoice) => {
+                  const invoiceStatus = INVOICE_STATUS_CONFIG[invoice.status];
+                  return (
+                    <TableRow key={invoice.id}>
+                      <TableCell>{formatDate(invoice.paidAt ?? invoice.createdAt)}</TableCell>
+                      <TableCell>{formatCurrency(invoice.amountCents)}</TableCell>
+                      <TableCell>
+                        <Badge variant={invoiceStatus.variant}>{invoiceStatus.label}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {invoice.invoiceUrl ? (
+                          <a
+                            href={invoice.invoiceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-sm font-medium text-[#EA580C] hover:underline"
+                          >
+                            Ver fatura
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        ) : (
+                          <span className="text-sm text-text-secondary">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </div>
       </div>
 
       <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>

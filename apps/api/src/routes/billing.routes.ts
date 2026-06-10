@@ -247,6 +247,39 @@ router.get('/subscription', async (req: Request, res: Response, next: NextFuncti
   }
 });
 
+router.get('/invoices', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId } = req.tenant!;
+
+    const tenantInvoices = await db.query.invoices.findMany({
+      where: eq(invoices.tenantId, tenantId),
+      orderBy: [desc(invoices.createdAt)],
+      limit: 12,
+    });
+
+    const isProduction = process.env.ASAAS_ENV === 'production';
+    const asaasInvoiceBaseUrl = isProduction
+      ? 'https://www.asaas.com/i'
+      : 'https://sandbox.asaas.com/i';
+
+    const data = tenantInvoices.map((invoice) => ({
+      id: invoice.id,
+      amountCents: invoice.amountCents,
+      status: invoice.status,
+      paidAt: invoice.paidAt,
+      asaasPaymentId: invoice.asaasPaymentId,
+      createdAt: invoice.createdAt,
+      invoiceUrl: invoice.asaasPaymentId
+        ? `${asaasInvoiceBaseUrl}/${invoice.asaasPaymentId}`
+        : null,
+    }));
+
+    res.json({ success: true, data, timestamp: new Date().toISOString() });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.delete('/subscription', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tenantId } = req.tenant!;
