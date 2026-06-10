@@ -7,7 +7,8 @@ import { IntegracoesContent } from './IntegracoesContent';
 import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
 import { useTheme } from '@/hooks/useTheme';
 import api from '@/lib/api';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { ConfiguracoesTabsNav } from './ConfiguracoesTabsNav';
 import {
   Dialog,
   DialogContent,
@@ -57,16 +58,6 @@ function Toast({ message, type }: { message: string; type: 'success' | 'error' }
     </div>
   );
 }
-
-const TAB_LABELS: { value: TabType; label: string }[] = [
-  { value: 'geral',        label: 'Geral' },
-  { value: 'notificacoes', label: 'Notificações' },
-  { value: 'seguranca',    label: 'Segurança' },
-  { value: 'equipe',       label: 'Equipe' },
-  { value: 'faturamento',  label: 'Faturamento' },
-  { value: 'integracoes',  label: 'Integrações' },
-  { value: 'fury',         label: 'FURY Engine' },
-];
 
 export function Configuracoes() {
   const navigate = useNavigate();
@@ -174,22 +165,9 @@ export function Configuracoes() {
     >
       {toast && <Toast message={toast.message} type={toast.type} />}
 
-      <Tabs value={activeTab} onValueChange={setTab}>
-          <TabsList>
-            {TAB_LABELS.map(({ value, label }) => (
-              <TabsTrigger key={value} value={value}>
-                {label}
-              </TabsTrigger>
-            ))}
-            <button
-              type="button"
-              onClick={() => navigate('/configuracoes/brand-kit')}
-              className="flex items-center gap-2 px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors border-transparent text-text-secondary hover:text-text-primary hover:border-border"
-            >
-              Brand Kit
-            </button>
-          </TabsList>
+      <ConfiguracoesTabsNav activeTab={activeTab} />
 
+      <Tabs value={activeTab} onValueChange={setTab}>
           {/* Geral */}
           <TabsContent value="geral">
             <Card>

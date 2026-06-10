@@ -5,6 +5,7 @@ import { useBrandKit, useSaveBrandKit, useUploadLogo, useUploadPhotos, useDelete
 import type { VoiceTone } from '@/types/brandKit';
 import { FURY_COLORS } from '@/lib/constants';
 import { Upload, X, Trash2, Image as ImageIcon } from 'lucide-react';
+import { ConfiguracoesTabsNav } from './ConfiguracoesTabsNav';
 
 const VOICE_TONE_OPTIONS: { value: VoiceTone; label: string; description: string }[] = [
   { value: 'professional', label: 'Profissional', description: 'Formal, técnico, confiável' },
@@ -48,17 +49,19 @@ function BrandKitContent() {
   const [primaryColor, setPrimaryColor] = useState(FURY_COLORS.primary);
   const [secondaryColor, setSecondaryColor] = useState('#1C1C1E');
   const [voiceTone, setVoiceTone] = useState<VoiceTone | ''>('');
+  const [initialized, setInitialized] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const photosInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!brandKit) return;
+    if (!brandKit || initialized) return;
     setPrimaryColor(brandKit.primary_color ?? FURY_COLORS.primary);
     setSecondaryColor(brandKit.secondary_color ?? '#1C1C1E');
     setVoiceTone(brandKit.voice_tone ?? '');
-  }, [brandKit]);
+    setInitialized(true);
+  }, [brandKit, initialized]);
 
   function showToast(message: string, type: 'success' | 'error') {
     setToast({ message, type });
@@ -158,6 +161,8 @@ function BrandKitContent() {
         title="Brand Kit"
         description="Configure a identidade visual e o tom de voz da sua marca para personalizar os criativos gerados automaticamente."
       />
+
+      <ConfiguracoesTabsNav activeTab="brand-kit" />
 
       {isLoading ? (
         <Card>
