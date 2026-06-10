@@ -278,6 +278,7 @@ export async function publishStudioAssetToMeta(params: {
 
   const connection = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, params.tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
   if (!connection) {

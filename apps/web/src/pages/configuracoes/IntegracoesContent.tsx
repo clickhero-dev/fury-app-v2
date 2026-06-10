@@ -237,7 +237,9 @@ export function IntegracoesContent() {
 
   const connectMutation = useMutation({
     mutationFn: async () => {
-      const response = await api.get<MetaAuthUrlResponse>('/meta/auth/url');
+      const response = await api.get<MetaAuthUrlResponse>('/meta/auth/url', {
+        params: { context: 'settings' },
+      });
       return response.data.data.authUrl;
     },
     onSuccess: (authUrl) => {

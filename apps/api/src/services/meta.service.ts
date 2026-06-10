@@ -15,10 +15,18 @@ import { addSyncJob } from '../lib/sync-jobs.js';
 const META_OAUTH_URL = 'https://www.facebook.com/v20.0/dialog/oauth';
 const META_SCOPES = ['ads_read', 'ads_management', 'business_management'];
 
+export type OAuthContext = 'onboarding' | 'settings';
+
 interface OAuthStatePayload {
   tenantId: string;
+  context: OAuthContext;
   returnUrl?: string;
 }
+
+const RETURN_URLS: Record<OAuthContext, string> = {
+  onboarding: '/onboarding/conectar-meta?connected=true',
+  settings: '/configuracoes/integracoes?connected=true',
+};
 
 interface StoredMetaConnection {
   id: string;
@@ -75,10 +83,10 @@ function signOAuthState(payload: OAuthStatePayload): string {
   return jwt.sign(payload, secret, { expiresIn: '10m' });
 }
 
-function verifyOAuthState(state: string): OAuthStatePayload & { returnUrl?: string } {
+function verifyOAuthState(state: string): OAuthStatePayload {
   try {
     const secret = getRequiredEnv('JWT_SECRET');
-    return jwt.verify(state, secret) as OAuthStatePayload & { returnUrl?: string };
+    return jwt.verify(state, secret) as OAuthStatePayload;
   } catch {
     throw new AppError(401, 'INVALID_OAUTH_STATE', 'State OAuth invalido ou expirado.');
   }
@@ -97,12 +105,12 @@ function getTokenExpiration(expiresIn: number): Date | null {
   return new Date(Date.now() + expiresIn * 1000);
 }
 
-export function generateMetaAuthUrl(tenantId: string): string {
+export function generateMetaAuthUrl(tenantId: string, context: OAuthContext = 'onboarding'): string {
   const appId = getRequiredEnv('META_APP_ID');
   const redirectUri =
     process.env.META_REDIRECT_URI ??
     'https://fury-app-v2-production.up.railway.app/api/meta/auth/callback';
-  const state = signOAuthState({ tenantId, returnUrl: '/onboarding/conectar-meta?connected=true' });
+  const state = signOAuthState({ tenantId, context, returnUrl: RETURN_URLS[context] });
 
   const authUrl = new URL(META_OAUTH_URL);
   authUrl.searchParams.set('client_id', appId);
@@ -116,10 +124,10 @@ export function generateMetaAuthUrl(tenantId: string): string {
 export async function handleMetaOAuthCallback(
   code: string,
   state: string,
-): Promise<{ tenantId: string }> {
+): Promise<{ tenantId: string; context: OAuthContext; returnUrl: string }> {
   console.log('[Meta Service] handleMetaOAuthCallback iniciado, state length:', state?.length);
-  const { tenantId } = verifyOAuthState(state);
-  console.log('[Meta Service] tenantId extraído do state:', tenantId);
+  const { tenantId, context, returnUrl } = verifyOAuthState(state);
+  console.log('[Meta Service] tenantId extraído do state:', tenantId, 'context:', context);
   const appId = getRequiredEnv('META_APP_ID');
   const appSecret = getRequiredEnv('META_APP_SECRET');
   const redirectUri =
@@ -145,7 +153,10 @@ export async function handleMetaOAuthCallback(
 
   const existing = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
+
+  const resolvedReturnUrl = returnUrl ?? RETURN_URLS[context];
 
   if (existing) {
     await db
@@ -155,11 +166,13 @@ export async function handleMetaOAuthCallback(
         accessToken: encryptedToken,
         tokenExpiresAt,
         adAccounts,
+        selectedAdAccountId: null,
+        updatedAt: new Date(),
       })
       .where(eq(metaConnections.id, existing.id));
     console.log('=== META CONNECTION SAVED ===', { tenantId, accountsCount: adAccounts.length, action: 'update' });
     await addSyncJob({ tenantId, metaUserId, adAccounts });
-    return { tenantId };
+    return { tenantId, context, returnUrl: resolvedReturnUrl };
   }
 
   await db.insert(metaConnections).values({
@@ -172,7 +185,7 @@ export async function handleMetaOAuthCallback(
 
   console.log('=== META CONNECTION SAVED ===', { tenantId, accountsCount: adAccounts.length, action: 'insert' });
   await addSyncJob({ tenantId, metaUserId, adAccounts });
-  return { tenantId };
+  return { tenantId, context, returnUrl: resolvedReturnUrl };
 }
 
 export async function getTenantMetaConnections(tenantId: string): Promise<StoredMetaConnection[]> {

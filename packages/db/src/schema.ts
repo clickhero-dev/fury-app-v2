@@ -10,6 +10,7 @@ import {
   boolean,
   numeric,
   integer,
+  unique,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -93,10 +94,12 @@ export const metaConnections = pgTable(
     adAccounts: jsonb('ad_accounts').default(sql`'[]'::jsonb`),
     selectedAdAccountId: varchar('selected_ad_account_id', { length: 255 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
     tenantIdIdx: index('meta_connections_tenant_id_idx').on(table.tenantId),
     metaUserIdIdx: index('meta_connections_meta_user_id_idx').on(table.metaUserId),
+    tenantIdUnique: unique('meta_connections_tenant_id_unique').on(table.tenantId),
   })
 );
 

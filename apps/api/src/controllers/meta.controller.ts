@@ -1,12 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import jwt from 'jsonwebtoken';
 import { AppError } from '../middleware/errorHandler.js';
 import * as metaService from '../services/meta.service.js';
 
 const callbackQuerySchema = z.object({
   code: z.string().min(1, 'Code OAuth ausente'),
   state: z.string().min(1, 'State OAuth ausente'),
+});
+
+const authUrlQuerySchema = z.object({
+  context: z.enum(['onboarding', 'settings']).default('onboarding'),
 });
 
 const connectionIdSchema = z.object({
@@ -22,7 +25,8 @@ export async function getAuthUrl(req: Request, res: Response, next: NextFunction
     if (!req.user?.tenantId) {
       throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no token JWT.');
     }
-    const authUrl = metaService.generateMetaAuthUrl(req.user.tenantId);
+    const { context } = authUrlQuerySchema.parse(req.query);
+    const authUrl = metaService.generateMetaAuthUrl(req.user.tenantId, context);
     res.status(200).json({
       success: true,
       data: { authUrl },
@@ -39,25 +43,12 @@ export async function authCallback(req: Request, res: Response, next: NextFuncti
     const query = callbackQuerySchema.parse(req.query);
     console.log('[OAuth Callback] code recebido, state:', query.state?.substring(0, 20));
 
-    const { tenantId } = await metaService.handleMetaOAuthCallback(query.code, query.state);
+    const { tenantId, context, returnUrl } = await metaService.handleMetaOAuthCallback(query.code, query.state);
 
     console.log('[OAuth Callback] handleMetaOAuthCallback concluído com sucesso');
 
-    let returnUrl = '/onboarding/conectar-meta?connected=true';
-    try {
-      const secret = process.env.JWT_SECRET;
-      if (secret) {
-        const decoded = jwt.verify(query.state, secret) as { returnUrl?: string };
-        if (decoded.returnUrl) {
-          returnUrl = decoded.returnUrl;
-        }
-      }
-    } catch {
-      // fallback to default returnUrl
-    }
-
     const frontendUrl = process.env.FRONTEND_URL ?? 'https://fury-app-v2-web.vercel.app';
-    console.log('=== META CALLBACK SUCCESS ===', { tenantId, returnUrl });
+    console.log('=== META CALLBACK SUCCESS ===', { tenantId, context, returnUrl });
     res.redirect(`${frontendUrl}${returnUrl}`);
   } catch (error) {
     console.error('[OAuth Callback] ERRO:', error);

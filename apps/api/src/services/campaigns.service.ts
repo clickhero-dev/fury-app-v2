@@ -19,6 +19,7 @@ export async function createCampaign(args: {
 }) {
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, args.tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
   if (!metaConn) {
@@ -83,6 +84,7 @@ export async function createCampaign(args: {
 export async function pauseCampaign(args: { tenantId: string; campaignId: string }) {
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, args.tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
   if (!metaConn) {
@@ -136,6 +138,7 @@ export async function pauseCampaign(args: { tenantId: string; campaignId: string
 export async function resumeCampaign(args: { tenantId: string; campaignId: string }) {
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, args.tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
   if (!metaConn) {
@@ -205,6 +208,7 @@ export async function updateCampaignBudget(args: {
 
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, args.tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
   if (!metaConn) {
@@ -494,6 +498,7 @@ export async function updateCampaign(args: {
 
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, args.tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
   if (!metaConn) {
@@ -586,6 +591,7 @@ export async function updateCampaignStatus(args: {
 
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, args.tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
   if (!metaConn) {
@@ -648,6 +654,7 @@ export async function softDeleteCampaign(args: { tenantId: string; campaignId: s
 
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, args.tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
   if (!metaConn) {
@@ -702,6 +709,7 @@ export async function getCampaignInsights(args: {
 }) {
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, args.tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
   if (!metaConn) {

@@ -6,7 +6,9 @@ export function MetaAuthorizePage() {
 
   useEffect(() => {
     api
-      .get<{ success: boolean; data: { authUrl: string } }>('/meta/auth/url')
+      .get<{ success: boolean; data: { authUrl: string } }>('/meta/auth/url', {
+        params: { context: 'onboarding' },
+      })
       .then((res) => {
         const authUrl = res.data.data.authUrl;
         console.log('[MetaAuthorizePage] redirecting to Meta OAuth:', authUrl.substring(0, 60) + '...');

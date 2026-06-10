@@ -205,6 +205,7 @@ export async function uploadCreativeAssetToMeta(params: {
 
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, params.tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
   if (!metaConn) {

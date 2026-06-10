@@ -38,6 +38,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
   }): Promise<MetaInsightsData[]> {
     const connection = await db.query.metaConnections.findFirst({
       where: eq(metaConnections.tenantId, params.tenantId),
+      orderBy: (table, { desc }) => [desc(table.createdAt)],
     });
 
     if (!connection) {
@@ -192,6 +193,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     try {
       const connection = await db.query.metaConnections.findFirst({
         where: eq(metaConnections.tenantId, tenantId),
+        orderBy: (table, { desc }) => [desc(table.createdAt)],
       });
 
       if (!connection) {
@@ -327,6 +329,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     try {
       const connection = await db.query.metaConnections.findFirst({
         where: eq(metaConnections.tenantId, tenantId),
+        orderBy: (table, { desc }) => [desc(table.createdAt)],
       });
 
       if (!connection) {
@@ -407,6 +410,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     try {
       const connection = await db.query.metaConnections.findFirst({
         where: eq(metaConnections.tenantId, tenantId),
+        orderBy: (table, { desc }) => [desc(table.createdAt)],
       });
 
       if (!connection) {
