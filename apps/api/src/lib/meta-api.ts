@@ -252,19 +252,23 @@ interface InstagramInsightsResponse {
 
 /** Busca o ID da conta comercial do Instagram vinculada a alguma Pagina do Facebook do usuario. */
 export async function getInstagramBusinessAccountId(accessToken: string): Promise<string> {
+  console.log('[Instagram] /me/accounts - access_token prefix:', accessToken.slice(0, 20));
+
   const response = await metaApiCall<InstagramAccountsResponse>(
     '/me/accounts?fields=instagram_business_account',
     accessToken
   );
+
+  console.log('[Instagram] /me/accounts response:', JSON.stringify(response));
 
   const igUserId = (response.data || []).find((page) => page.instagram_business_account?.id)
     ?.instagram_business_account?.id;
 
   if (!igUserId) {
     throw new AppError(
-      403,
-      'INSTAGRAM_NOT_CONNECTED',
-      'Nenhuma conta do Instagram conectada a esta Pagina do Facebook.'
+      404,
+      'INSTAGRAM_ACCOUNT_NOT_FOUND',
+      'Nenhuma conta do Instagram Business encontrada vinculada à sua página do Facebook. Configure em Configurações do Instagram.'
     );
   }
 
@@ -277,6 +281,8 @@ export async function getInstagramMedia(igUserId: string, accessToken: string): 
     `/${igUserId}/media?fields=id,caption,media_url,thumbnail_url,timestamp,like_count,comments_count&limit=20`,
     accessToken
   );
+
+  console.log('[Instagram] /{ig_user_id}/media response:', JSON.stringify(response));
 
   return response.data || [];
 }
@@ -375,6 +381,8 @@ type MetaApiErrorPayload2 = {
 
 type MetaApiError = Error & {
   metaCode?: number;
+  metaType?: string;
+  httpStatus?: number;
 };
 
 export async function metaApiCall<T>(
@@ -531,9 +539,21 @@ export async function metaApiCall<T>(
   const maybeErr = json as MetaApiErrorPayload2;
   if (!res.ok || maybeErr?.error) {
     const code = maybeErr?.error?.code;
+    const subcode = maybeErr?.error?.error_subcode;
+    const type = maybeErr?.error?.type;
     const message = maybeErr?.error?.message || (typeof json === 'object' ? JSON.stringify(json) : String(json));
+    console.error('[Meta API] Error response:', {
+      path,
+      status: res.status,
+      code,
+      subcode,
+      type,
+      message,
+    });
     const err = new Error(`[Meta API] ${code ?? res.status}: ${message}`);
     (err as MetaApiError).metaCode = code;
+    (err as MetaApiError).metaType = type;
+    (err as MetaApiError).httpStatus = res.status;
     throw err;
   }
 

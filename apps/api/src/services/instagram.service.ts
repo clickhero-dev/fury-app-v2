@@ -55,6 +55,7 @@ export async function getRankedInstagramPosts(
   }
 
   const accessToken = decryptMetaToken(metaConn.accessToken);
+  console.log('[Instagram] getRankedInstagramPosts - tenant:', tenantId, 'objective:', objective);
 
   try {
     const igUserId = await getInstagramBusinessAccountId(accessToken);
@@ -87,10 +88,30 @@ export async function getRankedInstagramPosts(
 
     return posts;
   } catch (err) {
+    if (err instanceof AppError) {
+      throw err;
+    }
+
     const metaCode = (err as any).metaCode;
+    const metaType = (err as any).metaType;
+    console.error('[Instagram] getRankedInstagramPosts error:', {
+      metaCode,
+      metaType,
+      message: (err as Error).message,
+    });
+
     if (metaCode === 190) {
       throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
     }
-    throw err;
+
+    if (metaType === 'OAuthException' && (metaCode === 200 || metaCode === 10)) {
+      throw new AppError(
+        403,
+        'META_PERMISSION_DENIED',
+        'Permissão do Instagram ausente. Reconecte sua conta em Configurações > Integrações.'
+      );
+    }
+
+    throw new AppError(502, 'INSTAGRAM_API_ERROR', 'Erro ao buscar posts do Instagram. Tente novamente.');
   }
 }

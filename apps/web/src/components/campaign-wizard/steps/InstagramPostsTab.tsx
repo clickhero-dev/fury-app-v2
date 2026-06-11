@@ -51,7 +51,7 @@ function formatMetrics(objective: WizardObjective | null, post: InstagramPost): 
 }
 
 export function InstagramPostsTab({ value, onChange, objective }: InstagramPostsTabProps) {
-  const { data, isLoading, isError, error } = useQuery<InstagramPostsResponse>({
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery<InstagramPostsResponse>({
     queryKey: ['instagram/posts-ranked', objective],
     queryFn: async () => {
       const response = await api.get('/instagram/posts-ranked', {
@@ -94,9 +94,15 @@ export function InstagramPostsTab({ value, onChange, objective }: InstagramPosts
     );
   }
 
-  const status = (error as { response?: { status?: number } })?.response?.status;
+  const errorCode = (error as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error
+    ?.code;
+  const errorMessage = (error as { response?: { data?: { error?: { message?: string } } } })?.response?.data
+    ?.error?.message;
 
-  if (isError && (status === 401 || status === 403)) {
+  const isReconnectError = errorCode === 'META_TOKEN_EXPIRED' || errorCode === 'META_PERMISSION_DENIED';
+  const isInstagramAccountMissing = errorCode === 'INSTAGRAM_ACCOUNT_NOT_FOUND';
+
+  if (isError && isReconnectError) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500 gap-3">
         <p className="text-sm">Para usar esta funcionalidade, reconecte sua conta Meta.</p>
@@ -111,10 +117,21 @@ export function InstagramPostsTab({ value, onChange, objective }: InstagramPosts
     );
   }
 
+  if (isError && isInstagramAccountMissing) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500 px-4">
+        <p className="text-sm">{errorMessage}</p>
+      </div>
+    );
+  }
+
   if (isError) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500">
-        <p className="text-sm">Não foi possível carregar os posts do Instagram.</p>
+      <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500 gap-3">
+        <p className="text-sm">Erro ao carregar posts. Tente novamente.</p>
+        <Button variant="outline" onClick={() => refetch()} disabled={isRefetching}>
+          {isRefetching ? 'Tentando...' : 'Tentar novamente'}
+        </Button>
       </div>
     );
   }
