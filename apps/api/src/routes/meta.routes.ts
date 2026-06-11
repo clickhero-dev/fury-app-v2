@@ -6,7 +6,6 @@ import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 const router = Router();
 
 router.get('/auth/test', (req, res) => {
-  console.log('=== META AUTH TEST HIT ===');
   res.json({ status: 'ok', message: 'meta auth router is reachable', timestamp: new Date().toISOString() });
 });
 

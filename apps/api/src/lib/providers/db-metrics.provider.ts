@@ -331,15 +331,6 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         const clicks = parseInt(insight.clicks || '0', 10);
         const objective = meta?.objective ?? null;
 
-        console.log('[Campaigns] conversions debug:', {
-          campaignId,
-          name: insight.campaign_name || meta?.name,
-          objective,
-          actions: insight.actions,
-          unique_actions: insight.unique_actions,
-          cost_per_action_type: insight.cost_per_action_type,
-        });
-
         const { roas, cpa, conversions } = extractCampaignMetricsFromInsight(
           insight,
           spendReais,

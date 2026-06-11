@@ -401,8 +401,7 @@ export function GeradorCopy() {
                 onClick={async () => {
                   if (!selectedVariation?.id) return;
                   try {
-                    const response = await api.post(`/studio/publish/${selectedVariation.id}`, {});
-                    console.log('Published to Meta', response.data);
+                    await api.post(`/studio/publish/${selectedVariation.id}`, {});
                   } catch (error) {
                     console.error('Erro ao publicar no Meta', error);
                   }

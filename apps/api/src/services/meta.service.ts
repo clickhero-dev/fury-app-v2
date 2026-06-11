@@ -155,9 +155,7 @@ export async function handleMetaOAuthCallback(
   code: string,
   state: string,
 ): Promise<{ tenantId: string; context: OAuthContext; returnUrl: string }> {
-  console.log('[Meta Service] handleMetaOAuthCallback iniciado, state length:', state?.length);
   const { tenantId, context, returnUrl } = verifyOAuthState(state);
-  console.log('[Meta Service] tenantId extraído do state:', tenantId, 'context:', context);
   const appId = getRequiredEnv('META_APP_ID');
   const appSecret = getRequiredEnv('META_APP_SECRET');
   const redirectUri =
@@ -200,7 +198,6 @@ export async function handleMetaOAuthCallback(
         updatedAt: new Date(),
       })
       .where(eq(metaConnections.id, existing.id));
-    console.log('=== META CONNECTION SAVED ===', { tenantId, accountsCount: adAccounts.length, action: 'update' });
     await addSyncJob({ tenantId, metaUserId, adAccounts });
     return { tenantId, context, returnUrl: resolvedReturnUrl };
   }
@@ -213,7 +210,6 @@ export async function handleMetaOAuthCallback(
     adAccounts,
   });
 
-  console.log('=== META CONNECTION SAVED ===', { tenantId, accountsCount: adAccounts.length, action: 'insert' });
   await addSyncJob({ tenantId, metaUserId, adAccounts });
   return { tenantId, context, returnUrl: resolvedReturnUrl };
 }

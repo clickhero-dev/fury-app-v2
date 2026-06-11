@@ -254,14 +254,10 @@ interface InstagramInsightsResponse {
 
 /** Busca o ID da conta comercial do Instagram vinculada a alguma Pagina do Facebook do usuario. */
 export async function getInstagramBusinessAccountId(accessToken: string): Promise<string> {
-  console.log('[Instagram] /me/accounts - access_token prefix:', accessToken.slice(0, 20));
-
   const response = await metaApiCall<InstagramAccountsResponse>(
     '/me/accounts?fields=instagram_business_account',
     accessToken
   );
-
-  console.log('[Instagram] /me/accounts response:', JSON.stringify(response));
 
   const igUserId = (response.data || []).find((page) => page.instagram_business_account?.id)
     ?.instagram_business_account?.id;
@@ -283,8 +279,6 @@ export async function getInstagramMedia(igUserId: string, accessToken: string): 
     `/${igUserId}/media?fields=id,caption,media_url,thumbnail_url,media_type,media_product_type,timestamp,like_count,comments_count&limit=20`,
     accessToken
   );
-
-  console.log('[Instagram] /{ig_user_id}/media response:', JSON.stringify(response));
 
   return response.data || [];
 }
@@ -326,8 +320,6 @@ export async function getInstagramMediaInsights(
         `/${mediaId}/insights?metric=${metric}`,
         accessToken
       );
-
-      console.log(`[Instagram] /${mediaId}/insights?metric=${metric} response:`, JSON.stringify(response));
 
       for (const item of response.data || []) {
         const field = METRIC_FIELD_MAP[item.name];

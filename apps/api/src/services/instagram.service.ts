@@ -55,7 +55,6 @@ export async function getRankedInstagramPosts(
   }
 
   const accessToken = decryptMetaToken(metaConn.accessToken);
-  console.log('[Instagram] getRankedInstagramPosts - tenant:', tenantId, 'objective:', objective);
 
   try {
     const igUserId = await getInstagramBusinessAccountId(accessToken);
