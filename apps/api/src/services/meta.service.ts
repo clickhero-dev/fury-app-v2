@@ -14,14 +14,25 @@ import {
 import { addSyncJob } from '../lib/sync-jobs.js';
 
 const META_OAUTH_URL = 'https://www.facebook.com/v20.0/dialog/oauth';
+
+// Ordem dos escopos reflete a dependencia entre as etapas de consentimento:
+// Business Manager -> Paginas (filtradas pelas BMs escolhidas) -> Instagram
+// (depende das Paginas) -> Conta de Anuncios. A Meta NAO garante que a UI de
+// consentimento respeite essa ordem, mas reordenar o parametro scope e a
+// unica alavanca disponivel via API para tentar influenciar o agrupamento
+// das telas exibidas ao usuario.
 const META_SCOPES = [
-  'ads_read',
-  'ads_management',
+  // 1) Business Manager
   'business_management',
+  // 2) Paginas (vinculadas as BMs selecionadas)
   'pages_show_list',
   'pages_read_engagement',
+  // 3) Instagram (depende das Paginas)
   'instagram_basic',
   'instagram_manage_insights',
+  // 4) Conta de Anuncios
+  'ads_management',
+  'ads_read',
 ];
 
 export type OAuthContext = 'onboarding' | 'settings';
@@ -126,6 +137,16 @@ export function generateMetaAuthUrl(tenantId: string, context: OAuthContext = 'o
   authUrl.searchParams.set('redirect_uri', redirectUri);
   authUrl.searchParams.set('scope', META_SCOPES.join(','));
   authUrl.searchParams.set('state', state);
+
+  // Alternativa para forcar a ordem/agrupamento das telas de consentimento:
+  // o fluxo "Facebook Login for Business" aceita um parametro `config_id`
+  // (criado no Meta App Dashboard, em Facebook Login for Business > Configurations),
+  // que permite definir explicitamente quais permissoes/etapas (BM, Paginas,
+  // Contas de Anuncio) sao solicitadas e em qual ordem. Nao usado atualmente
+  // porque exige criar e manter essa configuracao no painel da Meta; se a
+  // ordenacao do array META_SCOPES nao for suficiente, considerar migrar
+  // para esse fluxo definindo authUrl.searchParams.set('config_id', '<id>')
+  // no lugar de `scope`.
 
   return authUrl.toString();
 }
