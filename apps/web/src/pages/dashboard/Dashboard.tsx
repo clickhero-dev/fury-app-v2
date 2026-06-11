@@ -19,6 +19,8 @@ import {
   ShieldCheck,
   AlertTriangle,
   Info,
+  MessageCircle,
+  Bookmark,
 } from 'lucide-react';
 import { AppLayout, PageHeader } from '@/components';
 import {
@@ -574,6 +576,100 @@ function ActiveCampaignsTable({
   );
 }
 
+// ─── Instagram Engagement ──────────────────────────────────────────────────────
+
+interface InstagramInsights {
+  comments: number;
+  saves: number;
+  followers: number;
+  period: { from: string; to: string };
+}
+
+function InstagramMetricCard({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: React.ElementType;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex items-center gap-3">
+      <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
+        <Icon className="w-5 h-5 text-gray-400" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-gray-500 leading-tight">{label}</p>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function FollowersValue({ value }: { value: number }) {
+  if (value > 0) {
+    return <p className="text-lg md:text-xl font-black leading-tight text-green-600">+{value.toLocaleString('pt-BR')}</p>;
+  }
+  if (value < 0) {
+    return <p className="text-lg md:text-xl font-black leading-tight text-red-600">{value.toLocaleString('pt-BR')}</p>;
+  }
+  return <p className="text-lg md:text-xl font-black leading-tight text-gray-900">0</p>;
+}
+
+function InstagramEngagementSection({ startDate, endDate }: { startDate: string; endDate: string }) {
+  const { data, isLoading } = useQuery<InstagramInsights | null>({
+    queryKey: ['instagram-insights', startDate, endDate],
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ success: boolean; data: InstagramInsights | null }>(
+          '/dashboard/instagram-insights',
+          { params: { date_from: startDate, date_to: endDate } }
+        );
+        return res.data.data ?? null;
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
+  });
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-sm font-bold text-gray-900">Engajamento Instagram</h3>
+        <p className="text-xs text-gray-400 mt-0.5">Métricas orgânicas no período selecionado</p>
+      </div>
+
+      {!isLoading && data === null ? (
+        <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm text-center">
+          <p className="text-sm text-gray-400 mb-2">Conecte seu Instagram para ver métricas</p>
+          <Link to="/configuracoes/integracoes" className="text-xs text-[#EA580C] font-medium hover:underline">
+            Ir para Integrações →
+          </Link>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <InstagramMetricCard icon={MessageCircle} label="💬 Comentários">
+            <p className="text-lg md:text-xl font-black leading-tight text-gray-900">
+              {(data?.comments ?? 0).toLocaleString('pt-BR')}
+            </p>
+          </InstagramMetricCard>
+          <InstagramMetricCard icon={Bookmark} label="🔖 Salvamentos">
+            <p className="text-lg md:text-xl font-black leading-tight text-gray-900">
+              {(data?.saves ?? 0).toLocaleString('pt-BR')}
+            </p>
+          </InstagramMetricCard>
+          <InstagramMetricCard icon={Users} label="👥 Seguidores">
+            <FollowersValue value={data?.followers ?? 0} />
+          </InstagramMetricCard>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function Dashboard() {
@@ -804,6 +900,11 @@ export function Dashboard() {
         {/* ── Active campaigns table ────────────────────────────────────────── */}
         <div className="mt-5">
           <ActiveCampaignsTable campaigns={activeCampaigns} />
+        </div>
+
+        {/* ── Instagram engagement ─────────────────────────────────────────── */}
+        <div className="mt-5">
+          <InstagramEngagementSection startDate={startDate} endDate={endDate} />
         </div>
       </div>
       </TooltipProvider>

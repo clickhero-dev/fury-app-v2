@@ -8,6 +8,7 @@ import studioRoutes from './studio.routes.js';
 import campaignRoutes from './campaigns.routes.js';
 import budgetRoutes from './budget.routes.js';
 import instagramRoutes from './instagram.routes.js';
+import dashboardRoutes from './dashboard.routes.js';
 
 
 import furyRoutes from './fury.routes.js';
@@ -30,6 +31,7 @@ router.use('/studio', studioRoutes);
 router.use('/campaigns', authMiddleware, tenantMiddleware, campaignRoutes);
 router.use('/budget', budgetRoutes);
 router.use('/instagram', authMiddleware, tenantMiddleware, instagramRoutes);
+router.use('/dashboard', authMiddleware, tenantMiddleware, dashboardRoutes);
 router.use('/fury', furyRoutes);
 router.use('/goals', goalsRoutes);
 router.use('/billing', billingRoutes);

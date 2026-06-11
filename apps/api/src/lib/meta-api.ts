@@ -338,6 +338,62 @@ export async function getInstagramMediaInsights(
   return insights;
 }
 
+export interface InstagramAccountInsights {
+  comments: number;
+  saves: number;
+  followerChange: number;
+}
+
+interface InstagramTotalValueInsightsResponse {
+  data: Array<{ name: string; total_value?: { value: number } }>;
+}
+
+interface InstagramTimeSeriesInsightsResponse {
+  data: Array<{ name: string; period: string; values: Array<{ value: number; end_time?: string }> }>;
+}
+
+/** Busca metricas organicas da conta (comentarios, salvamentos e variacao de seguidores) no periodo informado (since/until no formato YYYY-MM-DD). */
+export async function getInstagramAccountInsights(
+  igUserId: string,
+  accessToken: string,
+  since: string,
+  until: string
+): Promise<InstagramAccountInsights> {
+  const insights: InstagramAccountInsights = { comments: 0, saves: 0, followerChange: 0 };
+
+  try {
+    const totals = await metaApiCall<InstagramTotalValueInsightsResponse>(
+      `/${igUserId}/insights?metric=comments,saved&metric_type=total_value&period=day&since=${since}&until=${until}`,
+      accessToken
+    );
+
+    for (const item of totals.data || []) {
+      if (item.name === 'comments') insights.comments = item.total_value?.value ?? 0;
+      if (item.name === 'saved') insights.saves = item.total_value?.value ?? 0;
+    }
+  } catch (err) {
+    console.warn('[Instagram] account insights (comments/saved) indisponivel:', (err as Error).message);
+  }
+
+  try {
+    const followers = await metaApiCall<InstagramTimeSeriesInsightsResponse>(
+      `/${igUserId}/insights?metric=follower_count&period=day&since=${since}&until=${until}`,
+      accessToken
+    );
+
+    const values = followers.data?.[0]?.values ?? [];
+    if (values.length >= 2) {
+      const first = values[0]?.value ?? 0;
+      const last = values[values.length - 1]?.value ?? 0;
+      insights.followerChange = last - first;
+    }
+  } catch (err) {
+    console.warn('[Instagram] account insights (follower_count) indisponivel:', (err as Error).message);
+  }
+
+  return insights;
+}
+
 interface MetaPermissionsResponse {
   data: Array<{ permission: string; status: 'granted' | 'declined' | 'expired' }>;
 }
@@ -471,6 +527,28 @@ export async function metaApiCall<T>(
       if (pathNoQuery.includes('/me/accounts')) {
         return {
           data: [{ id: 'mock_page_id', instagram_business_account: { id: 'mock_ig_user_id' } }],
+        } as T;
+      }
+      if (path.includes('metric_type=total_value')) {
+        return {
+          data: [
+            { name: 'comments', total_value: { value: 18 } },
+            { name: 'saved', total_value: { value: 37 } },
+          ],
+        } as T;
+      }
+      if (path.includes('metric=follower_count')) {
+        return {
+          data: [
+            {
+              name: 'follower_count',
+              period: 'day',
+              values: [
+                { value: 1200, end_time: '1970-01-01T00:00:00+0000' },
+                { value: 1242, end_time: '1970-01-02T00:00:00+0000' },
+              ],
+            },
+          ],
         } as T;
       }
       if (path.includes('/insights?metric=')) {

@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db, metaConnections } from '../lib/db.js';
 import {
+  getInstagramAccountInsights,
   getInstagramBusinessAccountId,
   getInstagramMedia,
   getInstagramMediaInsights,
@@ -39,6 +40,53 @@ function computeScore(objective: InstagramRankingObjective, post: {
   }
 
   return insights.saved * 0.4 + insights.shares * 0.25 + commentsCount * 0.2 + likeCount * 0.15;
+}
+
+export interface InstagramDashboardInsights {
+  comments: number;
+  saves: number;
+  followers: number;
+  period: { from: string; to: string };
+}
+
+/**
+ * Busca metricas organicas (comentarios, salvamentos e variacao de seguidores)
+ * para o card de engajamento do Dashboard. Retorna `null` (sem lancar erro)
+ * quando o tenant nao tem conexao Meta ou nao tem conta do Instagram Business
+ * vinculada, para que o frontend exiba o estado vazio.
+ */
+export async function getInstagramDashboardInsights(
+  tenantId: string,
+  dateFrom: string,
+  dateTo: string
+): Promise<InstagramDashboardInsights | null> {
+  const metaConn = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+
+  if (!metaConn) {
+    return null;
+  }
+
+  const accessToken = decryptMetaToken(metaConn.accessToken);
+
+  try {
+    const igUserId = await getInstagramBusinessAccountId(accessToken);
+    const insights = await getInstagramAccountInsights(igUserId, accessToken, dateFrom, dateTo);
+
+    return {
+      comments: insights.comments,
+      saves: insights.saves,
+      followers: insights.followerChange,
+      period: { from: dateFrom, to: dateTo },
+    };
+  } catch (err) {
+    if (err instanceof AppError && err.code === 'INSTAGRAM_ACCOUNT_NOT_FOUND') {
+      return null;
+    }
+    throw err;
+  }
 }
 
 export async function getRankedInstagramPosts(
