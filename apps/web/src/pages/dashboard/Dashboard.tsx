@@ -22,35 +22,30 @@ import {
 import { AppLayout, PageHeader } from '@/components';
 import api from '@/lib/api';
 import { useGoalsProgress, translateObjective, type FuryAlert } from '@/hooks/useGoalsProgress';
+import { getSaoPauloYMD, formatYMD, addDaysToYMD } from '@/lib/date-sao-paulo';
 
 // ─── Period ───────────────────────────────────────────────────────────────────
 
 type Period = 'today' | 'last_7d' | 'this_month' | 'last_month';
 
-function toYMD(d: Date): string {
-  return d.toISOString().split('T')[0];
-}
-
 function getPeriodDates(period: Period): { startDate: string; endDate: string } {
-  const now = new Date();
-  const today = toYMD(now);
+  const now = getSaoPauloYMD();
+  const today = formatYMD(now);
 
   if (period === 'today') {
     return { startDate: today, endDate: today };
   }
   if (period === 'last_7d') {
-    const start = new Date(now);
-    start.setDate(start.getDate() - 6);
-    return { startDate: toYMD(start), endDate: today };
+    const start = addDaysToYMD(now, -6);
+    return { startDate: formatYMD(start), endDate: today };
   }
   if (period === 'last_month') {
-    const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastOfLastMonth  = new Date(now.getFullYear(), now.getMonth(), 0);
-    return { startDate: toYMD(firstOfLastMonth), endDate: toYMD(lastOfLastMonth) };
+    const lastOfLastMonth = addDaysToYMD({ year: now.year, month: now.month, day: 1 }, -1);
+    const firstOfLastMonth = { year: lastOfLastMonth.year, month: lastOfLastMonth.month, day: 1 };
+    return { startDate: formatYMD(firstOfLastMonth), endDate: formatYMD(lastOfLastMonth) };
   }
   // this_month
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { startDate: toYMD(firstOfMonth), endDate: today };
+  return { startDate: formatYMD({ year: now.year, month: now.month, day: 1 }), endDate: today };
 }
 
 function formatPeriodLabel(startDate: string, endDate: string): string {

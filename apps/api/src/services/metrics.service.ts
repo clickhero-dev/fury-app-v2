@@ -1,4 +1,5 @@
 import { IMetricsProvider } from '../lib/providers/metrics.provider.js';
+import { todaySaoPauloYMD, daysAgoSaoPauloYMD } from '../utils/date-sao-paulo.js';
 import type {
   MetricsSummaryResponse,
   CampaignResponse,
@@ -13,13 +14,9 @@ export class MetricsService {
   constructor(private provider: IMetricsProvider) {}
 
   private getDefaultDateRange(): { startDate: string; endDate: string } {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
-
     return {
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0],
+      startDate: daysAgoSaoPauloYMD(30),
+      endDate: todaySaoPauloYMD(),
     };
   }
 

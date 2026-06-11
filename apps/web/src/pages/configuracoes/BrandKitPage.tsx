@@ -158,7 +158,7 @@ function BrandKitContent() {
       {toast && <Toast message={toast.message} type={toast.type} />}
 
       <PageHeader
-        title="Brand Kit"
+        title="Dados da Marca"
         description="Configure a identidade visual e o tom de voz da sua marca para personalizar os criativos gerados automaticamente."
       />
 

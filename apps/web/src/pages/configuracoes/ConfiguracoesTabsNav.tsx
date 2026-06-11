@@ -19,7 +19,7 @@ const TAB_LABELS: { value: ConfiguracoesTab; label: string; to: string }[] = [
   { value: 'faturamento', label: 'Faturamento', to: '/configuracoes?tab=faturamento' },
   { value: 'integracoes', label: 'Integrações', to: '/configuracoes?tab=integracoes' },
   { value: 'fury', label: 'FURY Engine', to: '/configuracoes?tab=fury' },
-  { value: 'brand-kit', label: 'Brand Kit', to: '/configuracoes/brand-kit' },
+  { value: 'brand-kit', label: 'Dados da Marca', to: '/configuracoes/brand-kit' },
 ];
 
 export function ConfiguracoesTabsNav({ activeTab }: { activeTab: ConfiguracoesTab }) {

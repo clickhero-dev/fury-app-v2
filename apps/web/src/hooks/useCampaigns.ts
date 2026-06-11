@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/api';
 import { campanhasMock } from '../lib/campanhas-mock';
+import { getSaoPauloYMD, formatYMD } from '../lib/date-sao-paulo';
 import {
   mapCampaignApiToRow,
   type CampaignApiItem,
@@ -18,15 +19,10 @@ function normalizeCampaignItems(data: unknown): CampaignApiItem[] {
   return [];
 }
 
-function toYMD(d: Date): string {
-  return d.toISOString().split('T')[0];
-}
-
-/** "Este mês": do primeiro dia do mês atual até hoje. Mesmo cálculo usado no Dashboard. */
+/** "Este mês": do primeiro dia do mês atual até hoje, no horario de Brasilia. Mesmo cálculo usado no Dashboard. */
 function getThisMonthRange(): { startDate: string; endDate: string } {
-  const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { startDate: toYMD(firstOfMonth), endDate: toYMD(now) };
+  const now = getSaoPauloYMD();
+  return { startDate: formatYMD({ ...now, day: 1 }), endDate: formatYMD(now) };
 }
 
 export interface CampaignsPeriod {
