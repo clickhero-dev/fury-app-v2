@@ -72,9 +72,10 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
     return {
       1: state.objective !== null,
       2: Boolean(
-        (state.creative.assetId || state.creative.uploadUrl) &&
+        (state.creative.assetId || state.creative.uploadUrl || state.creative.instagramMediaId) &&
           state.creative.headline.trim().length > 0 &&
-          state.creative.primaryText.trim().length > 0
+          state.creative.primaryText.trim().length > 0 &&
+          (state.objective !== 'visits' || /^https?:\/\//.test(state.creative.destinationUrl?.trim() ?? ''))
       ),
       3: Boolean(state.audience.city.trim().length > 0),
       4: state.budget.dailyBudgetBrl >= 5,

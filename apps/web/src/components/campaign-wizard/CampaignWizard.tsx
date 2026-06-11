@@ -114,7 +114,9 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {state.currentStep === 1 && <Step1Objective value={state.objective} onChange={wizard.setObjective} />}
-          {state.currentStep === 2 && <Step2Creative value={state.creative} onChange={wizard.setCreative} />}
+          {state.currentStep === 2 && (
+            <Step2Creative value={state.creative} onChange={wizard.setCreative} objective={state.objective} />
+          )}
           {state.currentStep === 3 && <Step3Audience value={state.audience} onChange={wizard.setAudience} />}
           {state.currentStep === 4 && <Step4Budget value={state.budget} onChange={wizard.setBudget} />}
           {state.currentStep === 5 && (

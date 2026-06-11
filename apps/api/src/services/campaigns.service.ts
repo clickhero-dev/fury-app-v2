@@ -883,8 +883,11 @@ export interface CreateWizardCampaignArgs {
   objective: WizardObjective;
   creativeAssetId?: string;
   creativeUploadUrl?: string;
+  creativeInstagramMediaId?: string;
+  creativeMediaUrl?: string;
   headline: string;
   primaryText: string;
+  destinationUrl?: string;
   locationCity: string;
   locationCityKey?: string;
   locationRadiusKm: number;
@@ -926,8 +929,8 @@ export async function createCampaignFromWizard(
   const accessToken = decryptMetaToken(metaConn.accessToken);
   const objectiveConfig = WIZARD_OBJECTIVE_MAP[args.objective];
 
-  // Resolve image URL: direct upload takes precedence over a gallery asset
-  let imageUrl = args.creativeUploadUrl;
+  // Resolve image URL: Instagram post > direct upload > gallery asset
+  let imageUrl = args.creativeInstagramMediaId ? args.creativeMediaUrl : args.creativeUploadUrl;
   if (!imageUrl && args.creativeAssetId) {
     const asset = await db.query.creativeAssets.findFirst({
       where: and(eq(creativeAssets.id, args.creativeAssetId), eq(creativeAssets.tenantId, args.tenantId)),
@@ -1040,6 +1043,7 @@ export async function createCampaignFromWizard(
               message: args.primaryText,
               name: args.headline,
               call_to_action: { type: objectiveConfig.cta },
+              ...(args.objective === 'visits' ? { link: args.destinationUrl } : {}),
             },
           },
         },

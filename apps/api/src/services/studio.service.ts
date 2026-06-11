@@ -301,7 +301,37 @@ export type StudioAssetListItem = {
   complianceStatus: string;
   metaAssetId: string | null;
   createdAt: string;
+  headline?: string;
+  primaryText?: string;
 };
+
+/**
+ * Extrai headline/primary_text salvos no momento da geracao do criativo.
+ * complianceNotes guarda metadados de geracao (ex: { headline, cta }) ate o
+ * worker de compliance sobrescrever com o resultado da checagem
+ * (ex: { approved, issues, text_percentage }) — nesse caso nao ha texto a extrair.
+ */
+function extractCreativeCopyFromComplianceNotes(complianceNotes: string | null): {
+  headline?: string;
+  primaryText?: string;
+} {
+  if (!complianceNotes) return {};
+
+  try {
+    const parsed = JSON.parse(complianceNotes) as Record<string, unknown>;
+
+    const isComplianceResult =
+      'approved' in parsed || 'issues' in parsed || 'text_percentage' in parsed;
+    if (isComplianceResult) return {};
+
+    const headline = typeof parsed.headline === 'string' ? parsed.headline : undefined;
+    const primaryText = typeof parsed.primary_text === 'string' ? parsed.primary_text : undefined;
+
+    return { headline, primaryText };
+  } catch {
+    return {};
+  }
+}
 
 export async function listStudioAssetsForTenant(params: {
   tenantId: string;
@@ -359,6 +389,7 @@ export async function listStudioAssetsForTenant(params: {
       complianceNotes: r.complianceNotes ?? null,
       metaAssetId: r.metaAssetId ?? null,
       createdAt: r.createdAt.toISOString(),
+      ...extractCreativeCopyFromComplianceNotes(r.complianceNotes ?? null),
     })),
     total,
     page,

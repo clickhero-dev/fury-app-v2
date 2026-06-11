@@ -228,6 +228,91 @@ export async function getUserAdAccounts(accessToken: string): Promise<MetaAdAcco
   return accounts;
 }
 
+export interface InstagramMediaItem {
+  id: string;
+  caption?: string;
+  media_url?: string;
+  thumbnail_url?: string;
+  timestamp: string;
+  like_count?: number;
+  comments_count?: number;
+}
+
+interface InstagramMediaListResponse {
+  data: InstagramMediaItem[];
+}
+
+interface InstagramAccountsResponse {
+  data: Array<{ id: string; instagram_business_account?: { id: string } }>;
+}
+
+interface InstagramInsightsResponse {
+  data: Array<{ name: string; values: Array<{ value: number }> }>;
+}
+
+/** Busca o ID da conta comercial do Instagram vinculada a alguma Pagina do Facebook do usuario. */
+export async function getInstagramBusinessAccountId(accessToken: string): Promise<string> {
+  const response = await metaApiCall<InstagramAccountsResponse>(
+    '/me/accounts?fields=instagram_business_account',
+    accessToken
+  );
+
+  const igUserId = (response.data || []).find((page) => page.instagram_business_account?.id)
+    ?.instagram_business_account?.id;
+
+  if (!igUserId) {
+    throw new AppError(
+      403,
+      'INSTAGRAM_NOT_CONNECTED',
+      'Nenhuma conta do Instagram conectada a esta Pagina do Facebook.'
+    );
+  }
+
+  return igUserId;
+}
+
+/** Busca os ultimos posts do Instagram de uma conta comercial. */
+export async function getInstagramMedia(igUserId: string, accessToken: string): Promise<InstagramMediaItem[]> {
+  const response = await metaApiCall<InstagramMediaListResponse>(
+    `/${igUserId}/media?fields=id,caption,media_url,thumbnail_url,timestamp,like_count,comments_count&limit=20`,
+    accessToken
+  );
+
+  return response.data || [];
+}
+
+export interface InstagramMediaInsights {
+  reach: number;
+  saved: number;
+  shares: number;
+  replies: number;
+}
+
+/** Busca metricas de um post do Instagram. Retorna zeros se indisponivel (ex.: stories/reels). */
+export async function getInstagramMediaInsights(
+  mediaId: string,
+  accessToken: string
+): Promise<InstagramMediaInsights> {
+  const insights: InstagramMediaInsights = { reach: 0, saved: 0, shares: 0, replies: 0 };
+
+  try {
+    const response = await metaApiCall<InstagramInsightsResponse>(
+      `/${mediaId}/insights?metric=reach,saved,shares,replies`,
+      accessToken
+    );
+
+    for (const item of response.data || []) {
+      if (item.name in insights) {
+        insights[item.name as keyof InstagramMediaInsights] = item.values?.[0]?.value ?? 0;
+      }
+    }
+  } catch {
+    // stories/reels podem nao ter algumas (ou todas) metricas disponiveis
+  }
+
+  return insights;
+}
+
 export async function getMetaUserId(accessToken: string): Promise<string> {
   const url = new URL(`${META_GRAPH_BASE_URL}/me`);
   url.searchParams.set('fields', 'id');
@@ -329,6 +414,45 @@ export async function metaApiCall<T>(
 
     if (method === 'GET') {
       const pathNoQuery = path.split('?')[0] || path;
+      if (pathNoQuery.includes('/me/accounts')) {
+        return {
+          data: [{ id: 'mock_page_id', instagram_business_account: { id: 'mock_ig_user_id' } }],
+        } as T;
+      }
+      if (path.includes('metric=reach')) {
+        return {
+          data: [
+            { name: 'reach', values: [{ value: 1500 }] },
+            { name: 'saved', values: [{ value: 45 }] },
+            { name: 'shares', values: [{ value: 22 }] },
+            { name: 'replies', values: [{ value: 6 }] },
+          ],
+        } as T;
+      }
+      if (pathNoQuery.endsWith('/media')) {
+        return {
+          data: [
+            {
+              id: 'mock_media_1',
+              caption: 'Confira nossa promoção especial deste mês! Aproveite enquanto dura.',
+              media_url: 'https://placehold.co/600x600?text=Post+1',
+              thumbnail_url: 'https://placehold.co/600x600?text=Post+1',
+              timestamp: new Date(Date.now() - 86400000).toISOString(),
+              like_count: 120,
+              comments_count: 14,
+            },
+            {
+              id: 'mock_media_2',
+              caption: 'Bastidores do nosso atendimento de hoje.',
+              media_url: 'https://placehold.co/600x600?text=Post+2',
+              thumbnail_url: 'https://placehold.co/600x600?text=Post+2',
+              timestamp: new Date(Date.now() - 172800000).toISOString(),
+              like_count: 60,
+              comments_count: 4,
+            },
+          ],
+        } as T;
+      }
       if (pathNoQuery.includes('/search')) {
         return {
           data: [

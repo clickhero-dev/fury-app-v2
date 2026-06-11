@@ -24,7 +24,11 @@ interface Step5ReviewProps {
 export function Step5Review({ state, onViewCampaigns, onCreateAnother }: Step5ReviewProps) {
   const mutation = useCreateCampaign();
 
-  const imageUrl = state.creative.uploadUrl || state.creative.assetUrl;
+  const isInstagramCreative = Boolean(state.creative.instagramMediaId);
+  const imageUrl = isInstagramCreative
+    ? state.creative.mediaUrl
+    : state.creative.uploadUrl || state.creative.assetUrl;
+  const creativeSourceLabel = isInstagramCreative ? 'Post do Instagram' : 'Galeria do Estúdio';
   const objectiveLabel = state.objective ? OBJECTIVE_LABELS[state.objective] : '';
   const total =
     state.budget.durationDays !== undefined
@@ -38,8 +42,11 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother }: Step5Re
       objective: state.objective,
       creative_asset_id: state.creative.assetId,
       creative_upload_url: state.creative.uploadUrl,
+      creative_instagram_media_id: state.creative.instagramMediaId,
+      creative_media_url: state.creative.instagramMediaId ? state.creative.mediaUrl : undefined,
       headline: state.creative.headline,
       primary_text: state.creative.primaryText,
+      destination_url: state.creative.destinationUrl,
       location_city: state.audience.city,
       location_city_key: state.audience.cityKey,
       location_radius_km: state.audience.radiusKm,
@@ -95,7 +102,9 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother }: Step5Re
             )}
           </div>
           <div className="min-w-0">
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Criativo</div>
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
+              Criativo · {creativeSourceLabel}
+            </div>
             <div className="text-sm font-medium text-gray-900 truncate">{state.creative.headline}</div>
             <div className="text-xs text-gray-500 mt-1 line-clamp-2">{state.creative.primaryText}</div>
           </div>

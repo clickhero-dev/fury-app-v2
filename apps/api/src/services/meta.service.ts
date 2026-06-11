@@ -13,7 +13,13 @@ import {
 import { addSyncJob } from '../lib/sync-jobs.js';
 
 const META_OAUTH_URL = 'https://www.facebook.com/v20.0/dialog/oauth';
-const META_SCOPES = ['ads_read', 'ads_management', 'business_management'];
+const META_SCOPES = [
+  'ads_read',
+  'ads_management',
+  'business_management',
+  'instagram_basic',
+  'instagram_manage_insights',
+];
 
 export type OAuthContext = 'onboarding' | 'settings';
 

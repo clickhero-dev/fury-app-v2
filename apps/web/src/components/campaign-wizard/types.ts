@@ -13,6 +13,9 @@ export interface WizardCreativeState {
   uploadUrl?: string;
   headline: string;
   primaryText: string;
+  destinationUrl?: string;
+  instagramMediaId?: string;
+  mediaUrl?: string;
 }
 
 export interface WizardAudienceState {
@@ -42,8 +45,11 @@ export interface CreateWizardCampaignPayload {
   objective: WizardObjective;
   creative_asset_id?: string;
   creative_upload_url?: string;
+  creative_instagram_media_id?: string;
+  creative_media_url?: string;
   headline: string;
   primary_text: string;
+  destination_url?: string;
   location_city: string;
   location_city_key?: string;
   location_radius_km: number;

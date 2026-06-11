@@ -6,7 +6,8 @@ import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import type { StudioAsset } from '@/types/studio';
 import { useUploadCreative } from '../hooks/useCreateCampaign';
-import type { WizardCreativeState } from '../types';
+import type { WizardCreativeState, WizardObjective } from '../types';
+import { InstagramPostsTab } from './InstagramPostsTab';
 
 interface StudioAssetResponse {
   assets: StudioAsset[];
@@ -17,10 +18,11 @@ const MAX_UPLOAD_SIZE = 5 * 1024 * 1024;
 interface Step2CreativeProps {
   value: WizardCreativeState;
   onChange: (updates: Partial<WizardCreativeState>) => void;
+  objective: WizardObjective | null;
 }
 
-export function Step2Creative({ value, onChange }: Step2CreativeProps) {
-  const [tab, setTab] = useState<'gallery' | 'upload'>(value.uploadUrl ? 'upload' : 'gallery');
+export function Step2Creative({ value, onChange, objective }: Step2CreativeProps) {
+  const [tab, setTab] = useState<'gallery' | 'upload' | 'instagram'>(value.uploadUrl ? 'upload' : value.instagramMediaId ? 'instagram' : 'gallery');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadMutation = useUploadCreative();
@@ -81,10 +83,11 @@ export function Step2Creative({ value, onChange }: Step2CreativeProps) {
         <p className="text-sm text-gray-500 mt-1">Escolha uma imagem da sua galeria ou faça upload de um novo arquivo.</p>
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as 'gallery' | 'upload')}>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as 'gallery' | 'upload' | 'instagram')}>
         <TabsList>
           <TabsTrigger value="gallery">Escolher da Galeria</TabsTrigger>
           <TabsTrigger value="upload">Fazer Upload</TabsTrigger>
+          <TabsTrigger value="instagram">Post do Instagram</TabsTrigger>
         </TabsList>
 
         <TabsContent value="gallery">
@@ -170,6 +173,10 @@ export function Step2Creative({ value, onChange }: Step2CreativeProps) {
           </div>
           {uploadError && <p className="text-sm text-red-600 mt-2">{uploadError}</p>}
         </TabsContent>
+
+        <TabsContent value="instagram">
+          <InstagramPostsTab value={value} onChange={onChange} objective={objective} />
+        </TabsContent>
       </Tabs>
 
       <div className="space-y-4 pt-2 border-t border-gray-100">
@@ -202,6 +209,26 @@ export function Step2Creative({ value, onChange }: Step2CreativeProps) {
             className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20 resize-none"
           />
         </div>
+
+        {objective === 'visits' && (
+          <div>
+            <label className="text-sm font-bold text-gray-900 mb-1 block">Link de destino</label>
+            <p className="text-xs text-gray-500 mb-2">Para onde as pessoas vão ao clicar?</p>
+            <input
+              type="text"
+              value={value.destinationUrl ?? ''}
+              onChange={(e) => onChange({ destinationUrl: e.target.value })}
+              placeholder="https://seusite.com.br ou link do WhatsApp"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20"
+            />
+            {value.destinationUrl && !/^https?:\/\//.test(value.destinationUrl.trim()) && (
+              <p className="text-sm text-red-600 mt-1">O link deve começar com http:// ou https://</p>
+            )}
+            <p className="text-xs text-gray-400 mt-1">
+              Dica: use o link do seu WhatsApp Business para receber mensagens diretamente.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

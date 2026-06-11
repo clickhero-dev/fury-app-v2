@@ -372,8 +372,11 @@ const createWizardSchema = z
 
     creative_asset_id: z.string().min(1).optional(),
     creative_upload_url: z.string().min(1).optional(),
+    creative_instagram_media_id: z.string().min(1).optional(),
+    creative_media_url: z.string().min(1).optional(),
     headline: z.string().min(1).max(40),
     primary_text: z.string().min(1).max(125),
+    destination_url: z.string().regex(/^https?:\/\//, 'URL inválida. Use http:// ou https://').optional(),
 
     location_city: z.string().min(1),
     location_city_key: z.string().min(1).optional(),
@@ -387,13 +390,20 @@ const createWizardSchema = z
     daily_budget_brl: z.number().min(5),
     duration_days: z.number().int().min(1).optional(),
   })
-  .refine((data) => Boolean(data.creative_asset_id || data.creative_upload_url), {
-    message: 'Selecione uma imagem da galeria ou envie um arquivo.',
-    path: ['creative_asset_id'],
-  })
+  .refine(
+    (data) => Boolean(data.creative_asset_id || data.creative_upload_url || data.creative_instagram_media_id),
+    {
+      message: 'Selecione uma imagem da galeria, envie um arquivo ou escolha um post do Instagram.',
+      path: ['creative_asset_id'],
+    }
+  )
   .refine((data) => data.age_max >= data.age_min, {
     message: 'A idade máxima deve ser maior ou igual à idade mínima.',
     path: ['age_max'],
+  })
+  .refine((data) => data.objective !== 'visits' || Boolean(data.destination_url), {
+    message: 'Informe o link de destino para o objetivo Visitas.',
+    path: ['destination_url'],
   });
 
 export async function createWizardCampaignHandler(req: Request, res: Response, next: NextFunction) {
@@ -409,8 +419,11 @@ export async function createWizardCampaignHandler(req: Request, res: Response, n
       objective: data.objective,
       creativeAssetId: data.creative_asset_id,
       creativeUploadUrl: data.creative_upload_url,
+      creativeInstagramMediaId: data.creative_instagram_media_id,
+      creativeMediaUrl: data.creative_media_url,
       headline: data.headline,
       primaryText: data.primary_text,
+      destinationUrl: data.destination_url,
       locationCity: data.location_city,
       locationCityKey: data.location_city_key,
       locationRadiusKm: data.location_radius_km,
