@@ -218,14 +218,14 @@ export function Step2Creative({ value, onChange, objective }: Step2CreativeProps
               type="text"
               value={value.destinationUrl ?? ''}
               onChange={(e) => onChange({ destinationUrl: e.target.value })}
-              placeholder="https://seusite.com.br ou link do WhatsApp"
+              placeholder="https://wa.me/55... · site · instagram.com/seu perfil"
               className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20"
             />
             {value.destinationUrl && !/^https?:\/\//.test(value.destinationUrl.trim()) && (
               <p className="text-sm text-red-600 mt-1">O link deve começar com http:// ou https://</p>
             )}
             <p className="text-xs text-gray-400 mt-1">
-              Dica: use o link do seu WhatsApp Business para receber mensagens diretamente.
+              WhatsApp, site ou perfil do Instagram
             </p>
           </div>
         )}
