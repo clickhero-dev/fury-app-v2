@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LogOut, ExternalLink } from 'lucide-react';
 import { EmptyState, LoadingSpinner, Button, StatusBadge } from '@/components';
@@ -213,13 +214,24 @@ function DisconnectDialog({
 
 export function IntegracoesContent() {
   const queryClient = useQueryClient();
-  const [toast, setToast] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
   const [pendingDisconnect, setPendingDisconnect] = useState<{ id: string; accountId: string } | null>(null);
 
-  function showToast(msg: string) {
-    setToast(msg);
+  function showToast(message: string, variant: 'success' | 'error' = 'success') {
+    setToast({ message, variant });
     setTimeout(() => setToast(null), 3000);
   }
+
+  useEffect(() => {
+    const error = searchParams.get('error');
+    if (error === 'oauth_cancelled') {
+      showToast('Conexão com o Meta cancelada ou expirada. Tente novamente.', 'error');
+      const next = new URLSearchParams(searchParams);
+      next.delete('error');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const { data: connections = [], isLoading } = useQuery<MetaConnection[]>({
     queryKey: ['meta-connections'],
@@ -276,8 +288,13 @@ export function IntegracoesContent() {
   return (
     <div className="space-y-6">
       {toast && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold bg-[#2EA043] text-white">
-          ✅ {toast}
+        <div
+          className={cn(
+            'fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold text-white',
+            toast.variant === 'error' ? 'bg-red-600' : 'bg-[#2EA043]'
+          )}
+        >
+          {toast.variant === 'error' ? '⚠️' : '✅'} {toast.message}
         </div>
       )}
 

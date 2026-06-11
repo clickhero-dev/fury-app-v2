@@ -38,6 +38,8 @@ export async function getAuthUrl(req: Request, res: Response, next: NextFunction
 }
 
 export async function authCallback(req: Request, res: Response, next: NextFunction) {
+  const frontendUrl = process.env.FRONTEND_URL ?? 'https://fury-app-v2-web.vercel.app';
+
   try {
     console.log('=== META CALLBACK HIT ===', { query: req.query });
     const query = callbackQuerySchema.parse(req.query);
@@ -47,12 +49,13 @@ export async function authCallback(req: Request, res: Response, next: NextFuncti
 
     console.log('[OAuth Callback] handleMetaOAuthCallback concluído com sucesso');
 
-    const frontendUrl = process.env.FRONTEND_URL ?? 'https://fury-app-v2-web.vercel.app';
     console.log('=== META CALLBACK SUCCESS ===', { tenantId, context, returnUrl });
     res.redirect(`${frontendUrl}${returnUrl}`);
   } catch (error) {
+    // Fluxo OAuth abandonado/cancelado/expirado nao deve travar o usuario numa
+    // resposta JSON crua: redireciona de volta para a tela de integracoes.
     console.error('[OAuth Callback] ERRO:', error);
-    next(error);
+    res.redirect(`${frontendUrl}/configuracoes/integracoes?error=oauth_cancelled`);
   }
 }
 
