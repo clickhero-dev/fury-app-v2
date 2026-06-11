@@ -3,11 +3,141 @@ import { Loader2, MapPin } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useMetaLocations } from '../hooks/useMetaLocations';
-import { AGE_OPTIONS, RADIUS_OPTIONS, type RadiusOption, type WizardAudienceState, type WizardGender } from '../types';
+import { useMetaPages, useMetaPageWhatsappNumbers } from '../hooks/useMetaPages';
+import {
+  AGE_OPTIONS,
+  RADIUS_OPTIONS,
+  type RadiusOption,
+  type WizardAudienceState,
+  type WizardGender,
+  type WizardObjective,
+  type WizardWhatsappState,
+} from '../types';
 
 interface Step3AudienceProps {
   value: WizardAudienceState;
   onChange: (updates: Partial<WizardAudienceState>) => void;
+  objective: WizardObjective | null;
+  whatsapp: WizardWhatsappState;
+  onWhatsappChange: (updates: Partial<WizardWhatsappState>) => void;
+}
+
+function WhatsappDestinationFields({
+  whatsapp,
+  onWhatsappChange,
+}: {
+  whatsapp: WizardWhatsappState;
+  onWhatsappChange: (updates: Partial<WizardWhatsappState>) => void;
+}) {
+  const { pages, isLoading: isLoadingPages, isError: isPagesError } = useMetaPages(true);
+  const {
+    numbers,
+    isLoading: isLoadingNumbers,
+    isError: isNumbersError,
+    isLoaded: numbersLoaded,
+  } = useMetaPageWhatsappNumbers(whatsapp.pageId);
+
+  const pageHasNoWhatsapp = Boolean(whatsapp.pageId) && numbersLoaded && numbers.length === 0;
+
+  function handleSelectPage(pageId: string) {
+    const page = pages.find((p) => p.pageId === pageId);
+    onWhatsappChange({
+      pageId: pageId || undefined,
+      pageName: page?.name,
+      phoneNumberId: undefined,
+      phoneNumberDisplay: undefined,
+    });
+  }
+
+  function handleSelectNumber(phoneNumberId: string) {
+    const number = numbers.find((n) => n.phoneNumberId === phoneNumberId);
+    onWhatsappChange({
+      phoneNumberId: phoneNumberId || undefined,
+      phoneNumberDisplay: number?.displayPhoneNumber,
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 p-4 space-y-4 bg-gray-50/50">
+      <div>
+        <h4 className="text-sm font-bold text-gray-900">Destino no WhatsApp</h4>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Escolha a Página do Facebook do seu negócio e o número de WhatsApp que receberá as conversas.
+        </p>
+      </div>
+
+      <div>
+        <label className="text-sm font-bold text-gray-900 mb-1 block">Página do Facebook</label>
+        <div className="relative">
+          <Select
+            value={whatsapp.pageId ?? ''}
+            onChange={(e) => handleSelectPage(e.target.value)}
+            disabled={isLoadingPages}
+          >
+            <option value="">
+              {isLoadingPages ? 'Carregando páginas...' : 'Selecione a página'}
+            </option>
+            {pages.map((page) => (
+              <option key={page.pageId} value={page.pageId}>
+                {page.name}
+              </option>
+            ))}
+          </Select>
+          {isLoadingPages && (
+            <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+          )}
+        </div>
+        {isPagesError && (
+          <p className="text-xs text-red-600 mt-1">
+            Não foi possível carregar suas páginas. Verifique a conexão Meta em Configurações → Integrações.
+          </p>
+        )}
+        {!isLoadingPages && !isPagesError && pages.length === 0 && (
+          <p className="text-xs text-amber-700 mt-1">
+            Nenhuma página encontrada na sua conta Meta conectada.
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label className="text-sm font-bold text-gray-900 mb-1 block">Número de WhatsApp</label>
+        <div className="relative">
+          <Select
+            value={whatsapp.phoneNumberId ?? ''}
+            onChange={(e) => handleSelectNumber(e.target.value)}
+            disabled={!whatsapp.pageId || isLoadingNumbers || pageHasNoWhatsapp}
+          >
+            <option value="">
+              {!whatsapp.pageId
+                ? 'Escolha a página primeiro'
+                : isLoadingNumbers
+                  ? 'Carregando números...'
+                  : 'Selecione o número'}
+            </option>
+            {numbers.map((number) => (
+              <option key={number.phoneNumberId} value={number.phoneNumberId}>
+                {number.displayPhoneNumber}
+                {number.verifiedName ? ` — ${number.verifiedName}` : ''}
+              </option>
+            ))}
+          </Select>
+          {isLoadingNumbers && (
+            <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+          )}
+        </div>
+        {pageHasNoWhatsapp && (
+          <p className="text-xs text-amber-700 mt-1">
+            Esta página não tem WhatsApp vinculado. Selecione outra ou vincule um número no Meta Business.
+          </p>
+        )}
+        {isNumbersError && (
+          <p className="text-xs text-red-600 mt-1">
+            Não foi possível carregar os números de WhatsApp desta página. Tente novamente.
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 const GENDER_OPTIONS: { value: WizardGender; label: string }[] = [
@@ -16,7 +146,7 @@ const GENDER_OPTIONS: { value: WizardGender; label: string }[] = [
   { value: 'female', label: 'Mulheres' },
 ];
 
-export function Step3Audience({ value, onChange }: Step3AudienceProps) {
+export function Step3Audience({ value, onChange, objective, whatsapp, onWhatsappChange }: Step3AudienceProps) {
   const [cityQuery, setCityQuery] = useState(value.city);
   const [showDropdown, setShowDropdown] = useState(false);
   const { locations, isLoading } = useMetaLocations(cityQuery);
@@ -34,6 +164,10 @@ export function Step3Audience({ value, onChange }: Step3AudienceProps) {
         <h3 className="text-lg font-bold text-gray-900">Quem deve ver esse anúncio?</h3>
         <p className="text-sm text-gray-500 mt-1">Defina a localização e o perfil do público.</p>
       </div>
+
+      {objective === 'whatsapp' && (
+        <WhatsappDestinationFields whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} />
+      )}
 
       <div className="relative">
         <label className="text-sm font-bold text-gray-900 mb-1 block">Cidade</label>

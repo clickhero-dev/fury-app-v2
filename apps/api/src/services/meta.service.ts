@@ -7,9 +7,13 @@ import {
   exchangeCodeForToken,
   exchangeForLongLivedToken,
   getMetaUserId,
+  getPageWhatsappNumbers,
   getUserAdAccounts,
+  getUserFacebookPages,
   getUserPermissions,
   type MetaAdAccount,
+  type MetaFacebookPage,
+  type MetaWhatsappNumber,
 } from '../lib/meta-api.js';
 import { addSyncJob } from '../lib/sync-jobs.js';
 
@@ -27,6 +31,9 @@ const META_SCOPES = [
   // 2) Paginas (vinculadas as BMs selecionadas)
   'pages_show_list',
   'pages_read_engagement',
+  // 2b) WhatsApp Business (WABAs vinculadas as Paginas/BM) — necessario para
+  // listar numeros WhatsApp em campanhas com destino WHATSAPP
+  'whatsapp_business_management',
   // 3) Instagram (depende das Paginas)
   'instagram_basic',
   'instagram_manage_insights',
@@ -214,8 +221,8 @@ export async function handleMetaOAuthCallback(
   return { tenantId, context, returnUrl: resolvedReturnUrl };
 }
 
-/** Retorna os escopos OAuth concedidos pela conexao Meta mais recente do tenant. */
-export async function getTenantMetaScopes(tenantId: string): Promise<string[]> {
+/** Recupera o access token descriptografado da conexao Meta mais recente do tenant. */
+async function getTenantAccessToken(tenantId: string): Promise<string> {
   const connection = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, tenantId),
     orderBy: (table, { desc }) => [desc(table.createdAt)],
@@ -225,8 +232,28 @@ export async function getTenantMetaScopes(tenantId: string): Promise<string[]> {
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
   }
 
-  const accessToken = decryptToken(connection.accessToken);
+  return decryptToken(connection.accessToken);
+}
+
+/** Retorna os escopos OAuth concedidos pela conexao Meta mais recente do tenant. */
+export async function getTenantMetaScopes(tenantId: string): Promise<string[]> {
+  const accessToken = await getTenantAccessToken(tenantId);
   return getUserPermissions(accessToken);
+}
+
+/** Lista as Paginas do Facebook vinculadas a conexao Meta do tenant. */
+export async function getTenantFacebookPages(tenantId: string): Promise<MetaFacebookPage[]> {
+  const accessToken = await getTenantAccessToken(tenantId);
+  return getUserFacebookPages(accessToken);
+}
+
+/** Lista os numeros WhatsApp Business vinculados a uma Pagina do tenant. */
+export async function getTenantPageWhatsappNumbers(
+  tenantId: string,
+  pageId: string,
+): Promise<MetaWhatsappNumber[]> {
+  const accessToken = await getTenantAccessToken(tenantId);
+  return getPageWhatsappNumbers(pageId, accessToken);
 }
 
 export async function getTenantMetaConnections(tenantId: string): Promise<StoredMetaConnection[]> {

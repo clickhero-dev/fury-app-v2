@@ -23,6 +23,7 @@ function createInitialState(preSelectedAssetId?: string): WizardState {
       dailyBudgetBrl: 20,
       durationDays: undefined,
     },
+    whatsapp: {},
     preSelectedAssetId,
   };
 }
@@ -44,6 +45,10 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
 
   const setBudget = useCallback((updates: Partial<WizardState['budget']>) => {
     setState((prev) => ({ ...prev, budget: { ...prev.budget, ...updates } }));
+  }, []);
+
+  const setWhatsapp = useCallback((updates: Partial<WizardState['whatsapp']>) => {
+    setState((prev) => ({ ...prev, whatsapp: { ...prev.whatsapp, ...updates } }));
   }, []);
 
   const goToStep = useCallback((step: WizardState['currentStep']) => {
@@ -77,7 +82,11 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
           state.creative.primaryText.trim().length > 0 &&
           (state.objective !== 'visits' || /^https?:\/\//.test(state.creative.destinationUrl?.trim() ?? ''))
       ),
-      3: Boolean(state.audience.city.trim().length > 0),
+      3: Boolean(
+        state.audience.city.trim().length > 0 &&
+          (state.objective !== 'whatsapp' ||
+            (state.whatsapp.pageId && state.whatsapp.phoneNumberId))
+      ),
       4: state.budget.dailyBudgetBrl >= 5,
       5: true,
     } as Record<WizardState['currentStep'], boolean>;
@@ -91,6 +100,7 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
     setCreative,
     setAudience,
     setBudget,
+    setWhatsapp,
     goToStep,
     goNext,
     goBack,

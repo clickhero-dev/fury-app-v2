@@ -28,6 +28,12 @@ const OBJECTIVE_OPTIONS: ObjectiveOption[] = [
     title: 'Atração de Clientes',
     description: 'Receba mensagens diretas de pessoas interessadas no seu produto ou serviço.',
   },
+  {
+    value: 'whatsapp',
+    emoji: '📲',
+    title: 'Conversas no WhatsApp',
+    description: 'Gere conversas com clientes interessados direto no WhatsApp do seu negócio.',
+  },
 ];
 
 interface Step1ObjectiveProps {

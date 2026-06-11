@@ -394,6 +394,71 @@ export async function getInstagramAccountInsights(
   return insights;
 }
 
+export interface MetaFacebookPage {
+  pageId: string;
+  name: string;
+  hasWhatsApp: boolean;
+}
+
+interface MetaPagesResponse {
+  data: Array<{ id: string; name?: string; whatsapp_business_account?: { id: string } }>;
+}
+
+/** Lista as Paginas do Facebook do usuario (/me/accounts), marcando as que tem WABA vinculada. */
+export async function getUserFacebookPages(accessToken: string): Promise<MetaFacebookPage[]> {
+  const response = await metaApiCall<MetaPagesResponse>(
+    '/me/accounts?fields=id,name,whatsapp_business_account&limit=100',
+    accessToken
+  );
+
+  return (response.data || []).map((page) => ({
+    pageId: page.id,
+    name: page.name ?? page.id,
+    hasWhatsApp: Boolean(page.whatsapp_business_account?.id),
+  }));
+}
+
+export interface MetaWhatsappNumber {
+  phoneNumberId: string;
+  displayPhoneNumber: string;
+  verifiedName: string;
+}
+
+interface MetaWabaPhoneNumbersResponse {
+  data: Array<{ id: string; display_phone_number?: string; verified_name?: string }>;
+}
+
+/**
+ * Lista os numeros WhatsApp Business vinculados a uma Pagina, via WABA da pagina
+ * (/{page-id}?fields=whatsapp_business_account -> /{waba-id}/phone_numbers).
+ * Pagina sem WhatsApp vinculado retorna lista vazia (nao erro).
+ */
+export async function getPageWhatsappNumbers(
+  pageId: string,
+  accessToken: string
+): Promise<MetaWhatsappNumber[]> {
+  const page = await metaApiCall<{ id: string; whatsapp_business_account?: { id: string } }>(
+    `/${encodeURIComponent(pageId)}?fields=whatsapp_business_account`,
+    accessToken
+  );
+
+  const wabaId = page.whatsapp_business_account?.id;
+  if (!wabaId) {
+    return [];
+  }
+
+  const numbers = await metaApiCall<MetaWabaPhoneNumbersResponse>(
+    `/${encodeURIComponent(wabaId)}/phone_numbers?fields=id,display_phone_number,verified_name`,
+    accessToken
+  );
+
+  return (numbers.data || []).map((number) => ({
+    phoneNumberId: number.id,
+    displayPhoneNumber: number.display_phone_number ?? '',
+    verifiedName: number.verified_name ?? '',
+  }));
+}
+
 interface MetaPermissionsResponse {
   data: Array<{ permission: string; status: 'granted' | 'declined' | 'expired' }>;
 }
@@ -526,7 +591,31 @@ export async function metaApiCall<T>(
       }
       if (pathNoQuery.includes('/me/accounts')) {
         return {
-          data: [{ id: 'mock_page_id', instagram_business_account: { id: 'mock_ig_user_id' } }],
+          data: [
+            {
+              id: 'mock_page_id',
+              name: 'Página Demo FURY',
+              instagram_business_account: { id: 'mock_ig_user_id' },
+              whatsapp_business_account: { id: 'mock_waba_id' },
+            },
+          ],
+        } as T;
+      }
+      if (pathNoQuery.includes('/phone_numbers')) {
+        return {
+          data: [
+            {
+              id: 'mock_phone_number_id',
+              display_phone_number: '+55 11 99999-0000',
+              verified_name: 'FURY Demo',
+            },
+          ],
+        } as T;
+      }
+      if (path.includes('fields=whatsapp_business_account')) {
+        return {
+          id: pathNoQuery.replace(/^\//, ''),
+          whatsapp_business_account: { id: 'mock_waba_id' },
         } as T;
       }
       if (path.includes('metric_type=total_value')) {

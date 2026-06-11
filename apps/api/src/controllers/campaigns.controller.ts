@@ -368,7 +368,7 @@ export async function getCampaignInsightsHandler(req: Request, res: Response, ne
 
 const createWizardSchema = z
   .object({
-    objective: z.enum(['visits', 'engagement', 'messages']),
+    objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp']),
 
     creative_asset_id: z.string().min(1).optional(),
     creative_upload_url: z.string().min(1).optional(),
@@ -389,6 +389,11 @@ const createWizardSchema = z
 
     daily_budget_brl: z.number().min(5),
     duration_days: z.number().int().min(1).optional(),
+
+    whatsapp_page_id: z.string().min(1).optional(),
+    whatsapp_page_name: z.string().min(1).optional(),
+    whatsapp_phone_number_id: z.string().min(1).optional(),
+    whatsapp_phone_number: z.string().min(1).optional(),
   })
   .refine(
     (data) => Boolean(data.creative_asset_id || data.creative_upload_url || data.creative_instagram_media_id),
@@ -404,7 +409,16 @@ const createWizardSchema = z
   .refine((data) => data.objective !== 'visits' || Boolean(data.destination_url), {
     message: 'Informe o link de destino para o objetivo Visitas.',
     path: ['destination_url'],
-  });
+  })
+  .refine(
+    (data) =>
+      data.objective !== 'whatsapp' ||
+      Boolean(data.whatsapp_page_id && data.whatsapp_phone_number_id),
+    {
+      message: 'Selecione a Página do Facebook e o número de WhatsApp.',
+      path: ['whatsapp_page_id'],
+    }
+  );
 
 export async function createWizardCampaignHandler(req: Request, res: Response, next: NextFunction) {
   try {
@@ -432,6 +446,10 @@ export async function createWizardCampaignHandler(req: Request, res: Response, n
       gender: data.gender,
       dailyBudgetBrl: data.daily_budget_brl,
       durationDays: data.duration_days,
+      whatsappPageId: data.whatsapp_page_id,
+      whatsappPageName: data.whatsapp_page_name,
+      whatsappPhoneNumberId: data.whatsapp_phone_number_id,
+      whatsappPhoneNumber: data.whatsapp_phone_number,
     });
 
     res.status(201).json(result);

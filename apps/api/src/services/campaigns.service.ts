@@ -841,7 +841,7 @@ function calculateDateRange(
 
 // ==================== Campaign Creation Wizard ====================
 
-export type WizardObjective = 'visits' | 'engagement' | 'messages';
+export type WizardObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';
 
 const WIZARD_OBJECTIVE_MAP: Record<
   WizardObjective,
@@ -860,6 +860,13 @@ const WIZARD_OBJECTIVE_MAP: Record<
     cta: 'MESSAGE_PAGE',
     destinationType: 'MESSENGER',
     label: 'Atração de Clientes',
+  },
+  whatsapp: {
+    metaObjective: 'OUTCOME_LEADS',
+    optimizationGoal: 'CONVERSATIONS',
+    cta: 'WHATSAPP_MESSAGE',
+    destinationType: 'WHATSAPP',
+    label: 'Conversas no WhatsApp',
   },
 };
 
@@ -903,6 +910,10 @@ export interface CreateWizardCampaignArgs {
   gender: 'all' | 'male' | 'female';
   dailyBudgetBrl: number;
   durationDays?: number;
+  whatsappPageId?: string;
+  whatsappPageName?: string;
+  whatsappPhoneNumberId?: string;
+  whatsappPhoneNumber?: string;
 }
 
 export interface CreateWizardCampaignResult {
@@ -935,6 +946,14 @@ export async function createCampaignFromWizard(
 
   const accessToken = decryptMetaToken(metaConn.accessToken);
   const objectiveConfig = WIZARD_OBJECTIVE_MAP[args.objective];
+
+  if (args.objective === 'whatsapp' && !args.whatsappPageId) {
+    throw new AppError(
+      400,
+      'WHATSAPP_PAGE_REQUIRED',
+      'Selecione a Página do Facebook e o número de WhatsApp para campanhas de Conversas no WhatsApp.'
+    );
+  }
 
   // Resolve image URL: Instagram post > direct upload > gallery asset
   let imageUrl = args.creativeInstagramMediaId ? args.creativeMediaUrl : args.creativeUploadUrl;
@@ -1015,6 +1034,13 @@ export async function createCampaignFromWizard(
     adSetBody.destination_type = objectiveConfig.destinationType;
   }
 
+  if (args.objective === 'whatsapp') {
+    adSetBody.promoted_object = {
+      page_id: args.whatsappPageId,
+      ...(args.whatsappPhoneNumber ? { whatsapp_phone_number: args.whatsappPhoneNumber } : {}),
+    };
+  }
+
   if (args.durationDays) {
     const endTime = new Date(today.getTime() + args.durationDays * 24 * 60 * 60 * 1000);
     adSetBody.end_time = endTime.toISOString();
@@ -1032,7 +1058,10 @@ export async function createCampaignFromWizard(
     mapWizardMetaError(err);
   }
 
-  const pageId = process.env.META_PAGE_ID || 'mock_page_id';
+  const pageId =
+    args.objective === 'whatsapp'
+      ? args.whatsappPageId!
+      : process.env.META_PAGE_ID || 'mock_page_id';
 
   let adCreativeId: string;
   try {
@@ -1049,8 +1078,12 @@ export async function createCampaignFromWizard(
               picture: imageUrl,
               message: args.primaryText,
               name: args.headline,
-              call_to_action: { type: objectiveConfig.cta },
+              call_to_action:
+                args.objective === 'whatsapp'
+                  ? { type: objectiveConfig.cta, value: { app_destination: 'WHATSAPP' } }
+                  : { type: objectiveConfig.cta },
               ...(args.objective === 'visits' ? { link: args.destinationUrl } : {}),
+              ...(args.objective === 'whatsapp' ? { link: 'https://api.whatsapp.com/send' } : {}),
             },
           },
         },
@@ -1096,6 +1129,14 @@ export async function createCampaignFromWizard(
         ad_creative_id: adCreativeId,
         ad_id: metaAdId,
         duration_days: args.durationDays ?? null,
+        ...(args.objective === 'whatsapp'
+          ? {
+              whatsapp_page_id: args.whatsappPageId,
+              whatsapp_page_name: args.whatsappPageName ?? null,
+              whatsapp_phone_number_id: args.whatsappPhoneNumberId ?? null,
+              whatsapp_phone_number: args.whatsappPhoneNumber ?? null,
+            }
+          : {}),
       },
     })
     .returning();

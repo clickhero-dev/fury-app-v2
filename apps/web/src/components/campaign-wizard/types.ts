@@ -1,4 +1,4 @@
-export type WizardObjective = 'visits' | 'engagement' | 'messages';
+export type WizardObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';
 
 export type WizardGender = 'all' | 'male' | 'female';
 
@@ -32,12 +32,20 @@ export interface WizardBudgetState {
   durationDays?: number;
 }
 
+export interface WizardWhatsappState {
+  pageId?: string;
+  pageName?: string;
+  phoneNumberId?: string;
+  phoneNumberDisplay?: string;
+}
+
 export interface WizardState {
   currentStep: 1 | 2 | 3 | 4 | 5;
   objective: WizardObjective | null;
   creative: WizardCreativeState;
   audience: WizardAudienceState;
   budget: WizardBudgetState;
+  whatsapp: WizardWhatsappState;
   preSelectedAssetId?: string;
 }
 
@@ -58,6 +66,10 @@ export interface CreateWizardCampaignPayload {
   gender: WizardGender;
   daily_budget_brl: number;
   duration_days?: number;
+  whatsapp_page_id?: string;
+  whatsapp_page_name?: string;
+  whatsapp_phone_number_id?: string;
+  whatsapp_phone_number?: string;
 }
 
 export interface CreateWizardCampaignResult {

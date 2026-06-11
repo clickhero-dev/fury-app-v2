@@ -12,6 +12,13 @@ router.get('/auth/test', (req, res) => {
 router.get('/auth/url', authMiddleware, metaController.getAuthUrl);
 router.get('/auth/callback', metaController.authCallback);
 router.get('/scopes', authMiddleware, tenantMiddleware, metaController.getScopes);
+router.get('/pages', authMiddleware, tenantMiddleware, metaController.getPages);
+router.get(
+  '/pages/:pageId/whatsapp-numbers',
+  authMiddleware,
+  tenantMiddleware,
+  metaController.getPageWhatsappNumbers
+);
 router.get('/connections', authMiddleware, tenantMiddleware, metaController.getConnections);
 router.patch(
   '/connections/:id/select-account',

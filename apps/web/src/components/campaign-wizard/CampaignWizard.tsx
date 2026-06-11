@@ -125,7 +125,15 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
           {state.currentStep === 2 && (
             <Step2Creative value={state.creative} onChange={wizard.setCreative} objective={state.objective} />
           )}
-          {state.currentStep === 3 && <Step3Audience value={state.audience} onChange={wizard.setAudience} />}
+          {state.currentStep === 3 && (
+            <Step3Audience
+              value={state.audience}
+              onChange={wizard.setAudience}
+              objective={state.objective}
+              whatsapp={state.whatsapp}
+              onWhatsappChange={wizard.setWhatsapp}
+            />
+          )}
           {state.currentStep === 4 && <Step4Budget value={state.budget} onChange={wizard.setBudget} />}
           {state.currentStep === 5 && (
             <Step5Review

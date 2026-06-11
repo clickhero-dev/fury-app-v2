@@ -45,7 +45,7 @@ function formatMetrics(objective: WizardObjective | null, post: InstagramPost): 
   if (objective === 'visits') {
     return `👁 ${post.insights.reach} alcance · 📤 ${post.insights.shares} compartilhamentos`;
   }
-  if (objective === 'messages') {
+  if (objective === 'messages' || objective === 'whatsapp') {
     return `💬 ${post.insights.replies} conversas · ❤️ ${post.like_count} curtidas`;
   }
   return `🔖 ${post.insights.saved} salvamentos · 💬 ${post.comments_count} comentários`;

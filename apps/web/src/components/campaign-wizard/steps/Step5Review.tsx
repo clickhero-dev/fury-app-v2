@@ -7,6 +7,7 @@ const OBJECTIVE_LABELS: Record<NonNullable<WizardState['objective']>, string> = 
   visits: 'Visitas',
   engagement: 'Engajamento',
   messages: 'Atração de Clientes',
+  whatsapp: 'Conversas no WhatsApp',
 };
 
 const GENDER_LABELS: Record<WizardState['audience']['gender'], string> = {
@@ -56,6 +57,14 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
       gender: state.audience.gender,
       daily_budget_brl: state.budget.dailyBudgetBrl,
       duration_days: state.budget.durationDays,
+      ...(state.objective === 'whatsapp'
+        ? {
+            whatsapp_page_id: state.whatsapp.pageId,
+            whatsapp_page_name: state.whatsapp.pageName,
+            whatsapp_phone_number_id: state.whatsapp.phoneNumberId,
+            whatsapp_phone_number: state.whatsapp.phoneNumberDisplay,
+          }
+        : {}),
     };
 
     mutation.mutate(payload);
@@ -93,6 +102,16 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
           <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Objetivo</div>
           <div className="text-sm font-medium text-gray-900">{objectiveLabel}</div>
         </div>
+
+        {state.objective === 'whatsapp' && (
+          <div className="p-4">
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
+              Destino no WhatsApp
+            </div>
+            <div className="text-sm font-medium text-gray-900">{state.whatsapp.pageName}</div>
+            <div className="text-xs text-gray-500 mt-1">{state.whatsapp.phoneNumberDisplay}</div>
+          </div>
+        )}
 
         <div className="p-4 flex gap-3">
           <div className="w-16 h-16 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
