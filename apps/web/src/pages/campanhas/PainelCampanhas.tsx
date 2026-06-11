@@ -20,6 +20,8 @@ import {
   formatInvestidoBRL,
   formatRoas,
 } from '@/lib/format-campaign-metrics';
+import { type Period, getPeriodDates, formatPeriodLabel } from '@/lib/period-utils';
+import { PeriodSelector } from '@/components/PeriodSelector';
 
 type FilterType = 'todos' | 'ativo' | 'pausado' | 'finalizado';
 
@@ -47,8 +49,10 @@ export function PainelCampanhas() {
   const [campaignToPause, setCampaignToPause] = useState<CampaignData | null>(null);
   const [actionError, setActionError] = useState<string>('');
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [period, setPeriod] = useState<Period>('this_month');
 
-  const { data: campaigns = [], isLoading } = useCampaigns();
+  const { startDate, endDate } = getPeriodDates(period);
+  const { data: campaigns = [], isLoading } = useCampaigns({ startDate, endDate });
   const pauseMutation = usePauseCampaign();
 
   const pendingCampaignId =
@@ -189,9 +193,12 @@ export function PainelCampanhas() {
       header={
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-text-primary">Campanhas</h2>
-          <Button variant="primary" size="sm" onClick={() => setWizardOpen(true)}>
-            + Nova Campanha
-          </Button>
+          <div className="flex items-center gap-3">
+            <PeriodSelector value={period} onChange={setPeriod} />
+            <Button variant="primary" size="sm" onClick={() => setWizardOpen(true)}>
+              + Nova Campanha
+            </Button>
+          </div>
         </div>
       }
     >
@@ -200,6 +207,7 @@ export function PainelCampanhas() {
           title="Gerenciamento de Campanhas"
           description="Monitore e otimize o desempenho de todas as suas campanhas"
         />
+        <p className="text-xs text-gray-400 -mt-3">{formatPeriodLabel(startDate, endDate)}</p>
 
         {/* Action error banner */}
         {actionError && (

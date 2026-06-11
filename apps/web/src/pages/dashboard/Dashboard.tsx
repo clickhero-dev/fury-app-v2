@@ -29,77 +29,8 @@ import {
 } from '@/components/ui/tooltip';
 import api from '@/lib/api';
 import { useGoalsProgress, translateObjective, type FuryAlert } from '@/hooks/useGoalsProgress';
-import { getSaoPauloYMD, formatYMD, addDaysToYMD } from '@/lib/date-sao-paulo';
-
-// ─── Period ───────────────────────────────────────────────────────────────────
-
-type Period = 'today' | 'last_7d' | 'this_month' | 'last_month';
-
-function getPeriodDates(period: Period): { startDate: string; endDate: string } {
-  const now = getSaoPauloYMD();
-  const today = formatYMD(now);
-
-  if (period === 'today') {
-    return { startDate: today, endDate: today };
-  }
-  if (period === 'last_7d') {
-    const start = addDaysToYMD(now, -6);
-    return { startDate: formatYMD(start), endDate: today };
-  }
-  if (period === 'last_month') {
-    const lastOfLastMonth = addDaysToYMD({ year: now.year, month: now.month, day: 1 }, -1);
-    const firstOfLastMonth = { year: lastOfLastMonth.year, month: lastOfLastMonth.month, day: 1 };
-    return { startDate: formatYMD(firstOfLastMonth), endDate: formatYMD(lastOfLastMonth) };
-  }
-  // this_month
-  return { startDate: formatYMD({ year: now.year, month: now.month, day: 1 }), endDate: today };
-}
-
-function formatPeriodLabel(startDate: string, endDate: string): string {
-  const fmt = (iso: string) =>
-    new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-  if (startDate === endDate) return fmt(startDate);
-  const s = new Date(startDate + 'T12:00:00');
-  const e = new Date(endDate + 'T12:00:00');
-  const sameYear  = s.getFullYear() === e.getFullYear();
-  const sameMonth = sameYear && s.getMonth() === e.getMonth();
-  const sDay = s.toLocaleDateString('pt-BR', { day: 'numeric', month: sameMonth ? undefined : 'long' });
-  const eDay = e.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
-  return `${sDay} · ${eDay}`;
-}
-
-// ─── Period Selector ──────────────────────────────────────────────────────────
-
-const PERIOD_LABELS: Record<Period, string> = {
-  today:      'Hoje',
-  last_7d:    '7 dias',
-  this_month: 'Este mês',
-  last_month: 'Mês anterior',
-};
-
-function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      {(Object.keys(PERIOD_LABELS) as Period[]).map((p) => (
-        <button
-          key={p}
-          onClick={() => onChange(p)}
-          className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
-            value === p
-              ? 'bg-[#EA580C] text-white'
-              : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-400'
-          }`}
-        >
-          {PERIOD_LABELS[p]}
-        </button>
-      ))}
-    </div>
-  );
-}
+import { type Period, getPeriodDates, formatPeriodLabel } from '@/lib/period-utils';
+import { PeriodSelector } from '@/components/PeriodSelector';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
