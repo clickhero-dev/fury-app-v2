@@ -29,14 +29,8 @@ export function getPeriodDates(period: Period): { startDate: string; endDate: st
     const firstOfLastMonth = { year: lastOfLastMonth.year, month: lastOfLastMonth.month, day: 1 };
     return { startDate: formatYMD(firstOfLastMonth), endDate: formatYMD(lastOfLastMonth) };
   }
-  // this_month: do dia 1 do mes atual ate ontem (exclui o dia atual, parcial).
-  // Caso hoje seja dia 1, ainda nao ha dados do mes atual: usa o mes anterior completo.
-  if (now.day === 1) {
-    const lastOfLastMonth = addDaysToYMD({ year: now.year, month: now.month, day: 1 }, -1);
-    const firstOfLastMonth = { year: lastOfLastMonth.year, month: lastOfLastMonth.month, day: 1 };
-    return { startDate: formatYMD(firstOfLastMonth), endDate: formatYMD(lastOfLastMonth) };
-  }
-  return { startDate: formatYMD({ year: now.year, month: now.month, day: 1 }), endDate: yesterday };
+  // this_month: do dia 1 do mes atual ate hoje.
+  return { startDate: formatYMD({ year: now.year, month: now.month, day: 1 }), endDate: today };
 }
 
 export function formatPeriodLabel(startDate: string, endDate: string): string {
