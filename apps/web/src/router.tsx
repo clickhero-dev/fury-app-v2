@@ -45,14 +45,6 @@ export const router = createBrowserRouter([
     element: <MetaAuthorizePage />,
   },
   {
-    path: '/onboarding/metas',
-    element: (
-      <ProtectedRoute>
-        <MetasPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
     path: '/onboarding/selecionar-conta',
     element: (
       <ProtectedRoute>
@@ -64,6 +56,7 @@ export const router = createBrowserRouter([
     element: <AuthenticatedShell />,
     children: [
       { path: '/dashboard', element: <Dashboard /> },
+      { path: '/onboarding/metas', element: <MetasPage /> },
       { path: '/dashboard/metas', element: <Metas /> },
       { path: '/campanhas', element: <PainelCampanhas /> },
       { path: '/campanhas/regras', element: <RegrasCampanhas /> },

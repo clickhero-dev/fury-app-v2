@@ -23,6 +23,7 @@ import {
   Bookmark,
 } from 'lucide-react';
 import { AppLayout, PageHeader } from '@/components';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import {
   Tooltip as UiTooltip,
   TooltipContent,
@@ -642,7 +643,7 @@ function InstagramEngagementSection({ startDate, endDate }: { startDate: string;
         <p className="text-xs text-gray-400 mt-0.5">Métricas orgânicas no período selecionado</p>
       </div>
 
-      {!isLoading && data === null ? (
+      {!isLoading && data == null ? (
         <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm text-center">
           <p className="text-sm text-gray-400 mb-2">Conecte seu Instagram para ver métricas</p>
           <Link to="/configuracoes/integracoes" className="text-xs text-[#EA580C] font-medium hover:underline">
@@ -884,6 +885,11 @@ export function Dashboard() {
           />
         </div>
 
+        {/* ── Instagram engagement ─────────────────────────────────────────── */}
+        <ErrorBoundary>
+          <InstagramEngagementSection startDate={startDate} endDate={endDate} />
+        </ErrorBoundary>
+
         {/* ── Bottom section: chart + alerts ───────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
           {/* Weekly performance chart (60% = 3 of 5 cols) */}
@@ -900,11 +906,6 @@ export function Dashboard() {
         {/* ── Active campaigns table ────────────────────────────────────────── */}
         <div className="mt-5">
           <ActiveCampaignsTable campaigns={activeCampaigns} />
-        </div>
-
-        {/* ── Instagram engagement ─────────────────────────────────────────── */}
-        <div className="mt-5">
-          <InstagramEngagementSection startDate={startDate} endDate={endDate} />
         </div>
       </div>
       </TooltipProvider>
