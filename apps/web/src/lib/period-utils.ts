@@ -14,21 +14,29 @@ export const PERIOD_LABELS: Record<Period, string> = {
 export function getPeriodDates(period: Period): { startDate: string; endDate: string } {
   const now = getSaoPauloYMD();
   const today = formatYMD(now);
+  const yesterday = formatYMD(addDaysToYMD(now, -1));
 
   if (period === 'today') {
     return { startDate: today, endDate: today };
   }
   if (period === 'last_7d') {
-    const start = addDaysToYMD(now, -6);
-    return { startDate: formatYMD(start), endDate: today };
+    // D-7 a D-1 (ontem): exclui o dia atual, cujos dados ainda estao parciais.
+    const start = addDaysToYMD(now, -7);
+    return { startDate: formatYMD(start), endDate: yesterday };
   }
   if (period === 'last_month') {
     const lastOfLastMonth = addDaysToYMD({ year: now.year, month: now.month, day: 1 }, -1);
     const firstOfLastMonth = { year: lastOfLastMonth.year, month: lastOfLastMonth.month, day: 1 };
     return { startDate: formatYMD(firstOfLastMonth), endDate: formatYMD(lastOfLastMonth) };
   }
-  // this_month
-  return { startDate: formatYMD({ year: now.year, month: now.month, day: 1 }), endDate: today };
+  // this_month: do dia 1 do mes atual ate ontem (exclui o dia atual, parcial).
+  // Caso hoje seja dia 1, ainda nao ha dados do mes atual: usa o mes anterior completo.
+  if (now.day === 1) {
+    const lastOfLastMonth = addDaysToYMD({ year: now.year, month: now.month, day: 1 }, -1);
+    const firstOfLastMonth = { year: lastOfLastMonth.year, month: lastOfLastMonth.month, day: 1 };
+    return { startDate: formatYMD(firstOfLastMonth), endDate: formatYMD(lastOfLastMonth) };
+  }
+  return { startDate: formatYMD({ year: now.year, month: now.month, day: 1 }), endDate: yesterday };
 }
 
 export function formatPeriodLabel(startDate: string, endDate: string): string {
