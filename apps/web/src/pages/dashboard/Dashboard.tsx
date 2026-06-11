@@ -18,8 +18,15 @@ import {
   Radio,
   ShieldCheck,
   AlertTriangle,
+  Info,
 } from 'lucide-react';
 import { AppLayout, PageHeader } from '@/components';
+import {
+  Tooltip as UiTooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import api from '@/lib/api';
 import { useGoalsProgress, translateObjective, type FuryAlert } from '@/hooks/useGoalsProgress';
 import { getSaoPauloYMD, formatYMD, addDaysToYMD } from '@/lib/date-sao-paulo';
@@ -268,6 +275,7 @@ function MetricCard({
   progressPct,
   progressStatus,
   progressLabel,
+  tooltip,
 }: {
   icon: React.ElementType;
   label: string;
@@ -278,6 +286,7 @@ function MetricCard({
   progressPct?: number;
   progressStatus?: 'on_track' | 'at_risk' | 'off_track' | 'no_goals';
   progressLabel?: string;
+  tooltip?: string;
 }) {
   const showSpark = hasRealData && sparkline && sparkline.length >= 2;
   const sparkColor =
@@ -307,7 +316,17 @@ function MetricCard({
         <Icon className="w-5 h-5" style={{ color: statusColor ?? '#9ca3af' }} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-gray-500 leading-tight">{label}</p>
+        <p className="text-xs font-medium text-gray-500 leading-tight flex items-center gap-1">
+          {label}
+          {tooltip && (
+            <UiTooltip>
+              <TooltipTrigger asChild>
+                <Info className="w-3 h-3 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent>{tooltip}</TooltipContent>
+            </UiTooltip>
+          )}
+        </p>
         <p
           className="text-lg md:text-xl font-black leading-tight"
           style={{ color: hasRealData ? '#EA580C' : '#111827' }}
@@ -753,6 +772,7 @@ export function Dashboard() {
 
   return (
     <AppLayout>
+      <TooltipProvider>
       <div className="space-y-5 pb-8">
         <PageHeader
           title="Dashboard"
@@ -798,6 +818,7 @@ export function Dashboard() {
             progressPct={goalConversions?.progress_pct}
             progressStatus={goalConversions?.status}
             progressLabel={hasGoals && goalConversions ? `${Math.round(goalConversions.progress_pct)}% da meta mensal` : undefined}
+            tooltip="Inclui resultados de campanhas ativas e pausadas no período selecionado"
           />
           <MetricCard
             icon={DollarSign}
@@ -854,6 +875,7 @@ export function Dashboard() {
           <ActiveCampaignsTable campaigns={activeCampaigns} />
         </div>
       </div>
+      </TooltipProvider>
     </AppLayout>
   );
 }

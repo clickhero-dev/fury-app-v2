@@ -145,7 +145,7 @@ function BrandKitContent() {
         secondary_color: secondaryColor,
         ...(voiceTone ? { voice_tone: voiceTone } : {}),
       });
-      showToast('Brand Kit salvo com sucesso!', 'success');
+      showToast('Dados da Marca salvos com sucesso!', 'success');
     } catch {
       showToast('Erro ao salvar. Tente novamente.', 'error');
     }
@@ -354,7 +354,7 @@ function BrandKitContent() {
       {/* Sticky save button */}
       <div className="sticky bottom-0 -mx-6 -mb-6 lg:-mx-8 lg:-mb-8 bg-white border-t border-gray-200 px-6 lg:px-8 py-4 flex justify-end">
         <Button variant="primary" size="md" onClick={handleSave} disabled={saveBrandKit.isPending}>
-          {saveBrandKit.isPending ? 'Salvando...' : 'Salvar Brand Kit'}
+          {saveBrandKit.isPending ? 'Salvando...' : 'Salvar Dados da Marca'}
         </Button>
       </div>
     </div>
