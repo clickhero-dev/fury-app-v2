@@ -63,14 +63,18 @@ export async function getRankedInstagramPosts(
 
     const posts = await Promise.all(
       media.map(async (item) => {
-        const insights = await getInstagramMediaInsights(item.id, accessToken);
+        const insights = await getInstagramMediaInsights(item.id, accessToken, item.media_product_type);
         const likeCount = item.like_count ?? 0;
         const commentsCount = item.comments_count ?? 0;
+
+        // Videos/Reels nao tem `media_url` exibivel diretamente (arquivo de video);
+        // usar a thumbnail como imagem de preview.
+        const displayUrl = item.media_type === 'VIDEO' ? (item.thumbnail_url ?? item.media_url) : (item.media_url ?? item.thumbnail_url);
 
         return {
           id: item.id,
           caption: item.caption,
-          media_url: item.media_url,
+          media_url: displayUrl,
           timestamp: item.timestamp,
           like_count: likeCount,
           comments_count: commentsCount,

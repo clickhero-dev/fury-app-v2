@@ -26,3 +26,43 @@ export async function getPostsRankedHandler(req: Request, res: Response, next: N
     next(err);
   }
 }
+
+const mediaProxyQuerySchema = z.object({
+  url: z.string().url(),
+});
+
+// URLs de midia do Instagram sao servidas pelos CDNs da Meta (placehold.co e
+// usado apenas pelos dados mockados em dev). Restringir o proxy a esses
+// dominios evita que o endpoint seja usado como SSRF generico.
+const ALLOWED_MEDIA_HOSTS = [/(^|\.)cdninstagram\.com$/, /(^|\.)fbcdn\.net$/, /(^|\.)placehold\.co$/];
+
+export async function mediaProxyHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { url } = mediaProxyQuerySchema.parse(req.query);
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      throw new AppError(400, 'INVALID_MEDIA_URL', 'URL de midia invalida.');
+    }
+
+    const isAllowedHost = ALLOWED_MEDIA_HOSTS.some((pattern) => pattern.test(parsedUrl.hostname));
+    if (parsedUrl.protocol !== 'https:' || !isAllowedHost) {
+      throw new AppError(400, 'INVALID_MEDIA_URL', 'URL de midia nao permitida.');
+    }
+
+    const response = await fetch(parsedUrl.toString());
+    if (!response.ok || !response.body) {
+      throw new AppError(502, 'MEDIA_PROXY_ERROR', 'Falha ao buscar midia do Instagram.');
+    }
+
+    res.setHeader('Content-Type', response.headers.get('content-type') ?? 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
+}

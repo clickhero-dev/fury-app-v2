@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Check, ImagePlus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,49 @@ function formatMetrics(objective: WizardObjective | null, post: InstagramPost): 
     return `💬 ${post.insights.replies} conversas · ❤️ ${post.like_count} curtidas`;
   }
   return `🔖 ${post.insights.saved} salvamentos · 💬 ${post.comments_count} comentários`;
+}
+
+/** Carrega imagens do Instagram via proxy autenticado, evitando bloqueio de CORS do CDN da Meta. */
+function ProxiedImage({ url, alt, className }: { url: string; alt: string; className?: string }) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let currentObjectUrl: string | null = null;
+    setObjectUrl(null);
+    setFailed(false);
+
+    api
+      .get('/instagram/media-proxy', { params: { url }, responseType: 'blob' })
+      .then((response) => {
+        if (cancelled) return;
+        currentObjectUrl = URL.createObjectURL(response.data as Blob);
+        setObjectUrl(currentObjectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+    };
+  }, [url]);
+
+  if (failed) {
+    return (
+      <div className={cn('flex items-center justify-center bg-gray-100 text-gray-300', className)}>
+        <ImagePlus className="w-8 h-8" />
+      </div>
+    );
+  }
+
+  if (!objectUrl) {
+    return <div className={cn('animate-pulse bg-gray-200', className)} />;
+  }
+
+  return <img src={objectUrl} alt={alt} className={className} />;
 }
 
 export function InstagramPostsTab({ value, onChange, objective }: InstagramPostsTabProps) {
@@ -148,7 +192,7 @@ export function InstagramPostsTab({ value, onChange, objective }: InstagramPosts
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
       {posts.map((post) => {
         const isSelected = value.instagramMediaId === post.id;
         return (
@@ -162,9 +206,13 @@ export function InstagramPostsTab({ value, onChange, objective }: InstagramPosts
             )}
           >
             {post.media_url ? (
-              <img src={post.media_url} alt="Post do Instagram" className="w-full aspect-square object-cover" />
+              <ProxiedImage
+                url={post.media_url}
+                alt={post.caption?.slice(0, 50) || 'Post do Instagram'}
+                className="w-full h-48 object-cover"
+              />
             ) : (
-              <div className="w-full aspect-square flex items-center justify-center text-gray-300">
+              <div className="w-full h-48 flex items-center justify-center text-gray-300">
                 <ImagePlus className="w-8 h-8" />
               </div>
             )}

@@ -233,6 +233,8 @@ export interface InstagramMediaItem {
   caption?: string;
   media_url?: string;
   thumbnail_url?: string;
+  media_type?: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM';
+  media_product_type?: 'FEED' | 'REELS' | 'STORY';
   timestamp: string;
   like_count?: number;
   comments_count?: number;
@@ -278,7 +280,7 @@ export async function getInstagramBusinessAccountId(accessToken: string): Promis
 /** Busca os ultimos posts do Instagram de uma conta comercial. */
 export async function getInstagramMedia(igUserId: string, accessToken: string): Promise<InstagramMediaItem[]> {
   const response = await metaApiCall<InstagramMediaListResponse>(
-    `/${igUserId}/media?fields=id,caption,media_url,thumbnail_url,timestamp,like_count,comments_count&limit=20`,
+    `/${igUserId}/media?fields=id,caption,media_url,thumbnail_url,media_type,media_product_type,timestamp,like_count,comments_count&limit=20`,
     accessToken
   );
 
@@ -294,26 +296,51 @@ export interface InstagramMediaInsights {
   replies: number;
 }
 
-/** Busca metricas de um post do Instagram. Retorna zeros se indisponivel (ex.: stories/reels). */
+// Metrica usada como "alcance": Reels nao expoe `reach`, mas expoe `plays`.
+const METRIC_FIELD_MAP: Record<string, keyof InstagramMediaInsights> = {
+  reach: 'reach',
+  plays: 'reach',
+  saved: 'saved',
+  shares: 'shares',
+  replies: 'replies',
+};
+
+/**
+ * Busca metricas de um post do Instagram, uma de cada vez, para isolar
+ * metricas indisponiveis para o tipo de midia (ex.: `reach` nao existe em
+ * Reels, `replies` so existe em stories). Metricas que falharem ficam em 0.
+ */
 export async function getInstagramMediaInsights(
   mediaId: string,
-  accessToken: string
+  accessToken: string,
+  mediaProductType?: InstagramMediaItem['media_product_type']
 ): Promise<InstagramMediaInsights> {
   const insights: InstagramMediaInsights = { reach: 0, saved: 0, shares: 0, replies: 0 };
 
-  try {
-    const response = await metaApiCall<InstagramInsightsResponse>(
-      `/${mediaId}/insights?metric=reach,saved,shares,replies`,
-      accessToken
-    );
+  const reachMetric = mediaProductType === 'REELS' ? 'plays' : 'reach';
+  const metricsToFetch = [reachMetric, 'saved', 'shares', 'replies'];
 
-    for (const item of response.data || []) {
-      if (item.name in insights) {
-        insights[item.name as keyof InstagramMediaInsights] = item.values?.[0]?.value ?? 0;
+  for (const metric of metricsToFetch) {
+    try {
+      const response = await metaApiCall<InstagramInsightsResponse>(
+        `/${mediaId}/insights?metric=${metric}`,
+        accessToken
+      );
+
+      console.log(`[Instagram] /${mediaId}/insights?metric=${metric} response:`, JSON.stringify(response));
+
+      for (const item of response.data || []) {
+        const field = METRIC_FIELD_MAP[item.name];
+        if (field) {
+          insights[field] = item.values?.[0]?.value ?? 0;
+        }
       }
+    } catch (err) {
+      console.warn(
+        `[Instagram] /${mediaId}/insights?metric=${metric} indisponivel:`,
+        (err as Error).message
+      );
     }
-  } catch {
-    // stories/reels podem nao ter algumas (ou todas) metricas disponiveis
   }
 
   return insights;
@@ -453,14 +480,17 @@ export async function metaApiCall<T>(
           data: [{ id: 'mock_page_id', instagram_business_account: { id: 'mock_ig_user_id' } }],
         } as T;
       }
-      if (path.includes('metric=reach')) {
+      if (path.includes('/insights?metric=')) {
+        const metric = path.split('metric=')[1]?.split('&')[0];
+        const mockValues: Record<string, number> = {
+          reach: 1500,
+          plays: 2200,
+          saved: 45,
+          shares: 22,
+          replies: 6,
+        };
         return {
-          data: [
-            { name: 'reach', values: [{ value: 1500 }] },
-            { name: 'saved', values: [{ value: 45 }] },
-            { name: 'shares', values: [{ value: 22 }] },
-            { name: 'replies', values: [{ value: 6 }] },
-          ],
+          data: [{ name: metric, period: 'lifetime', values: [{ value: mockValues[metric ?? ''] ?? 0 }] }],
         } as T;
       }
       if (pathNoQuery.endsWith('/media')) {
@@ -471,6 +501,8 @@ export async function metaApiCall<T>(
               caption: 'Confira nossa promoção especial deste mês! Aproveite enquanto dura.',
               media_url: 'https://placehold.co/600x600?text=Post+1',
               thumbnail_url: 'https://placehold.co/600x600?text=Post+1',
+              media_type: 'IMAGE',
+              media_product_type: 'FEED',
               timestamp: new Date(Date.now() - 86400000).toISOString(),
               like_count: 120,
               comments_count: 14,
@@ -480,6 +512,8 @@ export async function metaApiCall<T>(
               caption: 'Bastidores do nosso atendimento de hoje.',
               media_url: 'https://placehold.co/600x600?text=Post+2',
               thumbnail_url: 'https://placehold.co/600x600?text=Post+2',
+              media_type: 'IMAGE',
+              media_product_type: 'FEED',
               timestamp: new Date(Date.now() - 172800000).toISOString(),
               like_count: 60,
               comments_count: 4,

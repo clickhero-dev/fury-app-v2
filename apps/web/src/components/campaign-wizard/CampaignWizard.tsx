@@ -72,7 +72,7 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && handleClose()}>
-      <DialogContent className="max-w-lg w-full max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden [&>button]:hidden">
+      <DialogContent className="max-w-lg w-full max-h-[90vh] md:max-w-3xl md:max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden [&>button]:hidden">
         <div className="px-6 pt-6 pb-4 border-b border-gray-100">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-bold text-gray-900">{STEP_TITLES[state.currentStep]}</h2>
