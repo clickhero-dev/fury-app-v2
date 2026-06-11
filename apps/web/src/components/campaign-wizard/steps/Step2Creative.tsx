@@ -38,12 +38,15 @@ export function Step2Creative({ value, onChange }: Step2CreativeProps) {
   );
 
   function handleSelectAsset(asset: StudioAsset) {
+    const headline = asset.headline || asset.title || asset.name;
+    const primaryText = asset.primaryText || asset.description;
+
     onChange({
       assetId: asset.id,
       assetUrl: asset.url ?? undefined,
       uploadUrl: undefined,
-      headline: value.headline || asset.name?.slice(0, 40) || '',
-      primaryText: value.primaryText || asset.description?.slice(0, 125) || '',
+      headline: value.headline || headline?.slice(0, 40) || '',
+      primaryText: value.primaryText || primaryText?.slice(0, 125) || '',
     });
   }
 

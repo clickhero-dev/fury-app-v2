@@ -332,8 +332,8 @@ export async function metaApiCall<T>(
       if (pathNoQuery.includes('/search')) {
         return {
           data: [
-            { key: '2421217', name: 'São Paulo', region: 'São Paulo', country_code: 'BR', type: 'city' },
-            { key: '2406246', name: 'Rio de Janeiro', region: 'Rio de Janeiro', country_code: 'BR', type: 'city' },
+            { key: '2421217', name: 'São Paulo', region: 'São Paulo (state)', country_code: 'BR', type: 'city' },
+            { key: '2406246', name: 'Rio de Janeiro', region: 'Rio de Janeiro (state)', country_code: 'BR', type: 'city' },
           ],
         } as T;
       }
@@ -555,11 +555,20 @@ interface MetaLocationSearchResponse {
   data: MetaLocationResult[];
 }
 
+/** Remove sufixos de desambiguação ("(state)", "(country)") que a Meta retorna no campo region. */
+function cleanRegionLabel(region?: string): string | undefined {
+  if (!region) return undefined;
+  const cleaned = region.replace(/\s*\((state|country)\)\s*/gi, '').trim();
+  return cleaned || undefined;
+}
+
 /** Busca localizacoes (cidades) do Brasil via Meta Graph API para uso no targeting de campanhas. */
 export async function searchMetaCityLocations(query: string, accessToken: string): Promise<MetaLocationResult[]> {
-  const path = `/search?type=adgeolocation&location_types=${encodeURIComponent(JSON.stringify(['city']))}&q=${encodeURIComponent(query)}`;
+  const path = `/search?type=adgeolocation&location_types=${encodeURIComponent(JSON.stringify(['city']))}&country_codes=${encodeURIComponent(JSON.stringify(['BR']))}&q=${encodeURIComponent(query)}`;
   const response = await metaApiCall<MetaLocationSearchResponse>(path, accessToken);
-  return (response.data || []).filter((item) => item.country_code === 'BR');
+  return (response.data || [])
+    .filter((item) => item.type === 'city' && item.country_code === 'BR')
+    .map((item) => ({ ...item, region: cleanRegionLabel(item.region) }));
 }
 
 export async function uploadAdImage(params: {

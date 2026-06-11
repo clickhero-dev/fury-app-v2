@@ -4,8 +4,11 @@ export interface StudioAsset {
   url: string | null;
   complianceStatus: 'pending' | 'pending_compliance' | 'approved' | 'rejected';
   name?: string;
-  createdAt?: string;
+  title?: string;
+  headline?: string;
   description?: string;
+  primaryText?: string;
+  createdAt?: string;
   complianceNotes?: string | null;
   metaAssetId?: string | null;
 }
