@@ -1,6 +1,14 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, X } from 'lucide-react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useCampaignWizard } from './hooks/useCampaignWizard';
@@ -30,6 +38,7 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
   const navigate = useNavigate();
   const wizard = useCampaignWizard(preSelectedAssetId);
   const { state } = wizard;
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   if (state.creative.assetId === preSelectedAssetId && preSelectedAssetUrl && !state.creative.assetUrl) {
     wizard.setCreative({ assetUrl: preSelectedAssetUrl });
@@ -37,10 +46,16 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
 
   function handleClose() {
     const hasProgress = state.currentStep > 1 || state.objective !== null;
-    if (hasProgress) {
-      const confirmed = window.confirm('Tem certeza? As configurações serão perdidas.');
-      if (!confirmed) return;
+    if (!hasProgress) {
+      wizard.reset();
+      onOpenChange(false);
+      return;
     }
+    setShowCancelConfirm(true);
+  }
+
+  function handleConfirmCancel() {
+    setShowCancelConfirm(false);
     wizard.reset();
     onOpenChange(false);
   }
@@ -120,6 +135,23 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
           </div>
         )}
       </DialogContent>
+
+      <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar criação?</DialogTitle>
+            <DialogDescription>As configurações da campanha serão perdidas.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCancelConfirm(false)}>
+              Continuar editando
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmCancel}>
+              Cancelar campanha
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

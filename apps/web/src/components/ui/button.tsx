@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { FURY_COLORS } from '@/lib/constants';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'default' | 'primary' | 'outline' | 'ghost';
+  variant?: 'default' | 'primary' | 'outline' | 'ghost' | 'destructive';
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -34,6 +34,8 @@ export function Button({
           'border-2 border-[#E8631A] text-[#E8631A] hover:bg-orange-50 active:bg-orange-100 font-bold',
         variant === 'ghost' &&
           'text-gray-700 hover:bg-gray-100 active:bg-gray-200',
+        variant === 'destructive' &&
+          'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-sm',
         size === 'sm' && 'px-4 py-2.5 text-sm',
         size === 'md' && 'px-6 py-3 text-base font-bold',
         size === 'lg' && 'px-8 py-3 text-lg',
