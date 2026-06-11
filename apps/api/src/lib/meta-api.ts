@@ -78,6 +78,15 @@ export interface MetaAdAccountsResponse {
   data: MetaAdAccount[];
 }
 
+export interface MetaBusiness {
+  id: string;
+  name: string;
+}
+
+interface MetaBusinessesResponse {
+  data: MetaBusiness[];
+}
+
 interface MetaUserProfileResponse {
   id: string;
 }
@@ -147,7 +156,35 @@ export async function exchangeForLongLivedToken(params: {
   );
 }
 
-export async function getUserAdAccounts(accessToken: string): Promise<MetaAdAccount[]> {
+export async function getUserBusinesses(accessToken: string): Promise<MetaBusiness[]> {
+  const url = new URL(`${META_GRAPH_BASE_URL}/me/businesses`);
+  url.searchParams.set('fields', 'id,name');
+  url.searchParams.set('access_token', accessToken);
+
+  const response = await fetch(url, { method: 'GET' });
+  const payload = await parseMetaResponse<MetaBusinessesResponse>(
+    response,
+    'Falha ao buscar Business Managers no Meta.'
+  );
+
+  return payload.data || [];
+}
+
+export async function getBusinessAdAccounts(businessId: string, accessToken: string): Promise<MetaAdAccount[]> {
+  const url = new URL(`${META_GRAPH_BASE_URL}/${businessId}/owned_ad_accounts`);
+  url.searchParams.set('fields', 'id,name,account_status,currency,timezone_name');
+  url.searchParams.set('access_token', accessToken);
+
+  const response = await fetch(url, { method: 'GET' });
+  const payload = await parseMetaResponse<MetaAdAccountsResponse>(
+    response,
+    'Falha ao buscar contas de anuncios da Business Manager no Meta.'
+  );
+
+  return payload.data || [];
+}
+
+async function getPersonalAdAccounts(accessToken: string): Promise<MetaAdAccount[]> {
   const url = new URL(`${META_GRAPH_BASE_URL}/me/adaccounts`);
   url.searchParams.set('fields', 'id,name,account_status,currency,timezone_name');
   url.searchParams.set('access_token', accessToken);
@@ -159,6 +196,36 @@ export async function getUserAdAccounts(accessToken: string): Promise<MetaAdAcco
   );
 
   return payload.data || [];
+}
+
+/**
+ * Retorna apenas as contas de anuncio das Business Managers concedidas no escopo do OAuth
+ * (via /me/businesses + /{business_id}/owned_ad_accounts). Caso o usuario nao tenha BMs
+ * (contas pessoais), faz fallback para /me/adaccounts.
+ */
+export async function getUserAdAccounts(accessToken: string): Promise<MetaAdAccount[]> {
+  const businesses = await getUserBusinesses(accessToken);
+
+  if (businesses.length === 0) {
+    return getPersonalAdAccounts(accessToken);
+  }
+
+  const accountsByBusiness = await Promise.all(
+    businesses.map((business) => getBusinessAdAccounts(business.id, accessToken))
+  );
+
+  const seen = new Set<string>();
+  const accounts: MetaAdAccount[] = [];
+  for (const list of accountsByBusiness) {
+    for (const account of list) {
+      if (!seen.has(account.id)) {
+        seen.add(account.id);
+        accounts.push(account);
+      }
+    }
+  }
+
+  return accounts;
 }
 
 export async function getMetaUserId(accessToken: string): Promise<string> {

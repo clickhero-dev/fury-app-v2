@@ -78,6 +78,7 @@ export function SelecionarContaPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<FlatAdAccount | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
 
   const { data: connections = [], isLoading } = useQuery<MetaConnection[]>({
     queryKey: ['meta-connections'],
@@ -94,12 +95,19 @@ export function SelecionarContaPage() {
     (conn.adAccounts ?? []).map((acc) => ({ ...acc, connectionId: conn.id }))
   );
 
+  const inactiveCount = allAccounts.filter((acc) => acc.account_status !== 1).length;
+
+  // Por padrão, exibe apenas contas ativas. Toggle revela as inativas.
+  const visibleAccounts = showInactive
+    ? allAccounts
+    : allAccounts.filter((acc) => acc.account_status === 1);
+
   // Auto-select if only one account available
   useEffect(() => {
-    if (allAccounts.length === 1 && !selected) {
-      setSelected(allAccounts[0]);
+    if (visibleAccounts.length === 1 && !selected) {
+      setSelected(visibleAccounts[0]);
     }
-  }, [allAccounts.length]);
+  }, [visibleAccounts.length]);
 
   const mutation = useMutation({
     mutationFn: async ({ connectionId, adAccountId }: { connectionId: string; adAccountId: string }) => {
@@ -146,7 +154,7 @@ export function SelecionarContaPage() {
             <div className="flex justify-center py-12">
               <span className="w-8 h-8 border-2 border-[#EA580C]/30 border-t-[#EA580C] rounded-full animate-spin" />
             </div>
-          ) : allAccounts.length === 0 ? (
+          ) : visibleAccounts.length === 0 && allAccounts.length === 0 ? (
             <div className="bg-[#FFF7F4] border border-[#FDDCCC] rounded-2xl p-6 text-center">
               <p className="text-[#1C1C1E] font-semibold">Nenhuma conta de anúncio encontrada</p>
               <p className="text-sm text-[#6E7681] mt-1">
@@ -161,9 +169,16 @@ export function SelecionarContaPage() {
                 Criar conta de anúncios no Meta
               </a>
             </div>
+          ) : visibleAccounts.length === 0 ? (
+            <div className="bg-[#FFF7F4] border border-[#FDDCCC] rounded-2xl p-6 text-center">
+              <p className="text-[#1C1C1E] font-semibold">Nenhuma conta ativa encontrada</p>
+              <p className="text-sm text-[#6E7681] mt-1">
+                Todas as contas vinculadas estão inativas. Marque "Mostrar contas inativas" para selecionar uma delas.
+              </p>
+            </div>
           ) : (
             <div className="space-y-3">
-              {allAccounts.map((account) => {
+              {visibleAccounts.map((account) => {
                 const isActive = account.account_status === 1;
                 const isSelected = selected?.id === account.id;
                 return (
@@ -213,6 +228,19 @@ export function SelecionarContaPage() {
                 );
               })}
             </div>
+          )}
+
+          {/* Toggle: mostrar contas inativas */}
+          {!isLoading && inactiveCount > 0 && (
+            <label className="flex items-center justify-center gap-2 text-sm text-[#6E7681] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showInactive}
+                onChange={(e) => setShowInactive(e.target.checked)}
+                className="w-4 h-4 rounded border-[#D1D5DB] text-[#EA580C] focus:ring-[#EA580C]/30"
+              />
+              Mostrar contas inativas ({inactiveCount})
+            </label>
           )}
 
           {/* CTA */}
