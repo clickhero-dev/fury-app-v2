@@ -783,11 +783,11 @@ export async function getCampaignInsights(args: {
       const ctr = parseFloat(item.ctr || '0');
       const cpc = parseFloat(item.cpc || '0');
       const cpm = parseFloat(item.cpm || '0');
-      const conversions = parseConversionsFromActions(item.actions, campaignObjective) ?? 0;
+      const conversions = parseConversionsFromActions(item.actions, campaignObjective, item.unique_actions) ?? 0;
       const roas = parseRoasFromPurchaseRoas(item.purchase_roas) ?? null;
       const cpa =
-        parseCpaFromCostPerAction(item.cost_per_action_type) ??
-        (conversions > 0 ? roundToDecimals(spend / conversions, 2) : null);
+        (conversions > 0 ? roundToDecimals(spend / conversions, 2) : null) ??
+        parseCpaFromCostPerAction(item.cost_per_action_type);
 
       return {
         date: item.date_start || item.date_stop || '',

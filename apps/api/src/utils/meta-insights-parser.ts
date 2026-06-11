@@ -26,9 +26,10 @@ function pickActionValue(
 
 export function parseConversionsFromActions(
   actions: MetaInsightsAction[] | undefined,
-  objective?: string | null
+  objective?: string | null,
+  uniqueActions?: MetaInsightsAction[] | undefined
 ): number | null {
-  return getConversionsFromActions(actions, objective);
+  return getConversionsFromActions(actions, objective, uniqueActions);
 }
 
 export function parseRoasFromPurchaseRoas(
@@ -54,7 +55,7 @@ export function extractCampaignMetricsFromInsight(
   cpa: number | null;
   conversions: number | null;
 } {
-  const conversions = getConversionsFromActions(insight.actions, objective);
+  const conversions = getConversionsFromActions(insight.actions, objective, insight.unique_actions);
   const roasFromMeta = parseRoasFromPurchaseRoas(insight.purchase_roas);
   const cpaFromMeta = parseCpaFromCostPerAction(insight.cost_per_action_type);
 
@@ -73,11 +74,14 @@ export function extractCampaignMetricsFromInsight(
         })()
       : null);
 
+  // CPA deve refletir o numero de conversoes exibido na tabela (spend /
+  // conversions). O cost_per_action_type da Meta pode se referir a um
+  // action_type diferente do escolhido como "conversao" para o objetivo
+  // da campanha, gerando valores incoerentes com a coluna Conversoes.
   const cpa =
-    cpaFromMeta ??
     (conversions !== null && conversions > 0
       ? calculateCPA(spendInReais, conversions)
-      : null);
+      : null) ?? cpaFromMeta;
 
   return { roas, cpa, conversions };
 }

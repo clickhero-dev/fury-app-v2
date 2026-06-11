@@ -129,13 +129,13 @@ export function PainelCampanhas() {
     },
     {
       key: 'roas' as const,
-      label: 'ROAS',
+      label: 'Retorno sobre Investimento',
       align: 'right' as const,
       render: (value: unknown) => formatRoas(value as number | null),
     },
     {
       key: 'cpa' as const,
-      label: 'CPA',
+      label: 'Custo por Resultado',
       align: 'right' as const,
       render: (value: unknown) => {
         const cpaValue = value as number | null;
@@ -148,7 +148,7 @@ export function PainelCampanhas() {
     },
     {
       key: 'conversoes' as const,
-      label: 'Conversões',
+      label: 'Clientes',
       align: 'right' as const,
       render: (value: unknown) => formatConversions(value as number | null),
     },

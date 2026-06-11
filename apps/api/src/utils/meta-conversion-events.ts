@@ -118,7 +118,8 @@ export function getConversionActionTypesForObjective(objective?: string | null):
  */
 export function getConversionsFromActions(
   actions: MetaInsightsAction[] | undefined,
-  objective?: string | null
+  objective?: string | null,
+  uniqueActions?: MetaInsightsAction[] | undefined
 ): number | null {
   if (!actions || actions.length === 0) return null;
 
@@ -127,7 +128,12 @@ export function getConversionsFromActions(
   for (const type of candidateTypes) {
     const entry = actions.find((a) => a.action_type === type);
     if (entry) {
-      const value = parseInt(String(entry.value), 10);
+      // O Meta Ads Manager exibe "Resultados" com base em pessoas unicas
+      // (unique_actions), nao no total de eventos (actions) — a mesma
+      // pessoa pode gerar mais de um evento do mesmo tipo no periodo.
+      const uniqueEntry = uniqueActions?.find((a) => a.action_type === type);
+      const source = uniqueEntry ?? entry;
+      const value = parseInt(String(source.value), 10);
       if (Number.isFinite(value)) return value;
     }
   }

@@ -107,7 +107,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         const impressions = parseInt(item.impressions || '0', 10);
         const clicks = parseInt(item.clicks || '0', 10);
 
-        const conversions = parseConversionsFromActions(item.actions, objective) ?? 0;
+        const conversions = parseConversionsFromActions(item.actions, objective, item.unique_actions) ?? 0;
 
         const revenue = (item.action_values || [])
           .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
@@ -128,8 +128,8 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     const ctr = calculateCTR(summary.clicks, summary.impressions);
     const cpm = calculateCPM(Math.round(summary.spend * 100), summary.impressions);
     const cpa =
-      insights.reduce<number | null>((acc, item) => acc ?? parseCpaFromCostPerAction(item.cost_per_action_type), null) ??
-      (summary.conversions > 0 ? calculateCPA(spendReais, summary.conversions) : null);
+      (summary.conversions > 0 ? calculateCPA(spendReais, summary.conversions) : null) ??
+      insights.reduce<number | null>((acc, item) => acc ?? parseCpaFromCostPerAction(item.cost_per_action_type), null);
     const roas =
       insights.reduce<number | null>((acc, item) => acc ?? parseRoasFromPurchaseRoas(item.purchase_roas), null) ??
       (summary.spend > 0 && summary.revenue > 0
@@ -336,6 +336,8 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
           name: insight.campaign_name || meta?.name,
           objective,
           actions: insight.actions,
+          unique_actions: insight.unique_actions,
+          cost_per_action_type: insight.cost_per_action_type,
         });
 
         const { roas, cpa, conversions } = extractCampaignMetricsFromInsight(
