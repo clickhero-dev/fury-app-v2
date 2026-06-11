@@ -34,7 +34,7 @@ export function Step2Creative({ value, onChange }: Step2CreativeProps) {
   });
 
   const galleryAssets = (data?.assets ?? []).filter(
-    (asset) => asset.type === 'image' && asset.complianceStatus === 'approved'
+    (asset) => asset.type === 'image' && asset.complianceStatus !== 'rejected'
   );
 
   function handleSelectAsset(asset: StudioAsset) {
@@ -92,7 +92,7 @@ export function Step2Creative({ value, onChange }: Step2CreativeProps) {
           ) : galleryAssets.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500">
               <ImagePlus className="w-8 h-8 mb-2 text-gray-300" />
-              <p className="text-sm">Nenhuma imagem aprovada encontrada na galeria.</p>
+              <p className="text-sm">Nenhuma imagem encontrada na galeria.</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-72 overflow-y-auto pr-1">
