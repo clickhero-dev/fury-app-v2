@@ -1,6 +1,6 @@
 import type { MetaInsightsAction, MetaInsightsData } from '../lib/meta-api.js';
 import { calculateCPA, roundToDecimals } from './metrics-formatter.js';
-import { isConversionEvent } from './meta-conversion-events.js';
+import { getConversionsFromActions } from './meta-conversion-events.js';
 
 const ROAS_ACTION_TYPES = ['omni_purchase', 'purchase'] as const;
 const CPA_ACTION_TYPES = ['purchase', 'omni_purchase'] as const;
@@ -25,13 +25,10 @@ function pickActionValue(
 }
 
 export function parseConversionsFromActions(
-  actions: MetaInsightsAction[] | undefined
+  actions: MetaInsightsAction[] | undefined,
+  objective?: string | null
 ): number | null {
-  if (!actions) return null;
-
-  return actions
-    .filter((a) => isConversionEvent(a.action_type))
-    .reduce((sum, a) => sum + parseInt(String(a.value), 10), 0);
+  return getConversionsFromActions(actions, objective);
 }
 
 export function parseRoasFromPurchaseRoas(
@@ -50,13 +47,14 @@ export function parseCpaFromCostPerAction(
 
 export function extractCampaignMetricsFromInsight(
   insight: MetaInsightsData,
-  spendInReais: number
+  spendInReais: number,
+  objective?: string | null
 ): {
   roas: number | null;
   cpa: number | null;
   conversions: number | null;
 } {
-  const conversions = parseConversionsFromActions(insight.actions);
+  const conversions = getConversionsFromActions(insight.actions, objective);
   const roasFromMeta = parseRoasFromPurchaseRoas(insight.purchase_roas);
   const cpaFromMeta = parseCpaFromCostPerAction(insight.cost_per_action_type);
 

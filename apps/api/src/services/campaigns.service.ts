@@ -736,6 +736,7 @@ export async function getCampaignInsights(args: {
     name: `Campaign ${args.campaignId}`,
     status: 'ACTIVE',
   };
+  let campaignObjective: string | null = null;
 
   if (dbCampaign) {
     const statusMap: Record<string, string> = { ativo: 'ACTIVE', pausado: 'PAUSED', arquivado: 'ARCHIVED' };
@@ -744,10 +745,15 @@ export async function getCampaignInsights(args: {
       name: dbCampaign.name,
       status: statusMap[dbCampaign.status] ?? dbCampaign.status.toUpperCase(),
     };
+    const budgetObj = dbCampaign.budget as Record<string, unknown> | null | undefined;
+    const wizardObjective = budgetObj && typeof budgetObj.objective === 'string' ? budgetObj.objective : null;
+    campaignObjective = wizardObjective
+      ? WIZARD_OBJECTIVE_MAP[wizardObjective as WizardObjective]?.metaObjective ?? wizardObjective
+      : null;
   } else {
     try {
-      const meta = await metaApiCall<{ name?: string; status?: string }>(
-        `/${encodeURIComponent(args.campaignId)}?fields=name,status`,
+      const meta = await metaApiCall<{ name?: string; status?: string; objective?: string }>(
+        `/${encodeURIComponent(args.campaignId)}?fields=name,status,objective`,
         accessToken
       );
       campaignBlock = {
@@ -755,6 +761,7 @@ export async function getCampaignInsights(args: {
         name: meta.name || `Campaign ${args.campaignId}`,
         status: (meta.status || 'ACTIVE').toUpperCase(),
       };
+      campaignObjective = meta.objective ?? null;
     } catch { /* keep defaults */ }
   }
 
@@ -776,7 +783,7 @@ export async function getCampaignInsights(args: {
       const ctr = parseFloat(item.ctr || '0');
       const cpc = parseFloat(item.cpc || '0');
       const cpm = parseFloat(item.cpm || '0');
-      const conversions = parseConversionsFromActions(item.actions) ?? 0;
+      const conversions = parseConversionsFromActions(item.actions, campaignObjective) ?? 0;
       const roas = parseRoasFromPurchaseRoas(item.purchase_roas) ?? null;
       const cpa =
         parseCpaFromCostPerAction(item.cost_per_action_type) ??

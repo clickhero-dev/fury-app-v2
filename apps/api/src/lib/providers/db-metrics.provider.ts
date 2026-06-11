@@ -17,7 +17,7 @@ import {
   parseCpaFromCostPerAction,
   parseRoasFromPurchaseRoas,
 } from '../../utils/meta-insights-parser.js';
-import { isConversionEvent } from '../../utils/meta-conversion-events.js';
+import { getConversionsFromActions } from '../../utils/meta-conversion-events.js';
 import type {
   MetricsSummaryResponse,
   CampaignResponse,
@@ -100,14 +100,14 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     return { accessToken, adAccountId };
   }
 
-  private normalizeInsights(insights: MetaInsightsData[]): MetricsSummaryResponse {
+  private normalizeInsights(insights: MetaInsightsData[], objective?: string | null): MetricsSummaryResponse {
     const summary = insights.reduce(
       (acc, item) => {
         const spend = parseFloat(item.spend || '0');
         const impressions = parseInt(item.impressions || '0', 10);
         const clicks = parseInt(item.clicks || '0', 10);
 
-        const conversions = parseConversionsFromActions(item.actions) ?? 0;
+        const conversions = parseConversionsFromActions(item.actions, objective) ?? 0;
 
         const revenue = (item.action_values || [])
           .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
@@ -148,7 +148,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     };
   }
 
-  private mapMetaInsightToDaily(item: MetaInsightsData): DailyMetricsResponse | null {
+  private mapMetaInsightToDaily(item: MetaInsightsData, objective?: string | null): DailyMetricsResponse | null {
     if (!item.date_start || !item.date_stop) {
       return null;
     }
@@ -158,7 +158,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     const clicks = parseInt(item.clicks || '0', 10);
 
     const spendReais = centavosToReais(Math.round(spend * 100));
-    const { roas, conversions } = extractCampaignMetricsFromInsight(item, spendReais);
+    const { roas, conversions } = extractCampaignMetricsFromInsight(item, spendReais, objective);
 
     return {
       date: item.date_start,
@@ -264,10 +264,10 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         throw new AppError(400, 'NO_AD_ACCOUNT', 'Nenhuma conta de anuncios encontrada');
       }
 
-      type MetaCampaignRow = { id: string; name?: string; status?: string };
+      type MetaCampaignRow = { id: string; name?: string; status?: string; objective?: string };
 
       const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
-        `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,name,status')}`,
+        `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,name,status,objective')}`,
         accessToken
       );
 
@@ -329,9 +329,19 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         const spendReais = centavosToReais(Math.round(spend * 100));
         const impressions = parseInt(insight.impressions || '0', 10);
         const clicks = parseInt(insight.clicks || '0', 10);
+        const objective = meta?.objective ?? null;
+
+        console.log('[Campaigns] conversions debug:', {
+          campaignId,
+          name: insight.campaign_name || meta?.name,
+          objective,
+          actions: insight.actions,
+        });
+
         const { roas, cpa, conversions } = extractCampaignMetricsFromInsight(
           insight,
-          spendReais
+          spendReais,
+          objective
         );
 
         campaigns.push({
@@ -430,12 +440,12 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
 
       let summary: MetricsSummaryResponse | null = null;
       if (insights.length > 0) {
-        summary = this.normalizeInsights(insights);
+        summary = this.normalizeInsights(insights, campaignBlock.objective);
       }
 
       const dailyRaw: DailyMetricsResponse[] = [];
       for (const item of insights) {
-        const row = this.mapMetaInsightToDaily(item);
+        const row = this.mapMetaInsightToDaily(item, campaignBlock.objective);
         if (row) {
           dailyRaw.push(row);
         }
@@ -530,9 +540,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
           const impressions = parseInt(item.impressions || '0', 10);
           const clicks = parseInt(item.clicks || '0', 10);
 
-          const conversions = (item.actions || [])
-            .filter((a) => isConversionEvent(a.action_type))
-            .reduce((sum, a) => sum + parseInt(String(a.value), 10), 0);
+          const conversions = getConversionsFromActions(item.actions) ?? 0;
 
           const revenue = (item.action_values || [])
             .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
