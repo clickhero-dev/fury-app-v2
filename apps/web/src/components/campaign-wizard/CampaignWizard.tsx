@@ -87,28 +87,36 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
           </div>
 
           <div className="flex items-center gap-2">
-            {([1, 2, 3, 4, 5] as const).map((step, index) => (
-              <div key={step} className="flex items-center flex-1 last:flex-none">
-                <div
-                  className={cn(
-                    'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-colors',
-                    step < state.currentStep && 'bg-[#E8631A] text-white',
-                    step === state.currentStep && 'bg-[#E8631A] text-white ring-4 ring-[#E8631A]/20',
-                    step > state.currentStep && 'bg-gray-100 text-gray-400'
-                  )}
-                >
-                  {step < state.currentStep ? <Check className="w-4 h-4" /> : step}
-                </div>
-                {index < 4 && (
-                  <div
+            {([1, 2, 3, 4, 5] as const).map((step, index) => {
+              const isVisited = step < state.currentStep;
+              const isCurrent = step === state.currentStep;
+              return (
+                <div key={step} className="flex items-center flex-1 last:flex-none">
+                  <button
+                    type="button"
+                    onClick={() => isVisited && wizard.goToStep(step)}
+                    disabled={!isVisited}
+                    title={isVisited ? `Voltar ao passo ${step}` : undefined}
                     className={cn(
-                      'h-0.5 flex-1 mx-1 transition-colors',
-                      step < state.currentStep ? 'bg-[#E8631A]' : 'bg-gray-100'
+                      'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-colors',
+                      isVisited && 'bg-[#E8631A] text-white cursor-pointer hover:bg-[#D4520B]',
+                      isCurrent && 'bg-[#E8631A] text-white ring-4 ring-[#E8631A]/20 cursor-default',
+                      !isVisited && !isCurrent && 'bg-gray-100 text-gray-400 cursor-default'
                     )}
-                  />
-                )}
-              </div>
-            ))}
+                  >
+                    {isVisited ? <Check className="w-4 h-4" /> : step}
+                  </button>
+                  {index < 4 && (
+                    <div
+                      className={cn(
+                        'h-0.5 flex-1 mx-1 transition-colors',
+                        isVisited ? 'bg-[#E8631A]' : 'bg-gray-100'
+                      )}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -120,7 +128,12 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
           {state.currentStep === 3 && <Step3Audience value={state.audience} onChange={wizard.setAudience} />}
           {state.currentStep === 4 && <Step4Budget value={state.budget} onChange={wizard.setBudget} />}
           {state.currentStep === 5 && (
-            <Step5Review state={state} onViewCampaigns={handleViewCampaigns} onCreateAnother={handleCreateAnother} />
+            <Step5Review
+              state={state}
+              onViewCampaigns={handleViewCampaigns}
+              onCreateAnother={handleCreateAnother}
+              onBack={wizard.goBack}
+            />
           )}
         </div>
 

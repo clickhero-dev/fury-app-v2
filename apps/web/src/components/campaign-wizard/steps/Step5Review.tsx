@@ -19,9 +19,10 @@ interface Step5ReviewProps {
   state: WizardState;
   onViewCampaigns: () => void;
   onCreateAnother: () => void;
+  onBack: () => void;
 }
 
-export function Step5Review({ state, onViewCampaigns, onCreateAnother }: Step5ReviewProps) {
+export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }: Step5ReviewProps) {
   const mutation = useCreateCampaign();
 
   const isInstagramCreative = Boolean(state.creative.instagramMediaId);
@@ -141,22 +142,33 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother }: Step5Re
         </div>
       )}
 
-      <Button
-        variant="primary"
-        size="lg"
-        className="w-full"
-        onClick={handlePublish}
-        disabled={mutation.isPending}
-      >
-        {mutation.isPending ? (
-          <span className="flex items-center justify-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            Publicando no Meta...
-          </span>
-        ) : (
-          'Publicar Campanha'
-        )}
-      </Button>
+      <div className="flex gap-3">
+        <Button
+          variant="outline"
+          size="lg"
+          className="flex-1"
+          onClick={onBack}
+          disabled={mutation.isPending}
+        >
+          Voltar
+        </Button>
+        <Button
+          variant="primary"
+          size="lg"
+          className="flex-1"
+          onClick={handlePublish}
+          disabled={mutation.isPending}
+        >
+          {mutation.isPending ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Publicando...
+            </span>
+          ) : (
+            'Publicar Campanha'
+          )}
+        </Button>
+      </div>
     </div>
   );
 }
