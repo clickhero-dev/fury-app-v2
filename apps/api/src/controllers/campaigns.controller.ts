@@ -1,6 +1,8 @@
 /// <reference path="../types/express.d.ts" />
 import { Request, Response, NextFunction } from 'express';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
+import { uploadAsset } from '../services/storage.service.js';
 import {
   createCampaign,
   pauseCampaign,
@@ -12,6 +14,8 @@ import {
   updateCampaignStatus,
   softDeleteCampaign,
   getCampaignInsights,
+  createCampaignFromWizard,
+  searchMetaLocations,
 } from '../services/campaigns.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import {
@@ -355,6 +359,113 @@ export async function getCampaignInsightsHandler(req: Request, res: Response, ne
     res.json({
       success: true,
       data: insights,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const createWizardSchema = z
+  .object({
+    objective: z.enum(['visits', 'engagement', 'messages']),
+
+    creative_asset_id: z.string().min(1).optional(),
+    creative_upload_url: z.string().min(1).optional(),
+    headline: z.string().min(1).max(40),
+    primary_text: z.string().min(1).max(125),
+
+    location_city: z.string().min(1),
+    location_city_key: z.string().min(1).optional(),
+    location_radius_km: z.number().int().refine((v) => [5, 10, 15, 20, 30, 50].includes(v), {
+      message: 'Raio inválido. Use 5, 10, 15, 20, 30 ou 50 km.',
+    }),
+    age_min: z.number().int().min(18).max(65),
+    age_max: z.number().int().min(18).max(65),
+    gender: z.enum(['all', 'male', 'female']),
+
+    daily_budget_brl: z.number().min(5),
+    duration_days: z.number().int().min(1).optional(),
+  })
+  .refine((data) => Boolean(data.creative_asset_id || data.creative_upload_url), {
+    message: 'Selecione uma imagem da galeria ou envie um arquivo.',
+    path: ['creative_asset_id'],
+  })
+  .refine((data) => data.age_max >= data.age_min, {
+    message: 'A idade máxima deve ser maior ou igual à idade mínima.',
+    path: ['age_max'],
+  });
+
+export async function createWizardCampaignHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = createWizardSchema.parse(req.body);
+    const tenantId = req.tenant?.tenantId || '';
+    if (!tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+    }
+
+    const result = await createCampaignFromWizard({
+      tenantId,
+      objective: data.objective,
+      creativeAssetId: data.creative_asset_id,
+      creativeUploadUrl: data.creative_upload_url,
+      headline: data.headline,
+      primaryText: data.primary_text,
+      locationCity: data.location_city,
+      locationCityKey: data.location_city_key,
+      locationRadiusKm: data.location_radius_km,
+      ageMin: data.age_min,
+      ageMax: data.age_max,
+      gender: data.gender,
+      dailyBudgetBrl: data.daily_budget_brl,
+      durationDays: data.duration_days,
+    });
+
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function uploadWizardCreativeHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const tenantId = req.tenant?.tenantId || '';
+    if (!tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+    }
+
+    if (!req.file) {
+      throw new AppError(400, 'NO_FILE', 'Nenhum arquivo enviado');
+    }
+
+    const extensionByMime: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg' };
+    const extension = extensionByMime[req.file.mimetype] ?? 'jpg';
+    const fileName = `campaign-wizard/${tenantId}/${randomUUID()}.${extension}`;
+    const url = await uploadAsset(req.file.buffer, fileName, req.file.mimetype);
+
+    res.status(201).json({ success: true, data: { url }, timestamp: new Date().toISOString() });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const metaLocationsSchema = z.object({
+  q: z.string().min(2, 'Digite ao menos 2 caracteres'),
+});
+
+export async function searchMetaLocationsHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const query = metaLocationsSchema.parse(req.query);
+    const tenantId = req.tenant?.tenantId || '';
+    if (!tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+    }
+
+    const results = await searchMetaLocations({ tenantId, query: query.q });
+
+    res.json({
+      success: true,
+      data: results,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {

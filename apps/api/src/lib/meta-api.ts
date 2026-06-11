@@ -329,6 +329,14 @@ export async function metaApiCall<T>(
 
     if (method === 'GET') {
       const pathNoQuery = path.split('?')[0] || path;
+      if (pathNoQuery.includes('/search')) {
+        return {
+          data: [
+            { key: '2421217', name: 'São Paulo', region: 'São Paulo', country_code: 'BR', type: 'city' },
+            { key: '2406246', name: 'Rio de Janeiro', region: 'Rio de Janeiro', country_code: 'BR', type: 'city' },
+          ],
+        } as T;
+      }
       if (pathNoQuery.includes('/insights')) {
         return {
           data: [
@@ -533,6 +541,25 @@ export async function createAdCreativeFromCopy(params: {
   }
 
   return response.id;
+}
+
+export interface MetaLocationResult {
+  key: string;
+  name: string;
+  region?: string;
+  country_code?: string;
+  type?: string;
+}
+
+interface MetaLocationSearchResponse {
+  data: MetaLocationResult[];
+}
+
+/** Busca localizacoes (cidades) do Brasil via Meta Graph API para uso no targeting de campanhas. */
+export async function searchMetaCityLocations(query: string, accessToken: string): Promise<MetaLocationResult[]> {
+  const path = `/search?type=adgeolocation&location_types=${encodeURIComponent(JSON.stringify(['city']))}&q=${encodeURIComponent(query)}`;
+  const response = await metaApiCall<MetaLocationSearchResponse>(path, accessToken);
+  return (response.data || []).filter((item) => item.country_code === 'BR');
 }
 
 export async function uploadAdImage(params: {

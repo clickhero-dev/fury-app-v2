@@ -1,6 +1,12 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
-import { automationRules, campaigns, db, furyInsights, metaConnections } from '../lib/db.js';
-import { metaApiCall, getMetaInsights, type MetaCampaignCreateResponse } from '../lib/meta-api.js';
+import { automationRules, campaigns, creativeAssets, db, furyInsights, metaConnections } from '../lib/db.js';
+import {
+  metaApiCall,
+  getMetaInsights,
+  searchMetaCityLocations,
+  type MetaCampaignCreateResponse,
+  type MetaLocationResult,
+} from '../lib/meta-api.js';
 import { decryptMetaToken } from '../utils/crypto.js';
 import {
   parseConversionsFromActions,
@@ -9,6 +15,8 @@ import {
 } from '../utils/meta-insights-parser.js';
 import { roundToDecimals } from '../utils/metrics-formatter.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
+import { getMetaLocationsCache, setMetaLocationsCache } from '../lib/locations-cache.js';
 
 export async function createCampaign(args: {
   tenantId: string;
@@ -822,4 +830,298 @@ function calculateDateRange(
     startDate: start.toISOString().split('T')[0],
     endDate: end.toISOString().split('T')[0],
   };
+}
+
+// ==================== Campaign Creation Wizard ====================
+
+export type WizardObjective = 'visits' | 'engagement' | 'messages';
+
+const WIZARD_OBJECTIVE_MAP: Record<
+  WizardObjective,
+  { metaObjective: string; optimizationGoal: string; cta: string; destinationType?: string; label: string }
+> = {
+  visits: { metaObjective: 'OUTCOME_TRAFFIC', optimizationGoal: 'LINK_CLICKS', cta: 'LEARN_MORE', label: 'Visitas' },
+  engagement: {
+    metaObjective: 'OUTCOME_ENGAGEMENT',
+    optimizationGoal: 'POST_ENGAGEMENT',
+    cta: 'LIKE_PAGE',
+    label: 'Engajamento',
+  },
+  messages: {
+    metaObjective: 'OUTCOME_LEADS',
+    optimizationGoal: 'CONVERSATIONS',
+    cta: 'MESSAGE_PAGE',
+    destinationType: 'MESSENGER',
+    label: 'Atração de Clientes',
+  },
+};
+
+function mapWizardMetaError(err: unknown): never {
+  if (err instanceof AppError) throw err;
+
+  const metaCode = (err as any).metaCode;
+  const message = (err as Error).message || '';
+  const lowerMessage = message.toLowerCase();
+
+  if (metaCode === 190) {
+    throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão com Meta expirada. Reconecte em Configurações');
+  }
+
+  if (
+    lowerMessage.includes('insufficient') ||
+    lowerMessage.includes('saldo') ||
+    lowerMessage.includes('fund')
+  ) {
+    throw new AppError(402, 'META_INSUFFICIENT_FUNDS', 'Conta de anúncios sem saldo suficiente');
+  }
+
+  throw new AppError(502, 'META_API_ERROR', 'Erro ao publicar no Meta. Tente novamente.');
+}
+
+export interface CreateWizardCampaignArgs {
+  tenantId: string;
+  objective: WizardObjective;
+  creativeAssetId?: string;
+  creativeUploadUrl?: string;
+  headline: string;
+  primaryText: string;
+  locationCity: string;
+  locationCityKey?: string;
+  locationRadiusKm: number;
+  ageMin: number;
+  ageMax: number;
+  gender: 'all' | 'male' | 'female';
+  dailyBudgetBrl: number;
+  durationDays?: number;
+}
+
+export interface CreateWizardCampaignResult {
+  success: true;
+  campaign_id: string;
+  meta_campaign_id: string;
+  campaign_name: string;
+}
+
+export async function createCampaignFromWizard(
+  args: CreateWizardCampaignArgs
+): Promise<CreateWizardCampaignResult> {
+  const metaConn = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, args.tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+
+  if (!metaConn) {
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
+  }
+
+  const adAccountId = metaConn.selectedAdAccountId;
+  if (!adAccountId) {
+    throw new AppError(
+      400,
+      'AD_ACCOUNT_NOT_SELECTED',
+      'Nenhuma conta de anúncios selecionada. Configure em Configurações → Integrações.'
+    );
+  }
+
+  const accessToken = decryptMetaToken(metaConn.accessToken);
+  const objectiveConfig = WIZARD_OBJECTIVE_MAP[args.objective];
+
+  // Resolve image URL: direct upload takes precedence over a gallery asset
+  let imageUrl = args.creativeUploadUrl;
+  if (!imageUrl && args.creativeAssetId) {
+    const asset = await db.query.creativeAssets.findFirst({
+      where: and(eq(creativeAssets.id, args.creativeAssetId), eq(creativeAssets.tenantId, args.tenantId)),
+    });
+    if (!asset) {
+      throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo não encontrado.');
+    }
+    imageUrl = asset.url;
+  }
+
+  if (!imageUrl) {
+    throw new AppError(400, 'CREATIVE_IMAGE_MISSING', 'Selecione uma imagem da galeria ou envie um arquivo.');
+  }
+
+  // Resolve city key for geo targeting
+  let cityKey = args.locationCityKey;
+  if (!cityKey) {
+    let locations: MetaLocationResult[];
+    try {
+      locations = await searchMetaCityLocations(args.locationCity, accessToken);
+    } catch (err) {
+      mapWizardMetaError(err);
+    }
+    const match = locations[0];
+    if (!match) {
+      throw new AppError(400, 'LOCATION_NOT_FOUND', 'Cidade não encontrada. Tente outro nome.');
+    }
+    cityKey = match.key;
+  }
+
+  const today = new Date();
+  const dataLabel = today.toLocaleDateString('pt-BR');
+  const campaignName = `${objectiveConfig.label} — FURY — ${dataLabel}`;
+
+  let metaCampaignId: string;
+  try {
+    const campaignResponse = await metaApiCall<MetaCampaignCreateResponse>(
+      `/${encodeURIComponent(adAccountId)}/campaigns`,
+      accessToken,
+      {
+        method: 'POST',
+        body: {
+          name: campaignName,
+          objective: objectiveConfig.metaObjective,
+          status: 'ACTIVE',
+          special_ad_categories: [],
+        },
+      }
+    );
+    metaCampaignId = campaignResponse.id;
+  } catch (err) {
+    mapWizardMetaError(err);
+  }
+
+  const targeting: Record<string, unknown> = {
+    geo_locations: {
+      cities: [{ key: cityKey, radius: args.locationRadiusKm, distance_unit: 'kilometer' }],
+    },
+    age_min: args.ageMin,
+    age_max: args.ageMax,
+    genders: args.gender === 'all' ? [1, 2] : args.gender === 'male' ? [1] : [2],
+  };
+
+  const adSetBody: Record<string, unknown> = {
+    name: `AdSet — ${args.locationCity} — FURY`,
+    campaign_id: metaCampaignId,
+    daily_budget: Math.round(args.dailyBudgetBrl * 100),
+    billing_event: 'IMPRESSIONS',
+    optimization_goal: objectiveConfig.optimizationGoal,
+    targeting,
+    status: 'ACTIVE',
+  };
+
+  if (objectiveConfig.destinationType) {
+    adSetBody.destination_type = objectiveConfig.destinationType;
+  }
+
+  if (args.durationDays) {
+    const endTime = new Date(today.getTime() + args.durationDays * 24 * 60 * 60 * 1000);
+    adSetBody.end_time = endTime.toISOString();
+  }
+
+  let adSetId: string;
+  try {
+    const adSetResponse = await metaApiCall<{ id: string }>(
+      `/${encodeURIComponent(adAccountId)}/adsets`,
+      accessToken,
+      { method: 'POST', body: adSetBody }
+    );
+    adSetId = adSetResponse.id;
+  } catch (err) {
+    mapWizardMetaError(err);
+  }
+
+  const pageId = process.env.META_PAGE_ID || 'mock_page_id';
+
+  let adCreativeId: string;
+  try {
+    const adCreativeResponse = await metaApiCall<{ id: string }>(
+      `/${encodeURIComponent(adAccountId)}/adcreatives`,
+      accessToken,
+      {
+        method: 'POST',
+        body: {
+          name: 'Creative — FURY',
+          object_story_spec: {
+            page_id: pageId,
+            link_data: {
+              picture: imageUrl,
+              message: args.primaryText,
+              name: args.headline,
+              call_to_action: { type: objectiveConfig.cta },
+            },
+          },
+        },
+      }
+    );
+    adCreativeId = adCreativeResponse.id;
+  } catch (err) {
+    mapWizardMetaError(err);
+  }
+
+  let metaAdId: string;
+  try {
+    const adResponse = await metaApiCall<{ id: string }>(
+      `/${encodeURIComponent(adAccountId)}/ads`,
+      accessToken,
+      {
+        method: 'POST',
+        body: {
+          name: `Ad — FURY — ${dataLabel}`,
+          adset_id: adSetId,
+          creative: { creative_id: adCreativeId },
+          status: 'ACTIVE',
+        },
+      }
+    );
+    metaAdId = adResponse.id;
+  } catch (err) {
+    mapWizardMetaError(err);
+  }
+
+  const [campaign] = await db
+    .insert(campaigns)
+    .values({
+      tenantId: args.tenantId,
+      metaCampaignId,
+      name: campaignName,
+      status: 'active',
+      budget: {
+        daily_budget: Math.round(args.dailyBudgetBrl * 100),
+        objective: objectiveConfig.metaObjective,
+        created_via: 'wizard',
+        ad_set_id: adSetId,
+        ad_creative_id: adCreativeId,
+        ad_id: metaAdId,
+        duration_days: args.durationDays ?? null,
+      },
+    })
+    .returning();
+
+  await invalidateCampaignsCache(args.tenantId);
+
+  return {
+    success: true,
+    campaign_id: campaign.id,
+    meta_campaign_id: metaCampaignId,
+    campaign_name: campaignName,
+  };
+}
+
+export async function searchMetaLocations(args: { tenantId: string; query: string }): Promise<MetaLocationResult[]> {
+  const cached = await getMetaLocationsCache(args.query);
+  if (cached) return cached;
+
+  const metaConn = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, args.tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+
+  if (!metaConn) {
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
+  }
+
+  const accessToken = decryptMetaToken(metaConn.accessToken);
+
+  let results: MetaLocationResult[];
+  try {
+    results = await searchMetaCityLocations(args.query, accessToken);
+  } catch (err) {
+    mapWizardMetaError(err);
+  }
+
+  await setMetaLocationsCache(args.query, results);
+
+  return results;
 }

@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { CampaignWizard } from '@/components/campaign-wizard/CampaignWizard';
 import { Search, Loader2, Pause, Play } from 'lucide-react';
 import { AppLayout, PageHeader, DataTable, StatusBadge, Button } from '@/components';
 import {
@@ -45,6 +46,7 @@ export function PainelCampanhas() {
   const [page, setPage] = useState(1);
   const [campaignToPause, setCampaignToPause] = useState<CampaignData | null>(null);
   const [actionError, setActionError] = useState<string>('');
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const { data: campaigns = [], isLoading } = useCampaigns();
   const pauseMutation = usePauseCampaign();
@@ -187,7 +189,7 @@ export function PainelCampanhas() {
       header={
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-text-primary">Campanhas</h2>
-          <Button variant="primary" size="sm">
+          <Button variant="primary" size="sm" onClick={() => setWizardOpen(true)}>
             + Nova Campanha
           </Button>
         </div>
@@ -324,6 +326,8 @@ export function PainelCampanhas() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CampaignWizard open={wizardOpen} onOpenChange={setWizardOpen} />
     </AppLayout>
   );
 }

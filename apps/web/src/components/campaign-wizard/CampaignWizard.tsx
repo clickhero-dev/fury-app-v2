@@ -1,0 +1,125 @@
+import { useNavigate } from 'react-router-dom';
+import { Check, X } from 'lucide-react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { useCampaignWizard } from './hooks/useCampaignWizard';
+import { Step1Objective } from './steps/Step1Objective';
+import { Step2Creative } from './steps/Step2Creative';
+import { Step3Audience } from './steps/Step3Audience';
+import { Step4Budget } from './steps/Step4Budget';
+import { Step5Review } from './steps/Step5Review';
+import type { WizardState } from './types';
+
+interface CampaignWizardProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  preSelectedAssetId?: string;
+  preSelectedAssetUrl?: string;
+}
+
+const STEP_TITLES: Record<WizardState['currentStep'], string> = {
+  1: 'Objetivo',
+  2: 'Criativo',
+  3: 'Público',
+  4: 'Orçamento',
+  5: 'Revisão e Publicação',
+};
+
+export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSelectedAssetUrl }: CampaignWizardProps) {
+  const navigate = useNavigate();
+  const wizard = useCampaignWizard(preSelectedAssetId);
+  const { state } = wizard;
+
+  if (state.creative.assetId === preSelectedAssetId && preSelectedAssetUrl && !state.creative.assetUrl) {
+    wizard.setCreative({ assetUrl: preSelectedAssetUrl });
+  }
+
+  function handleClose() {
+    const hasProgress = state.currentStep > 1 || state.objective !== null;
+    if (hasProgress) {
+      const confirmed = window.confirm('Tem certeza? As configurações serão perdidas.');
+      if (!confirmed) return;
+    }
+    wizard.reset();
+    onOpenChange(false);
+  }
+
+  function handleViewCampaigns() {
+    wizard.reset();
+    onOpenChange(false);
+    navigate('/campanhas');
+  }
+
+  function handleCreateAnother() {
+    wizard.reset();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && handleClose()}>
+      <DialogContent className="max-w-lg w-full max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden [&>button]:hidden">
+        <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-bold text-gray-900">{STEP_TITLES[state.currentStep]}</h2>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="rounded-lg p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+              <span className="sr-only">Fechar</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {([1, 2, 3, 4, 5] as const).map((step, index) => (
+              <div key={step} className="flex items-center flex-1 last:flex-none">
+                <div
+                  className={cn(
+                    'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-colors',
+                    step < state.currentStep && 'bg-[#E8631A] text-white',
+                    step === state.currentStep && 'bg-[#E8631A] text-white ring-4 ring-[#E8631A]/20',
+                    step > state.currentStep && 'bg-gray-100 text-gray-400'
+                  )}
+                >
+                  {step < state.currentStep ? <Check className="w-4 h-4" /> : step}
+                </div>
+                {index < 4 && (
+                  <div
+                    className={cn(
+                      'h-0.5 flex-1 mx-1 transition-colors',
+                      step < state.currentStep ? 'bg-[#E8631A]' : 'bg-gray-100'
+                    )}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {state.currentStep === 1 && <Step1Objective value={state.objective} onChange={wizard.setObjective} />}
+          {state.currentStep === 2 && <Step2Creative value={state.creative} onChange={wizard.setCreative} />}
+          {state.currentStep === 3 && <Step3Audience value={state.audience} onChange={wizard.setAudience} />}
+          {state.currentStep === 4 && <Step4Budget value={state.budget} onChange={wizard.setBudget} />}
+          {state.currentStep === 5 && (
+            <Step5Review state={state} onViewCampaigns={handleViewCampaigns} onCreateAnother={handleCreateAnother} />
+          )}
+        </div>
+
+        {state.currentStep < 5 && (
+          <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+            {state.currentStep > 1 && (
+              <Button variant="outline" className="flex-1" onClick={wizard.goBack}>
+                Voltar
+              </Button>
+            )}
+            <Button variant="primary" className="flex-1" onClick={wizard.goNext} disabled={!wizard.canGoNext}>
+              Continuar
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

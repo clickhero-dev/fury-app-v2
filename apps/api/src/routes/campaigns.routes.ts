@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import {
   createCampaignHandler,
   pauseCampaignHandler,
@@ -10,13 +11,31 @@ import {
   updateCampaignStatusHandler,
   softDeleteCampaignHandler,
   getCampaignInsightsHandler,
+  createWizardCampaignHandler,
+  searchMetaLocationsHandler,
+  uploadWizardCreativeHandler,
 } from '../controllers/campaigns.controller.js';
 
 const router = Router();
 
+const creativeUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'image/png' || file.mimetype === 'image/jpeg') {
+      cb(null, true);
+    } else {
+      cb(new Error('Formato inválido. Envie PNG ou JPG.'));
+    }
+  },
+});
+
 // Static and collection routes first
 router.get('/', getCampaignsHandler);
 router.post('/create', createCampaignHandler);
+router.post('/create-wizard', createWizardCampaignHandler);
+router.post('/upload-creative', creativeUpload.single('file'), uploadWizardCreativeHandler);
+router.get('/meta-locations', searchMetaLocationsHandler);
 
 // Specific sub-resource routes before generic /:id to avoid Express matching /:id first
 router.patch('/:id/pause', pauseCampaignHandler);

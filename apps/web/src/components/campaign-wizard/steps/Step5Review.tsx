@@ -1,0 +1,153 @@
+import { CheckCircle2, ImagePlus, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useCreateCampaign } from '../hooks/useCreateCampaign';
+import type { CreateWizardCampaignPayload, WizardState } from '../types';
+
+const OBJECTIVE_LABELS: Record<NonNullable<WizardState['objective']>, string> = {
+  visits: 'Visitas',
+  engagement: 'Engajamento',
+  messages: 'Atração de Clientes',
+};
+
+const GENDER_LABELS: Record<WizardState['audience']['gender'], string> = {
+  all: 'Todos os gêneros',
+  male: 'Homens',
+  female: 'Mulheres',
+};
+
+interface Step5ReviewProps {
+  state: WizardState;
+  onViewCampaigns: () => void;
+  onCreateAnother: () => void;
+}
+
+export function Step5Review({ state, onViewCampaigns, onCreateAnother }: Step5ReviewProps) {
+  const mutation = useCreateCampaign();
+
+  const imageUrl = state.creative.uploadUrl || state.creative.assetUrl;
+  const objectiveLabel = state.objective ? OBJECTIVE_LABELS[state.objective] : '';
+  const total =
+    state.budget.durationDays !== undefined
+      ? state.budget.dailyBudgetBrl * state.budget.durationDays
+      : null;
+
+  function handlePublish() {
+    if (!state.objective) return;
+
+    const payload: CreateWizardCampaignPayload = {
+      objective: state.objective,
+      creative_asset_id: state.creative.assetId,
+      creative_upload_url: state.creative.uploadUrl,
+      headline: state.creative.headline,
+      primary_text: state.creative.primaryText,
+      location_city: state.audience.city,
+      location_city_key: state.audience.cityKey,
+      location_radius_km: state.audience.radiusKm,
+      age_min: state.audience.ageMin,
+      age_max: state.audience.ageMax,
+      gender: state.audience.gender,
+      daily_budget_brl: state.budget.dailyBudgetBrl,
+      duration_days: state.budget.durationDays,
+    };
+
+    mutation.mutate(payload);
+  }
+
+  if (mutation.isSuccess) {
+    return (
+      <div className="flex flex-col items-center text-center py-8 space-y-4">
+        <CheckCircle2 className="w-16 h-16 text-green-500" />
+        <div>
+          <h3 className="text-lg font-bold text-gray-900">Campanha publicada com sucesso!</h3>
+          <p className="text-sm text-gray-500 mt-1">Sua campanha já está ativa no Meta Ads.</p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3 w-full pt-2">
+          <Button variant="outline" className="flex-1" onClick={onCreateAnother}>
+            Criar outra campanha
+          </Button>
+          <Button variant="primary" className="flex-1" onClick={onViewCampaigns}>
+            Ver campanhas
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-lg font-bold text-gray-900">Revisão e Publicação</h3>
+        <p className="text-sm text-gray-500 mt-1">Confira os detalhes antes de publicar sua campanha.</p>
+      </div>
+
+      <div className="rounded-xl border border-gray-200 divide-y divide-gray-100">
+        <div className="p-4">
+          <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Objetivo</div>
+          <div className="text-sm font-medium text-gray-900">{objectiveLabel}</div>
+        </div>
+
+        <div className="p-4 flex gap-3">
+          <div className="w-16 h-16 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
+            {imageUrl ? (
+              <img src={imageUrl} alt="Criativo" className="w-full h-full object-cover" />
+            ) : (
+              <ImagePlus className="w-6 h-6 text-gray-300" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Criativo</div>
+            <div className="text-sm font-medium text-gray-900 truncate">{state.creative.headline}</div>
+            <div className="text-xs text-gray-500 mt-1 line-clamp-2">{state.creative.primaryText}</div>
+          </div>
+        </div>
+
+        <div className="p-4">
+          <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Público</div>
+          <div className="text-sm font-medium text-gray-900">
+            {state.audience.city} • Raio de {state.audience.radiusKm}km
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            {state.audience.ageMin}-{state.audience.ageMax} anos • {GENDER_LABELS[state.audience.gender]}
+          </div>
+        </div>
+
+        <div className="p-4">
+          <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Orçamento</div>
+          <div className="text-sm font-medium text-gray-900">
+            R$ {state.budget.dailyBudgetBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/dia
+            {state.budget.durationDays !== undefined && ` • ${state.budget.durationDays} dias`}
+          </div>
+          {total !== null && (
+            <div className="text-xs text-gray-500 mt-1">
+              Total estimado: R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {mutation.isError && (
+        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+          {(mutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error
+            ?.message || 'Erro ao publicar no Meta. Tente novamente.'}
+        </div>
+      )}
+
+      <Button
+        variant="primary"
+        size="lg"
+        className="w-full"
+        onClick={handlePublish}
+        disabled={mutation.isPending}
+      >
+        {mutation.isPending ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            Publicando no Meta...
+          </span>
+        ) : (
+          'Publicar Campanha'
+        )}
+      </Button>
+    </div>
+  );
+}
