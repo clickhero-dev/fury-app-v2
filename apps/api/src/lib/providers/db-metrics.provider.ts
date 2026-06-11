@@ -72,6 +72,34 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     return response.data || [];
   }
 
+  private async getConnectionAndAccount(tenantId: string): Promise<{ accessToken: string; adAccountId: string }> {
+    const connection = await db.query.metaConnections.findFirst({
+      where: eq(metaConnections.tenantId, tenantId),
+      orderBy: (table, { desc }) => [desc(table.createdAt)],
+    });
+
+    if (!connection) {
+      throw new AppError(
+        401,
+        'META_NOT_CONNECTED',
+        'Conta Meta nao conectada. Acesse Configuracoes > Integracoes.'
+      );
+    }
+
+    const accessToken = decryptMetaToken(connection.accessToken);
+    const adAccounts = (connection.adAccounts as any[]) || [];
+    const adAccountId =
+      (connection as any).selectedAdAccountId ||
+      adAccounts.find((a: any) => a.account_status === 1)?.id ||
+      adAccounts[0]?.id;
+
+    if (!adAccountId) {
+      throw new AppError(400, 'NO_AD_ACCOUNT', 'Nenhuma conta de anuncios encontrada');
+    }
+
+    return { accessToken, adAccountId };
+  }
+
   private normalizeInsights(insights: MetaInsightsData[]): MetricsSummaryResponse {
     const summary = insights.reduce(
       (acc, item) => {
@@ -153,11 +181,32 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     endDate: string
   ): Promise<MetricsSummaryResponse | null> {
     try {
-      const insights = await this.fetchMetaInsights({
-        tenantId,
+      const { accessToken, adAccountId } = await this.getConnectionAndAccount(tenantId);
+
+      type MetaCampaignRow = { id: string; status?: string };
+      const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
+        `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,status')}`,
+        accessToken
+      );
+
+      const includedStatuses = new Set(['ACTIVE', 'PAUSED']);
+      const includedCampaignIds = new Set(
+        (campaignsResp.data || [])
+          .filter((c) => includedStatuses.has((c.status || '').toUpperCase()))
+          .map((c) => c.id)
+      );
+
+      const response = await getMetaInsights({
+        accessToken,
+        adAccountId,
         startDate,
         endDate,
+        level: 'campaign',
       });
+
+      const insights = (response.data || []).filter(
+        (item) => item.campaign_id && includedCampaignIds.has(item.campaign_id)
+      );
 
       if (insights.length === 0) {
         return null;

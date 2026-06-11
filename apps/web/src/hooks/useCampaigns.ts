@@ -18,13 +18,31 @@ function normalizeCampaignItems(data: unknown): CampaignApiItem[] {
   return [];
 }
 
-export function useCampaigns() {
+function toYMD(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
+/** "Este mês": do primeiro dia do mês atual até hoje. Mesmo cálculo usado no Dashboard. */
+function getThisMonthRange(): { startDate: string; endDate: string } {
+  const now = new Date();
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  return { startDate: toYMD(firstOfMonth), endDate: toYMD(now) };
+}
+
+export interface CampaignsPeriod {
+  startDate: string;
+  endDate: string;
+}
+
+export function useCampaigns(period?: CampaignsPeriod) {
+  const { startDate, endDate } = period ?? getThisMonthRange();
+
   return useQuery({
-    queryKey: ['campaigns'],
+    queryKey: ['campaigns', startDate, endDate],
     queryFn: async (): Promise<CampaignData[]> => {
       try {
         const response = await api.get<CampaignsApiResponse>('/metrics/campaigns', {
-          params: { limit: 100 },
+          params: { limit: 100, startDate, endDate },
         });
         const items = normalizeCampaignItems(response.data?.data);
         if (items.length === 0) return [];
