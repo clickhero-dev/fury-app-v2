@@ -247,6 +247,22 @@ export function IntegracoesContent() {
     refetchOnMount: true,
   });
 
+  const { data: scopes = [] } = useQuery<string[]>({
+    queryKey: ['meta-scopes'],
+    queryFn: async () => {
+      try {
+        const response = await api.get<{ success: boolean; data: { scopes: string[] } }>('/meta/scopes');
+        return response.data.data.scopes ?? [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: connections.length > 0,
+    placeholderData: [],
+  });
+
+  const needsScopeReconnect = connections.length > 0 && !scopes.includes('pages_show_list');
+
   const connectMutation = useMutation({
     mutationFn: async () => {
       const response = await api.get<MetaAuthUrlResponse>('/meta/auth/url', {
@@ -295,6 +311,23 @@ export function IntegracoesContent() {
           )}
         >
           {toast.variant === 'error' ? '⚠️' : '✅'} {toast.message}
+        </div>
+      )}
+
+      {needsScopeReconnect && (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-[#E8631A]/30 bg-[#E8631A]/10 p-4">
+          <p className="text-sm text-text-primary">
+            Reconecte sua conta Meta para habilitar o acesso a posts do Instagram.
+          </p>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => connectMutation.mutate()}
+            disabled={connectMutation.isPending}
+            className="flex-shrink-0"
+          >
+            {connectMutation.isPending ? 'Reconectando...' : 'Reconectar'}
+          </Button>
         </div>
       )}
 

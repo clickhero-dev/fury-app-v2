@@ -319,6 +319,19 @@ export async function getInstagramMediaInsights(
   return insights;
 }
 
+interface MetaPermissionsResponse {
+  data: Array<{ permission: string; status: 'granted' | 'declined' | 'expired' }>;
+}
+
+/** Busca os escopos OAuth concedidos pelo usuario (GET /me/permissions). */
+export async function getUserPermissions(accessToken: string): Promise<string[]> {
+  const response = await metaApiCall<MetaPermissionsResponse>('/me/permissions', accessToken);
+
+  return (response.data || [])
+    .filter((permission) => permission.status === 'granted')
+    .map((permission) => permission.permission);
+}
+
 export async function getMetaUserId(accessToken: string): Promise<string> {
   const url = new URL(`${META_GRAPH_BASE_URL}/me`);
   url.searchParams.set('fields', 'id');
@@ -422,6 +435,19 @@ export async function metaApiCall<T>(
 
     if (method === 'GET') {
       const pathNoQuery = path.split('?')[0] || path;
+      if (pathNoQuery.includes('/me/permissions')) {
+        return {
+          data: [
+            { permission: 'ads_read', status: 'granted' },
+            { permission: 'ads_management', status: 'granted' },
+            { permission: 'business_management', status: 'granted' },
+            { permission: 'pages_show_list', status: 'granted' },
+            { permission: 'pages_read_engagement', status: 'granted' },
+            { permission: 'instagram_basic', status: 'granted' },
+            { permission: 'instagram_manage_insights', status: 'granted' },
+          ],
+        } as T;
+      }
       if (pathNoQuery.includes('/me/accounts')) {
         return {
           data: [{ id: 'mock_page_id', instagram_business_account: { id: 'mock_ig_user_id' } }],

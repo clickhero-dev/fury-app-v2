@@ -59,6 +59,22 @@ export async function authCallback(req: Request, res: Response, next: NextFuncti
   }
 }
 
+export async function getScopes(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const scopes = await metaService.getTenantMetaScopes(req.tenant.tenantId);
+    res.status(200).json({
+      success: true,
+      data: { scopes },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getConnections(req: Request, res: Response, next: NextFunction) {
   try {
     if (!req.tenant?.tenantId) {

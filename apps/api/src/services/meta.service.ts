@@ -8,6 +8,7 @@ import {
   exchangeForLongLivedToken,
   getMetaUserId,
   getUserAdAccounts,
+  getUserPermissions,
   type MetaAdAccount,
 } from '../lib/meta-api.js';
 import { addSyncJob } from '../lib/sync-jobs.js';
@@ -17,6 +18,8 @@ const META_SCOPES = [
   'ads_read',
   'ads_management',
   'business_management',
+  'pages_show_list',
+  'pages_read_engagement',
   'instagram_basic',
   'instagram_manage_insights',
 ];
@@ -192,6 +195,21 @@ export async function handleMetaOAuthCallback(
   console.log('=== META CONNECTION SAVED ===', { tenantId, accountsCount: adAccounts.length, action: 'insert' });
   await addSyncJob({ tenantId, metaUserId, adAccounts });
   return { tenantId, context, returnUrl: resolvedReturnUrl };
+}
+
+/** Retorna os escopos OAuth concedidos pela conexao Meta mais recente do tenant. */
+export async function getTenantMetaScopes(tenantId: string): Promise<string[]> {
+  const connection = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+
+  if (!connection) {
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
+  }
+
+  const accessToken = decryptToken(connection.accessToken);
+  return getUserPermissions(accessToken);
 }
 
 export async function getTenantMetaConnections(tenantId: string): Promise<StoredMetaConnection[]> {
