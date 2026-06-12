@@ -9,6 +9,7 @@ import {
 } from '../lib/meta-api.js';
 import { decryptMetaToken } from '../utils/crypto.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { getResolvedTenantAssetSelection } from './meta.service.js';
 
 export type InstagramRankingObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';
 
@@ -72,7 +73,9 @@ export async function getInstagramDashboardInsights(
   const accessToken = decryptMetaToken(metaConn.accessToken);
 
   try {
-    const igUserId = await getInstagramBusinessAccountId(accessToken);
+    const assetSelection = await getResolvedTenantAssetSelection(tenantId);
+    const selectedPage = assetSelection.pages.find((page) => page.instagramUserId);
+    const igUserId = selectedPage?.instagramUserId || (await getInstagramBusinessAccountId(accessToken));
     const insights = await getInstagramAccountInsights(igUserId, accessToken, dateFrom, dateTo);
 
     return {
