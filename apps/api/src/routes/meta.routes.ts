@@ -19,6 +19,11 @@ router.get(
   tenantMiddleware,
   metaController.getPageWhatsappNumbers
 );
+router.get('/businesses', authMiddleware, tenantMiddleware, metaController.getBusinesses);
+router.post('/pages-by-business', authMiddleware, tenantMiddleware, metaController.getPagesByBusiness);
+router.post('/adaccounts-by-business', authMiddleware, tenantMiddleware, metaController.getAdAccountsByBusiness);
+router.post('/whatsapp-by-pages', authMiddleware, tenantMiddleware, metaController.getWhatsappByPages);
+router.post('/save-selection', authMiddleware, tenantMiddleware, metaController.saveSelection);
 router.get('/connections', authMiddleware, tenantMiddleware, metaController.getConnections);
 router.patch(
   '/connections/:id/select-account',

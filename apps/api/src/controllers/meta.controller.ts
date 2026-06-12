@@ -47,8 +47,8 @@ export async function authCallback(req: Request, res: Response, next: NextFuncti
 
     res.redirect(`${frontendUrl}${returnUrl}`);
   } catch (error) {
-    // Fluxo OAuth abandonado/cancelado/expirado nao deve travar o usuario numa
-    // resposta JSON crua: redireciona de volta para a tela de integracoes.
+    // Erros de token/state OAuth redirecionam para integracoes; falhas na busca de
+    // ativos sao tratadas no service e nao chegam aqui (conexao ja persistida).
     console.error('[OAuth Callback] ERRO:', error);
     res.redirect(`${frontendUrl}/configuracoes/integracoes?error=oauth_cancelled`);
   }
@@ -100,6 +100,105 @@ export async function getPageWhatsappNumbers(req: Request, res: Response, next: 
     res.status(200).json({
       success: true,
       data: numbers,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+const businessIdsBodySchema = z.object({
+  businessIds: z.array(z.string().min(1)).min(1, 'Informe ao menos uma Business Manager'),
+});
+
+const pageIdsBodySchema = z.object({
+  pageIds: z.array(z.string().min(1)),
+});
+
+const saveSelectionBodySchema = z.object({
+  businessIds: z.array(z.string().min(1)).default([]),
+  pageIds: z.array(z.string().min(1)).default([]),
+  adAccountIds: z.array(z.string().min(1)).default([]),
+  whatsappNumberIds: z.array(z.string().min(1)).default([]),
+});
+
+export async function getBusinesses(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const businesses = await metaService.getTenantBusinesses(req.tenant.tenantId);
+    res.status(200).json({
+      success: true,
+      data: businesses,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getPagesByBusiness(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const { businessIds } = businessIdsBodySchema.parse(req.body);
+    const pages = await metaService.getTenantPagesByBusiness(req.tenant.tenantId, businessIds);
+    res.status(200).json({
+      success: true,
+      data: pages,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getAdAccountsByBusiness(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const { businessIds } = businessIdsBodySchema.parse(req.body);
+    const adAccounts = await metaService.getTenantAdAccountsByBusiness(req.tenant.tenantId, businessIds);
+    res.status(200).json({
+      success: true,
+      data: adAccounts,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getWhatsappByPages(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const { pageIds } = pageIdsBodySchema.parse(req.body);
+    const numbers = pageIds.length > 0 ? await metaService.getTenantWhatsappByPages(req.tenant.tenantId, pageIds) : [];
+    res.status(200).json({
+      success: true,
+      data: numbers,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function saveSelection(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const selection = saveSelectionBodySchema.parse(req.body);
+    await metaService.saveTenantAssetSelection(req.tenant.tenantId, selection);
+    res.status(200).json({
+      success: true,
+      data: selection,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

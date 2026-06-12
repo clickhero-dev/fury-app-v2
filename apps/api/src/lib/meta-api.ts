@@ -184,6 +184,37 @@ export async function getBusinessAdAccounts(businessId: string, accessToken: str
   return payload.data || [];
 }
 
+export interface MetaOwnedPage {
+  pageId: string;
+  name: string;
+  businessId: string;
+  hasInstagram: boolean;
+}
+
+interface MetaOwnedPagesResponse {
+  data: Array<{ id: string; name?: string; instagram_business_account?: { id: string } }>;
+}
+
+/** Lista as Paginas pertencentes a uma Business Manager (/{business_id}/owned_pages). */
+export async function getBusinessOwnedPages(businessId: string, accessToken: string): Promise<MetaOwnedPage[]> {
+  const url = new URL(`${META_GRAPH_BASE_URL}/${businessId}/owned_pages`);
+  url.searchParams.set('fields', 'id,name,instagram_business_account');
+  url.searchParams.set('access_token', accessToken);
+
+  const response = await fetch(url, { method: 'GET' });
+  const payload = await parseMetaResponse<MetaOwnedPagesResponse>(
+    response,
+    'Falha ao buscar Paginas da Business Manager no Meta.'
+  );
+
+  return (payload.data || []).map((page) => ({
+    pageId: page.id,
+    name: page.name ?? page.id,
+    businessId,
+    hasInstagram: Boolean(page.instagram_business_account?.id),
+  }));
+}
+
 async function getPersonalAdAccounts(accessToken: string): Promise<MetaAdAccount[]> {
   const url = new URL(`${META_GRAPH_BASE_URL}/me/adaccounts`);
   url.searchParams.set('fields', 'id,name,account_status,currency,timezone_name');
@@ -198,34 +229,57 @@ async function getPersonalAdAccounts(accessToken: string): Promise<MetaAdAccount
   return payload.data || [];
 }
 
+export interface UserAdAccountsResult {
+  accounts: MetaAdAccount[];
+  ignoredBusinessIds: string[];
+}
+
 /**
  * Retorna apenas as contas de anuncio das Business Managers concedidas no escopo do OAuth
  * (via /me/businesses + /{business_id}/owned_ad_accounts). Caso o usuario nao tenha BMs
  * (contas pessoais), faz fallback para /me/adaccounts.
+ * BMs sem permissao (ex.: erro #100) sao ignoradas sem derrubar as demais.
  */
-export async function getUserAdAccounts(accessToken: string): Promise<MetaAdAccount[]> {
+export async function getUserAdAccounts(accessToken: string): Promise<UserAdAccountsResult> {
   const businesses = await getUserBusinesses(accessToken);
 
   if (businesses.length === 0) {
-    return getPersonalAdAccounts(accessToken);
+    const accounts = await getPersonalAdAccounts(accessToken);
+    return { accounts, ignoredBusinessIds: [] };
   }
 
-  const accountsByBusiness = await Promise.all(
-    businesses.map((business) => getBusinessAdAccounts(business.id, accessToken))
+  const results = await Promise.allSettled(
+    businesses.map(async (business) => ({
+      businessId: business.id,
+      accounts: await getBusinessAdAccounts(business.id, accessToken),
+    }))
   );
 
+  const ignoredBusinessIds: string[] = [];
   const seen = new Set<string>();
   const accounts: MetaAdAccount[] = [];
-  for (const list of accountsByBusiness) {
-    for (const account of list) {
-      if (!seen.has(account.id)) {
-        seen.add(account.id);
-        accounts.push(account);
+
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    const businessId = businesses[i]?.id ?? 'unknown';
+
+    if (result.status === 'fulfilled') {
+      for (const account of result.value.accounts) {
+        if (!seen.has(account.id)) {
+          seen.add(account.id);
+          accounts.push(account);
+        }
       }
+    } else {
+      ignoredBusinessIds.push(businessId);
+      console.warn(
+        `[Meta API] BM ${businessId} ignorada ao buscar ad accounts:`,
+        result.reason instanceof Error ? result.reason.message : result.reason
+      );
     }
   }
 
-  return accounts;
+  return { accounts, ignoredBusinessIds };
 }
 
 export interface InstagramMediaItem {

@@ -4,7 +4,7 @@ import { RegisterPage } from './pages/auth/RegisterPage';
 import { ConectarMetaPage } from './pages/onboarding/ConectarMetaPage';
 import { MetaAuthorizePage } from './pages/onboarding/MetaAuthorizePage';
 import { MetasPage } from './pages/onboarding/MetasPage';
-import { SelecionarContaPage } from './pages/onboarding/SelecionarContaPage';
+import { SelecionarAtivosPage } from './pages/onboarding/SelecionarAtivosPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthenticatedShell } from './components/layout/AuthenticatedShell';
 import { Dashboard } from './pages/dashboard/Dashboard';
@@ -48,7 +48,7 @@ export const router = createBrowserRouter([
     path: '/onboarding/selecionar-conta',
     element: (
       <ProtectedRoute>
-        <SelecionarContaPage />
+        <SelecionarAtivosPage />
       </ProtectedRoute>
     ),
   },

@@ -54,6 +54,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0011_add_notification_prefs' },
   { tag: '0012_add_brand_kits' },
   { tag: '0013_meta_connections_dedupe_unique' },
+  { tag: '0014_add_asset_selection' },
 ];
 
 async function runMigrate() {

@@ -66,7 +66,7 @@ async function processSyncJob(job: SyncJobRecord): Promise<void> {
   }
 
   const accessToken = decryptMetaToken(connection.accessToken);
-  const refreshedAdAccounts = await getUserAdAccounts(accessToken);
+  const { accounts: refreshedAdAccounts } = await getUserAdAccounts(accessToken);
 
   await db
     .update(metaConnections)

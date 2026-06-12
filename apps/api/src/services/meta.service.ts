@@ -6,13 +6,18 @@ import { AppError } from '../middleware/errorHandler.js';
 import {
   exchangeCodeForToken,
   exchangeForLongLivedToken,
+  getBusinessAdAccounts,
+  getBusinessOwnedPages,
   getMetaUserId,
   getPageWhatsappNumbers,
   getUserAdAccounts,
+  getUserBusinesses,
   getUserFacebookPages,
   getUserPermissions,
   type MetaAdAccount,
+  type MetaBusiness,
   type MetaFacebookPage,
+  type MetaOwnedPage,
   type MetaWhatsappNumber,
 } from '../lib/meta-api.js';
 import { addSyncJob } from '../lib/sync-jobs.js';
@@ -182,7 +187,6 @@ export async function handleMetaOAuthCallback(
   });
 
   const metaUserId = await getMetaUserId(longLivedToken.access_token);
-  const adAccounts = await getUserAdAccounts(longLivedToken.access_token);
   const encryptedToken = encryptToken(longLivedToken.access_token);
   const tokenExpiresAt = getTokenExpiration(longLivedToken.expires_in);
 
@@ -193,6 +197,8 @@ export async function handleMetaOAuthCallback(
 
   const resolvedReturnUrl = returnUrl ?? RETURN_URLS[context];
 
+  let connectionId: string;
+
   if (existing) {
     await db
       .update(metaConnections)
@@ -200,24 +206,50 @@ export async function handleMetaOAuthCallback(
         metaUserId,
         accessToken: encryptedToken,
         tokenExpiresAt,
-        adAccounts,
+        adAccounts: [],
         selectedAdAccountId: null,
         updatedAt: new Date(),
       })
       .where(eq(metaConnections.id, existing.id));
-    await addSyncJob({ tenantId, metaUserId, adAccounts });
-    return { tenantId, context, returnUrl: resolvedReturnUrl };
+    connectionId = existing.id;
+  } else {
+    const [inserted] = await db
+      .insert(metaConnections)
+      .values({
+        tenantId,
+        metaUserId,
+        accessToken: encryptedToken,
+        tokenExpiresAt,
+        adAccounts: [],
+      })
+      .returning({ id: metaConnections.id });
+    connectionId = inserted.id;
   }
 
-  await db.insert(metaConnections).values({
-    tenantId,
-    metaUserId,
-    accessToken: encryptedToken,
-    tokenExpiresAt,
-    adAccounts,
-  });
+  console.log(`[OAuth] conexão salva, id=${connectionId}`);
 
-  await addSyncJob({ tenantId, metaUserId, adAccounts });
+  try {
+    const { accounts: adAccounts, ignoredBusinessIds } = await getUserAdAccounts(
+      longLivedToken.access_token
+    );
+
+    if (ignoredBusinessIds.length > 0) {
+      console.warn(
+        `[OAuth] busca de ativos falhou parcialmente: ${JSON.stringify(ignoredBusinessIds)}`
+      );
+    }
+
+    if (adAccounts.length > 0) {
+      await db
+        .update(metaConnections)
+        .set({ adAccounts, updatedAt: new Date() })
+        .where(eq(metaConnections.id, connectionId));
+      await addSyncJob({ tenantId, metaUserId, adAccounts });
+    }
+  } catch (error) {
+    console.error('[OAuth] busca de ativos falhou completamente:', error);
+  }
+
   return { tenantId, context, returnUrl: resolvedReturnUrl };
 }
 
@@ -235,25 +267,190 @@ async function getTenantAccessToken(tenantId: string): Promise<string> {
   return decryptToken(connection.accessToken);
 }
 
+export interface TenantAssetSelection {
+  businessIds: string[];
+  pageIds: string[];
+  adAccountIds: string[];
+  whatsappNumberIds: string[];
+}
+
+/** Retorna a selecao de ativos persistida do tenant, ou null se ainda nao houver conexao. */
+export async function getTenantAssetSelection(tenantId: string): Promise<TenantAssetSelection | null> {
+  const connection = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+
+  if (!connection) return null;
+
+  return {
+    businessIds: (connection.selectedBusinessIds as string[] | null) ?? [],
+    pageIds: (connection.selectedPageIds as string[] | null) ?? [],
+    adAccountIds: (connection.selectedAdAccountIds as string[] | null) ?? [],
+    whatsappNumberIds: (connection.selectedWhatsappNumberIds as string[] | null) ?? [],
+  };
+}
+
+/** Persiste a selecao cascateada de ativos (BMs, Paginas, Contas de Anuncio, numeros WhatsApp) do tenant. */
+export async function saveTenantAssetSelection(
+  tenantId: string,
+  selection: TenantAssetSelection,
+): Promise<void> {
+  const connection = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+
+  if (!connection) {
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
+  }
+
+  await db
+    .update(metaConnections)
+    .set({
+      selectedBusinessIds: selection.businessIds,
+      selectedPageIds: selection.pageIds,
+      selectedAdAccountIds: selection.adAccountIds,
+      selectedWhatsappNumberIds: selection.whatsappNumberIds,
+      selectedAdAccountId: selection.adAccountIds[0] ?? connection.selectedAdAccountId,
+      updatedAt: new Date(),
+    })
+    .where(eq(metaConnections.id, connection.id));
+}
+
+/** Lista as Business Managers do tenant (/me/businesses). */
+export async function getTenantBusinesses(tenantId: string): Promise<MetaBusiness[]> {
+  const accessToken = await getTenantAccessToken(tenantId);
+  return getUserBusinesses(accessToken);
+}
+
+/** Lista as Paginas pertencentes as Business Managers informadas (uniao, sem duplicatas). */
+export async function getTenantPagesByBusiness(tenantId: string, businessIds: string[]): Promise<MetaOwnedPage[]> {
+  const accessToken = await getTenantAccessToken(tenantId);
+
+  const pagesByBusiness = await Promise.all(
+    businessIds.map((businessId) => getBusinessOwnedPages(businessId, accessToken))
+  );
+
+  const seen = new Set<string>();
+  const pages: MetaOwnedPage[] = [];
+  for (const list of pagesByBusiness) {
+    for (const page of list) {
+      if (!seen.has(page.pageId)) {
+        seen.add(page.pageId);
+        pages.push(page);
+      }
+    }
+  }
+
+  return pages;
+}
+
+export interface TenantBusinessAdAccount {
+  adAccountId: string;
+  name: string;
+  status: number;
+  businessId: string;
+}
+
+/** Lista as Contas de Anuncio pertencentes as Business Managers informadas (uniao, sem duplicatas). */
+export async function getTenantAdAccountsByBusiness(
+  tenantId: string,
+  businessIds: string[],
+): Promise<TenantBusinessAdAccount[]> {
+  const accessToken = await getTenantAccessToken(tenantId);
+
+  const accountsByBusiness = await Promise.all(
+    businessIds.map(async (businessId) => {
+      const accounts = await getBusinessAdAccounts(businessId, accessToken);
+      return accounts.map((account) => ({
+        adAccountId: account.id,
+        name: account.name,
+        status: account.account_status,
+        businessId,
+      }));
+    })
+  );
+
+  const seen = new Set<string>();
+  const accounts: TenantBusinessAdAccount[] = [];
+  for (const list of accountsByBusiness) {
+    for (const account of list) {
+      if (!seen.has(account.adAccountId)) {
+        seen.add(account.adAccountId);
+        accounts.push(account);
+      }
+    }
+  }
+
+  return accounts;
+}
+
+export interface TenantPageWhatsappNumber {
+  phoneNumberId: string;
+  displayPhoneNumber: string;
+  pageId: string;
+}
+
+/** Lista os numeros WhatsApp Business vinculados as Paginas informadas. */
+export async function getTenantWhatsappByPages(tenantId: string, pageIds: string[]): Promise<TenantPageWhatsappNumber[]> {
+  const accessToken = await getTenantAccessToken(tenantId);
+
+  const numbersByPage = await Promise.all(
+    pageIds.map(async (pageId) => {
+      const numbers = await getPageWhatsappNumbers(pageId, accessToken);
+      return numbers.map((number) => ({
+        phoneNumberId: number.phoneNumberId,
+        displayPhoneNumber: number.displayPhoneNumber,
+        pageId,
+      }));
+    })
+  );
+
+  return numbersByPage.flat();
+}
+
 /** Retorna os escopos OAuth concedidos pela conexao Meta mais recente do tenant. */
 export async function getTenantMetaScopes(tenantId: string): Promise<string[]> {
   const accessToken = await getTenantAccessToken(tenantId);
   return getUserPermissions(accessToken);
 }
 
-/** Lista as Paginas do Facebook vinculadas a conexao Meta do tenant. */
+/**
+ * Lista as Paginas do Facebook vinculadas a conexao Meta do tenant. Se o tenant
+ * ja tiver uma selecao de Paginas persistida (fluxo de selecao de ativos), o
+ * resultado e filtrado para conter apenas as Paginas selecionadas.
+ */
 export async function getTenantFacebookPages(tenantId: string): Promise<MetaFacebookPage[]> {
   const accessToken = await getTenantAccessToken(tenantId);
-  return getUserFacebookPages(accessToken);
+  const pages = await getUserFacebookPages(accessToken);
+
+  const selection = await getTenantAssetSelection(tenantId);
+  if (selection && selection.pageIds.length > 0) {
+    return pages.filter((page) => selection.pageIds.includes(page.pageId));
+  }
+
+  return pages;
 }
 
-/** Lista os numeros WhatsApp Business vinculados a uma Pagina do tenant. */
+/**
+ * Lista os numeros WhatsApp Business vinculados a uma Pagina do tenant. Se o
+ * tenant ja tiver uma selecao de numeros WhatsApp persistida, o resultado e
+ * filtrado para conter apenas os numeros selecionados.
+ */
 export async function getTenantPageWhatsappNumbers(
   tenantId: string,
   pageId: string,
 ): Promise<MetaWhatsappNumber[]> {
   const accessToken = await getTenantAccessToken(tenantId);
-  return getPageWhatsappNumbers(pageId, accessToken);
+  const numbers = await getPageWhatsappNumbers(pageId, accessToken);
+
+  const selection = await getTenantAssetSelection(tenantId);
+  if (selection && selection.whatsappNumberIds.length > 0) {
+    return numbers.filter((number) => selection.whatsappNumberIds.includes(number.phoneNumberId));
+  }
+
+  return numbers;
 }
 
 export async function getTenantMetaConnections(tenantId: string): Promise<StoredMetaConnection[]> {
@@ -262,16 +459,25 @@ export async function getTenantMetaConnections(tenantId: string): Promise<Stored
     orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
-  return connections.map((connection) => ({
-    id: connection.id,
-    tenantId: connection.tenantId,
-    metaUserId: connection.metaUserId,
-    accessToken: maskToken(connection.accessToken),
-    tokenExpiresAt: connection.tokenExpiresAt,
-    adAccounts: (connection.adAccounts as MetaAdAccount[]) || [],
-    selectedAdAccountId: connection.selectedAdAccountId ?? null,
-    createdAt: connection.createdAt,
-  }));
+  return connections.map((connection) => {
+    const allAdAccounts = (connection.adAccounts as MetaAdAccount[]) || [];
+    const selectedAdAccountIds = (connection.selectedAdAccountIds as string[] | null) ?? [];
+    const adAccounts =
+      selectedAdAccountIds.length > 0
+        ? allAdAccounts.filter((account) => selectedAdAccountIds.includes(account.id))
+        : allAdAccounts;
+
+    return {
+      id: connection.id,
+      tenantId: connection.tenantId,
+      metaUserId: connection.metaUserId,
+      accessToken: maskToken(connection.accessToken),
+      tokenExpiresAt: connection.tokenExpiresAt,
+      adAccounts,
+      selectedAdAccountId: connection.selectedAdAccountId ?? null,
+      createdAt: connection.createdAt,
+    };
+  });
 }
 
 export async function deleteTenantMetaConnection(tenantId: string, connectionId: string): Promise<void> {
