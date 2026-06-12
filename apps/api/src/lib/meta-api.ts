@@ -478,48 +478,201 @@ export interface MetaWhatsappNumber {
   verifiedName: string;
 }
 
-interface MetaWabaPhoneNumbersResponse {
-  data: Array<{ id: string; display_phone_number?: string; verified_name?: string }>;
+export interface WhatsappNumberWithContext extends MetaWhatsappNumber {
+  businessId?: string;
+  pageId?: string;
 }
 
-interface MetaWabasResponse {
-  data: Array<{ id: string; name?: string }>;
+interface WabaPhoneNumberRaw {
+  id: string;
+  display_phone_number?: string;
+  verified_name?: string;
+  is_on_biz_app?: boolean;
+  platform_type?: string;
+  status?: string;
+}
+
+interface MetaWabaPhoneNumbersResponse {
+  data: WabaPhoneNumberRaw[];
+}
+
+interface MetaWabaWithPhones {
+  id: string;
+  name?: string;
+  phone_numbers?: { data?: WabaPhoneNumberRaw[] };
+}
+
+interface MetaWabasWithPhonesResponse {
+  data: MetaWabaWithPhones[];
+}
+
+interface MetaPageWithWhatsapp {
+  id: string;
+  whatsapp_number?: string;
+  access_token?: string;
+  whatsapp_business_account?: MetaWabaWithPhones;
+}
+
+const WABA_PHONE_FIELDS =
+  'id,display_phone_number,verified_name,is_on_biz_app,platform_type,status';
+const WABA_NESTED_FIELDS = `id,name,phone_numbers{${WABA_PHONE_FIELDS}}`;
+const PAGE_WHATSAPP_FIELDS = `id,whatsapp_number,whatsapp_business_account{${WABA_NESTED_FIELDS}}`;
+
+const BUSINESS_WABA_EDGES = [
+  'owned_whatsapp_business_accounts',
+  'client_whatsapp_business_accounts',
+  'whatsapp_business_accounts',
+] as const;
+
+function normalizeWhatsappPhone(phone: string): string {
+  return phone.replace(/\D/g, '');
+}
+
+function isSyntheticWhatsappId(phoneNumberId: string): boolean {
+  return phoneNumberId.startsWith('page-wa:');
+}
+
+function mapWabaPhoneNumber(raw: WabaPhoneNumberRaw): MetaWhatsappNumber {
+  return {
+    phoneNumberId: raw.id,
+    displayPhoneNumber: raw.display_phone_number ?? '',
+    verifiedName: raw.verified_name ?? '',
+  };
+}
+
+function mergeWhatsappNumbers(
+  target: Map<string, WhatsappNumberWithContext>,
+  list: WhatsappNumberWithContext[],
+): void {
+  for (const number of list) {
+    const key = normalizeWhatsappPhone(number.displayPhoneNumber) || number.phoneNumberId;
+    const existing = target.get(key);
+    if (
+      !existing ||
+      (isSyntheticWhatsappId(existing.phoneNumberId) && !isSyntheticWhatsappId(number.phoneNumberId))
+    ) {
+      target.set(key, number);
+    }
+  }
+}
+
+function mapNestedWabaPhones(
+  waba: MetaWabaWithPhones | undefined,
+  context: { businessId?: string; pageId?: string },
+): WhatsappNumberWithContext[] {
+  if (!waba?.phone_numbers?.data?.length) {
+    return [];
+  }
+
+  return waba.phone_numbers.data
+    .filter((raw) => raw.id && (raw.display_phone_number || raw.verified_name))
+    .map((raw) => ({
+      ...mapWabaPhoneNumber(raw),
+      ...context,
+    }));
+}
+
+function mapPageDirectWhatsappNumber(
+  pageId: string,
+  whatsappNumber: string,
+): WhatsappNumberWithContext {
+  const normalized = normalizeWhatsappPhone(whatsappNumber);
+  return {
+    phoneNumberId: `page-wa:${pageId}:${normalized || pageId}`,
+    displayPhoneNumber: whatsappNumber,
+    verifiedName: '',
+    pageId,
+  };
 }
 
 async function getWabaPhoneNumbers(wabaId: string, accessToken: string): Promise<MetaWhatsappNumber[]> {
   const numbers = await metaApiCall<MetaWabaPhoneNumbersResponse>(
-    `/${encodeURIComponent(wabaId)}/phone_numbers?fields=id,display_phone_number,verified_name`,
+    `/${encodeURIComponent(wabaId)}/phone_numbers?fields=${WABA_PHONE_FIELDS}`,
     accessToken
   );
 
-  return (numbers.data || []).map((number) => ({
-    phoneNumberId: number.id,
-    displayPhoneNumber: number.display_phone_number ?? '',
-    verifiedName: number.verified_name ?? '',
-  }));
+  return (numbers.data || [])
+    .filter((number) => number.id && (number.display_phone_number || number.verified_name))
+    .map(mapWabaPhoneNumber);
 }
 
-async function getBusinessWabaIds(businessId: string, accessToken: string): Promise<string[]> {
-  const wabaIds: string[] = [];
-  const edges = ['owned_whatsapp_business_accounts', 'client_whatsapp_business_accounts'] as const;
+async function getPageDirectWhatsappNumber(
+  pageId: string,
+  accessToken: string,
+): Promise<WhatsappNumberWithContext | null> {
+  const page = await metaApiCall<{ whatsapp_number?: string }>(
+    `/${encodeURIComponent(pageId)}?fields=whatsapp_number,has_whatsapp_business_number`,
+    accessToken
+  );
 
-  for (const edge of edges) {
-    try {
-      const url = new URL(`${META_GRAPH_BASE_URL}/${businessId}/${edge}`);
-      url.searchParams.set('fields', 'id,name');
-      url.searchParams.set('access_token', accessToken);
+  if (!page.whatsapp_number?.trim()) {
+    return null;
+  }
 
-      const response = await fetch(url, { method: 'GET' });
-      const payload = await parseMetaResponse<MetaWabasResponse>(
-        response,
-        `Falha ao buscar WABAs (${edge}) da Business Manager no Meta.`
+  return mapPageDirectWhatsappNumber(pageId, page.whatsapp_number.trim());
+}
+
+async function getBusinessWhatsappNumbersFromEdge(
+  businessId: string,
+  edge: (typeof BUSINESS_WABA_EDGES)[number],
+  accessToken: string,
+): Promise<WhatsappNumberWithContext[]> {
+  const url = new URL(`${META_GRAPH_BASE_URL}/${businessId}/${edge}`);
+  url.searchParams.set('fields', WABA_NESTED_FIELDS);
+  url.searchParams.set('access_token', accessToken);
+
+  const response = await fetch(url, { method: 'GET' });
+  const payload = await parseMetaResponse<MetaWabasWithPhonesResponse>(
+    response,
+    `Falha ao buscar WABAs (${edge}) da Business Manager no Meta.`
+  );
+
+  const numbers: WhatsappNumberWithContext[] = [];
+  const wabaIdsNeedingFallback: string[] = [];
+
+  for (const waba of payload.data || []) {
+    const nested = mapNestedWabaPhones(waba, { businessId });
+    if (nested.length > 0) {
+      numbers.push(...nested);
+    } else if (waba.id) {
+      wabaIdsNeedingFallback.push(waba.id);
+    }
+  }
+
+  const fallbackResults = await Promise.allSettled(
+    wabaIdsNeedingFallback.map(async (wabaId) => {
+      const list = await getWabaPhoneNumbers(wabaId, accessToken);
+      return list.map((number) => ({ ...number, businessId }));
+    })
+  );
+
+  for (const result of fallbackResults) {
+    if (result.status === 'fulfilled') {
+      numbers.push(...result.value);
+    } else {
+      console.warn(
+        `[Meta API] WABA da BM ${businessId} ignorada:`,
+        result.reason instanceof Error ? result.reason.message : result.reason
       );
+    }
+  }
 
-      for (const waba of payload.data || []) {
-        if (!wabaIds.includes(waba.id)) {
-          wabaIds.push(waba.id);
-        }
-      }
+  return numbers;
+}
+
+/**
+ * Lista numeros WhatsApp das WABAs de uma Business Manager (Cloud API + Business App).
+ */
+export async function getBusinessWhatsappNumbers(
+  businessId: string,
+  accessToken: string
+): Promise<MetaWhatsappNumber[]> {
+  const merged = new Map<string, WhatsappNumberWithContext>();
+
+  for (const edge of BUSINESS_WABA_EDGES) {
+    try {
+      const numbers = await getBusinessWhatsappNumbersFromEdge(businessId, edge, accessToken);
+      mergeWhatsappNumbers(merged, numbers);
     } catch (err) {
       console.warn(
         `[Meta API] BM ${businessId} edge ${edge} indisponivel:`,
@@ -528,39 +681,83 @@ async function getBusinessWabaIds(businessId: string, accessToken: string): Prom
     }
   }
 
-  return wabaIds;
+  return [...merged.values()];
 }
 
-/**
- * Lista numeros WhatsApp das WABAs owned/client de uma Business Manager.
- * Caminho principal quando WABAs nao aparecem no campo whatsapp_business_account da Pagina.
- */
-export async function getBusinessWhatsappNumbers(
-  businessId: string,
-  accessToken: string
-): Promise<MetaWhatsappNumber[]> {
-  const wabaIds = await getBusinessWabaIds(businessId, accessToken);
-
-  const results = await Promise.allSettled(
-    wabaIds.map((wabaId) => getWabaPhoneNumbers(wabaId, accessToken))
+async function getUserAccountWhatsappNumbers(
+  accessToken: string,
+  filterPageIds?: string[],
+): Promise<WhatsappNumberWithContext[]> {
+  const response = await metaApiCall<{ data: MetaPageWithWhatsapp[] }>(
+    `/me/accounts?fields=id,access_token,${PAGE_WHATSAPP_FIELDS}&limit=200`,
+    accessToken
   );
 
-  const seen = new Set<string>();
-  const numbers: MetaWhatsappNumber[] = [];
+  const numbers: WhatsappNumberWithContext[] = [];
+  const pageFilter = filterPageIds?.length ? new Set(filterPageIds) : null;
 
-  for (const result of results) {
-    if (result.status !== 'fulfilled') {
-      console.warn(
-        '[Meta API] WABA ignorada ao buscar phone_numbers:',
-        result.reason instanceof Error ? result.reason.message : result.reason
-      );
+  for (const page of response.data || []) {
+    if (pageFilter && !pageFilter.has(page.id)) {
       continue;
     }
 
-    for (const number of result.value) {
-      if (!seen.has(number.phoneNumberId)) {
-        seen.add(number.phoneNumberId);
-        numbers.push(number);
+    numbers.push(...mapNestedWabaPhones(page.whatsapp_business_account, { pageId: page.id }));
+
+    if (page.whatsapp_number?.trim()) {
+      numbers.push(mapPageDirectWhatsappNumber(page.id, page.whatsapp_number.trim()));
+    } else if (page.access_token) {
+      try {
+        const direct = await getPageDirectWhatsappNumber(page.id, page.access_token);
+        if (direct) {
+          numbers.push(direct);
+        }
+      } catch (err) {
+        console.warn(
+          `[Meta API] Pagina ${page.id} (page token) ignorada ao buscar whatsapp_number:`,
+          err instanceof Error ? err.message : err
+        );
+      }
+    }
+  }
+
+  return numbers;
+}
+
+async function getBusinessPagesWhatsappNumbers(
+  businessId: string,
+  accessToken: string,
+  filterPageIds?: string[],
+): Promise<WhatsappNumberWithContext[]> {
+  const url = new URL(`${META_GRAPH_BASE_URL}/${businessId}/owned_pages`);
+  url.searchParams.set('fields', PAGE_WHATSAPP_FIELDS);
+  url.searchParams.set('access_token', accessToken);
+
+  const response = await fetch(url, { method: 'GET' });
+  const payload = await parseMetaResponse<{ data: MetaPageWithWhatsapp[] }>(
+    response,
+    'Falha ao buscar Paginas da Business Manager no Meta.'
+  );
+
+  const numbers: WhatsappNumberWithContext[] = [];
+  const pageFilter = filterPageIds?.length ? new Set(filterPageIds) : null;
+
+  for (const page of payload.data || []) {
+    if (pageFilter && !pageFilter.has(page.id)) {
+      continue;
+    }
+
+    numbers.push(...mapNestedWabaPhones(page.whatsapp_business_account, { pageId: page.id, businessId }));
+
+    if (page.whatsapp_number?.trim()) {
+      numbers.push(mapPageDirectWhatsappNumber(page.id, page.whatsapp_number.trim()));
+    } else {
+      try {
+        const direct = await getPageDirectWhatsappNumber(page.id, accessToken);
+        if (direct) {
+          numbers.push({ ...direct, businessId });
+        }
+      } catch {
+        // Campo whatsapp_number pode nao estar disponivel para paginas do novo experience.
       }
     }
   }
@@ -569,33 +766,120 @@ export async function getBusinessWhatsappNumbers(
 }
 
 /**
- * Lista os numeros WhatsApp Business vinculados a uma Pagina, via WABA da pagina
- * (/{page-id}?fields=whatsapp_business_account -> /{waba-id}/phone_numbers).
- * Pagina sem WhatsApp vinculado retorna lista vazia (nao erro).
+ * Agrega numeros WhatsApp de BMs e Paginas selecionadas, cobrindo Cloud API e WhatsApp Business App.
+ */
+export async function getWhatsappNumbersForAssets(
+  accessToken: string,
+  { businessIds, pageIds }: { businessIds: string[]; pageIds: string[] },
+): Promise<WhatsappNumberWithContext[]> {
+  const merged = new Map<string, WhatsappNumberWithContext>();
+
+  const businessResults = await Promise.allSettled(
+    businessIds.map((businessId) => getBusinessWhatsappNumbers(businessId, accessToken))
+  );
+
+  for (let i = 0; i < businessResults.length; i++) {
+    const result = businessResults[i];
+    const businessId = businessIds[i];
+    if (result.status === 'fulfilled') {
+      mergeWhatsappNumbers(
+        merged,
+        result.value.map((number) => ({ ...number, businessId }))
+      );
+    } else {
+      console.warn(
+        `[Meta API] BM ${businessId} ignorada ao buscar WhatsApp:`,
+        result.reason instanceof Error ? result.reason.message : result.reason
+      );
+    }
+  }
+
+  const ownedPagesResults = await Promise.allSettled(
+    businessIds.map((businessId) =>
+      getBusinessPagesWhatsappNumbers(
+        businessId,
+        accessToken,
+        pageIds.length > 0 ? pageIds : undefined
+      )
+    )
+  );
+
+  for (const result of ownedPagesResults) {
+    if (result.status === 'fulfilled') {
+      mergeWhatsappNumbers(merged, result.value);
+    }
+  }
+
+  if (pageIds.length > 0) {
+    try {
+      mergeWhatsappNumbers(merged, await getUserAccountWhatsappNumbers(accessToken, pageIds));
+    } catch (err) {
+      console.warn(
+        '[Meta API] /me/accounts ignorado ao buscar WhatsApp:',
+        err instanceof Error ? err.message : err
+      );
+    }
+
+    const pageResults = await Promise.allSettled(
+      pageIds.map((pageId) => getPageWhatsappNumbers(pageId, accessToken))
+    );
+
+    for (let i = 0; i < pageResults.length; i++) {
+      const result = pageResults[i];
+      const pageId = pageIds[i];
+      if (result.status === 'fulfilled') {
+        mergeWhatsappNumbers(
+          merged,
+          result.value.map((number) => ({ ...number, pageId }))
+        );
+      }
+    }
+  }
+
+  return [...merged.values()];
+}
+
+/**
+ * Lista numeros WhatsApp de uma Pagina: WABA (Cloud API), campo whatsapp_number (Business App)
+ * e /me/accounts com page access token.
  */
 export async function getPageWhatsappNumbers(
   pageId: string,
   accessToken: string
 ): Promise<MetaWhatsappNumber[]> {
+  const merged = new Map<string, WhatsappNumberWithContext>();
+
   try {
-    const page = await metaApiCall<{ id: string; whatsapp_business_account?: { id: string } }>(
-      `/${encodeURIComponent(pageId)}?fields=whatsapp_business_account`,
+    const page = await metaApiCall<MetaPageWithWhatsapp>(
+      `/${encodeURIComponent(pageId)}?fields=${PAGE_WHATSAPP_FIELDS}`,
       accessToken
     );
 
-    const wabaId = page.whatsapp_business_account?.id;
-    if (!wabaId) {
-      return [];
+    mergeWhatsappNumbers(merged, mapNestedWabaPhones(page.whatsapp_business_account, { pageId }));
+
+    if (page.whatsapp_number?.trim()) {
+      mergeWhatsappNumbers(merged, [mapPageDirectWhatsappNumber(pageId, page.whatsapp_number.trim())]);
     }
 
-    return getWabaPhoneNumbers(wabaId, accessToken);
+    const wabaId = page.whatsapp_business_account?.id;
+    if (wabaId && !page.whatsapp_business_account?.phone_numbers?.data?.length) {
+      const wabaNumbers = await getWabaPhoneNumbers(wabaId, accessToken);
+      mergeWhatsappNumbers(merged, wabaNumbers.map((number) => ({ ...number, pageId })));
+    }
   } catch (err) {
     console.warn(
-      `[Meta API] Pagina ${pageId} ignorada ao buscar WhatsApp:`,
+      `[Meta API] Pagina ${pageId} ignorada ao buscar WhatsApp (user token):`,
       err instanceof Error ? err.message : err
     );
-    return [];
   }
+
+  try {
+    mergeWhatsappNumbers(merged, await getUserAccountWhatsappNumbers(accessToken, [pageId]));
+  } catch {
+    // /me/accounts pode falhar sem impactar as demais fontes.
+  }
+
+  return [...merged.values()];
 }
 
 interface MetaPermissionsResponse {

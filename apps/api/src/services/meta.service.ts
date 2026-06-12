@@ -8,9 +8,9 @@ import {
   exchangeForLongLivedToken,
   getBusinessAdAccounts,
   getBusinessOwnedPages,
-  getBusinessWhatsappNumbers,
   getMetaUserId,
   getPageWhatsappNumbers,
+  getWhatsappNumbersForAssets,
   getUserAdAccounts,
   getUserBusinesses,
   getUserFacebookPages,
@@ -400,60 +400,14 @@ export async function getTenantWhatsappNumbers(
   { businessIds, pageIds }: { businessIds: string[]; pageIds: string[] },
 ): Promise<TenantWhatsappNumber[]> {
   const accessToken = await getTenantAccessToken(tenantId);
-  const seen = new Set<string>();
-  const numbers: TenantWhatsappNumber[] = [];
+  const numbers = await getWhatsappNumbersForAssets(accessToken, { businessIds, pageIds });
 
-  const businessResults = await Promise.allSettled(
-    businessIds.map(async (businessId) => {
-      const list = await getBusinessWhatsappNumbers(businessId, accessToken);
-      return list.map((number) => ({ ...number, businessId }));
-    })
-  );
-
-  for (const result of businessResults) {
-    if (result.status !== 'fulfilled') {
-      console.warn(
-        '[Meta API] BM ignorada ao buscar WhatsApp:',
-        result.reason instanceof Error ? result.reason.message : result.reason
-      );
-      continue;
-    }
-
-    for (const number of result.value) {
-      if (!seen.has(number.phoneNumberId)) {
-        seen.add(number.phoneNumberId);
-        numbers.push({
-          phoneNumberId: number.phoneNumberId,
-          displayPhoneNumber: number.displayPhoneNumber,
-          businessId: number.businessId,
-        });
-      }
-    }
-  }
-
-  const pageResults = await Promise.allSettled(
-    pageIds.map(async (pageId) => {
-      const list = await getPageWhatsappNumbers(pageId, accessToken);
-      return list.map((number) => ({ ...number, pageId }));
-    })
-  );
-
-  for (const result of pageResults) {
-    if (result.status !== 'fulfilled') continue;
-
-    for (const number of result.value) {
-      if (!seen.has(number.phoneNumberId)) {
-        seen.add(number.phoneNumberId);
-        numbers.push({
-          phoneNumberId: number.phoneNumberId,
-          displayPhoneNumber: number.displayPhoneNumber,
-          pageId: number.pageId,
-        });
-      }
-    }
-  }
-
-  return numbers;
+  return numbers.map(({ phoneNumberId, displayPhoneNumber, businessId, pageId }) => ({
+    phoneNumberId,
+    displayPhoneNumber,
+    businessId,
+    pageId,
+  }));
 }
 
 /** @deprecated Use getTenantWhatsappNumbers — mantido para compatibilidade. */
