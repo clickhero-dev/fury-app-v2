@@ -872,10 +872,20 @@ const WIZARD_OBJECTIVE_MAP: Record<
 
 export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'messenger';
 
+/** Remove um objeto criado no Meta (Campaign/AdSet/AdCreative) durante rollback de falha. Best-effort: nao lanca. */
+async function deleteMetaObject(objectId: string, accessToken: string): Promise<void> {
+  try {
+    await metaApiCall<unknown>(`/${objectId}`, accessToken, { method: 'DELETE' });
+  } catch (cleanupErr) {
+    console.error(`[CampaignWizard] Falha ao remover objeto Meta ${objectId} durante rollback:`, cleanupErr);
+  }
+}
+
 function mapWizardMetaError(err: unknown, step: string): never {
   if (err instanceof AppError) throw err;
 
   const metaCode = (err as any).metaCode;
+  const metaSubcode = (err as any).metaSubcode;
   const metaType = (err as any).metaType;
   const httpStatus = (err as any).httpStatus;
   const message = (err as Error).message || '';
@@ -883,6 +893,7 @@ function mapWizardMetaError(err: unknown, step: string): never {
 
   console.error(`[CampaignWizard] Erro Meta API na etapa "${step}":`, {
     metaCode,
+    metaSubcode,
     metaType,
     httpStatus,
     message,
@@ -908,10 +919,11 @@ function mapWizardMetaError(err: unknown, step: string): never {
     throw new AppError(402, 'META_INSUFFICIENT_FUNDS', 'Conta de anúncios sem saldo suficiente');
   }
 
-  const devDetails =
-    process.env.NODE_ENV !== 'production' ? { step, metaCode, metaType, metaMessage: message } : undefined;
-
-  throw new AppError(502, 'META_API_ERROR', 'Erro ao publicar no Meta. Tente novamente.', devDetails);
+  throw new AppError(502, 'META_API_ERROR', message || 'Erro ao publicar no Meta. Tente novamente.', {
+    step,
+    meta_code: metaCode,
+    meta_subcode: metaSubcode,
+  });
 }
 
 export interface CreateWizardCampaignArgs {
@@ -1038,7 +1050,45 @@ export async function createCampaignFromWizard(
   const dataLabel = today.toLocaleDateString('pt-BR');
   const campaignName = `${objectiveConfig.label} — FURY — ${dataLabel}`;
 
-  let metaCampaignId: string;
+  const pageId =
+    args.objective === 'whatsapp'
+      ? args.whatsappPageId!
+      : process.env.META_PAGE_ID || 'mock_page_id';
+
+  let messagingDestinationType: string | undefined;
+  let promotedObject: Record<string, unknown> | undefined;
+
+  if (args.objective === 'whatsapp') {
+    promotedObject = { page_id: args.whatsappPageId };
+
+    if (messagingDestinations.includes('whatsapp')) {
+      promotedObject.whatsapp_phone_number = args.whatsappPhoneNumber;
+    }
+    if (messagingDestinations.includes('instagram_direct')) {
+      promotedObject.instagram_user_id = args.instagramUserId;
+    }
+
+    messagingDestinationType =
+      messagingDestinations.length > 1
+        ? 'MESSAGING_APPS'
+        : messagingDestinations[0] === 'whatsapp'
+          ? 'WHATSAPP'
+          : messagingDestinations[0] === 'instagram_direct'
+            ? 'INSTAGRAM_DIRECT'
+            : 'MESSENGER';
+  } else if (args.objective === 'visits' || args.objective === 'engagement') {
+    // OUTCOME_TRAFFIC (visits) e OUTCOME_ENGAGEMENT (engagement) exigem promoted_object.page_id
+    // no AdSet, senao a Meta API retorna code=100/subcode=4834011 (Invalid parameter).
+    promotedObject = { page_id: pageId };
+  }
+
+  const destinationType = messagingDestinationType || objectiveConfig.destinationType;
+
+  let metaCampaignId: string | undefined;
+  let adSetId: string | undefined;
+  let adCreativeId: string | undefined;
+  let metaAdId: string | undefined;
+
   try {
     const campaignResponse = await metaApiCall<MetaCampaignCreateResponse>(
       `/${encodeURIComponent(adAccountId)}/campaigns`,
@@ -1054,86 +1104,46 @@ export async function createCampaignFromWizard(
       }
     );
     metaCampaignId = campaignResponse.id;
-  } catch (err) {
-    mapWizardMetaError(err, 'campaign');
-  }
 
-  const targeting: Record<string, unknown> = {
-    geo_locations: {
-      cities: [{ key: cityKey, radius: args.locationRadiusKm, distance_unit: 'kilometer' }],
-    },
-    age_min: args.ageMin,
-    age_max: args.ageMax,
-    genders: args.gender === 'all' ? [1, 2] : args.gender === 'male' ? [1] : [2],
-  };
+    const targeting: Record<string, unknown> = {
+      geo_locations: {
+        cities: [{ key: cityKey, radius: args.locationRadiusKm, distance_unit: 'kilometer' }],
+      },
+      age_min: args.ageMin,
+      age_max: args.ageMax,
+      genders: args.gender === 'all' ? [1, 2] : args.gender === 'male' ? [1] : [2],
+    };
 
-  const adSetBody: Record<string, unknown> = {
-    name: `AdSet — ${args.locationCity} — FURY`,
-    campaign_id: metaCampaignId,
-    daily_budget: Math.round(args.dailyBudgetBrl * 100),
-    billing_event: 'IMPRESSIONS',
-    optimization_goal: objectiveConfig.optimizationGoal,
-    targeting,
-    status: 'ACTIVE',
-  };
+    const adSetBody: Record<string, unknown> = {
+      name: `AdSet — ${args.locationCity} — FURY`,
+      campaign_id: metaCampaignId,
+      daily_budget: Math.round(args.dailyBudgetBrl * 100),
+      billing_event: 'IMPRESSIONS',
+      optimization_goal: objectiveConfig.optimizationGoal,
+      targeting,
+      status: 'ACTIVE',
+    };
 
-  let messagingDestinationType: string | undefined;
-  let messagingPromotedObject: Record<string, unknown> | undefined;
-
-  if (args.objective === 'whatsapp') {
-    messagingPromotedObject = { page_id: args.whatsappPageId };
-
-    if (messagingDestinations.includes('whatsapp')) {
-      messagingPromotedObject.whatsapp_phone_number = args.whatsappPhoneNumber;
-    }
-    if (messagingDestinations.includes('instagram_direct')) {
-      messagingPromotedObject.instagram_user_id = args.instagramUserId;
+    if (destinationType) {
+      adSetBody.destination_type = destinationType;
     }
 
-    messagingDestinationType =
-      messagingDestinations.length > 1
-        ? 'MESSAGING_APPS'
-        : messagingDestinations[0] === 'whatsapp'
-          ? 'WHATSAPP'
-          : messagingDestinations[0] === 'instagram_direct'
-            ? 'INSTAGRAM_DIRECT'
-            : 'MESSENGER';
-  }
+    if (promotedObject) {
+      adSetBody.promoted_object = promotedObject;
+    }
 
-  if (messagingDestinationType) {
-    adSetBody.destination_type = messagingDestinationType;
-  } else if (objectiveConfig.destinationType) {
-    adSetBody.destination_type = objectiveConfig.destinationType;
-  }
+    if (args.durationDays) {
+      const endTime = new Date(today.getTime() + args.durationDays * 24 * 60 * 60 * 1000);
+      adSetBody.end_time = endTime.toISOString();
+    }
 
-  if (messagingPromotedObject) {
-    adSetBody.promoted_object = messagingPromotedObject;
-  }
-
-  if (args.durationDays) {
-    const endTime = new Date(today.getTime() + args.durationDays * 24 * 60 * 60 * 1000);
-    adSetBody.end_time = endTime.toISOString();
-  }
-
-  let adSetId: string;
-  try {
     const adSetResponse = await metaApiCall<{ id: string }>(
       `/${encodeURIComponent(adAccountId)}/adsets`,
       accessToken,
       { method: 'POST', body: adSetBody }
     );
     adSetId = adSetResponse.id;
-  } catch (err) {
-    mapWizardMetaError(err, 'adset');
-  }
 
-  const pageId =
-    args.objective === 'whatsapp'
-      ? args.whatsappPageId!
-      : process.env.META_PAGE_ID || 'mock_page_id';
-
-  let adCreativeId: string;
-  try {
     const adCreativeResponse = await metaApiCall<{ id: string }>(
       `/${encodeURIComponent(adAccountId)}/adcreatives`,
       accessToken,
@@ -1161,12 +1171,7 @@ export async function createCampaignFromWizard(
       }
     );
     adCreativeId = adCreativeResponse.id;
-  } catch (err) {
-    mapWizardMetaError(err, 'creative');
-  }
 
-  let metaAdId: string;
-  try {
     const adResponse = await metaApiCall<{ id: string }>(
       `/${encodeURIComponent(adAccountId)}/ads`,
       accessToken,
@@ -1182,7 +1187,14 @@ export async function createCampaignFromWizard(
     );
     metaAdId = adResponse.id;
   } catch (err) {
-    mapWizardMetaError(err, 'ad');
+    // Rollback: remove objetos ja criados nas etapas anteriores para nao deixar
+    // campanhas/adsets/creatives orfaos na conta de anuncios.
+    if (adCreativeId) await deleteMetaObject(adCreativeId, accessToken);
+    if (adSetId) await deleteMetaObject(adSetId, accessToken);
+    if (metaCampaignId) await deleteMetaObject(metaCampaignId, accessToken);
+
+    const step = !metaCampaignId ? 'campaign' : !adSetId ? 'adset' : !adCreativeId ? 'creative' : 'ad';
+    mapWizardMetaError(err, step);
   }
 
   const [campaign] = await db

@@ -972,6 +972,7 @@ type MetaApiErrorPayload2 = {
 
 type MetaApiError = Error & {
   metaCode?: number;
+  metaSubcode?: number;
   metaType?: string;
   httpStatus?: number;
 };
@@ -1209,6 +1210,7 @@ export async function metaApiCall<T>(
     });
     const err = new Error(`[Meta API] ${code ?? res.status}: ${message}`);
     (err as MetaApiError).metaCode = code;
+    (err as MetaApiError).metaSubcode = subcode;
     (err as MetaApiError).metaType = type;
     (err as MetaApiError).httpStatus = res.status;
     throw err;
