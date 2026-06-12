@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm';
 import { db, metaConnections } from '../lib/db.js';
 import {
   getInstagramAccountInsights,
-  getInstagramBusinessAccountId,
   getInstagramMedia,
   getInstagramMediaInsights,
   type InstagramMediaInsights,
@@ -75,8 +74,12 @@ export async function getInstagramDashboardInsights(
   try {
     const assetSelection = await getResolvedTenantAssetSelection(tenantId);
     const selectedPage = assetSelection.pages.find((page) => page.instagramUserId);
-    const igUserId = selectedPage?.instagramUserId || (await getInstagramBusinessAccountId(accessToken));
-    const insights = await getInstagramAccountInsights(igUserId, accessToken, dateFrom, dateTo);
+
+    if (!selectedPage?.instagramUserId) {
+      return null;
+    }
+
+    const insights = await getInstagramAccountInsights(selectedPage.instagramUserId, accessToken, dateFrom, dateTo);
 
     return {
       comments: insights.comments,
@@ -109,7 +112,25 @@ export async function getRankedInstagramPosts(
   const accessToken = decryptMetaToken(metaConn.accessToken);
 
   try {
-    const igUserId = instagramUserId || (await getInstagramBusinessAccountId(accessToken));
+    // Resolve o igUserId a partir das Paginas selecionadas pelo tenant (nunca
+    // "a primeira conta do Instagram do usuario Meta"), evitando vazar posts
+    // de outra conta/negocio que o mesmo usuario Meta tambem administra.
+    const assetSelection = await getResolvedTenantAssetSelection(tenantId);
+    const tenantIgUserIds = assetSelection.pages
+      .map((page) => page.instagramUserId)
+      .filter((id): id is string => Boolean(id));
+
+    const igUserId =
+      instagramUserId && tenantIgUserIds.includes(instagramUserId) ? instagramUserId : tenantIgUserIds[0];
+
+    if (!igUserId) {
+      throw new AppError(
+        404,
+        'INSTAGRAM_ACCOUNT_NOT_FOUND',
+        'Nenhuma conta do Instagram Business vinculada as Paginas selecionadas.'
+      );
+    }
+
     const media = await getInstagramMedia(igUserId, accessToken);
 
     const posts = await Promise.all(

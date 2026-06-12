@@ -306,6 +306,16 @@ export async function saveTenantAssetSelection(
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
   }
 
+  // Preserva a conta de anuncios ja escolhida pelo usuario (via "Conta ativa
+  // para metricas" em Configuracoes > Integracoes) se ela ainda estiver entre
+  // as contas selecionadas no onboarding. Sobrescrever sempre com
+  // adAccountIds[0] fazia createCampaignFromWizard usar uma conta diferente
+  // da que o usuario configurou explicitamente.
+  const selectedAdAccountId =
+    connection.selectedAdAccountId && selection.adAccountIds.includes(connection.selectedAdAccountId)
+      ? connection.selectedAdAccountId
+      : selection.adAccountIds[0] ?? connection.selectedAdAccountId;
+
   await db
     .update(metaConnections)
     .set({
@@ -313,7 +323,7 @@ export async function saveTenantAssetSelection(
       selectedPageIds: selection.pageIds,
       selectedAdAccountIds: selection.adAccountIds,
       selectedWhatsappNumberIds: selection.whatsappNumberIds,
-      selectedAdAccountId: selection.adAccountIds[0] ?? connection.selectedAdAccountId,
+      selectedAdAccountId,
       updatedAt: new Date(),
     })
     .where(eq(metaConnections.id, connection.id));
@@ -550,20 +560,30 @@ export async function getResolvedTenantAssetSelection(tenantId: string): Promise
 }
 
 export async function getTenantMetaConnections(tenantId: string): Promise<StoredMetaConnection[]> {
-  const connections = await db.query.metaConnections.findMany({
+  // Assim como handleMetaOAuthCallback, createCampaignFromWizard e
+  // getResolvedTenantAssetSelection, tratamos apenas a conexao mais recente do
+  // tenant como canonica. Um findMany aqui retornaria tambem linhas antigas/
+  // obsoletas (ex.: de reconexoes anteriores), cujo tokenExpiresAt pode estar
+  // vencido, fazendo a UI exibir um card "Pausado" permanente que nao reflete
+  // a conexao realmente em uso.
+  const connection = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, tenantId),
     orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
-  return connections.map((connection) => {
-    const allAdAccounts = (connection.adAccounts as MetaAdAccount[]) || [];
-    const selectedAdAccountIds = (connection.selectedAdAccountIds as string[] | null) ?? [];
-    const adAccounts =
-      selectedAdAccountIds.length > 0
-        ? allAdAccounts.filter((account) => selectedAdAccountIds.includes(account.id))
-        : allAdAccounts;
+  if (!connection) {
+    return [];
+  }
 
-    return {
+  const allAdAccounts = (connection.adAccounts as MetaAdAccount[]) || [];
+  const selectedAdAccountIds = (connection.selectedAdAccountIds as string[] | null) ?? [];
+  const adAccounts =
+    selectedAdAccountIds.length > 0
+      ? allAdAccounts.filter((account) => selectedAdAccountIds.includes(account.id))
+      : allAdAccounts;
+
+  return [
+    {
       id: connection.id,
       tenantId: connection.tenantId,
       metaUserId: connection.metaUserId,
@@ -572,8 +592,8 @@ export async function getTenantMetaConnections(tenantId: string): Promise<Stored
       adAccounts,
       selectedAdAccountId: connection.selectedAdAccountId ?? null,
       createdAt: connection.createdAt,
-    };
-  });
+    },
+  ];
 }
 
 export async function deleteTenantMetaConnection(tenantId: string, connectionId: string): Promise<void> {
