@@ -261,7 +261,9 @@ export function IntegracoesContent() {
     placeholderData: [],
   });
 
-  const needsScopeReconnect = connections.length > 0 && !scopes.includes('pages_show_list');
+  const REQUIRED_SCOPES = ['pages_show_list', 'ads_management', 'ads_read'];
+  const needsScopeReconnect =
+    connections.length > 0 && REQUIRED_SCOPES.some((scope) => !scopes.includes(scope));
 
   const connectMutation = useMutation({
     mutationFn: async () => {
@@ -317,7 +319,7 @@ export function IntegracoesContent() {
       {needsScopeReconnect && (
         <div className="flex items-center justify-between gap-4 rounded-xl border border-[#E8631A]/30 bg-[#E8631A]/10 p-4">
           <p className="text-sm text-text-primary">
-            Reconecte sua conta Meta para habilitar o acesso a posts do Instagram.
+            Reconecte sua conta Meta para habilitar o acesso a posts do Instagram e a criação de campanhas de anúncios.
           </p>
           <Button
             variant="primary"
