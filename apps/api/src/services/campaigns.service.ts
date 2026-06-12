@@ -17,6 +17,7 @@ import { roundToDecimals } from '../utils/metrics-formatter.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../lib/locations-cache.js';
+import { getResolvedTenantAssetSelection } from './meta.service.js';
 
 export async function createCampaign(args: {
   tenantId: string;
@@ -1030,6 +1031,25 @@ export async function createCampaignFromWizard(
     throw new AppError(400, 'CREATIVE_IMAGE_MISSING', 'Selecione uma imagem da galeria ou envie um arquivo.');
   }
 
+  // Para criativo a partir de post existente do Instagram, a Meta API exige
+  // object_story_spec.instagram_actor_id + source_instagram_media_id (em vez de
+  // link_data.picture), senao retorna code=100 "Invalid parameter".
+  let instagramCreativeActorId: string | undefined;
+  let instagramCreativePageId: string | undefined;
+  if (args.creativeInstagramMediaId) {
+    const assetSelection = await getResolvedTenantAssetSelection(args.tenantId);
+    const igPage = assetSelection.pages.find((page) => page.instagramUserId);
+    if (!igPage?.instagramUserId) {
+      throw new AppError(
+        400,
+        'INSTAGRAM_ACCOUNT_NOT_FOUND',
+        'Nenhuma conta do Instagram conectada para usar este post como criativo.'
+      );
+    }
+    instagramCreativeActorId = igPage.instagramUserId;
+    instagramCreativePageId = igPage.pageId;
+  }
+
   // Resolve city key for geo targeting
   let cityKey = args.locationCityKey;
   if (!cityKey) {
@@ -1144,12 +1164,16 @@ export async function createCampaignFromWizard(
     );
     adSetId = adSetResponse.id;
 
-    const adCreativeResponse = await metaApiCall<{ id: string }>(
-      `/${encodeURIComponent(adAccountId)}/adcreatives`,
-      accessToken,
-      {
-        method: 'POST',
-        body: {
+    const creativeBody: Record<string, unknown> = instagramCreativeActorId
+      ? {
+          name: 'Creative — FURY',
+          object_story_spec: {
+            page_id: instagramCreativePageId,
+            instagram_actor_id: instagramCreativeActorId,
+          },
+          source_instagram_media_id: args.creativeInstagramMediaId,
+        }
+      : {
           name: 'Creative — FURY',
           object_story_spec: {
             page_id: pageId,
@@ -1167,7 +1191,16 @@ export async function createCampaignFromWizard(
               ...(messagingDestinations.includes('whatsapp') ? { link: 'https://api.whatsapp.com/send' } : {}),
             },
           },
-        },
+        };
+
+    console.log('[CampaignWizard] AdCreative body:', JSON.stringify(creativeBody));
+
+    const adCreativeResponse = await metaApiCall<{ id: string }>(
+      `/${encodeURIComponent(adAccountId)}/adcreatives`,
+      accessToken,
+      {
+        method: 'POST',
+        body: creativeBody,
       }
     );
     adCreativeId = adCreativeResponse.id;
