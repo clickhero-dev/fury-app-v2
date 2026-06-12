@@ -10,6 +10,7 @@ import {
   type RadiusOption,
   type WizardAudienceState,
   type WizardGender,
+  type WizardMessagingDestination,
   type WizardObjective,
   type WizardWhatsappState,
 } from '../types';
@@ -22,7 +23,7 @@ interface Step3AudienceProps {
   onWhatsappChange: (updates: Partial<WizardWhatsappState>) => void;
 }
 
-function WhatsappDestinationFields({
+function MessagingDestinationFields({
   whatsapp,
   onWhatsappChange,
 }: {
@@ -35,17 +36,41 @@ function WhatsappDestinationFields({
     isLoading: isLoadingNumbers,
     isError: isNumbersError,
     isLoaded: numbersLoaded,
-  } = useMetaPageWhatsappNumbers(whatsapp.pageId);
+  } = useMetaPageWhatsappNumbers(whatsapp.hasWhatsApp ? whatsapp.pageId : undefined);
 
-  const pageHasNoWhatsapp = Boolean(whatsapp.pageId) && numbersLoaded && numbers.length === 0;
+  const pageHasNoWhatsapp =
+    Boolean(whatsapp.pageId) && whatsapp.hasWhatsApp && numbersLoaded && numbers.length === 0;
+
+  const onlyMessengerAvailable = Boolean(whatsapp.pageId) && !whatsapp.hasWhatsApp && !whatsapp.hasInstagram;
 
   function handleSelectPage(pageId: string) {
     const page = pages.find((p) => p.pageId === pageId);
+
+    if (!page) {
+      onWhatsappChange({
+        pageId: undefined,
+        pageName: undefined,
+        hasWhatsApp: undefined,
+        hasInstagram: undefined,
+        destinations: [],
+        phoneNumberId: undefined,
+        phoneNumberDisplay: undefined,
+        instagramUserId: undefined,
+        instagramUsername: undefined,
+      });
+      return;
+    }
+
     onWhatsappChange({
-      pageId: pageId || undefined,
-      pageName: page?.name,
+      pageId: page.pageId,
+      pageName: page.name,
+      hasWhatsApp: page.hasWhatsApp,
+      hasInstagram: page.hasInstagram,
+      destinations: page.hasWhatsApp || page.hasInstagram ? [] : ['messenger'],
       phoneNumberId: undefined,
       phoneNumberDisplay: undefined,
+      instagramUserId: page.hasInstagram ? page.instagramUserId ?? undefined : undefined,
+      instagramUsername: page.hasInstagram ? page.instagramUsername ?? undefined : undefined,
     });
   }
 
@@ -57,12 +82,26 @@ function WhatsappDestinationFields({
     });
   }
 
+  function toggleDestination(destination: WizardMessagingDestination) {
+    const isSelected = whatsapp.destinations.includes(destination);
+    const destinations = isSelected
+      ? whatsapp.destinations.filter((d) => d !== destination)
+      : [...whatsapp.destinations, destination];
+
+    const updates: Partial<WizardWhatsappState> = { destinations };
+    if (destination === 'whatsapp' && isSelected) {
+      updates.phoneNumberId = undefined;
+      updates.phoneNumberDisplay = undefined;
+    }
+    onWhatsappChange(updates);
+  }
+
   return (
     <div className="rounded-xl border border-gray-200 p-4 space-y-4 bg-gray-50/50">
       <div>
-        <h4 className="text-sm font-bold text-gray-900">Destino no WhatsApp</h4>
+        <h4 className="text-sm font-bold text-gray-900">Destino das mensagens</h4>
         <p className="text-xs text-gray-500 mt-0.5">
-          Escolha a Página do Facebook do seu negócio e o número de WhatsApp que receberá as conversas.
+          Escolha a Página do Facebook do seu negócio e onde deseja receber as conversas.
         </p>
       </div>
 
@@ -99,43 +138,101 @@ function WhatsappDestinationFields({
         )}
       </div>
 
-      <div>
-        <label className="text-sm font-bold text-gray-900 mb-1 block">Número de WhatsApp</label>
-        <div className="relative">
-          <Select
-            value={whatsapp.phoneNumberId ?? ''}
-            onChange={(e) => handleSelectNumber(e.target.value)}
-            disabled={!whatsapp.pageId || isLoadingNumbers || pageHasNoWhatsapp}
-          >
-            <option value="">
-              {!whatsapp.pageId
-                ? 'Escolha a página primeiro'
-                : isLoadingNumbers
-                  ? 'Carregando números...'
-                  : 'Selecione o número'}
-            </option>
-            {numbers.map((number) => (
-              <option key={number.phoneNumberId} value={number.phoneNumberId}>
-                {number.displayPhoneNumber}
-                {number.verifiedName ? ` — ${number.verifiedName}` : ''}
-              </option>
-            ))}
-          </Select>
-          {isLoadingNumbers && (
-            <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+      {whatsapp.pageId && (
+        <div>
+          <label className="text-sm font-bold text-gray-900 mb-2 block">Onde quer receber as mensagens?</label>
+
+          {onlyMessengerAvailable && (
+            <p className="text-xs text-amber-700 mb-2">
+              Esta Página só tem Messenger disponível. Para usar WhatsApp, vincule um número WABA. Para usar
+              Instagram Direct, conecte sua conta Instagram à Página no Meta Business.
+            </p>
           )}
+
+          <div className="space-y-3">
+            {whatsapp.hasWhatsApp && (
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={whatsapp.destinations.includes('whatsapp')}
+                    onChange={() => toggleDestination('whatsapp')}
+                    className="w-4 h-4 rounded border-gray-300 text-[#E8631A] focus:ring-[#E8631A]"
+                  />
+                  WhatsApp
+                </label>
+
+                {whatsapp.destinations.includes('whatsapp') && (
+                  <div className="mt-2 ml-6">
+                    <div className="relative">
+                      <Select
+                        value={whatsapp.phoneNumberId ?? ''}
+                        onChange={(e) => handleSelectNumber(e.target.value)}
+                        disabled={isLoadingNumbers || pageHasNoWhatsapp}
+                      >
+                        <option value="">
+                          {isLoadingNumbers ? 'Carregando números...' : 'Selecione o número'}
+                        </option>
+                        {numbers.map((number) => (
+                          <option key={number.phoneNumberId} value={number.phoneNumberId}>
+                            {number.displayPhoneNumber}
+                            {number.verifiedName ? ` — ${number.verifiedName}` : ''}
+                          </option>
+                        ))}
+                      </Select>
+                      {isLoadingNumbers && (
+                        <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+                      )}
+                    </div>
+                    {pageHasNoWhatsapp && (
+                      <p className="text-xs text-amber-700 mt-1">
+                        Esta página não tem número de WhatsApp vinculado. Vincule um número no Meta Business.
+                      </p>
+                    )}
+                    {isNumbersError && (
+                      <p className="text-xs text-red-600 mt-1">
+                        Não foi possível carregar os números de WhatsApp desta página. Tente novamente.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {whatsapp.hasInstagram && (
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={whatsapp.destinations.includes('instagram_direct')}
+                    onChange={() => toggleDestination('instagram_direct')}
+                    className="w-4 h-4 rounded border-gray-300 text-[#E8631A] focus:ring-[#E8631A]"
+                  />
+                  Instagram Direct
+                </label>
+
+                {whatsapp.destinations.includes('instagram_direct') && (
+                  <div className="mt-2 ml-6 text-sm text-gray-600">
+                    @{whatsapp.instagramUsername}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={whatsapp.destinations.includes('messenger')}
+                  onChange={() => toggleDestination('messenger')}
+                  className="w-4 h-4 rounded border-gray-300 text-[#E8631A] focus:ring-[#E8631A]"
+                />
+                Messenger
+              </label>
+            </div>
+          </div>
         </div>
-        {pageHasNoWhatsapp && (
-          <p className="text-xs text-amber-700 mt-1">
-            Esta página não tem WhatsApp vinculado. Selecione outra ou vincule um número no Meta Business.
-          </p>
-        )}
-        {isNumbersError && (
-          <p className="text-xs text-red-600 mt-1">
-            Não foi possível carregar os números de WhatsApp desta página. Tente novamente.
-          </p>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -166,7 +263,7 @@ export function Step3Audience({ value, onChange, objective, whatsapp, onWhatsapp
       </div>
 
       {objective === 'whatsapp' && (
-        <WhatsappDestinationFields whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} />
+        <MessagingDestinationFields whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} />
       )}
 
       <div className="relative">

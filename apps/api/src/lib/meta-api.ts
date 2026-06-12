@@ -452,16 +452,24 @@ export interface MetaFacebookPage {
   pageId: string;
   name: string;
   hasWhatsApp: boolean;
+  hasInstagram: boolean;
+  instagramUserId: string | null;
+  instagramUsername: string | null;
 }
 
 interface MetaPagesResponse {
-  data: Array<{ id: string; name?: string; whatsapp_business_account?: { id: string } }>;
+  data: Array<{
+    id: string;
+    name?: string;
+    whatsapp_business_account?: { id: string };
+    instagram_business_account?: { id: string; username?: string };
+  }>;
 }
 
-/** Lista as Paginas do Facebook do usuario (/me/accounts), marcando as que tem WABA vinculada. */
+/** Lista as Paginas do Facebook do usuario (/me/accounts), marcando WABA e Instagram Business vinculados. */
 export async function getUserFacebookPages(accessToken: string): Promise<MetaFacebookPage[]> {
   const response = await metaApiCall<MetaPagesResponse>(
-    '/me/accounts?fields=id,name,whatsapp_business_account&limit=100',
+    '/me/accounts?fields=id,name,whatsapp_business_account,instagram_business_account{id,username}&limit=100',
     accessToken
   );
 
@@ -469,6 +477,9 @@ export async function getUserFacebookPages(accessToken: string): Promise<MetaFac
     pageId: page.id,
     name: page.name ?? page.id,
     hasWhatsApp: Boolean(page.whatsapp_business_account?.id),
+    hasInstagram: Boolean(page.instagram_business_account?.id),
+    instagramUserId: page.instagram_business_account?.id ?? null,
+    instagramUsername: page.instagram_business_account?.username ?? null,
   }));
 }
 

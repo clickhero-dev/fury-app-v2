@@ -32,11 +32,18 @@ export interface WizardBudgetState {
   durationDays?: number;
 }
 
+export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'messenger';
+
 export interface WizardWhatsappState {
   pageId?: string;
   pageName?: string;
+  hasWhatsApp?: boolean;
+  hasInstagram?: boolean;
+  destinations: WizardMessagingDestination[];
   phoneNumberId?: string;
   phoneNumberDisplay?: string;
+  instagramUserId?: string;
+  instagramUsername?: string;
 }
 
 export interface WizardState {
@@ -70,6 +77,9 @@ export interface CreateWizardCampaignPayload {
   whatsapp_page_name?: string;
   whatsapp_phone_number_id?: string;
   whatsapp_phone_number?: string;
+  destinations?: WizardMessagingDestination[];
+  instagram_user_id?: string;
+  instagram_username?: string;
 }
 
 export interface CreateWizardCampaignResult {

@@ -866,9 +866,11 @@ const WIZARD_OBJECTIVE_MAP: Record<
     optimizationGoal: 'CONVERSATIONS',
     cta: 'WHATSAPP_MESSAGE',
     destinationType: 'WHATSAPP',
-    label: 'Conversas no WhatsApp',
+    label: 'Gerar Conversas',
   },
 };
+
+export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'messenger';
 
 function mapWizardMetaError(err: unknown): never {
   if (err instanceof AppError) throw err;
@@ -914,6 +916,9 @@ export interface CreateWizardCampaignArgs {
   whatsappPageName?: string;
   whatsappPhoneNumberId?: string;
   whatsappPhoneNumber?: string;
+  destinations?: WizardMessagingDestination[];
+  instagramUserId?: string;
+  instagramUsername?: string;
 }
 
 export interface CreateWizardCampaignResult {
@@ -947,12 +952,34 @@ export async function createCampaignFromWizard(
   const accessToken = decryptMetaToken(metaConn.accessToken);
   const objectiveConfig = WIZARD_OBJECTIVE_MAP[args.objective];
 
-  if (args.objective === 'whatsapp' && !args.whatsappPageId) {
-    throw new AppError(
-      400,
-      'WHATSAPP_PAGE_REQUIRED',
-      'Selecione a Página do Facebook e o número de WhatsApp para campanhas de Conversas no WhatsApp.'
-    );
+  let messagingDestinations: WizardMessagingDestination[] = [];
+
+  if (args.objective === 'whatsapp') {
+    if (!args.whatsappPageId) {
+      throw new AppError(
+        400,
+        'WHATSAPP_PAGE_REQUIRED',
+        'Selecione a Página do Facebook para receber as mensagens.'
+      );
+    }
+
+    messagingDestinations = args.destinations && args.destinations.length > 0 ? args.destinations : ['whatsapp'];
+
+    if (messagingDestinations.includes('whatsapp') && !args.whatsappPhoneNumber) {
+      throw new AppError(
+        400,
+        'WHATSAPP_NUMBER_REQUIRED',
+        'Selecione o número de WhatsApp que receberá as mensagens.'
+      );
+    }
+
+    if (messagingDestinations.includes('instagram_direct') && !args.instagramUserId) {
+      throw new AppError(
+        400,
+        'INSTAGRAM_USER_ID_REQUIRED',
+        'Conecte uma conta do Instagram à Página no Meta Business para usar Instagram Direct.'
+      );
+    }
   }
 
   // Resolve image URL: Instagram post > direct upload > gallery asset
@@ -1030,15 +1057,37 @@ export async function createCampaignFromWizard(
     status: 'ACTIVE',
   };
 
-  if (objectiveConfig.destinationType) {
+  let messagingDestinationType: string | undefined;
+  let messagingPromotedObject: Record<string, unknown> | undefined;
+
+  if (args.objective === 'whatsapp') {
+    messagingPromotedObject = { page_id: args.whatsappPageId };
+
+    if (messagingDestinations.includes('whatsapp')) {
+      messagingPromotedObject.whatsapp_phone_number = args.whatsappPhoneNumber;
+    }
+    if (messagingDestinations.includes('instagram_direct')) {
+      messagingPromotedObject.instagram_user_id = args.instagramUserId;
+    }
+
+    messagingDestinationType =
+      messagingDestinations.length > 1
+        ? 'MESSAGING_APPS'
+        : messagingDestinations[0] === 'whatsapp'
+          ? 'WHATSAPP'
+          : messagingDestinations[0] === 'instagram_direct'
+            ? 'INSTAGRAM_DIRECT'
+            : 'MESSENGER';
+  }
+
+  if (messagingDestinationType) {
+    adSetBody.destination_type = messagingDestinationType;
+  } else if (objectiveConfig.destinationType) {
     adSetBody.destination_type = objectiveConfig.destinationType;
   }
 
-  if (args.objective === 'whatsapp') {
-    adSetBody.promoted_object = {
-      page_id: args.whatsappPageId,
-      ...(args.whatsappPhoneNumber ? { whatsapp_phone_number: args.whatsappPhoneNumber } : {}),
-    };
+  if (messagingPromotedObject) {
+    adSetBody.promoted_object = messagingPromotedObject;
   }
 
   if (args.durationDays) {
@@ -1078,12 +1127,14 @@ export async function createCampaignFromWizard(
               picture: imageUrl,
               message: args.primaryText,
               name: args.headline,
-              call_to_action:
-                args.objective === 'whatsapp'
-                  ? { type: objectiveConfig.cta, value: { app_destination: 'WHATSAPP' } }
-                  : { type: objectiveConfig.cta },
+              call_to_action: messagingDestinationType
+                ? {
+                    type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE',
+                    value: { app_destination: messagingDestinationType },
+                  }
+                : { type: objectiveConfig.cta },
               ...(args.objective === 'visits' ? { link: args.destinationUrl } : {}),
-              ...(args.objective === 'whatsapp' ? { link: 'https://api.whatsapp.com/send' } : {}),
+              ...(messagingDestinations.includes('whatsapp') ? { link: 'https://api.whatsapp.com/send' } : {}),
             },
           },
         },
@@ -1131,10 +1182,22 @@ export async function createCampaignFromWizard(
         duration_days: args.durationDays ?? null,
         ...(args.objective === 'whatsapp'
           ? {
+              destinations: messagingDestinations,
+              destination_type: messagingDestinationType,
               whatsapp_page_id: args.whatsappPageId,
               whatsapp_page_name: args.whatsappPageName ?? null,
-              whatsapp_phone_number_id: args.whatsappPhoneNumberId ?? null,
-              whatsapp_phone_number: args.whatsappPhoneNumber ?? null,
+              whatsapp_phone_number_id: messagingDestinations.includes('whatsapp')
+                ? args.whatsappPhoneNumberId ?? null
+                : null,
+              whatsapp_phone_number: messagingDestinations.includes('whatsapp')
+                ? args.whatsappPhoneNumber ?? null
+                : null,
+              instagram_user_id: messagingDestinations.includes('instagram_direct')
+                ? args.instagramUserId ?? null
+                : null,
+              instagram_username: messagingDestinations.includes('instagram_direct')
+                ? args.instagramUsername ?? null
+                : null,
             }
           : {}),
       },

@@ -394,6 +394,9 @@ const createWizardSchema = z
     whatsapp_page_name: z.string().min(1).optional(),
     whatsapp_phone_number_id: z.string().min(1).optional(),
     whatsapp_phone_number: z.string().min(1).optional(),
+    destinations: z.array(z.enum(['whatsapp', 'instagram_direct', 'messenger'])).optional(),
+    instagram_user_id: z.string().min(1).optional(),
+    instagram_username: z.string().min(1).optional(),
   })
   .refine(
     (data) => Boolean(data.creative_asset_id || data.creative_upload_url || data.creative_instagram_media_id),
@@ -411,12 +414,35 @@ const createWizardSchema = z
     path: ['destination_url'],
   })
   .refine(
-    (data) =>
-      data.objective !== 'whatsapp' ||
-      Boolean(data.whatsapp_page_id && data.whatsapp_phone_number_id),
+    (data) => {
+      if (data.objective !== 'whatsapp') return true;
+      return Boolean(data.whatsapp_page_id) && Boolean(data.destinations && data.destinations.length > 0);
+    },
     {
-      message: 'Selecione a Página do Facebook e o número de WhatsApp.',
+      message: 'Selecione a Página do Facebook e ao menos um destino para receber as mensagens.',
       path: ['whatsapp_page_id'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.objective !== 'whatsapp') return true;
+      if (!data.destinations?.includes('whatsapp')) return true;
+      return Boolean(data.whatsapp_phone_number_id);
+    },
+    {
+      message: 'Selecione o número de WhatsApp que receberá as mensagens.',
+      path: ['whatsapp_phone_number_id'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.objective !== 'whatsapp') return true;
+      if (!data.destinations?.includes('instagram_direct')) return true;
+      return Boolean(data.instagram_user_id);
+    },
+    {
+      message: 'Conecte uma conta do Instagram à Página no Meta Business para usar Instagram Direct.',
+      path: ['instagram_user_id'],
     }
   );
 
@@ -450,6 +476,9 @@ export async function createWizardCampaignHandler(req: Request, res: Response, n
       whatsappPageName: data.whatsapp_page_name,
       whatsappPhoneNumberId: data.whatsapp_phone_number_id,
       whatsappPhoneNumber: data.whatsapp_phone_number,
+      destinations: data.destinations,
+      instagramUserId: data.instagram_user_id,
+      instagramUsername: data.instagram_username,
     });
 
     res.status(201).json(result);

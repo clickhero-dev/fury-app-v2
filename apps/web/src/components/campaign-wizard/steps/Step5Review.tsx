@@ -63,6 +63,9 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
             whatsapp_page_name: state.whatsapp.pageName,
             whatsapp_phone_number_id: state.whatsapp.phoneNumberId,
             whatsapp_phone_number: state.whatsapp.phoneNumberDisplay,
+            destinations: state.whatsapp.destinations,
+            instagram_user_id: state.whatsapp.instagramUserId,
+            instagram_username: state.whatsapp.instagramUsername,
           }
         : {}),
     };
@@ -106,10 +109,20 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
         {state.objective === 'whatsapp' && (
           <div className="p-4">
             <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
-              Destino no WhatsApp
+              Destino das mensagens
             </div>
             <div className="text-sm font-medium text-gray-900">{state.whatsapp.pageName}</div>
-            <div className="text-xs text-gray-500 mt-1">{state.whatsapp.phoneNumberDisplay}</div>
+            <div className="text-xs text-gray-500 mt-1 space-y-0.5">
+              {state.whatsapp.destinations.includes('whatsapp') && (
+                <div>WhatsApp: {state.whatsapp.phoneNumberDisplay}</div>
+              )}
+              {state.whatsapp.destinations.includes('instagram_direct') && (
+                <div>Instagram Direct: @{state.whatsapp.instagramUsername}</div>
+              )}
+              {state.whatsapp.destinations.includes('messenger') && (
+                <div>Messenger da Página {state.whatsapp.pageName}</div>
+              )}
+            </div>
           </div>
         )}
 

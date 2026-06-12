@@ -31,8 +31,8 @@ const OBJECTIVE_OPTIONS: ObjectiveOption[] = [
   {
     value: 'whatsapp',
     emoji: '📲',
-    title: 'Conversas no WhatsApp',
-    description: 'Gere conversas com clientes interessados direto no WhatsApp do seu negócio.',
+    title: 'Gerar Conversas',
+    description: 'Receba mensagens de clientes interessados no WhatsApp, Instagram Direct ou Messenger.',
   },
 ];
 

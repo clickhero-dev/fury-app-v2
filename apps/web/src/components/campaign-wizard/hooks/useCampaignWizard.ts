@@ -23,7 +23,7 @@ function createInitialState(preSelectedAssetId?: string): WizardState {
       dailyBudgetBrl: 20,
       durationDays: undefined,
     },
-    whatsapp: {},
+    whatsapp: { destinations: [] },
     preSelectedAssetId,
   };
 }
@@ -85,7 +85,9 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
       3: Boolean(
         state.audience.city.trim().length > 0 &&
           (state.objective !== 'whatsapp' ||
-            (state.whatsapp.pageId && state.whatsapp.phoneNumberId))
+            (state.whatsapp.pageId &&
+              state.whatsapp.destinations.length > 0 &&
+              (!state.whatsapp.destinations.includes('whatsapp') || state.whatsapp.phoneNumberId)))
       ),
       4: state.budget.dailyBudgetBrl >= 5,
       5: true,

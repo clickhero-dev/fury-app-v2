@@ -5,6 +5,9 @@ export interface MetaPageOption {
   pageId: string;
   name: string;
   hasWhatsApp: boolean;
+  hasInstagram: boolean;
+  instagramUserId: string | null;
+  instagramUsername: string | null;
 }
 
 export interface MetaWhatsappNumberOption {
