@@ -289,6 +289,11 @@ export function SelecionarAtivosPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
+      // A query 'meta-connections' fica `enabled: false` enquanto estamos em /onboarding,
+      // entao invalidateQueries (refetchType padrao 'active') nao a refaz. Forca o refetch
+      // com type 'all' para garantir que o cache ja tenha selectedAdAccountId antes do
+      // AuthenticatedShell decidir se redireciona de volta para o onboarding.
+      await queryClient.refetchQueries({ queryKey: ['meta-connections'], type: 'all' });
       navigate('/dashboard');
     },
   });
