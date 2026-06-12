@@ -172,13 +172,21 @@ export async function getAdAccountsByBusiness(req: Request, res: Response, next:
   }
 }
 
+const whatsappByAssetsBodySchema = z.object({
+  businessIds: z.array(z.string().min(1)).default([]),
+  pageIds: z.array(z.string().min(1)).default([]),
+});
+
 export async function getWhatsappByPages(req: Request, res: Response, next: NextFunction) {
   try {
     if (!req.tenant?.tenantId) {
       throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
     }
-    const { pageIds } = pageIdsBodySchema.parse(req.body);
-    const numbers = pageIds.length > 0 ? await metaService.getTenantWhatsappByPages(req.tenant.tenantId, pageIds) : [];
+    const { businessIds, pageIds } = whatsappByAssetsBodySchema.parse(req.body);
+    const numbers =
+      businessIds.length > 0 || pageIds.length > 0
+        ? await metaService.getTenantWhatsappNumbers(req.tenant.tenantId, { businessIds, pageIds })
+        : [];
     res.status(200).json({
       success: true,
       data: numbers,

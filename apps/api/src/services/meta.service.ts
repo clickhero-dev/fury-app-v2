@@ -8,6 +8,7 @@ import {
   exchangeForLongLivedToken,
   getBusinessAdAccounts,
   getBusinessOwnedPages,
+  getBusinessWhatsappNumbers,
   getMetaUserId,
   getPageWhatsappNumbers,
   getUserAdAccounts,
@@ -386,28 +387,78 @@ export async function getTenantAdAccountsByBusiness(
   return accounts;
 }
 
-export interface TenantPageWhatsappNumber {
+export interface TenantWhatsappNumber {
   phoneNumberId: string;
   displayPhoneNumber: string;
-  pageId: string;
+  businessId?: string;
+  pageId?: string;
 }
 
-/** Lista os numeros WhatsApp Business vinculados as Paginas informadas. */
-export async function getTenantWhatsappByPages(tenantId: string, pageIds: string[]): Promise<TenantPageWhatsappNumber[]> {
+/** Lista numeros WhatsApp das BMs e/ou Paginas selecionadas (uniao, sem duplicatas). */
+export async function getTenantWhatsappNumbers(
+  tenantId: string,
+  { businessIds, pageIds }: { businessIds: string[]; pageIds: string[] },
+): Promise<TenantWhatsappNumber[]> {
   const accessToken = await getTenantAccessToken(tenantId);
+  const seen = new Set<string>();
+  const numbers: TenantWhatsappNumber[] = [];
 
-  const numbersByPage = await Promise.all(
-    pageIds.map(async (pageId) => {
-      const numbers = await getPageWhatsappNumbers(pageId, accessToken);
-      return numbers.map((number) => ({
-        phoneNumberId: number.phoneNumberId,
-        displayPhoneNumber: number.displayPhoneNumber,
-        pageId,
-      }));
+  const businessResults = await Promise.allSettled(
+    businessIds.map(async (businessId) => {
+      const list = await getBusinessWhatsappNumbers(businessId, accessToken);
+      return list.map((number) => ({ ...number, businessId }));
     })
   );
 
-  return numbersByPage.flat();
+  for (const result of businessResults) {
+    if (result.status !== 'fulfilled') {
+      console.warn(
+        '[Meta API] BM ignorada ao buscar WhatsApp:',
+        result.reason instanceof Error ? result.reason.message : result.reason
+      );
+      continue;
+    }
+
+    for (const number of result.value) {
+      if (!seen.has(number.phoneNumberId)) {
+        seen.add(number.phoneNumberId);
+        numbers.push({
+          phoneNumberId: number.phoneNumberId,
+          displayPhoneNumber: number.displayPhoneNumber,
+          businessId: number.businessId,
+        });
+      }
+    }
+  }
+
+  const pageResults = await Promise.allSettled(
+    pageIds.map(async (pageId) => {
+      const list = await getPageWhatsappNumbers(pageId, accessToken);
+      return list.map((number) => ({ ...number, pageId }));
+    })
+  );
+
+  for (const result of pageResults) {
+    if (result.status !== 'fulfilled') continue;
+
+    for (const number of result.value) {
+      if (!seen.has(number.phoneNumberId)) {
+        seen.add(number.phoneNumberId);
+        numbers.push({
+          phoneNumberId: number.phoneNumberId,
+          displayPhoneNumber: number.displayPhoneNumber,
+          pageId: number.pageId,
+        });
+      }
+    }
+  }
+
+  return numbers;
+}
+
+/** @deprecated Use getTenantWhatsappNumbers — mantido para compatibilidade. */
+export async function getTenantWhatsappByPages(tenantId: string, pageIds: string[]): Promise<TenantWhatsappNumber[]> {
+  return getTenantWhatsappNumbers(tenantId, { businessIds: [], pageIds });
 }
 
 /** Retorna os escopos OAuth concedidos pela conexao Meta mais recente do tenant. */

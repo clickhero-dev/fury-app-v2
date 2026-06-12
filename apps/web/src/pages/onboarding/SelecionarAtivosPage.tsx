@@ -260,14 +260,17 @@ export function SelecionarAtivosPage() {
   });
   const adAccounts = adAccountsQuery.data ?? [];
 
-  // ── Step 4: WhatsApp (filtrado pelas Páginas selecionadas) ──────────────────────
+  // ── Step 4: WhatsApp (filtrado pelas BMs e Páginas selecionadas) ─────────────
   const whatsappQuery = useQuery({
-    queryKey: ['meta-whatsapp-by-pages', pageIds],
+    queryKey: ['meta-whatsapp-by-assets', businessIds, pageIds],
     queryFn: async () => {
-      const res = await api.post<ApiListResponse<MetaWhatsappOption>>('/meta/whatsapp-by-pages', { pageIds });
+      const res = await api.post<ApiListResponse<MetaWhatsappOption>>('/meta/whatsapp-by-pages', {
+        businessIds,
+        pageIds,
+      });
       return res.data.data;
     },
-    enabled: subStep >= 4 && pageIds.length > 0,
+    enabled: subStep >= 4 && businessIds.length > 0,
     staleTime: 0,
     retry: false,
   });
@@ -476,22 +479,17 @@ export function SelecionarAtivosPage() {
                   Quais números de WhatsApp você vai usar?
                 </h1>
                 <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Apenas números vinculados às Páginas selecionadas aparecem aqui. Se você não usa WhatsApp,
+                  Números das Business Managers selecionadas e das Páginas vinculadas. Se você não usa WhatsApp,
                   pode continuar sem marcar nenhum.
                 </p>
               </div>
 
-              {pageIds.length === 0 ? (
-                <EmptyState
-                  title="Nenhuma Página selecionada"
-                  description="Como nenhuma Página foi selecionada na etapa anterior, não há números de WhatsApp para mostrar."
-                />
-              ) : whatsappQuery.isLoading ? (
+              {whatsappQuery.isLoading ? (
                 <LoadingSpinner />
               ) : whatsappNumbers.length === 0 ? (
                 <EmptyState
                   title="Nenhum número de WhatsApp encontrado"
-                  description="As Páginas selecionadas não têm números de WhatsApp Business vinculados. Você pode continuar sem selecionar nenhum."
+                  description="As Business Managers selecionadas não têm números de WhatsApp Business vinculados. Você pode continuar sem selecionar nenhum."
                 />
               ) : (
                 <div className="space-y-3">
