@@ -1368,7 +1368,10 @@ function cleanRegionLabel(region?: string): string | undefined {
 
 /** Busca localizacoes (cidades) do Brasil via Meta Graph API para uso no targeting de campanhas. */
 export async function searchMetaCityLocations(query: string, accessToken: string): Promise<MetaLocationResult[]> {
-  const path = `/search?type=adgeolocation&location_types=${encodeURIComponent(JSON.stringify(['city']))}&country_codes=${encodeURIComponent(JSON.stringify(['BR']))}&q=${encodeURIComponent(query)}`;
+  // `country_codes` (plural) nao e um parametro valido para /search?type=adgeolocation
+  // e faz a Meta API retornar code=100 "Invalid parameter". O filtro por Brasil
+  // e feito client-side abaixo via item.country_code.
+  const path = `/search?type=adgeolocation&location_types=${encodeURIComponent(JSON.stringify(['city']))}&q=${encodeURIComponent(query)}`;
   const response = await metaApiCall<MetaLocationSearchResponse>(path, accessToken);
   return (response.data || [])
     .filter((item) => item.type === 'city' && item.country_code === 'BR')
