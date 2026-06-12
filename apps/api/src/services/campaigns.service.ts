@@ -872,15 +872,32 @@ const WIZARD_OBJECTIVE_MAP: Record<
 
 export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'messenger';
 
-function mapWizardMetaError(err: unknown): never {
+function mapWizardMetaError(err: unknown, step: string): never {
   if (err instanceof AppError) throw err;
 
   const metaCode = (err as any).metaCode;
+  const metaType = (err as any).metaType;
+  const httpStatus = (err as any).httpStatus;
   const message = (err as Error).message || '';
   const lowerMessage = message.toLowerCase();
 
+  console.error(`[CampaignWizard] Erro Meta API na etapa "${step}":`, {
+    metaCode,
+    metaType,
+    httpStatus,
+    message,
+  });
+
   if (metaCode === 190) {
     throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão com Meta expirada. Reconecte em Configurações');
+  }
+
+  if (metaType === 'OAuthException' && (metaCode === 200 || metaCode === 10)) {
+    throw new AppError(
+      403,
+      'META_PERMISSION_DENIED',
+      'Permissão do Meta ausente para publicar campanhas. Verifique ads_management, pages_show_list e business_management em Configurações → Integrações.'
+    );
   }
 
   if (
@@ -891,7 +908,10 @@ function mapWizardMetaError(err: unknown): never {
     throw new AppError(402, 'META_INSUFFICIENT_FUNDS', 'Conta de anúncios sem saldo suficiente');
   }
 
-  throw new AppError(502, 'META_API_ERROR', 'Erro ao publicar no Meta. Tente novamente.');
+  const devDetails =
+    process.env.NODE_ENV !== 'production' ? { step, metaCode, metaType, metaMessage: message } : undefined;
+
+  throw new AppError(502, 'META_API_ERROR', 'Erro ao publicar no Meta. Tente novamente.', devDetails);
 }
 
 export interface CreateWizardCampaignArgs {
@@ -1005,7 +1025,7 @@ export async function createCampaignFromWizard(
     try {
       locations = await searchMetaCityLocations(args.locationCity, accessToken);
     } catch (err) {
-      mapWizardMetaError(err);
+      mapWizardMetaError(err, 'location_search');
     }
     const match = locations[0];
     if (!match) {
@@ -1035,7 +1055,7 @@ export async function createCampaignFromWizard(
     );
     metaCampaignId = campaignResponse.id;
   } catch (err) {
-    mapWizardMetaError(err);
+    mapWizardMetaError(err, 'campaign');
   }
 
   const targeting: Record<string, unknown> = {
@@ -1104,7 +1124,7 @@ export async function createCampaignFromWizard(
     );
     adSetId = adSetResponse.id;
   } catch (err) {
-    mapWizardMetaError(err);
+    mapWizardMetaError(err, 'adset');
   }
 
   const pageId =
@@ -1142,7 +1162,7 @@ export async function createCampaignFromWizard(
     );
     adCreativeId = adCreativeResponse.id;
   } catch (err) {
-    mapWizardMetaError(err);
+    mapWizardMetaError(err, 'creative');
   }
 
   let metaAdId: string;
@@ -1162,7 +1182,7 @@ export async function createCampaignFromWizard(
     );
     metaAdId = adResponse.id;
   } catch (err) {
-    mapWizardMetaError(err);
+    mapWizardMetaError(err, 'ad');
   }
 
   const [campaign] = await db
@@ -1233,7 +1253,7 @@ export async function searchMetaLocations(args: { tenantId: string; query: strin
   try {
     results = await searchMetaCityLocations(args.query, accessToken);
   } catch (err) {
-    mapWizardMetaError(err);
+    mapWizardMetaError(err, 'location_search');
   }
 
   await setMetaLocationsCache(args.query, results);
