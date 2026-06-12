@@ -417,16 +417,16 @@ export async function getInstagramAccountInsights(
 
   try {
     const totals = await metaApiCall<InstagramTotalValueInsightsResponse>(
-      `/${igUserId}/insights?metric=comments,saved&metric_type=total_value&period=day&since=${since}&until=${until}`,
+      `/${igUserId}/insights?metric=comments,saves&metric_type=total_value&period=day&since=${since}&until=${until}`,
       accessToken
     );
 
     for (const item of totals.data || []) {
       if (item.name === 'comments') insights.comments = item.total_value?.value ?? 0;
-      if (item.name === 'saved') insights.saves = item.total_value?.value ?? 0;
+      if (item.name === 'saves') insights.saves = item.total_value?.value ?? 0;
     }
   } catch (err) {
-    console.warn('[Instagram] account insights (comments/saved) indisponivel:', (err as Error).message);
+    console.warn('[Instagram] account insights (comments/saves) indisponivel:', (err as Error).message);
   }
 
   try {
@@ -1059,7 +1059,7 @@ export async function metaApiCall<T>(
         return {
           data: [
             { name: 'comments', total_value: { value: 18 } },
-            { name: 'saved', total_value: { value: 37 } },
+            { name: 'saves', total_value: { value: 37 } },
           ],
         } as T;
       }

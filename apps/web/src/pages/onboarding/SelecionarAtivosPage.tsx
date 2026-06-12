@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -209,6 +209,7 @@ function LoadingSpinner() {
 
 export function SelecionarAtivosPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [subStep, setSubStep] = useState(1);
   const [businessIds, setBusinessIds] = useState<string[]>([]);
@@ -286,7 +287,8 @@ export function SelecionarAtivosPage() {
         whatsappNumberIds,
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
       navigate('/dashboard');
     },
   });
