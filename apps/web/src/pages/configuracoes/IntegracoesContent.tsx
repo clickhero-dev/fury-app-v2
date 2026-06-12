@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { LogOut, ExternalLink } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { EmptyState, LoadingSpinner, Button, StatusBadge } from '@/components';
 import {
   Dialog,
@@ -30,7 +30,11 @@ function formatDate(dateString: string): string {
 }
 
 function isTokenValid(tokenExpiresAt: string | null): boolean {
-  if (!tokenExpiresAt) return false;
+  // tokenExpiresAt nulo significa que o Meta nao retornou expiracao para esse
+  // token (ex.: expires_in=0), o que indica um token sem prazo de validade —
+  // nao um token invalido. So marcar "Pausado" quando ha uma data de
+  // expiracao e ela ja passou.
+  if (!tokenExpiresAt) return true;
   return new Date(tokenExpiresAt) > new Date();
 }
 
@@ -341,32 +345,11 @@ export function IntegracoesContent() {
         isPending={disconnectMutation.isPending}
       />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-bold text-text-primary">Contas Meta Conectadas</h3>
-          <p className="text-sm text-text-secondary mt-0.5">
-            Gerencie suas contas de anúncios conectadas
-          </p>
-        </div>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => connectMutation.mutate()}
-          disabled={connectMutation.isPending}
-          className="flex items-center gap-2"
-        >
-          {connectMutation.isPending ? (
-            <>
-              <span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Conectando...
-            </>
-          ) : (
-            <>
-              <ExternalLink className="w-4 h-4" />
-              Adicionar conta Meta
-            </>
-          )}
-        </Button>
+      <div>
+        <h3 className="text-lg font-bold text-text-primary">Contas Meta Conectadas</h3>
+        <p className="text-sm text-text-secondary mt-0.5">
+          Gerencie suas contas de anúncios conectadas
+        </p>
       </div>
 
       {isLoading ? (
