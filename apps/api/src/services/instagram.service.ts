@@ -10,7 +10,7 @@ import {
 import { decryptMetaToken } from '../utils/crypto.js';
 import { AppError } from '../middleware/errorHandler.js';
 
-export type InstagramRankingObjective = 'visits' | 'engagement' | 'messages';
+export type InstagramRankingObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';
 
 export interface RankedInstagramPost {
   id: string;
@@ -35,7 +35,7 @@ function computeScore(objective: InstagramRankingObjective, post: {
     return insights.reach * 0.5 + insights.shares * 0.3 + commentsCount * 0.2;
   }
 
-  if (objective === 'messages') {
+  if (objective === 'messages' || objective === 'whatsapp') {
     return insights.replies * 0.7 + commentsCount * 0.3;
   }
 

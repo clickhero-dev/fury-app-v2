@@ -4,7 +4,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { getRankedInstagramPosts } from '../services/instagram.service.js';
 
 const postsRankedQuerySchema = z.object({
-  objective: z.enum(['visits', 'engagement', 'messages']),
+  objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp']),
   instagramUserId: z.string().min(1).optional(),
 });
 
