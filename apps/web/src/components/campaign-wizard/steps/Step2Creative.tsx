@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Check, ImagePlus, Loader2, UploadCloud } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -27,6 +27,17 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadMutation = useUploadCreative();
+
+  const canUseInstagramPost = objective === 'engagement' || objective === 'messages' || objective === 'whatsapp';
+
+  useEffect(() => {
+    if (!canUseInstagramPost && tab === 'instagram') {
+      setTab('gallery');
+      if (value.instagramMediaId) {
+        onChange({ instagramMediaId: undefined, mediaUrl: undefined });
+      }
+    }
+  }, [canUseInstagramPost, tab, value.instagramMediaId, onChange]);
 
   const { data, isLoading } = useQuery<StudioAssetResponse>({
     queryKey: ['studio/assets'],
@@ -88,7 +99,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
         <TabsList>
           <TabsTrigger value="gallery">Escolher da Galeria</TabsTrigger>
           <TabsTrigger value="upload">Fazer Upload</TabsTrigger>
-          <TabsTrigger value="instagram">Post do Instagram</TabsTrigger>
+          {canUseInstagramPost && <TabsTrigger value="instagram">Post do Instagram</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="gallery">
@@ -175,9 +186,11 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
           {uploadError && <p className="text-sm text-red-600 mt-2">{uploadError}</p>}
         </TabsContent>
 
-        <TabsContent value="instagram">
-          <InstagramPostsTab value={value} onChange={onChange} objective={objective} instagramUserId={instagramUserId} />
-        </TabsContent>
+        {canUseInstagramPost && (
+          <TabsContent value="instagram">
+            <InstagramPostsTab value={value} onChange={onChange} objective={objective} instagramUserId={instagramUserId} />
+          </TabsContent>
+        )}
       </Tabs>
 
       <div className="space-y-4 pt-2 border-t border-gray-100">
