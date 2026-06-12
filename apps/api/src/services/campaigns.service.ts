@@ -1110,17 +1110,23 @@ export async function createCampaignFromWizard(
   let metaAdId: string | undefined;
 
   try {
+    const campaignBody = {
+      name: campaignName,
+      objective: objectiveConfig.metaObjective,
+      status: 'ACTIVE',
+      special_ad_categories: [],
+    };
+
+    console.log('[DEBUG] campaignBody:', JSON.stringify(campaignBody, null, 2));
+    console.log('[DEBUG] adAccountId:', adAccountId);
+    console.log('[DEBUG] objective recebido:', args.objective);
+
     const campaignResponse = await metaApiCall<MetaCampaignCreateResponse>(
       `/${encodeURIComponent(adAccountId)}/campaigns`,
       accessToken,
       {
         method: 'POST',
-        body: {
-          name: campaignName,
-          objective: objectiveConfig.metaObjective,
-          status: 'ACTIVE',
-          special_ad_categories: [],
-        },
+        body: campaignBody,
       }
     );
     metaCampaignId = campaignResponse.id;
