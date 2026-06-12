@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, X } from 'lucide-react';
 import {
@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useCampaignWizard } from './hooks/useCampaignWizard';
+import { useMetaAssetSelection } from './hooks/useMetaAssetSelection';
 import { Step1Objective } from './steps/Step1Objective';
 import { Step2Creative } from './steps/Step2Creative';
 import { Step3Audience } from './steps/Step3Audience';
@@ -39,10 +40,31 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
   const wizard = useCampaignWizard(preSelectedAssetId);
   const { state } = wizard;
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const assetSelection = useMetaAssetSelection();
 
   if (state.creative.assetId === preSelectedAssetId && preSelectedAssetUrl && !state.creative.assetUrl) {
     wizard.setCreative({ assetUrl: preSelectedAssetUrl });
   }
+
+  // Resolve automaticamente a Pagina do tenant a partir da selecao salva do
+  // onboarding, para que o step de Criativo (posts do Instagram) e o step de
+  // Publico ja tenham pageId/instagramUserId disponiveis sem pedir ao usuario.
+  useEffect(() => {
+    if (state.whatsapp.pageId) return;
+    const page = assetSelection.data?.pages[0];
+    if (!page) return;
+
+    wizard.setWhatsapp({
+      pageId: page.pageId,
+      pageName: page.name,
+      hasWhatsApp: page.hasWhatsApp,
+      hasInstagram: page.hasInstagram,
+      instagramUserId: page.instagramUserId ?? undefined,
+      instagramUsername: page.instagramUsername ?? undefined,
+      destinations: page.hasWhatsApp || page.hasInstagram ? [] : ['messenger'],
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetSelection.data, state.whatsapp.pageId]);
 
   function handleClose() {
     const hasProgress = state.currentStep > 1 || state.objective !== null;
@@ -123,7 +145,12 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {state.currentStep === 1 && <Step1Objective value={state.objective} onChange={wizard.setObjective} />}
           {state.currentStep === 2 && (
-            <Step2Creative value={state.creative} onChange={wizard.setCreative} objective={state.objective} />
+            <Step2Creative
+              value={state.creative}
+              onChange={wizard.setCreative}
+              objective={state.objective}
+              instagramUserId={state.whatsapp.instagramUserId}
+            />
           )}
           {state.currentStep === 3 && (
             <Step3Audience

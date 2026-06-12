@@ -5,6 +5,7 @@ import { getRankedInstagramPosts } from '../services/instagram.service.js';
 
 const postsRankedQuerySchema = z.object({
   objective: z.enum(['visits', 'engagement', 'messages']),
+  instagramUserId: z.string().min(1).optional(),
 });
 
 export async function getPostsRankedHandler(req: Request, res: Response, next: NextFunction) {
@@ -14,8 +15,8 @@ export async function getPostsRankedHandler(req: Request, res: Response, next: N
       throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
     }
 
-    const { objective } = postsRankedQuerySchema.parse(req.query);
-    const posts = await getRankedInstagramPosts(tenantId, objective);
+    const { objective, instagramUserId } = postsRankedQuerySchema.parse(req.query);
+    const posts = await getRankedInstagramPosts(tenantId, objective, instagramUserId);
 
     res.json({
       success: true,

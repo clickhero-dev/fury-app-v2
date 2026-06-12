@@ -19,9 +19,10 @@ interface Step2CreativeProps {
   value: WizardCreativeState;
   onChange: (updates: Partial<WizardCreativeState>) => void;
   objective: WizardObjective | null;
+  instagramUserId?: string;
 }
 
-export function Step2Creative({ value, onChange, objective }: Step2CreativeProps) {
+export function Step2Creative({ value, onChange, objective, instagramUserId }: Step2CreativeProps) {
   const [tab, setTab] = useState<'gallery' | 'upload' | 'instagram'>(value.uploadUrl ? 'upload' : value.instagramMediaId ? 'instagram' : 'gallery');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -175,7 +176,7 @@ export function Step2Creative({ value, onChange, objective }: Step2CreativeProps
         </TabsContent>
 
         <TabsContent value="instagram">
-          <InstagramPostsTab value={value} onChange={onChange} objective={objective} />
+          <InstagramPostsTab value={value} onChange={onChange} objective={objective} instagramUserId={instagramUserId} />
         </TabsContent>
       </Tabs>
 

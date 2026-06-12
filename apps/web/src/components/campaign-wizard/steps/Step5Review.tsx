@@ -117,10 +117,10 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
                 <div>WhatsApp: {state.whatsapp.phoneNumberDisplay}</div>
               )}
               {state.whatsapp.destinations.includes('instagram_direct') && (
-                <div>Instagram Direct: @{state.whatsapp.instagramUsername}</div>
+                <div>Instagram: @{state.whatsapp.instagramUsername}</div>
               )}
               {state.whatsapp.destinations.includes('messenger') && (
-                <div>Messenger da Página {state.whatsapp.pageName}</div>
+                <div>Facebook da Página {state.whatsapp.pageName}</div>
               )}
             </div>
           </div>

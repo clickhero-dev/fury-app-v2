@@ -3,7 +3,8 @@ import { Loader2, MapPin } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useMetaLocations } from '../hooks/useMetaLocations';
-import { useMetaPages, useMetaPageWhatsappNumbers } from '../hooks/useMetaPages';
+import { useMetaPageWhatsappNumbers } from '../hooks/useMetaPages';
+import { useMetaAssetSelection } from '../hooks/useMetaAssetSelection';
 import {
   AGE_OPTIONS,
   RADIUS_OPTIONS,
@@ -30,7 +31,8 @@ function MessagingDestinationFields({
   whatsapp: WizardWhatsappState;
   onWhatsappChange: (updates: Partial<WizardWhatsappState>) => void;
 }) {
-  const { pages, isLoading: isLoadingPages, isError: isPagesError } = useMetaPages(true);
+  const { data: assetSelection, isLoading: isLoadingPages, isError: isPagesError } = useMetaAssetSelection();
+  const pages = assetSelection?.pages ?? [];
   const {
     numbers,
     isLoading: isLoadingNumbers,
@@ -100,43 +102,42 @@ function MessagingDestinationFields({
     <div className="rounded-xl border border-gray-200 p-4 space-y-4 bg-gray-50/50">
       <div>
         <h4 className="text-sm font-bold text-gray-900">Destino das mensagens</h4>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Escolha a Página do Facebook do seu negócio e onde deseja receber as conversas.
-        </p>
+        <p className="text-xs text-gray-500 mt-0.5">Escolha onde deseja receber as conversas.</p>
       </div>
 
-      <div>
-        <label className="text-sm font-bold text-gray-900 mb-1 block">Página do Facebook</label>
-        <div className="relative">
-          <Select
-            value={whatsapp.pageId ?? ''}
-            onChange={(e) => handleSelectPage(e.target.value)}
-            disabled={isLoadingPages}
-          >
-            <option value="">
-              {isLoadingPages ? 'Carregando páginas...' : 'Selecione a página'}
-            </option>
+      {isLoadingPages && (
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Carregando dados do seu negócio...
+        </div>
+      )}
+
+      {isPagesError && (
+        <p className="text-xs text-red-600">
+          Não foi possível carregar os dados do seu negócio. Verifique a conexão Meta em Configurações →
+          Integrações.
+        </p>
+      )}
+
+      {!isLoadingPages && !isPagesError && pages.length === 0 && (
+        <p className="text-xs text-amber-700">
+          Nenhuma Página selecionada na conexão Meta. Configure em Configurações → Integrações.
+        </p>
+      )}
+
+      {pages.length > 1 && (
+        <div>
+          <label className="text-sm font-bold text-gray-900 mb-1 block">Qual negócio vai anunciar?</label>
+          <Select value={whatsapp.pageId ?? ''} onChange={(e) => handleSelectPage(e.target.value)}>
+            <option value="">Selecione</option>
             {pages.map((page) => (
               <option key={page.pageId} value={page.pageId}>
                 {page.name}
               </option>
             ))}
           </Select>
-          {isLoadingPages && (
-            <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
-          )}
         </div>
-        {isPagesError && (
-          <p className="text-xs text-red-600 mt-1">
-            Não foi possível carregar suas páginas. Verifique a conexão Meta em Configurações → Integrações.
-          </p>
-        )}
-        {!isLoadingPages && !isPagesError && pages.length === 0 && (
-          <p className="text-xs text-amber-700 mt-1">
-            Nenhuma página encontrada na sua conta Meta conectada.
-          </p>
-        )}
-      </div>
+      )}
 
       {whatsapp.pageId && (
         <div>
@@ -144,8 +145,8 @@ function MessagingDestinationFields({
 
           {onlyMessengerAvailable && (
             <p className="text-xs text-amber-700 mb-2">
-              Esta Página só tem Messenger disponível. Para usar WhatsApp, vincule um número WABA. Para usar
-              Instagram Direct, conecte sua conta Instagram à Página no Meta Business.
+              Este negócio só tem Facebook disponível. Para usar WhatsApp, vincule um número WABA. Para usar
+              Instagram, conecte sua conta Instagram à Página no Meta Business.
             </p>
           )}
 
@@ -161,6 +162,7 @@ function MessagingDestinationFields({
                   />
                   WhatsApp
                 </label>
+                <p className="text-xs text-gray-500 ml-6">As pessoas vão te chamar pelo WhatsApp</p>
 
                 {whatsapp.destinations.includes('whatsapp') && (
                   <div className="mt-2 ml-6">
@@ -208,11 +210,12 @@ function MessagingDestinationFields({
                     onChange={() => toggleDestination('instagram_direct')}
                     className="w-4 h-4 rounded border-gray-300 text-[#E8631A] focus:ring-[#E8631A]"
                   />
-                  Instagram Direct
+                  Instagram
                 </label>
+                <p className="text-xs text-gray-500 ml-6">As pessoas vão te chamar pelo Instagram</p>
 
                 {whatsapp.destinations.includes('instagram_direct') && (
-                  <div className="mt-2 ml-6 text-sm text-gray-600">
+                  <div className="mt-1 ml-6 text-sm text-gray-600">
                     @{whatsapp.instagramUsername}
                   </div>
                 )}
@@ -227,8 +230,9 @@ function MessagingDestinationFields({
                   onChange={() => toggleDestination('messenger')}
                   className="w-4 h-4 rounded border-gray-300 text-[#E8631A] focus:ring-[#E8631A]"
                 />
-                Messenger
+                Facebook
               </label>
+              <p className="text-xs text-gray-500 ml-6">As pessoas vão te chamar pelo Facebook</p>
             </div>
           </div>
         </div>

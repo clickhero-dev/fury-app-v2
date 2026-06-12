@@ -91,7 +91,8 @@ export async function getInstagramDashboardInsights(
 
 export async function getRankedInstagramPosts(
   tenantId: string,
-  objective: InstagramRankingObjective
+  objective: InstagramRankingObjective,
+  instagramUserId?: string
 ): Promise<RankedInstagramPost[]> {
   const metaConn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, tenantId),
@@ -105,7 +106,7 @@ export async function getRankedInstagramPosts(
   const accessToken = decryptMetaToken(metaConn.accessToken);
 
   try {
-    const igUserId = await getInstagramBusinessAccountId(accessToken);
+    const igUserId = instagramUserId || (await getInstagramBusinessAccountId(accessToken));
     const media = await getInstagramMedia(igUserId, accessToken);
 
     const posts = await Promise.all(

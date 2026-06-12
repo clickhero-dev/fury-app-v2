@@ -458,6 +458,97 @@ export async function getTenantPageWhatsappNumbers(
   return numbers;
 }
 
+export interface ResolvedAssetSelectionPage {
+  pageId: string;
+  name: string;
+  hasInstagram: boolean;
+  instagramUserId: string | null;
+  instagramUsername: string | null;
+  hasWhatsApp: boolean;
+}
+
+export interface ResolvedAssetSelectionAdAccount {
+  adAccountId: string;
+  name: string;
+}
+
+export interface ResolvedAssetSelectionWhatsappNumber {
+  phoneNumberId: string;
+  displayPhoneNumber: string;
+}
+
+export interface ResolvedAssetSelectionBusiness {
+  businessId: string;
+  name: string;
+}
+
+export interface ResolvedTenantAssetSelection {
+  pages: ResolvedAssetSelectionPage[];
+  adAccounts: ResolvedAssetSelectionAdAccount[];
+  whatsappNumbers: ResolvedAssetSelectionWhatsappNumber[];
+  businesses: ResolvedAssetSelectionBusiness[];
+}
+
+/**
+ * Resolve a selecao de ativos persistida do tenant (BMs, Paginas, Contas de
+ * Anuncio e numeros WhatsApp) em detalhes atualizados via Graph API, para uso
+ * no Wizard de Campanha (que nao deve pedir nova selecao ao usuario).
+ */
+export async function getResolvedTenantAssetSelection(tenantId: string): Promise<ResolvedTenantAssetSelection> {
+  const connection = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+
+  if (!connection) {
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
+  }
+
+  const accessToken = decryptToken(connection.accessToken);
+  const selectedPageIds = (connection.selectedPageIds as string[] | null) ?? [];
+  const selectedAdAccountIds = (connection.selectedAdAccountIds as string[] | null) ?? [];
+  const selectedWhatsappNumberIds = (connection.selectedWhatsappNumberIds as string[] | null) ?? [];
+  const selectedBusinessIds = (connection.selectedBusinessIds as string[] | null) ?? [];
+
+  const [allPages, allBusinesses] = await Promise.all([
+    getUserFacebookPages(accessToken),
+    selectedBusinessIds.length > 0 ? getUserBusinesses(accessToken) : Promise.resolve([]),
+  ]);
+
+  const pages: ResolvedAssetSelectionPage[] = allPages
+    .filter((page) => selectedPageIds.length === 0 || selectedPageIds.includes(page.pageId))
+    .map((page) => ({
+      pageId: page.pageId,
+      name: page.name,
+      hasInstagram: page.hasInstagram,
+      instagramUserId: page.instagramUserId,
+      instagramUsername: page.instagramUsername,
+      hasWhatsApp: page.hasWhatsApp,
+    }));
+
+  const allAdAccounts = (connection.adAccounts as MetaAdAccount[]) ?? [];
+  const adAccounts: ResolvedAssetSelectionAdAccount[] = allAdAccounts
+    .filter((account) => selectedAdAccountIds.length === 0 || selectedAdAccountIds.includes(account.id))
+    .map((account) => ({ adAccountId: account.id, name: account.name }));
+
+  const businesses: ResolvedAssetSelectionBusiness[] = allBusinesses
+    .filter((business) => selectedBusinessIds.includes(business.id))
+    .map((business) => ({ businessId: business.id, name: business.name }));
+
+  let whatsappNumbers: ResolvedAssetSelectionWhatsappNumber[] = [];
+  if (selectedWhatsappNumberIds.length > 0) {
+    const numbers = await getWhatsappNumbersForAssets(accessToken, {
+      businessIds: selectedBusinessIds,
+      pageIds: selectedPageIds,
+    });
+    whatsappNumbers = numbers
+      .filter((number) => selectedWhatsappNumberIds.includes(number.phoneNumberId))
+      .map((number) => ({ phoneNumberId: number.phoneNumberId, displayPhoneNumber: number.displayPhoneNumber }));
+  }
+
+  return { pages, adAccounts, whatsappNumbers, businesses };
+}
+
 export async function getTenantMetaConnections(tenantId: string): Promise<StoredMetaConnection[]> {
   const connections = await db.query.metaConnections.findMany({
     where: eq(metaConnections.tenantId, tenantId),

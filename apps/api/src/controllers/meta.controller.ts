@@ -214,6 +214,22 @@ export async function saveSelection(req: Request, res: Response, next: NextFunct
   }
 }
 
+export async function getAssetSelection(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const selection = await metaService.getResolvedTenantAssetSelection(req.tenant.tenantId);
+    res.status(200).json({
+      success: true,
+      data: selection,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getConnections(req: Request, res: Response, next: NextFunction) {
   try {
     if (!req.tenant?.tenantId) {

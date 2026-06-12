@@ -39,6 +39,7 @@ interface InstagramPostsTabProps {
   value: WizardCreativeState;
   onChange: (updates: Partial<WizardCreativeState>) => void;
   objective: WizardObjective | null;
+  instagramUserId?: string;
 }
 
 function formatMetrics(objective: WizardObjective | null, post: InstagramPost): string {
@@ -94,12 +95,12 @@ function ProxiedImage({ url, alt, className }: { url: string; alt: string; class
   return <img src={objectUrl} alt={alt} className={className} />;
 }
 
-export function InstagramPostsTab({ value, onChange, objective }: InstagramPostsTabProps) {
+export function InstagramPostsTab({ value, onChange, objective, instagramUserId }: InstagramPostsTabProps) {
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery<InstagramPostsResponse>({
-    queryKey: ['instagram/posts-ranked', objective],
+    queryKey: ['instagram/posts-ranked', objective, instagramUserId],
     queryFn: async () => {
       const response = await api.get('/instagram/posts-ranked', {
-        params: { objective: objective ?? 'engagement' },
+        params: { objective: objective ?? 'engagement', instagramUserId },
       });
       return response.data;
     },
