@@ -476,6 +476,7 @@ export interface MetaWhatsappNumber {
   phoneNumberId: string;
   displayPhoneNumber: string;
   verifiedName: string;
+  source?: 'business_app' | 'cloud_api';
 }
 
 export interface WhatsappNumberWithContext extends MetaWhatsappNumber {
@@ -536,7 +537,7 @@ function normalizeWhatsappPhone(phone: string): string {
 }
 
 function isSyntheticWhatsappId(phoneNumberId: string): boolean {
-  return phoneNumberId.startsWith('page-wa:');
+  return phoneNumberId.startsWith('wa-biz:');
 }
 
 function mapWabaPhoneNumber(raw: WabaPhoneNumberRaw): MetaWhatsappNumber {
@@ -544,6 +545,7 @@ function mapWabaPhoneNumber(raw: WabaPhoneNumberRaw): MetaWhatsappNumber {
     phoneNumberId: raw.id,
     displayPhoneNumber: raw.display_phone_number ?? '',
     verifiedName: raw.verified_name ?? '',
+    source: 'cloud_api',
   };
 }
 
@@ -582,12 +584,13 @@ function mapNestedWabaPhones(
 function mapPageDirectWhatsappNumber(
   pageId: string,
   whatsappNumber: string,
+  pageName?: string,
 ): WhatsappNumberWithContext {
-  const normalized = normalizeWhatsappPhone(whatsappNumber);
   return {
-    phoneNumberId: `page-wa:${pageId}:${normalized || pageId}`,
+    phoneNumberId: `wa-biz:${pageId}`,
     displayPhoneNumber: whatsappNumber,
-    verifiedName: '',
+    verifiedName: pageName ?? '',
+    source: 'business_app',
     pageId,
   };
 }
@@ -715,7 +718,7 @@ async function getUserAccountWhatsappNumbers(
     }
 
     if (page.whatsapp_number?.trim()) {
-      numbers.push(mapPageDirectWhatsappNumber(page.id, page.whatsapp_number.trim()));
+      numbers.push(mapPageDirectWhatsappNumber(page.id, page.whatsapp_number.trim(), page.name));
     } else {
       const token = page.access_token || accessToken;
       numbers.push(...(await getPageWabaPhones(page.id, token, { pageId: page.id })));
@@ -749,7 +752,7 @@ async function getBusinessPagesWhatsappNumbers(
     }
 
     if (page.whatsapp_number?.trim()) {
-      numbers.push(mapPageDirectWhatsappNumber(page.id, page.whatsapp_number.trim()));
+      numbers.push(mapPageDirectWhatsappNumber(page.id, page.whatsapp_number.trim(), page.name));
     } else {
       numbers.push(...(await getPageWabaPhones(page.id, accessToken, { pageId: page.id, businessId })));
     }
@@ -842,28 +845,41 @@ export async function getPageWhatsappNumbers(
 ): Promise<MetaWhatsappNumber[]> {
   const merged = new Map<string, WhatsappNumberWithContext>();
 
+  // Passo 1 (sempre executado primeiro, para todas as paginas): whatsapp_number
+  // direto na Pagina - existe em Paginas com WhatsApp Business App.
+  let foundDirect = false;
   try {
-    const page = await metaApiCall<{ id: string; whatsapp_number?: string }>(
+    const page = await metaApiCall<{ id: string; name?: string; whatsapp_number?: string }>(
       `/${encodeURIComponent(pageId)}?fields=${PAGE_DIRECT_FIELDS}`,
       accessToken
     );
 
     if (page.whatsapp_number?.trim()) {
-      mergeWhatsappNumbers(merged, [mapPageDirectWhatsappNumber(pageId, page.whatsapp_number.trim())]);
-    } else {
-      mergeWhatsappNumbers(merged, await getPageWabaPhones(pageId, accessToken, { pageId }));
+      mergeWhatsappNumbers(merged, [mapPageDirectWhatsappNumber(pageId, page.whatsapp_number.trim(), page.name)]);
+      foundDirect = true;
     }
   } catch (err) {
     console.warn(
-      `[Meta API] Pagina ${pageId} ignorada ao buscar WhatsApp (user token):`,
+      `[Meta API] Pagina ${pageId} ignorada ao buscar whatsapp_number:`,
       err instanceof Error ? err.message : err
     );
   }
 
-  try {
-    mergeWhatsappNumbers(merged, await getUserAccountWhatsappNumbers(accessToken, [pageId]));
-  } catch {
-    // /me/accounts pode falhar sem impactar as demais fontes.
+  // Passo 2 (so se o passo 1 nao encontrou numero): whatsapp_business_account
+  // (Cloud API) - paginas com WhatsApp Business App nao tem esse campo (erro #100,
+  // tratado e ignorado dentro de getPageWabaPhones).
+  if (!foundDirect) {
+    mergeWhatsappNumbers(merged, await getPageWabaPhones(pageId, accessToken, { pageId }));
+  }
+
+  // Passo 3 (fallback final, so se os anteriores nao retornaram nada): /me/accounts
+  // com token de pagina.
+  if (merged.size === 0) {
+    try {
+      mergeWhatsappNumbers(merged, await getUserAccountWhatsappNumbers(accessToken, [pageId]));
+    } catch {
+      // /me/accounts pode falhar sem impactar as demais fontes.
+    }
   }
 
   return [...merged.values()];
