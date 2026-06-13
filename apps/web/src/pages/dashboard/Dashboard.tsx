@@ -85,6 +85,18 @@ const STATUS_CONFIG = {
 
 const NO_DATA_CFG = { label: 'Sem dados', bg: 'bg-gray-100', text: 'text-gray-500', bar: '#d1d5db' };
 
+// Recomputes progress directly from current/target so the UI always reflects
+// the real ratio, regardless of how the backend's own progress_pct was derived.
+function computeProgressPercent(current: number, target: number): number {
+  return target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+}
+
+function statusFromProgress(progressPercent: number): 'on_track' | 'at_risk' | 'off_track' {
+  if (progressPercent >= 90) return 'on_track';
+  if (progressPercent >= 60) return 'at_risk';
+  return 'off_track';
+}
+
 // ─── Meta Banner ──────────────────────────────────────────────────────────────
 
 function MetaBanner() {
@@ -126,9 +138,9 @@ function HeroStrip({
   hasRealData: boolean;
   hasGoals: boolean;
 }) {
-  const statusKey = !hasRealData ? 'no_goals' : (goal.status === 'no_goals' ? 'no_goals' : goal.status);
+  const pct = hasGoals && hasRealData ? computeProgressPercent(goal.current_value, goal.target_value) : 0;
+  const statusKey = !hasGoals || !hasRealData ? 'no_goals' : statusFromProgress(pct);
   const cfg = STATUS_CONFIG[statusKey] ?? NO_DATA_CFG;
-  const pct = hasGoals && hasRealData ? Math.min(100, goal.progress_pct ?? 0) : 0;
 
   return (
     <div className="bg-gradient-to-r from-[#1a0a00] via-[#2d1200] to-[#1c1c1e] rounded-xl px-5 py-3.5 flex items-center gap-5 flex-wrap sm:flex-nowrap border-l-4 border-[#EA580C]">
@@ -173,7 +185,7 @@ function HeroStrip({
           <span className="text-white/70">Projeção:{' '}</span>
           <strong className="text-white/80 font-bold">
             {hasGoals && hasRealData
-              ? `${(goal.projected_value ?? 0).toLocaleString('pt-BR')} ${goal.unit}`
+              ? `${(goal.projected_value ?? 0).toLocaleString('pt-BR')} ${goal.metric === 'conversions' ? 'clientes' : goal.unit}`
               : '--'}
           </strong>
         </span>
@@ -774,6 +786,15 @@ export function Dashboard() {
   const goalBudget      = g?.goals?.find((goal) => goal.metric === 'spend');
   const goalRoas        = g?.goals?.find((goal) => goal.metric === 'roas');
 
+  const conversionsProgressPct = goalConversions
+    ? computeProgressPercent(goalConversions.current_value, goalConversions.target_value)
+    : undefined;
+  const conversionsStatus = !hasGoals
+    ? 'no_goals'
+    : conversionsProgressPct !== undefined
+      ? statusFromProgress(conversionsProgressPct)
+      : undefined;
+
   const sparkConversions = goalConversions?.sparkline;
   const sparkBudget      = goalBudget?.sparkline;
   const sparkRoas        = goalRoas?.sparkline;
@@ -843,9 +864,9 @@ export function Dashboard() {
             sparkline={sparkConversions}
             hasRealData={hasRealData}
             hasGoals={hasGoals}
-            progressPct={goalConversions?.progress_pct}
-            progressStatus={goalConversions?.status}
-            progressLabel={hasGoals && goalConversions ? `${Math.round(goalConversions.progress_pct)}% da meta mensal` : undefined}
+            progressPct={conversionsProgressPct}
+            progressStatus={conversionsStatus}
+            progressLabel={hasGoals && conversionsProgressPct !== undefined ? `${conversionsProgressPct}% da meta mensal` : undefined}
             tooltip="Inclui resultados de campanhas ativas e pausadas no período selecionado"
           />
           <MetricCard
