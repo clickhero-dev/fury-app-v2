@@ -3,6 +3,8 @@ import fs from 'fs';
 import type { CreativeData } from './creative-generator.service.js';
 
 // Register system fonts installed via nixpacks (fonts-open-sans, fonts-dejavu-core)
+// in production, with macOS fallbacks so local dev also renders PT-BR accents
+// (the bundled @napi-rs/canvas "sans-serif" fallback is missing accented glyphs).
 const FONT_CANDIDATES = [
   // Open Sans (installed via apt fonts-open-sans)
   { path: '/usr/share/fonts/truetype/open-sans/OpenSans-Regular.ttf',    family: 'AppFont', weight: 'normal' },
@@ -10,6 +12,9 @@ const FONT_CANDIDATES = [
   // DejaVu fallback (installed via apt fonts-dejavu-core)
   { path: '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',             family: 'AppFont', weight: 'normal' },
   { path: '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',        family: 'AppFont', weight: 'bold' },
+  // macOS dev fallback (full Latin/PT-BR coverage)
+  { path: '/System/Library/Fonts/Supplemental/Arial.ttf',                family: 'AppFont', weight: 'normal' },
+  { path: '/System/Library/Fonts/Supplemental/Arial Bold.ttf',           family: 'AppFont', weight: 'bold' },
 ];
 
 let fontFamily = 'sans-serif';
@@ -47,6 +52,128 @@ const COLOR_SCHEMES: Record<string, ColorScheme> = {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Ctx = any;
+
+// ── Contraste (WCAG) ─────────────────────────────────────────────────────────
+
+function hexToRgb(hex: string): [number, number, number] {
+  let h = hex.replace('#', '').trim();
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const num = parseInt(h, 16) || 0;
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  return `#${[r, g, b].map((v) => clamp(v).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+  const d = max - min;
+  if (d !== 0) {
+    s = d / (1 - Math.abs(2 * l - 1));
+    switch (max) {
+      case r: h = ((g - b) / d) % 6; break;
+      case g: h = (b - r) / d + 2; break;
+      default: h = (r - g) / d + 4; break;
+    }
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return [h, s, l];
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let [r, g, b] = [0, 0, 0];
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+}
+
+function mixHex(hexA: string, hexB: string, t: number): string {
+  const [r1, g1, b1] = hexToRgb(hexA);
+  const [r2, g2, b2] = hexToRgb(hexB);
+  return rgbToHex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t);
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** Luminancia relativa (formula WCAG), 0 a 1. */
+function getLuminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex).map((c) => {
+    const cs = c / 255;
+    return cs <= 0.03928 ? cs / 12.92 : Math.pow((cs + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Razao de contraste WCAG entre duas cores (1 a 21). */
+function getContrastRatio(hexA: string, hexB: string): number {
+  const l1 = getLuminance(hexA);
+  const l2 = getLuminance(hexB);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/** Branco ou preto, o que tiver melhor contraste contra bgColor. */
+function pickTextOn(bgColor: string): string {
+  return getContrastRatio('#FFFFFF', bgColor) >= getContrastRatio('#000000', bgColor) ? '#FFFFFF' : '#000000';
+}
+
+/**
+ * Garante contraste >= minRatio entre textColor e bgColor. Se ja for legivel,
+ * retorna textColor inalterado. Senao, ajusta a luminancia de textColor
+ * (clareando sobre fundo escuro, escurecendo sobre fundo claro) preservando
+ * matiz/saturacao, ate atingir minRatio. Se nem no limite atingir, cai para
+ * preto/branco — o que tiver melhor contraste contra bgColor.
+ */
+function ensureReadable(textColor: string, bgColor: string, minRatio = 4.5): string {
+  if (getContrastRatio(textColor, bgColor) >= minRatio) return textColor;
+
+  const [r, g, b] = hexToRgb(textColor);
+  const [h, s, l] = rgbToHsl(r, g, b);
+  const targetL = getLuminance(bgColor) > 0.5 ? 0 : 1;
+
+  let best = textColor;
+  let bestRatio = getContrastRatio(textColor, bgColor);
+  const steps = 20;
+  for (let i = 1; i <= steps; i++) {
+    const newL = l + (targetL - l) * (i / steps);
+    const [nr, ng, nb] = hslToRgb(h, s, newL);
+    const candidate = rgbToHex(nr, ng, nb);
+    const ratio = getContrastRatio(candidate, bgColor);
+    if (ratio > bestRatio) {
+      best = candidate;
+      bestRatio = ratio;
+    }
+    if (ratio >= minRatio) return candidate;
+  }
+
+  return bestRatio >= minRatio ? best : pickTextOn(bgColor);
+}
+
+/** Tom medio assumido para fotos desconhecidas, usado para estimar a cor efetiva de fundo sob um overlay. */
+const PHOTO_MID = '#808080';
+
+/** Cor efetiva de fundo quando um overlay (overlayColor, alpha) cobre uma foto de tom medio desconhecido. */
+function effectiveBgOverPhoto(overlayColor: string, alpha: number): string {
+  return mixHex(PHOTO_MID, overlayColor, alpha);
+}
 
 function wrapText(
   ctx: Ctx,
@@ -129,29 +256,47 @@ function drawDarkOverlay(ctx: Ctx, x: number, y: number, w: number, h: number, a
   ctx.fillRect(x, y, w, h);
 }
 
-/** Botao CTA arredondado, preenchido com colors.primary e texto branco em uppercase. */
+/** Gradiente vertical (mais escuro na base) sobre uma area — da profundidade a foto e reforca a legibilidade onde fica o texto/CTA. */
+function drawGradientOverlay(ctx: Ctx, x: number, y: number, w: number, h: number, colorHex: string, alphaTop: number, alphaBottom: number) {
+  const grad = ctx.createLinearGradient(x, y, x, y + h);
+  grad.addColorStop(0, hexToRgba(colorHex, alphaTop));
+  grad.addColorStop(1, hexToRgba(colorHex, alphaBottom));
+  ctx.fillStyle = grad;
+  ctx.fillRect(x, y, w, h);
+}
+
+/** Botao CTA arredondado, preenchido com colors.primary; texto na cor com melhor contraste. */
 function drawCtaButton(ctx: Ctx, x: number, y: number, w: number, h: number, text: string | undefined, colors: ColorScheme) {
   drawRoundRect(ctx, x, y, w, h, 14);
   ctx.fillStyle = colors.primary;
   ctx.fill();
 
   ctx.font = `bold 34px ${fontFamily}`;
-  ctx.fillStyle = '#FFFFFF';
+  ctx.fillStyle = pickTextOn(colors.primary);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText((text ?? 'Saiba Mais').toUpperCase(), x + w / 2, y + h / 2);
+}
+
+/** Desenha o logo dentro de um chip claro arredondado, em tamanho fixo — garante contraste do logo sobre qualquer fundo. */
+function drawLogoBadge(ctx: Ctx, logo: Image, x: number, y: number, size: number) {
+  drawRoundRect(ctx, x, y, size, size, size * 0.18);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fill();
+  const pad = size * 0.14;
+  drawCoverImage(ctx, logo, x + pad, y + pad, size - pad * 2, size - pad * 2);
 }
 
 /**
  * product_hero — produto/imagem como herói (topo), texto + CTA na metade inferior.
  * Sem imagem: area superior recebe um placeholder com circulo na cor de destaque.
  */
-function drawProductHero(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null) {
+function drawProductHero(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null, logo: Image | null) {
   const IMG_H = 540;
 
   if (img) {
     drawCoverImage(ctx, img, 0, 0, W, IMG_H);
-    drawDarkOverlay(ctx, 0, 0, W, IMG_H, 0.4);
+    drawGradientOverlay(ctx, 0, 0, W, IMG_H, '#000000', 0.1, 0.55);
   } else {
     ctx.save();
     ctx.globalAlpha = 0.16;
@@ -188,23 +333,28 @@ function drawProductHero(ctx: Ctx, data: CreativeData, colors: ColorScheme, img:
   ctx.fillStyle = colors.primary;
   ctx.fillRect(0, H - BAR_H, W, BAR_H);
 
+  // Logo (canto superior esquerdo, sobre a imagem/placeholder)
+  if (logo) {
+    drawLogoBadge(ctx, logo, 32, 32, 72);
+  }
+
   // Nome do negocio
   ctx.font = `bold 28px ${fontFamily}`;
-  ctx.fillStyle = colors.primary;
+  ctx.fillStyle = ensureReadable(colors.primary, colors.bg);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillText((data.businessName ?? '').toUpperCase(), cx, 558);
 
   // Headline
   ctx.font = `bold 68px ${fontFamily}`;
-  ctx.fillStyle = colors.textPrimary;
+  ctx.fillStyle = ensureReadable(colors.textPrimary, colors.bg);
   const headlineBottom = wrapText(ctx, data.headline ?? '', cx, 608, CONTENT_W, 80, 2);
 
   // Subheadline
   const subY = Math.max(headlineBottom + 16, 790);
   if (data.subheadline) {
     ctx.font = `34px ${fontFamily}`;
-    ctx.fillStyle = colors.textSecondary;
+    ctx.fillStyle = ensureReadable(colors.textSecondary, colors.bg);
     wrapText(ctx, data.subheadline, cx, subY, CONTENT_W, 44, 1);
   }
 
@@ -216,14 +366,17 @@ function drawProductHero(ctx: Ctx, data: CreativeData, colors: ColorScheme, img:
  * Com imagem: a foto entra como fundo da tela toda, mas recebe um overlay forte
  * na cor de fundo do scheme para nao competir com o texto.
  */
-function drawTextFocus(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null) {
+function drawTextFocus(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null, logo: Image | null) {
+  let bgTop = colors.bg;
+  let bgBottom = colors.bg;
+
   if (img) {
     drawCoverImage(ctx, img, 0, 0, W, H);
-    ctx.save();
-    ctx.globalAlpha = 0.86;
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, W, H);
-    ctx.restore();
+    // Gradiente na cor de fundo do scheme, mais forte na base — da profundidade
+    // a foto e mantem o texto/CTA legivel.
+    drawGradientOverlay(ctx, 0, 0, W, H, colors.bg, 0.78, 0.92);
+    bgTop = effectiveBgOverPhoto(colors.bg, 0.78);
+    bgBottom = effectiveBgOverPhoto(colors.bg, 0.9);
   } else {
     ctx.fillStyle = colors.bg;
     ctx.fillRect(0, 0, W, H);
@@ -234,23 +387,28 @@ function drawTextFocus(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: I
   ctx.fillRect(0, 0, W, BAR_H);
   ctx.fillRect(0, H - BAR_H, W, BAR_H);
 
+  // Logo (canto superior esquerdo)
+  if (logo) {
+    drawLogoBadge(ctx, logo, 32, 32, 64);
+  }
+
   // Nome do negocio
   ctx.font = `bold 32px ${fontFamily}`;
-  ctx.fillStyle = colors.primary;
+  ctx.fillStyle = ensureReadable(colors.primary, bgTop);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillText((data.businessName ?? '').toUpperCase(), cx, 120);
 
   // Headline
   ctx.font = `bold 80px ${fontFamily}`;
-  ctx.fillStyle = colors.textPrimary;
+  ctx.fillStyle = ensureReadable(colors.textPrimary, bgTop);
   const headlineBottom = wrapText(ctx, data.headline ?? '', cx, 260, CONTENT_W, 92, 2);
 
   // Subheadline
   let subBottom = headlineBottom + 20;
   if (data.subheadline) {
     ctx.font = `40px ${fontFamily}`;
-    ctx.fillStyle = colors.textSecondary;
+    ctx.fillStyle = ensureReadable(colors.textSecondary, bgTop);
     subBottom = wrapText(ctx, data.subheadline, cx, headlineBottom + 20, CONTENT_W, 52, 2);
   }
 
@@ -261,7 +419,7 @@ function drawTextFocus(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: I
 
   // Texto principal
   ctx.font = `34px ${fontFamily}`;
-  ctx.fillStyle = colors.textSecondary;
+  ctx.fillStyle = ensureReadable(colors.textSecondary, bgBottom);
   wrapText(ctx, data.primary_text ?? '', cx, sepY + 40, CONTENT_W, 46, 2);
 
   drawCtaButton(ctx, cx - 240, 860, 480, 88, data.cta, colors);
@@ -271,13 +429,16 @@ function drawTextFocus(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: I
  * offer_highlight — faixa superior na cor de destaque com selo "OFERTA ESPECIAL",
  * headline grande e caixa com borda destacando a oferta, seguido de CTA.
  */
-function drawOfferHighlight(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null) {
+function drawOfferHighlight(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null, logo: Image | null) {
   const STRIP_H = 130;
+  const HEADLINE_OVERLAY_ALPHA_TOP = 0.32;
 
   // Corpo (atras da faixa)
+  let headlineBg = colors.bg;
   if (img) {
     drawCoverImage(ctx, img, 0, STRIP_H, W, H - STRIP_H);
-    drawDarkOverlay(ctx, 0, STRIP_H, W, H - STRIP_H, 0.5);
+    drawGradientOverlay(ctx, 0, STRIP_H, W, H - STRIP_H, '#000000', HEADLINE_OVERLAY_ALPHA_TOP, 0.6);
+    headlineBg = effectiveBgOverPhoto('#000000', HEADLINE_OVERLAY_ALPHA_TOP);
   } else {
     ctx.fillStyle = colors.bg;
     ctx.fillRect(0, STRIP_H, W, H - STRIP_H);
@@ -287,11 +448,19 @@ function drawOfferHighlight(ctx: Ctx, data: CreativeData, colors: ColorScheme, i
   ctx.fillStyle = colors.primary;
   ctx.fillRect(0, 0, W, STRIP_H);
 
+  // Logo (dentro da faixa, a esquerda do nome do negocio)
+  let nameX = PAD_X;
+  if (logo) {
+    const logoSize = 80;
+    drawLogoBadge(ctx, logo, PAD_X, (STRIP_H - logoSize) / 2, logoSize);
+    nameX = PAD_X + logoSize + 20;
+  }
+
   ctx.font = `bold 30px ${fontFamily}`;
-  ctx.fillStyle = '#FFFFFF';
+  ctx.fillStyle = pickTextOn(colors.primary);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText((data.businessName ?? '').toUpperCase(), PAD_X, STRIP_H / 2);
+  ctx.fillText((data.businessName ?? '').toUpperCase(), nameX, STRIP_H / 2);
 
   // Selo "OFERTA ESPECIAL"
   const badgeText = 'OFERTA ESPECIAL';
@@ -303,13 +472,13 @@ function drawOfferHighlight(ctx: Ctx, data: CreativeData, colors: ColorScheme, i
   drawRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, badgeH / 2);
   ctx.fillStyle = '#FFFFFF';
   ctx.fill();
-  ctx.fillStyle = colors.primary;
+  ctx.fillStyle = ensureReadable(colors.primary, '#FFFFFF');
   ctx.textAlign = 'center';
   ctx.fillText(badgeText, badgeX + badgeW / 2, badgeY + badgeH / 2);
 
   // Headline
   ctx.font = `bold 76px ${fontFamily}`;
-  ctx.fillStyle = colors.textPrimary;
+  ctx.fillStyle = ensureReadable(colors.textPrimary, headlineBg);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   const headlineBottom = wrapText(ctx, data.headline ?? '', cx, STRIP_H + 60, CONTENT_W, 86, 2);
@@ -326,14 +495,14 @@ function drawOfferHighlight(ctx: Ctx, data: CreativeData, colors: ColorScheme, i
 
   const highlightText = data.subheadline || data.primary_text || '';
   ctx.font = `bold 40px ${fontFamily}`;
-  ctx.fillStyle = colors.primary;
+  ctx.fillStyle = pickTextOn(colors.bg);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   const highlightBottom = wrapText(ctx, highlightText, cx, boxY + 30, CONTENT_W - 80, 48, 2);
 
   if (data.subheadline && data.primary_text) {
     ctx.font = `26px ${fontFamily}`;
-    ctx.fillStyle = colors.textSecondary;
+    ctx.fillStyle = ensureReadable(colors.textSecondary, colors.bg);
     wrapText(ctx, data.primary_text, cx, Math.min(highlightBottom + 6, boxY + boxH - 70), CONTENT_W - 80, 34, 1);
   }
 
@@ -344,25 +513,30 @@ function drawOfferHighlight(ctx: Ctx, data: CreativeData, colors: ColorScheme, i
  * testimonial_style — aspas em destaque, headline como "depoimento", texto principal
  * em itálico, atribuicao (avatar com mascara circular se houver imagem) + CTA.
  */
-function drawTestimonialStyle(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null) {
+function drawTestimonialStyle(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null, logo: Image | null) {
   ctx.fillStyle = colors.bg;
   ctx.fillRect(0, 0, W, H);
 
+  // Logo (canto superior esquerdo)
+  if (logo) {
+    drawLogoBadge(ctx, logo, 32, 32, 64);
+  }
+
   // Aspas de destaque
   ctx.font = `bold 160px ${fontFamily}`;
-  ctx.fillStyle = colors.primary;
+  ctx.fillStyle = ensureReadable(colors.primary, colors.bg);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillText('"', cx, 30);
 
   // Headline (frase de destaque/depoimento)
   ctx.font = `bold 60px ${fontFamily}`;
-  ctx.fillStyle = colors.textPrimary;
+  ctx.fillStyle = ensureReadable(colors.textPrimary, colors.bg);
   const headlineBottom = wrapText(ctx, data.headline ?? '', cx, 220, CONTENT_W, 70, 2);
 
   // Texto principal (itálico)
   ctx.font = `italic 30px ${fontFamily}`;
-  ctx.fillStyle = colors.textSecondary;
+  ctx.fillStyle = ensureReadable(colors.textSecondary, colors.bg);
   const primaryBottom = wrapText(ctx, data.primary_text ?? '', cx, headlineBottom + 20, CONTENT_W - 120, 42, 3);
 
   // Linha divisoria
@@ -384,7 +558,7 @@ function drawTestimonialStyle(ctx: Ctx, data: CreativeData, colors: ColorScheme,
   }
 
   ctx.font = `bold 26px ${fontFamily}`;
-  ctx.fillStyle = colors.primary;
+  ctx.fillStyle = ensureReadable(colors.primary, colors.bg);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillText((data.businessName ?? '').toUpperCase(), cx, attribY);
@@ -392,7 +566,7 @@ function drawTestimonialStyle(ctx: Ctx, data: CreativeData, colors: ColorScheme,
 
   if (data.subheadline) {
     ctx.font = `22px ${fontFamily}`;
-    ctx.fillStyle = colors.textSecondary;
+    ctx.fillStyle = ensureReadable(colors.textSecondary, colors.bg);
     ctx.fillText(data.subheadline, cx, attribY);
     attribY += 36;
   }
@@ -400,7 +574,7 @@ function drawTestimonialStyle(ctx: Ctx, data: CreativeData, colors: ColorScheme,
   drawCtaButton(ctx, cx - 240, Math.min(attribY + 24, 960), 480, 80, data.cta, colors);
 }
 
-const LAYOUT_RENDERERS: Record<string, (ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null) => void> = {
+const LAYOUT_RENDERERS: Record<string, (ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null, logo: Image | null) => void> = {
   product_hero: drawProductHero,
   text_focus: drawTextFocus,
   offer_highlight: drawOfferHighlight,
@@ -410,6 +584,7 @@ const LAYOUT_RENDERERS: Record<string, (ctx: Ctx, data: CreativeData, colors: Co
 export type BrandColors = {
   primary?: string | null;
   secondary?: string | null;
+  logoUrl?: string | null;
 };
 
 export async function convertHTMLToPNG(data: CreativeData, brandColors?: BrandColors): Promise<Buffer> {
@@ -422,10 +597,20 @@ export async function convertHTMLToPNG(data: CreativeData, brandColors?: BrandCo
 
   const img = data.productImageUrl ? await loadImage(data.productImageUrl) : null;
 
+  const includeLogo = data.includeLogo ?? true;
+  let logo: Image | null = null;
+  if (includeLogo && brandColors?.logoUrl) {
+    try {
+      logo = await loadImage(brandColors.logoUrl);
+    } catch (err) {
+      console.warn('=== CANVAS failed to load logo, skipping:', err);
+    }
+  }
+
   const renderer =
     LAYOUT_RENDERERS[data.layout] ?? (img ? drawProductHero : drawTextFocus);
 
-  renderer(ctx, data, colors, img);
+  renderer(ctx, data, colors, img, logo);
 
   const buffer = canvas.toBuffer('image/png');
   console.log('=== CANVAS generated buffer size:', buffer.length, '| layout:', data.layout);

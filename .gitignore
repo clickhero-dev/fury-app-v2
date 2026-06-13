@@ -148,3 +148,4 @@ target_roas
 *.bak
 packages/db/src/*.js
 .claude/settings.local.json
+apps/api/scripts/_samples/

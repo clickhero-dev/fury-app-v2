@@ -7,6 +7,7 @@ export interface CreativeData {
   color_scheme: 'brand_orange' | 'dark_premium' | 'clean_white' | 'bold_contrast';
   productImageUrl?: string;
   businessName: string;
+  includeLogo?: boolean;
 }
 
 type ColorScheme = {

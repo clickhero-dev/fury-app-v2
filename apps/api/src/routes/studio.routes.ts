@@ -229,6 +229,7 @@ const generateCreativeSchema = z.object({
   productImageUrl: z.string().optional(), // accepts data URLs and regular URLs
   adaptiveAnswers: z.record(z.string()).optional(),
   templateStyle: z.string().optional(),
+  includeLogo: z.boolean().optional(),
 });
 
 async function savePNG(buffer: Buffer): Promise<{ fileName: string; filePath: string }> {
@@ -277,8 +278,8 @@ async function getBrandKitContext(tenantId: string): Promise<{ tone?: string; co
     tone: brandKit.voiceTone
       ? `Tom de voz da marca: ${VOICE_TONE_LABELS[brandKit.voiceTone]}. Escreva o copy seguindo esse tom.`
       : undefined,
-    colors: brandKit.primaryColor
-      ? { primary: brandKit.primaryColor, secondary: brandKit.secondaryColor }
+    colors: brandKit.primaryColor || brandKit.logoUrl
+      ? { primary: brandKit.primaryColor, secondary: brandKit.secondaryColor, logoUrl: brandKit.logoUrl }
       : undefined,
   };
 }
@@ -300,7 +301,7 @@ const TEMPLATE_LAYOUT_MAP: Record<string, { layout: string; color_scheme: string
   'institutional':      { layout: 'product_hero',       color_scheme: 'clean_white' },
 };
 
-async function runGenerate(context: CreativeContext, productImageUrl: string | undefined, tenantId: string, publicBaseUrl: string, brandColors?: BrandColors) {
+async function runGenerate(context: CreativeContext, productImageUrl: string | undefined, tenantId: string, publicBaseUrl: string, brandColors?: BrandColors, includeLogo?: boolean) {
   const prompt = buildCreativePrompt(context);
   const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.8 });
   const creativeData = parseCreativeJSON(raw);
@@ -321,6 +322,7 @@ async function runGenerate(context: CreativeContext, productImageUrl: string | u
     color_scheme: creativeData.color_scheme,
     productImageUrl,
     businessName: context.businessName,
+    includeLogo,
   }, brandColors);
   let imageUrl: string;
   if (process.env.R2_ENDPOINT && process.env.R2_PUBLIC_URL) {
@@ -380,7 +382,7 @@ router.post('/creative/generate', authMiddleware, tenantMiddleware, async (req: 
       templateStyle: body.templateStyle,
     };
 
-    const result = await runGenerate(context, body.productImageUrl, tenantId, publicBaseUrl, brandKitContext.colors);
+    const result = await runGenerate(context, body.productImageUrl, tenantId, publicBaseUrl, brandKitContext.colors, body.includeLogo);
     return res.status(201).json(result);
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
