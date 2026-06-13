@@ -34,6 +34,12 @@ function getStatus(projectedPct: number): 'on_track' | 'at_risk' | 'off_track' {
   return 'off_track';
 }
 
+// Guards against division by zero when no target is configured yet.
+function calcProgressPercent(current: number, target: number): number {
+  if (!target || target <= 0) return 0;
+  return Math.min(100, Math.round((current / target) * 100));
+}
+
 function parseMoneyJson(json: unknown, fallback: number): number {
   const obj = json as { amount?: unknown } | null;
   const raw = Number(obj?.amount ?? 0);
@@ -274,9 +280,13 @@ router.get(
       type GoalStatus = 'on_track' | 'at_risk' | 'off_track' | 'no_goals';
 
       // ── 5. Goals array ────────────────────────────────────────────────────
+      const conversionsProgressPercent = hasGoals ? calcProgressPercent(currentConversions, Math.round(targetConversions)) : 0;
+      const budgetProgressPercent = hasGoals ? calcProgressPercent(currentSpend, targetBudget) : 0;
+      const roasProgressPercent = hasGoals ? calcProgressPercent(currentRoas, targetRoas) : 0;
+
       const goals: {
         id: string; name: string; metric: string; unit: string;
-        target_value: number; current_value: number; progress_pct: number;
+        target_value: number; current_value: number; progress_pct: number; progressPercent: number;
         projected_value: number; deadline: string; status: GoalStatus;
         sparkline: { date: string; value: number }[];
       }[] = [
@@ -287,7 +297,8 @@ router.get(
           unit: 'conv.',
           target_value: Math.round(targetConversions),
           current_value: currentConversions,
-          progress_pct: hasGoals ? Math.min(100, Math.round((currentConversions / Math.max(1, targetConversions)) * 100)) : 0,
+          progress_pct: conversionsProgressPercent,
+          progressPercent: conversionsProgressPercent,
           projected_value: Math.round(projConversions),
           deadline,
           status: hasGoals ? getStatus(convProjPct) : 'no_goals',
@@ -300,7 +311,8 @@ router.get(
           unit: 'R$',
           target_value: targetBudget,
           current_value: Math.round(currentSpend * 100) / 100,
-          progress_pct: hasGoals ? Math.min(100, Math.round((currentSpend / Math.max(1, targetBudget)) * 100)) : 0,
+          progress_pct: budgetProgressPercent,
+          progressPercent: budgetProgressPercent,
           projected_value: Math.round(projSpend * 100) / 100,
           deadline,
           status: hasGoals ? getStatus(budgetProjPct) : 'no_goals',
@@ -313,7 +325,8 @@ router.get(
           unit: 'x',
           target_value: targetRoas,
           current_value: Math.round(currentRoas * 100) / 100,
-          progress_pct: hasGoals ? Math.min(100, Math.round(roasProjPct)) : 0,
+          progress_pct: roasProgressPercent,
+          progressPercent: roasProgressPercent,
           projected_value: Math.round(currentRoas * 100) / 100,
           deadline,
           status: hasGoals ? getStatus(roasProjPct) : 'no_goals',
@@ -402,13 +415,19 @@ router.get(
         // no DB — empty alerts
       }
 
+      const primaryGoal = goals[0];
+      const onTrack = hasGoals ? convProjPct >= 90 : false;
+
       res.json({
         success: true,
         data: {
           hasGoals,
           objective,
           goals,
-          primary_goal: goals[0],
+          primary_goal: primaryGoal,
+          progressPercent: primaryGoal.progressPercent,
+          progressLabel: `${primaryGoal.progressPercent}% da meta`,
+          onTrack,
           days_elapsed: elapsed,
           days_remaining: remaining,
           days_in_month: total,
