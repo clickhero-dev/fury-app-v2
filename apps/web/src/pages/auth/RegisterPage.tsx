@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/FormField';
 import { AuthLayout } from '@/components/AuthLayout';
 import { useRegister } from '@/hooks/useRegister';
+import type { RegisterRequest } from '@/types/auth';
 import { FURY_COLORS } from '@/lib/constants';
 
 const registerSchema = z.object({
@@ -40,7 +41,9 @@ export function RegisterPage() {
   const onSubmit = async (data: RegisterFormValues) => {
     try {
       setError('');
-      await registerMutation.mutateAsync(data);
+      // O schema exige todos os campos; o resolver (zod+RHF no TS6) infere
+      // tudo opcional, daí o cast.
+      await registerMutation.mutateAsync(data as RegisterRequest);
       navigate('/onboarding/conectar-meta');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao registrar');

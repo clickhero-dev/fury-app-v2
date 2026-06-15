@@ -1,59 +1,80 @@
-import { createCanvas, GlobalFonts, loadImage, type Image } from '@napi-rs/canvas';
+import { createCanvas, GlobalFonts, loadImage, type Image, type Canvas } from '@napi-rs/canvas';
 import fs from 'fs';
-import type { CreativeData } from './creative-generator.service.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import type { CreativeData } from './creative-data.js';
+import type { CreativeLayout } from '@fury/shared';
 
-// Register system fonts installed via nixpacks (fonts-open-sans, fonts-dejavu-core)
-// in production, with macOS fallbacks so local dev also renders PT-BR accents
-// (the bundled @napi-rs/canvas "sans-serif" fallback is missing accented glyphs).
-const FONT_CANDIDATES = [
-  // Open Sans (installed via apt fonts-open-sans)
-  { path: '/usr/share/fonts/truetype/open-sans/OpenSans-Regular.ttf',    family: 'AppFont', weight: 'normal' },
-  { path: '/usr/share/fonts/truetype/open-sans/OpenSans-Bold.ttf',       family: 'AppFont', weight: 'bold' },
-  // DejaVu fallback (installed via apt fonts-dejavu-core)
-  { path: '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',             family: 'AppFont', weight: 'normal' },
-  { path: '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',        family: 'AppFont', weight: 'bold' },
-  // macOS dev fallback (full Latin/PT-BR coverage)
-  { path: '/System/Library/Fonts/Supplemental/Arial.ttf',                family: 'AppFont', weight: 'normal' },
-  { path: '/System/Library/Fonts/Supplemental/Arial Bold.ttf',           family: 'AppFont', weight: 'bold' },
+// ── Registro de fontes ─────────────────────────────────────────────────────
+// Os arquétipos exigem pesos pesados (ExtraBold 800) para os displays. O
+// @napi-rs/canvas NÃO aceita peso numérico em register() — o peso vem da
+// metadata interna (OS/2) de cada arquivo. Solução: registrar VÁRIOS arquivos
+// (cada um com seu peso) sob o MESMO alias 'AppFont' e selecionar via string
+// CSS de peso (ctx.font = '800 72px AppFont'). O matcher escolhe o face pelo
+// peso mais próximo.
+//
+// Fonte bundlada no repo (Open Sans, OFL) → determinística entre macOS/Railway.
+// Open Sans vai até ExtraBold (800); chamadas a '900' caem em 800 (nearest).
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const BUNDLED_FONT_DIR = path.resolve(__dirname, '../../assets/fonts');
+
+const BUNDLED_FONTS = [
+  { file: 'OpenSans-Regular.ttf', label: 'Regular(400)' },
+  { file: 'OpenSans-Bold.ttf', label: 'Bold(700)' },
+  { file: 'OpenSans-ExtraBold.ttf', label: 'ExtraBold(800)' },
 ];
 
-let fontFamily = 'sans-serif';
+// Fallbacks de sistema (Linux apt / macOS) caso os bundlados sumam.
+const SYSTEM_FONT_FALLBACKS = [
+  '/usr/share/fonts/truetype/open-sans/OpenSans-Regular.ttf',
+  '/usr/share/fonts/truetype/open-sans/OpenSans-Bold.ttf',
+  '/usr/share/fonts/truetype/open-sans/OpenSans-ExtraBold.ttf',
+  '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+  '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+  '/System/Library/Fonts/Supplemental/Arial.ttf',
+  '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
+  '/System/Library/Fonts/Supplemental/Arial Black.ttf',
+];
 
-for (const f of FONT_CANDIDATES) {
-  if (fs.existsSync(f.path)) {
-    GlobalFonts.registerFromPath(f.path, f.family);
-    fontFamily = f.family;
-    console.log('=== CANVAS registered font:', f.path);
+let registeredCount = 0;
+for (const f of BUNDLED_FONTS) {
+  const p = path.join(BUNDLED_FONT_DIR, f.file);
+  if (fs.existsSync(p)) {
+    GlobalFonts.registerFromPath(p, 'AppFont');
+    registeredCount++;
+    console.log(`[Studio] Fonte ${f.label} registrada (bundled)`);
+  } else {
+    console.warn(`[Studio] Fonte ${f.label} bundled não encontrada em ${p}`);
   }
 }
+if (registeredCount === 0) {
+  for (const p of SYSTEM_FONT_FALLBACKS) {
+    if (fs.existsSync(p)) {
+      GlobalFonts.registerFromPath(p, 'AppFont');
+      registeredCount++;
+      console.log(`[Studio] Fonte de sistema registrada (fallback): ${p}`);
+    }
+  }
+}
+const FONT = registeredCount > 0 ? 'AppFont' : 'sans-serif';
+console.log(`[Studio] Usando família de fonte: ${FONT} (${registeredCount} face(s))`);
 
-console.log('=== CANVAS using font family:', fontFamily);
-
+// ── Dimensões do canvas (Meta Ads 1:1) ─────────────────────────────────────
 const W = 1080;
 const H = 1080;
-const BAR_H = 12;
-const PAD_X = 80;
-const CONTENT_W = W - PAD_X * 2;
 const cx = W / 2;
-
-type ColorScheme = {
-  bg: string;
-  primary: string;
-  textPrimary: string;
-  textSecondary: string;
-};
-
-const COLOR_SCHEMES: Record<string, ColorScheme> = {
-  brand_orange: { bg: '#0F0F0F', primary: '#EA580C', textPrimary: '#FFFFFF', textSecondary: '#CCCCCC' },
-  dark_premium:  { bg: '#0A0A0A', primary: '#C9A84C', textPrimary: '#FFFFFF', textSecondary: '#AAAAAA' },
-  clean_white:   { bg: '#F8F8F8', primary: '#2563EB', textPrimary: '#111111', textSecondary: '#555555' },
-  bold_contrast: { bg: '#111111', primary: '#EA580C', textPrimary: '#FFFFFF', textSecondary: '#AAAAAA' },
-};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Ctx = any;
 
-// ── Contraste (WCAG) ─────────────────────────────────────────────────────────
+// Pesos como strings CSS. Black mapeia para 800 (Open Sans não tem 900).
+const wRegular = 'normal';
+const wBold = 'bold';
+const wXBold = '800';
+const wBlack = '800';
+const font = (weight: string, size: number) => `${weight} ${size}px ${FONT}`;
+
+// ── Cor / contraste (WCAG) ──────────────────────────────────────────────────
 
 function hexToRgb(hex: string): [number, number, number] {
   let h = hex.replace('#', '').trim();
@@ -101,18 +122,12 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
 }
 
-function mixHex(hexA: string, hexB: string, t: number): string {
-  const [r1, g1, b1] = hexToRgb(hexA);
-  const [r2, g2, b2] = hexToRgb(hexB);
-  return rgbToHex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t);
-}
-
 function hexToRgba(hex: string, alpha: number): string {
   const [r, g, b] = hexToRgb(hex);
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/** Luminancia relativa (formula WCAG), 0 a 1. */
+/** Luminância relativa (WCAG), 0 a 1. */
 function getLuminance(hex: string): number {
   const [r, g, b] = hexToRgb(hex).map((c) => {
     const cs = c / 255;
@@ -121,13 +136,11 @@ function getLuminance(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-/** Razao de contraste WCAG entre duas cores (1 a 21). */
+/** Razão de contraste WCAG entre duas cores (1 a 21). */
 function getContrastRatio(hexA: string, hexB: string): number {
   const l1 = getLuminance(hexA);
   const l2 = getLuminance(hexB);
-  const lighter = Math.max(l1, l2);
-  const darker = Math.min(l1, l2);
-  return (lighter + 0.05) / (darker + 0.05);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
 }
 
 /** Branco ou preto, o que tiver melhor contraste contra bgColor. */
@@ -136,11 +149,9 @@ function pickTextOn(bgColor: string): string {
 }
 
 /**
- * Garante contraste >= minRatio entre textColor e bgColor. Se ja for legivel,
- * retorna textColor inalterado. Senao, ajusta a luminancia de textColor
- * (clareando sobre fundo escuro, escurecendo sobre fundo claro) preservando
- * matiz/saturacao, ate atingir minRatio. Se nem no limite atingir, cai para
- * preto/branco — o que tiver melhor contraste contra bgColor.
+ * Garante contraste >= minRatio entre textColor e bgColor. Ajusta a luminância
+ * de textColor preservando matiz/saturação; se nem no limite atingir, cai para
+ * preto/branco — o que tiver melhor contraste.
  */
 function ensureReadable(textColor: string, bgColor: string, minRatio = 4.5): string {
   if (getContrastRatio(textColor, bgColor) >= minRatio) return textColor;
@@ -157,77 +168,51 @@ function ensureReadable(textColor: string, bgColor: string, minRatio = 4.5): str
     const [nr, ng, nb] = hslToRgb(h, s, newL);
     const candidate = rgbToHex(nr, ng, nb);
     const ratio = getContrastRatio(candidate, bgColor);
-    if (ratio > bestRatio) {
-      best = candidate;
-      bestRatio = ratio;
-    }
+    if (ratio > bestRatio) { best = candidate; bestRatio = ratio; }
     if (ratio >= minRatio) return candidate;
   }
-
   return bestRatio >= minRatio ? best : pickTextOn(bgColor);
 }
 
-/** Tom medio assumido para fotos desconhecidas, usado para estimar a cor efetiva de fundo sob um overlay. */
-const PHOTO_MID = '#808080';
-
-/** Cor efetiva de fundo quando um overlay (overlayColor, alpha) cobre uma foto de tom medio desconhecido. */
-function effectiveBgOverPhoto(overlayColor: string, alpha: number): string {
-  return mixHex(PHOTO_MID, overlayColor, alpha);
+/** Deriva uma versão escura da cor (mesma matiz/saturação, L=20%). */
+function derivarDark(hex: string): string {
+  const [h, s] = rgbToHsl(...hexToRgb(hex));
+  const [r, g, b] = hslToRgb(h, s, 0.2);
+  return rgbToHex(r, g, b);
 }
 
-function wrapText(
-  ctx: Ctx,
-  text: string,
-  x: number,
-  startY: number,
-  maxWidth: number,
-  lineHeight: number,
-  maxLines = 3,
-): number {
-  const words = text.split(' ');
-  let line = '';
-  let y = startY;
-  let lineCount = 0;
-
-  for (const word of words) {
-    const test = line ? `${line} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      if (lineCount >= maxLines - 1) {
-        // truncate last line
-        let truncated = line;
-        while (truncated.length > 0 && ctx.measureText(`${truncated}...`).width > maxWidth) {
-          truncated = truncated.slice(0, -1);
-        }
-        ctx.fillText(`${truncated}...`, x, y);
-        return y + lineHeight;
-      }
-      ctx.fillText(line, x, y);
-      line = word;
-      y += lineHeight;
-      lineCount++;
-    } else {
-      line = test;
-    }
-  }
-  if (line) ctx.fillText(line, x, y);
-  return y + lineHeight;
+/** Clareia a cor em deltaL na luminância HSL (0-1). */
+function lightenHex(hex: string, deltaL: number): string {
+  const [h, s, l] = rgbToHsl(...hexToRgb(hex));
+  const [r, g, b] = hslToRgb(h, s, Math.min(1, l + deltaL));
+  return rgbToHex(r, g, b);
 }
+
+/** PRNG determinístico (LCG) — jitter reproduzível por seed (sem Math.random). */
+function makeRng(seed: number): () => number {
+  let s = Math.abs(Math.round(seed)) % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return () => (s = (s * 16807) % 2147483647) / 2147483647;
+}
+
+// ── Primitivas de desenho ───────────────────────────────────────────────────
 
 function drawRoundRect(ctx: Ctx, x: number, y: number, width: number, height: number, radius: number) {
+  const r = Math.min(radius, width / 2, height / 2);
   ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
 }
 
-/** Desenha `img` em (x, y, w, h) com crop "cover" (preenche a área, recorta excesso). */
+/** Desenha `img` em (x,y,w,h) com crop "cover" (preenche a área, recorta excesso, centrado). */
 function drawCoverImage(ctx: Ctx, img: Image, x: number, y: number, w: number, h: number) {
   ctx.save();
   ctx.beginPath();
@@ -240,23 +225,7 @@ function drawCoverImage(ctx: Ctx, img: Image, x: number, y: number, w: number, h
   ctx.restore();
 }
 
-/** Desenha `img` recortada em circulo, centrada em (cx, cy) com raio `radius`. */
-function drawCircleImage(ctx: Ctx, img: Image, circleCx: number, circleCy: number, radius: number) {
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(circleCx, circleCy, radius, 0, Math.PI * 2);
-  ctx.clip();
-  drawCoverImage(ctx, img, circleCx - radius, circleCy - radius, radius * 2, radius * 2);
-  ctx.restore();
-}
-
-/** Overlay escuro semi-transparente sobre uma area — usado para garantir legibilidade de texto sobre foto. */
-function drawDarkOverlay(ctx: Ctx, x: number, y: number, w: number, h: number, alpha: number) {
-  ctx.fillStyle = `rgba(0,0,0,${alpha})`;
-  ctx.fillRect(x, y, w, h);
-}
-
-/** Gradiente vertical (mais escuro na base) sobre uma area — da profundidade a foto e reforca a legibilidade onde fica o texto/CTA. */
+/** Gradiente vertical (topo→base) numa área. Reusado pelo gradiente adaptativo. */
 function drawGradientOverlay(ctx: Ctx, x: number, y: number, w: number, h: number, colorHex: string, alphaTop: number, alphaBottom: number) {
   const grad = ctx.createLinearGradient(x, y, x, y + h);
   grad.addColorStop(0, hexToRgba(colorHex, alphaTop));
@@ -265,321 +234,579 @@ function drawGradientOverlay(ctx: Ctx, x: number, y: number, w: number, h: numbe
   ctx.fillRect(x, y, w, h);
 }
 
-/** Botao CTA arredondado, preenchido com colors.primary; texto na cor com melhor contraste. */
-function drawCtaButton(ctx: Ctx, x: number, y: number, w: number, h: number, text: string | undefined, colors: ColorScheme) {
-  drawRoundRect(ctx, x, y, w, h, 14);
-  ctx.fillStyle = colors.primary;
-  ctx.fill();
-
-  ctx.font = `bold 34px ${fontFamily}`;
-  ctx.fillStyle = pickTextOn(colors.primary);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText((text ?? 'Saiba Mais').toUpperCase(), x + w / 2, y + h / 2);
-}
-
-/** Desenha o logo dentro de um chip claro arredondado, em tamanho fixo — garante contraste do logo sobre qualquer fundo. */
+/** Logo dentro de chip claro arredondado, em tamanho fixo. */
 function drawLogoBadge(ctx: Ctx, logo: Image, x: number, y: number, size: number) {
-  drawRoundRect(ctx, x, y, size, size, size * 0.18);
+  drawRoundRect(ctx, x, y, size, size, size * 0.12);
   ctx.fillStyle = '#FFFFFF';
   ctx.fill();
   const pad = size * 0.14;
   drawCoverImage(ctx, logo, x + pad, y + pad, size - pad * 2, size - pad * 2);
 }
 
-/**
- * product_hero — produto/imagem como herói (topo), texto + CTA na metade inferior.
- * Sem imagem: area superior recebe um placeholder com circulo na cor de destaque.
- */
-function drawProductHero(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null, logo: Image | null) {
-  const IMG_H = 540;
+// ── Utilitários novos dos arquétipos ────────────────────────────────────────
 
-  if (img) {
-    drawCoverImage(ctx, img, 0, 0, W, IMG_H);
-    drawGradientOverlay(ctx, 0, 0, W, IMG_H, '#000000', 0.1, 0.55);
-  } else {
-    ctx.save();
-    ctx.globalAlpha = 0.16;
-    ctx.fillStyle = colors.primary;
-    ctx.fillRect(0, 0, W, IMG_H);
-    ctx.restore();
+/** Vinheta radial: escurece as bordas focando o centro. */
+function drawRadialVignette(ctx: Ctx, centerX = 540, centerY = 540, radius = 800, intensity = 0.3): void {
+  ctx.save();
+  const g = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, `rgba(0,0,0,${intensity})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
 
+/** Raios divergentes do centro (efeito "sol"). Jitter determinístico por seed. */
+function drawSunburst(ctx: Ctx, centerX: number, centerY: number, raysCount = 28, baseColorHex: string, opacity = 0.35): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const rayColor = lightenHex(baseColorHex, 0.12);
+  const rng = makeRng(centerX + centerY + raysCount);
+  const reach = Math.hypot(W, H); // ultrapassa as bordas
+  for (let i = 0; i < raysCount; i++) {
+    const baseAngle = (i / raysCount) * 360 + (rng() * 8 - 4); // jitter -4..+4
+    const angularWidth = (i % 2 === 0 ? 4 : 7) * (Math.PI / 180);
+    const a = baseAngle * (Math.PI / 180);
+    const a1 = a - angularWidth / 2;
+    const a2 = a + angularWidth / 2;
     ctx.beginPath();
-    ctx.arc(cx, IMG_H / 2, 110, 0, Math.PI * 2);
-    ctx.save();
-    ctx.globalAlpha = 0.12;
-    ctx.fillStyle = colors.primary;
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(centerX + Math.cos(a1) * reach, centerY + Math.sin(a1) * reach);
+    ctx.lineTo(centerX + Math.cos(a2) * reach, centerY + Math.sin(a2) * reach);
+    ctx.closePath();
+    ctx.fillStyle = hexToRgba(rayColor, opacity);
     ctx.fill();
-    ctx.restore();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = colors.primary;
-    ctx.stroke();
   }
+  ctx.restore(); // restaura globalCompositeOperation para 'source-over'
+}
 
-  // Metade inferior
-  ctx.fillStyle = colors.bg;
-  ctx.fillRect(0, IMG_H, W, H - IMG_H);
-
-  if (img) {
-    // Gradiente de transicao entre imagem e fundo
-    const grad = ctx.createLinearGradient(0, IMG_H - 40, 0, IMG_H + 40);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, colors.bg);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, IMG_H - 40, W, 80);
+/** Estrela irregular ("explode") para selo de preço. Jitter determinístico. */
+function drawStarburst(ctx: Ctx, centerX: number, centerY: number, pointsCount = 14, rExt = 95, rInt = 75, colorHex: string, rotationDeg = -8): void {
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  ctx.rotate(rotationDeg * (Math.PI / 180));
+  const rng = makeRng(centerX + centerY + pointsCount);
+  const total = pointsCount * 2;
+  ctx.beginPath();
+  for (let i = 0; i < total; i++) {
+    const isExt = i % 2 === 0;
+    const ang = (i / total) * Math.PI * 2 - Math.PI / 2;
+    const r = isExt ? rExt + (rng() * 16 - 8) : rInt; // ±8px só nas pontas externas
+    const px = Math.cos(ang) * r;
+    const py = Math.sin(ang) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
   }
+  ctx.closePath();
+  ctx.fillStyle = colorHex;
+  ctx.fill();
+  ctx.restore();
+}
 
-  // Faixa inferior
-  ctx.fillStyle = colors.primary;
-  ctx.fillRect(0, H - BAR_H, W, BAR_H);
+/** Divide o canvas em duas zonas por uma linha diagonal. */
+function drawDiagonalSplit(ctx: Ctx, leftY = 460, rightY = 380, topColorHex: string, bottomColorHex: string): void {
+  ctx.fillStyle = topColorHex;
+  ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.lineTo(W, 0); ctx.lineTo(W, rightY); ctx.lineTo(0, leftY);
+  ctx.closePath(); ctx.fill();
 
-  // Logo (canto superior esquerdo, sobre a imagem/placeholder)
-  if (logo) {
-    drawLogoBadge(ctx, logo, 32, 32, 72);
+  ctx.fillStyle = bottomColorHex;
+  ctx.beginPath();
+  ctx.moveTo(0, leftY); ctx.lineTo(W, rightY); ctx.lineTo(W, H); ctx.lineTo(0, H);
+  ctx.closePath(); ctx.fill();
+}
+
+/** Luminância média (0-1) de uma região do canvas — amostragem com passo. */
+function sampleLuminanceInRegion(canvas: Canvas, x1: number, y1: number, x2: number, y2: number): number {
+  const c = canvas.getContext('2d') as Ctx;
+  const w = Math.max(1, x2 - x1);
+  const h = Math.max(1, y2 - y1);
+  const d = c.getImageData(x1, y1, w, h).data as Uint8ClampedArray;
+  let sum = 0;
+  let n = 0;
+  const stride = 4 * 8; // amostra 1 a cada 8 pixels
+  for (let i = 0; i < d.length; i += stride) {
+    sum += (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+    n++;
   }
+  return n > 0 ? sum / n : 0.5;
+}
 
-  // Nome do negocio
-  ctx.font = `bold 28px ${fontFamily}`;
-  ctx.fillStyle = ensureReadable(colors.primary, colors.bg);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  ctx.fillText((data.businessName ?? '').toUpperCase(), cx, 558);
-
-  // Headline
-  ctx.font = `bold 68px ${fontFamily}`;
-  ctx.fillStyle = ensureReadable(colors.textPrimary, colors.bg);
-  const headlineBottom = wrapText(ctx, data.headline ?? '', cx, 608, CONTENT_W, 80, 2);
-
-  // Subheadline
-  const subY = Math.max(headlineBottom + 16, 790);
-  if (data.subheadline) {
-    ctx.font = `34px ${fontFamily}`;
-    ctx.fillStyle = ensureReadable(colors.textSecondary, colors.bg);
-    wrapText(ctx, data.subheadline, cx, subY, CONTENT_W, 44, 1);
+/** Variância de luminância (0-1) de uma região — alto = região com "assunto". */
+function sampleVarianceInRegion(canvas: Canvas, x1: number, y1: number, x2: number, y2: number): number {
+  const c = canvas.getContext('2d') as Ctx;
+  const w = Math.max(1, x2 - x1);
+  const h = Math.max(1, y2 - y1);
+  const d = c.getImageData(x1, y1, w, h).data as Uint8ClampedArray;
+  let sum = 0;
+  let sum2 = 0;
+  let n = 0;
+  const stride = 4 * 8;
+  for (let i = 0; i < d.length; i += stride) {
+    const lum = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+    sum += lum; sum2 += lum * lum; n++;
   }
-
-  drawCtaButton(ctx, cx - 240, 960, 480, 80, data.cta, colors);
+  if (n === 0) return 0;
+  const mean = sum / n;
+  return sum2 / n - mean * mean;
 }
 
 /**
- * text_focus — headline grande dominando a composicao, pouco/nenhum peso de imagem.
- * Com imagem: a foto entra como fundo da tela toda, mas recebe um overlay forte
- * na cor de fundo do scheme para nao competir com o texto.
+ * Gradiente de leitura adaptativo: amostra a luminância da faixa e calcula a
+ * opacity de um overlay preto (fromY→toY) suficiente para texto branco passar
+ * minContrastRatio. Limita opacity entre 0.60 e 0.92.
  */
-function drawTextFocus(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null, logo: Image | null) {
-  let bgTop = colors.bg;
-  let bgBottom = colors.bg;
+async function drawAdaptiveReadabilityGradient(ctx: Ctx, canvas: Canvas, fromY = 540, toY = 1080, minContrastRatio = 4.5): Promise<void> {
+  const avgLum = sampleLuminanceInRegion(canvas, 0, fromY, W, toY);
+  // contraste = 1.05 / (bgLum_overlay + 0.05) >= minRatio
+  // bgLum_overlay = avgLum * (1 - opacity)  →  opacity >= 1 - (target / avgLum)
+  const targetBgLum = 1.05 / minContrastRatio - 0.05;
+  let opacity = avgLum > 0 ? 1 - targetBgLum / avgLum : 0.92;
+  opacity = Math.max(0.6, Math.min(0.92, opacity));
+  drawGradientOverlay(ctx, 0, fromY, W, toY - fromY, '#000000', 0, opacity);
+}
 
-  if (img) {
-    drawCoverImage(ctx, img, 0, 0, W, H);
-    // Gradiente na cor de fundo do scheme, mais forte na base — da profundidade
-    // a foto e mantem o texto/CTA legivel.
-    drawGradientOverlay(ctx, 0, 0, W, H, colors.bg, 0.78, 0.92);
-    bgTop = effectiveBgOverPhoto(colors.bg, 0.78);
-    bgBottom = effectiveBgOverPhoto(colors.bg, 0.9);
-  } else {
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, W, H);
-  }
+/** Check (✓) com traço curvo (handwritten), não geométrico perfeito. */
+function drawHandwrittenCheck(ctx: Ctx, x: number, y: number, size = 24, colorHex: string): void {
+  ctx.save();
+  ctx.strokeStyle = colorHex;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x, y + size * 0.5);
+  ctx.quadraticCurveTo(x + size * 0.35, y + size * 0.8, x + size * 0.4, y + size * 0.85);
+  ctx.quadraticCurveTo(x + size * 0.55, y + size * 0.4, x + size, y);
+  ctx.stroke();
+  ctx.restore();
+}
 
-  // Faixas superior/inferior
-  ctx.fillStyle = colors.primary;
-  ctx.fillRect(0, 0, W, BAR_H);
-  ctx.fillRect(0, H - BAR_H, W, BAR_H);
-
-  // Logo (canto superior esquerdo)
-  if (logo) {
-    drawLogoBadge(ctx, logo, 32, 32, 64);
-  }
-
-  // Nome do negocio
-  ctx.font = `bold 32px ${fontFamily}`;
-  ctx.fillStyle = ensureReadable(colors.primary, bgTop);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  ctx.fillText((data.businessName ?? '').toUpperCase(), cx, 120);
-
-  // Headline
-  ctx.font = `bold 80px ${fontFamily}`;
-  ctx.fillStyle = ensureReadable(colors.textPrimary, bgTop);
-  const headlineBottom = wrapText(ctx, data.headline ?? '', cx, 260, CONTENT_W, 92, 2);
-
-  // Subheadline
-  let subBottom = headlineBottom + 20;
-  if (data.subheadline) {
-    ctx.font = `40px ${fontFamily}`;
-    ctx.fillStyle = ensureReadable(colors.textSecondary, bgTop);
-    subBottom = wrapText(ctx, data.subheadline, cx, headlineBottom + 20, CONTENT_W, 52, 2);
-  }
-
-  // Linha separadora
-  const sepY = Math.max(subBottom + 20, 680);
-  ctx.fillStyle = colors.primary;
-  ctx.fillRect(cx - 300, sepY, 600, 3);
-
-  // Texto principal
-  ctx.font = `34px ${fontFamily}`;
-  ctx.fillStyle = ensureReadable(colors.textSecondary, bgBottom);
-  wrapText(ctx, data.primary_text ?? '', cx, sepY + 40, CONTENT_W, 46, 2);
-
-  drawCtaButton(ctx, cx - 240, 860, 480, 88, data.cta, colors);
+/** Barra editorial vertical (separador estilo revista). */
+function drawEditorialBar(ctx: Ctx, x: number, yTop: number, yBottom: number, colorHex: string, width = 7): void {
+  ctx.fillStyle = colorHex;
+  ctx.fillRect(x, yTop, width, Math.max(0, yBottom - yTop));
 }
 
 /**
- * offer_highlight — faixa superior na cor de destaque com selo "OFERTA ESPECIAL",
- * headline grande e caixa com borda destacando a oferta, seguido de CTA.
+ * Quebra de texto com limite de linhas + elipse, alinhamento e retorno do
+ * y-final (baseline da última linha) para posicionar elementos seguintes.
  */
-function drawOfferHighlight(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null, logo: Image | null) {
-  const STRIP_H = 130;
-  const HEADLINE_OVERLAY_ALPHA_TOP = 0.32;
+function wrapTextAdvanced(
+  ctx: Ctx,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxLines = 0,
+  textAlign: 'left' | 'center' | 'right' = 'left',
+): { linesRendered: number; finalY: number } {
+  ctx.textAlign = textAlign;
+  const words = (text ?? '').split(' ').filter(Boolean);
+  const lines: string[] = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
 
-  // Corpo (atras da faixa)
-  let headlineBg = colors.bg;
-  if (img) {
-    drawCoverImage(ctx, img, 0, STRIP_H, W, H - STRIP_H);
-    drawGradientOverlay(ctx, 0, STRIP_H, W, H - STRIP_H, '#000000', HEADLINE_OVERLAY_ALPHA_TOP, 0.6);
-    headlineBg = effectiveBgOverPhoto('#000000', HEADLINE_OVERLAY_ALPHA_TOP);
+  let out = lines;
+  if (maxLines > 0 && lines.length > maxLines) {
+    out = lines.slice(0, maxLines);
+    let last = out[maxLines - 1];
+    while (last.length > 0 && ctx.measureText(`${last}…`).width > maxWidth) {
+      last = last.slice(0, -1);
+    }
+    out[maxLines - 1] = `${last}…`;
+  }
+
+  let cy = y;
+  for (const l of out) {
+    ctx.fillText(l, x, cy);
+    cy += lineHeight;
+  }
+  return { linesRendered: out.length, finalY: y + Math.max(0, out.length - 1) * lineHeight };
+}
+
+/** Subtítulo com um trecho destacado em cor de acento (offer_burst). */
+function drawHighlightedSubtitle(ctx: Ctx, full: string, highlight: string | undefined, centerX: number, y: number, size: number, accentColor: string): void {
+  type Seg = { t: string; hl: boolean };
+  const segs: Seg[] = [];
+  const idx = highlight ? full.toLowerCase().indexOf(highlight.toLowerCase()) : -1;
+  if (highlight && idx >= 0) {
+    const before = full.slice(0, idx);
+    const mid = full.slice(idx, idx + highlight.length);
+    const after = full.slice(idx + highlight.length);
+    if (before) segs.push({ t: before, hl: false });
+    segs.push({ t: mid, hl: true });
+    if (after) segs.push({ t: after, hl: false });
   } else {
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, STRIP_H, W, H - STRIP_H);
+    segs.push({ t: full, hl: false });
   }
 
-  // Faixa superior
-  ctx.fillStyle = colors.primary;
-  ctx.fillRect(0, 0, W, STRIP_H);
-
-  // Logo (dentro da faixa, a esquerda do nome do negocio)
-  let nameX = PAD_X;
-  if (logo) {
-    const logoSize = 80;
-    drawLogoBadge(ctx, logo, PAD_X, (STRIP_H - logoSize) / 2, logoSize);
-    nameX = PAD_X + logoSize + 20;
-  }
-
-  ctx.font = `bold 30px ${fontFamily}`;
-  ctx.fillStyle = pickTextOn(colors.primary);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText((data.businessName ?? '').toUpperCase(), nameX, STRIP_H / 2);
-
-  // Selo "OFERTA ESPECIAL"
-  const badgeText = 'OFERTA ESPECIAL';
-  ctx.font = `bold 24px ${fontFamily}`;
-  const badgeW = ctx.measureText(badgeText).width + 56;
-  const badgeH = 52;
-  const badgeX = W - PAD_X - badgeW;
-  const badgeY = STRIP_H / 2 - badgeH / 2;
-  drawRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, badgeH / 2);
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fill();
-  ctx.fillStyle = ensureReadable(colors.primary, '#FFFFFF');
-  ctx.textAlign = 'center';
-  ctx.fillText(badgeText, badgeX + badgeW / 2, badgeY + badgeH / 2);
-
-  // Headline
-  ctx.font = `bold 76px ${fontFamily}`;
-  ctx.fillStyle = ensureReadable(colors.textPrimary, headlineBg);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  const headlineBottom = wrapText(ctx, data.headline ?? '', cx, STRIP_H + 60, CONTENT_W, 86, 2);
-
-  // Caixa de destaque da oferta (fundo solido para legibilidade sobre foto)
-  const boxY = Math.max(headlineBottom + 30, 470);
-  const boxH = 220;
-  drawRoundRect(ctx, PAD_X, boxY, CONTENT_W, boxH, 16);
-  ctx.fillStyle = colors.bg;
-  ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = colors.primary;
-  ctx.stroke();
-
-  const highlightText = data.subheadline || data.primary_text || '';
-  ctx.font = `bold 40px ${fontFamily}`;
-  ctx.fillStyle = pickTextOn(colors.bg);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  const highlightBottom = wrapText(ctx, highlightText, cx, boxY + 30, CONTENT_W - 80, 48, 2);
-
-  if (data.subheadline && data.primary_text) {
-    ctx.font = `26px ${fontFamily}`;
-    ctx.fillStyle = ensureReadable(colors.textSecondary, colors.bg);
-    wrapText(ctx, data.primary_text, cx, Math.min(highlightBottom + 6, boxY + boxH - 70), CONTENT_W - 80, 34, 1);
+  let total = 0;
+  for (const s of segs) {
+    ctx.font = font(s.hl ? wBold : wRegular, size);
+    total += ctx.measureText(s.t).width;
   }
-
-  drawCtaButton(ctx, cx - 240, 960, 480, 80, data.cta, colors);
+  let drawX = centerX - total / 2;
+  for (const s of segs) {
+    ctx.font = font(s.hl ? wBold : wRegular, size);
+    ctx.fillStyle = s.hl ? accentColor : '#FFFFFF';
+    ctx.fillText(s.t, drawX, y);
+    drawX += ctx.measureText(s.t).width;
+  }
 }
 
-/**
- * testimonial_style — aspas em destaque, headline como "depoimento", texto principal
- * em itálico, atribuicao (avatar com mascara circular se houver imagem) + CTA.
- */
-function drawTestimonialStyle(ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null, logo: Image | null) {
-  ctx.fillStyle = colors.bg;
+// ── Renderers por arquétipo ─────────────────────────────────────────────────
+
+/** editorial_headline — foto no topo, faixa preta com manchete + subheadline. */
+async function drawEditorialHeadline(ctx: Ctx, data: CreativeData, canvas: Canvas, logo: Image | null): Promise<void> {
+  if (!data.background_image_url) throw new Error('editorial_headline requer background_image_url');
+  const img = await loadImage(data.background_image_url);
+
+  // 1-3. Foto no topo + faixa preta inferior
+  drawCoverImage(ctx, img, 0, 0, W, 640);
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 640, W, 440);
+
+  // 4. Logo sobre a foto (canto superior esquerdo)
+  if (logo) drawLogoBadge(ctx, logo, 64, 36, 110);
+
+  // 5. Manchete — cor com contraste >= 7:1 contra preto
+  const headlineColor = ensureReadable(data.highlight_color || '#F4C430', '#000000', 7.0);
+  ctx.fillStyle = headlineColor;
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = font(wBlack, 54);
+  const yTopHeadline = 720 - 50;
+  const r1 = wrapTextAdvanced(ctx, (data.headline || '').toUpperCase(), 100, 720, 920, 58, 5, 'left');
+
+  // 6. Subheadline
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = font(wRegular, 30);
+  const r2 = wrapTextAdvanced(ctx, data.subheadline || '', 100, r1.finalY + 56, 920, 39, 4, 'left');
+
+  // 7. Barra editorial vertical
+  const lPrimary = getLuminance(data.brand_colors.primary);
+  const barColor = lPrimary >= 0.3 && lPrimary <= 0.65 ? data.brand_colors.primary : '#D7263D';
+  drawEditorialBar(ctx, 64, yTopHeadline, r2.finalY, barColor, 7);
+}
+
+/** offer_burst — fundo na cor da marca, sunburst, badge de oferta e hero opcional. */
+async function drawOfferBurst(ctx: Ctx, data: CreativeData, canvas: Canvas, logo: Image | null): Promise<void> {
+  // 1. Fundo legível para texto branco
+  const bg = ensureReadable(data.brand_colors.primary, '#FFFFFF', 4.5);
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  // Logo (canto superior esquerdo)
-  if (logo) {
-    drawLogoBadge(ctx, logo, 32, 32, 64);
-  }
+  // 2-3. Vinheta + sunburst
+  drawRadialVignette(ctx, 540, 540, 800, 0.3);
+  drawSunburst(ctx, 540, 540, 28, data.brand_colors.primary, 0.35);
 
-  // Aspas de destaque
-  ctx.font = `bold 160px ${fontFamily}`;
-  ctx.fillStyle = ensureReadable(colors.primary, colors.bg);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  ctx.fillText('"', cx, 30);
+  // 4. Headline
+  ctx.fillStyle = '#FFFFFF';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = font(wXBold, 72);
+  wrapTextAdvanced(ctx, (data.headline || '').toUpperCase(), 540, 130, 920, 86, 2, 'center');
 
-  // Headline (frase de destaque/depoimento)
-  ctx.font = `bold 60px ${fontFamily}`;
-  ctx.fillStyle = ensureReadable(colors.textPrimary, colors.bg);
-  const headlineBottom = wrapText(ctx, data.headline ?? '', cx, 220, CONTENT_W, 70, 2);
+  // 5. Badge pill (gradiente escuro)
+  const pillW = 820;
+  const pillH = 180;
+  const pillX = 540 - pillW / 2;
+  const pillY = 360 - pillH / 2;
+  ctx.save();
+  const grd = ctx.createLinearGradient(540, pillY, 540, pillY + pillH);
+  grd.addColorStop(0, '#3A3A3A');
+  grd.addColorStop(1, '#1F1F1F');
+  drawRoundRect(ctx, pillX, pillY, pillW, pillH, 90);
+  ctx.fillStyle = grd;
+  ctx.fill();
+  ctx.restore();
 
-  // Texto principal (itálico)
-  ctx.font = `italic 30px ${fontFamily}`;
-  ctx.fillStyle = ensureReadable(colors.textSecondary, colors.bg);
-  const primaryBottom = wrapText(ctx, data.primary_text ?? '', cx, headlineBottom + 20, CONTENT_W - 120, 42, 3);
-
-  // Linha divisoria
-  const dividerY = Math.min(primaryBottom + 30, 760);
-  ctx.fillStyle = colors.primary;
-  ctx.fillRect(cx - 30, dividerY, 60, 3);
-
-  // Atribuicao: avatar (se houver imagem) + nome do negocio + subheadline
-  let attribY = dividerY + 40;
-  if (img) {
-    const radius = 50;
-    drawCircleImage(ctx, img, cx, attribY + radius, radius);
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = colors.primary;
+  // 6. Ilhós do badge
+  for (const ox of [130, 950]) {
     ctx.beginPath();
-    ctx.arc(cx, attribY + radius, radius, 0, Math.PI * 2);
+    ctx.arc(ox, 360, 14, 0, Math.PI * 2);
+    ctx.fillStyle = '#1A1A1A';
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#0F0F0F';
     ctx.stroke();
-    attribY += radius * 2 + 24;
   }
 
-  ctx.font = `bold 26px ${fontFamily}`;
-  ctx.fillStyle = ensureReadable(colors.primary, colors.bg);
+  // 7. Offer text com auto-shrink
+  const offerColor = ensureReadable(data.brand_colors.accent || '#F2B81E', '#2B2B2B', 4.5);
+  const offerText = (data.offer_text || '').toUpperCase();
+  let offerSize = 140;
+  ctx.font = font(wBlack, offerSize);
+  while (ctx.measureText(offerText).width > 700 && offerSize > 40) {
+    offerSize -= 10;
+    ctx.font = font(wBlack, offerSize);
+  }
+  ctx.fillStyle = offerColor;
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  ctx.fillText((data.businessName ?? '').toUpperCase(), cx, attribY);
-  attribY += 36;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(offerText, 540, 360);
 
-  if (data.subheadline) {
-    ctx.font = `22px ${fontFamily}`;
-    ctx.fillStyle = ensureReadable(colors.textSecondary, colors.bg);
-    ctx.fillText(data.subheadline, cx, attribY);
-    attribY += 36;
+  // 8. Subtítulo com highlight
+  if (data.subtitle) {
+    drawHighlightedSubtitle(ctx, data.subtitle, data.subtitle_highlight, 540, 540, 34, offerColor);
   }
 
-  drawCtaButton(ctx, cx - 240, Math.min(attribY + 24, 960), 480, 80, data.cta, colors);
+  // 9. Hero image (PNG transparente)
+  if (data.hero_image_url) {
+    try {
+      const hero = await loadImage(data.hero_image_url);
+      const heroH = 480;
+      const heroW = heroH * (hero.width / hero.height);
+      ctx.drawImage(hero, 560 - heroW / 2, (H - 10) - heroH, heroW, heroH);
+    } catch (err) {
+      console.warn('[Studio] offer_burst: falha ao carregar hero_image_url:', (err as Error).message);
+    }
+  }
+
+  // 10. Logo (canto superior direito)
+  if (data.includeLogo !== false && logo) {
+    drawLogoBadge(ctx, logo, W - 32 - 80, 32, 80);
+  }
 }
 
-const LAYOUT_RENDERERS: Record<string, (ctx: Ctx, data: CreativeData, colors: ColorScheme, img: Image | null, logo: Image | null) => void> = {
-  product_hero: drawProductHero,
-  text_focus: drawTextFocus,
-  offer_highlight: drawOfferHighlight,
-  testimonial_style: drawTestimonialStyle,
+/** split_diagonal_product — split diagonal, mockup cruzando a linha, benefícios e CTA. */
+async function drawSplitDiagonalProduct(ctx: Ctx, data: CreativeData, canvas: Canvas, logo: Image | null): Promise<void> {
+  if (!data.product_image_url) throw new Error('split_diagonal_product requer product_image_url');
+
+  // 1-2. Split diagonal
+  const darkColor = data.brand_colors.dark || derivarDark(data.brand_colors.primary);
+  drawDiagonalSplit(ctx, 460, 380, data.brand_colors.primary, darkColor);
+
+  // 3. Headline
+  ctx.fillStyle = '#FFFFFF';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = font(wBlack, 88);
+  wrapTextAdvanced(ctx, (data.headline || '').toUpperCase(), 76, 160, 420, 81, 4, 'left');
+
+  // 4-5. Mockup do produto (com sombra projetada), cruzando a diagonal
+  const prod = await loadImage(data.product_image_url);
+  const prodH = 720;
+  const prodW = prodH * (prod.width / prod.height);
+  let yCenter = 470;
+  const diagonalAtX750 = 380 + (460 - 380) * (750 / W); // ~436
+  const prodTop = yCenter - prodH / 2;
+  const prodBottom = yCenter + prodH / 2;
+  if (prodTop > diagonalAtX750 || prodBottom < diagonalAtX750) {
+    yCenter = diagonalAtX750 + prodH / 2 - prodH * 0.3;
+  }
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.25)';
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 20;
+  ctx.drawImage(prod, 750 - prodW / 2, yCenter - prodH / 2, prodW, prodH);
+  ctx.restore();
+
+  // 6. Selo de preço
+  if (data.price_text) {
+    drawStarburst(ctx, 925, 155, 14, 95, 75, '#FAE04A', -8);
+    ctx.save();
+    ctx.translate(925, 155);
+    ctx.rotate(-8 * (Math.PI / 180));
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = font(wBold, 30);
+    const parts = data.price_text.split(/\s+/);
+    if (parts.length > 1) {
+      ctx.fillText(parts[0], 0, -16);
+      ctx.fillText(parts.slice(1).join(' '), 0, 18);
+    } else {
+      ctx.fillText(data.price_text, 0, 0);
+    }
+    ctx.restore();
+  }
+
+  // 7. Bullets de benefícios
+  ctx.textBaseline = 'alphabetic';
+  let bulletY = 620;
+  for (const benefit of data.benefits || []) {
+    drawHandwrittenCheck(ctx, 76, bulletY - 20, 24, data.brand_colors.primary);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = font(wRegular, 34);
+    // maxWidth 360 mantém os bullets à esquerda do mockup (borda ~466px),
+    // evitando colisão com textos longos.
+    const r = wrapTextAdvanced(ctx, benefit, 118, bulletY, 360, 44, 2, 'left');
+    bulletY = r.finalY + 46;
+  }
+
+  // 8. CTA
+  drawRoundRect(ctx, 590, 780, 420, 100, 4);
+  ctx.fillStyle = data.brand_colors.primary;
+  ctx.fill();
+  ctx.fillStyle = ensureReadable('#FFFFFF', data.brand_colors.primary, 4.5);
+  ctx.font = font(wBold, 38);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText((data.cta || 'SAIBA MAIS').toUpperCase(), 800, 830);
+
+  // 9. Linha de rodapé
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(76, 990);
+  ctx.lineTo(1004, 990);
+  ctx.stroke();
+}
+
+/** photo_immersive — foto full-bleed, gradiente adaptativo, qualifier/headline/CTA. */
+async function drawPhotoImmersive(ctx: Ctx, data: CreativeData, canvas: Canvas, logo: Image | null): Promise<void> {
+  if (!data.background_image_url) throw new Error('photo_immersive requer background_image_url');
+  if (!logo) throw new Error('photo_immersive requer logo');
+  const img = await loadImage(data.background_image_url);
+  if (img.width < 800) throw new Error('photo_immersive requer foto com pelo menos 800px de largura');
+  if (img.width < 1080) console.warn('[Studio] Foto abaixo de 1080px — qualidade reduzida');
+
+  // 2-4. Foto + vinheta + gradiente adaptativo
+  drawCoverImage(ctx, img, 0, 0, W, H);
+  drawRadialVignette(ctx, 540, 540, 800, 0.25);
+  await drawAdaptiveReadabilityGradient(ctx, canvas, 540, 1080, 4.5);
+
+  // 5. Logo chip (obrigatório) com sombra
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.20)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 2;
+  drawRoundRect(ctx, 32, 32, 140, 140, 14);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fill();
+  ctx.restore();
+  drawCoverImage(ctx, logo, 32 + 16, 32 + 16, 140 - 32, 140 - 32);
+
+  // 6. Qualifier (com sombra de texto)
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = 4;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = font(wBold, 38);
+  ctx.fillText((data.qualifier || '').toUpperCase(), 64, 820);
+
+  // 7. Headline
+  ctx.font = font(wXBold, 56);
+  wrapTextAdvanced(ctx, (data.headline || '').toUpperCase(), 64, 890, 960, 59, 2, 'left');
+  ctx.restore();
+
+  // 8. CTA
+  const ctaColor = ensureReadable(data.brand_colors.primary, '#FFFFFF', 4.5);
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.3)';
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 4;
+  drawRoundRect(ctx, 64, 940, 420, 100, 4);
+  ctx.fillStyle = ctaColor;
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = font(wBold, 32);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const ctaText = (data.cta || 'SAIBA MAIS').toUpperCase();
+  ctx.fillText(ctaText, 64 + 32, 940 + 50);
+  if (data.cta_icon === 'arrow') {
+    ctx.fillText('▸', 64 + 32 + ctx.measureText(ctaText).width + 16, 940 + 50);
+  }
+}
+
+/** split_horizontal_photo — zona superior sólida + foto embaixo, tom institucional/energetic. */
+async function drawSplitHorizontalPhoto(ctx: Ctx, data: CreativeData, canvas: Canvas, logo: Image | null): Promise<void> {
+  if (!data.background_image_url) throw new Error('split_horizontal_photo requer background_image_url');
+  if (!logo) throw new Error('split_horizontal_photo requer logo');
+  const img = await loadImage(data.background_image_url);
+
+  const tone = data.tone || 'institutional';
+  const SPLIT_Y = 486; // 45% do canvas = linha divisória
+
+  // 2. Zona superior sólida (contraste branco >= 7 garantido)
+  let topColor = data.top_zone_color || '#3D3D3D';
+  if (data.top_zone_color && getContrastRatio('#FFFFFF', topColor) < 7) topColor = '#3D3D3D';
+  ctx.fillStyle = topColor;
+  ctx.fillRect(0, 0, W, SPLIT_Y);
+
+  // 3. Zona inferior: foto cover
+  drawCoverImage(ctx, img, 0, SPLIT_Y, W, H - SPLIT_Y);
+
+  // 4. Qualifier
+  ctx.fillStyle = '#FFFFFF';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = font(tone === 'energetic' ? wBold : wRegular, 36);
+  ctx.fillText(tone === 'energetic' ? (data.qualifier || '').toUpperCase() : (data.qualifier || ''), 64, 130);
+
+  // 5. Headline
+  ctx.font = font(wXBold, 64);
+  wrapTextAdvanced(ctx, tone === 'energetic' ? (data.headline || '').toUpperCase() : (data.headline || ''), 64, 210, 950, 67, 2, 'left');
+
+  // 6. CTA
+  let ctaBg: string;
+  let ctaText: string;
+  if (tone === 'institutional') {
+    ctaBg = '#FFFFFF';
+    ctaText = topColor;
+  } else {
+    ctaBg = ensureReadable(data.brand_colors.primary, '#FFFFFF', 4.5);
+    ctaText = '#FFFFFF';
+  }
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.15)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 2;
+  drawRoundRect(ctx, 64, 280, 360, 88, 2);
+  ctx.fillStyle = ctaBg;
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = ctaText;
+  ctx.font = font(wBold, 26);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const cta = (data.cta || 'SAIBA MAIS').toUpperCase();
+  ctx.fillText(cta, 64 + 28, 280 + 44);
+  if (data.cta_icon === 'arrow') {
+    ctx.fillText('›', 64 + 28 + ctx.measureText(cta).width + 14, 280 + 44);
+  }
+
+  // 7. Logo chip (obrigatório) — heurística para não cobrir o assunto da foto
+  let chipX = 64;
+  if (sampleVarianceInRegion(canvas, 40, SPLIT_Y, 240, SPLIT_Y + 140) > 0.04) {
+    chipX = W - 64 - 140; // região agitada → move para a direita
+  }
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.35)';
+  ctx.shadowBlur = 16;
+  ctx.shadowOffsetY = 6;
+  drawRoundRect(ctx, chipX, SPLIT_Y - 70, 140, 140, 14);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fill();
+  ctx.restore();
+  drawCoverImage(ctx, logo, chipX + 18, SPLIT_Y - 70 + 18, 140 - 36, 140 - 36);
+}
+
+// ── Dispatcher ───────────────────────────────────────────────────────────────
+const LAYOUT_RENDERERS: Record<CreativeLayout, (ctx: Ctx, data: CreativeData, canvas: Canvas, logo: Image | null) => Promise<void>> = {
+  editorial_headline: drawEditorialHeadline,
+  offer_burst: drawOfferBurst,
+  split_diagonal_product: drawSplitDiagonalProduct,
+  photo_immersive: drawPhotoImmersive,
+  split_horizontal_photo: drawSplitHorizontalPhoto,
 };
+// Layouts antigos removidos. Assets com layouts legados em complianceNotes
+// (product_hero, text_focus, offer_highlight, testimonial_style) não podem ser
+// regenerados — a UI trata com badge "Modelo descontinuado".
 
 export type BrandColors = {
   primary?: string | null;
@@ -590,13 +817,8 @@ export type BrandColors = {
 export async function convertHTMLToPNG(data: CreativeData, brandColors?: BrandColors): Promise<Buffer> {
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
-  const colors = { ...(COLOR_SCHEMES[data.color_scheme] ?? COLOR_SCHEMES.brand_orange) };
 
-  if (brandColors?.primary) colors.primary = brandColors.primary;
-  if (brandColors?.secondary) colors.textSecondary = brandColors.secondary;
-
-  const img = data.productImageUrl ? await loadImage(data.productImageUrl) : null;
-
+  // Logo (pré-carregado; renderers que o exigem validam presença).
   const includeLogo = data.includeLogo ?? true;
   let logo: Image | null = null;
   if (includeLogo && brandColors?.logoUrl) {
@@ -607,10 +829,12 @@ export async function convertHTMLToPNG(data: CreativeData, brandColors?: BrandCo
     }
   }
 
-  const renderer =
-    LAYOUT_RENDERERS[data.layout] ?? (img ? drawProductHero : drawTextFocus);
+  const renderer = LAYOUT_RENDERERS[data.layout as CreativeLayout];
+  if (!renderer) {
+    throw new Error(`Layout não suportado pelo renderer (modelo descontinuado): ${data.layout}`);
+  }
 
-  renderer(ctx, data, colors, img, logo);
+  await renderer(ctx, data, canvas, logo);
 
   const buffer = canvas.toBuffer('image/png');
   console.log('=== CANVAS generated buffer size:', buffer.length, '| layout:', data.layout);

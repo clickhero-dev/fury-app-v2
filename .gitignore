@@ -149,3 +149,4 @@ target_roas
 packages/db/src/*.js
 .claude/settings.local.json
 apps/api/scripts/_samples/
+apps/api/_samples/

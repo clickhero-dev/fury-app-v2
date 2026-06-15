@@ -2,6 +2,11 @@
 
 Uma plataforma SaaS de automação de tráfego pago que integra com Meta Ads API.
 
+> **Estúdio de Criação (jun/2026):** os 4 layouts antigos foram substituídos por
+> **5 arquétipos visuais** com seleção automática via Layout Selector Agent
+> (DeepSeek) e renderização em `@napi-rs/canvas`. Ver
+> [`apps/api/docs/CREATIVE_STUDIO_ARCHETYPES.md`](apps/api/docs/CREATIVE_STUDIO_ARCHETYPES.md).
+
 ## 📋 Estrutura do Monorepo
 
 ```

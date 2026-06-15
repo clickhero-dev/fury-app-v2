@@ -14,6 +14,10 @@ import { studioCopyService } from '../services/studio-copy.service.js';
 import { deepseekService } from '../services/deepseek.service.js';
 import { buildCreativePrompt, buildRegeneratePrompt, buildValidationPrompt, type CreativeContext } from '../prompts/creative-studio.prompt.js';
 import { convertHTMLToPNG, type BrandColors } from '../services/html-to-png.service.js';
+import type { CreativeData } from '../services/creative-data.js';
+import { selectLayout } from '../services/layout-selector.service.js';
+import type { CreativeLayout } from '@fury/shared';
+import { CREATIVE_LAYOUT_LABELS, CREATIVE_LAYOUT_FUNNEL_STAGE } from '@fury/shared';
 import { studioAssetsDir } from '../lib/temp-storage.js';
 import { uploadAsset } from '../services/storage.service.js';
 
@@ -194,7 +198,6 @@ const validateContextSchema = z.object({
   promise: z.string().min(1),
   offer: z.string().optional(),
   audience: z.string().min(1),
-  templateStyle: z.string().optional(),
 });
 
 router.post('/creative/validate-context', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
@@ -221,16 +224,60 @@ router.post('/creative/validate-context', authMiddleware, tenantMiddleware, asyn
 });
 
 const generateCreativeSchema = z.object({
-  product: z.string().min(2),
-  promise: z.string().min(2),
-  offer: z.string().optional(),
-  audience: z.string().min(2),
-  hasProductImage: z.boolean().default(false),
-  productImageUrl: z.string().optional(), // accepts data URLs and regular URLs
-  adaptiveAnswers: z.record(z.string()).optional(),
-  templateStyle: z.string().optional(),
-  includeLogo: z.boolean().optional(),
+  // ── Briefing (preservados para compatibilidade com o wizard atual) ───
+  product:          z.string().min(2),
+  promise:          z.string().min(2),
+  offer:            z.string().optional(),
+  audience:         z.string().min(2),
+  adaptiveAnswers:  z.record(z.string()).optional(),
+
+  // ── Layout (vem do Layout Selector Agent após Prompt 3) ──────────────
+  // Opcional aqui: se ausente, o pipeline chama selectLayout() em runtime.
+  // Se presente, pula a chamada ao agente e usa o valor direto.
+  layout: z.enum([
+    'editorial_headline',
+    'offer_burst',
+    'split_diagonal_product',
+    'photo_immersive',
+    'split_horizontal_photo',
+  ]).optional(),
+
+  // ── Textos do criativo ───────────────────────────────────────────────
+  headline:           z.string().max(120).optional(),
+  qualifier:          z.string().max(60).optional(),
+  offer_text:         z.string().max(20).optional(),
+  subheadline:        z.string().max(160).optional(),
+  subtitle:           z.string().max(200).optional(),
+  subtitle_highlight: z.string().max(30).optional(),
+  benefits:           z.array(z.string().max(80)).max(4).optional(),
+  cta:                z.string().max(24).optional(),
+  cta_icon:           z.enum(['arrow', 'phone', 'whatsapp', 'none']).optional(),
+  price_text:         z.string().max(20).optional(),
+
+  // ── Imagens ──────────────────────────────────────────────────────────
+  hasProductImage:      z.boolean().default(false),
+  background_image_url: z.string().optional(),
+  product_image_url:    z.string().optional(),
+  hero_image_url:       z.string().optional(),
+  productImageUrl:      z.string().optional(), // @deprecated — manter para não quebrar chamadas antigas
+
+  // ── Visual ───────────────────────────────────────────────────────────
+  tone:            z.enum(['institutional', 'energetic']).optional(),
+  top_zone_color:  z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  highlight_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  includeLogo:     z.boolean().optional(),
+
+  // Quando true, os textos vêm prontos do wizard (já curados pelo usuário) e o
+  // pipeline NÃO chama o DeepSeek — renderiza direto. Garante que o resultado
+  // final seja idêntico ao preview fiel (preview-png).
+  skipCopy:        z.boolean().optional(),
+
+  // Nota: templateStyle foi removido. O layout é determinado pelo
+  // Layout Selector Agent (apps/api/src/services/layout-selector.service.ts).
+  // Ver: docs/CREATIVE_STUDIO_ARCHETYPES.md
 });
+
+type GenerateCreativeBody = z.infer<typeof generateCreativeSchema>;
 
 async function savePNG(buffer: Buffer): Promise<{ fileName: string; filePath: string }> {
   console.log('=== STUDIO [1] PNG buffer size:', buffer?.length ?? 0);
@@ -290,40 +337,84 @@ function parseCreativeJSON(raw: string) {
   return JSON.parse(match ? match[0] : cleaned);
 }
 
-const TEMPLATE_LAYOUT_MAP: Record<string, { layout: string; color_scheme: string }> = {
-  'product-focus':      { layout: 'product_hero',       color_scheme: 'brand_orange' },
-  'irresistible-offer': { layout: 'offer_highlight',    color_scheme: 'bold_contrast' },
-  'transformation':     { layout: 'text_focus',         color_scheme: 'clean_white' },
-  'social-proof':       { layout: 'testimonial_style',  color_scheme: 'clean_white' },
-  'minimal-premium':    { layout: 'text_focus',         color_scheme: 'dark_premium' },
-  'bold-direct':        { layout: 'text_focus',         color_scheme: 'bold_contrast' },
-  'educational':        { layout: 'text_focus',         color_scheme: 'clean_white' },
-  'institutional':      { layout: 'product_hero',       color_scheme: 'clean_white' },
-};
+// TEMPLATE_LAYOUT_MAP removido em 15/06/2026.
+// O layout é agora determinado pelo Layout Selector Agent
+// (apps/api/src/services/layout-selector.service.ts), com prioridade para
+// body.layout quando o cliente já passa o arquétipo escolhido.
+// Ver: docs/CREATIVE_STUDIO_ARCHETYPES.md
 
-async function runGenerate(context: CreativeContext, productImageUrl: string | undefined, tenantId: string, publicBaseUrl: string, brandColors?: BrandColors, includeLogo?: boolean) {
-  const prompt = buildCreativePrompt(context);
-  const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.8 });
-  const creativeData = parseCreativeJSON(raw);
+// A imagem única do wizard é roteada para o campo que cada arquétipo consome.
+function imageFieldsForLayout(layout: CreativeLayout, imageUrl?: string): Pick<CreativeData, 'background_image_url' | 'product_image_url' | 'hero_image_url'> {
+  if (!imageUrl) return {};
+  if (layout === 'split_diagonal_product') return { product_image_url: imageUrl };
+  if (layout === 'offer_burst') return { hero_image_url: imageUrl };
+  return { background_image_url: imageUrl }; // editorial_headline, photo_immersive, split_horizontal_photo
+}
 
-  // Force layout/color_scheme from template — never trust the LLM when template is selected
-  if (context.templateStyle && TEMPLATE_LAYOUT_MAP[context.templateStyle]) {
-    const forced = TEMPLATE_LAYOUT_MAP[context.templateStyle];
-    creativeData.layout = forced.layout;
-    creativeData.color_scheme = forced.color_scheme;
+// Monta o CreativeData a partir do body (textos curados) e, opcionalmente, do
+// copy gerado pelo DeepSeek. Os campos do body têm prioridade. Compartilhado
+// entre runGenerate e o endpoint preview-png (preview fiel = saída final).
+function buildCreativeData(args: {
+  layout: CreativeLayout;
+  body: Partial<GenerateCreativeBody>;
+  businessName: string;
+  brandColors?: BrandColors;
+  copy?: Record<string, unknown>;
+}): CreativeData {
+  const { layout, body, businessName, brandColors } = args;
+  const copy = (args.copy ?? {}) as Record<string, string | string[] | undefined>;
+  const imageUrl = body.background_image_url || body.product_image_url || body.hero_image_url || body.productImageUrl;
+
+  return {
+    layout,
+    headline: body.headline || (copy.headline as string) || '',
+    subheadline: body.subheadline || (copy.subheadline as string),
+    qualifier: body.qualifier || (copy.qualifier as string),
+    offer_text: body.offer_text || (copy.offer_text as string),
+    subtitle: body.subtitle || (copy.subtitle as string),
+    subtitle_highlight: body.subtitle_highlight || (copy.subtitle_highlight as string),
+    benefits: body.benefits || (copy.benefits as string[] | undefined),
+    cta: body.cta || (copy.cta as string),
+    cta_icon: body.cta_icon,
+    price_text: body.price_text,
+    ...imageFieldsForLayout(layout, imageUrl),
+    tone: body.tone,
+    top_zone_color: body.top_zone_color,
+    highlight_color: body.highlight_color,
+    businessName,
+    includeLogo: body.includeLogo ?? true,
+    brand_colors: {
+      primary: brandColors?.primary || '#EA580C',
+      accent: brandColors?.secondary || undefined,
+    },
+  };
+}
+
+async function runGenerate(
+  body: GenerateCreativeBody,
+  context: CreativeContext,
+  tenantId: string,
+  publicBaseUrl: string,
+  brandColors?: BrandColors,
+  layoutSelection?: { layout: CreativeLayout; confidence: number; justification: string },
+) {
+  // skipCopy: textos já curados pelo wizard → renderiza direto, sem LLM.
+  let copy: Record<string, unknown> | undefined;
+  if (!body.skipCopy) {
+    const prompt = buildCreativePrompt(context);
+    const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.8 });
+    copy = parseCreativeJSON(raw);
   }
 
-  const pngBuffer = await convertHTMLToPNG({
-    headline: creativeData.headline,
-    primary_text: creativeData.primary_text,
-    cta: creativeData.cta,
-    subheadline: creativeData.subheadline,
-    layout: creativeData.layout,
-    color_scheme: creativeData.color_scheme,
-    productImageUrl,
+  const creativeData = buildCreativeData({
+    layout: context.layout,
+    body,
     businessName: context.businessName,
-    includeLogo,
-  }, brandColors);
+    brandColors,
+    copy,
+  });
+
+  const pngBuffer = await convertHTMLToPNG(creativeData, brandColors);
   let imageUrl: string;
   if (process.env.R2_ENDPOINT && process.env.R2_PUBLIC_URL) {
     const fileName = `${randomUUID()}.png`;
@@ -335,7 +426,7 @@ async function runGenerate(context: CreativeContext, productImageUrl: string | u
     console.log('=== STUDIO [4] imageUrl (local):', imageUrl);
   }
 
-  const metadata = JSON.stringify({ ...creativeData, context });
+  const metadata = JSON.stringify({ ...creativeData, context, layoutSelection });
 
   const [asset] = await db.insert(creativeAssets).values({
     tenantId,
@@ -349,12 +440,15 @@ async function runGenerate(context: CreativeContext, productImageUrl: string | u
     assetId: asset.id,
     imageUrl,
     creativeData: {
-      headline: creativeData.headline,
-      primary_text: creativeData.primary_text,
-      cta: creativeData.cta,
-      subheadline: creativeData.subheadline,
       layout: creativeData.layout,
-      color_scheme: creativeData.color_scheme,
+      headline: creativeData.headline,
+      subheadline: creativeData.subheadline,
+      qualifier: creativeData.qualifier,
+      offer_text: creativeData.offer_text,
+      subtitle: creativeData.subtitle,
+      subtitle_highlight: creativeData.subtitle_highlight,
+      benefits: creativeData.benefits,
+      cta: creativeData.cta,
     },
   };
 }
@@ -369,20 +463,47 @@ router.post('/creative/generate', authMiddleware, tenantMiddleware, async (req: 
     const brandKitContext = await getBrandKitContext(tenantId);
     const adaptive = body.adaptiveAnswers ?? {};
 
+    const product = adaptive.product || body.product;
+    const promise = adaptive.promise || body.promise;
+    const offer = adaptive.offer || body.offer;
+    const audience = adaptive.audience || body.audience;
+
+    // 1. Resolver o layout pelo Layout Selector Agent (DeepSeek, temp 0.3).
+    //    body.layout tem prioridade sobre o agente (permite override manual).
+    const layoutResult = await selectLayout({
+      tenantId,
+      briefing: { product, promise, offer, audience },
+      assets: {
+        hasProductImage: body.hasProductImage,
+        productImageUrl: body.product_image_url || body.productImageUrl,
+        hasLogo: !!brandKitContext.colors?.logoUrl,
+      },
+      brand: {
+        primary_color: brandKitContext.colors?.primary || '#EA580C',
+        accent_color: brandKitContext.colors?.secondary || undefined,
+        brand_voice: brandKitContext.tone,
+      },
+    });
+    const resolvedLayout: CreativeLayout = body.layout ?? layoutResult.layout;
+
     const context: CreativeContext = {
-      product: adaptive.product || body.product,
-      promise: adaptive.promise || body.promise,
-      offer: adaptive.offer || body.offer,
-      audience: adaptive.audience || body.audience,
+      product,
+      promise,
+      offer,
+      audience,
       hasProductImage: body.hasProductImage,
-      productImageUrl: body.productImageUrl,
+      productImageUrl: body.product_image_url || body.productImageUrl,
       businessName,
       objective,
       tone: brandKitContext.tone,
-      templateStyle: body.templateStyle,
+      layout: resolvedLayout,
     };
 
-    const result = await runGenerate(context, body.productImageUrl, tenantId, publicBaseUrl, brandKitContext.colors, body.includeLogo);
+    const result = await runGenerate(body, context, tenantId, publicBaseUrl, brandKitContext.colors, {
+      layout: layoutResult.layout,
+      confidence: layoutResult.confidence,
+      justification: layoutResult.justification,
+    });
     return res.status(201).json(result);
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
@@ -416,22 +537,38 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
       return res.status(400).json({ error: 'Contexto original do criativo não encontrado' });
     }
 
+    // Assets antigos (layouts descontinuados) não têm arquétipo novo no contexto.
+    // Usa um default até o usuário reescolher — evita prompt com layout indefinido.
+    if (!savedContext.layout) {
+      savedContext.layout = 'offer_burst';
+    }
+
     const prompt = buildRegeneratePrompt(savedContext, feedback);
     const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.9 });
-    const creativeData = parseCreativeJSON(raw);
+    const copy = parseCreativeJSON(raw);
 
     const brandKitContext = await getBrandKitContext(tenantId);
 
-    const pngBuffer = await convertHTMLToPNG({
-      headline: creativeData.headline,
-      primary_text: creativeData.primary_text,
-      cta: creativeData.cta,
-      subheadline: creativeData.subheadline,
-      layout: creativeData.layout,
-      color_scheme: creativeData.color_scheme,
-      productImageUrl: savedContext.productImageUrl,
+    const creativeData: CreativeData = {
+      layout: savedContext.layout,
+      headline: copy.headline || '',
+      subheadline: copy.subheadline,
+      qualifier: copy.qualifier,
+      offer_text: copy.offer_text,
+      subtitle: copy.subtitle,
+      subtitle_highlight: copy.subtitle_highlight,
+      benefits: copy.benefits,
+      cta: copy.cta,
       businessName: savedContext.businessName,
-    }, brandKitContext.colors);
+      includeLogo: true,
+      brand_colors: {
+        primary: brandKitContext.colors?.primary || '#EA580C',
+        accent: brandKitContext.colors?.secondary || undefined,
+      },
+      productImageUrl: savedContext.productImageUrl, // @deprecated — compat renderer legado
+    };
+
+    const pngBuffer = await convertHTMLToPNG(creativeData, brandKitContext.colors);
     let imageUrl: string;
     if (process.env.R2_ENDPOINT && process.env.R2_PUBLIC_URL) {
       const fileName = `${randomUUID()}.png`;
@@ -457,14 +594,134 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
       assetId: newAsset.id,
       imageUrl,
       creativeData: {
-        headline: creativeData.headline,
-        primary_text: creativeData.primary_text,
-        cta: creativeData.cta,
-        subheadline: creativeData.subheadline,
         layout: creativeData.layout,
-        color_scheme: creativeData.color_scheme,
+        headline: creativeData.headline,
+        subheadline: creativeData.subheadline,
+        qualifier: creativeData.qualifier,
+        offer_text: creativeData.offer_text,
+        subtitle: creativeData.subtitle,
+        subtitle_highlight: creativeData.subtitle_highlight,
+        benefits: creativeData.benefits,
+        cta: creativeData.cta,
       },
     });
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
+    next(err);
+  }
+});
+
+// Layout Selector standalone — o wizard consome para sugerir o arquétipo antes
+// de gerar o criativo. Usa o brand_kit do tenant (scoping rigoroso por tenantId).
+const selectLayoutSchema = z.object({
+  product: z.string().min(1),
+  promise: z.string().min(1),
+  offer: z.string().optional(),
+  audience: z.string().min(1),
+  objective: z.enum(['awareness', 'consideration', 'conversion', 'content']).optional(),
+  hasProductImage: z.boolean().default(false),
+  productImageUrl: z.string().optional(),
+  background_image_url: z.string().optional(),
+});
+
+router.post('/select-layout', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = selectLayoutSchema.parse(req.body);
+    const tenantId = (req as any).tenant?.tenantId as string;
+
+    const brandKitContext = await getBrandKitContext(tenantId);
+
+    const result = await selectLayout({
+      tenantId,
+      briefing: {
+        product: body.product,
+        promise: body.promise,
+        offer: body.offer,
+        audience: body.audience,
+        objective: body.objective,
+      },
+      assets: {
+        hasProductImage: body.hasProductImage,
+        productImageUrl: body.productImageUrl || body.background_image_url,
+        hasLogo: !!brandKitContext.colors?.logoUrl,
+      },
+      brand: {
+        primary_color: brandKitContext.colors?.primary || '#EA580C',
+        accent_color: brandKitContext.colors?.secondary || undefined,
+        brand_voice: brandKitContext.tone,
+      },
+    });
+
+    return res.json({
+      layout: result.layout,
+      label: CREATIVE_LAYOUT_LABELS[result.layout],
+      funnel_stage: CREATIVE_LAYOUT_FUNNEL_STAGE[result.layout],
+      confidence: result.confidence,
+      justification: result.justification,
+      suggested_fields: result.suggested_fields,
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
+    next(err);
+  }
+});
+
+// Preview fiel (Estratégia A): renderiza o PNG com os campos atuais do wizard
+// SEM chamar o LLM e SEM salvar (R2/DB). O frontend usa <img> com debounce.
+const previewCreativeSchema = z.object({
+  layout: z.enum([
+    'editorial_headline',
+    'offer_burst',
+    'split_diagonal_product',
+    'photo_immersive',
+    'split_horizontal_photo',
+  ]),
+  headline:           z.string().max(120).optional(),
+  qualifier:          z.string().max(60).optional(),
+  offer_text:         z.string().max(20).optional(),
+  subheadline:        z.string().max(160).optional(),
+  subtitle:           z.string().max(200).optional(),
+  subtitle_highlight: z.string().max(30).optional(),
+  benefits:           z.array(z.string().max(80)).max(4).optional(),
+  cta:                z.string().max(24).optional(),
+  cta_icon:           z.enum(['arrow', 'phone', 'whatsapp', 'none']).optional(),
+  price_text:         z.string().max(20).optional(),
+  background_image_url: z.string().optional(),
+  product_image_url:    z.string().optional(),
+  hero_image_url:       z.string().optional(),
+  productImageUrl:      z.string().optional(),
+  tone:            z.enum(['institutional', 'energetic']).optional(),
+  top_zone_color:  z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  highlight_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  includeLogo:     z.boolean().optional(),
+});
+
+router.post('/preview-png', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = previewCreativeSchema.parse(req.body);
+    const tenantId = (req as any).tenant?.tenantId as string;
+
+    const { businessName } = await getTenantContext(tenantId);
+    const brandKitContext = await getBrandKitContext(tenantId);
+
+    const creativeData = buildCreativeData({
+      layout: body.layout,
+      body,
+      businessName,
+      brandColors: brandKitContext.colors,
+    });
+
+    let pngBuffer: Buffer;
+    try {
+      pngBuffer = await convertHTMLToPNG(creativeData, brandKitContext.colors);
+    } catch (renderErr) {
+      // Falta de asset obrigatório (foto/logo) — o front mostra orientação.
+      return res.status(422).json({ error: 'preview_unavailable', message: (renderErr as Error).message });
+    }
+
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(pngBuffer);
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
     next(err);

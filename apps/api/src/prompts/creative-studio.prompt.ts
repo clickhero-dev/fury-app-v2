@@ -1,3 +1,5 @@
+import type { CreativeLayout } from '@fury/shared';
+
 export interface CreativeContext {
   product: string;
   promise: string;
@@ -8,29 +10,39 @@ export interface CreativeContext {
   businessName: string;
   objective: string;
   tone?: string;
-  templateStyle?: string;
+  // Arquétipo já resolvido pelo Layout Selector Agent (ou override do body).
+  // TEMPLATE_MAP/templateStyle foram removidos em 15/06/2026 — o layout não é
+  // mais escolhido por um mapa de templateStyle.
+  layout: CreativeLayout;
 }
 
-const TEMPLATE_MAP: Record<string, { layout: string; color_scheme: string }> = {
-  'product-focus':      { layout: 'product_hero',       color_scheme: 'brand_orange' },
-  'irresistible-offer': { layout: 'offer_highlight',    color_scheme: 'bold_contrast' },
-  'transformation':     { layout: 'text_focus',         color_scheme: 'clean_white' },
-  'social-proof':       { layout: 'testimonial_style',  color_scheme: 'clean_white' },
-  'minimal-premium':    { layout: 'text_focus',         color_scheme: 'dark_premium' },
-  'bold-direct':        { layout: 'text_focus',         color_scheme: 'bold_contrast' },
-  'educational':        { layout: 'text_focus',         color_scheme: 'clean_white' },
-  'institutional':      { layout: 'product_hero',       color_scheme: 'clean_white' },
+// Instruções de copy específicas para cada arquétipo. O DeepSeek gera apenas
+// os campos pedidos para o layout recebido.
+const LAYOUT_COPY_INSTRUCTIONS: Record<CreativeLayout, string> = {
+  editorial_headline: `Gere headline estilo manchete de curiosidade (8-16 palavras, tom jornalístico).
+Gere subheadline de autoridade (10-20 palavras).
+NÃO gere cta.`,
+  offer_burst: `Gere headline categórica e curta.
+Gere offer_text com a oferta numérica (máx 8 caracteres: "50% OFF", "GRÁTIS", "R$49").
+Gere subtitle com a quebra de objeção e subtitle_highlight com a palavra-chave de ênfase (substring do subtitle).
+Gere cta curto.`,
+  split_diagonal_product: `Gere headline curta (1-4 palavras).
+Gere benefits: array com 3 itens, cada um com no máximo 60 caracteres.
+Gere cta (máx 12 caracteres).`,
+  photo_immersive: `Gere qualifier (oferta/qualificador, máx 40 caracteres, em CAIXA ALTA).
+Gere headline (identidade do negócio, máx 24 caracteres, em CAIXA ALTA).
+Gere cta (máx 18 caracteres).`,
+  split_horizontal_photo: `Gere qualifier (máx 45 caracteres).
+Gere headline (máx 30 caracteres).
+Gere cta (máx 18 caracteres).`,
 };
 
 export function buildCreativePrompt(context: CreativeContext): string {
-  const forced = context.templateStyle ? TEMPLATE_MAP[context.templateStyle] : null;
-  const layoutInstruction = forced
-    ? `Use EXATAMENTE: "layout": "${forced.layout}", "color_scheme": "${forced.color_scheme}"`
-    : `"layout": "um de: product_hero | text_focus | offer_highlight | testimonial_style",\n  "color_scheme": "um de: brand_orange | dark_premium | clean_white | bold_contrast"`;
+  const layoutInstructions = LAYOUT_COPY_INSTRUCTIONS[context.layout];
 
   return `Você é um especialista em criativos de alta performance para Meta Ads no mercado brasileiro.
 
-Com base no contexto abaixo, gere um criativo de anúncio completo.
+Com base no contexto abaixo, gere a copy de um criativo de anúncio para o arquétipo visual "${context.layout}".
 
 NEGÓCIO: ${context.businessName}
 OBJETIVO: ${context.objective}
@@ -39,21 +51,27 @@ PROMESSA: ${context.promise}
 ${context.offer ? `OFERTA: ${context.offer}` : ''}
 PÚBLICO: ${context.audience}
 TOM DE VOZ: ${context.tone || 'profissional e direto'}
-${context.hasProductImage ? 'O usuário forneceu imagem do produto — posicione-a como elemento principal.' : ''}
-${forced ? `ESTILO VISUAL OBRIGATÓRIO: layout="${forced.layout}", color_scheme="${forced.color_scheme}" — não altere esses valores.` : ''}
+${context.hasProductImage ? 'O usuário forneceu imagem do produto — a copy deve complementá-la.' : ''}
 
-Responda SOMENTE em JSON válido com esta estrutura exata:
+ARQUÉTIPO: ${context.layout}
+INSTRUÇÕES DE COPY PARA ESTE ARQUÉTIPO:
+${layoutInstructions}
+
+Responda SOMENTE em JSON válido. Inclua apenas os campos pedidos para o arquétipo
+e ecoe "layout" exatamente como "${context.layout}":
 {
-  "headline": "texto impactante com máximo 40 caracteres",
-  "primary_text": "texto principal do anúncio com máximo 125 caracteres, focado na promessa",
-  "cta": "um de: Saiba Mais | Comprar Agora | Cadastre-se | Falar com Especialista | Ver Oferta",
-  "subheadline": "frase de apoio com máximo 60 caracteres",
-  ${layoutInstruction},
-  "visual_elements": ["lista de elementos visuais sugeridos como strings"],
-  "compliance_notes": "observações sobre compliance Meta se houver"
+  "headline": "texto da manchete",
+  "subheadline": "(apenas se pedido para o arquétipo)",
+  "qualifier": "(apenas se pedido para o arquétipo)",
+  "offer_text": "(apenas se pedido para o arquétipo)",
+  "subtitle": "(apenas se pedido para o arquétipo)",
+  "subtitle_highlight": "(apenas se pedido para o arquétipo)",
+  "benefits": ["(apenas se pedido para o arquétipo)"],
+  "cta": "(apenas se pedido para o arquétipo)",
+  "layout": "${context.layout}"
 }
 
-Não inclua explicações fora do JSON.`;
+NÃO inclua color_scheme. NÃO inclua explicações fora do JSON.`;
 }
 
 export interface ValidationContext {
