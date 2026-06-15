@@ -1,6 +1,6 @@
 import { Sparkles, Wand2, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components';
-import { FUNNEL_LABEL } from '@/lib/layout-labels';
+import { FUNNEL_LABEL, sanitizeJustification } from '@/lib/layout-labels';
 import type { SelectLayoutResponse } from '@/types/studio';
 
 interface Props {
@@ -28,7 +28,7 @@ export function LayoutSuggestion({ suggestion, onAccept, onChooseManually }: Pro
           </p>
         </div>
         <div className="rounded-xl bg-white border border-[#F0DCCB] p-3">
-          <p className="text-sm text-[#475467] leading-relaxed">{suggestion.justification}</p>
+          <p className="text-sm text-[#475467] leading-relaxed">{sanitizeJustification(suggestion.justification)}</p>
         </div>
       </div>
 

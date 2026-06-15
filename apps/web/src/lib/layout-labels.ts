@@ -132,3 +132,13 @@ export function layoutLabel(layout: string): string {
 export function isKnownLayout(layout: string): layout is CreativeLayout {
   return layout in LAYOUT_META;
 }
+
+// Defesa em profundidade: mesmo que o LLM escape a instrução do prompt, a UI
+// nunca exibe o nome técnico do arquétipo — troca por nome de produto.
+export function sanitizeJustification(text: string): string {
+  let out = text;
+  for (const layout of CREATIVE_LAYOUTS) {
+    out = out.replace(new RegExp(layout, 'gi'), LAYOUT_META[layout].label);
+  }
+  return out;
+}

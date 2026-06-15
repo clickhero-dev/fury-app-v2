@@ -161,6 +161,18 @@ FORMATO DE RESPOSTA (JSON ESTRITO — nada além disso)
   }
 }
 
+IMPORTANTE (campo "justification"): NUNCA mencione os nomes técnicos dos
+arquétipos (editorial_headline, offer_burst, split_diagonal_product,
+photo_immersive, split_horizontal_photo) na justificativa. Use APENAS os nomes
+de produto:
+  - editorial_headline → 'Manchete editorial'
+  - offer_burst → 'Oferta de alto impacto'
+  - split_diagonal_product → 'Vitrine de produto'
+  - photo_immersive → 'Foto imersiva'
+  - split_horizontal_photo → 'Apresentação institucional'
+Escreva a justificativa como um diretor de arte explicando para um dono de
+negócio, NÃO para um desenvolvedor.
+
 NÃO inclua nada fora do JSON. Sem markdown, sem explicações fora do JSON.`;
 
 function buildUserMessage(input: LayoutSelectorInput): string {
