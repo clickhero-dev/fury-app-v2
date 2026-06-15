@@ -100,15 +100,74 @@ export interface RenderCreativeResponse {
   brandColor: string;
 }
 
-export interface GenerateCreativePayload {
+import type { CreativeLayout } from '@/lib/layout-labels';
+
+export interface SuggestedFields {
+  headline?: string;
+  subheadline?: string;
+  qualifier?: string;
+  offer_text?: string;
+  subtitle?: string;
+  subtitle_highlight?: string;
+  benefits?: string[];
+  cta?: string;
+  tone?: 'institutional' | 'energetic';
+}
+
+// Campos de copy enviados ao backend (curados pelo usuário).
+export interface CreativeCopyFields {
+  headline?: string;
+  subheadline?: string;
+  qualifier?: string;
+  offer_text?: string;
+  subtitle?: string;
+  subtitle_highlight?: string;
+  benefits?: string[];
+  cta?: string;
+  cta_icon?: 'arrow' | 'phone' | 'whatsapp' | 'none';
+  price_text?: string;
+  tone?: 'institutional' | 'energetic';
+}
+
+export interface GenerateCreativePayload extends CreativeCopyFields {
   product: string;
   promise: string;
   offer?: string;
   audience: string;
   hasProductImage: boolean;
   productImageUrl?: string;
+  background_image_url?: string;
+  product_image_url?: string;
+  hero_image_url?: string;
+  layout?: CreativeLayout;
+  includeLogo?: boolean;
+  skipCopy?: boolean;
   adaptiveAnswers?: Record<string, string>;
-  templateStyle?: string;
+}
+
+// Payload do preview fiel (POST /studio/preview-png → PNG).
+export interface PreviewCreativePayload extends CreativeCopyFields {
+  layout: CreativeLayout;
+  productImageUrl?: string;
+  includeLogo?: boolean;
+}
+
+export interface SelectLayoutPayload {
+  product: string;
+  promise: string;
+  offer?: string;
+  audience: string;
+  hasProductImage: boolean;
+  productImageUrl?: string;
+}
+
+export interface SelectLayoutResponse {
+  layout: CreativeLayout;
+  label: string;
+  funnel_stage: 'TOFU' | 'MOFU' | 'BOFU';
+  confidence: number;
+  justification: string;
+  suggested_fields: SuggestedFields;
 }
 
 export interface AdaptiveQuestion {
@@ -123,7 +182,6 @@ export interface ValidateContextPayload {
   promise: string;
   offer?: string;
   audience: string;
-  templateStyle?: string;
 }
 
 export interface ValidateContextResponse {
@@ -136,17 +194,17 @@ export interface GenerateCreativeResponse {
   assetId: string;
   imageUrl: string;
   creativeData: {
-    headline: string;
-    primary_text: string;
-    cta: string;
-    subheadline: string;
-    layout: string;
-    color_scheme: string;
+    layout?: string;
+    headline?: string;
+    subheadline?: string;
+    qualifier?: string;
+    offer_text?: string;
+    subtitle?: string;
+    subtitle_highlight?: string;
+    benefits?: string[];
+    cta?: string;
+    // legados (assets antigos na biblioteca)
+    primary_text?: string;
+    color_scheme?: string;
   };
-}
-
-export interface StyleTemplate {
-  id: string;
-  name: string;
-  category: 'Geral' | 'Promoção' | 'Resultado' | 'Confiança' | 'Marca' | 'Conteúdo';
 }

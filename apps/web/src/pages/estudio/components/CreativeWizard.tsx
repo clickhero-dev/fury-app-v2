@@ -5,12 +5,17 @@ import api from '@/lib/api';
 import { useBrandKit } from '@/hooks/useBrandKit';
 import type {
   AdaptiveQuestion,
+  CreativeCopyFields,
   GenerateCreativePayload,
-  StyleTemplate,
+  SelectLayoutResponse,
+  SuggestedFields,
   ValidateContextResponse,
 } from '@/types/studio';
+import type { CreativeLayout } from '@/lib/layout-labels';
 import { AdaptiveQuestions } from './AdaptiveQuestions';
-import { TemplateGallery } from './TemplateGallery';
+import { LayoutSuggestion } from './LayoutSuggestion';
+import { LayoutPicker } from './LayoutPicker';
+import { CreativeFieldsForm } from './CreativeFieldsForm';
 
 interface WizardData {
   product: string;
@@ -38,36 +43,33 @@ const INITIAL_DATA: WizardData = {
   libraryImageUrl: null,
 };
 
-// Step 0 = template gallery; steps 1-5 = briefing questions
-const STEPS = [
-  'Estilo',
-  'Produto',
-  'Promessa',
-  'Oferta',
-  'Público',
-  'Imagem',
-];
-
-const TOTAL_STEPS = STEPS.length; // 6
+const STEPS = ['Produto', 'Promessa', 'Oferta', 'Público', 'Imagem'];
+const TOTAL_STEPS = STEPS.length; // 5
 
 interface Props {
   onGenerate: (payload: GenerateCreativePayload) => void;
+  submitting: boolean;
   onBack: () => void;
 }
 
-type InternalState = 'steps' | 'validating' | 'questions';
+// 'steps' = briefing; depois o fluxo de layout (sugestão → picker → campos).
+type InternalState = 'steps' | 'validating' | 'questions' | 'selecting' | 'suggestion' | 'picker' | 'fields';
 
-export function CreativeWizard({ onGenerate, onBack }: Props) {
+export function CreativeWizard({ onGenerate, submitting, onBack }: Props) {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<WizardData>(INITIAL_DATA);
-  const [selectedTemplate, setSelectedTemplate] = useState<StyleTemplate | null>(null);
   const [visible, setVisible] = useState(true);
   const [internalState, setInternalState] = useState<InternalState>('steps');
   const [adaptiveQuestions, setAdaptiveQuestions] = useState<AdaptiveQuestion[]>([]);
-  const [pendingPayload, setPendingPayload] = useState<GenerateCreativePayload | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string> | undefined>(undefined);
+  const [suggestion, setSuggestion] = useState<SelectLayoutResponse | null>(null);
+  const [chosenLayout, setChosenLayout] = useState<CreativeLayout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { brandKit } = useBrandKit();
   const libraryPhotos = brandKit?.photo_urls ?? [];
+  const hasLogo = !!brandKit?.logo_url;
+
+  const imageUrl = data.imageChoice === 'library' ? data.libraryImageUrl : data.imageBase64;
 
   const transition = (fn: () => void) => {
     setVisible(false);
@@ -87,12 +89,11 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
   };
 
   const canAdvance = (() => {
-    if (step === 0) return selectedTemplate !== null;
-    if (step === 1) return data.product.trim().length >= 5;
-    if (step === 2) return data.promise.trim().length >= 5;
-    if (step === 3) return !data.hasOffer || data.offer.trim().length >= 3;
-    if (step === 4) return data.audience.trim().length >= 5;
-    if (step === 5) return data.imageChoice !== 'library' || !!data.libraryImageUrl;
+    if (step === 0) return data.product.trim().length >= 5;
+    if (step === 1) return data.promise.trim().length >= 5;
+    if (step === 2) return !data.hasOffer || data.offer.trim().length >= 3;
+    if (step === 3) return data.audience.trim().length >= 5;
+    if (step === 4) return data.imageChoice !== 'library' || !!data.libraryImageUrl;
     return true;
   })();
 
@@ -120,86 +121,132 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
     }
   };
 
-  const buildPayload = (): GenerateCreativePayload => {
-    const productImageUrl =
-      data.imageChoice === 'library' ? data.libraryImageUrl ?? undefined : data.imageBase64 ?? undefined;
+  const briefing = () => ({
+    product: data.product.trim(),
+    promise: data.promise.trim(),
+    offer: data.hasOffer ? data.offer.trim() : undefined,
+    audience: data.audience.trim(),
+  });
 
-    return {
-      product: data.product.trim(),
-      promise: data.promise.trim(),
-      offer: data.hasOffer ? data.offer.trim() : undefined,
-      audience: data.audience.trim(),
-      hasProductImage: !!productImageUrl,
-      productImageUrl,
-      templateStyle: selectedTemplate?.id,
-    };
+  const runSelectLayout = async (mergedAnswers?: Record<string, string>) => {
+    setAnswers(mergedAnswers);
+    setInternalState('selecting');
+    const b = briefing();
+    try {
+      const res = await api.post<SelectLayoutResponse>('/studio/select-layout', {
+        product: mergedAnswers?.product || b.product,
+        promise: mergedAnswers?.promise || b.promise,
+        offer: mergedAnswers?.offer || b.offer,
+        audience: mergedAnswers?.audience || b.audience,
+        hasProductImage: !!imageUrl,
+        productImageUrl: imageUrl ?? undefined,
+      });
+      setSuggestion(res.data);
+      setInternalState('suggestion');
+    } catch {
+      // Sem sugestão → escolha manual direta.
+      setSuggestion(null);
+      setInternalState('picker');
+    }
   };
 
-  const handleSubmit = async () => {
-    const payload = buildPayload();
-    setPendingPayload(payload);
+  const handleBriefingDone = async () => {
     setInternalState('validating');
-
+    const b = briefing();
     try {
-      const res = await api.post<ValidateContextResponse>('/studio/creative/validate-context', {
-        product: payload.product,
-        promise: payload.promise,
-        offer: payload.offer,
-        audience: payload.audience,
-        templateStyle: selectedTemplate?.id,
-      });
-
+      const res = await api.post<ValidateContextResponse>('/studio/creative/validate-context', b);
       if (res.data.sufficient || !res.data.questions?.length) {
-        onGenerate(payload);
+        await runSelectLayout();
       } else {
         setAdaptiveQuestions(res.data.questions);
         setInternalState('questions');
       }
     } catch {
-      onGenerate(payload);
+      await runSelectLayout();
     }
   };
 
-  const handleAdaptiveComplete = (answers: Record<string, string>) => {
-    const base = pendingPayload!;
-    const merged: GenerateCreativePayload = {
-      ...base,
-      product: answers.product || base.product,
-      promise: answers.promise || base.promise,
-      offer: answers.offer || base.offer,
-      audience: answers.audience || base.audience,
-      adaptiveAnswers: answers,
-    };
-    onGenerate(merged);
+  const handleAdaptiveComplete = (a: Record<string, string>) => {
+    void runSelectLayout(a);
   };
 
-  const step0ButtonLabel = selectedTemplate
-    ? `Continuar com ${selectedTemplate.name}`
-    : 'Selecione um estilo para continuar';
+  const handleFieldsSubmit = (copy: CreativeCopyFields) => {
+    if (!chosenLayout) return;
+    const b = briefing();
+    const payload: GenerateCreativePayload = {
+      ...b,
+      hasProductImage: !!imageUrl,
+      productImageUrl: imageUrl ?? undefined,
+      layout: chosenLayout,
+      ...copy,
+      skipCopy: true,
+      includeLogo: true,
+      adaptiveAnswers: answers,
+    };
+    onGenerate(payload);
+  };
 
-  if (internalState === 'validating') {
+  // ── Sub-telas do fluxo de layout ──────────────────────────────────────────
+  if (internalState === 'validating' || internalState === 'selecting') {
+    const msg = internalState === 'validating'
+      ? { title: 'Analisando suas informações...', sub: 'Verificando se temos tudo para criar seu anúncio' }
+      : { title: 'Escolhendo o melhor formato...', sub: 'A IA está analisando seu briefing e seus assets' };
     return (
       <div className="max-w-xl mx-auto flex min-h-[300px] flex-col items-center justify-center text-center space-y-4">
         <div className="rounded-full bg-[#FFF4ED] p-4">
           <Loader2 className="h-8 w-8 animate-spin text-[#EA580C]" />
         </div>
         <div>
-          <p className="text-base font-semibold text-[#101828]">Analisando suas informações...</p>
-          <p className="text-sm text-[#667085] mt-1">A IA está verificando se temos tudo para criar seu anúncio</p>
+          <p className="text-base font-semibold text-[#101828]">{msg.title}</p>
+          <p className="text-sm text-[#667085] mt-1">{msg.sub}</p>
         </div>
       </div>
     );
   }
 
   if (internalState === 'questions') {
+    return <AdaptiveQuestions questions={adaptiveQuestions} onComplete={handleAdaptiveComplete} />;
+  }
+
+  if (internalState === 'suggestion' && suggestion) {
     return (
-      <AdaptiveQuestions
-        questions={adaptiveQuestions}
-        onComplete={handleAdaptiveComplete}
+      <LayoutSuggestion
+        suggestion={suggestion}
+        onAccept={() => {
+          setChosenLayout(suggestion.layout);
+          setInternalState('fields');
+        }}
+        onChooseManually={() => setInternalState('picker')}
       />
     );
   }
 
+  if (internalState === 'picker') {
+    return (
+      <LayoutPicker
+        selected={chosenLayout}
+        onSelect={setChosenLayout}
+        onContinue={() => chosenLayout && setInternalState('fields')}
+        hasImage={!!imageUrl}
+        hasLogo={hasLogo}
+      />
+    );
+  }
+
+  if (internalState === 'fields' && chosenLayout) {
+    return (
+      <CreativeFieldsForm
+        layout={chosenLayout}
+        initial={(suggestion?.suggested_fields ?? {}) as SuggestedFields}
+        imageUrl={imageUrl}
+        submitting={submitting}
+        onSubmit={handleFieldsSubmit}
+        onBack={() => setInternalState(suggestion ? 'suggestion' : 'picker')}
+      />
+    );
+  }
+
+  // ── Briefing (steps) ────────────────────────────────────────────────────
   return (
     <div className="max-w-xl mx-auto space-y-6">
       {/* Stepper */}
@@ -224,24 +271,11 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
         ))}
       </div>
 
-      {/* Step content */}
       <div
         className="transition-all duration-[180ms]"
         style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateX(0)' : 'translateX(20px)' }}
       >
-        {/* STEP 0 — Template gallery */}
         {step === 0 && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-bold text-[#101828]">Escolha o estilo do seu anúncio</h2>
-              <p className="text-sm text-[#667085] mt-1">Selecione o visual do anúncio que você quer que o FURY crie pra você</p>
-            </div>
-            <TemplateGallery selectedTemplate={selectedTemplate} onSelect={setSelectedTemplate} />
-          </div>
-        )}
-
-        {/* STEP 1 — Product */}
-        {step === 1 && (
           <StepCard title="O que você vai anunciar?" hint="Descreva o que você quer mostrar para as pessoas">
             <textarea
               autoFocus
@@ -253,21 +287,19 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
           </StepCard>
         )}
 
-        {/* STEP 2 — Promise */}
-        {step === 2 && (
+        {step === 1 && (
           <StepCard title="O que você oferece de especial?" hint="Pode ser um preço, uma condição, um atendimento diferente ou um resultado garantido">
             <textarea
               autoFocus
               value={data.promise}
               onChange={(e) => setData((d) => ({ ...d, promise: e.target.value }))}
-              placeholder="Ex: Corte por R$ 35 com agendamento fácil pelo WhatsApp, Tosa com busca e entrega no bairro, Primeira consulta sem custo, Marmita por R$ 18 com entrega em 30 minutos..."
+              placeholder="Ex: Corte por R$ 35 com agendamento fácil pelo WhatsApp, Primeira consulta sem custo..."
               className="w-full min-h-[120px] rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] px-4 py-3 text-sm text-[#101828] outline-none transition focus:border-[#EA580C] focus:ring-2 focus:ring-[#EA580C]/10 resize-none"
             />
           </StepCard>
         )}
 
-        {/* STEP 3 — Offer */}
-        {step === 3 && (
+        {step === 2 && (
           <StepCard title="Tem alguma promoção ou condição especial?" hint="Desconto, preço especial ou condição por tempo limitado aumentam muito os resultados">
             <div className="space-y-4">
               <div className="flex gap-3">
@@ -292,7 +324,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
                   autoFocus
                   value={data.offer}
                   onChange={(e) => setData((d) => ({ ...d, offer: e.target.value }))}
-                  placeholder="Ex: 20% de desconto essa semana, Leve 2 pague 1, Mensalidade por R$ 89 no primeiro mês, Frete grátis para o bairro..."
+                  placeholder="Ex: 20% de desconto essa semana, Leve 2 pague 1, Frete grátis para o bairro..."
                   className="w-full min-h-[100px] rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] px-4 py-3 text-sm text-[#101828] outline-none transition focus:border-[#EA580C] focus:ring-2 focus:ring-[#EA580C]/10 resize-none"
                 />
               )}
@@ -300,21 +332,19 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
           </StepCard>
         )}
 
-        {/* STEP 4 — Audience */}
-        {step === 4 && (
+        {step === 3 && (
           <StepCard title="Quem você quer atingir?" hint="Quanto mais específico, mais certeiro o anúncio — pode ser simples">
             <textarea
               autoFocus
               value={data.audience}
               onChange={(e) => setData((d) => ({ ...d, audience: e.target.value }))}
-              placeholder="Ex: Homens da região que cuidam da aparência, Mães que precisam de praticidade na alimentação, Pessoas que querem emagrecer com saúde..."
+              placeholder="Ex: Homens da região que cuidam da aparência, Mães que precisam de praticidade..."
               className="w-full min-h-[120px] rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] px-4 py-3 text-sm text-[#101828] outline-none transition focus:border-[#EA580C] focus:ring-2 focus:ring-[#EA580C]/10 resize-none"
             />
           </StepCard>
         )}
 
-        {/* STEP 5 — Image */}
-        {step === 5 && (
+        {step === 4 && (
           <StepCard title="Você tem uma foto para usar?" hint="Uma foto do seu produto, serviço ou espaço deixa o anúncio muito mais real e confiável">
             <div className="space-y-4">
               <div className={`grid gap-3 ${libraryPhotos.length > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
@@ -322,9 +352,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
                   <button
                     onClick={() => setData((d) => ({ ...d, imageChoice: 'library', imageFile: null, imagePreviewUrl: null, imageBase64: null }))}
                     className={`rounded-xl border-2 p-4 text-center transition-all ${
-                      data.imageChoice === 'library'
-                        ? 'border-[#EA580C] bg-[#FFF4ED]'
-                        : 'border-[#E6E8EC] hover:border-[#F0B48E]'
+                      data.imageChoice === 'library' ? 'border-[#EA580C] bg-[#FFF4ED]' : 'border-[#E6E8EC] hover:border-[#F0B48E]'
                     }`}
                   >
                     <Images className="mx-auto mb-2 h-5 w-5 text-[#EA580C]" />
@@ -334,9 +362,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
                 <button
                   onClick={() => setData((d) => ({ ...d, imageChoice: 'upload', libraryImageUrl: null }))}
                   className={`rounded-xl border-2 p-4 text-center transition-all ${
-                    data.imageChoice === 'upload'
-                      ? 'border-[#EA580C] bg-[#FFF4ED]'
-                      : 'border-[#E6E8EC] hover:border-[#F0B48E]'
+                    data.imageChoice === 'upload' ? 'border-[#EA580C] bg-[#FFF4ED]' : 'border-[#E6E8EC] hover:border-[#F0B48E]'
                   }`}
                 >
                   <Upload className="mx-auto mb-2 h-5 w-5 text-[#EA580C]" />
@@ -345,9 +371,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
                 <button
                   onClick={() => setData((d) => ({ ...d, imageChoice: 'none', imageFile: null, imagePreviewUrl: null, imageBase64: null, libraryImageUrl: null }))}
                   className={`rounded-xl border-2 p-4 text-center transition-all ${
-                    data.imageChoice === 'none'
-                      ? 'border-[#EA580C] bg-[#FFF4ED]'
-                      : 'border-[#E6E8EC] hover:border-[#F0B48E]'
+                    data.imageChoice === 'none' ? 'border-[#EA580C] bg-[#FFF4ED]' : 'border-[#E6E8EC] hover:border-[#F0B48E]'
                   }`}
                 >
                   <Wand2 className="mx-auto mb-2 h-5 w-5 text-[#EA580C]" />
@@ -362,9 +386,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
                       key={url}
                       onClick={() => setData((d) => ({ ...d, libraryImageUrl: url }))}
                       className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all ${
-                        data.libraryImageUrl === url
-                          ? 'border-[#EA580C] ring-2 ring-[#EA580C]/30'
-                          : 'border-[#E6E8EC] hover:border-[#F0B48E]'
+                        data.libraryImageUrl === url ? 'border-[#EA580C] ring-2 ring-[#EA580C]/30' : 'border-[#E6E8EC] hover:border-[#F0B48E]'
                       }`}
                     >
                       <img src={url} alt="Foto da biblioteca" className="w-full h-full object-cover" />
@@ -377,11 +399,7 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
                 <div className="space-y-3">
                   {data.imagePreviewUrl ? (
                     <div className="relative">
-                      <img
-                        src={data.imagePreviewUrl}
-                        alt="Preview"
-                        className="w-full max-h-48 object-contain rounded-xl border border-[#E6E8EC]"
-                      />
+                      <img src={data.imagePreviewUrl} alt="Preview" className="w-full max-h-48 object-contain rounded-xl border border-[#E6E8EC]" />
                       <button
                         onClick={() => setData((d) => ({ ...d, imageFile: null, imagePreviewUrl: null, imageBase64: null }))}
                         className="absolute top-2 right-2 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
@@ -416,42 +434,30 @@ export function CreativeWizard({ onGenerate, onBack }: Props) {
       </div>
 
       {/* Navigation */}
-      {step === 0 ? (
-        <Button
-          onClick={advance}
-          disabled={!canAdvance}
-          className={`w-full inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white font-semibold ${!canAdvance ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          {step0ButtonLabel}
-          {canAdvance && <ArrowRight className="h-4 w-4" />}
+      <div className="flex items-center gap-3">
+        <Button variant="outline" onClick={retreat} className="w-10 h-10 p-0 shrink-0">
+          <ArrowLeft className="h-4 w-4" />
         </Button>
-      ) : (
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={retreat} className="w-10 h-10 p-0 shrink-0">
-            <ArrowLeft className="h-4 w-4" />
+        {step < TOTAL_STEPS - 1 ? (
+          <Button
+            onClick={advance}
+            disabled={!canAdvance}
+            className="flex-1 inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white disabled:opacity-50"
+          >
+            Continuar
+            <ArrowRight className="h-4 w-4" />
           </Button>
-
-          {step < TOTAL_STEPS - 1 ? (
-            <Button
-              onClick={advance}
-              disabled={!canAdvance}
-              className="flex-1 inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white disabled:opacity-50"
-            >
-              Continuar
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Button
-              onClick={() => void handleSubmit()}
-              disabled={!canAdvance}
-              className="flex-1 inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white disabled:opacity-50"
-            >
-              <Wand2 className="h-4 w-4" />
-              Criar meu anúncio
-            </Button>
-          )}
-        </div>
-      )}
+        ) : (
+          <Button
+            onClick={() => void handleBriefingDone()}
+            disabled={!canAdvance}
+            className="flex-1 inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white disabled:opacity-50"
+          >
+            <ArrowRight className="h-4 w-4" />
+            Ver formato recomendado
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
