@@ -434,36 +434,86 @@ function wrapTextAdvanced(
   return { linesRendered: out.length, finalY: y + Math.max(0, out.length - 1) * lineHeight };
 }
 
-/** Subtítulo com um trecho destacado em cor de acento (offer_burst). */
-function drawHighlightedSubtitle(ctx: Ctx, full: string, highlight: string | undefined, centerX: number, y: number, size: number, accentColor: string): void {
-  type Seg = { t: string; hl: boolean };
-  const segs: Seg[] = [];
-  const idx = highlight ? full.toLowerCase().indexOf(highlight.toLowerCase()) : -1;
-  if (highlight && idx >= 0) {
-    const before = full.slice(0, idx);
-    const mid = full.slice(idx, idx + highlight.length);
-    const after = full.slice(idx + highlight.length);
-    if (before) segs.push({ t: before, hl: false });
-    segs.push({ t: mid, hl: true });
-    if (after) segs.push({ t: after, hl: false });
-  } else {
-    segs.push({ t: full, hl: false });
+/**
+ * Subtítulo com um trecho destacado em cor de acento (offer_burst), centrado em
+ * centerX/y. Quebra por palavra respeitando maxWidth e reduz a fonte se passar
+ * de 2 linhas (piso 22px) — NUNCA ultrapassa a borda do canvas. O destaque é
+ * preservado por palavra (overlap com o range do subtitle_highlight).
+ */
+function drawHighlightedSubtitle(ctx: Ctx, full: string, highlight: string | undefined, centerX: number, y: number, baseSize: number, accentColor: string, maxWidth = 960): void {
+  const hlStart = highlight ? full.toLowerCase().indexOf(highlight.toLowerCase()) : -1;
+  const hlEnd = hlStart >= 0 ? hlStart + highlight!.length : -1;
+
+  // Tokeniza em palavras, marcando quais caem dentro do range do destaque.
+  type Word = { text: string; hl: boolean };
+  const words: Word[] = [];
+  let offset = 0;
+  for (const w of full.split(' ')) {
+    const start = offset;
+    const end = offset + w.length;
+    offset = end + 1; // +1 do espaço
+    if (w) words.push({ text: w, hl: hlStart >= 0 && start < hlEnd && end > hlStart });
   }
 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  let total = 0;
-  for (const s of segs) {
-    ctx.font = font(s.hl ? wBold : wRegular, size);
-    total += ctx.measureText(s.t).width;
+
+  type Line = { words: Word[]; width: number };
+  const layout = (size: number): Line[] => {
+    ctx.font = font(wRegular, size);
+    const sp = ctx.measureText(' ').width;
+    const wWidth = (wd: Word) => { ctx.font = font(wd.hl ? wBold : wRegular, size); return ctx.measureText(wd.text).width; };
+    const lines: Line[] = [];
+    let cur: Word[] = [];
+    let curW = 0;
+    for (const wd of words) {
+      const ww = wWidth(wd);
+      const add = cur.length ? sp + ww : ww;
+      if (cur.length && curW + add > maxWidth) {
+        lines.push({ words: cur, width: curW });
+        cur = [wd];
+        curW = ww;
+      } else {
+        cur.push(wd);
+        curW += add;
+      }
+    }
+    if (cur.length) lines.push({ words: cur, width: curW });
+    return lines;
+  };
+
+  let size = baseSize;
+  let lines = layout(size);
+  while (lines.length > 2 && size > 22) {
+    size -= 2;
+    lines = layout(size);
   }
-  let drawX = centerX - total / 2;
-  for (const s of segs) {
-    ctx.font = font(s.hl ? wBold : wRegular, size);
-    ctx.fillStyle = s.hl ? accentColor : '#FFFFFF';
-    ctx.fillText(s.t, drawX, y);
-    drawX += ctx.measureText(s.t).width;
+
+  const lineH = size * 1.25;
+  let cy = y - ((lines.length - 1) * lineH) / 2;
+  for (const ln of lines) {
+    ctx.font = font(wRegular, size);
+    const sp = ctx.measureText(' ').width;
+    let x = centerX - ln.width / 2;
+    for (const wd of ln.words) {
+      ctx.font = font(wd.hl ? wBold : wRegular, size);
+      ctx.fillStyle = wd.hl ? accentColor : '#FFFFFF';
+      ctx.fillText(wd.text, x, cy);
+      x += ctx.measureText(wd.text).width + sp;
+    }
+    cy += lineH;
   }
+}
+
+/** Reduz o tamanho da fonte até o texto caber em maxWidth (piso minSize). */
+function fitFontSize(ctx: Ctx, text: string, maxWidth: number, baseSize: number, minSize: number, weight: string): number {
+  let s = baseSize;
+  ctx.font = font(weight, s);
+  while (ctx.measureText(text).width > maxWidth && s > minSize) {
+    s -= 2;
+    ctx.font = font(weight, s);
+  }
+  return s;
 }
 
 // ── Renderers por arquétipo ─────────────────────────────────────────────────
@@ -694,8 +744,9 @@ async function drawPhotoImmersive(ctx: Ctx, data: CreativeData, canvas: Canvas, 
   ctx.fillStyle = '#FFFFFF';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  ctx.font = font(wBold, 38);
-  ctx.fillText((data.qualifier || '').toUpperCase(), 64, 820);
+  const qualifierText = (data.qualifier || '').toUpperCase();
+  ctx.font = font(wBold, fitFontSize(ctx, qualifierText, 956, 38, 24, wBold));
+  ctx.fillText(qualifierText, 64, 820);
 
   // 7. Headline
   ctx.font = font(wXBold, 56);
@@ -745,8 +796,10 @@ async function drawSplitHorizontalPhoto(ctx: Ctx, data: CreativeData, canvas: Ca
   ctx.fillStyle = '#FFFFFF';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  ctx.font = font(tone === 'energetic' ? wBold : wRegular, 36);
-  ctx.fillText(tone === 'energetic' ? (data.qualifier || '').toUpperCase() : (data.qualifier || ''), 64, 130);
+  const shQualifier = tone === 'energetic' ? (data.qualifier || '').toUpperCase() : (data.qualifier || '');
+  const shWeight = tone === 'energetic' ? wBold : wRegular;
+  ctx.font = font(shWeight, fitFontSize(ctx, shQualifier, 952, 36, 24, shWeight));
+  ctx.fillText(shQualifier, 64, 130);
 
   // 5. Headline
   ctx.font = font(wXBold, 64);
