@@ -590,7 +590,11 @@ export type BrandColors = {
 export async function convertHTMLToPNG(data: CreativeData, brandColors?: BrandColors): Promise<Buffer> {
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
-  const colors = { ...(COLOR_SCHEMES[data.color_scheme] ?? COLOR_SCHEMES.brand_orange) };
+  // NOTA (Prompt 4): renderers ainda usam os color_schemes legados como base.
+  // O novo contrato traz cores em data.brand_colors — a refatoração dos renderers
+  // por arquétipo é feita no Prompt 4. Até lá, caímos no scheme legado e a cor
+  // primária da marca é aplicada via brandColors (abaixo).
+  const colors = { ...(COLOR_SCHEMES[data.color_scheme ?? 'brand_orange'] ?? COLOR_SCHEMES.brand_orange) };
 
   if (brandColors?.primary) colors.primary = brandColors.primary;
   if (brandColors?.secondary) colors.textSecondary = brandColors.secondary;

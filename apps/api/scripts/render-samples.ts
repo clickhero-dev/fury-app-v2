@@ -12,20 +12,25 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(__dirname, '_samples');
 fs.mkdirSync(outDir, { recursive: true });
 
+// NOTA (Prompt 4): os renderers por arquétipo ainda não foram implementados.
+// Este script compila com o novo contrato, mas a saída visual só fica correta
+// após o Prompt 4 reescrever os renderers e este script.
 const LAYOUTS: CreativeData['layout'][] = [
-  'product_hero',
-  'text_focus',
-  'offer_highlight',
-  'testimonial_style',
+  'editorial_headline',
+  'offer_burst',
+  'split_diagonal_product',
+  'photo_immersive',
+  'split_horizontal_photo',
 ];
 
 const baseData: Omit<CreativeData, 'layout' | 'productImageUrl' | 'includeLogo'> = {
   headline: 'Buffet a partir de R$ 54,99',
-  primary_text: 'Pizza artesanal, massas frescas e sobremesas todos os dias da semana, em um ambiente acolhedor para toda a família.',
+  primary_text: 'Pizza artesanal, massas frescas e sobremesas todos os dias da semana, em um ambiente acolhedor para toda a família.', // @deprecated legado — renderer atual ainda lê
   subheadline: 'Válido de segunda a sexta',
   cta: 'Conheça agora',
-  color_scheme: 'brand_orange',
+  color_scheme: 'brand_orange', // @deprecated legado
   businessName: 'Fogo & Forno',
+  brand_colors: { primary: '#EA580C' },
 };
 
 // Cor de marca legível — roxo claro, contraste suficiente sobre fundo escuro.
