@@ -1,11 +1,10 @@
-// Contrato central do Estúdio de Criação.
-// Define os 5 arquétipos visuais e os campos de copy/imagem/marca consumidos
-// pelo renderer (html-to-png.service.ts) e pelo pipeline de geração.
+// Contrato central do Estúdio de Criação — os 5 arquétipos visuais e os campos
+// de copy/imagem/marca consumidos pelo renderer (html-to-png.service.ts) e pelo
+// pipeline de geração (studio.routes.ts).
 //
-// Histórico: o gerador de HTML legado (generateCreativeHTML + layouts
-// product_hero/text_focus/offer_highlight/testimonial_style) foi removido em
-// 15/06/2026 — era código morto (nenhum importador) e incompatível com o novo
-// contrato. A renderização é feita por @napi-rs/canvas em html-to-png.service.ts.
+// Histórico: este contrato vivia em creative-generator.service.ts (junto do
+// gerador de HTML legado, removido em 15/06/2026). Como o arquivo passou a
+// conter apenas a interface, foi renomeado para creative-data.ts no Prompt 6.
 
 export interface CreativeData {
   // ── Layout ───────────────────────────────────────────────────────────

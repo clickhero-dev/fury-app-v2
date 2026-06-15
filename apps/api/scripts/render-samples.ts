@@ -1,133 +1,203 @@
-// Temporary script — generates sample PNGs for the 4 creative layouts so the
-// renderer output can be visually inspected before committing.
-// Run with: node --loader ts-node/esm apps/api/scripts/render-samples.ts
+// Script de amostras — gera PNGs dos 5 arquétipos para VALIDAÇÃO VISUAL
+// obrigatória antes do commit (Prompt 6). Usa placeholders locais (sem rede).
+//
+// TODO: quando houver fotos stock no R2, trocar os placeholders por URLs reais
+// (foto de cena humana p/ editorial, comida apetitosa p/ photo_immersive).
+//
+// Run: npx ts-node scripts/render-samples.ts  (a partir de apps/api)
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createCanvas } from '@napi-rs/canvas';
 import { convertHTMLToPNG, type BrandColors } from '../src/services/html-to-png.service.js';
-import type { CreativeData } from '../src/services/creative-generator.service.js';
+import type { CreativeData } from '../src/services/creative-data.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const outDir = path.join(__dirname, '_samples');
+// apps/api/_samples/<timestamp>/
+const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+const outDir = path.resolve(__dirname, '..', '_samples', stamp);
 fs.mkdirSync(outDir, { recursive: true });
 
-// NOTA (Prompt 4): os renderers por arquétipo ainda não foram implementados.
-// Este script compila com o novo contrato, mas a saída visual só fica correta
-// após o Prompt 4 reescrever os renderers e este script.
-const LAYOUTS: CreativeData['layout'][] = [
-  'editorial_headline',
-  'offer_burst',
-  'split_diagonal_product',
-  'photo_immersive',
-  'split_horizontal_photo',
-];
-
-const baseData: Omit<CreativeData, 'layout' | 'productImageUrl' | 'includeLogo'> = {
-  headline: 'Buffet a partir de R$ 54,99',
-  primary_text: 'Pizza artesanal, massas frescas e sobremesas todos os dias da semana, em um ambiente acolhedor para toda a família.', // @deprecated legado — renderer atual ainda lê
-  subheadline: 'Válido de segunda a sexta',
-  cta: 'Conheça agora',
-  color_scheme: 'brand_orange', // @deprecated legado
-  businessName: 'Fogo & Forno',
-  brand_colors: { primary: '#EA580C' },
-};
-
-// Cor de marca legível — roxo claro, contraste suficiente sobre fundo escuro.
-const GOOD_BRAND_COLORS: BrandColors = { primary: '#A78BFA', secondary: '#CCCCCC' };
-
-// Cor de marca propositalmente ilegível — roxo escuro #6D28D9 sobre fundo escuro
-// (contraste ~2:1, abaixo do minimo de 4.5:1). Usada para provar o guard de contraste.
-const BAD_BRAND_COLORS: BrandColors = { primary: '#6D28D9', secondary: '#3F3F46' };
-
-// Generate a local placeholder "product photo" so we don't depend on network access.
-function makePlaceholderImage(): string {
+// ── Placeholders via canvas (sem assets externos) ───────────────────────────
+function makePhoto(label: string, a: string, b: string): string {
   const c = createCanvas(1200, 1200);
   const ctx = c.getContext('2d');
   const grad = ctx.createLinearGradient(0, 0, 1200, 1200);
-  grad.addColorStop(0, '#7C2D12');
-  grad.addColorStop(1, '#FACC15');
+  grad.addColorStop(0, a);
+  grad.addColorStop(1, b);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 1200, 1200);
-
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
   for (let i = 0; i < 6; i++) {
     ctx.beginPath();
-    ctx.arc(200 + i * 180, 600 + (i % 2 === 0 ? -150 : 150), 140, 0, Math.PI * 2);
+    ctx.arc(180 + i * 190, 700 + (i % 2 === 0 ? -160 : 160), 150, 0, Math.PI * 2);
     ctx.fill();
   }
-
-  ctx.font = 'bold 70px sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.font = 'bold 60px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('FOTO DO PRODUTO', 600, 600);
-
-  const imgPath = path.join(outDir, '_placeholder-product.png');
-  fs.writeFileSync(imgPath, c.toBuffer('image/png'));
-  return imgPath;
+  ctx.fillText(label, 600, 600);
+  const p = path.join(outDir, `_photo-${label.toLowerCase().replace(/\s+/g, '-')}.png`);
+  fs.writeFileSync(p, c.toBuffer('image/png'));
+  return p;
 }
 
-// Generate a local placeholder logo (circular mark) so we don't depend on network access.
-function makePlaceholderLogo(): string {
+function makeProductMockup(): string {
+  const c = createCanvas(820, 1040);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(120, 120, 560, 800);
+  const grad = ctx.createLinearGradient(120, 0, 680, 0);
+  grad.addColorStop(0, 'rgba(255,255,255,0.25)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.05)');
+  grad.addColorStop(1, 'rgba(255,255,255,0.15)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(120, 120, 560, 800);
+  ctx.font = 'bold 44px sans-serif';
+  ctx.fillStyle = '#FACC15';
+  ctx.textAlign = 'center';
+  ctx.fillText('E-BOOK', 400, 520);
+  const p = path.join(outDir, '_product-mockup.png');
+  fs.writeFileSync(p, c.toBuffer('image/png'));
+  return p;
+}
+
+function makeHero(): string {
+  const c = createCanvas(700, 900);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#0EA5E9';
+  ctx.beginPath();
+  ctx.ellipse(350, 450, 230, 380, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = 'bold 56px sans-serif';
+  ctx.fillStyle = '#FFFFFF';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('HERO', 350, 450);
+  const p = path.join(outDir, '_hero.png');
+  fs.writeFileSync(p, c.toBuffer('image/png'));
+  return p;
+}
+
+function makeLogo(): string {
   const size = 400;
   const c = createCanvas(size, size);
   const ctx = c.getContext('2d');
-
-  // fundo transparente, marca circular escura — testa o chip claro do logo
   ctx.beginPath();
   ctx.arc(size / 2, size / 2, size / 2 - 10, 0, Math.PI * 2);
   ctx.fillStyle = '#1F2937';
   ctx.fill();
-
-  ctx.font = 'bold 160px sans-serif';
+  ctx.font = 'bold 150px sans-serif';
   ctx.fillStyle = '#FACC15';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('FF', size / 2, size / 2 + 10);
+  ctx.fillText('FF', size / 2, size / 2 + 8);
+  const p = path.join(outDir, '_logo.png');
+  fs.writeFileSync(p, c.toBuffer('image/png'));
+  return p;
+}
 
-  const imgPath = path.join(outDir, '_placeholder-logo.png');
-  fs.writeFileSync(imgPath, c.toBuffer('image/png'));
-  return imgPath;
+async function save(name: string, data: CreativeData, brand: BrandColors) {
+  try {
+    const buf = await convertHTMLToPNG(data, brand);
+    const out = path.join(outDir, `${name}.png`);
+    fs.writeFileSync(out, buf);
+    console.log(`OK  ${name}  →  ${out}`);
+  } catch (err) {
+    console.error(`ERR ${name}:`, (err as Error).message);
+  }
 }
 
 async function run() {
-  const placeholderPath = makePlaceholderImage();
-  const logoPath = makePlaceholderLogo();
+  const scenePhoto = makePhoto('CENA', '#3b1d10', '#1F2937');
+  const foodPhoto = makePhoto('COMIDA', '#7C2D12', '#b45309');
+  const product = makeProductMockup();
+  const hero = makeHero();
+  const logo = makeLogo();
 
-  for (const layout of LAYOUTS) {
-    // Sem foto, sem logo, cor de marca legivel
-    const a: CreativeData = { ...baseData, layout, includeLogo: false };
-    fs.writeFileSync(
-      path.join(outDir, `${layout}_sem-foto_sem-logo_cor-ok.png`),
-      await convertHTMLToPNG(a, GOOD_BRAND_COLORS),
-    );
+  const business = 'Fogo & Forno';
 
-    // Com foto, sem logo, cor de marca legivel
-    const b: CreativeData = { ...baseData, layout, productImageUrl: placeholderPath, includeLogo: false };
-    fs.writeFileSync(
-      path.join(outDir, `${layout}_com-foto_sem-logo_cor-ok.png`),
-      await convertHTMLToPNG(b, GOOD_BRAND_COLORS),
-    );
+  // Sample 1 — editorial_headline
+  await save('1_editorial_headline', {
+    layout: 'editorial_headline',
+    businessName: 'Dra. Ana Nutri',
+    includeLogo: true,
+    background_image_url: scenePhoto,
+    headline: 'O PERIGO INVISÍVEL NAS FESTAS PARA QUEM TEM INTOLERÂNCIA',
+    subheadline: 'Como especialista, a nutricionista Dra. Ana revela o que o cardápio esconde — e como se proteger sem abrir mão do sabor.',
+    highlight_color: '#F4C430',
+    brand_colors: { primary: '#D7263D', accent: '#F4C430' },
+  }, { primary: '#D7263D', secondary: '#F4C430', logoUrl: logo });
 
-    // Com foto, com logo, cor de marca legivel
-    const c: CreativeData = { ...baseData, layout, productImageUrl: placeholderPath, includeLogo: true };
-    fs.writeFileSync(
-      path.join(outDir, `${layout}_com-foto_com-logo_cor-ok.png`),
-      await convertHTMLToPNG(c, { ...GOOD_BRAND_COLORS, logoUrl: logoPath }),
-    );
+  // Sample 2 — offer_burst
+  await save('2_offer_burst', {
+    layout: 'offer_burst',
+    businessName: business,
+    includeLogo: true,
+    hero_image_url: hero,
+    headline: '108 TEMPLATES DE EMAILS',
+    offer_text: '50% OFF',
+    subtitle: 'Necessidade ZERO de conhecimento de copy ou design',
+    subtitle_highlight: 'ZERO',
+    brand_colors: { primary: '#C8161D', accent: '#F2B81E' },
+  }, { primary: '#C8161D', secondary: '#F2B81E', logoUrl: logo });
 
-    // Com foto, com logo, cor de marca PROPOSITALMENTE ilegivel (guard deve corrigir)
-    const d: CreativeData = { ...baseData, layout, productImageUrl: placeholderPath, includeLogo: true };
-    fs.writeFileSync(
-      path.join(outDir, `${layout}_com-foto_com-logo_cor-RUIM.png`),
-      await convertHTMLToPNG(d, { ...BAD_BRAND_COLORS, logoUrl: logoPath }),
-    );
+  // Sample 3 — split_diagonal_product
+  await save('3_split_diagonal_product', {
+    layout: 'split_diagonal_product',
+    businessName: business,
+    includeLogo: false,
+    product_image_url: product,
+    headline: 'PÁSCOA SEM GLÚTEN',
+    benefits: ['15 Receitas que Funcionam', 'Tabela de Ingredientes', 'Tabelas de Farinhas Sem Glúten'],
+    cta: 'SAIBA MAIS',
+    price_text: 'R$ 49,90',
+    brand_colors: { primary: '#F08475', dark: '#1F2937' },
+  }, { primary: '#F08475' });
 
-    console.log(`OK: ${layout} (4 variantes)`);
-  }
+  // Sample 4 — photo_immersive
+  await save('4_photo_immersive', {
+    layout: 'photo_immersive',
+    businessName: business,
+    includeLogo: true,
+    background_image_url: foodPhoto,
+    qualifier: 'Buffet a partir de R$ 54,99',
+    headline: 'Restaurante e Pizzaria',
+    cta: 'CONHEÇA AGORA',
+    cta_icon: 'arrow',
+    brand_colors: { primary: '#D43F2A' },
+  }, { primary: '#D43F2A', logoUrl: logo });
 
-  console.log('\nAmostras salvas em:', outDir);
+  // Sample 5a — split_horizontal_photo (institutional)
+  await save('5a_split_horizontal_institutional', {
+    layout: 'split_horizontal_photo',
+    businessName: business,
+    includeLogo: true,
+    background_image_url: foodPhoto,
+    tone: 'institutional',
+    qualifier: 'Tradição em cada fatia desde 2008',
+    headline: 'Restaurante e Pizzaria',
+    cta: 'CONHEÇA AGORA',
+    cta_icon: 'arrow',
+    brand_colors: { primary: '#D43F2A' },
+  }, { primary: '#D43F2A', logoUrl: logo });
+
+  // Sample 5b — split_horizontal_photo (energetic)
+  await save('5b_split_horizontal_energetic', {
+    layout: 'split_horizontal_photo',
+    businessName: business,
+    includeLogo: true,
+    background_image_url: foodPhoto,
+    tone: 'energetic',
+    qualifier: 'Buffet a partir de R$ 54,99',
+    headline: 'Restaurante e Pizzaria',
+    cta: 'PEÇA AGORA',
+    cta_icon: 'arrow',
+    brand_colors: { primary: '#D43F2A' },
+  }, { primary: '#D43F2A', logoUrl: logo });
+
+  console.log('\nAmostras em:', outDir);
 }
 
 run().catch((err) => {
