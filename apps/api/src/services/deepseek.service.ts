@@ -3,6 +3,8 @@ type Message = { role: 'system' | 'user' | 'assistant'; content: string };
 interface ChatOptions {
   temperature?: number;
   max_tokens?: number;
+  // DeepSeek é OpenAI-compatible: força a resposta a ser um objeto JSON válido.
+  response_format?: { type: 'json_object' };
 }
 
 async function chat(messages: Message[], options: ChatOptions = {}): Promise<string> {
@@ -20,6 +22,7 @@ async function chat(messages: Message[], options: ChatOptions = {}): Promise<str
       messages,
       temperature: options.temperature ?? 0.7,
       max_tokens: options.max_tokens ?? 1500,
+      ...(options.response_format ? { response_format: options.response_format } : {}),
     }),
   });
 

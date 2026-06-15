@@ -17,6 +17,7 @@ import { convertHTMLToPNG, type BrandColors } from '../services/html-to-png.serv
 import type { CreativeData } from '../services/creative-generator.service.js';
 import { selectLayout } from '../services/layout-selector.service.js';
 import type { CreativeLayout } from '@fury/shared';
+import { CREATIVE_LAYOUT_LABELS, CREATIVE_LAYOUT_FUNNEL_STAGE } from '@fury/shared';
 import { studioAssetsDir } from '../lib/temp-storage.js';
 import { uploadAsset } from '../services/storage.service.js';
 
@@ -343,6 +344,7 @@ async function runGenerate(
   tenantId: string,
   publicBaseUrl: string,
   brandColors?: BrandColors,
+  layoutSelection?: { layout: CreativeLayout; confidence: number; justification: string },
 ) {
   const prompt = buildCreativePrompt(context);
   const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.8 });
@@ -392,7 +394,7 @@ async function runGenerate(
     console.log('=== STUDIO [4] imageUrl (local):', imageUrl);
   }
 
-  const metadata = JSON.stringify({ ...creativeData, context });
+  const metadata = JSON.stringify({ ...creativeData, context, layoutSelection });
 
   const [asset] = await db.insert(creativeAssets).values({
     tenantId,
@@ -434,7 +436,7 @@ router.post('/creative/generate', authMiddleware, tenantMiddleware, async (req: 
     const offer = adaptive.offer || body.offer;
     const audience = adaptive.audience || body.audience;
 
-    // 1. Resolver o layout (stub por enquanto; lógica real no Prompt 3).
+    // 1. Resolver o layout pelo Layout Selector Agent (DeepSeek, temp 0.3).
     //    body.layout tem prioridade sobre o agente (permite override manual).
     const layoutResult = await selectLayout({
       tenantId,
@@ -465,7 +467,11 @@ router.post('/creative/generate', authMiddleware, tenantMiddleware, async (req: 
       layout: resolvedLayout,
     };
 
-    const result = await runGenerate(body, context, tenantId, publicBaseUrl, brandKitContext.colors);
+    const result = await runGenerate(body, context, tenantId, publicBaseUrl, brandKitContext.colors, {
+      layout: layoutResult.layout,
+      confidence: layoutResult.confidence,
+      justification: layoutResult.justification,
+    });
     return res.status(201).json(result);
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
@@ -566,6 +572,61 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
         benefits: creativeData.benefits,
         cta: creativeData.cta,
       },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
+    next(err);
+  }
+});
+
+// Layout Selector standalone — o wizard consome para sugerir o arquétipo antes
+// de gerar o criativo. Usa o brand_kit do tenant (scoping rigoroso por tenantId).
+const selectLayoutSchema = z.object({
+  product: z.string().min(1),
+  promise: z.string().min(1),
+  offer: z.string().optional(),
+  audience: z.string().min(1),
+  objective: z.enum(['awareness', 'consideration', 'conversion', 'content']).optional(),
+  hasProductImage: z.boolean().default(false),
+  productImageUrl: z.string().optional(),
+  background_image_url: z.string().optional(),
+});
+
+router.post('/select-layout', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = selectLayoutSchema.parse(req.body);
+    const tenantId = (req as any).tenant?.tenantId as string;
+
+    const brandKitContext = await getBrandKitContext(tenantId);
+
+    const result = await selectLayout({
+      tenantId,
+      briefing: {
+        product: body.product,
+        promise: body.promise,
+        offer: body.offer,
+        audience: body.audience,
+        objective: body.objective,
+      },
+      assets: {
+        hasProductImage: body.hasProductImage,
+        productImageUrl: body.productImageUrl || body.background_image_url,
+        hasLogo: !!brandKitContext.colors?.logoUrl,
+      },
+      brand: {
+        primary_color: brandKitContext.colors?.primary || '#EA580C',
+        accent_color: brandKitContext.colors?.secondary || undefined,
+        brand_voice: brandKitContext.tone,
+      },
+    });
+
+    return res.json({
+      layout: result.layout,
+      label: CREATIVE_LAYOUT_LABELS[result.layout],
+      funnel_stage: CREATIVE_LAYOUT_FUNNEL_STAGE[result.layout],
+      confidence: result.confidence,
+      justification: result.justification,
+      suggested_fields: result.suggested_fields,
     });
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
