@@ -47,7 +47,8 @@ const STEPS = ['Produto', 'Promessa', 'Oferta', 'Público', 'Imagem'];
 const TOTAL_STEPS = STEPS.length; // 5
 
 interface Props {
-  onGenerate: (payload: GenerateCreativePayload, mode: 'create' | 'library') => void;
+  onGenerate: (payload: GenerateCreativePayload) => void;
+  onSaveToLibrary: (payload: GenerateCreativePayload) => Promise<void>;
   submitting: boolean;
   onBack: () => void;
 }
@@ -55,7 +56,7 @@ interface Props {
 // 'steps' = briefing; depois o fluxo de layout (sugestão → picker → campos).
 type InternalState = 'steps' | 'validating' | 'questions' | 'selecting' | 'suggestion' | 'picker' | 'fields';
 
-export function CreativeWizard({ onGenerate, submitting, onBack }: Props) {
+export function CreativeWizard({ onGenerate, onSaveToLibrary, submitting, onBack }: Props) {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<WizardData>(INITIAL_DATA);
   const [visible, setVisible] = useState(true);
@@ -170,10 +171,10 @@ export function CreativeWizard({ onGenerate, submitting, onBack }: Props) {
     void runSelectLayout(a);
   };
 
-  const handleFieldsSubmit = (copy: CreativeCopyFields, mode: 'create' | 'library') => {
-    if (!chosenLayout) return;
+  const buildPayload = (copy: CreativeCopyFields): GenerateCreativePayload | null => {
+    if (!chosenLayout) return null;
     const b = briefing();
-    const payload: GenerateCreativePayload = {
+    return {
       ...b,
       hasProductImage: !!imageUrl,
       productImageUrl: imageUrl ?? undefined,
@@ -183,7 +184,16 @@ export function CreativeWizard({ onGenerate, submitting, onBack }: Props) {
       includeLogo: true,
       adaptiveAnswers: answers,
     };
-    onGenerate(payload, mode);
+  };
+
+  // Handlers totalmente independentes — não compartilham mutation nem side effect.
+  const handleCreate = (copy: CreativeCopyFields) => {
+    const payload = buildPayload(copy);
+    if (payload) onGenerate(payload);
+  };
+  const handleSaveToLibrary = async (copy: CreativeCopyFields) => {
+    const payload = buildPayload(copy);
+    if (payload) await onSaveToLibrary(payload);
   };
 
   // ── Sub-telas do fluxo de layout ──────────────────────────────────────────
@@ -240,7 +250,8 @@ export function CreativeWizard({ onGenerate, submitting, onBack }: Props) {
         initial={(suggestion?.suggested_fields ?? {}) as SuggestedFields}
         imageUrl={imageUrl}
         submitting={submitting}
-        onSubmit={handleFieldsSubmit}
+        onCreate={handleCreate}
+        onSaveToLibrary={handleSaveToLibrary}
         onBack={() => setInternalState(suggestion ? 'suggestion' : 'picker')}
       />
     );

@@ -25,22 +25,14 @@ export function EstudioHome() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const generateMutation = useMutation({
-    mutationFn: async ({ payload }: { payload: GenerateCreativePayload; mode: 'create' | 'library' }) => {
+    mutationFn: async (payload: GenerateCreativePayload) => {
       const res = await api.post<GenerateCreativeResponse>('/studio/creative/generate', payload);
       return res.data;
     },
-    onSuccess: (data, { mode }) => {
+    onSuccess: (data) => {
+      setGenerationResult(data);
+      setView('result');
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
-      // O endpoint de geração já persiste o asset na biblioteca. No modo
-      // 'library' o usuário só quer salvar → volta pra biblioteca; no 'create'
-      // segue pra tela de resultado (publicar/regenerar).
-      if (mode === 'library') {
-        setGenerationResult(null);
-        setView('library');
-      } else {
-        setGenerationResult(data);
-        setView('result');
-      }
     },
     onError: () => {
       setView('error');
@@ -79,9 +71,18 @@ export function EstudioHome() {
     });
   }, [assetList, filterType, filterStatus]);
 
-  const handleGenerate = (payload: GenerateCreativePayload, mode: 'create' | 'library') => {
+  const handleGenerate = (payload: GenerateCreativePayload) => {
     setView('loading');
-    generateMutation.mutate({ payload, mode });
+    generateMutation.mutate(payload);
+  };
+
+  // "Salvar na Biblioteca": persiste o asset SEM trocar a view global — o
+  // usuário permanece na tela de edição. O endpoint de geração já persiste o
+  // asset; aqui não navegamos nem abrimos o fluxo de publicação. Lança em erro
+  // para o componente exibir feedback inline.
+  const handleSaveToLibrary = async (payload: GenerateCreativePayload) => {
+    await api.post<GenerateCreativeResponse>('/studio/creative/generate', payload);
+    await queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
   };
 
   const handleStartWizard = () => setView('wizard');
@@ -269,7 +270,7 @@ export function EstudioHome() {
             <div className="pt-2">
               <p className="text-sm text-[#667085]">Responda as perguntas abaixo — o FURY cria o criativo completo para você</p>
             </div>
-            <CreativeWizard onGenerate={handleGenerate} submitting={generateMutation.isPending} onBack={handleBackToLibrary} />
+            <CreativeWizard onGenerate={handleGenerate} onSaveToLibrary={handleSaveToLibrary} submitting={generateMutation.isPending} onBack={handleBackToLibrary} />
           </>
         )}
 

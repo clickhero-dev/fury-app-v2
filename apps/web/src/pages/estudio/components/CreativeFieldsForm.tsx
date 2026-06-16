@@ -10,15 +10,22 @@ interface Props {
   initial: SuggestedFields;
   imageUrl: string | null;
   submitting: boolean;
-  onSubmit: (fields: CreativeCopyFields, mode: 'create' | 'library') => void;
+  onCreate: (fields: CreativeCopyFields) => void;
+  onSaveToLibrary: (fields: CreativeCopyFields) => Promise<void>;
   onBack: () => void;
 }
 
 const TEXT_KEYS = ['headline', 'subheadline', 'qualifier', 'offer_text', 'subtitle', 'subtitle_highlight', 'cta', 'price_text'] as const;
 type TextKey = (typeof TEXT_KEYS)[number];
 
-export function CreativeFieldsForm({ layout, initial, imageUrl, submitting, onSubmit, onBack }: Props) {
+export function CreativeFieldsForm({ layout, initial, imageUrl, submitting, onCreate, onSaveToLibrary, onBack }: Props) {
   const meta = LAYOUT_META[layout];
+
+  // Estado local do "Salvar na Biblioteca" — independente do fluxo de criação.
+  // Salva sem navegar; feedback inline (o projeto não tem lib de toast).
+  const [savingLib, setSavingLib] = useState(false);
+  const [savedLib, setSavedLib] = useState(false);
+  const [saveError, setSaveError] = useState(false);
 
   const [texts, setTexts] = useState<Record<TextKey, string>>(() => {
     const seed = {} as Record<TextKey, string>;
@@ -88,7 +95,27 @@ export function CreativeFieldsForm({ layout, initial, imageUrl, submitting, onSu
     if (lastUrlRef.current) URL.revokeObjectURL(lastUrlRef.current);
   }, []);
 
-  const setText = (key: TextKey, value: string) => setTexts((t) => ({ ...t, [key]: value }));
+  const setText = (key: TextKey, value: string) => {
+    setSavedLib(false);
+    setSaveError(false);
+    setTexts((t) => ({ ...t, [key]: value }));
+  };
+
+  const handleSaveToLibrary = async () => {
+    setSavingLib(true);
+    setSaveError(false);
+    setSavedLib(false);
+    try {
+      await onSaveToLibrary(buildCopy());
+      setSavedLib(true);
+    } catch {
+      setSaveError(true);
+    } finally {
+      setSavingLib(false);
+    }
+  };
+
+  const busy = submitting || savingLib;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-6 items-start">
@@ -137,27 +164,34 @@ export function CreativeFieldsForm({ layout, initial, imageUrl, submitting, onSu
         </div>
 
         <div className="flex items-center gap-3 pt-2">
-          <Button variant="outline" onClick={onBack} className="w-10 h-10 p-0 shrink-0" disabled={submitting}>
+          <Button variant="outline" onClick={onBack} className="w-10 h-10 p-0 shrink-0" disabled={busy}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <Button
             variant="outline"
-            onClick={() => onSubmit(buildCopy(), 'library')}
-            disabled={submitting}
+            onClick={() => void handleSaveToLibrary()}
+            disabled={busy}
             className="inline-flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            <BookmarkCheck className="h-4 w-4" />
-            Salvar na Biblioteca
+            {savingLib ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookmarkCheck className="h-4 w-4" />}
+            {savingLib ? 'Salvando...' : 'Salvar na Biblioteca'}
           </Button>
           <Button
-            onClick={() => onSubmit(buildCopy(), 'create')}
-            disabled={submitting}
+            onClick={() => onCreate(buildCopy())}
+            disabled={busy}
             className="flex-1 inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white disabled:opacity-50"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
             Criar meu anúncio
           </Button>
         </div>
+
+        {savedLib && (
+          <p className="text-xs font-medium text-emerald-600">Rascunho salvo na biblioteca ✓</p>
+        )}
+        {saveError && (
+          <p className="text-xs font-medium text-red-600">Não foi possível salvar. Tente novamente.</p>
+        )}
       </div>
     </div>
   );
