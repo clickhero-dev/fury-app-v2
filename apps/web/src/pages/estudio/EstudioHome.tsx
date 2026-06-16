@@ -25,14 +25,22 @@ export function EstudioHome() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const generateMutation = useMutation({
-    mutationFn: async (payload: GenerateCreativePayload) => {
+    mutationFn: async ({ payload }: { payload: GenerateCreativePayload; mode: 'create' | 'library' }) => {
       const res = await api.post<GenerateCreativeResponse>('/studio/creative/generate', payload);
       return res.data;
     },
-    onSuccess: (data) => {
-      setGenerationResult(data);
-      setView('result');
+    onSuccess: (data, { mode }) => {
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+      // O endpoint de geração já persiste o asset na biblioteca. No modo
+      // 'library' o usuário só quer salvar → volta pra biblioteca; no 'create'
+      // segue pra tela de resultado (publicar/regenerar).
+      if (mode === 'library') {
+        setGenerationResult(null);
+        setView('library');
+      } else {
+        setGenerationResult(data);
+        setView('result');
+      }
     },
     onError: () => {
       setView('error');
@@ -71,9 +79,9 @@ export function EstudioHome() {
     });
   }, [assetList, filterType, filterStatus]);
 
-  const handleGenerate = (payload: GenerateCreativePayload) => {
+  const handleGenerate = (payload: GenerateCreativePayload, mode: 'create' | 'library') => {
     setView('loading');
-    generateMutation.mutate(payload);
+    generateMutation.mutate({ payload, mode });
   };
 
   const handleStartWizard = () => setView('wizard');

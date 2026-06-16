@@ -47,7 +47,7 @@ const STEPS = ['Produto', 'Promessa', 'Oferta', 'Público', 'Imagem'];
 const TOTAL_STEPS = STEPS.length; // 5
 
 interface Props {
-  onGenerate: (payload: GenerateCreativePayload) => void;
+  onGenerate: (payload: GenerateCreativePayload, mode: 'create' | 'library') => void;
   submitting: boolean;
   onBack: () => void;
 }
@@ -170,7 +170,7 @@ export function CreativeWizard({ onGenerate, submitting, onBack }: Props) {
     void runSelectLayout(a);
   };
 
-  const handleFieldsSubmit = (copy: CreativeCopyFields) => {
+  const handleFieldsSubmit = (copy: CreativeCopyFields, mode: 'create' | 'library') => {
     if (!chosenLayout) return;
     const b = briefing();
     const payload: GenerateCreativePayload = {
@@ -183,7 +183,7 @@ export function CreativeWizard({ onGenerate, submitting, onBack }: Props) {
       includeLogo: true,
       adaptiveAnswers: answers,
     };
-    onGenerate(payload);
+    onGenerate(payload, mode);
   };
 
   // ── Sub-telas do fluxo de layout ──────────────────────────────────────────

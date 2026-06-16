@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Loader2, Plus, Trash2, Wand2, ImageOff } from 'lucide-react';
+import { ArrowLeft, BookmarkCheck, Loader2, Plus, Trash2, Wand2, ImageOff } from 'lucide-react';
 import { Button } from '@/components';
 import api from '@/lib/api';
 import { LAYOUT_META, type CreativeLayout, type LayoutFieldSpec } from '@/lib/layout-labels';
@@ -10,7 +10,7 @@ interface Props {
   initial: SuggestedFields;
   imageUrl: string | null;
   submitting: boolean;
-  onSubmit: (fields: CreativeCopyFields) => void;
+  onSubmit: (fields: CreativeCopyFields, mode: 'create' | 'library') => void;
   onBack: () => void;
 }
 
@@ -141,7 +141,16 @@ export function CreativeFieldsForm({ layout, initial, imageUrl, submitting, onSu
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <Button
-            onClick={() => onSubmit(buildCopy())}
+            variant="outline"
+            onClick={() => onSubmit(buildCopy(), 'library')}
+            disabled={submitting}
+            className="inline-flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            <BookmarkCheck className="h-4 w-4" />
+            Salvar na Biblioteca
+          </Button>
+          <Button
+            onClick={() => onSubmit(buildCopy(), 'create')}
             disabled={submitting}
             className="flex-1 inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white disabled:opacity-50"
           >
