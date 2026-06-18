@@ -1,0 +1,25 @@
+name: fury-web
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: fury-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - VITE_API_URL=http://localhost:3001/api
+    network_mode: "infra_fury-network"
+    ports:
+      - "5174:80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  infra_fury-network:
+    external: true

@@ -15,7 +15,6 @@ import { startStudioGenerationWorker, stopStudioGenerationWorker } from './worke
 import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
 
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
