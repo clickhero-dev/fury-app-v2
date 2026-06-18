@@ -21,8 +21,8 @@ if (fs.existsSync(envFile)) {
 
 const connectionString =
   process.env.NODE_ENV === 'test'
-    ? process.env.TEST_DATABASE_URL || 'postgresql://fury:fury_local@localhost:5432/fury_test'
-    : process.env.DATABASE_URL || 'postgresql://fury:fury_local@localhost:5432/fury_dev';
+    ? process.env.TEST_DATABASE_URL || 'postgresql://admin:***@localhost:5444/fury_test'
+    : process.env.DATABASE_URL || 'postgresql://admin:***@localhost:5444/fury_dev';
 
 const MIGRATIONS_DIR = path.join(__dirname, '../migrations');
 

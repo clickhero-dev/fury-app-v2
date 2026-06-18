@@ -5,7 +5,7 @@ export default {
   out: './migrations',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL || 'postgresql://fury:fury_local@localhost:5432/fury_dev',
+    url: process.env.DATABASE_URL || 'postgresql://admin:***@localhost:5444/fury_dev',
   },
   verbose: true,
   strict: false,
