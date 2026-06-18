@@ -136,3 +136,32 @@ rtk init --global       # Add RTK to ~/.claude/CLAUDE.md
 
 Overall average: **60-90% token reduction** on common development operations.
 <!-- /rtk-instructions -->
+
+<!-- security-agent-instructions v2 -->
+# 🔒 FURY Cybersecurity Agent
+
+## Scan automatizado
+```bash
+npm run security:audit           # Relatório colorido no terminal
+npm run security:audit -- --json # JSON para CI/tooling
+```
+
+## Agente opencode (`@security`)
+O agente está definido em `.opencode/agents/security.md`. Use `@security` no
+meio da conversa para invocar uma auditoria completa:
+
+- Executa `npm run security:audit -- --json` automaticamente
+- Faz análise profunda de cada vulnerabilidade no código fonte
+- Gera `security-report.md` com recomendações e código de correção
+
+## Categorias verificadas
+
+| Categoria | O que verifica |
+|-----------|----------------|
+| **HTTP Headers** | Helmet, CSP, HSTS, X-Frame-Options, X-Content-Type-Options |
+| **Auth & Access** | Cobertura de rotas, auth bypass, token handling |
+| **Data Protection** | Criptografia, RLS, secrets hardcoded |
+| **Input Validation** | Zod schemas, file upload, SSRF |
+| **Infra Security** | Rate limiting, CORS, static files |
+| **Audit & Monitoring** | Audit logging, sanitização de IA |
+<!-- /security-agent-instructions -->
