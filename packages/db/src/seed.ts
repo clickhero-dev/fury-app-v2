@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { db } from './client.js';
 import * as schema from './schema.js';
 
@@ -13,14 +14,6 @@ function encryptAccessToken(token: string): string {
   let encrypted = cipher.update(token, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   return iv.toString('hex') + ':' + encrypted;
-}
-
-// Simple hash function using crypto
-function simpleHash(password: string): string {
-  const salt = crypto.randomBytes(16);
-  const iterations = 10000;
-  const hash = crypto.pbkdf2Sync(password, salt, iterations, 64, 'sha256');
-  return salt.toString('hex') + ':' + hash.toString('hex') + ':' + iterations;
 }
 
 async function seedDatabase() {
@@ -86,8 +79,8 @@ async function seedDatabase() {
 
     // Create users with simple hash
     console.log('👤 Criando usuários...');
-    const fashionPasswordHash = simpleHash('Dev@12345');
-    const dentalPasswordHash = simpleHash('Dev@12345');
+    const fashionPasswordHash = await bcrypt.hash('Dev@12345', 12);
+    const dentalPasswordHash = await bcrypt.hash('Dev@12345', 12);
 
     const fashionUser = (
       await db
