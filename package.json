@@ -16,7 +16,9 @@
     "db:studio": "npm run --workspace @fury/db studio",
     "db:seed": "npm run db:seed --workspace=@fury/db",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "security:audit": "bash scripts/security-audit.sh",
+    "security:audit:json": "bash scripts/security-audit.sh --json"
   },
   "devDependencies": {
     "tsx": "^4.21.0",

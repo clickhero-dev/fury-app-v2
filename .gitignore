@@ -148,5 +148,31 @@ target_roas
 *.bak
 packages/db/src/*.js
 .claude/settings.local.json
+
+# Editor configs
+.vscode/
+.idea/
+
+# Local config overrides
+*.local
+
+# SSL / certs
+*.pem
+*.key
+*.crt
+
+# direnv
+.envrc
+
+# Docker local override
+docker-compose.override.yml
+
+# Terraform
+.terraform/
+
+# Cloud service account keys
+*credentials.json
+*secret*.json
+service-account*.json
 apps/api/scripts/_samples/
 apps/api/_samples/
