@@ -1,7 +1,7 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import { queryClient } from './query-client';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'https://fury-app-v2-production.up.railway.app/api';
+const BASE_URL = import.meta.env.VITE_API_URL;
 
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
