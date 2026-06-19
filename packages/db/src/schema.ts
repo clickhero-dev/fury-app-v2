@@ -11,6 +11,10 @@ import {
   numeric,
   integer,
   unique,
+  bigserial,
+  smallint,
+  inet,
+  bigint,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -410,6 +414,32 @@ export const brandKits = pgTable(
   })
 );
 
+// Request logs table (audit / debug)
+export const requestLogs = pgTable(
+  'request_logs',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    requestId: uuid('request_id').notNull(),
+    tenantId: uuid('tenant_id'),
+    userId: bigint('user_id', { mode: 'number' }),
+    method: varchar('method', { length: 10 }).notNull(),
+    path: varchar('path', { length: 500 }).notNull(),
+    pathTemplate: varchar('path_template', { length: 500 }),
+    statusCode: smallint('status_code').notNull(),
+    responseTimeMs: integer('response_time_ms').notNull(),
+    ipAddress: inet('ip_address'),
+    userAgent: text('user_agent'),
+    requestHeaders: jsonb('request_headers'),
+    requestBody: jsonb('request_body'),
+  },
+  (table) => ({
+    tenantCreatedIdx: index('idx_request_logs_tenant_created').on(table.tenantId, table.createdAt),
+    statusCreatedIdx: index('idx_request_logs_status_created').on(table.statusCode, table.createdAt),
+    requestIdIdx: index('idx_request_logs_request_id').on(table.requestId),
+  })
+);
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -429,4 +459,5 @@ export const allTables = {
   subscriptions,
   invoices,
   brandKits,
+  requestLogs,
 };
