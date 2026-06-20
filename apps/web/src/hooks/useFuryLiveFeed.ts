@@ -1,11 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
 
+/** Evento recebido via SSE do FURY Engine. */
 export interface FuryFeedEvent {
   event: string;
   data: unknown;
   timestamp: string;
 }
 
+/** Estado completo da conexão SSE do live feed. */
 interface FuryLiveFeedState {
   events: FuryFeedEvent[];
   isConnected: boolean;
@@ -14,9 +16,22 @@ interface FuryLiveFeedState {
   reconnectAttempts: number;
 }
 
+/**
+ * Delays progressivos de reconexão em milissegundos.
+ * A cada tentativa falha, aguarda mais tempo antes de tentar novamente.
+ */
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000];
+
+/** Tempo máximo de espera pelo token JWT antes de desistir (ms). */
 const TOKEN_WAIT_TIMEOUT = 3000;
 
+/**
+ * Aguarda o token JWT estar disponível no localStorage por até `timeoutMs` milissegundos.
+ * Útil para casos onde o hook monta antes do login ser concluído.
+ *
+ * @param timeoutMs - Tempo máximo de espera em milissegundos
+ * @returns Token JWT encontrado ou `null` se o timeout expirar
+ */
 async function waitForToken(timeoutMs: number): Promise<string | null> {
   const startTime = Date.now();
   while (Date.now() - startTime < timeoutMs) {
@@ -31,6 +46,27 @@ async function waitForToken(timeoutMs: number): Promise<string | null> {
   return null;
 }
 
+/**
+ * Hook para receber eventos em tempo real do FURY Engine via SSE (Server-Sent Events).
+ *
+ * Conecta ao endpoint `/api/fury/live-feed` e escuta eventos do tipo:
+ * - `fury:update` — atualização de scores de campanhas
+ * - `rule_triggered` — regra de automação disparada
+ *
+ * Funcionalidades:
+ * - Reconexão automática com backoff progressivo (1s → 2s → 5s → 10s)
+ * - Aguarda até 3 segundos pelo token JWT antes de desistir
+ * - Mantém os últimos 50 eventos em memória
+ * - Limpa a conexão ao desmontar o componente
+ *
+ * @returns Estado completo da conexão com eventos recebidos
+ *
+ * @example
+ * const { events, isConnected, isConnecting, error } = useFuryLiveFeed();
+ *
+ * if (isConnecting) return <Spinner />;
+ * if (!isConnected) return <p>Desconectado</p>;
+ */
 export function useFuryLiveFeed() {
   const [state, setState] = useState<FuryLiveFeedState>({
     events: [],
@@ -81,7 +117,7 @@ export function useFuryLiveFeed() {
               }
               return {
                 ...prev,
-                events: [parsed, ...prev.events].slice(0, 50),
+                events: [parsed, ...prev.events].slice(0, 50), // Mantém os últimos 50 eventos
                 isConnected: true,
                 isConnecting: false,
                 error: null,
@@ -120,6 +156,7 @@ export function useFuryLiveFeed() {
 
       setState((prev) => {
         const attempts = prev.reconnectAttempts + 1;
+        // Usa delay progressivo, limitado ao maior valor da lista
         const delay = RECONNECT_DELAYS[Math.min(attempts - 1, RECONNECT_DELAYS.length - 1)];
         console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${attempts})`);
 
