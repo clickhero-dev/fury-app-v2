@@ -145,6 +145,76 @@ Organization (tenant)
 
 ---
 
+## Estrutura do Frontend (`apps/web`)
+
+### Organização de Pastas
+
+```
+apps/web/src/
+├── pages/                  # Páginas da aplicação (organizadas por módulo)
+│   ├── auth/               # Login e cadastro
+│   ├── onboarding/         # Fluxo de onboarding pós-cadastro
+│   ├── dashboard/          # Dashboard e metas
+│   ├── campanhas/          # Gerenciamento de campanhas
+│   ├── estudio/            # Estúdio Criativo (copy e imagens)
+│   ├── automacao/          # Regras de automação
+│   ├── configuracoes/      # Configurações, integrações e brand kit
+│   └── billing/            # Planos e assinatura
+├── components/             # Componentes reutilizáveis
+│   ├── ui/                 # Componentes base (button, card, input, etc.)
+│   ├── layout/             # Layouts (AppLayout, AuthenticatedShell)
+│   └── campaign-wizard/    # Wizard de criação de campanhas
+├── hooks/                  # React hooks customizados
+├── lib/                    # Utilitários, cliente API e mocks
+├── types/                  # Tipos TypeScript por domínio
+└── router.tsx              # Definição de rotas (React Router)
+```
+
+### Rotas da Aplicação
+
+| Rota | Página | Autenticação |
+|------|--------|-------------|
+| `/login` | LoginPage | Não |
+| `/cadastro` | RegisterPage | Não |
+| `/onboarding/conectar-meta` | ConectarMetaPage | Não |
+| `/onboarding/meta-authorize` | MetaAuthorizePage | Não |
+| `/onboarding/selecionar-conta` | SelecionarAtivosPage | Sim |
+| `/onboarding/metas` | MetasPage | Sim |
+| `/dashboard` | Dashboard | Sim |
+| `/dashboard/metas` | Metas | Sim |
+| `/campanhas` | PainelCampanhas | Sim |
+| `/campanhas/regras` | RegrasCampanhas | Sim |
+| `/campanhas/:id/insights` | InsightsCampanha | Sim |
+| `/automacao` | MinhasRegras | Sim |
+| `/estudio` | EstudioHome | Sim |
+| `/estudio/imagem` | GeradorImagem | Sim |
+| `/estudio-criativo` | CreativeStudio | Sim |
+| `/configuracoes` | Configuracoes | Sim |
+| `/configuracoes/integracoes` | Integracoes | Sim |
+| `/configuracoes/brand-kit` | BrandKitPage | Sim |
+| `/planos` | Plans | Sim |
+| `/assinatura` | Subscription | Sim |
+
+### Hooks Principais
+
+| Hook | Responsabilidade |
+|------|-----------------|
+| `useAuth` | Autenticação e sessão do usuário |
+| `useCampaigns` | Listagem e gerenciamento de campanhas |
+| `useCampaignInsights` | Métricas e insights de campanha |
+| `useFurySSE` | Conexão SSE para atualizações em tempo real do FURY Engine |
+| `useFuryLiveFeed` | Feed ao vivo de automações executadas |
+| `useFuryRules` | Regras de automação configuradas |
+| `useGoalsProgress` | Progresso em relação às metas mensais |
+| `useBilling` | Planos e assinatura |
+| `useBrandKit` | Brand kit da organização |
+
+### Como o Frontend Consome a API
+
+O cliente HTTP está centralizado em `apps/web/src/lib/api.ts` e usa a variável de ambiente `VITE_API_URL` como base URL. Todos os hooks fazem chamadas através desse cliente, que automaticamente inclui o token JWT no header `Authorization`.
+
+---
+
 ## Segurança e Multi-tenancy
 
 - Cada usuário pertence a uma **Organização**
