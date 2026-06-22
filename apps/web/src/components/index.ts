@@ -1,4 +1,17 @@
-// UI Components
+/**
+ * Barrel de exportações dos componentes da aplicação FURY.
+ *
+ * Centraliza todos os imports de componentes para simplificar o uso:
+ * `import { Button, MetricCard, PageHeader } from '@/components'`
+ * em vez de importar cada componente do seu caminho individual.
+ *
+ * Organizado em três grupos:
+ * - **UI:** componentes base do design system (Button, Card, Input, Dialog)
+ * - **Layout:** componentes estruturais de página (AuthLayout, AppLayout, Sidebar)
+ * - **Feature:** componentes de funcionalidade específica da plataforma
+ */
+
+// UI Components — design system base
 export { Button } from './ui/button';
 export { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 export { Input } from './ui/input';
@@ -11,12 +24,12 @@ export {
   DialogTitle,
 } from './ui/dialog';
 
-// Layout Components
+// Layout Components — estrutura de páginas
 export { AuthLayout } from './AuthLayout';
 export { AppLayout } from './layout/AppLayout';
 export { Sidebar } from './Sidebar';
 
-// Feature Components
+// Feature Components — componentes de funcionalidade da plataforma
 export { FormField } from './FormField';
 export { MetricCard } from './MetricCard';
 export { PageHeader } from './PageHeader';

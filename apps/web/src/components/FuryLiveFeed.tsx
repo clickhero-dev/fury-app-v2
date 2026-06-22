@@ -1,6 +1,12 @@
 import { useFuryLiveFeed, type FuryFeedEvent } from '@/hooks/useFuryLiveFeed';
 import { Card } from '@/components';
 
+/**
+ * Converte uma string de data ISO em tempo relativo legível em português.
+ *
+ * @param dateString - Data no formato ISO 8601
+ * @returns Tempo relativo (ex: "agora", "há 5 min", "há 2h", "há 1d")
+ */
 function getRelativeTime(dateString: string): string {
   const now = new Date();
   const date = new Date(dateString);
@@ -12,6 +18,12 @@ function getRelativeTime(dateString: string): string {
   return `há ${Math.floor(seconds / 86400)}d`;
 }
 
+/**
+ * Retorna as classes CSS do badge de ação conforme o tipo de automação.
+ *
+ * @param action - Tipo de ação executada pelo FURY Engine
+ * @returns Classes Tailwind para colorir o badge
+ */
 function getActionBadgeColor(action: string): string {
   if (action === 'pause_campaign') return 'bg-red-50 text-red-600 border border-red-200';
   if (action === 'reduce_budget') return 'bg-yellow-50 text-yellow-700 border border-yellow-200';
@@ -20,6 +32,12 @@ function getActionBadgeColor(action: string): string {
   return 'bg-gray-100 text-gray-600 border border-gray-200';
 }
 
+/**
+ * Converte a chave de ação do FURY Engine em label legível em português.
+ *
+ * @param action - Chave da ação (ex: 'pause_campaign')
+ * @returns Label traduzido ou a própria chave se não mapeada
+ */
 function getActionLabel(action: string): string {
   const labels: Record<string, string> = {
     pause_campaign: 'Pausar',
@@ -30,6 +48,7 @@ function getActionLabel(action: string): string {
   return labels[action] || action;
 }
 
+/** Payload do evento `rule_triggered` recebido via SSE. */
 interface RuleTriggeredData {
   id?: string;
   ruleId?: string;
@@ -41,6 +60,10 @@ interface RuleTriggeredData {
   timestamp?: string;
 }
 
+/**
+ * Sub-componente que renderiza um evento de regra disparada pelo FURY Engine.
+ * Exibe o nome da campanha, a ação executada e o motivo do disparo.
+ */
 function RuleTriggeredEvent({ event }: { event: FuryFeedEvent }) {
   const data = event.data as RuleTriggeredData;
   const action = data.action || '';
@@ -59,9 +82,7 @@ function RuleTriggeredEvent({ event }: { event: FuryFeedEvent }) {
             </span>
           </div>
           {data.reason && (
-            <p className="text-xs text-text-secondary mb-2">
-              {data.reason}
-            </p>
+            <p className="text-xs text-text-secondary mb-2">{data.reason}</p>
           )}
           <p className="text-xs text-text-secondary/60">
             {getRelativeTime(event.timestamp)}
@@ -72,8 +93,15 @@ function RuleTriggeredEvent({ event }: { event: FuryFeedEvent }) {
   );
 }
 
+/**
+ * Sub-componente que renderiza um evento de atualização de scores do FURY Engine.
+ * Exibe os scores e grades das campanhas processadas no ciclo (máximo 3 visíveis).
+ */
 function FuryUpdateEvent({ event }: { event: FuryFeedEvent }) {
-  const data = event.data as { timestamp?: string; scores?: Array<{ campaignId: string; campaignName: string; score: number; grade: string }> };
+  const data = event.data as {
+    timestamp?: string;
+    scores?: Array<{ campaignId: string; campaignName: string; score: number; grade: string }>;
+  };
 
   return (
     <div className="border border-blue-500/30 bg-blue-500/5 rounded-lg p-4 transition-all animate-in slide-in-from-right-full duration-300">
@@ -88,7 +116,9 @@ function FuryUpdateEvent({ event }: { event: FuryFeedEvent }) {
               {data.scores.slice(0, 3).map((score) => (
                 <div key={score.campaignId} className="text-xs text-text-secondary flex items-center justify-between">
                   <span>{score.campaignName}</span>
-                  <span className="text-text-primary font-semibold">{score.score} ({score.grade})</span>
+                  <span className="text-text-primary font-semibold">
+                    {score.score} ({score.grade})
+                  </span>
                 </div>
               ))}
               {data.scores.length > 3 && (
@@ -107,6 +137,24 @@ function FuryUpdateEvent({ event }: { event: FuryFeedEvent }) {
   );
 }
 
+/**
+ * Componente de feed em tempo real de eventos do FURY Engine.
+ *
+ * Conecta via SSE usando `useFuryLiveFeed` e exibe os eventos recebidos
+ * em ordem cronológica reversa (mais recente primeiro).
+ *
+ * Tipos de evento suportados:
+ * - `rule_triggered` → regra de automação disparada
+ * - `fury:update` → atualização de scores de campanhas
+ *
+ * Indicador de status da conexão:
+ * - 🟢 "Ao vivo" → conectado
+ * - 🟡 "Reconectando..." → tentando reconectar
+ * - 🔴 "Desconectado" → falha na conexão
+ *
+ * @example
+ * <FuryLiveFeed />
+ */
 export function FuryLiveFeed() {
   const { events, isConnected, isConnecting, error } = useFuryLiveFeed();
 

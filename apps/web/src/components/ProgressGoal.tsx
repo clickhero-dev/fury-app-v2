@@ -2,14 +2,40 @@ import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ProgressGoalProps {
+  /** Label descritivo da meta (ex: "ROAS", "CPA"). */
   label: string;
+  /** Percentual de progresso de 0 a 100. Valores fora do intervalo são limitados. */
   progressPercent: number;
+  /** Indica se a meta está sendo atingida conforme o esperado para o período. */
   onTrack: boolean;
+  /** Valor atual formatado para exibição (ex: "R$ 38,00", "4.2x"). */
   currentLabel: string;
+  /** Valor alvo formatado para exibição (ex: "R$ 50,00", "4.0x"). */
   targetLabel: string;
 }
 
+/**
+ * Componente de progresso de meta com indicador de status visual.
+ *
+ * Exibe uma barra de progresso colorida e um chip de status baseados
+ * no percentual atingido e se a meta está no caminho certo.
+ *
+ * Lógica de status:
+ * - ✅ Verde "No caminho certo" → `onTrack = true`
+ * - ⚠️ Amarelo "Atenção necessária" → `onTrack = false` e progresso ≥ 40%
+ * - ❌ Vermelho "Abaixo da meta" → `onTrack = false` e progresso < 40%
+ *
+ * @example
+ * <ProgressGoal
+ *   label="ROAS"
+ *   progressPercent={75}
+ *   onTrack={true}
+ *   currentLabel="4.2x"
+ *   targetLabel="4.0x"
+ * />
+ */
 export function ProgressGoal({ label, progressPercent, onTrack, currentLabel, targetLabel }: ProgressGoalProps) {
+  // Limita o progresso entre 0 e 100 para evitar overflow na barra
   const clamped = Math.min(100, Math.max(0, progressPercent));
 
   const isGreen = onTrack;
@@ -28,6 +54,7 @@ export function ProgressGoal({ label, progressPercent, onTrack, currentLabel, ta
 
   return (
     <div className="bg-surface rounded-xl border border-border p-6 space-y-4">
+      {/* Cabeçalho: label, percentual e chip de status */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{label}</p>
@@ -42,6 +69,7 @@ export function ProgressGoal({ label, progressPercent, onTrack, currentLabel, ta
         </span>
       </div>
 
+      {/* Barra de progresso e valores atual/meta */}
       <div className="space-y-2">
         <div className="h-2.5 bg-surface-secondary rounded-full overflow-hidden">
           <div

@@ -1,7 +1,13 @@
 import type { CampaignData } from '../types/campaigns';
-
 export type { CampaignData };
 
+/**
+ * Dados fictícios de campanhas para uso como fallback quando a API falha
+ * ou quando `META_USE_MOCK=true` está configurado.
+ *
+ * Usado pelo hook `useCampaigns` em caso de erro na requisição.
+ * Cobre os três status possíveis: ativo, pausado e finalizado.
+ */
 export const campanhasMock: CampaignData[] = [
   {
     id: '1',
