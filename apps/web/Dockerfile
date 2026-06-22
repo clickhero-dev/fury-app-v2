@@ -4,8 +4,8 @@ RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 
@@ -18,9 +18,6 @@ RUN apk add --no-cache fontconfig font-opensans font-dejavu
 WORKDIR /app
 
 ENV NODE_ENV=production
-
-COPY --from=builder /app/package.json ./package.json
-RUN npm install --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
