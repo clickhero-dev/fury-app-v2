@@ -19,9 +19,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/vite.config.ts ./
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 80
 
-CMD ["npx", "vite", "preview", "--host", "0.0.0.0", "--port", "80"]
+CMD ["node_modules/.bin/vite", "preview", "--host", "0.0.0.0", "--port", "80"]
