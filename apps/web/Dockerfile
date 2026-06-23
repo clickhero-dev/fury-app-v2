@@ -19,6 +19,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+COPY --from=builder /app/vite.config.ts ./
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 80
