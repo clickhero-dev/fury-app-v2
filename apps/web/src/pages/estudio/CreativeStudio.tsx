@@ -5,7 +5,6 @@ import { AppLayout, Button, Card, CardContent, PageHeader, StatusBadge } from '@
 import api from '@/lib/api';
 import type {
   StudioComplianceStatusResponse,
-  StudioImageGenerationResponse,
   StudioPublishResponse,
   StudioTemplate,
 } from '@/types/studio';
