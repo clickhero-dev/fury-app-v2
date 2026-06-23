@@ -1,15 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/api';
-import type { BudgetConfig, BudgetConfigResponse } from '../types/budget.types';
+import type { BudgetSuggestion, BudgetSuggestionsResponse } from '../types/budget.types';
 
-export function useBudgetConfig() {
+export function useBudgetSuggestions(status?: 'pending' | 'applied' | 'rejected') {
   return useQuery({
-    queryKey: ['budget-config'],
-    queryFn: async (): Promise<BudgetConfig> => {
-      const response = await api.get<BudgetConfigResponse>('/budget/config');
-      return response.data?.data;
+    queryKey: ['budget-suggestions', status],
+    queryFn: async (): Promise<BudgetSuggestion[]> => {
+      const response = await api.get<BudgetSuggestionsResponse>('/budget/suggestions', {
+        params: status ? { status } : {},
+      });
+      return response.data?.data?.suggestions ?? [];
     },
-    staleTime: 60 * 1000,
-    refetchInterval: 60 * 1000,
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
   });
 }

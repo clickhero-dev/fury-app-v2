@@ -6,13 +6,8 @@ export function useBudgetConfig() {
   return useQuery({
     queryKey: ['budget-config'],
     queryFn: async (): Promise<BudgetConfig> => {
-      try {
-        const response = await api.get<BudgetConfigResponse>('/budget/config');
-        return response.data?.data ?? { tenantId: '', mode: 'suggestion', totalBudget: 0, autoApplyEnabled: false };
-      } catch (error) {
-        console.warn('Failed to fetch budget config:', error);
-        return { tenantId: '', mode: 'suggestion', totalBudget: 0, autoApplyEnabled: false };
-      }
+      const response = await api.get<BudgetConfigResponse>('/budget/config');
+      return response.data?.data;
     },
     staleTime: 60 * 1000,
     refetchInterval: 60 * 1000,
