@@ -3,6 +3,8 @@ import { ArrowLeft, ArrowRight, ImageIcon, Loader2, Images, Upload, Wand2, X } f
 import { Button } from '@/components';
 import api from '@/lib/api';
 import { useBrandKit } from '@/hooks/useBrandKit';
+import { useAuth } from '@/hooks/useAuth';
+import { completeForm } from '@/lib/forms';
 import type {
   AdaptiveQuestion,
   CreativeCopyFields,
@@ -57,6 +59,7 @@ interface Props {
 type InternalState = 'steps' | 'validating' | 'questions' | 'selecting' | 'suggestion' | 'picker' | 'fields';
 
 export function CreativeWizard({ onGenerate, onSaveToLibrary, submitting, onBack }: Props) {
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<WizardData>(INITIAL_DATA);
   const [visible, setVisible] = useState(true);
@@ -65,6 +68,7 @@ export function CreativeWizard({ onGenerate, onSaveToLibrary, submitting, onBack
   const [answers, setAnswers] = useState<Record<string, string> | undefined>(undefined);
   const [suggestion, setSuggestion] = useState<SelectLayoutResponse | null>(null);
   const [chosenLayout, setChosenLayout] = useState<CreativeLayout | null>(null);
+  const [formSubmissionId, setFormSubmissionId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { brandKit } = useBrandKit();
   const libraryPhotos = brandKit?.photo_urls ?? [];
@@ -187,13 +191,23 @@ export function CreativeWizard({ onGenerate, onSaveToLibrary, submitting, onBack
   };
 
   // Handlers totalmente independentes — não compartilham mutation nem side effect.
-  const handleCreate = (copy: CreativeCopyFields) => {
+  const handleCreate = async (copy: CreativeCopyFields) => {
     const payload = buildPayload(copy);
-    if (payload) onGenerate(payload);
+    if (payload) {
+      if (formSubmissionId) {
+        await completeForm(formSubmissionId).catch(console.error);
+      }
+      onGenerate(payload);
+    }
   };
   const handleSaveToLibrary = async (copy: CreativeCopyFields) => {
     const payload = buildPayload(copy);
-    if (payload) await onSaveToLibrary(payload);
+    if (payload) {
+      if (formSubmissionId) {
+        await completeForm(formSubmissionId).catch(console.error);
+      }
+      await onSaveToLibrary(payload);
+    }
   };
 
   // ── Sub-telas do fluxo de layout ──────────────────────────────────────────

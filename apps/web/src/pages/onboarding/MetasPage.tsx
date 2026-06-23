@@ -11,6 +11,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import { AppLayout, PageHeader } from '@/components';
+import { useAuth } from '@/hooks/useAuth';
+import { completeForm, errorForm } from '@/lib/forms';
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -75,8 +77,10 @@ function fmtBRL(n?: number) {
 
 export function MetasPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [formSubmissionId, setFormSubmissionId] = useState<string | null>(null);
 
   const {
     register,
@@ -119,11 +123,17 @@ export function MetasPage() {
       existingGoals
         ? api.put('/goals', data).then((r) => r.data)
         : api.post('/goals/setup', data).then((r) => r.data),
-    onSuccess: () => {
+    onSuccess: async () => {
+      if (formSubmissionId) {
+        await completeForm(formSubmissionId).catch(console.error);
+      }
       showToast('success', '✅ Metas salvas com sucesso!');
       setTimeout(() => navigate('/dashboard'), 1000);
     },
-    onError: (error: unknown) => {
+    onError: async (error: unknown) => {
+      if (formSubmissionId) {
+        await errorForm(formSubmissionId).catch(console.error);
+      }
       const msg =
         (error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ??
         'Erro ao salvar metas. Tente novamente.';

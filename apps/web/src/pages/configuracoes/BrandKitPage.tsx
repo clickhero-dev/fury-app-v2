@@ -6,6 +6,8 @@ import type { VoiceTone } from '@/types/brandKit';
 import { FURY_COLORS } from '@/lib/constants';
 import { Upload, X, Trash2, Image as ImageIcon } from 'lucide-react';
 import { ConfiguracoesTabsNav } from './ConfiguracoesTabsNav';
+import { useAuth } from '@/hooks/useAuth';
+import { completeForm, errorForm } from '@/lib/forms';
 
 const VOICE_TONE_OPTIONS: { value: VoiceTone; label: string; description: string }[] = [
   { value: 'professional', label: 'Profissional', description: 'Formal, técnico, confiável' },
@@ -40,6 +42,7 @@ export function BrandKitPage() {
 }
 
 function BrandKitContent() {
+  const { user } = useAuth();
   const { brandKit, isLoading } = useBrandKit();
   const saveBrandKit = useSaveBrandKit();
   const uploadLogo = useUploadLogo();
@@ -51,6 +54,9 @@ function BrandKitContent() {
   const [voiceTone, setVoiceTone] = useState<VoiceTone | ''>('');
   const [initialized, setInitialized] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [logoSubmissionId, setLogoSubmissionId] = useState<string | null>(null);
+  const [photosSubmissionId, setPhotosSubmissionId] = useState<string | null>(null);
+  const [brandKitSubmissionId, setBrandKitSubmissionId] = useState<string | null>(null);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const photosInputRef = useRef<HTMLInputElement>(null);
@@ -84,8 +90,14 @@ function BrandKitContent() {
 
     try {
       await uploadLogo.mutateAsync(file);
+      if (logoSubmissionId) {
+        await completeForm(logoSubmissionId).catch(console.error);
+      }
       showToast('Logo enviada com sucesso!', 'success');
     } catch {
+      if (logoSubmissionId) {
+        await errorForm(logoSubmissionId).catch(console.error);
+      }
       showToast('Erro ao enviar logo. Tente novamente.', 'error');
     }
   }
@@ -123,8 +135,14 @@ function BrandKitContent() {
 
     try {
       await uploadPhotos.mutateAsync(files);
+      if (photosSubmissionId) {
+        await completeForm(photosSubmissionId).catch(console.error);
+      }
       showToast('Fotos enviadas com sucesso!', 'success');
     } catch {
+      if (photosSubmissionId) {
+        await errorForm(photosSubmissionId).catch(console.error);
+      }
       showToast('Erro ao enviar fotos. Tente novamente.', 'error');
     }
   }
@@ -145,8 +163,14 @@ function BrandKitContent() {
         secondary_color: secondaryColor,
         ...(voiceTone ? { voice_tone: voiceTone } : {}),
       });
+      if (brandKitSubmissionId) {
+        await completeForm(brandKitSubmissionId).catch(console.error);
+      }
       showToast('Dados da Marca salvos com sucesso!', 'success');
     } catch {
+      if (brandKitSubmissionId) {
+        await errorForm(brandKitSubmissionId).catch(console.error);
+      }
       showToast('Erro ao salvar. Tente novamente.', 'error');
     }
   }

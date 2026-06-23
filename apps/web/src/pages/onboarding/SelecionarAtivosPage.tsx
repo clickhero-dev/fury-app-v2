@@ -5,6 +5,8 @@ import { Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
+import { completeForm, errorForm } from '@/lib/forms';
 
 // ─── Progress steps (etapa do onboarding) ──────────────────────────────────────
 
@@ -210,12 +212,14 @@ function LoadingSpinner() {
 export function SelecionarAtivosPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const [subStep, setSubStep] = useState(1);
   const [businessIds, setBusinessIds] = useState<string[]>([]);
   const [pageIds, setPageIds] = useState<string[]>([]);
   const [adAccountIds, setAdAccountIds] = useState<string[]>([]);
   const [whatsappNumberIds, setWhatsappNumberIds] = useState<string[]>([]);
+  const [formSubmissionId, setFormSubmissionId] = useState<string | null>(null);
 
   function toggle(list: string[], id: string, setter: (value: string[]) => void) {
     setter(list.includes(id) ? list.filter((item) => item !== id) : [...list, id]);
@@ -288,6 +292,9 @@ export function SelecionarAtivosPage() {
       });
     },
     onSuccess: async () => {
+      if (formSubmissionId) {
+        await completeForm(formSubmissionId).catch(console.error);
+      }
       await queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
       // A query 'meta-connections' fica `enabled: false` enquanto estamos em /onboarding,
       // entao invalidateQueries (refetchType padrao 'active') nao a refaz. Forca o refetch
@@ -295,6 +302,11 @@ export function SelecionarAtivosPage() {
       // AuthenticatedShell decidir se redireciona de volta para o onboarding.
       await queryClient.refetchQueries({ queryKey: ['meta-connections'], type: 'all' });
       navigate('/dashboard');
+    },
+    onError: async () => {
+      if (formSubmissionId) {
+        await errorForm(formSubmissionId).catch(console.error);
+      }
     },
   });
 
