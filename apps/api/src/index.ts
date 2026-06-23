@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import { loggerMiddleware } from './middleware/logger.js';
 import { requestLogger, flushRequestLogs } from './middleware/request-logger.js';
+import { rateLimitMiddleware } from './middleware/rate-limit.middleware.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
 import { closeRedis, waitForRedisReady } from './lib/redis.js';
@@ -20,6 +21,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+// Necessário para req.ip refletir o IP real atrás de proxy reverso (nginx, load balancer)
+app.set('trust proxy', 1);
+
 app.use(cors({
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => callback(null, true),
   credentials: true,
@@ -32,6 +36,7 @@ app.use(requestLogger);
 console.log('=== STATIC serving /studio-assets from:', studioAssetsDir);
 app.use('/studio-assets', express.static(studioAssetsDir));
 
+app.use('/api', rateLimitMiddleware);
 app.use('/api', routes);
 app.use(errorHandler);
 
