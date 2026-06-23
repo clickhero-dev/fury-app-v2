@@ -6,6 +6,7 @@ import { createAdCreativeFromCopy, uploadAdImage } from '../lib/meta-api.js';
 import { decryptMetaToken } from '../utils/crypto.js';
 import { saveTemporaryStudioImage } from '../lib/temp-storage.js';
 import { getComplianceQueue } from '../lib/queue.js';
+import { openrouterService } from './openrouter.service.js';
 
 export type StudioImageGenerationResult = {
   creativeAssetId: string;
@@ -163,7 +164,16 @@ async function persistGeneratedImage(params: {
   prompt: string;
   publicBaseUrl: string;
 }): Promise<StudioImageGenerationResult> {
-  const sourceUrl = await generateOpenAIImage(params.prompt);
+  // Se OPENROUTER_API_KEY estiver configurada, usa OpenRouter em vez de OpenAI
+  let sourceUrl: string;
+  if (process.env.OPENROUTER_API_KEY) {
+    sourceUrl = await openrouterService.generateImage({
+      model: 'black-forest-labs/flux.2-klein-4b',
+      prompt: params.prompt,
+    });
+  } else {
+    sourceUrl = await generateOpenAIImage(params.prompt);
+  }
 
   // OpenAI returns a temporary CDN URL — use it directly so the browser can
   // display the image immediately. The compliance worker re-downloads it
