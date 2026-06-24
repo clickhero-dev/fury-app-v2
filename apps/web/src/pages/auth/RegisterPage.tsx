@@ -19,6 +19,24 @@ const registerSchema = z.object({
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
+/**
+ * Página de cadastro de novos usuários na plataforma FURY.
+ *
+ * Exibe um formulário com validação via Zod + React Hook Form coletando
+ * nome, e-mail, senha e empresa. Em caso de sucesso, redireciona para
+ * o fluxo de onboarding em `/onboarding/conectar-meta`.
+ *
+ * @remarks
+ * - Utiliza `useRegister` para executar a mutation de criação de conta
+ * - O layout é fornecido por `AuthLayout`, compartilhado com `LoginPage`
+ * - O cast `data as RegisterRequest` é necessário por limitação de inferência
+ *   do Zod + RHF no TypeScript 5.6, onde campos obrigatórios são inferidos
+ *   como opcionais
+ *
+ * @example
+ * // Registrada na rota pública `/cadastro`
+ * <Route path="/cadastro" element={<RegisterPage />} />
+ */
 export function RegisterPage() {
   const navigate = useNavigate();
   const registerMutation = useRegister();
@@ -38,6 +56,11 @@ export function RegisterPage() {
     },
   });
 
+  /**
+   * Submete os dados do formulário para criar uma nova conta.
+   * Em caso de sucesso, redireciona para o onboarding de conexão com Meta.
+   * Em caso de erro, exibe a mensagem retornada pela API ou um fallback genérico.
+   */
   const onSubmit = async (data: RegisterFormValues) => {
     try {
       setError('');
