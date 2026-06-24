@@ -194,7 +194,7 @@ export function EstudioHome() {
       if (creativeType === 'image') {
         orImageMutation.mutate({ model: selectedImageModel, prompt: enhancedPrompt });
       } else {
-        orVideoMutation.mutate({ model: selectedVideoModel, prompt: enhancedPrompt, duration: 5 });
+        orVideoMutation.mutate({ model: selectedVideoModel, prompt: enhancedPrompt, duration: 4 });
       }
     } catch {
       // Fallback: use original prompt if enhancement fails
@@ -202,7 +202,7 @@ export function EstudioHome() {
       if (creativeType === 'image') {
         orImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt });
       } else {
-        orVideoMutation.mutate({ model: selectedVideoModel, prompt: finalPrompt, duration: 5 });
+        orVideoMutation.mutate({ model: selectedVideoModel, prompt: finalPrompt, duration: 4 });
       }
     }
   };

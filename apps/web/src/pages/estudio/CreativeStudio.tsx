@@ -178,7 +178,7 @@ export function CreativeStudio() {
     if (creativeType === 'image') {
       generateImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt });
     } else {
-      generateVideoMutation.mutate({ model: selectedVideoModel, prompt: finalPrompt, duration: 5 });
+      generateVideoMutation.mutate({ model: selectedVideoModel, prompt: finalPrompt, duration: 4 });
     }
   };
 

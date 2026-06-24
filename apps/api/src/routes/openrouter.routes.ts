@@ -38,7 +38,7 @@ const generateImageSchema = z.object({
 const generateVideoSchema = z.object({
   model: z.enum(['google/veo-3.1-lite', 'kwaivgi/kling-video-o1', 'google/veo-3.1']),
   prompt: z.string().min(10).max(1000),
-  duration: z.number().int().min(3).max(15).optional().default(5),
+  duration: z.number().int().min(3).max(15).optional().default(4),
   resolution: z.enum(['480p', '720p', '1080p']).optional().default('720p'),
   aspect_ratio: z.enum(['16:9', '9:16', '1:1']).optional().default('16:9'),
   generate_audio: z.boolean().optional().default(true),
@@ -301,7 +301,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
       const videoUrl = await openrouterService.generateVideo({
         model: originalModel,
         prompt: newPrompt,
-        duration: 5,
+        duration: 4,
         resolution: '720p',
         generate_audio: true,
       });
