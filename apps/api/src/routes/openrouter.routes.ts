@@ -32,7 +32,7 @@ const generateImageSchema = z.object({
   model: z.enum(['bytedance-seed/seedream-4.5', 'black-forest-labs/flux.2-klein-4b', 'black-forest-labs/flux.2-max']),
   prompt: z.string().min(10).max(1000),
   aspect_ratio: z.enum(['1:1', '16:9', '9:16']).optional().default('1:1'),
-  resolution: z.enum(['1K', '2K', '4K']).optional().default('1K'),
+  resolution: z.enum(['1K', '2K', '4K']).optional().default('2K'),
 });
 
 const generateVideoSchema = z.object({
@@ -144,7 +144,7 @@ router.post('/generate-image', authMiddleware, tenantMiddleware, async (req: Req
   try {
     const body = generateImageSchema.parse(req.body);
     const tenantId = (req as any).tenant?.tenantId as string;
-    const publicBaseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.APP_URL || `https://${req.get('host')}`;
 
     const base64Image = await openrouterService.generateImage({
       model: body.model,
@@ -247,7 +247,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
   try {
     const body = regenerateQuickSchema.parse(req.body);
     const tenantId = (req as any).tenant?.tenantId as string;
-    const publicBaseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.APP_URL || `https://${req.get('host')}`;
 
     // Look up original asset
     const asset = await db.query.creativeAssets.findFirst({
