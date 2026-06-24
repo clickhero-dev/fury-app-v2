@@ -21,10 +21,8 @@ export function useFurySSE() {
     const token = localStorage.getItem('token');
     if (!token) return;
 
-    const apiUrl = import.meta.env.VITE_API_URL;
-    // Remove trailing /api if present to avoid duplication
-    const baseUrl = apiUrl.endsWith('/api') ? apiUrl.slice(0, -4) : apiUrl;
-    const es = new EventSource(`${baseUrl}/api/automation/feed?token=${token}`);
+    const apiUrl = 'https://clickhero-fury-api.u7pe19.easypanel.host/api';
+    const es = new EventSource(`${apiUrl}/automation/feed?token=${token}`);
     esRef.current = es;
 
     es.addEventListener('open', () => setIsConnected(true));

@@ -1,7 +1,9 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import { queryClient } from './query-client';
 
-const BASE_URL = import.meta.env.VITE_API_URL;
+const BASE_URL = 'https://clickhero-fury-api.u7pe19.easypanel.host/api';
+
+console.log(BASE_URL);
 
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,

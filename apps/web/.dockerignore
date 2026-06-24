@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.*
+*.md
+.DS_Store
+.gitignore
+README.md
+node_modules/.cache

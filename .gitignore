@@ -177,4 +177,3 @@ service-account*.json
 apps/api/scripts/_samples/
 apps/api/_samples/
 
-docs/*.md

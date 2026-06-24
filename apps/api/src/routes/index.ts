@@ -10,6 +10,7 @@ import budgetRoutes from './budget.routes.js';
 import instagramRoutes from './instagram.routes.js';
 import dashboardRoutes from './dashboard.routes.js';
 import formsRoutes from './forms.routes.js';
+import openrouterRoutes from './openrouter.routes.js';
 
 import furyRoutes from './fury.routes.js';
 import goalsRoutes from './goals.routes.js';
@@ -37,5 +38,6 @@ router.use('/fury', furyRoutes);
 router.use('/goals', goalsRoutes);
 router.use('/billing', billingRoutes);
 router.use('/brand-kit', authMiddleware, tenantMiddleware, brandKitRoutes);
+router.use('/openrouter', openrouterRoutes);
 
 export default router;

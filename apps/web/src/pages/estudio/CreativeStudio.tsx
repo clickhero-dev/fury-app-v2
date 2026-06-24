@@ -5,10 +5,17 @@ import { AppLayout, Button, Card, CardContent, PageHeader, StatusBadge } from '@
 import api from '@/lib/api';
 import type {
   StudioComplianceStatusResponse,
-  StudioImageGenerationResponse,
   StudioPublishResponse,
   StudioTemplate,
 } from '@/types/studio';
+
+interface ModelInfo {
+  id: string;
+  label: string;
+  description: string;
+  category: string;
+  type: 'image' | 'video';
+}
 
 const TEMPLATES: StudioTemplate[] = [
   {
@@ -49,6 +56,12 @@ function getComplianceTone(status?: StudioComplianceStatusResponse['complianceSt
   return 'pending_compliance';
 }
 
+function categoryBadge(category: string) {
+  if (category === 'barato') return { label: '💰 Barato', class: 'bg-green-100 text-green-700' };
+  if (category === 'custo-beneficio') return { label: '⭐ Custo-benefício', class: 'bg-blue-100 text-blue-700' };
+  return { label: '👑 Qualidade', class: 'bg-purple-100 text-purple-700' };
+}
+
 export function CreativeStudio() {
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState(TEMPLATES[0]?.prompt ?? '');
@@ -57,6 +70,21 @@ export function CreativeStudio() {
   const [pollStartedAt, setPollStartedAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [publishFeedback, setPublishFeedback] = useState<{ hash: string; imageUrl: string; adsManagerUrl: string } | null>(null);
+
+  // ─── OpenRouter state ──────────────────────────────────────
+  const [creativeType, setCreativeType] = useState<'image' | 'video'>('image');
+  const [selectedImageModel, setSelectedImageModel] = useState('black-forest-labs/flux.2-klein-4b');
+  const [selectedVideoModel, setSelectedVideoModel] = useState('google/veo-3.1-lite');
+  const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+
+  const modelsQuery = useQuery({
+    queryKey: ['openrouter', 'models'],
+    queryFn: async () => {
+      const res = await api.get('/openrouter/models');
+      return res.data as { image: ModelInfo[]; video: ModelInfo[] };
+    },
+    staleTime: 1000 * 60 * 60, // 1h
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -73,18 +101,29 @@ export function CreativeStudio() {
     [selectedTemplateId]
   );
 
-  const generateMutation = useMutation({
-    mutationFn: async (payload: { prompt: string }) => {
-      const response = await api.post<StudioImageGenerationResponse>('/studio/generate-image', {
-        prompt: payload.prompt,
-      });
+  const generateImageMutation = useMutation({
+    mutationFn: async (payload: { model: string; prompt: string; aspect_ratio?: string }) => {
+      const response = await api.post('/openrouter/generate-image', payload);
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       setCurrentAssetId(data.creativeAssetId);
       setPollStartedAt(Date.now());
       setPublishFeedback(null);
+      setGeneratedUrl(data.imageUrl);
       queryClient.setQueryData(['studio', 'asset', data.creativeAssetId], data);
+    },
+  });
+
+  const generateVideoMutation = useMutation({
+    mutationFn: async (payload: { model: string; prompt: string; duration?: number }) => {
+      const response = await api.post('/openrouter/generate-video', payload);
+      return response.data;
+    },
+    onSuccess: (data: any) => {
+      setCurrentAssetId(data.creativeAssetId);
+      setPublishFeedback(null);
+      setGeneratedUrl(data.videoUrl);
     },
   });
 
@@ -130,13 +169,17 @@ export function CreativeStudio() {
   const isWithinPollingWindow = Boolean(pollStartedAt && nowMs - pollStartedAt < 30_000);
   const canPublish = currentCompliance?.complianceStatus === 'approved';
 
+  const isGenerating = generateImageMutation.isPending || generateVideoMutation.isPending;
+
   const handleGenerate = () => {
     const finalPrompt = prompt.trim();
-    if (finalPrompt.length < 10) {
-      return;
-    }
+    if (finalPrompt.length < 10) return;
 
-    generateMutation.mutate({ prompt: finalPrompt });
+    if (creativeType === 'image') {
+      generateImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt });
+    } else {
+      generateVideoMutation.mutate({ model: selectedVideoModel, prompt: finalPrompt, duration: 5 });
+    }
   };
 
   const handleRegenerate = () => {
@@ -152,7 +195,11 @@ export function CreativeStudio() {
     const adjustmentHint = `\n\nAjustes obrigatorios de compliance Meta:\n- ${currentCompliance.issues.join('\n- ')}\n\nRegere mantendo o conceito principal, removendo qualquer violacao e reduzindo texto para menos de 20%.`;
     const adjustedPrompt = `${basePrompt}${adjustmentHint}`.slice(0, 1000);
     setPrompt(adjustedPrompt);
-    generateMutation.mutate({ prompt: adjustedPrompt });
+    if (creativeType === 'image') {
+      generateImageMutation.mutate({ model: selectedImageModel, prompt: adjustedPrompt });
+    } else {
+      generateVideoMutation.mutate({ model: selectedVideoModel, prompt: adjustedPrompt });
+    }
   };
 
   const handlePublish = async () => {
@@ -164,18 +211,115 @@ export function CreativeStudio() {
     publishMutation.mutate();
   };
 
+  const currentModels = creativeType === 'image'
+    ? (modelsQuery.data?.image ?? [])
+    : (modelsQuery.data?.video ?? []);
+
+  const selectedModel = creativeType === 'image' ? selectedImageModel : selectedVideoModel;
+  const setSelectedModel = creativeType === 'image' ? setSelectedImageModel : setSelectedVideoModel;
+
   return (
     <AppLayout header={<div className="flex items-center justify-between" />}>
       <div className="space-y-8 bg-[radial-gradient(circle_at_top_right,_rgba(232,99,26,0.08),_transparent_30%),radial-gradient(circle_at_bottom_left,_rgba(0,0,0,0.04),_transparent_25%)]">
         <PageHeader
           title="Creative Studio"
-          description="FURY está criando seu anúncio com DALL-E 3, compliance automático e publish direto no Meta."
+          description="FURY gera criativos com IA via OpenRouter — escolha entre 3 modelos de imagem e 3 de vídeo."
           actions={<StatusBadge status={complianceStatus} />}
         />
 
         <div className="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-6">
           <Card className="overflow-hidden border-[#E6E8EC] shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
             <CardContent className="space-y-6">
+              {/* Seletor de tipo de criativo */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Tipo de criativo</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCreativeType('image')}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
+                      creativeType === 'image'
+                        ? 'border-[#E8631A] bg-[#FFF4ED] text-[#E8631A]'
+                        : 'border-[#E6E8EC] bg-white text-[#667085]'
+                    }`}
+                  >
+                    🖼️ Imagem
+                  </button>
+                  <button
+                    onClick={() => setCreativeType('video')}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
+                      creativeType === 'video'
+                        ? 'border-[#E8631A] bg-[#FFF4ED] text-[#E8631A]'
+                        : 'border-[#E6E8EC] bg-white text-[#667085]'
+                    }`}
+                  >
+                    🎬 Vídeo
+                  </button>
+                </div>
+              </div>
+
+              {/* Seletor de modelo */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">
+                  Modelo de {creativeType === 'image' ? 'imagem' : 'vídeo'}
+                </p>
+                <div className="space-y-2">
+                  {currentModels.length > 0 ? (
+                    currentModels.map((model) => {
+                      const badge = categoryBadge(model.category);
+                      return (
+                        <button
+                          key={model.id}
+                          onClick={() => setSelectedModel(model.id)}
+                          className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
+                            selectedModel === model.id
+                              ? 'border-[#E8631A] bg-[#FFF4ED]'
+                              : 'border-[#E6E8EC] bg-white hover:border-[#F0B48E]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-[#101828]">{model.label}</span>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badge.class}`}>
+                              {badge.label}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-[#667085]">{model.description}</p>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="space-y-2">
+                      {/* Fallback inline enquanto a query carrega */}
+                      {[
+                        { id: 'bytedance-seed/seedream-4.5', label: 'Seedream 4.5', desc: 'ByteDance — Mais barato ($0.04/img)', cat: 'barato' },
+                        { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 Klein 4B', desc: 'Black Forest Labs — Melhor custo-benefício', cat: 'custo-beneficio' },
+                        { id: 'black-forest-labs/flux.2-max', label: 'FLUX.2 Max', desc: 'Black Forest Labs — Máxima qualidade', cat: 'qualidade' },
+                      ].map((m) => {
+                        const badge = categoryBadge(m.cat);
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => setSelectedModel(m.id)}
+                            className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
+                              selectedModel === m.id
+                                ? 'border-[#E8631A] bg-[#FFF4ED]'
+                                : 'border-[#E6E8EC] bg-white hover:border-[#F0B48E]'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-semibold text-[#101828]">{m.label}</span>
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badge.class}`}>
+                                {badge.label}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-xs text-[#667085]">{m.desc}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Templates por nicho</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -222,11 +366,11 @@ export function CreativeStudio() {
               <div className="flex gap-3">
                 <Button
                   onClick={handleGenerate}
-                  disabled={generateMutation.isPending}
+                  disabled={isGenerating}
                   className="flex-1 bg-[#E8631A] hover:bg-[#D45714]"
                 >
-                  {generateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                  Gerar anúncio
+                  {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                  Gerar {creativeType === 'image' ? 'imagem' : 'vídeo'}
                 </Button>
                 <Button
                   variant="outline"
@@ -241,11 +385,11 @@ export function CreativeStudio() {
                 </Button>
               </div>
 
-              {generateMutation.isPending && (
+              {isGenerating && (
                 <div className="rounded-2xl border border-[#FFE3D4] bg-[#FFF7F2] p-4 text-sm text-[#7A4A27]">
                   <div className="flex items-center gap-3">
                     <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
-                    <span>FURY está criando seu anúncio...</span>
+                    <span>FURY está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...</span>
                   </div>
                 </div>
               )}
@@ -284,31 +428,31 @@ export function CreativeStudio() {
                 </div>
               </div>
 
-              {!currentAssetId && !generateMutation.isPending && (
+              {!currentAssetId && !isGenerating && (
                 <div className="flex min-h-[520px] flex-col items-center justify-center rounded-[28px] border border-dashed border-[#E6E8EC] bg-[#FCFCFD] text-center">
                   <div className="rounded-full bg-[#FFF4ED] p-4 text-[#E8631A]">
                     <Sparkles className="h-7 w-7" />
                   </div>
                   <h3 className="mt-4 text-xl font-semibold text-[#101828]">Pronto para gerar</h3>
-                  <p className="mt-2 max-w-md text-sm text-[#667085]">Escolha um template ou escreva um prompt detalhado. O preview, o status de compliance e a publicação aparecem aqui.</p>
+                  <p className="mt-2 max-w-md text-sm text-[#667085]">Escolha um modelo, um template ou escreva um prompt detalhado. O preview, o status de compliance e a publicação aparecem aqui.</p>
                 </div>
               )}
 
-              {generateMutation.isPending && (
+              {isGenerating && (
                 <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[#E6E8EC] bg-gradient-to-br from-[#FFF7F2] to-white">
                   <div className="space-y-4 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
-                    <p className="text-base font-semibold text-[#101828]">FURY está criando seu anúncio...</p>
-                    <p className="text-sm text-[#667085]">A geração via DALL-E 3 e a checagem de compliance são processadas em sequência.</p>
+                    <p className="text-base font-semibold text-[#101828]">FURY está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...</p>
+                    <p className="text-sm text-[#667085]">A geração via OpenRouter e a checagem de compliance são processadas em sequência.</p>
                   </div>
                 </div>
               )}
 
-              {currentAssetId && !generateMutation.isPending && !currentCompliance && (
+              {currentAssetId && !isGenerating && !currentCompliance && (
                 <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[#E6E8EC] bg-gradient-to-br from-[#FFF7F2] to-white">
                   <div className="space-y-4 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
-                    <p className="text-base font-semibold text-[#101828]">FURY está criando seu anúncio...</p>
+                    <p className="text-base font-semibold text-[#101828]">FURY está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...</p>
                     <p className="text-sm text-[#667085]">
                       {isWithinPollingWindow ? 'Análise de compliance em andamento.' : 'A janela de polling terminou. Atualize ou gere novamente.'}
                     </p>
@@ -316,15 +460,29 @@ export function CreativeStudio() {
                 </div>
               )}
 
-              {currentAssetId && currentCompliance && !generateMutation.isPending && (
+              {currentAssetId && currentCompliance && !isGenerating && (
                 <div className="space-y-6">
                   <div className="overflow-hidden rounded-[28px] border border-[#E6E8EC] bg-[#101828]">
                     <div className="relative aspect-square md:aspect-[16/11]">
-                      <img
-                        src={currentCompliance.imageUrl}
-                        alt="Preview do criativo"
-                        className="h-full w-full object-cover"
-                      />
+                      {creativeType === 'video' && generatedUrl ? (
+                        <video
+                          src={generatedUrl}
+                          controls
+                          className="h-full w-full object-cover"
+                        />
+                      ) : generatedUrl ? (
+                        <img
+                          src={generatedUrl}
+                          alt="Preview do criativo"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <img
+                          src={currentCompliance.imageUrl}
+                          alt="Preview do criativo"
+                          className="h-full w-full object-cover"
+                        />
+                      )}
                       <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
                         <CheckCircle2 className="h-4 w-4" />
                         {currentCompliance.complianceStatus === 'approved' ? 'Aprovado' : currentCompliance.complianceStatus === 'rejected' ? 'Reprovado' : 'Em análise'}

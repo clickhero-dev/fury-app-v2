@@ -20,7 +20,7 @@ export function useAutomationFeed() {
       return;
     }
 
-    const apiUrl = import.meta.env.VITE_API_URL;
+    const apiUrl = 'https://clickhero-fury-api.u7pe19.easypanel.host/api';
     // Remove trailing /api if present to avoid duplication
     const baseUrl = apiUrl.endsWith('/api') ? apiUrl.slice(0, -4) : apiUrl;
     const eventSource = new EventSource(
