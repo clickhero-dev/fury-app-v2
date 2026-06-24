@@ -191,8 +191,10 @@ export interface ValidateContextResponse {
 }
 
 export interface GenerateCreativeResponse {
+  type?: 'image' | 'video';
   assetId: string;
   imageUrl: string;
+  videoUrl?: string;
   creativeData: {
     layout?: string;
     headline?: string;

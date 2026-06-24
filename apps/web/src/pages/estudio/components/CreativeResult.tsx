@@ -19,9 +19,18 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
   const [feedback, setFeedback] = useState('');
   const [publishFeedback, setPublishFeedback] = useState<StudioPublishResponse | null>(null);
 
+  const isQuickCreate = !!currentResult.type; // openrouter assets have type field
+  const isVideo = currentResult.type === 'video';
+  const displayUrl = isVideo ? (currentResult.videoUrl ?? currentResult.imageUrl) : currentResult.imageUrl;
+
   const regenerateMutation = useMutation({
     mutationFn: async ({ assetId, feedbackText }: { assetId: string; feedbackText: string }) => {
-      const res = await api.post<GenerateCreativeResponse>('/studio/creative/regenerate', {
+      // Quick-create assets use /openrouter/regenerate
+      // Wizard assets use /studio/creative/regenerate
+      const endpoint = isQuickCreate
+        ? '/openrouter/regenerate'
+        : '/studio/creative/regenerate';
+      const res = await api.post<GenerateCreativeResponse>(endpoint, {
         assetId,
         feedback: feedbackText,
       });
@@ -55,19 +64,36 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
-        {/* PNG real do backend — fonte única da verdade (preview fiel) */}
+        {/* Preview area — video or image */}
         <div className="overflow-hidden rounded-2xl border border-[#E6E8EC]">
           <div className="relative w-full" style={{ aspectRatio: '1 / 1' }}>
-            <img
-              src={currentResult.imageUrl}
-              alt="Criativo gerado"
-              className="w-full h-full object-cover block rounded-lg"
-              style={{ opacity: regenerateMutation.isPending ? 0.5 : 1, transition: 'opacity 0.2s' }}
-              onError={(e) => {
-                console.error('=== Image failed to load:', currentResult.imageUrl);
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
+            {isVideo && displayUrl ? (
+              <video
+                src={displayUrl}
+                controls
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-cover block rounded-lg"
+                style={{ opacity: regenerateMutation.isPending ? 0.5 : 1, transition: 'opacity 0.2s' }}
+                onError={(e) => {
+                  console.error('=== Video failed to load:', displayUrl);
+                  (e.target as HTMLVideoElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <img
+                src={displayUrl}
+                alt="Criativo gerado"
+                className="w-full h-full object-cover block rounded-lg"
+                style={{ opacity: regenerateMutation.isPending ? 0.5 : 1, transition: 'opacity 0.2s' }}
+                onError={(e) => {
+                  console.error('=== Image failed to load:', displayUrl);
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            )}
             {regenerateMutation.isPending && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex items-center gap-2 rounded-xl bg-black/60 px-5 py-4 text-sm text-white">
@@ -82,7 +108,9 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
         {/* Painel lateral */}
         <div className="space-y-4">
           <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E8631A]">Seu criativo</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E8631A]">
+              {isVideo ? 'Seu vídeo' : 'Seu criativo'}
+            </p>
             {cd.layout && (
               <div className="flex items-center gap-2">
                 <p className="text-sm font-semibold text-[#101828]">{layoutLabel(cd.layout)}</p>
@@ -94,7 +122,7 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
               </div>
             )}
             <p className="text-sm text-[#667085]">
-              {isLegacy ? 'Este modelo foi descontinuado. Crie um novo criativo para usar os formatos atuais.' : 'Pronto. Regenere com ajustes, salve ou publique no Meta.'}
+              {isLegacy ? 'Este modelo foi descontinuado. Crie um novo criativo para usar os formatos atuais.' : isQuickCreate ? 'Criado via Criação Rápida. Regenere com ajustes ou salve na biblioteca.' : 'Pronto. Regenere com ajustes, salve ou publique no Meta.'}
             </p>
           </div>
 
@@ -164,15 +192,17 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
               <BookmarkCheck className="h-4 w-4 shrink-0" />
               Salvar na Biblioteca
             </Button>
-            <Button
-              size="sm"
-              onClick={() => publishMutation.mutate(currentResult.assetId)}
-              disabled={publishMutation.isPending || !!publishFeedback}
-              className="w-full flex items-center justify-center gap-2 bg-[#E8631A] hover:bg-[#D45714] text-white"
-            >
-              {publishMutation.isPending ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Upload className="h-4 w-4 shrink-0" />}
-              Publicar no Meta
-            </Button>
+            {!isQuickCreate && (
+              <Button
+                size="sm"
+                onClick={() => publishMutation.mutate(currentResult.assetId)}
+                disabled={publishMutation.isPending || !!publishFeedback}
+                className="w-full flex items-center justify-center gap-2 bg-[#E8631A] hover:bg-[#D45714] text-white"
+              >
+                {publishMutation.isPending ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Upload className="h-4 w-4 shrink-0" />}
+                Publicar no Meta
+              </Button>
+            )}
             {publishMutation.isError && (
               <div className="flex items-center gap-2 text-xs text-red-600">
                 <AlertCircle className="h-3.5 w-3.5" />
