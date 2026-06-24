@@ -48,6 +48,7 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', [
 ]);
 export const invoiceStatusEnum = pgEnum('invoice_status', ['pending', 'paid', 'overdue', 'cancelled']);
 export const voiceToneEnum = pgEnum('voice_tone', ['professional', 'casual', 'urgent', 'premium']);
+export const formSubmissionStatusEnum = pgEnum('form_submission_status', ['PENDING', 'COMPLETED', 'ERROR', 'ABANDONED']);
 
 // Tenants table
 export const tenants = pgTable(
@@ -330,6 +331,32 @@ export const furyConfig = pgTable(
   })
 );
 
+// Form submissions table
+export const formSubmissions = pgTable(
+  'form_submissions',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    formType: varchar('form_type', { length: 255 }).notNull(),
+    status: formSubmissionStatusEnum('status').notNull().default('PENDING'),
+    abandonedAt: timestamp('abandoned_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('form_submissions_tenant_id_idx').on(table.tenantId),
+    userIdIdx: index('form_submissions_user_id_idx').on(table.userId),
+    formTypeIdx: index('form_submissions_form_type_idx').on(table.formType),
+    statusIdx: index('form_submissions_status_idx').on(table.status),
+    tenantFormTypeIdx: index('form_submissions_tenant_form_type_idx').on(table.tenantId, table.formType),
+  })
+);
+
 // ==================== Billing ====================
 
 // Plans table (global — not per-tenant)
@@ -455,6 +482,7 @@ export const allTables = {
   performanceScores,
   ruleExecutions,
   furyConfig,
+  formSubmissions,
   plans,
   subscriptions,
   invoices,

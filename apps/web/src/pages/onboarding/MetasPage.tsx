@@ -119,11 +119,11 @@ export function MetasPage() {
       existingGoals
         ? api.put('/goals', data).then((r) => r.data)
         : api.post('/goals/setup', data).then((r) => r.data),
-    onSuccess: () => {
+    onSuccess: async () => {
       showToast('success', '✅ Metas salvas com sucesso!');
       setTimeout(() => navigate('/dashboard'), 1000);
     },
-    onError: (error: unknown) => {
+    onError: async (error: unknown) => {
       const msg =
         (error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ??
         'Erro ao salvar metas. Tente novamente.';

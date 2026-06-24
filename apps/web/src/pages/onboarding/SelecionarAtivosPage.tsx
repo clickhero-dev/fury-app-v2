@@ -296,6 +296,8 @@ export function SelecionarAtivosPage() {
       await queryClient.refetchQueries({ queryKey: ['meta-connections'], type: 'all' });
       navigate('/dashboard');
     },
+    onError: async () => {
+    },
   });
 
   const selectedBusinessNames = businesses.filter((b) => businessIds.includes(b.id)).map((b) => b.name);
