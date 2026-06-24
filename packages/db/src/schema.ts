@@ -449,7 +449,7 @@ export const requestLogs = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     requestId: uuid('request_id').notNull(),
     tenantId: uuid('tenant_id'),
-    userId: bigint('user_id', { mode: 'number' }),
+    userId: uuid('user_id'),
     method: varchar('method', { length: 10 }).notNull(),
     path: varchar('path', { length: 500 }).notNull(),
     pathTemplate: varchar('path_template', { length: 500 }),

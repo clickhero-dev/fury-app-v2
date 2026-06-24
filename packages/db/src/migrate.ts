@@ -56,6 +56,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0013_meta_connections_dedupe_unique' },
   { tag: '0014_add_asset_selection' },
   { tag: '0015_add_request_logs' },
+  { tag: '0016_fix_request_logs_user_id' },
 ];
 
 async function runMigrate() {
