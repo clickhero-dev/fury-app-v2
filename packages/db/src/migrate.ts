@@ -21,8 +21,8 @@ if (fs.existsSync(envFile)) {
 
 const connectionString =
   process.env.NODE_ENV === 'test'
-    ? process.env.TEST_DATABASE_URL || 'postgresql://admin:***@localhost:5444/fury_test'
-    : process.env.DATABASE_URL || 'postgresql://admin:***@localhost:5444/fury_dev';
+    ? process.env.TEST_DATABASE_URL || 'postgresql://fury:fury_local@localhost:5432/fury_test'
+    : process.env.DATABASE_URL || 'postgresql://fury:fury_local@localhost:5432/fury_dev';
 
 const MIGRATIONS_DIR = path.join(__dirname, '../migrations');
 
@@ -55,6 +55,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0012_add_brand_kits' },
   { tag: '0013_meta_connections_dedupe_unique' },
   { tag: '0014_add_asset_selection' },
+  { tag: '0015_add_request_logs' },
 ];
 
 async function runMigrate() {

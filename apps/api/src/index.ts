@@ -3,6 +3,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { loggerMiddleware } from './middleware/logger.js';
+import { requestLogger, flushRequestLogs } from './middleware/request-logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
 import { closeRedis, waitForRedisReady } from './lib/redis.js';
@@ -27,6 +28,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(loggerMiddleware);
+app.use(requestLogger);
 console.log('=== STATIC serving /studio-assets from:', studioAssetsDir);
 app.use('/studio-assets', express.static(studioAssetsDir));
 
@@ -97,6 +99,7 @@ app.use((req, res) => {
     process.on('SIGTERM', () => {
       console.log('SIGTERM received, shutting down gracefully...');
       server.close(async () => {
+        await flushRequestLogs();
         await stopSyncJobsWorker();
         await stopRuleEngine();
         await stopStudioGenerationWorker();
