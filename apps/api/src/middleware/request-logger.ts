@@ -14,11 +14,17 @@ type RequestLogEntry = typeof requestLogs.$inferInsert;
 const buffer: RequestLogEntry[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let isFlushing = false;
+let flushFailures = 0;
 
 function resolveRequestId(req: Request): string {
   const header = req.headers['x-request-id'];
   const raw = typeof header === 'string' ? header.trim() : '';
   return raw && UUID_RE.test(raw) ? raw : randomUUID();
+}
+
+function extractQueryString(req: Request): string | null {
+  const qs = req.url?.split('?')[1];
+  return qs && qs.length <= 2048 ? qs : null;
 }
 
 function captureRequestBody(req: Request): unknown {
@@ -43,12 +49,18 @@ async function flushBuffer() {
   }
 
   isFlushing = true;
-  const batch = buffer.splice(0, buffer.length);
+  // Snapshot so new entries aren't lost if insert fails
+  const batch = [...buffer];
 
   try {
     await db.insert(requestLogs).values(batch);
+    // Only remove successfully written entries from buffer
+    buffer.splice(0, batch.length);
+    flushFailures = 0;
   } catch (err) {
-    console.error('[request-logger] flush failed:', err);
+    flushFailures++;
+    console.error(`[request-logger] flush failed (attempt #${flushFailures}):`, err);
+    // Keep entries in buffer for retry — schedule another flush
   } finally {
     isFlushing = false;
     if (buffer.length > 0) {
@@ -73,7 +85,10 @@ export async function flushRequestLogs() {
     clearTimeout(flushTimer);
     flushTimer = null;
   }
-  await flushBuffer();
+  // Drain completely: keep flushing until buffer is empty
+  while (buffer.length > 0) {
+    await flushBuffer();
+  }
 }
 
 export function requestLogger(req: Request, res: Response, next: NextFunction) {
@@ -83,18 +98,19 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
 
   res.setHeader('x-request-id', requestId);
 
-  res.on('finish', () => {
+  function captureLog() {
     buffer.push({
       requestId,
       tenantId: req.tenant?.tenantId ?? req.user?.tenantId ?? null,
       userId: req.user?.userId ?? null,
       method: req.method,
-      path: req.originalUrl.slice(0, 500),
-      pathTemplate: req.route?.path ? String(req.route.path).slice(0, 500) : null,
+      path: req.originalUrl.slice(0, 2048),
+      queryString: extractQueryString(req),
       statusCode: res.statusCode,
       responseTimeMs: Date.now() - start,
       ipAddress: req.ip ?? null,
       userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+      referer: typeof req.headers['referer'] === 'string' ? req.headers['referer'].slice(0, 2048) : null,
       requestHeaders: sanitizeHeaders(req.headers as Record<string, unknown>),
       requestBody: safeBody,
     });
@@ -104,6 +120,20 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
     } else {
       scheduleFlush();
     }
+  }
+
+  // finish: response fully sent. close: connection terminated (covers aborted requests).
+  // Listen to both — deduplicate via a fired flag.
+  let captured = false;
+  res.on('finish', () => {
+    if (captured) return;
+    captured = true;
+    captureLog();
+  });
+  res.on('close', () => {
+    if (captured) return;
+    captured = true;
+    captureLog();
   });
 
   next();

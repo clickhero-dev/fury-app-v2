@@ -9,7 +9,7 @@ RUN npm install
 
 COPY . .
 
-RUN npm run build
+RUN npm run build --workspace=@fury/web
 
 FROM node:22-alpine AS production
 

@@ -65,7 +65,9 @@ export function useFuryLiveFeed() {
     if (!isMountedRef.current) return;
     setState((prev) => ({ ...prev, isConnecting: true, error: null }));
 
-    const eventSource = new EventSource(`/api/fury/live-feed?token=${token}`);
+    const apiUrl = 'https://clickhero-fury-api.u7pe19.easypanel.host/api';
+    const baseUrl = apiUrl.replace(/\/$/, '');
+    const eventSource = new EventSource(`${baseUrl}/fury/live-feed?token=${token}`);
     eventSourceRef.current = eventSource;
 
     const handleMessage = (event: MessageEvent) => {

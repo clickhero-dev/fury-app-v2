@@ -11,10 +11,9 @@ import {
   numeric,
   integer,
   unique,
-  bigserial,
-  smallint,
   inet,
   bigint,
+  smallint,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -442,23 +441,28 @@ export const brandKits = pgTable(
 );
 
 // Request logs table (audit / debug)
+// Partitioned by RANGE (created_at) — PK is (id, created_at) at DB level.
+// Drizzle schema mirrors the production columns for type-safe queries.
 export const requestLogs = pgTable(
   'request_logs',
   {
-    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    id: bigint('id', { mode: 'number' }).notNull().default(sql`nextval('request_logs_id_seq'::regclass)`),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    requestId: uuid('request_id').notNull(),
-    tenantId: uuid('tenant_id'),
-    userId: uuid('user_id'),
+    requestId: uuid('request_id'),
+    tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
     method: varchar('method', { length: 10 }).notNull(),
-    path: varchar('path', { length: 500 }).notNull(),
-    pathTemplate: varchar('path_template', { length: 500 }),
+    path: text('path').notNull(),
+    queryString: text('query_string'),
     statusCode: smallint('status_code').notNull(),
     responseTimeMs: integer('response_time_ms').notNull(),
     ipAddress: inet('ip_address'),
     userAgent: text('user_agent'),
+    referer: text('referer'),
     requestHeaders: jsonb('request_headers'),
     requestBody: jsonb('request_body'),
+    responseBody: jsonb('response_body'),
+    errorMessage: text('error_message'),
   },
   (table) => ({
     tenantCreatedIdx: index('idx_request_logs_tenant_created').on(table.tenantId, table.createdAt),
