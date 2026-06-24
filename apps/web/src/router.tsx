@@ -22,6 +22,7 @@ import { MinhasRegras } from './pages/automacao/MinhasRegras';
 import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
 import { Subscription } from './pages/billing/Subscription';
+import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
 
 export const router = createBrowserRouter([
   {
@@ -71,6 +72,7 @@ export const router = createBrowserRouter([
       { path: '/configuracoes/brand-kit', element: <BrandKitPage /> },
       { path: '/planos', element: <Plans /> },
       { path: '/assinatura', element: <Subscription /> },
+      { path: '/orcamento-smart', element: <OrcamentoSmart /> },
       { path: '/components-demo', element: <ComponentsDemo /> },
     ],
   },
