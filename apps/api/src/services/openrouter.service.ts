@@ -75,42 +75,71 @@ export const openrouterService = {
   }): Promise<string> {
     const apiKey = getClient();
 
-    // 1. Submeter job
-    const submitResponse = await fetch(`${OPENROUTER_BASE}/videos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: options.model,
-        prompt: options.prompt,
-        ...(options.duration ? { duration: options.duration } : {}),
-        ...(options.resolution ? { resolution: options.resolution } : {}),
-        ...(options.aspect_ratio ? { aspect_ratio: options.aspect_ratio } : {}),
-        ...(options.generate_audio !== undefined ? { generate_audio: options.generate_audio } : {}),
-      }),
-    });
-    if (!submitResponse.ok) {
-      const err = await submitResponse.text();
-      throw new AppError(502, 'OPENROUTER_VIDEO_SUBMIT_ERROR', `OpenRouter video submit error: ${err}`);
+    // Helper: submit a video job and return the polling URL
+    async function submitJob(prompt: string): Promise<string> {
+      const submitResponse = await fetch(`${OPENROUTER_BASE}/videos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: options.model,
+          prompt,
+          ...(options.duration ? { duration: options.duration } : {}),
+          ...(options.resolution ? { resolution: options.resolution } : {}),
+          ...(options.aspect_ratio ? { aspect_ratio: options.aspect_ratio } : {}),
+          ...(options.generate_audio !== undefined ? { generate_audio: options.generate_audio } : {}),
+        }),
+      });
+      if (!submitResponse.ok) {
+        const err = await submitResponse.text();
+        throw new AppError(500, 'OPENROUTER_VIDEO_SUBMIT_ERROR', `OpenRouter video submit error: ${err}`);
+      }
+      const submitData = (await submitResponse.json()) as any;
+      const pollingUrl = submitData.polling_url;
+      if (!pollingUrl) throw new AppError(500, 'OPENROUTER_VIDEO_NO_POLL', 'OpenRouter não retornou polling_url.');
+      return pollingUrl;
     }
-    const submitData = (await submitResponse.json()) as any;
-    const pollingUrl = submitData.polling_url;
-    if (!pollingUrl) throw new AppError(502, 'OPENROUTER_VIDEO_NO_POLL', 'OpenRouter não retornou polling_url.');
 
-    // 2. Polling até completar (máx 40 tentativas * 3s = 120s)
-    for (let attempt = 0; attempt < 40; attempt++) {
-      await new Promise((r) => setTimeout(r, 3000));
-      const pollResponse = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${apiKey}` } });
-      if (!pollResponse.ok) continue;
-      const pollData = (await pollResponse.json()) as any;
-      if (pollData.status === 'completed') {
-        const videoUrl = pollData.unsigned_urls?.[0];
-        if (videoUrl) return videoUrl;
-        throw new AppError(502, 'OPENROUTER_VIDEO_NO_URL', 'Job completed mas sem URL de vídeo.');
+    // Helper: poll until completion
+    async function pollJob(pollingUrl: string): Promise<{ status: string; videoUrl?: string; error?: string }> {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const pollResponse = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${apiKey}` } });
+        if (!pollResponse.ok) continue;
+        const pollData = (await pollResponse.json()) as any;
+        if (pollData.status === 'completed') {
+          const videoUrl = pollData.unsigned_urls?.[0];
+          return { status: 'completed', videoUrl };
+        }
+        if (pollData.status === 'failed') {
+          return { status: 'failed', error: pollData.error || 'desconhecido' };
+        }
       }
-      if (pollData.status === 'failed') {
-        throw new AppError(502, 'OPENROUTER_VIDEO_FAILED', `Geração de vídeo falhou: ${pollData.error || 'desconhecido'}`);
-      }
+      return { status: 'timeout', error: 'Timeout (120s)' };
     }
-    throw new AppError(502, 'OPENROUTER_VIDEO_TIMEOUT', 'Timeout na geração de vídeo (120s).');
+
+    // First attempt
+    const pollingUrl = await submitJob(options.prompt);
+    let result = await pollJob(pollingUrl);
+
+    // If content filtered, retry with sanitized prompt
+    if (result.status === 'failed' && (result.error || '').includes('no output')) {
+      console.log('[openrouter] Video content filtered, retrying with sanitized prompt...');
+      const safePrompt = `${options.prompt} - advertisement, professional use, compliant with advertising standards`;
+      const retryUrl = await submitJob(safePrompt);
+      result = await pollJob(retryUrl);
+    }
+
+    if (result.status === 'completed' && result.videoUrl) {
+      return result.videoUrl;
+    }
+
+    if (result.status === 'failed') {
+      const msg = (result.error || '').includes('no output')
+        ? 'O vídeo foi bloqueado pelo filtro de conteúdo. Tente um prompt mais genérico ou com menos detalhes específicos.'
+        : `Geração de vídeo falhou: ${result.error}`;
+      throw new AppError(500, 'OPENROUTER_VIDEO_FAILED', msg);
+    }
+
+    throw new AppError(500, 'OPENROUTER_VIDEO_FAILED', 'Job completed mas sem URL de vídeo (conteúdo pode ter sido filtrado).');
   },
 };
