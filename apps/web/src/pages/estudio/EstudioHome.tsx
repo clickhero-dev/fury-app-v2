@@ -55,6 +55,7 @@ export function EstudioHome() {
   const [selectedImageModel, setSelectedImageModel] = useState('black-forest-labs/flux.2-klein-4b');
   const [selectedVideoModel, setSelectedVideoModel] = useState('google/veo-3.1-lite');
   const [orPrompt, setOrPrompt] = useState('');
+  const [progressMessage, setProgressMessage] = useState('');
 
   const generateMutation = useMutation({
     mutationFn: async (payload: GenerateCreativePayload) => {
@@ -87,36 +88,43 @@ export function EstudioHome() {
   // ─── OpenRouter mutations ──────────────────────────────────────────
   const orImageMutation = useMutation({
     mutationFn: async (payload: { model: string; prompt: string }) => {
+      setProgressMessage('Gerando imagem...');
       const res = await api.post('/openrouter/generate-image', payload);
       return res.data;
     },
     onSuccess: (data: any) => {
       setGenerationResult({
+        type: 'image',
         assetId: data.creativeAssetId,
         imageUrl: data.imageUrl,
         creativeData: { headline: '', primary_text: '', cta: '' },
       });
       setView('result');
+      setProgressMessage('');
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
-    onError: () => setView('error'),
+    onError: () => { setView('error'); setProgressMessage(''); },
   });
 
   const orVideoMutation = useMutation({
     mutationFn: async (payload: { model: string; prompt: string; duration?: number }) => {
+      setProgressMessage('Submetendo vídeo...');
       const res = await api.post('/openrouter/generate-video', payload);
       return res.data;
     },
     onSuccess: (data: any) => {
       setGenerationResult({
+        type: 'video',
         assetId: data.creativeAssetId,
-        imageUrl: data.videoUrl,
+        imageUrl: '', // videos don't have imageUrl
+        videoUrl: data.videoUrl,
         creativeData: { headline: '', primary_text: '', cta: '' },
       });
       setView('result');
+      setProgressMessage('');
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
-    onError: () => setView('error'),
+    onError: () => { setView('error'); setProgressMessage(''); },
   });
 
   const modelsQuery = useQuery({
@@ -167,14 +175,35 @@ export function EstudioHome() {
     setCreativeType('image');
     setView('quick-create');
   };
-  const handleQuickCreate = () => {
+  const handleQuickCreate = async () => {
     const finalPrompt = orPrompt.trim();
     if (finalPrompt.length < 10) return;
     setView('loading');
-    if (creativeType === 'image') {
-      orImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt });
-    } else {
-      orVideoMutation.mutate({ model: selectedVideoModel, prompt: finalPrompt, duration: 5 });
+    setProgressMessage('Aprimorando prompt...');
+
+    try {
+      // Enhance prompt with brand context + AI improvement
+      const enhanceRes = await api.post('/openrouter/enhance-prompt', {
+        prompt: finalPrompt,
+        type: creativeType,
+      });
+      const { enhancedPrompt } = enhanceRes.data as { enhancedPrompt: string };
+
+      setProgressMessage(creativeType === 'image' ? 'Gerando imagem...' : 'Submetendo vídeo...');
+
+      if (creativeType === 'image') {
+        orImageMutation.mutate({ model: selectedImageModel, prompt: enhancedPrompt });
+      } else {
+        orVideoMutation.mutate({ model: selectedVideoModel, prompt: enhancedPrompt, duration: 5 });
+      }
+    } catch {
+      // Fallback: use original prompt if enhancement fails
+      setProgressMessage(creativeType === 'image' ? 'Gerando imagem...' : 'Submetendo vídeo...');
+      if (creativeType === 'image') {
+        orImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt });
+      } else {
+        orVideoMutation.mutate({ model: selectedVideoModel, prompt: finalPrompt, duration: 5 });
+      }
     }
   };
   const handleBackToLibrary = () => {
@@ -501,14 +530,30 @@ export function EstudioHome() {
               <Loader2 className="h-10 w-10 animate-spin text-[#EA580C]" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-[#101828]">O FURY está criando seu anúncio...</h2>
-              <p className="mt-2 text-sm text-[#667085]">A geração com IA e a renderização podem levar até 15 segundos</p>
+              <h2 className="text-2xl font-bold text-[#101828]">
+                {progressMessage || (creativeType === 'video' ? 'O FURY está criando seu vídeo...' : 'O FURY está criando seu anúncio...')}
+              </h2>
+              <p className="mt-2 text-sm text-[#667085]">
+                {creativeType === 'video'
+                  ? 'A geração de vídeo com IA pode levar até 2 minutos. Aguarde...'
+                  : 'A geração com IA e a renderização podem levar até 15 segundos'}
+              </p>
             </div>
-            <div className="flex flex-col gap-1 text-xs text-[#667085]">
-              <span>✦ Analisando seu briefing</span>
-              <span>✦ Gerando textos e layout</span>
-              <span>✦ Renderizando o criativo</span>
-            </div>
+            {creativeType === 'video' && (
+              <div className="flex flex-col gap-1 text-xs text-[#667085]">
+                <span>✦ Aprimorando o prompt com o contexto da marca</span>
+                <span>✦ Submetendo job de vídeo ao OpenRouter</span>
+                <span>✦ Aguardando renderização (polling a cada 3s, máx 120s)</span>
+                <span>✦ Salvando na biblioteca</span>
+              </div>
+            )}
+            {creativeType === 'image' && (
+              <div className="flex flex-col gap-1 text-xs text-[#667085]">
+                <span>✦ Aprimorando o prompt com o contexto da marca</span>
+                <span>✦ Gerando imagem via IA</span>
+                <span>✦ Salvando na biblioteca</span>
+              </div>
+            )}
           </div>
         )}
 
