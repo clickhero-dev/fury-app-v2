@@ -57,6 +57,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0014_add_asset_selection' },
   { tag: '0015_add_request_logs' },
   { tag: '0016_fix_request_logs_user_id' },
+  { tag: '0017_add_request_logs_default_partition' },
 ];
 
 async function runMigrate() {
