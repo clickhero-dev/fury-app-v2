@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { db, creativeAssets } from '@fury/db';
 import { eq } from 'drizzle-orm';
@@ -6,6 +7,7 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import { openrouterService } from '../services/openrouter.service.js';
 import { saveTemporaryStudioImage } from '../lib/temp-storage.js';
+import { uploadAsset } from '../services/storage.service.js';
 
 const router = Router();
 
@@ -71,6 +73,43 @@ async function getBrandContext(tenantId: string): Promise<{
     secondaryColor: brandKit?.secondaryColor ?? undefined,
     voiceTone: brandKit?.voiceTone ? VOICE_TONE_LABELS[brandKit.voiceTone] : undefined,
   };
+}
+
+// ─── Upload helper ────────────────────────────────────────────────
+async function uploadImageToStorage(base64DataUrl: string): Promise<string> {
+  // If R2 is configured, upload to Cloudflare R2
+  if (process.env.R2_ENDPOINT && process.env.R2_PUBLIC_URL) {
+    const match = base64DataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+    if (match) {
+      const mimeType = match[1];
+      const base64Data = match[2];
+      const buffer = Buffer.from(base64Data, 'base64');
+      const ext = mimeType.includes('jpeg') ? 'jpg' : mimeType.includes('webp') ? 'webp' : 'png';
+      const fileName = `${randomUUID()}.${ext}`;
+      return uploadAsset(buffer, fileName, mimeType);
+    }
+  }
+  // Fallback to local storage
+  const { fileName } = await saveTemporaryStudioImage(base64DataUrl);
+  // Use PUBLIC_BASE_URL or construct from request host
+  return `https://${process.env.DOMAIN || 'clickhero-fury-api.u7pe19.easypanel.host'}/studio-assets/${fileName}`;
+}
+// ─── Video upload helper ──────────────────────────────────────────
+async function uploadVideoToStorage(videoUrl: string): Promise<string> {
+  // If R2 is configured, download video and upload to R2
+  if (process.env.R2_ENDPOINT && process.env.R2_PUBLIC_URL) {
+    try {
+      const response = await fetch(videoUrl);
+      if (!response.ok) throw new Error(`Failed to download video: ${response.status}`);
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const fileName = `${randomUUID()}.mp4`;
+      return uploadAsset(buffer, fileName, 'video/mp4');
+    } catch (err) {
+      console.error('[openrouter] Video upload to R2 failed, using original URL:', err);
+    }
+  }
+  // Fallback: return the OpenRouter URL directly (temporary, but works)
+  return videoUrl;
 }
 
 // ─── Enhance prompt (brand + AI improvement) ─────────────────────
@@ -153,9 +192,7 @@ router.post('/generate-image', authMiddleware, tenantMiddleware, async (req: Req
       resolution: body.resolution,
     });
 
-    const { fileName } = await saveTemporaryStudioImage(base64Image);
-    const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
-
+    const imageUrl = await uploadImageToStorage(base64Image);
     const brand = await getBrandContext(tenantId);
     const [asset] = await db
       .insert(creativeAssets)
@@ -204,12 +241,13 @@ router.post('/generate-video', authMiddleware, tenantMiddleware, async (req: Req
     });
 
     const brand = await getBrandContext(tenantId);
+    const storedVideoUrl = await uploadVideoToStorage(videoUrl);
     const [asset] = await db
       .insert(creativeAssets)
       .values({
         tenantId,
         type: 'video',
-        url: videoUrl,
+        url: storedVideoUrl,
         complianceStatus: 'pending_compliance',
         complianceNotes: JSON.stringify({
           prompt: body.prompt,
@@ -225,7 +263,7 @@ router.post('/generate-video', authMiddleware, tenantMiddleware, async (req: Req
     res.json({
       type: 'video' as const,
       creativeAssetId: asset.id,
-      videoUrl,
+      videoUrl: storedVideoUrl,
       model: body.model,
       prompt: body.prompt,
       duration: body.duration,
@@ -298,18 +336,19 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
 
     // Generate new asset
     if (assetType === 'video') {
-      const videoUrl = await openrouterService.generateVideo({
+      const rawVideoUrl = await openrouterService.generateVideo({
         model: originalModel,
         prompt: newPrompt,
         duration: 4,
         resolution: '720p',
         generate_audio: true,
       });
+      const storedVideoUrl = await uploadVideoToStorage(rawVideoUrl);
 
       const [newAsset] = await db.insert(creativeAssets).values({
         tenantId,
         type: 'video',
-        url: videoUrl,
+        url: storedVideoUrl,
         complianceStatus: 'pending_compliance',
         complianceNotes: JSON.stringify({
           prompt: newPrompt,
@@ -324,7 +363,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
       return res.json({
         type: 'video' as const,
         assetId: newAsset.id,
-        videoUrl,
+        videoUrl: storedVideoUrl,
         creativeData: { headline: '', primary_text: '', cta: '' },
       });
     }
@@ -335,9 +374,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
       prompt: newPrompt,
     });
 
-    const { fileName } = await saveTemporaryStudioImage(base64Image);
-    const imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
-
+    const imageUrl = await uploadImageToStorage(base64Image);
     const [newAsset] = await db.insert(creativeAssets).values({
       tenantId,
       type: 'image',
