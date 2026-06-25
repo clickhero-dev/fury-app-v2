@@ -15,8 +15,11 @@ import { eq } from 'drizzle-orm';
 // Mock the meta-api
 vi.mock('../lib/meta-api', () => ({
   metaApiCall: vi.fn().mockResolvedValue({ id: 'mock_campaign_id_123' }),
-  decryptAccessToken: vi.fn((token) => token),
-  encryptAccessToken: vi.fn((token) => token),
+}));
+
+// Mock crypto utils — decryptMetaToken precisa retornar um token válido
+vi.mock('../utils/crypto.js', () => ({
+  decryptMetaToken: vi.fn((token: string) => token), // pass-through seguro para testes
 }));
 
 describe('POST /api/campaigns/create', () => {

@@ -24,7 +24,8 @@
   },
   "devDependencies": {
     "tsx": "^4.21.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "esbuild": "0.28.0"
