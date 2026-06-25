@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
 import { AppError } from '../middleware/errorHandler.js';
 
-const META_API_VERSION = 'v20.0';
+const META_API_VERSION = 'v21.0';
 const META_GRAPH_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
 function requireEnv(name: string): string {
@@ -466,10 +466,16 @@ interface MetaPagesResponse {
   }>;
 }
 
-/** Lista as Paginas do Facebook do usuario (/me/accounts), marcando WABA e Instagram Business vinculados. */
-export async function getUserFacebookPages(accessToken: string): Promise<MetaFacebookPage[]> {
+/** Lista as Paginas do Facebook do usuario (/me/accounts), com Instagram Business.
+ *  Nao consulta whatsapp_business_account para evitar erro 400 em paginas sem WhatsApp.
+ *  Use getUserFacebookPages com includeWhatsApp=true quando precisar de hasWhatsApp. */
+export async function getUserFacebookPages(
+  accessToken: string,
+  opts?: { includeWhatsApp?: boolean }
+): Promise<MetaFacebookPage[]> {
+  const whatsappField = opts?.includeWhatsApp ? ',whatsapp_business_account' : '';
   const response = await metaApiCall<MetaPagesResponse>(
-    '/me/accounts?fields=id,name,whatsapp_business_account,instagram_business_account{id,username}&limit=100',
+    `/me/accounts?fields=id,name${whatsappField},instagram_business_account{id,username}&limit=100`,
     accessToken
   );
 
