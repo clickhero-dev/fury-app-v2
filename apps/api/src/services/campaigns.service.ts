@@ -853,6 +853,7 @@ const WIZARD_OBJECTIVE_MAP: Record<
     metaObjective: 'OUTCOME_ENGAGEMENT',
     optimizationGoal: 'POST_ENGAGEMENT',
     cta: 'LIKE_PAGE',
+    destinationType: 'ON_POST',
     label: 'Engajamento',
   },
   messages: {
@@ -1096,9 +1097,9 @@ export async function createCampaignFromWizard(
           : messagingDestinations[0] === 'instagram_direct'
             ? 'INSTAGRAM_DIRECT'
             : 'MESSENGER';
-  } else if (args.objective === 'visits' || args.objective === 'engagement') {
-    // OUTCOME_TRAFFIC (visits) e OUTCOME_ENGAGEMENT (engagement) exigem promoted_object.page_id
-    // no AdSet, senao a Meta API retorna code=100/subcode=4834011 (Invalid parameter).
+  } else if (args.objective === 'visits' || args.objective === 'engagement' || args.objective === 'messages') {
+    // OUTCOME_TRAFFIC (visits), OUTCOME_ENGAGEMENT (engagement) e OUTCOME_LEADS (messages)
+    // exigem promoted_object.page_id no AdSet.
     promotedObject = { page_id: pageId };
   }
 
