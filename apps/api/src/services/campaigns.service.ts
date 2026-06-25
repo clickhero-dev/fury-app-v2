@@ -1115,6 +1115,7 @@ export async function createCampaignFromWizard(
       objective: objectiveConfig.metaObjective,
       status: 'ACTIVE',
       special_ad_categories: [],
+      is_adset_budget_sharing_enabled: false,
     };
 
     console.log('[DEBUG] campaignBody: ' + JSON.stringify(campaignBody));
