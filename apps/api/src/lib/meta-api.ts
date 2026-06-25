@@ -973,6 +973,9 @@ type MetaApiErrorPayload2 = {
     message?: string;
     type?: string;
     error_subcode?: number;
+    error_user_msg?: string;
+    error_user_title?: string;
+    error_data?: string;
   };
 };
 
@@ -981,6 +984,9 @@ type MetaApiError = Error & {
   metaSubcode?: number;
   metaType?: string;
   httpStatus?: number;
+  metaUserMsg?: string;
+  metaUserTitle?: string;
+  metaBlameField?: string;
 };
 
 export async function metaApiCall<T>(
@@ -1241,6 +1247,16 @@ export async function metaApiCall<T>(
     (err as MetaApiError).metaSubcode = subcode;
     (err as MetaApiError).metaType = type;
     (err as MetaApiError).httpStatus = res.status;
+    (err as MetaApiError).metaUserMsg = maybeErr?.error?.error_user_msg;
+    (err as MetaApiError).metaUserTitle = maybeErr?.error?.error_user_title;
+    // Extrai blame_field do error_data (JSON string como "{\"blame_field\":\"targeting\"}")
+    try {
+      const ed = maybeErr?.error?.error_data;
+      if (ed) {
+        const parsed = JSON.parse(ed);
+        (err as MetaApiError).metaBlameField = parsed.blame_field || parsed.blame_field_specs?.[0]?.[0];
+      }
+    } catch { /* error_data pode nao ser JSON */ }
     throw err;
   }
 

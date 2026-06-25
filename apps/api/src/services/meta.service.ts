@@ -547,9 +547,14 @@ export async function getResolvedTenantAssetSelection(tenantId: string): Promise
 
   let whatsappNumbers: ResolvedAssetSelectionWhatsappNumber[] = [];
   if (selectedWhatsappNumberIds.length > 0) {
+    // Filtra apenas paginas que tem WhatsApp para evitar erro 400
+    // "Tried accessing nonexisting field (whatsapp_business_account)"
+    const whatsappPageIds = selectedPageIds.filter(
+      (pageId) => allPages.find((p) => p.pageId === pageId)?.hasWhatsApp
+    );
     const numbers = await getWhatsappNumbersForAssets(accessToken, {
       businessIds: selectedBusinessIds,
-      pageIds: selectedPageIds,
+      pageIds: whatsappPageIds,
     });
     whatsappNumbers = numbers
       .filter((number) => selectedWhatsappNumberIds.includes(number.phoneNumberId))
