@@ -1171,7 +1171,7 @@ export async function createCampaignFromWizard(
       daily_budget: Math.round(args.dailyBudgetBrl * 100),
       billing_event: 'IMPRESSIONS',
       optimization_goal: objectiveConfig.optimizationGoal,
-      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP', // obrigatorio pela Meta API (erro 2490487)
       targeting,
       status: 'ACTIVE',
     };
