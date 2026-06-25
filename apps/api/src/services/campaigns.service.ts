@@ -890,6 +890,9 @@ function mapWizardMetaError(err: unknown, step: string): never {
   const metaSubcode = (err as any).metaSubcode;
   const metaType = (err as any).metaType;
   const httpStatus = (err as any).httpStatus;
+  const metaUserMsg = (err as any).metaUserMsg as string | undefined;
+  const metaUserTitle = (err as any).metaUserTitle as string | undefined;
+  const metaBlameField = (err as any).metaBlameField as string | undefined;
   const message = (err as Error).message || '';
   const lowerMessage = message.toLowerCase();
 
@@ -899,6 +902,9 @@ function mapWizardMetaError(err: unknown, step: string): never {
     metaType,
     httpStatus,
     message,
+    metaUserTitle,
+    metaUserMsg,
+    metaBlameField,
   });
 
   if (metaCode === 190) {
@@ -921,10 +927,16 @@ function mapWizardMetaError(err: unknown, step: string): never {
     throw new AppError(402, 'META_INSUFFICIENT_FUNDS', 'Conta de anúncios sem saldo suficiente');
   }
 
-  throw new AppError(502, 'META_API_ERROR', message || 'Erro ao publicar no Meta. Tente novamente.', {
+  // Usa a mensagem amigavel da Meta se disponivel, senao a mensagem original
+  const userMessage = metaUserMsg || metaUserTitle
+    ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}`
+    : (message || 'Erro ao publicar no Meta. Tente novamente.');
+
+  throw new AppError(502, 'META_API_ERROR', userMessage, {
     step,
     meta_code: metaCode,
     meta_subcode: metaSubcode,
+    ...(metaBlameField ? { blame_field: metaBlameField } : {}),
   });
 }
 
