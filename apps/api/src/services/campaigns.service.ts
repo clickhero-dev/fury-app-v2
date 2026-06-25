@@ -1071,10 +1071,21 @@ export async function createCampaignFromWizard(
   const dataLabel = today.toLocaleDateString('pt-BR');
   const campaignName = `${objectiveConfig.label} — FURY — ${dataLabel}`;
 
+  // Resolve a Pagina do Facebook para promoted_object.page_id.
+  // Prioridade: (1) pagina selecionada na conexao Meta, (2) env META_PAGE_ID.
+  const selectedPageIds = (metaConn.selectedPageIds as string[] | null) ?? [];
   const pageId =
     args.objective === 'whatsapp'
       ? args.whatsappPageId!
-      : process.env.META_PAGE_ID || 'mock_page_id';
+      : selectedPageIds[0] || process.env.META_PAGE_ID || '';
+
+  if (!pageId) {
+    throw new AppError(
+      400,
+      'PAGE_NOT_FOUND',
+      'Nenhuma Página do Facebook configurada. Selecione uma página em Configurações → Integrações.'
+    );
+  }
 
   let messagingDestinationType: string | undefined;
   let promotedObject: Record<string, unknown> | undefined;
