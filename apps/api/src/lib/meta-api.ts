@@ -985,9 +985,9 @@ export async function metaApiCall<T>(
     body?: Record<string, unknown>;
   }
 ): Promise<T> {
-  const isMocked = (accessToken.toLowerCase().includes('mock') ||
-                   process.env.META_API_MOCK === 'true') &&
-                   !accessToken.startsWith('EAAC');
+  // Só ativa mock quando META_API_MOCK=true E o token NÃO é um token real do Meta (EAAC*).
+  // Tokens reais SEMPRE começam com EAAC e nunca devem passar pelo mock.
+  const isMocked = process.env.META_API_MOCK === 'true' && !accessToken.startsWith('EAAC');
 
   if (isMocked) {
     const method = options?.method || 'GET';
@@ -1002,6 +1002,18 @@ export async function metaApiCall<T>(
       } as T;
     }
 
+    if (method === 'POST' && path.includes('/adsets')) {
+      return {
+        id: `meta_adset_${Date.now()}`,
+      } as T;
+    }
+
+    if (method === 'POST' && path.includes('/ads')) {
+      return {
+        id: `meta_ad_${Date.now()}`,
+      } as T;
+    }
+
     if (method === 'POST' && path.includes('/adcreatives')) {
       return {
         id: `meta_adcreative_${Date.now()}`,
@@ -1009,6 +1021,11 @@ export async function metaApiCall<T>(
     }
 
     if (method === 'POST' && path.match(/^\/[a-zA-Z0-9_-]+$/)) {
+      return { success: true } as T;
+    }
+
+    // DELETE: rollback de objetos mock — retorna success sem chamar API real
+    if (method === 'DELETE') {
       return { success: true } as T;
     }
 
