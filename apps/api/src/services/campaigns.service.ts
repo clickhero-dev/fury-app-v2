@@ -1173,6 +1173,9 @@ export async function createCampaignFromWizard(
       optimization_goal: objectiveConfig.optimizationGoal,
       bid_strategy: 'LOWEST_COST_WITHOUT_CAP', // obrigatorio pela Meta API (erro 2490487)
       targeting,
+      // Meta exige targeting_automation.advantage_audience (erro 1870227).
+      // 0 = desabilita Advantage+ audience (targeting manual).
+      targeting_automation: { advantage_audience: 0 },
       status: 'ACTIVE',
     };
 
