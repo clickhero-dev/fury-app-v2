@@ -1225,6 +1225,11 @@ export async function metaApiCall<T>(
       type,
       message,
     });
+    // Loga o body COMPLETO da resposta para diagnóstico de blame_field_specs etc
+    console.error('[Meta API] Full error body:', JSON.stringify(json, null, 2));
+    if (options?.body) {
+      console.error('[Meta API] Request body:', JSON.stringify(options.body, null, 2));
+    }
     const err = new Error(`[Meta API] ${code ?? res.status}: ${message}`);
     (err as MetaApiError).metaCode = code;
     (err as MetaApiError).metaSubcode = subcode;
