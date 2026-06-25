@@ -130,6 +130,8 @@ describe('createCampaign', () => {
     const result = await createCampaign(args);
     expect(mockDecryptMetaToken).toHaveBeenCalled();
     expect(mockMetaApiCall).toHaveBeenCalledTimes(1);
+    const call = mockMetaApiCall.mock.calls[0] as unknown[];
+    expect((call[2] as any).body.is_adset_budget_sharing_enabled).toBe(false);
     expect(result).toHaveProperty('metaCampaignId', 'meta_c_123');
   });
 
