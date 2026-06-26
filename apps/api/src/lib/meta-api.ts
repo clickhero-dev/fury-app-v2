@@ -1213,6 +1213,8 @@ export async function metaApiCall<T>(
   const fetchOptions: RequestInit = {
     method: options?.method || 'GET',
     headers: { Accept: 'application/json' },
+    // Timeout de 15s para evitar que chamadas Meta travem o request
+    signal: AbortSignal.timeout(15_000),
   };
 
   if (options?.body) {
@@ -1220,8 +1222,20 @@ export async function metaApiCall<T>(
     fetchOptions.body = JSON.stringify(options.body);
   }
 
-  const res = await fetch(url.toString(), fetchOptions);
-  const json = (await res.json()) as unknown;
+  let res: Response;
+  let json: unknown;
+  try {
+    res = await fetch(url.toString(), fetchOptions);
+    json = (await res.json()) as unknown;
+  } catch (fetchErr: any) {
+    if (fetchErr.name === 'TimeoutError' || fetchErr.name === 'AbortError') {
+      console.error(`[Meta API] Timeout (15s) ao chamar: ${path}`);
+      const err = new Error(`[Meta API] Timeout ao chamar ${path} (>15s)`);
+      (err as MetaApiError).httpStatus = 504;
+      throw err;
+    }
+    throw fetchErr;
+  }
 
   const maybeErr = json as MetaApiErrorPayload2;
   if (!res.ok || maybeErr?.error) {

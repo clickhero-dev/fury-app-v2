@@ -61,6 +61,12 @@ app.use((req, res) => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
       console.log(`📝 Environment: ${NODE_ENV}`);
 
+      // Aumenta o timeout do servidor HTTP para 60s, evitando que o proxy
+      // (Traefik) retorne 502 antes do Node.js completar requisições longas.
+      server.timeout = 60_000;
+      server.keepAliveTimeout = 65_000;
+      server.headersTimeout = 66_000;
+
       // Debug: print all registered routes
       const printRoutes = (stack: any[], prefix = '') => {
         for (const layer of stack) {

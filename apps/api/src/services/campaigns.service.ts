@@ -1148,6 +1148,31 @@ export async function createCampaignFromWizard(
     console.log('[DEBUG] adAccountId: ' + adAccountId);
     console.log('[DEBUG] objective recebido: ' + args.objective);
 
+    // Inicia download+upload da imagem em paralelo com a criacao da campanha e adset.
+    // Isso economiza 1-2s no fluxo total, ajudando a ficar dentro do timeout do proxy.
+    let adImageHashPromise: Promise<string | undefined> = Promise.resolve(undefined);
+    if (!instagramCreativeActorId && imageUrl) {
+      adImageHashPromise = (async () => {
+        try {
+          const imageResponse = await fetch(imageUrl, {
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (!imageResponse.ok) {
+            throw new Error(`Failed to download image: ${imageResponse.status}`);
+          }
+          const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+          const base64 = imageBuffer.toString('base64');
+          const filename = `fury_creative_${Date.now()}.jpg`;
+          const hash = await uploadAdImage({ adAccountId, base64, filename, accessToken });
+          console.log('[CampaignWizard] Imagem enviada para Meta, hash:', hash);
+          return hash;
+        } catch (uploadErr) {
+          console.error('[CampaignWizard] Falha ao enviar imagem para Meta, usando URL original:', uploadErr);
+          return undefined;
+        }
+      })();
+    }
+
     const campaignResponse = await metaApiCall<MetaCampaignCreateResponse>(
       `/${encodeURIComponent(adAccountId)}/campaigns`,
       accessToken,
@@ -1201,24 +1226,8 @@ export async function createCampaignFromWizard(
     );
     adSetId = adSetResponse.id;
 
-    // Upload da imagem para o Meta (AdImage) antes de criar o creative.
-    // O campo picture do link_data exige um hash de imagem, nao uma URL externa.
-    let adImageHash: string | undefined;
-    if (!instagramCreativeActorId && imageUrl) {
-      try {
-        const imageResponse = await fetch(imageUrl);
-        if (!imageResponse.ok) {
-          throw new Error(`Failed to download image: ${imageResponse.status}`);
-        }
-        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-        const base64 = imageBuffer.toString('base64');
-        const filename = `fury_creative_${Date.now()}.jpg`;
-        adImageHash = await uploadAdImage({ adAccountId, base64, filename, accessToken });
-        console.log('[CampaignWizard] Imagem enviada para Meta, hash:', adImageHash);
-      } catch (uploadErr) {
-        console.error('[CampaignWizard] Falha ao enviar imagem para Meta, usando URL original:', uploadErr);
-      }
-    }
+    // Aguarda o upload da imagem (que estava rodando em paralelo)
+    const adImageHash = await adImageHashPromise;
 
     const creativeBody: Record<string, unknown> = instagramCreativeActorId
       ? {
