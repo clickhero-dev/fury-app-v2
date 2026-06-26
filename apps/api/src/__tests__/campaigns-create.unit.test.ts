@@ -265,6 +265,14 @@ describe('createCampaignFromWizard', () => {
     });
   });
 
+  it('adset inclui regional_regulated_categories (BRAZIL_REGULATION)', async () => {
+    await createCampaignFromWizard(w);
+    // Segunda chamada Meta = criação do adset
+    const adsetCall = mockMetaApiCall.mock.calls[1] as unknown[];
+    const adsetBody = (adsetCall[2] as any).body;
+    expect(adsetBody.regional_regulated_categories).toEqual(['BRAZIL_REGULATION']);
+  });
+
   it('META_CONNECTION_NOT_FOUND no wizard', async () => {
     dbMock.query.metaConnections.findFirst.mockResolvedValue(null);
     await expect(createCampaignFromWizard(w)).rejects.toMatchObject({

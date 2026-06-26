@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
 import { AppError } from '../middleware/errorHandler.js';
 
-const META_API_VERSION = 'v21.0';
+const META_API_VERSION = 'v25.0';
 const META_GRAPH_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
 function requireEnv(name: string): string {

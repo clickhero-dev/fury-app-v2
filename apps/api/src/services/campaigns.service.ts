@@ -1047,8 +1047,9 @@ export async function createCampaignFromWizard(
   }
 
   // Para criativo a partir de post existente do Instagram, a Meta API exige
-  // object_story_spec.instagram_actor_id + source_instagram_media_id (em vez de
+  // object_story_spec.instagram_user_id + source_instagram_media_id (em vez de
   // link_data.picture), senao retorna code=100 "Invalid parameter".
+  // NOTA: instagram_actor_id foi depreciado na v22.0 (Set/2025) → usar instagram_user_id.
   let instagramCreativeActorId: string | undefined;
   let instagramCreativePageId: string | undefined;
   if (args.creativeInstagramMediaId) {
@@ -1178,6 +1179,11 @@ export async function createCampaignFromWizard(
       // Meta exige targeting_automation.advantage_audience (erro 1870227).
       // 0 = desabilita Advantage+ audience (targeting manual).
       targeting_automation: { advantage_audience: 0 },
+      // Brasil: regional_regulated_categories foi adicionado na OOC de Dez/2025.
+      // Sempre que o adset targetear BR, declarar BRAZIL_REGULATION.
+      // Se Meta passar a exigir, adicionar regional_regulation_identities:
+      //   { universal_beneficiary: "<ID>", universal_payer: "<ID>" }
+      regional_regulated_categories: ['BRAZIL_REGULATION'],
       status: 'ACTIVE',
     };
 
@@ -1225,7 +1231,7 @@ export async function createCampaignFromWizard(
           name: 'Creative — FURY',
           object_story_spec: {
             page_id: instagramCreativePageId,
-            instagram_actor_id: instagramCreativeActorId,
+            instagram_user_id: instagramCreativeActorId,
           },
           source_instagram_media_id: args.creativeInstagramMediaId,
         }
