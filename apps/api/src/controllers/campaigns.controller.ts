@@ -509,6 +509,146 @@ export async function uploadWizardCreativeHandler(req: Request, res: Response, n
   }
 }
 
+/**
+ * MCP-LOG: Endpoint de diagnóstico que executa createCampaignFromWizard
+ * e retorna SEMPRE JSON (nunca 502), com erro completo, stack trace e
+ * logs de cada etapa da criação da campanha.
+ *
+ * Usado para debug remoto quando não há acesso a docker logs.
+ */
+export async function mcpLogWizardHandler(req: Request, res: Response, _next: NextFunction) {
+  const startTime = Date.now();
+  const steps: Array<{ step: string; status: string; duration_ms: number; error?: string; meta_response?: unknown }> = [];
+
+  function recordStep(step: string, status: string, metaResponse?: unknown) {
+    steps.push({
+      step,
+      status,
+      duration_ms: Date.now() - startTime,
+      ...(metaResponse !== undefined ? { meta_response: metaResponse } : {}),
+    });
+  }
+
+  try {
+    // Step 1: Parse body
+    let data: any;
+    try {
+      data = createWizardSchema.parse(req.body);
+      recordStep('zod_parse', 'ok');
+    } catch (zodErr: any) {
+      recordStep('zod_parse', 'fail');
+      return res.status(400).json({
+        success: false,
+        endpoint: 'mcp-log',
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: zodErr.message,
+          issues: zodErr.issues || [],
+        },
+        steps,
+        request_body: req.body,
+      });
+    }
+
+    const tenantId = req.tenant?.tenantId || '';
+    if (!tenantId) {
+      return res.status(401).json({
+        success: false,
+        endpoint: 'mcp-log',
+        error: { code: 'UNAUTHORIZED', message: 'Tenant ID required' },
+        steps,
+      });
+    }
+
+    // Step 2: Call createCampaignFromWizard
+    try {
+      const result = await createCampaignFromWizard({
+        tenantId,
+        objective: data.objective,
+        creativeAssetId: data.creative_asset_id,
+        creativeUploadUrl: data.creative_upload_url,
+        creativeInstagramMediaId: data.creative_instagram_media_id,
+        creativeMediaUrl: data.creative_media_url,
+        headline: data.headline,
+        primaryText: data.primary_text,
+        destinationUrl: data.destination_url,
+        locationCity: data.location_city,
+        locationCityKey: data.location_city_key,
+        locationRadiusKm: data.location_radius_km,
+        ageMin: data.age_min,
+        ageMax: data.age_max,
+        gender: data.gender,
+        dailyBudgetBrl: data.daily_budget_brl,
+        durationDays: data.duration_days,
+        whatsappPageId: data.whatsapp_page_id,
+        whatsappPageName: data.whatsapp_page_name,
+        whatsappPhoneNumberId: data.whatsapp_phone_number_id,
+        whatsappPhoneNumber: data.whatsapp_phone_number,
+        destinations: data.destinations,
+        instagramUserId: data.instagram_user_id,
+        instagramUsername: data.instagram_username,
+      });
+
+      recordStep('wizard_complete', 'ok');
+      return res.status(201).json({
+        success: true,
+        endpoint: 'mcp-log',
+        data: result,
+        steps,
+        total_duration_ms: Date.now() - startTime,
+      });
+    } catch (wizardErr: any) {
+      // Captura TUDO do erro: stack, props da Meta, código, etc.
+      recordStep('wizard_error', 'fail');
+      return res.status(200).json({  // 200 de propósito pra nunca dar 502
+        success: false,
+        endpoint: 'mcp-log',
+        error: {
+          name: wizardErr.name,
+          message: wizardErr.message,
+          code: wizardErr.code,
+          statusCode: wizardErr.statusCode,
+          // Props injetadas pelo metaApiCall
+          metaCode: wizardErr.metaCode,
+          metaSubcode: wizardErr.metaSubcode,
+          metaType: wizardErr.metaType,
+          httpStatus: wizardErr.httpStatus,
+          metaUserMsg: wizardErr.metaUserMsg,
+          metaUserTitle: wizardErr.metaUserTitle,
+          metaBlameField: wizardErr.metaBlameField,
+          // Detalhes extras do AppError
+          details: wizardErr.details,
+        },
+        stack: wizardErr.stack?.split('\n').slice(0, 20) || null,
+        steps,
+        total_duration_ms: Date.now() - startTime,
+        request_payload: {
+          objective: data.objective,
+          location_city: data.location_city,
+          location_radius_km: data.location_radius_km,
+          daily_budget_brl: data.daily_budget_brl,
+          duration_days: data.duration_days,
+          has_image: !!(data.creative_upload_url || data.creative_asset_id || data.creative_instagram_media_id),
+        },
+      });
+    }
+  } catch (outerErr: any) {
+    // Catch-all para erros inesperados (nunca deve acontecer, mas seguro morreu de velho)
+    return res.status(200).json({
+      success: false,
+      endpoint: 'mcp-log',
+      error: {
+        name: outerErr.name,
+        message: outerErr.message,
+        code: 'UNEXPECTED',
+      },
+      stack: outerErr.stack?.split('\n').slice(0, 20) || null,
+      steps,
+      total_duration_ms: Date.now() - startTime,
+    });
+  }
+}
+
 const metaLocationsSchema = z.object({
   q: z.string().min(2, 'Digite ao menos 2 caracteres'),
 });
