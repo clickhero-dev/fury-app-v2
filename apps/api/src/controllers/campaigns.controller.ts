@@ -447,21 +447,47 @@ const createWizardSchema = z
   );
 
 export async function createWizardCampaignHandler(req: Request, res: Response, next: NextFunction) {
-  // DIAGNOSTIC: Call createCampaign directly (same as simple create endpoint)
+  // DIAG 2: Use createCampaignFromWizard but catch EVERYTHING
   try {
+    const data = createWizardSchema.parse(req.body);
+    const tenantId = req.tenant?.tenantId || '';
+    if (!tenantId) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED' } });
+    }
+
+    // Use the SAME createCampaign that works, but get adAccountId from DB
     const { createCampaign } = await import('../services/campaigns.service.js');
-    const result = await createCampaign({
-      tenantId: req.tenant?.tenantId || '',
-      name: 'WIZARD DIAGNOSTIC',
-      objective: 'OUTCOME_TRAFFIC',
-      dailyBudget: 1000,
-      adAccountId: 'act_2141634409570732', // hardcode the known working account
+    const { db, metaConnections } = await import('../lib/db.js');
+    const { eq, desc } = await import('drizzle-orm');
+    
+    const metaConn = await db.query.metaConnections.findFirst({
+      where: eq(metaConnections.tenantId, tenantId),
+      orderBy: (table: any, { desc }: any) => [desc(table.createdAt)],
     });
-    return res.status(201).json({ success: true, data: result, step: 'simple_create_works' });
+    
+    if (!metaConn?.selectedAdAccountId) {
+      return res.status(400).json({ success: false, error: { code: 'NO_AD_ACCOUNT', selectedAdAccountId: metaConn?.selectedAdAccountId || null } });
+    }
+
+    // Test: createCampaign with the DB adAccountId
+    const result = await createCampaign({
+      tenantId,
+      name: 'DIAG2 ' + data.headline,
+      objective: 'OUTCOME_TRAFFIC',
+      dailyBudget: data.daily_budget_brl * 100,
+      adAccountId: metaConn.selectedAdAccountId,
+    });
+    
+    return res.status(201).json({ 
+      success: true, 
+      data: result, 
+      step: 'simple_with_db_adaccount_works',
+      adAccountId: metaConn.selectedAdAccountId,
+    });
   } catch (err: any) {
     return res.status(500).json({
       success: false,
-      error: { code: err.code || 'ERROR', message: err.message, metaCode: err.metaCode },
+      error: { code: err.code || 'ERROR', message: err.message, step: 'diag2', metaCode: err.metaCode },
     });
   }
 }
