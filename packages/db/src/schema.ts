@@ -11,6 +11,9 @@ import {
   numeric,
   integer,
   unique,
+  inet,
+  bigint,
+  smallint,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -44,6 +47,7 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', [
 ]);
 export const invoiceStatusEnum = pgEnum('invoice_status', ['pending', 'paid', 'overdue', 'cancelled']);
 export const voiceToneEnum = pgEnum('voice_tone', ['professional', 'casual', 'urgent', 'premium']);
+export const formSubmissionStatusEnum = pgEnum('form_submission_status', ['PENDING', 'COMPLETED', 'ERROR', 'ABANDONED']);
 
 // Tenants table
 export const tenants = pgTable(
@@ -326,6 +330,32 @@ export const furyConfig = pgTable(
   })
 );
 
+// Form submissions table
+export const formSubmissions = pgTable(
+  'form_submissions',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    formType: varchar('form_type', { length: 255 }).notNull(),
+    status: formSubmissionStatusEnum('status').notNull().default('PENDING'),
+    abandonedAt: timestamp('abandoned_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('form_submissions_tenant_id_idx').on(table.tenantId),
+    userIdIdx: index('form_submissions_user_id_idx').on(table.userId),
+    formTypeIdx: index('form_submissions_form_type_idx').on(table.formType),
+    statusIdx: index('form_submissions_status_idx').on(table.status),
+    tenantFormTypeIdx: index('form_submissions_tenant_form_type_idx').on(table.tenantId, table.formType),
+  })
+);
+
 // ==================== Billing ====================
 
 // Plans table (global — not per-tenant)
@@ -410,6 +440,37 @@ export const brandKits = pgTable(
   })
 );
 
+// Request logs table (audit / debug)
+// Partitioned by RANGE (created_at) — PK is (id, created_at) at DB level.
+// Drizzle schema mirrors the production columns for type-safe queries.
+export const requestLogs = pgTable(
+  'request_logs',
+  {
+    id: bigint('id', { mode: 'number' }).notNull().default(sql`nextval('request_logs_id_seq'::regclass)`),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    requestId: uuid('request_id'),
+    tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    method: varchar('method', { length: 10 }).notNull(),
+    path: text('path').notNull(),
+    queryString: text('query_string'),
+    statusCode: smallint('status_code').notNull(),
+    responseTimeMs: integer('response_time_ms').notNull(),
+    ipAddress: inet('ip_address'),
+    userAgent: text('user_agent'),
+    referer: text('referer'),
+    requestHeaders: jsonb('request_headers'),
+    requestBody: jsonb('request_body'),
+    responseBody: jsonb('response_body'),
+    errorMessage: text('error_message'),
+  },
+  (table) => ({
+    tenantCreatedIdx: index('idx_request_logs_tenant_created').on(table.tenantId, table.createdAt),
+    statusCreatedIdx: index('idx_request_logs_status_created').on(table.statusCode, table.createdAt),
+    requestIdIdx: index('idx_request_logs_request_id').on(table.requestId),
+  })
+);
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -425,8 +486,10 @@ export const allTables = {
   performanceScores,
   ruleExecutions,
   furyConfig,
+  formSubmissions,
   plans,
   subscriptions,
   invoices,
   brandKits,
+  requestLogs,
 };

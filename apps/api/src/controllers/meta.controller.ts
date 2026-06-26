@@ -38,7 +38,11 @@ export async function getAuthUrl(req: Request, res: Response, next: NextFunction
 }
 
 export async function authCallback(req: Request, res: Response, next: NextFunction) {
-  const frontendUrl = process.env.FRONTEND_URL ?? 'https://fury-app-v2-web.vercel.app';
+  const frontendUrl = process.env.FRONTEND_URL;
+
+  if (!frontendUrl) {
+    throw new AppError(500, 'SERVER_ERROR', 'URL do frontend nao encontrada');
+  }
 
   try {
     const query = callbackQuerySchema.parse(req.query);
