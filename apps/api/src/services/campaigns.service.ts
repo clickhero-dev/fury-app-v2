@@ -1047,9 +1047,8 @@ export async function createCampaignFromWizard(
   }
 
   // Para criativo a partir de post existente do Instagram, a Meta API exige
-  // object_story_spec.instagram_user_id + source_instagram_media_id (em vez de
+  // object_story_spec.instagram_actor_id + source_instagram_media_id (em vez de
   // link_data.picture), senao retorna code=100 "Invalid parameter".
-  // NOTA: instagram_actor_id foi depreciado na v22.0 (Set/2025) → usar instagram_user_id.
   let instagramCreativeActorId: string | undefined;
   let instagramCreativePageId: string | undefined;
   if (args.creativeInstagramMediaId) {
@@ -1140,7 +1139,7 @@ export async function createCampaignFromWizard(
     const campaignBody = {
       name: campaignName,
       objective: objectiveConfig.metaObjective,
-      status: 'ACTIVE',
+      status: 'PAUSED',
       special_ad_categories: [],
       is_adset_budget_sharing_enabled: false,
     };
@@ -1226,7 +1225,7 @@ export async function createCampaignFromWizard(
           name: 'Creative — FURY',
           object_story_spec: {
             page_id: instagramCreativePageId,
-            instagram_user_id: instagramCreativeActorId,
+            instagram_actor_id: instagramCreativeActorId,
           },
           source_instagram_media_id: args.creativeInstagramMediaId,
         }
