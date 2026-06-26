@@ -447,6 +447,29 @@ const createWizardSchema = z
   );
 
 export async function createWizardCampaignHandler(req: Request, res: Response, next: NextFunction) {
+  // Timeout de 55s — se estourar, retorna JSON 504 em vez de deixar o proxy
+  // (Traefik) retornar 502 HTML.
+  const timeoutMs = 55_000;
+  req.setTimeout(timeoutMs);
+  res.setTimeout(timeoutMs);
+
+  let timedOut = false;
+  const onTimeout = () => {
+    timedOut = true;
+    if (!res.headersSent) {
+      res.status(504).json({
+        success: false,
+        timestamp: new Date().toISOString(),
+        error: {
+          code: 'GATEWAY_TIMEOUT',
+          message: 'A criação da campanha excedeu o tempo limite. Tente novamente.',
+        },
+      });
+    }
+  };
+  req.on('timeout', onTimeout);
+  res.on('timeout', onTimeout);
+
   try {
     const data = createWizardSchema.parse(req.body);
     const tenantId = req.tenant?.tenantId || '';
@@ -481,9 +504,14 @@ export async function createWizardCampaignHandler(req: Request, res: Response, n
       instagramUsername: data.instagram_username,
     });
 
+    if (timedOut) return;
     res.status(201).json(result);
   } catch (err) {
+    if (timedOut) return;
     next(err);
+  } finally {
+    req.off('timeout', onTimeout);
+    res.off('timeout', onTimeout);
   }
 }
 
