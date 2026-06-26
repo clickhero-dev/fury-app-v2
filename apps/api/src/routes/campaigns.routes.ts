@@ -30,10 +30,27 @@ const creativeUpload = multer({
   },
 });
 
+// Wrapper que garante JSON sempre, mesmo se o handler crashar
+function safeHandler(handler: any) {
+  return async (req: any, res: any, next: any) => {
+    try {
+      await handler(req, res, next);
+    } catch (e: any) {
+      console.error('[SAFE] Wizard crash:', e?.message || e);
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          error: { code: 'WIZARD_CRASH', message: e?.message || 'Unknown error' },
+        });
+      }
+    }
+  };
+}
+
 // Static and collection routes first
 router.get('/', getCampaignsHandler);
 router.post('/create', createCampaignHandler);
-router.post('/create-wizard', createWizardCampaignHandler);
+router.post('/create-wizard', safeHandler(createWizardCampaignHandler));
 router.post('/upload-creative', creativeUpload.single('file'), uploadWizardCreativeHandler);
 router.get('/meta-locations', searchMetaLocationsHandler);
 
