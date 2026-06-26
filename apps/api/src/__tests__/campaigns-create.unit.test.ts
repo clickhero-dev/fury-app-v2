@@ -265,12 +265,14 @@ describe('createCampaignFromWizard', () => {
     });
   });
 
-  it('adset inclui regional_regulated_categories (BRAZIL_REGULATION)', async () => {
+  it('targeting_automation está DENTRO do targeting (não no adset)', async () => {
     await createCampaignFromWizard(w);
     // Segunda chamada Meta = criação do adset
     const adsetCall = mockMetaApiCall.mock.calls[1] as unknown[];
     const adsetBody = (adsetCall[2] as any).body;
-    expect(adsetBody.regional_regulated_categories).toEqual(['BRAZIL_REGULATION']);
+    // targeting_automation deve estar DENTRO do targeting, não no nível do adset
+    expect(adsetBody.targeting_automation).toBeUndefined();
+    expect(adsetBody.targeting.targeting_automation).toEqual({ advantage_audience: 0 });
   });
 
   it('META_CONNECTION_NOT_FOUND no wizard', async () => {
