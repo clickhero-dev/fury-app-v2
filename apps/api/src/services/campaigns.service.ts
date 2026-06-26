@@ -1276,12 +1276,9 @@ export async function createCampaignFromWizard(
     );
     metaAdId = adResponse.id;
   } catch (err) {
-    // Rollback: remove objetos ja criados nas etapas anteriores para nao deixar
-    // campanhas/adsets/creatives orfaos na conta de anuncios.
-    if (adCreativeId) await deleteMetaObject(adCreativeId, accessToken);
-    if (adSetId) await deleteMetaObject(adSetId, accessToken);
-    if (metaCampaignId) await deleteMetaObject(metaCampaignId, accessToken);
-
+    // NOTA: Rollback com deleteMetaObject foi removido pois causava crash (502)
+    // em produção. Os objetos orfaos no Meta (campaign/adset/creative) serao
+    // limpos manualmente ou por um job futuro.
     const step = !metaCampaignId ? 'campaign' : !adSetId ? 'adset' : !adCreativeId ? 'creative' : 'ad';
     mapWizardMetaError(err, step);
   }
