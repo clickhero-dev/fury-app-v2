@@ -8,11 +8,7 @@ export default defineConfig({
     globals: true,
     testTimeout: 30000,
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
+    singleFork: true,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

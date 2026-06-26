@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
 import { AppError } from '../middleware/errorHandler.js';
 
-const META_API_VERSION = 'v20.0';
+const META_API_VERSION = 'v25.0';
 const META_GRAPH_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
 function requireEnv(name: string): string {
@@ -466,10 +466,16 @@ interface MetaPagesResponse {
   }>;
 }
 
-/** Lista as Paginas do Facebook do usuario (/me/accounts), marcando WABA e Instagram Business vinculados. */
-export async function getUserFacebookPages(accessToken: string): Promise<MetaFacebookPage[]> {
+/** Lista as Paginas do Facebook do usuario (/me/accounts), com Instagram Business.
+ *  Nao consulta whatsapp_business_account para evitar erro 400 em paginas sem WhatsApp.
+ *  Use getUserFacebookPages com includeWhatsApp=true quando precisar de hasWhatsApp. */
+export async function getUserFacebookPages(
+  accessToken: string,
+  opts?: { includeWhatsApp?: boolean }
+): Promise<MetaFacebookPage[]> {
+  const whatsappField = opts?.includeWhatsApp ? ',whatsapp_business_account' : '';
   const response = await metaApiCall<MetaPagesResponse>(
-    '/me/accounts?fields=id,name,whatsapp_business_account,instagram_business_account{id,username}&limit=100',
+    `/me/accounts?fields=id,name${whatsappField},instagram_business_account{id,username}&limit=100`,
     accessToken
   );
 
@@ -967,6 +973,9 @@ type MetaApiErrorPayload2 = {
     message?: string;
     type?: string;
     error_subcode?: number;
+    error_user_msg?: string;
+    error_user_title?: string;
+    error_data?: string;
   };
 };
 
@@ -975,6 +984,9 @@ type MetaApiError = Error & {
   metaSubcode?: number;
   metaType?: string;
   httpStatus?: number;
+  metaUserMsg?: string;
+  metaUserTitle?: string;
+  metaBlameField?: string;
 };
 
 export async function metaApiCall<T>(
@@ -985,9 +997,9 @@ export async function metaApiCall<T>(
     body?: Record<string, unknown>;
   }
 ): Promise<T> {
-  const isMocked = (accessToken.toLowerCase().includes('mock') ||
-                   process.env.META_API_MOCK === 'true') &&
-                   !accessToken.startsWith('EAAC');
+  // Só ativa mock quando META_API_MOCK=true E o token NÃO é um token real do Meta (EAAC*).
+  // Tokens reais SEMPRE começam com EAAC e nunca devem passar pelo mock.
+  const isMocked = process.env.META_API_MOCK === 'true' && !accessToken.startsWith('EAAC');
 
   if (isMocked) {
     const method = options?.method || 'GET';
@@ -1002,6 +1014,18 @@ export async function metaApiCall<T>(
       } as T;
     }
 
+    if (method === 'POST' && path.includes('/adsets')) {
+      return {
+        id: `meta_adset_${Date.now()}`,
+      } as T;
+    }
+
+    if (method === 'POST' && path.includes('/ads')) {
+      return {
+        id: `meta_ad_${Date.now()}`,
+      } as T;
+    }
+
     if (method === 'POST' && path.includes('/adcreatives')) {
       return {
         id: `meta_adcreative_${Date.now()}`,
@@ -1009,6 +1033,11 @@ export async function metaApiCall<T>(
     }
 
     if (method === 'POST' && path.match(/^\/[a-zA-Z0-9_-]+$/)) {
+      return { success: true } as T;
+    }
+
+    // DELETE: rollback de objetos mock — retorna success sem chamar API real
+    if (method === 'DELETE') {
       return { success: true } as T;
     }
 
@@ -1184,6 +1213,8 @@ export async function metaApiCall<T>(
   const fetchOptions: RequestInit = {
     method: options?.method || 'GET',
     headers: { Accept: 'application/json' },
+    // Timeout de 15s para evitar que chamadas Meta travem o request
+    signal: AbortSignal.timeout(15_000),
   };
 
   if (options?.body) {
@@ -1191,8 +1222,20 @@ export async function metaApiCall<T>(
     fetchOptions.body = JSON.stringify(options.body);
   }
 
-  const res = await fetch(url.toString(), fetchOptions);
-  const json = (await res.json()) as unknown;
+  let res: Response;
+  let json: unknown;
+  try {
+    res = await fetch(url.toString(), fetchOptions);
+    json = (await res.json()) as unknown;
+  } catch (fetchErr: any) {
+    if (fetchErr.name === 'TimeoutError' || fetchErr.name === 'AbortError') {
+      console.error(`[Meta API] Timeout (15s) ao chamar: ${path}`);
+      const err = new Error(`[Meta API] Timeout ao chamar ${path} (>15s)`);
+      (err as MetaApiError).httpStatus = 504;
+      throw err;
+    }
+    throw fetchErr;
+  }
 
   const maybeErr = json as MetaApiErrorPayload2;
   if (!res.ok || maybeErr?.error) {
@@ -1208,11 +1251,26 @@ export async function metaApiCall<T>(
       type,
       message,
     });
+    // Loga o body COMPLETO da resposta para diagnóstico de blame_field_specs etc
+    console.error('[Meta API] Full error body:', JSON.stringify(json, null, 2));
+    if (options?.body) {
+      console.error('[Meta API] Request body:', JSON.stringify(options.body, null, 2));
+    }
     const err = new Error(`[Meta API] ${code ?? res.status}: ${message}`);
     (err as MetaApiError).metaCode = code;
     (err as MetaApiError).metaSubcode = subcode;
     (err as MetaApiError).metaType = type;
     (err as MetaApiError).httpStatus = res.status;
+    (err as MetaApiError).metaUserMsg = maybeErr?.error?.error_user_msg;
+    (err as MetaApiError).metaUserTitle = maybeErr?.error?.error_user_title;
+    // Extrai blame_field do error_data (JSON string como "{\"blame_field\":\"targeting\"}")
+    try {
+      const ed = maybeErr?.error?.error_data;
+      if (ed) {
+        const parsed = JSON.parse(ed);
+        (err as MetaApiError).metaBlameField = parsed.blame_field || parsed.blame_field_specs?.[0]?.[0];
+      }
+    } catch { /* error_data pode nao ser JSON */ }
     throw err;
   }
 

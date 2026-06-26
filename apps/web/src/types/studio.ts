@@ -232,8 +232,10 @@ export interface ValidateContextResponse {
 
 /** Resposta da API após geração completa de um criativo. */
 export interface GenerateCreativeResponse {
+  type?: 'image' | 'video';
   assetId: string;
   imageUrl: string;
+  videoUrl?: string;
   creativeData: {
     layout?: string;
     headline?: string;

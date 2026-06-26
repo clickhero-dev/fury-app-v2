@@ -22,6 +22,7 @@ import { MinhasRegras } from './pages/automacao/MinhasRegras';
 import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
 import { Subscription } from './pages/billing/Subscription';
+import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
 
 /**
  * Roteador principal da aplicação FURY.
@@ -131,6 +132,8 @@ export const router = createBrowserRouter([
       { path: '/planos', element: <Plans /> },
       { path: '/assinatura', element: <Subscription /> },
       { path: '/components-demo', element: <ComponentsDemo /> }, // uso interno
+      { path: '/orcamento-smart', element: <OrcamentoSmart /> },
+      { path: '/components-demo', element: <ComponentsDemo /> },
     ],
   },
 ]);

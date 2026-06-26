@@ -4,6 +4,7 @@ import {
   metaApiCall,
   getMetaInsights,
   searchMetaCityLocations,
+  uploadAdImage,
   type MetaCampaignCreateResponse,
   type MetaLocationResult,
 } from '../lib/meta-api.js';
@@ -55,6 +56,7 @@ export async function createCampaign(args: {
           objective: args.objective,
           status: 'PAUSED',
           special_ad_categories: [],
+          is_adset_budget_sharing_enabled: false,
         },
       }
     );
@@ -853,6 +855,7 @@ const WIZARD_OBJECTIVE_MAP: Record<
     metaObjective: 'OUTCOME_ENGAGEMENT',
     optimizationGoal: 'POST_ENGAGEMENT',
     cta: 'LIKE_PAGE',
+    destinationType: 'ON_POST',
     label: 'Engajamento',
   },
   messages: {
@@ -889,6 +892,9 @@ function mapWizardMetaError(err: unknown, step: string): never {
   const metaSubcode = (err as any).metaSubcode;
   const metaType = (err as any).metaType;
   const httpStatus = (err as any).httpStatus;
+  const metaUserMsg = (err as any).metaUserMsg as string | undefined;
+  const metaUserTitle = (err as any).metaUserTitle as string | undefined;
+  const metaBlameField = (err as any).metaBlameField as string | undefined;
   const message = (err as Error).message || '';
   const lowerMessage = message.toLowerCase();
 
@@ -898,6 +904,9 @@ function mapWizardMetaError(err: unknown, step: string): never {
     metaType,
     httpStatus,
     message,
+    metaUserTitle,
+    metaUserMsg,
+    metaBlameField,
   });
 
   if (metaCode === 190) {
@@ -920,10 +929,16 @@ function mapWizardMetaError(err: unknown, step: string): never {
     throw new AppError(402, 'META_INSUFFICIENT_FUNDS', 'Conta de anúncios sem saldo suficiente');
   }
 
-  throw new AppError(502, 'META_API_ERROR', message || 'Erro ao publicar no Meta. Tente novamente.', {
+  // Usa a mensagem amigavel da Meta se disponivel, senao a mensagem original
+  const userMessage = metaUserMsg || metaUserTitle
+    ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}`
+    : (message || 'Erro ao publicar no Meta. Tente novamente.');
+
+  throw new AppError(502, 'META_API_ERROR', userMessage, {
     step,
     meta_code: metaCode,
     meta_subcode: metaSubcode,
+    ...(metaBlameField ? { blame_field: metaBlameField } : {}),
   });
 }
 
@@ -1070,10 +1085,21 @@ export async function createCampaignFromWizard(
   const dataLabel = today.toLocaleDateString('pt-BR');
   const campaignName = `${objectiveConfig.label} — FURY — ${dataLabel}`;
 
+  // Resolve a Pagina do Facebook para promoted_object.page_id.
+  // Prioridade: (1) pagina selecionada na conexao Meta, (2) env META_PAGE_ID.
+  const selectedPageIds = (metaConn.selectedPageIds as string[] | null) ?? [];
   const pageId =
     args.objective === 'whatsapp'
       ? args.whatsappPageId!
-      : process.env.META_PAGE_ID || 'mock_page_id';
+      : selectedPageIds[0] || process.env.META_PAGE_ID || '';
+
+  if (!pageId) {
+    throw new AppError(
+      400,
+      'PAGE_NOT_FOUND',
+      'Nenhuma Página do Facebook configurada. Selecione uma página em Configurações → Integrações.'
+    );
+  }
 
   let messagingDestinationType: string | undefined;
   let promotedObject: Record<string, unknown> | undefined;
@@ -1096,9 +1122,9 @@ export async function createCampaignFromWizard(
           : messagingDestinations[0] === 'instagram_direct'
             ? 'INSTAGRAM_DIRECT'
             : 'MESSENGER';
-  } else if (args.objective === 'visits' || args.objective === 'engagement') {
-    // OUTCOME_TRAFFIC (visits) e OUTCOME_ENGAGEMENT (engagement) exigem promoted_object.page_id
-    // no AdSet, senao a Meta API retorna code=100/subcode=4834011 (Invalid parameter).
+  } else if (args.objective === 'visits' || args.objective === 'engagement' || args.objective === 'messages') {
+    // OUTCOME_TRAFFIC (visits), OUTCOME_ENGAGEMENT (engagement) e OUTCOME_LEADS (messages)
+    // exigem promoted_object.page_id no AdSet.
     promotedObject = { page_id: pageId };
   }
 
@@ -1115,11 +1141,37 @@ export async function createCampaignFromWizard(
       objective: objectiveConfig.metaObjective,
       status: 'ACTIVE',
       special_ad_categories: [],
+      is_adset_budget_sharing_enabled: false,
     };
 
     console.log('[DEBUG] campaignBody: ' + JSON.stringify(campaignBody));
     console.log('[DEBUG] adAccountId: ' + adAccountId);
     console.log('[DEBUG] objective recebido: ' + args.objective);
+
+    // Inicia download+upload da imagem em paralelo com a criacao da campanha e adset.
+    // Isso economiza 1-2s no fluxo total, ajudando a ficar dentro do timeout do proxy.
+    let adImageHashPromise: Promise<string | undefined> = Promise.resolve(undefined);
+    if (!instagramCreativeActorId && imageUrl) {
+      adImageHashPromise = (async () => {
+        try {
+          const imageResponse = await fetch(imageUrl, {
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (!imageResponse.ok) {
+            throw new Error(`Failed to download image: ${imageResponse.status}`);
+          }
+          const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+          const base64 = imageBuffer.toString('base64');
+          const filename = `fury_creative_${Date.now()}.jpg`;
+          const hash = await uploadAdImage({ adAccountId, base64, filename, accessToken });
+          console.log('[CampaignWizard] Imagem enviada para Meta, hash:', hash);
+          return hash;
+        } catch (uploadErr) {
+          console.error('[CampaignWizard] Falha ao enviar imagem para Meta, usando URL original:', uploadErr);
+          return undefined;
+        }
+      })();
+    }
 
     const campaignResponse = await metaApiCall<MetaCampaignCreateResponse>(
       `/${encodeURIComponent(adAccountId)}/campaigns`,
@@ -1146,7 +1198,11 @@ export async function createCampaignFromWizard(
       daily_budget: Math.round(args.dailyBudgetBrl * 100),
       billing_event: 'IMPRESSIONS',
       optimization_goal: objectiveConfig.optimizationGoal,
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP', // obrigatorio pela Meta API (erro 2490487)
       targeting,
+      // Meta exige targeting_automation.advantage_audience (erro 1870227).
+      // 0 = desabilita Advantage+ audience (targeting manual).
+      targeting_automation: { advantage_audience: 0 },
       status: 'ACTIVE',
     };
 
@@ -1170,12 +1226,15 @@ export async function createCampaignFromWizard(
     );
     adSetId = adSetResponse.id;
 
+    // Aguarda o upload da imagem (que estava rodando em paralelo)
+    const adImageHash = await adImageHashPromise;
+
     const creativeBody: Record<string, unknown> = instagramCreativeActorId
       ? {
           name: 'Creative — FURY',
           object_story_spec: {
             page_id: instagramCreativePageId,
-            instagram_actor_id: instagramCreativeActorId,
+            instagram_user_id: instagramCreativeActorId,
           },
           source_instagram_media_id: args.creativeInstagramMediaId,
         }
@@ -1184,7 +1243,7 @@ export async function createCampaignFromWizard(
           object_story_spec: {
             page_id: pageId,
             link_data: {
-              picture: imageUrl,
+              picture: adImageHash || imageUrl,
               message: args.primaryText,
               name: args.headline,
               call_to_action: messagingDestinationType
@@ -1226,12 +1285,9 @@ export async function createCampaignFromWizard(
     );
     metaAdId = adResponse.id;
   } catch (err) {
-    // Rollback: remove objetos ja criados nas etapas anteriores para nao deixar
-    // campanhas/adsets/creatives orfaos na conta de anuncios.
-    if (adCreativeId) await deleteMetaObject(adCreativeId, accessToken);
-    if (adSetId) await deleteMetaObject(adSetId, accessToken);
-    if (metaCampaignId) await deleteMetaObject(metaCampaignId, accessToken);
-
+    // NOTA: Rollback com deleteMetaObject foi removido pois causava crash (502)
+    // em produção. Os objetos orfaos no Meta (campaign/adset/creative) serao
+    // limpos manualmente ou por um job futuro.
     const step = !metaCampaignId ? 'campaign' : !adSetId ? 'adset' : !adCreativeId ? 'creative' : 'ad';
     mapWizardMetaError(err, step);
   }

@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from '../Sidebar';
 import api from '../../lib/api';
+import { DEMO_CREDENTIALS } from '../../lib/constants';
 
 /**
  * Contexto disponível para rotas filhas via `useOutletContext`.
@@ -16,6 +17,7 @@ export type ShellContext = {
  * Rotas que não devem disparar o redirecionamento de onboarding.
  * Billing é isento para que usuários sem conta Meta possam acessar planos e assinar.
  */
+const DEMO_USER_EMAILS = [DEMO_CREDENTIALS.email];
 const ONBOARDING_EXEMPT = ['/assinatura', '/planos'];
 
 /**
@@ -52,10 +54,18 @@ export function AuthenticatedShell() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  let currentUserEmail: string | null = null;
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    currentUserEmail = user?.email ?? null;
+  } catch { /* ignore */ }
+
+  const isDemoUser = currentUserEmail ? DEMO_USER_EMAILS.includes(currentUserEmail) : false;
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   // Só verifica conexão Meta se autenticado e fora de rotas isentas/onboarding
   const shouldCheck = !!token && !isOnboarding && !isExempt;
+  const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser;
 
   const { data: connections, isLoading, isFetched } = useQuery({
     queryKey: ['meta-connections'],

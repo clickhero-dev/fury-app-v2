@@ -3,6 +3,8 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { loggerMiddleware } from './middleware/logger.js';
+import { requestLogger, flushRequestLogs } from './middleware/request-logger.js';
+import { rateLimitMiddleware } from './middleware/rate-limit.middleware.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
 import { closeRedis, waitForRedisReady } from './lib/redis.js';
@@ -19,17 +21,22 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+// Necessário para req.ip refletir o IP real atrás de proxy reverso (nginx, load balancer)
+app.set('trust proxy', 1);
+
 app.use(cors({
-  origin: (process.env.CORS_ALLOWED_ORIGINS ?? 'http://localhost:5173,http://localhost:5174').split(','),
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => callback(null, true),
   credentials: true,
 }));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(loggerMiddleware);
+app.use(requestLogger);
 console.log('=== STATIC serving /studio-assets from:', studioAssetsDir);
 app.use('/studio-assets', express.static(studioAssetsDir));
 
+app.use('/api', rateLimitMiddleware);
 app.use('/api', routes);
 app.use(errorHandler);
 
@@ -53,6 +60,12 @@ app.use((req, res) => {
     const server = app.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
       console.log(`📝 Environment: ${NODE_ENV}`);
+
+      // Aumenta o timeout do servidor HTTP para 60s, evitando que o proxy
+      // (Traefik) retorne 502 antes do Node.js completar requisições longas.
+      server.timeout = 60_000;
+      server.keepAliveTimeout = 65_000;
+      server.headersTimeout = 66_000;
 
       // Debug: print all registered routes
       const printRoutes = (stack: any[], prefix = '') => {
@@ -97,6 +110,7 @@ app.use((req, res) => {
     process.on('SIGTERM', () => {
       console.log('SIGTERM received, shutting down gracefully...');
       server.close(async () => {
+        await flushRequestLogs();
         await stopSyncJobsWorker();
         await stopRuleEngine();
         await stopStudioGenerationWorker();

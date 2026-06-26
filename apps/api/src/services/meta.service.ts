@@ -438,7 +438,7 @@ export async function getTenantMetaScopes(tenantId: string): Promise<string[]> {
  */
 export async function getTenantFacebookPages(tenantId: string): Promise<MetaFacebookPage[]> {
   const accessToken = await getTenantAccessToken(tenantId);
-  const pages = await getUserFacebookPages(accessToken);
+  const pages = await getUserFacebookPages(accessToken, { includeWhatsApp: true });
 
   const selection = await getTenantAssetSelection(tenantId);
   if (selection && selection.pageIds.length > 0) {
@@ -521,7 +521,7 @@ export async function getResolvedTenantAssetSelection(tenantId: string): Promise
   const selectedBusinessIds = (connection.selectedBusinessIds as string[] | null) ?? [];
 
   const [allPages, allBusinesses] = await Promise.all([
-    getUserFacebookPages(accessToken),
+    getUserFacebookPages(accessToken, { includeWhatsApp: true }),
     selectedBusinessIds.length > 0 ? getUserBusinesses(accessToken) : Promise.resolve([]),
   ]);
 
@@ -547,9 +547,14 @@ export async function getResolvedTenantAssetSelection(tenantId: string): Promise
 
   let whatsappNumbers: ResolvedAssetSelectionWhatsappNumber[] = [];
   if (selectedWhatsappNumberIds.length > 0) {
+    // Filtra apenas paginas que tem WhatsApp para evitar erro 400
+    // "Tried accessing nonexisting field (whatsapp_business_account)"
+    const whatsappPageIds = selectedPageIds.filter(
+      (pageId) => allPages.find((p) => p.pageId === pageId)?.hasWhatsApp
+    );
     const numbers = await getWhatsappNumbersForAssets(accessToken, {
       businessIds: selectedBusinessIds,
-      pageIds: selectedPageIds,
+      pageIds: whatsappPageIds,
     });
     whatsappNumbers = numbers
       .filter((number) => selectedWhatsappNumberIds.includes(number.phoneNumberId))
