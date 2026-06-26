@@ -1456,5 +1456,7 @@ export async function uploadAdImage(params: {
     throw new AppError(502, 'META_IMAGE_UPLOAD_FAILED', 'Meta nao retornou hash da imagem enviada.');
   }
 
-  return imageData.hash;
+  // A Meta devolve uma URL CDN no campo `url`. O campo `picture` do criativo
+  // exige uma URL valida — hash puro causa erro 100 "picture should represent a valid URL".
+  return imageData.url || imageData.hash;
 }
