@@ -482,8 +482,17 @@ export async function createWizardCampaignHandler(req: Request, res: Response, n
     });
 
     res.status(201).json(result);
-  } catch (err) {
-    next(err);
+  } catch (err: any) {
+    // Safety net: always return JSON, never crash Express
+    console.error('[Wizard] UNHANDLED ERROR:', err?.message || err, err?.stack);
+    const statusCode = err?.statusCode || err?.status || 500;
+    const code = err?.code || 'INTERNAL_SERVER_ERROR';
+    const message = err?.message || 'Unexpected error in campaign wizard';
+    res.status(statusCode).json({
+      success: false,
+      error: { code, message, details: err?.details },
+      timestamp: new Date().toISOString(),
+    });
   }
 }
 
