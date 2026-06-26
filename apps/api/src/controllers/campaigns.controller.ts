@@ -447,6 +447,12 @@ const createWizardSchema = z
   );
 
 export async function createWizardCampaignHandler(req: Request, res: Response, next: NextFunction) {
+  // TEST: return immediately to see if handler is reached
+  return res.json({
+    success: true,
+    message: 'Handler reached! Code deployed correctly.',
+    timestamp: new Date().toISOString(),
+  });
   try {
     const data = createWizardSchema.parse(req.body);
     const tenantId = req.tenant?.tenantId || '';
