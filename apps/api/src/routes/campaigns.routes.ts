@@ -39,7 +39,7 @@ router.post('/mcp-log', mcpLogWizardHandler);
 router.get('/create-wizard-diag', async (req: any, res: any) => {
   // DIAG: Test if createCampaignFromWizard is importable and callable
   try {
-    const { createCampaignFromWizard } = await import('../../services/campaigns.service.js');
+    const { createCampaignFromWizard } = await import('../services/campaigns.service.js');
     if (typeof createCampaignFromWizard !== 'function') {
       return res.json({ success: false, error: { code: 'NOT_A_FUNCTION', type: typeof createCampaignFromWizard } });
     }
