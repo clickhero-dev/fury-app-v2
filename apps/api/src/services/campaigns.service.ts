@@ -1139,7 +1139,7 @@ export async function createCampaignFromWizard(
     const campaignBody = {
       name: campaignName,
       objective: objectiveConfig.metaObjective,
-      status: 'PAUSED',
+      status: 'ACTIVE',
       special_ad_categories: [],
       is_adset_budget_sharing_enabled: false,
     };
@@ -1225,7 +1225,7 @@ export async function createCampaignFromWizard(
           name: 'Creative — FURY',
           object_story_spec: {
             page_id: instagramCreativePageId,
-            instagram_actor_id: instagramCreativeActorId,
+            instagram_user_id: instagramCreativeActorId,
           },
           source_instagram_media_id: args.creativeInstagramMediaId,
         }
