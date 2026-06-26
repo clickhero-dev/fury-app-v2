@@ -1179,11 +1179,6 @@ export async function createCampaignFromWizard(
       // Meta exige targeting_automation.advantage_audience (erro 1870227).
       // 0 = desabilita Advantage+ audience (targeting manual).
       targeting_automation: { advantage_audience: 0 },
-      // Brasil: regional_regulated_categories foi adicionado na OOC de Dez/2025.
-      // Sempre que o adset targetear BR, declarar BRAZIL_REGULATION.
-      // Se Meta passar a exigir, adicionar regional_regulation_identities:
-      //   { universal_beneficiary: "<ID>", universal_payer: "<ID>" }
-      regional_regulated_categories: ['BRAZIL_REGULATION'],
       status: 'ACTIVE',
     };
 
