@@ -447,57 +447,21 @@ const createWizardSchema = z
   );
 
 export async function createWizardCampaignHandler(req: Request, res: Response, next: NextFunction) {
-  // TEST: return immediately to see if handler is reached
-  return res.json({
-    success: true,
-    message: 'Handler reached! Code deployed correctly.',
-    timestamp: new Date().toISOString(),
-  });
+  // DIAGNOSTIC: Call createCampaign directly (same as simple create endpoint)
   try {
-    const data = createWizardSchema.parse(req.body);
-    const tenantId = req.tenant?.tenantId || '';
-    if (!tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
-    }
-
-    const result = await createCampaignFromWizard({
-      tenantId,
-      objective: data.objective,
-      creativeAssetId: data.creative_asset_id,
-      creativeUploadUrl: data.creative_upload_url,
-      creativeInstagramMediaId: data.creative_instagram_media_id,
-      creativeMediaUrl: data.creative_media_url,
-      headline: data.headline,
-      primaryText: data.primary_text,
-      destinationUrl: data.destination_url,
-      locationCity: data.location_city,
-      locationCityKey: data.location_city_key,
-      locationRadiusKm: data.location_radius_km,
-      ageMin: data.age_min,
-      ageMax: data.age_max,
-      gender: data.gender,
-      dailyBudgetBrl: data.daily_budget_brl,
-      durationDays: data.duration_days,
-      whatsappPageId: data.whatsapp_page_id,
-      whatsappPageName: data.whatsapp_page_name,
-      whatsappPhoneNumberId: data.whatsapp_phone_number_id,
-      whatsappPhoneNumber: data.whatsapp_phone_number,
-      destinations: data.destinations,
-      instagramUserId: data.instagram_user_id,
-      instagramUsername: data.instagram_username,
+    const { createCampaign } = await import('../services/campaigns.service.js');
+    const result = await createCampaign({
+      tenantId: req.tenant?.tenantId || '',
+      name: 'WIZARD DIAGNOSTIC',
+      objective: 'OUTCOME_TRAFFIC',
+      dailyBudget: 1000,
+      adAccountId: 'act_2141634409570732', // hardcode the known working account
     });
-
-    res.status(201).json(result);
+    return res.status(201).json({ success: true, data: result, step: 'simple_create_works' });
   } catch (err: any) {
-    // Safety net: always return JSON, never crash Express
-    console.error('[Wizard] UNHANDLED ERROR:', err?.message || err, err?.stack);
-    const statusCode = err?.statusCode || err?.status || 500;
-    const code = err?.code || 'INTERNAL_SERVER_ERROR';
-    const message = err?.message || 'Unexpected error in campaign wizard';
-    res.status(statusCode).json({
+    return res.status(500).json({
       success: false,
-      error: { code, message, details: err?.details },
-      timestamp: new Date().toISOString(),
+      error: { code: err.code || 'ERROR', message: err.message, metaCode: err.metaCode },
     });
   }
 }
