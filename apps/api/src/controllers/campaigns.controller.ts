@@ -447,7 +447,7 @@ const createWizardSchema = z
   );
 
 export async function createWizardCampaignHandler(req: Request, res: Response, next: NextFunction) {
-  // DIAG 2: Use createCampaignFromWizard but catch EVERYTHING
+  // DIAG 3: Replicate wizard flow step by step
   try {
     const data = createWizardSchema.parse(req.body);
     const tenantId = req.tenant?.tenantId || '';
@@ -455,40 +455,53 @@ export async function createWizardCampaignHandler(req: Request, res: Response, n
       return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED' } });
     }
 
-    // Use the SAME createCampaign that works, but get adAccountId from DB
-    const { createCampaign } = await import('../services/campaigns.service.js');
+    const { metaApiCall } = await import('../lib/meta-api.js');
+    const { decryptMetaToken } = await import('../utils/crypto.js');
     const { db, metaConnections } = await import('../lib/db.js');
     const { eq, desc } = await import('drizzle-orm');
-    
+
     const metaConn = await db.query.metaConnections.findFirst({
       where: eq(metaConnections.tenantId, tenantId),
       orderBy: (table: any, { desc }: any) => [desc(table.createdAt)],
     });
-    
-    if (!metaConn?.selectedAdAccountId) {
-      return res.status(400).json({ success: false, error: { code: 'NO_AD_ACCOUNT', selectedAdAccountId: metaConn?.selectedAdAccountId || null } });
+    if (!metaConn) {
+      return res.status(403).json({ success: false, error: { code: 'META_CONNECTION_NOT_FOUND' } });
     }
 
-    // Test: createCampaign with the DB adAccountId
-    const result = await createCampaign({
-      tenantId,
-      name: 'DIAG2 ' + data.headline,
-      objective: 'OUTCOME_TRAFFIC',
-      dailyBudget: data.daily_budget_brl * 100,
-      adAccountId: metaConn.selectedAdAccountId,
-    });
-    
-    return res.status(201).json({ 
-      success: true, 
-      data: result, 
-      step: 'simple_with_db_adaccount_works',
-      adAccountId: metaConn.selectedAdAccountId,
-    });
+    const adAccountId = metaConn.selectedAdAccountId;
+    const accessToken = decryptMetaToken(metaConn.accessToken);
+
+    // STEP 1: Create campaign (same as createCampaign)
+    let metaCampaignId: string | undefined;
+    try {
+      const resp1 = await metaApiCall<any>(
+        `/${encodeURIComponent(adAccountId)}/campaigns`,
+        accessToken,
+        { method: 'POST', body: { name: 'DIAG3 STEP1', objective: 'OUTCOME_TRAFFIC', status: 'PAUSED', special_ad_categories: [], is_adset_budget_sharing_enabled: false } }
+      );
+      metaCampaignId = resp1.id;
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: { code: 'STEP1_FAIL', message: e.message, metaCode: e.metaCode } });
+    }
+
+    // STEP 2: Create adset
+    let adSetId: string | undefined;
+    try {
+      const resp2 = await metaApiCall<any>(
+        `/${encodeURIComponent(adAccountId)}/adsets`,
+        accessToken,
+        { method: 'POST', body: { name: 'DIAG3 AdSet', campaign_id: metaCampaignId, daily_budget: 1500, billing_event: 'IMPRESSIONS', optimization_goal: 'LINK_CLICKS', bid_strategy: 'LOWEST_COST_WITHOUT_CAP', targeting: { geo_locations: { cities: [{ key: '2421217', radius: 20, distance_unit: 'kilometer' }] }, age_min: 18, age_max: 65, genders: [1, 2] }, targeting_automation: { advantage_audience: 0 }, status: 'PAUSED' } }
+      );
+      adSetId = resp2.id;
+    } catch (e: any) {
+      // Cleanup campaign
+      try { await metaApiCall<any>(`/${metaCampaignId}`, accessToken, { method: 'DELETE' }); } catch {}
+      return res.status(500).json({ success: false, error: { code: 'STEP2_FAIL', message: e.message, metaCode: e.metaCode, metaSubcode: e.metaSubcode } });
+    }
+
+    return res.json({ success: true, step: 'all_ok', metaCampaignId, adSetId });
   } catch (err: any) {
-    return res.status(500).json({
-      success: false,
-      error: { code: err.code || 'ERROR', message: err.message, step: 'diag2', metaCode: err.metaCode },
-    });
+    return res.status(500).json({ success: false, error: { code: 'FATAL', message: err.message, stack: err.stack?.split('\n').slice(0, 3).join('\n') } });
   }
 }
 
