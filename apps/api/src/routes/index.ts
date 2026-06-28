@@ -16,9 +16,11 @@ import furyRoutes from './fury.routes.js';
 import goalsRoutes from './goals.routes.js';
 import billingRoutes from './billing.routes.js';
 import brandKitRoutes from './brand-kit.routes.js';
+import adminRoutes from './admin.routes.js';
 
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
+import { requireSuperadmin } from '../middleware/admin.middleware.js';
 
 const router = Router();
 
@@ -38,6 +40,7 @@ router.use('/fury', furyRoutes);
 router.use('/goals', goalsRoutes);
 router.use('/billing', billingRoutes);
 router.use('/brand-kit', authMiddleware, tenantMiddleware, brandKitRoutes);
+router.use('/admin', authMiddleware, requireSuperadmin, adminRoutes);
 router.use('/openrouter', openrouterRoutes);
 
 export default router;

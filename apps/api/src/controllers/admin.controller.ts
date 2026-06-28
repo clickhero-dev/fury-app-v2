@@ -1,0 +1,64 @@
+import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
+import { AppError } from '../middleware/errorHandler.js';
+import { listUsersByTenant, createUser, resetPassword } from '../services/admin.service.js';
+
+export async function listUsersHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { tenantId } = z
+      .object({
+        tenantId: z.string().uuid('Invalid tenant ID'),
+      })
+      .parse(req.query);
+
+    const users = await listUsersByTenant(tenantId);
+
+    res.status(200).json({ data: users });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createUserHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { tenantId, name, email, role } = z
+      .object({
+        tenantId: z.string().uuid('Invalid tenant ID'),
+        name: z.string().min(1, 'Name is required').max(255, 'Name too long'),
+        email: z.string().email('Invalid email'),
+        role: z.enum(['owner', 'admin', 'member'], { message: 'Invalid role' }),
+      })
+      .parse(req.body);
+
+    const result = await createUser(tenantId, { name, email, role });
+
+    res.status(201).json({
+      data: {
+        user: result.user,
+        temporaryPassword: result.temporaryPassword,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function resetPasswordHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { userId } = z
+      .object({
+        userId: z.string().uuid('Invalid user ID'),
+      })
+      .parse(req.params);
+
+    const result = await resetPassword(userId);
+
+    res.status(200).json({
+      data: {
+        newPassword: result.newPassword,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
