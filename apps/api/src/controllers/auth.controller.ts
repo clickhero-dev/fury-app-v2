@@ -28,6 +28,21 @@ const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 });
 
+const verifyEmailSchema = z.object({
+  email: z.string().email(),
+  otp: z.string().regex(/^\d{6}$/, 'OTP must be a 6-digit code'),
+});
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+const resetPasswordSchema = z.object({
+  email: z.string().email(),
+  token: z.string().min(1),
+  password: z.string().min(8).max(255),
+});
+
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
     const body = registerSchema.parse(req.body);
@@ -41,7 +56,9 @@ export async function register(req: Request, res: Response, next: NextFunction) 
           email: result.user.email,
           role: result.user.role,
           tenantId: result.user.tenantId,
+          emailVerified: result.user.emailVerified,
         },
+        tokens: result.tokens,
       },
       timestamp: new Date().toISOString(),
     });
@@ -58,13 +75,13 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     res.status(200).json({
       success: true,
       data: {
-        token: result.tokens.accessToken,
-        refreshToken: result.tokens.refreshToken,
+        tokens: result.tokens,
         user: {
           id: result.user.id,
           email: result.user.email,
           role: result.user.role,
           tenantId: result.user.tenantId,
+          emailVerified: result.user.emailVerified,
         },
       },
       timestamp: new Date().toISOString(),
@@ -137,6 +154,51 @@ export async function updateMe(req: Request, res: Response, next: NextFunction) 
     res.status(200).json({
       success: true,
       data: user,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function verifyEmail(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = verifyEmailSchema.parse(req.body);
+    const result = await authService.verifyEmail(body);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function forgotPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = forgotPasswordSchema.parse(req.body);
+    const result = await authService.forgotPassword(body);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function resetPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = resetPasswordSchema.parse(req.body);
+    const result = await authService.resetPassword(body);
+
+    res.status(200).json({
+      success: true,
+      data: result,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

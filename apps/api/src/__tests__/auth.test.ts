@@ -1,15 +1,34 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
+import bcrypt from 'bcryptjs';
+import { eq } from 'drizzle-orm';
 import app from '../index.js';
 import { db } from '@fury/db';
 import { tenants, users } from '@fury/db';
 
 describe('Auth Endpoints', () => {
   const uniqueId = () => Date.now().toString().slice(-8);
+  const testOtp = '123456';
 
   const clearData = async () => {
     await db.delete(users);
     await db.delete(tenants);
+  };
+
+  const setKnownOtp = async (email: string, otp = testOtp) => {
+    const hash = await bcrypt.hash(otp, 12);
+    await db
+      .update(users)
+      .set({
+        emailOtpHash: hash,
+        emailOtpExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      })
+      .where(eq(users.email, email));
+  };
+
+  const verifyUserEmail = async (email: string, otp = testOtp) => {
+    await setKnownOtp(email, otp);
+    return request(app).post('/api/auth/verify-email').send({ email, otp });
   };
 
   beforeEach(async () => {
@@ -114,6 +133,8 @@ describe('Auth Endpoints', () => {
         password: testPassword,
         companyName: `Test Company ${id}`,
       });
+
+      await verifyUserEmail(testEmail);
     });
 
     it('should return tokens with valid credentials', async () => {

@@ -1,13 +1,28 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { db } from '../lib/db.js';
 import { tenants, users } from '../lib/db.js';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { getRedis } from '../lib/redis.js';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../lib/jwt.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { assertEmailRateLimit, checkEmailRateLimit } from '../lib/email-rate-limit.js';
+import {
+  sendOtpEmail,
+  sendPasswordResetEmail,
+  sendPasswordResetSuccessEmail,
+  sendWelcomeEmail,
+} from './email.service.js';
 import type { UserDTO } from '../lib/shared.js';
 
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
+const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const VERIFY_EMAIL_RATE_LIMIT = 5;
+const FORGOT_PASSWORD_RATE_LIMIT = 3;
+
+const GENERIC_RESET_MESSAGE =
+  'If an account exists with this email, you will receive password reset instructions shortly.';
 
 function generateSlug(companyName: string): string {
   return companyName
@@ -39,16 +54,40 @@ async function ensureUniqueSlug(baseSlug: string): Promise<string> {
 
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
 
-function userToDTO(user: any): UserDTO {
+function userToDTO(user: {
+  id: string;
+  tenantId: string;
+  name: string | null;
+  email: string;
+  role: UserDTO['role'];
+  notificationPrefs: unknown;
+  emailVerified: boolean;
+  createdAt: Date;
+}): UserDTO {
   return {
     id: user.id,
     name: user.name ?? null,
     email: user.email,
     role: user.role,
     tenantId: user.tenantId,
+    emailVerified: user.emailVerified,
     notificationPrefs: (user.notificationPrefs as UserDTO['notificationPrefs']) ?? DEFAULT_NOTIFICATION_PREFS,
     createdAt: user.createdAt,
   };
+}
+
+function generateOtp(): string {
+  return crypto.randomInt(100000, 1000000).toString();
+}
+
+function generateResetToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function getResetUrl(token: string, email: string): string {
+  const baseUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:5173';
+  const params = new URLSearchParams({ token, email });
+  return `${baseUrl}/reset-password?${params.toString()}`;
 }
 
 async function storeRefreshTokenHash(userId: string, refreshToken: string): Promise<void> {
@@ -77,13 +116,49 @@ async function revokeRefreshToken(userId: string): Promise<void> {
   await redis.del(key);
 }
 
+async function issueTokens(user: {
+  id: string;
+  tenantId: string;
+  email: string;
+  role: UserDTO['role'];
+}): Promise<{ accessToken: string; refreshToken: string }> {
+  const accessToken = generateAccessToken({
+    userId: user.id,
+    tenantId: user.tenantId,
+    email: user.email,
+    role: user.role,
+  });
+
+  const refreshToken = generateRefreshToken(user.id);
+  await storeRefreshTokenHash(user.id, refreshToken);
+
+  return { accessToken, refreshToken };
+}
+
+async function assignEmailOtp(userId: string): Promise<string> {
+  const otp = generateOtp();
+  const emailOtpHash = await bcrypt.hash(otp, 12);
+  const emailOtpExpiresAt = new Date(Date.now() + OTP_TTL_MS);
+
+  await db
+    .update(users)
+    .set({
+      emailOtpHash,
+      emailOtpExpiresAt,
+      emailVerified: false,
+      emailVerifiedAt: null,
+    })
+    .where(eq(users.id, userId));
+
+  return otp;
+}
+
 export async function register(data: {
   name: string;
   email: string;
   password: string;
   companyName: string;
 }): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
-  // Check if email already exists
   const existingUser = await db.query.users.findFirst({
     where: eq(users.email, data.email),
   });
@@ -92,14 +167,10 @@ export async function register(data: {
     throw new AppError(409, 'EMAIL_EXISTS', 'Email already registered');
   }
 
-  // Generate unique slug
   const baseSlug = generateSlug(data.companyName);
   const slug = await ensureUniqueSlug(baseSlug);
-
-  // Hash password
   const passwordHash = await bcrypt.hash(data.password, 12);
 
-  // Create tenant and user in transaction
   const result = await db.transaction(async (tx) => {
     const [tenant] = await tx
       .insert(tenants)
@@ -113,31 +184,29 @@ export async function register(data: {
       .insert(users)
       .values({
         tenantId: tenant.id,
+        name: data.name,
         email: data.email,
         passwordHash,
         role: 'owner',
+        emailVerified: false,
       })
       .returning();
 
     return { tenant, user };
   });
 
-  // Generate tokens
-  const accessToken = generateAccessToken({
-    userId: result.user.id,
-    tenantId: result.user.tenantId,
-    email: result.user.email,
-    role: result.user.role,
-  });
+  const otp = await assignEmailOtp(result.user.id);
 
-  const refreshToken = generateRefreshToken(result.user.id);
+  await Promise.all([
+    sendWelcomeEmail(result.user.email, result.user.name ?? data.name),
+    sendOtpEmail(result.user.email, result.user.name ?? data.name, otp),
+  ]);
 
-  // Store refresh token hash
-  await storeRefreshTokenHash(result.user.id, refreshToken);
+  const tokens = await issueTokens(result.user);
 
   return {
     user: userToDTO(result.user),
-    tokens: { accessToken, refreshToken },
+    tokens,
   };
 }
 
@@ -159,23 +228,122 @@ export async function login(data: {
     throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
   }
 
-  // Generate tokens
-  const accessToken = generateAccessToken({
-    userId: user.id,
-    tenantId: user.tenantId,
-    email: user.email,
-    role: user.role,
-  });
+  if (!user.emailVerified) {
+    throw new AppError(403, 'EMAIL_NOT_VERIFIED', 'Email not verified. Please check your inbox for the verification code.');
+  }
 
-  const refreshToken = generateRefreshToken(user.id);
-
-  // Store refresh token hash
-  await storeRefreshTokenHash(user.id, refreshToken);
+  const tokens = await issueTokens(user);
 
   return {
     user: userToDTO(user),
-    tokens: { accessToken, refreshToken },
+    tokens,
   };
+}
+
+export async function verifyEmail(data: { email: string; otp: string }): Promise<{ message: string }> {
+  await assertEmailRateLimit('verify_email', data.email, VERIFY_EMAIL_RATE_LIMIT);
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, data.email),
+  });
+
+  if (!user) {
+    throw new AppError(400, 'INVALID_OTP', 'Invalid or expired verification code');
+  }
+
+  if (user.emailVerified) {
+    return { message: 'Email already verified' };
+  }
+
+  if (!user.emailOtpHash || !user.emailOtpExpiresAt) {
+    throw new AppError(400, 'INVALID_OTP', 'Invalid or expired verification code');
+  }
+
+  if (user.emailOtpExpiresAt.getTime() < Date.now()) {
+    throw new AppError(400, 'OTP_EXPIRED', 'Verification code has expired. Please request a new one.');
+  }
+
+  const isValidOtp = await bcrypt.compare(data.otp, user.emailOtpHash);
+  if (!isValidOtp) {
+    throw new AppError(400, 'INVALID_OTP', 'Invalid or expired verification code');
+  }
+
+  await db
+    .update(users)
+    .set({
+      emailVerified: true,
+      emailVerifiedAt: new Date(),
+      emailOtpHash: null,
+      emailOtpExpiresAt: null,
+    })
+    .where(eq(users.id, user.id));
+
+  return { message: 'Email verified successfully' };
+}
+
+export async function forgotPassword(data: { email: string }): Promise<{ message: string }> {
+  const allowed = await checkEmailRateLimit('forgot_password', data.email, FORGOT_PASSWORD_RATE_LIMIT);
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, data.email),
+  });
+
+  if (user && allowed) {
+    const resetToken = generateResetToken();
+    const passwordResetTokenHash = await bcrypt.hash(resetToken, 12);
+    const passwordResetExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+
+    await db
+      .update(users)
+      .set({
+        passwordResetTokenHash,
+        passwordResetExpiresAt,
+      })
+      .where(eq(users.id, user.id));
+
+    await sendPasswordResetEmail(user.email, user.name ?? '', getResetUrl(resetToken, user.email));
+  }
+
+  return { message: GENERIC_RESET_MESSAGE };
+}
+
+export async function resetPassword(data: {
+  email: string;
+  token: string;
+  password: string;
+}): Promise<{ message: string }> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, data.email),
+  });
+
+  if (!user || !user.passwordResetTokenHash || !user.passwordResetExpiresAt) {
+    throw new AppError(400, 'INVALID_RESET_TOKEN', 'Invalid or expired reset token');
+  }
+
+  if (user.passwordResetExpiresAt.getTime() < Date.now()) {
+    throw new AppError(400, 'RESET_TOKEN_EXPIRED', 'Reset token has expired. Please request a new one.');
+  }
+
+  const isValidToken = await bcrypt.compare(data.token, user.passwordResetTokenHash);
+  if (!isValidToken) {
+    throw new AppError(400, 'INVALID_RESET_TOKEN', 'Invalid or expired reset token');
+  }
+
+  const passwordHash = await bcrypt.hash(data.password, 12);
+
+  await db
+    .update(users)
+    .set({
+      passwordHash,
+      passwordResetTokenHash: null,
+      passwordResetExpiresAt: null,
+    })
+    .where(eq(users.id, user.id));
+
+  await revokeRefreshToken(user.id);
+  await sendPasswordResetSuccessEmail(user.email, user.name ?? '');
+
+  return { message: 'Password reset successfully' };
 }
 
 export async function refresh(data: {
@@ -183,14 +351,12 @@ export async function refresh(data: {
 }): Promise<{ tokens: { accessToken: string; refreshToken: string } }> {
   const payload = verifyRefreshToken(data.refreshToken);
 
-  // Verify refresh token hash in Redis
   const isValid = await verifyRefreshTokenHash(payload.userId, data.refreshToken);
 
   if (!isValid) {
     throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Invalid or revoked refresh token');
   }
 
-  // Get fresh user data
   const user = await db.query.users.findFirst({
     where: eq(users.id, payload.userId),
   });
@@ -199,25 +365,10 @@ export async function refresh(data: {
     throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
   }
 
-  // Revoke old refresh token
   await revokeRefreshToken(user.id);
+  const tokens = await issueTokens(user);
 
-  // Generate new tokens
-  const accessToken = generateAccessToken({
-    userId: user.id,
-    tenantId: user.tenantId,
-    email: user.email,
-    role: user.role,
-  });
-
-  const refreshToken = generateRefreshToken(user.id);
-
-  // Store new refresh token hash
-  await storeRefreshTokenHash(user.id, refreshToken);
-
-  return {
-    tokens: { accessToken, refreshToken },
-  };
+  return { tokens };
 }
 
 export async function logout(userId: string): Promise<void> {

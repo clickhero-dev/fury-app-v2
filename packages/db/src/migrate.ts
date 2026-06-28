@@ -58,6 +58,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0015_add_request_logs' },
   { tag: '0016_fix_request_logs_user_id' },
   { tag: '0017_add_request_logs_default_partition' },
+  { tag: '0018_add_email_auth_fields' },
 ];
 
 async function runMigrate() {

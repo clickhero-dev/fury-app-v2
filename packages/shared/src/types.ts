@@ -93,6 +93,7 @@ export interface UserDTO {
   name: string | null;
   email: string;
   role: UserRole;
+  emailVerified: boolean;
   notificationPrefs: NotificationPrefs;
   createdAt: Date;
 }
