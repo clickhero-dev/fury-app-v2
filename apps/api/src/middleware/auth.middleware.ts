@@ -14,6 +14,7 @@ function tryParseMockQuickstartToken(rawToken: string): AccessTokenPayload | nul
         tenantId: id,
         email: 'mock@quickstart.local',
         role: 'mock',
+        isSuperadmin: false,
       };
     }
   } catch {
@@ -30,6 +31,7 @@ function verifyTokenAndSetUser(token: string, req: Request): boolean {
       tenantId: payload.tenantId,
       email: payload.email,
       role: payload.role,
+      isSuperadmin: payload.isSuperadmin,
     };
     return true;
   } catch (jwtError) {
@@ -43,6 +45,7 @@ function verifyTokenAndSetUser(token: string, req: Request): boolean {
           tenantId: mockPayload.tenantId,
           email: mockPayload.email,
           role: mockPayload.role,
+          isSuperadmin: mockPayload.isSuperadmin,
         };
         return true;
       }

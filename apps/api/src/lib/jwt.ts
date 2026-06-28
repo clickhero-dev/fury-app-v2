@@ -15,6 +15,7 @@ export interface AccessTokenPayload {
   tenantId: string;
   email: string;
   role: string;
+  isSuperadmin: boolean;
 }
 
 export interface RefreshTokenPayload {

@@ -8,6 +8,7 @@ declare global {
         tenantId: string;
         email: string;
         role: string;
+        isSuperadmin: boolean;
       };
       tenant?: {
         tenantId: string;

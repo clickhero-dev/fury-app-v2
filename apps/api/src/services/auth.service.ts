@@ -128,6 +128,7 @@ export async function register(data: {
     tenantId: result.user.tenantId,
     email: result.user.email,
     role: result.user.role,
+    isSuperadmin: result.user.isSuperadmin,
   });
 
   const refreshToken = generateRefreshToken(result.user.id);
@@ -165,6 +166,7 @@ export async function login(data: {
     tenantId: user.tenantId,
     email: user.email,
     role: user.role,
+    isSuperadmin: user.isSuperadmin,
   });
 
   const refreshToken = generateRefreshToken(user.id);
@@ -208,6 +210,7 @@ export async function refresh(data: {
     tenantId: user.tenantId,
     email: user.email,
     role: user.role,
+    isSuperadmin: user.isSuperadmin,
   });
 
   const refreshToken = generateRefreshToken(user.id);
