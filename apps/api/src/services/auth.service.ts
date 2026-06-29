@@ -71,7 +71,7 @@ async function verifyRefreshTokenHash(userId: string, refreshToken: string): Pro
   return bcrypt.compare(refreshToken, hash);
 }
 
-async function revokeRefreshToken(userId: string): Promise<void> {
+export async function revokeRefreshToken(userId: string): Promise<void> {
   const redis = getRedis();
   const key = `refresh:${userId}`;
   await redis.del(key);
