@@ -886,6 +886,7 @@ async function deleteMetaObject(objectId: string, accessToken: string): Promise<
 }
 
 function mapWizardMetaError(err: unknown, step: string): never {
+  // ponytail: v2026-07-01b — verifica se deploy rodou
   if (err instanceof AppError) throw err;
 
   const metaCode = (err as any).metaCode;
