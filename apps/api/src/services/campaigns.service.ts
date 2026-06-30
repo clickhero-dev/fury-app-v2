@@ -859,14 +859,14 @@ const WIZARD_OBJECTIVE_MAP: Record<
     label: 'Engajamento',
   },
   messages: {
-    metaObjective: 'OUTCOME_LEADS',
+    metaObjective: 'OUTCOME_ENGAGEMENT',
     optimizationGoal: 'CONVERSATIONS',
     cta: 'MESSAGE_PAGE',
     destinationType: 'MESSENGER',
     label: 'Atração de Clientes',
   },
   whatsapp: {
-    metaObjective: 'OUTCOME_LEADS',
+    metaObjective: 'OUTCOME_ENGAGEMENT',
     optimizationGoal: 'CONVERSATIONS',
     cta: 'WHATSAPP_MESSAGE',
     destinationType: 'WHATSAPP',
