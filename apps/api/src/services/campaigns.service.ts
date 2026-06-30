@@ -1263,13 +1263,16 @@ export async function createCampaignFromWizard(
 
     const creativeBody: Record<string, unknown> = instagramCreativeActorId
       ? {
-          name: 'Creative — FURY',
-          object_story_spec: {
-            page_id: instagramCreativePageId,
-            instagram_user_id: instagramCreativeActorId,
-          },
+          // ponytail: Instagram criativo usa object_id + call_to_action (formato Meta oficial)
+          // POST /adcreatives?object_id=...&instagram_user_id=...&source_instagram_media_id=...&call_to_action=...
+          // Nao usa object_story_spec nem link na raiz — JSON body nao funciona aqui.
+          object_id: instagramCreativePageId,
+          instagram_user_id: instagramCreativeActorId,
           source_instagram_media_id: args.creativeInstagramMediaId,
-          link: 'https://www.facebook.com/',
+          call_to_action: JSON.stringify({
+            type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE',
+            value: { link: args.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` },
+          }),
         }
       : {
           name: 'Creative — FURY',
