@@ -1282,8 +1282,13 @@ export async function createCampaignFromWizard(
               picture: adImageHash || imageUrl,
               message: args.primaryText,
               name: args.headline,
-              call_to_action: { type: 'LEARN_MORE' },
-              link: `https://www.facebook.com/${pageId}`,
+              call_to_action: messagingDestinationType
+                ? {
+                    type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE',
+                  }
+                : { type: objectiveConfig.cta },
+              ...(args.objective === 'visits' ? { link: args.destinationUrl } : {}),
+              ...(args.objective !== 'visits' ? { link: `https://www.facebook.com/${pageId}` } : {}),
             },
           },
         };
