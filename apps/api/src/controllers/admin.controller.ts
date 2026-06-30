@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
-import { listUsersByTenant, createUser, resetPassword, updateUserPassword, getTenantDetails, updateTenantDetails } from '../services/admin.service.js';
+import { listUsersByTenant, createUser, resetPassword, updateUserPassword, getTenantDetails, updateTenantDetails, listTenantCampaigns, updateTenantCampaign } from '../services/admin.service.js';
 
 export async function listUsersHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -138,6 +138,57 @@ export async function updateTenantHandler(req: Request, res: Response, next: Nex
     const payload = updateTenantDetailsSchema.parse(req.body);
 
     const result = await updateTenantDetails(id, payload);
+
+    res.status(200).json({ data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listTenantCampaignsHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = z
+      .object({
+        id: z.string().uuid('Invalid tenant ID'),
+      })
+      .parse(req.params);
+
+    const { status, search } = z
+      .object({
+        status: z.enum(['active', 'paused', 'draft']).optional(),
+        search: z.string().optional(),
+      })
+      .parse(req.query);
+
+    const result = await listTenantCampaigns(id, { status, search });
+
+    res.status(200).json({ data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateTenantCampaignHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id, campaignId } = z
+      .object({
+        id: z.string().uuid('Invalid tenant ID'),
+        campaignId: z.string().uuid('Invalid campaign ID'),
+      })
+      .parse(req.params);
+
+    const payload = z
+      .object({
+        status: z.enum(['draft', 'active', 'paused', 'archived']).optional(),
+        budget: z
+          .object({
+            daily_budget: z.number().positive().optional(),
+          })
+          .optional(),
+      })
+      .parse(req.body);
+
+    const result = await updateTenantCampaign(id, campaignId, payload);
 
     res.status(200).json({ data: result });
   } catch (error) {

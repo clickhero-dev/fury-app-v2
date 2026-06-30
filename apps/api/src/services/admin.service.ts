@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { db, users, tenants, furyConfig, brandKits, metaConnections, subscriptions, plans } from '@fury/db';
+import { db, users, tenants, furyConfig, brandKits, metaConnections, subscriptions, plans, campaigns, performanceScores } from '@fury/db';
 import { eq, and, desc } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler.js';
 import { revokeRefreshToken } from './auth.service.js';
@@ -318,4 +318,129 @@ export async function updateTenantDetails(
 
   // Return updated details
   return getTenantDetails(tenantId);
+}
+
+interface TenantCampaignResponse {
+  id: string;
+  name: string;
+  status: string;
+  budget: any;
+  performance_grade: string | null;
+}
+
+export async function listTenantCampaigns(
+  tenantId: string,
+  filters?: { status?: 'active' | 'paused' | 'draft'; search?: string }
+): Promise<TenantCampaignResponse[]> {
+  // Verify tenant exists
+  const tenant = await db.query.tenants.findFirst({
+    where: eq(tenants.id, tenantId),
+  });
+
+  if (!tenant) {
+    throw new AppError(404, 'TENANT_NOT_FOUND', 'Tenant not found');
+  }
+
+  // Build query conditions
+  const conditions = [eq(campaigns.tenantId, tenantId)];
+
+  if (filters?.status) {
+    conditions.push(eq(campaigns.status, filters.status));
+  }
+
+  // Fetch campaigns
+  const campaignsList = await db.query.campaigns.findMany({
+    where: and(...conditions),
+    orderBy: [desc(campaigns.createdAt)],
+  });
+
+  // Filter by search if provided
+  let filtered = campaignsList;
+  if (filters?.search) {
+    const searchLower = filters.search.toLowerCase();
+    filtered = campaignsList.filter((c) => c.name.toLowerCase().includes(searchLower));
+  }
+
+  // For each campaign, fetch latest performance score
+  const result: TenantCampaignResponse[] = await Promise.all(
+    filtered.map(async (campaign) => {
+      const latestScore = await db.query.performanceScores.findFirst({
+        where: eq(performanceScores.campaignId, campaign.id),
+        orderBy: [desc(performanceScores.computedAt)],
+      });
+
+      return {
+        id: campaign.id,
+        name: campaign.name,
+        status: campaign.status,
+        budget: campaign.budget,
+        performance_grade: latestScore?.grade ?? null,
+      };
+    })
+  );
+
+  return result;
+}
+
+export async function updateTenantCampaign(
+  tenantId: string,
+  campaignId: string,
+  data: { status?: 'draft' | 'active' | 'paused' | 'archived'; budget?: { daily_budget?: number } }
+): Promise<TenantCampaignResponse> {
+  // Fetch campaign
+  const campaign = await db.query.campaigns.findFirst({
+    where: eq(campaigns.id, campaignId),
+  });
+
+  if (!campaign) {
+    throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
+  }
+
+  // Verify campaign belongs to tenant
+  if (campaign.tenantId !== tenantId) {
+    throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');
+  }
+
+  // Build update object
+  const updates: Record<string, any> = {};
+
+  if (data.status) {
+    updates.status = data.status;
+  }
+
+  if (data.budget) {
+    const existingBudget = (campaign.budget as any) || {};
+    updates.budget = {
+      ...existingBudget,
+      ...(data.budget.daily_budget !== undefined && { daily_budget: data.budget.daily_budget }),
+    };
+  }
+
+  // Update campaign (only if there's something to update)
+  if (Object.keys(updates).length > 0) {
+    await db.update(campaigns).set(updates).where(eq(campaigns.id, campaignId));
+  }
+
+  // Fetch updated campaign
+  const updatedCampaign = await db.query.campaigns.findFirst({
+    where: eq(campaigns.id, campaignId),
+  });
+
+  if (!updatedCampaign) {
+    throw new AppError(500, 'INTERNAL_ERROR', 'Failed to fetch updated campaign');
+  }
+
+  // Fetch latest performance score
+  const latestScore = await db.query.performanceScores.findFirst({
+    where: eq(performanceScores.campaignId, campaignId),
+    orderBy: [desc(performanceScores.computedAt)],
+  });
+
+  return {
+    id: updatedCampaign.id,
+    name: updatedCampaign.name,
+    status: updatedCampaign.status,
+    budget: updatedCampaign.budget,
+    performance_grade: latestScore?.grade ?? null,
+  };
 }

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listUsersHandler, createUserHandler, resetPasswordHandler, updatePasswordHandler, getTenantHandler, updateTenantHandler } from '../controllers/admin.controller.js';
+import { listUsersHandler, createUserHandler, resetPasswordHandler, updatePasswordHandler, getTenantHandler, updateTenantHandler, listTenantCampaignsHandler, updateTenantCampaignHandler } from '../controllers/admin.controller.js';
 
 const router = Router();
 
@@ -10,5 +10,8 @@ router.put('/users/:userId/password', updatePasswordHandler);
 
 router.get('/tenants/:id', getTenantHandler);
 router.put('/tenants/:id', updateTenantHandler);
+
+router.get('/tenants/:id/campaigns', listTenantCampaignsHandler);
+router.patch('/tenants/:id/campaigns/:campaignId', updateTenantCampaignHandler);
 
 export default router;
