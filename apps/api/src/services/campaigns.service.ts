@@ -931,7 +931,7 @@ function mapWizardMetaError(err: unknown, step: string): never {
 
   // Subcode 3858258: Meta nao conseguiu baixar a imagem (robots.txt, formato invalido, etc.)
   if (metaSubcode === 3858258) {
-    throw new AppError(502, 'META_IMAGE_DOWNLOAD_FAILED',
+    throw new AppError(400, 'META_IMAGE_DOWNLOAD_FAILED',
       'O Meta nao conseguiu baixar a imagem do criativo. A URL pode estar bloqueada (robots.txt) ou o formato pode ser invalido. Use uma imagem JPEG ou PNG hospedada em um servidor acessivel.',
       { step, meta_code: metaCode, meta_subcode: metaSubcode }
     );
@@ -950,7 +950,7 @@ function mapWizardMetaError(err: unknown, step: string): never {
     ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}`
     : (message || 'Erro ao publicar no Meta. Tente novamente.');
 
-  throw new AppError(502, 'META_API_ERROR', userMessage, {
+  throw new AppError(400, 'META_API_ERROR', userMessage, {
     step,
     meta_code: metaCode,
     meta_subcode: metaSubcode,
@@ -1267,6 +1267,7 @@ export async function createCampaignFromWizard(
             instagram_user_id: instagramCreativeActorId,
           },
           source_instagram_media_id: args.creativeInstagramMediaId,
+          link: args.creativeMediaUrl || `https://www.instagram.com/p/${args.creativeInstagramMediaId}`,
         }
       : {
           name: 'Creative — FURY',
