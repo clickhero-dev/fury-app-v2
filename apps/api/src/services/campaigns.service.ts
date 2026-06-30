@@ -1285,7 +1285,6 @@ export async function createCampaignFromWizard(
               call_to_action: messagingDestinationType
                 ? {
                     type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE',
-                    value: { app_destination: messagingDestinationType },
                   }
                 : { type: objectiveConfig.cta },
               ...(args.objective === 'visits' ? { link: args.destinationUrl } : {}),
