@@ -1128,9 +1128,7 @@ export async function createCampaignFromWizard(
     if (messagingDestinations.includes('whatsapp')) {
       promotedObject.whatsapp_phone_number = args.whatsappPhoneNumber;
     }
-    if (messagingDestinations.includes('instagram_direct')) {
-      promotedObject.instagram_user_id = args.instagramUserId;
-    }
+    // ponytail: instagram_user_id nao vai em promoted_object — Meta rejeita (code 100)
 
     messagingDestinationType =
       messagingDestinations.length > 1
