@@ -1,4 +1,4 @@
-import { LayoutDashboard, Megaphone, Palette, Settings, ChevronLeft, Zap, CreditCard, X, LogOut, Target, Wallet } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Palette, Settings, ChevronLeft, Zap, CreditCard, X, LogOut, Target } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,7 +14,8 @@ const navItems = [
   { icon: Target, label: 'Metas', path: '/onboarding/metas' },
   { icon: Megaphone, label: 'Campanhas', path: '/campanhas' },
   { icon: Zap, label: 'Automação', path: '/automacao/minhas-regras' },
-  { icon: Wallet, label: 'Orçamento Smart', path: '/orcamento-smart' },
+  // ponytail: oculto até feature de orçamento smart estar pronta
+  // { icon: Wallet, label: 'Orçamento Smart', path: '/orcamento-smart' },
   { icon: Palette, label: 'Estúdio', path: '/estudio' },
   { icon: Settings, label: 'Configurações', path: '/configuracoes' },
   { icon: CreditCard, label: 'Assinatura', path: '/assinatura' },
