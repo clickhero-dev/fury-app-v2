@@ -1265,10 +1265,12 @@ export async function createCampaignFromWizard(
           object_story_spec: {
             page_id: instagramCreativePageId,
             instagram_user_id: instagramCreativeActorId,
+            link_data: {
+              link: args.destinationUrl
+                || (args.objective === 'engagement' ? `https://www.facebook.com/${instagramCreativePageId}` : `https://www.instagram.com/`),
+            },
           },
           source_instagram_media_id: args.creativeInstagramMediaId,
-          link: args.destinationUrl 
-            || (args.objective === 'engagement' ? `https://www.facebook.com/${instagramCreativePageId}` : `https://www.instagram.com/`),
         }
       : {
           name: 'Creative — FURY',
@@ -1286,6 +1288,7 @@ export async function createCampaignFromWizard(
                 : { type: objectiveConfig.cta },
               ...(args.objective === 'visits' ? { link: args.destinationUrl } : {}),
               ...(args.objective === 'engagement' ? { link: `https://www.facebook.com/${pageId}` } : {}),
+              ...(!messagingDestinations.includes('whatsapp') && messagingDestinationType === 'MESSENGER' ? { link: `https://www.facebook.com/${pageId}` } : {}),
               ...(messagingDestinations.includes('whatsapp') ? { link: 'https://api.whatsapp.com/send' } : {}),
             },
           },
