@@ -1265,12 +1265,11 @@ export async function createCampaignFromWizard(
           object_story_spec: {
             page_id: instagramCreativePageId,
             instagram_user_id: instagramCreativeActorId,
-            link_data: {
-              link: args.destinationUrl
-                || (args.objective === 'engagement' ? `https://www.facebook.com/${instagramCreativePageId}` : `https://www.instagram.com/`),
-            },
           },
           source_instagram_media_id: args.creativeInstagramMediaId,
+          // ponytail: link na raiz — Meta rejeita link_data.link + source_instagram_media_id juntos (subcode 1487929)
+          link: args.destinationUrl
+            || (args.objective === 'engagement' ? `https://www.facebook.com/${instagramCreativePageId}` : `https://www.instagram.com/`),
         }
       : {
           name: 'Creative — FURY',
