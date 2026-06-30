@@ -11,6 +11,7 @@ import instagramRoutes from './instagram.routes.js';
 import dashboardRoutes from './dashboard.routes.js';
 import formsRoutes from './forms.routes.js';
 import openrouterRoutes from './openrouter.routes.js';
+import observabilityRoutes from './observability.routes.js';
 
 import furyRoutes from './fury.routes.js';
 import goalsRoutes from './goals.routes.js';
@@ -39,5 +40,6 @@ router.use('/goals', goalsRoutes);
 router.use('/billing', billingRoutes);
 router.use('/brand-kit', authMiddleware, tenantMiddleware, brandKitRoutes);
 router.use('/openrouter', openrouterRoutes);
+router.use('/observability', authMiddleware, tenantMiddleware, observabilityRoutes);
 
 export default router;

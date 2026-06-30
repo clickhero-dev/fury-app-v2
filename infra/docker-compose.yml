@@ -35,9 +35,32 @@ services:
     networks:
       - fury-network
 
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: fury-grafana
+    environment:
+      GF_SECURITY_ADMIN_EMAIL: estagiario@clickhero.com.br
+      GF_SECURITY_ADMIN_PASSWORD: estagiario@2026#
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_INSTALL_PLUGINS: ""
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - fury-network
+
 volumes:
   postgres_data:
   redis_data:
+  grafana_data:
 
 networks:
   fury-network:
