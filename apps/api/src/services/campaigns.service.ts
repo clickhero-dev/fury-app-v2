@@ -1265,9 +1265,12 @@ export async function createCampaignFromWizard(
           object_story_spec: {
             page_id: instagramCreativePageId,
             instagram_user_id: instagramCreativeActorId,
+            link_data: {
+              link: args.destinationUrl 
+                || (args.objective === 'engagement' ? `https://www.facebook.com/${instagramCreativePageId}` : `https://www.instagram.com/`),
+            },
           },
           source_instagram_media_id: args.creativeInstagramMediaId,
-          link: args.creativeMediaUrl || `https://www.instagram.com/p/${args.creativeInstagramMediaId}`,
         }
       : {
           name: 'Creative — FURY',
