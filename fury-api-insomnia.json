@@ -1,0 +1,3114 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-06-26T13:40:00.000Z",
+  "__export_source": "insomnia.desktop.app:10.0.0",
+  "resources": [
+    {
+      "_type": "workspace",
+      "_id": "624f97edb9b543a0b7ee152b",
+      "name": "FURY API",
+      "description": "Endpoints da API FURY\nBase: https://clickhero-fury-api.u7pe19.easypanel.host",
+      "scope": "collection",
+      "certificates": [],
+      "environments": [
+        "e487de2ce06b48b0ab8015a7"
+      ],
+      "metaSortKey": 0
+    },
+    {
+      "_type": "environment",
+      "_id": "e487de2ce06b48b0ab8015a7",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "https://clickhero-fury-api.u7pe19.easypanel.host",
+        "access_token": "{{ access_token }}",
+        "tenant_id": "{{ tenant_id }}"
+      },
+      "dataPropertyOrder": {
+        "&": [
+          "base_url",
+          "access_token",
+          "tenant_id"
+        ]
+      },
+      "color": null,
+      "isPrivate": false,
+      "metaSortKey": 0
+    },
+    {
+      "_type": "request_group",
+      "_id": "6cc0fe96267f4dbab8b096b1",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "🔐 Auth",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 0
+    },
+    {
+      "_type": "request_group",
+      "_id": "ce14b06307684baa87a3c7f5",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "🔄 Meta (conexão)",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 1
+    },
+    {
+      "_type": "request_group",
+      "_id": "dc15ef6438ab4ad5a3789cd1",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "📢 Campaigns",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 2
+    },
+    {
+      "_type": "request_group",
+      "_id": "6fbf38535ee1455592444629",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "🎨 Studio",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 3
+    },
+    {
+      "_type": "request_group",
+      "_id": "9e482c3e85374145b18fdfca",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "🤖 OpenRouter (AI)",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 4
+    },
+    {
+      "_type": "request_group",
+      "_id": "5005942c60cf46bebcc95598",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "🎯 Goals",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 5
+    },
+    {
+      "_type": "request_group",
+      "_id": "edde0c6ca3ee4e119ad75508",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "📊 Metrics",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 6
+    },
+    {
+      "_type": "request_group",
+      "_id": "de85d6ef634843cb96919829",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "⚡ Fury Engine",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 7
+    },
+    {
+      "_type": "request_group",
+      "_id": "61035dc5cd93447d84184389",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "💰 Budget Optimizer",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 8
+    },
+    {
+      "_type": "request_group",
+      "_id": "f2309766a1ac4f24b293dcaf",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "🤖 Automation",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 9
+    },
+    {
+      "_type": "request_group",
+      "_id": "3dc74aeb8d7847faa8dc6550",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "📸 Instagram",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 10
+    },
+    {
+      "_type": "request_group",
+      "_id": "0004f647974a47458c753e7a",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "📋 Dashboard",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 11
+    },
+    {
+      "_type": "request_group",
+      "_id": "8741a3ab672d4d0fb25a6ad8",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "📝 Forms",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 12
+    },
+    {
+      "_type": "request_group",
+      "_id": "910b45c0a83343c99e3046d3",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "🎨 Brand Kit",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 13
+    },
+    {
+      "_type": "request_group",
+      "_id": "2b6867a8aeaa4c749ca14223",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "💳 Billing",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 14
+    },
+    {
+      "_type": "request_group",
+      "_id": "8fd274e2e56e4112a22e0180",
+      "parentId": "624f97edb9b543a0b7ee152b",
+      "name": "❤️ Health",
+      "description": "",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 15
+    },
+    {
+      "_type": "request",
+      "_id": "4f88cdf121f04e48aac52a2c",
+      "parentId": "6cc0fe96267f4dbab8b096b1",
+      "name": "Register",
+      "method": "POST",
+      "url": "{{ base_url }}/api/auth/register",
+      "description": "",
+      "headers": [],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"senha123\",\n  \"name\": \"User\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "32dac577e2264bbcad0095c6",
+      "parentId": "6cc0fe96267f4dbab8b096b1",
+      "name": "Login",
+      "method": "POST",
+      "url": "{{ base_url }}/api/auth/login",
+      "description": "Retorna access_token + refresh_token. Copie o access_token para a env variable.",
+      "headers": [],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"dev.fashion@fury.test\",\n  \"password\": \"123456\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "e9b1f2768aaa47dcaabfbc33",
+      "parentId": "6cc0fe96267f4dbab8b096b1",
+      "name": "Refresh Token",
+      "method": "POST",
+      "url": "{{ base_url }}/api/auth/refresh",
+      "description": "",
+      "headers": [],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"refreshToken\": \"{{ refresh_token }}\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "e6a44aff3d294145a8c95e6b",
+      "parentId": "6cc0fe96267f4dbab8b096b1",
+      "name": "Logout",
+      "method": "POST",
+      "url": "{{ base_url }}/api/auth/logout",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "4885fcb1ea5445c18682960c",
+      "parentId": "6cc0fe96267f4dbab8b096b1",
+      "name": "Me (GET)",
+      "method": "GET",
+      "url": "{{ base_url }}/api/auth/me",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "fe45358a8482487fa8bcf224",
+      "parentId": "6cc0fe96267f4dbab8b096b1",
+      "name": "Me (PATCH)",
+      "method": "PATCH",
+      "url": "{{ base_url }}/api/auth/me",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Novo Nome\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "3c33a1b79c1041ad9f85c0ee",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "Auth URL",
+      "method": "GET",
+      "url": "{{ base_url }}/api/meta/auth/url",
+      "description": "Retorna a URL de login OAuth do Facebook",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "3e610a17bd4843e88190ee0b",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "Auth Test",
+      "method": "GET",
+      "url": "{{ base_url }}/api/meta/auth/test",
+      "description": "",
+      "headers": [],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "28488f0109b6404e96c24442",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "Scopes",
+      "method": "GET",
+      "url": "{{ base_url }}/api/meta/scopes",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "fad0661f03824d97af83fe80",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "Pages",
+      "method": "GET",
+      "url": "{{ base_url }}/api/meta/pages",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "b0fcce9927024bd3b0e481a3",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "WhatsApp Numbers",
+      "method": "GET",
+      "url": "{{ base_url }}/api/meta/pages/:pageId/whatsapp-numbers",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "1a712aa7d5ed422289cbc95d",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "Businesses",
+      "method": "GET",
+      "url": "{{ base_url }}/api/meta/businesses",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "0c7c0dd3aa9b43a9b683b499",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "Pages by Business",
+      "method": "POST",
+      "url": "{{ base_url }}/api/meta/pages-by-business",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"businessId\": \"\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "cb63da43a648463d97f85485",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "Ad Accounts by Business",
+      "method": "POST",
+      "url": "{{ base_url }}/api/meta/adaccounts-by-business",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"businessId\": \"\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "f5f4f54fcd3449a19d17848f",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "WhatsApp by Pages",
+      "method": "POST",
+      "url": "{{ base_url }}/api/meta/whatsapp-by-pages",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"pageIds\": []\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "d74323c0d4a84719a6bef84f",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "Save Selection",
+      "method": "POST",
+      "url": "{{ base_url }}/api/meta/save-selection",
+      "description": "Salva a seleção de ativos Meta do usuário",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"businessId\": \"\",\n  \"pageId\": \"\",\n  \"adAccountId\": \"\",\n  \"instagramActorId\": \"\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "0e95a5b9efbc473da245637e",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "Asset Selection",
+      "method": "GET",
+      "url": "{{ base_url }}/api/meta/asset-selection",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "3694d769bce44cce86bda70f",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "Connections",
+      "method": "GET",
+      "url": "{{ base_url }}/api/meta/connections",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "b1f68efbce1d41438864c3af",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "Select Ad Account",
+      "method": "PATCH",
+      "url": "{{ base_url }}/api/meta/connections/:id/select-account",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"adAccountId\": \"\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "5cbb7ef7048d489693b4ab1c",
+      "parentId": "ce14b06307684baa87a3c7f5",
+      "name": "Delete Connection",
+      "method": "DELETE",
+      "url": "{{ base_url }}/api/meta/connections/:id",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "3e93e0d91abf40d2b2b57c51",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "List Campaigns",
+      "method": "GET",
+      "url": "{{ base_url }}/api/campaigns",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "f320bbd686f34ad09c6ffe23",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Get Campaign",
+      "method": "GET",
+      "url": "{{ base_url }}/api/campaigns/:id",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "44e41865af88470187814035",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Create Campaign",
+      "method": "POST",
+      "url": "{{ base_url }}/api/campaigns/create",
+      "description": "Cria campanha simples na Meta. Campos: name, objective, dailyBudgetBrl, pageId",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Campanha Teste\",\n  \"objective\": \"visits\",\n  \"dailyBudgetBrl\": 10,\n  \"pageId\": \"\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "0f60acdef0b94e3cae7401a2",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Create Campaign (Wizard)",
+      "method": "POST",
+      "url": "{{ base_url }}/api/campaigns/create-wizard",
+      "description": "Wizard completo: cria campaign + adset + criativo + ad na Meta. Erro 502 corrigido.",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"objective\": \"visits\",\n  \"locationCity\": \"S\\u00e3o Paulo\",\n  \"locationRadiusKm\": 50,\n  \"ageMin\": 18,\n  \"ageMax\": 65,\n  \"gender\": \"all\",\n  \"dailyBudgetBrl\": 10,\n  \"destinationUrl\": \"https://clickhero-fury-web.u7pe19.easypanel.host/campanhas\",\n  \"headline\": \"Confira nossa oferta\",\n  \"primaryText\": \"Texto principal do an\\u00fancio\",\n  \"imageUrl\": \"https://example.com/imagem.jpg\",\n  \"pageId\": \"248051691715153\",\n  \"durationDays\": 30\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "60ee3e0b7bae46c6a7d9c20a",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "MCP Log Wizard",
+      "method": "POST",
+      "url": "{{ base_url }}/api/campaigns/mcp-log",
+      "description": "Diagnóstico: executa wizard e retorna erro detalhado em JSON (nunca 502)",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"objective\": \"visits\",\n  \"locationCity\": \"S\\u00e3o Paulo\",\n  \"dailyBudgetBrl\": 10,\n  \"pageId\": \"248051691715153\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "43a1527aedaf4201b71f45c1",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Wizard Diag",
+      "method": "GET",
+      "url": "{{ base_url }}/api/campaigns/create-wizard-diag",
+      "description": "Verifica se createCampaignFromWizard está importável",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "77ab0b0d4fdc48f780abaaec",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Upload Creative",
+      "method": "POST",
+      "url": "{{ base_url }}/api/campaigns/upload-creative",
+      "description": "Upload de imagem (PNG/JPG, max 5MB) para criativo",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"file\": \"<multipart>\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "dbf78d8cd59a49d782baadd7",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Search Meta Locations",
+      "method": "GET",
+      "url": "{{ base_url }}/api/campaigns/meta-locations?q=São+Paulo",
+      "description": "Busca localizações na Meta (cidades/regiões)",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "074a416d602740c6ad029ced",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Pause Campaign",
+      "method": "PATCH",
+      "url": "{{ base_url }}/api/campaigns/:id/pause",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "fecdaaf8936949dd9edba998",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Resume Campaign",
+      "method": "PATCH",
+      "url": "{{ base_url }}/api/campaigns/:id/resume",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "85c8d0adb1a7417098aae88d",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Update Status",
+      "method": "PATCH",
+      "url": "{{ base_url }}/api/campaigns/:id/status",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"status\": \"PAUSED\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "41cf9f0b19da447b97b2df5d",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Update Budget",
+      "method": "PATCH",
+      "url": "{{ base_url }}/api/campaigns/:id/budget",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"dailyBudgetBrl\": 20\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "6bf0e9965dc0411da556793c",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Get Insights",
+      "method": "GET",
+      "url": "{{ base_url }}/api/campaigns/:id/insights",
+      "description": "Métricas da campanha (impressões, cliques, custo, etc.)",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "e95542ad635e4833b35df7aa",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Update Campaign",
+      "method": "PATCH",
+      "url": "{{ base_url }}/api/campaigns/:id",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Novo nome\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "acdae70a6cbb4c84ab557660",
+      "parentId": "dc15ef6438ab4ad5a3789cd1",
+      "name": "Delete Campaign",
+      "method": "DELETE",
+      "url": "{{ base_url }}/api/campaigns/:id",
+      "description": "Soft delete — apenas marca como deletada",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "49edbec0d825492e8cc35f27",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Storage Check",
+      "method": "GET",
+      "url": "{{ base_url }}/api/studio/storage-check",
+      "description": "Verifica se o diretório de assets está funcionando",
+      "headers": [],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "97ea3d64e2294f3c927e143f",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "List Assets",
+      "method": "GET",
+      "url": "{{ base_url }}/api/studio/assets",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "4f1f7dd9a5ec451daf4f7414",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Get Asset",
+      "method": "GET",
+      "url": "{{ base_url }}/api/studio/assets/:assetId",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "823eedde7a2c49189accf89e",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Delete Asset",
+      "method": "DELETE",
+      "url": "{{ base_url }}/api/studio/assets/:assetId",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "4bcf87b99ef74fe495d9fd50",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Compliance Status",
+      "method": "GET",
+      "url": "{{ base_url }}/api/studio/assets/:assetId/compliance-status",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "10a4b24c4d094bb2a673c247",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Generate Copy",
+      "method": "POST",
+      "url": "{{ base_url }}/api/studio/generate-copy",
+      "description": "Gera copy com OpenAI GPT-4o",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"type\": \"headline\",\n  \"produto\": \"T\\u00eanis Esportivo\",\n  \"publico\": \"Jovens atletas\",\n  \"objetivo\": \"Vender mais\",\n  \"tom\": \"casual\",\n  \"quantidadeVariacoes\": 3\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "40fd8bc3868b48ed999318fe",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Generate Copy v2",
+      "method": "POST",
+      "url": "{{ base_url }}/api/studio/copy/generate",
+      "description": "Geração de copy via DeepSeek",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"produto\": \"T\\u00eanis\",\n  \"publico\": \"Atletas\",\n  \"objetivo\": \"Vender\",\n  \"tom\": \"energetico\",\n  \"quantidadeVariacoes\": 3\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "c60549d0f8e74109a083c92c",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Generate Image",
+      "method": "POST",
+      "url": "{{ base_url }}/api/studio/generate-image",
+      "description": "Geração de imagem via OpenRouter (FLUX, Seedream)",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"prompt\": \"T\\u00eanis esportivo vermelho em fundo preto\",\n  \"model\": \"black-forest-labs/flux.2-klein-4b\",\n  \"aspect_ratio\": \"1:1\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "95e269bbdcd140cc8adc4f90",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Render Creative",
+      "method": "POST",
+      "url": "{{ base_url }}/api/studio/render-creative",
+      "description": "Renderiza HTML criativo em PNG",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"assetId\": \"\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "515a70e6beb64c53bbeed33f",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Publish Asset",
+      "method": "POST",
+      "url": "{{ base_url }}/api/studio/publish/:assetId",
+      "description": "Publica asset no Meta Ads",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "99d3561e1f704263a6c19ed6",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Upload to Meta",
+      "method": "POST",
+      "url": "{{ base_url }}/api/studio/upload-to-meta",
+      "description": "Upload de imagem para conta Meta",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"assetId\": \"\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "8930105b2f0f4f3b98818653",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Validate Context",
+      "method": "POST",
+      "url": "{{ base_url }}/api/studio/creative/validate-context",
+      "description": "Valida contexto criativo via DeepSeek",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"product\": \"T\\u00eanis\",\n  \"promise\": \"Conforto m\\u00e1ximo\",\n  \"offer\": \"30% OFF\",\n  \"audience\": \"Jovens\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "ac01744d4a01413fa690a49d",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Generate Creative",
+      "method": "POST",
+      "url": "{{ base_url }}/api/studio/creative/generate",
+      "description": "Pipeline completo de geração criativa (layout + copy + imagem + render)",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"product\": \"T\\u00eanis Runner Pro\",\n  \"promise\": \"Performance e estilo\",\n  \"audience\": \"Corredores\",\n  \"hasProductImage\": false\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "54d4d6e2486844c6b4e2f981",
+      "parentId": "6fbf38535ee1455592444629",
+      "name": "Regenerate Creative",
+      "method": "POST",
+      "url": "{{ base_url }}/api/studio/creative/regenerate",
+      "description": "Regenera criativo com feedback via DeepSeek",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"assetId\": \"\",\n  \"feedback\": \"Deixar texto mais impactante\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "740563c458714fa6b2d5f3f6",
+      "parentId": "9e482c3e85374145b18fdfca",
+      "name": "Models",
+      "method": "GET",
+      "url": "{{ base_url }}/api/openrouter/models",
+      "description": "Lista modelos de imagem e vídeo disponíveis",
+      "headers": [],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "a4cc9432547649418dcfdb83",
+      "parentId": "9e482c3e85374145b18fdfca",
+      "name": "Generate Image",
+      "method": "POST",
+      "url": "{{ base_url }}/api/openrouter/generate-image",
+      "description": "Geração de imagem direta pelo OpenRouter",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"prompt\": \"T\\u00eanis vermelho futurista, est\\u00fadio, 8K\",\n  \"model\": \"black-forest-labs/flux.2-klein-4b\",\n  \"aspect_ratio\": \"1:1\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "fc02f898fe864ffa966f23ef",
+      "parentId": "9e482c3e85374145b18fdfca",
+      "name": "Generate Video",
+      "method": "POST",
+      "url": "{{ base_url }}/api/openrouter/generate-video",
+      "description": "Geração de vídeo direta pelo OpenRouter (Veo, Kling)",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"prompt\": \"T\\u00eanis flutuando com efeito de fuma\\u00e7a\",\n  \"model\": \"google/veo-3.1-lite\",\n  \"duration\": 4,\n  \"aspect_ratio\": \"16:9\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "ff1a5b0444964bf3a098498d",
+      "parentId": "5005942c60cf46bebcc95598",
+      "name": "List Goals",
+      "method": "GET",
+      "url": "{{ base_url }}/api/goals",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "c1a5c5f78bac4a6ba6145e47",
+      "parentId": "5005942c60cf46bebcc95598",
+      "name": "Create Goal",
+      "method": "POST",
+      "url": "{{ base_url }}/api/goals",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"objective\": \"Vendas\",\n  \"niche\": \"Moda\",\n  \"mainProduct\": \"T\\u00eanis\",\n  \"monthlyBudget\": 5000,\n  \"targetCpa\": 15\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "9dbd83d5944f4aec801dec78",
+      "parentId": "5005942c60cf46bebcc95598",
+      "name": "Update Goal",
+      "method": "PUT",
+      "url": "{{ base_url }}/api/goals/:id",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"monthlyBudget\": 8000,\n  \"targetCpa\": 12\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "a4934394366e4c938eaa1e90",
+      "parentId": "5005942c60cf46bebcc95598",
+      "name": "Delete Goal",
+      "method": "DELETE",
+      "url": "{{ base_url }}/api/goals/:id",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "b7041f1fd2744dd6ae41861e",
+      "parentId": "5005942c60cf46bebcc95598",
+      "name": "Progress (All)",
+      "method": "GET",
+      "url": "{{ base_url }}/api/goals/progress",
+      "description": "Progresso de todas as metas do tenant",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "4d48983645fa4b46bdba3a38",
+      "parentId": "5005942c60cf46bebcc95598",
+      "name": "Progress (Single)",
+      "method": "GET",
+      "url": "{{ base_url }}/api/goals/:id/progress",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "f0c42fdf0f474dae9bc7c2cb",
+      "parentId": "edde0c6ca3ee4e119ad75508",
+      "name": "Summary",
+      "method": "GET",
+      "url": "{{ base_url }}/api/metrics/summary",
+      "description": "Resumo de métricas (gasto, impressões, cliques, ROAS, CPA)",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "2863eb965a40464aa0654a80",
+      "parentId": "edde0c6ca3ee4e119ad75508",
+      "name": "Campaigns",
+      "method": "GET",
+      "url": "{{ base_url }}/api/metrics/campaigns",
+      "description": "Métricas por campanha",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "10348fc83aa34b9593858f27",
+      "parentId": "edde0c6ca3ee4e119ad75508",
+      "name": "Campaign Adsets",
+      "method": "GET",
+      "url": "{{ base_url }}/api/metrics/campaigns/:campaignId/adsets",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "831eb90e4e9647499516ed5c",
+      "parentId": "edde0c6ca3ee4e119ad75508",
+      "name": "Campaign Insights",
+      "method": "GET",
+      "url": "{{ base_url }}/api/metrics/campaigns/:campaignId/insights",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "5d5edff7b5c14161a1b67a81",
+      "parentId": "edde0c6ca3ee4e119ad75508",
+      "name": "Daily Metrics",
+      "method": "GET",
+      "url": "{{ base_url }}/api/metrics/daily",
+      "description": "Métricas diárias agregadas",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "cbc68c8e3acd4549902e0e75",
+      "parentId": "edde0c6ca3ee4e119ad75508",
+      "name": "Goals Progress",
+      "method": "GET",
+      "url": "{{ base_url }}/api/metrics/goals-progress",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "e9a9d39381494a9caf2603c4",
+      "parentId": "de85d6ef634843cb96919829",
+      "name": "Config (GET)",
+      "method": "GET",
+      "url": "{{ base_url }}/api/fury/config",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "696d14c11b654829afc3fce1",
+      "parentId": "de85d6ef634843cb96919829",
+      "name": "Config (PATCH)",
+      "method": "PATCH",
+      "url": "{{ base_url }}/api/fury/config",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"targetRoas\": 2.5,\n  \"targetCpa\": 15\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "8ee6c79373de4dde86975532",
+      "parentId": "de85d6ef634843cb96919829",
+      "name": "List Rules",
+      "method": "GET",
+      "url": "{{ base_url }}/api/fury/rules",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "299dc95d46c741eaa9f389cd",
+      "parentId": "de85d6ef634843cb96919829",
+      "name": "Create Rule",
+      "method": "POST",
+      "url": "{{ base_url }}/api/fury/rules",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Pausar CPC alto\",\n  \"conditionField\": \"cpc\",\n  \"conditionOperator\": \"gt\",\n  \"conditionValue\": 5.0,\n  \"action\": \"pause_campaign\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "0ce3a033ca9b4d9189baaf0e",
+      "parentId": "de85d6ef634843cb96919829",
+      "name": "Update Rule",
+      "method": "PATCH",
+      "url": "{{ base_url }}/api/fury/rules/:id",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"isActive\": false\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "d08b7d11f879446ab518534d",
+      "parentId": "de85d6ef634843cb96919829",
+      "name": "Delete Rule",
+      "method": "DELETE",
+      "url": "{{ base_url }}/api/fury/rules/:id",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "4c6ebc9fe99e41c5b673f7f1",
+      "parentId": "de85d6ef634843cb96919829",
+      "name": "Live Feed (SSE)",
+      "method": "GET",
+      "url": "{{ base_url }}/api/fury/live-feed",
+      "description": "SSE stream de eventos em tempo real. Usar header Accept: text/event-stream",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "b33174acc17a4314b5b976c5",
+      "parentId": "de85d6ef634843cb96919829",
+      "name": "List Scores",
+      "method": "GET",
+      "url": "{{ base_url }}/api/fury/scores",
+      "description": "Scores de performance das campanhas",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "4147ca48ccdf42a5beddc36d",
+      "parentId": "de85d6ef634843cb96919829",
+      "name": "List Executions",
+      "method": "GET",
+      "url": "{{ base_url }}/api/fury/executions",
+      "description": "Histórico de execuções das regras",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "5a49e3de355f44dda9e523a6",
+      "parentId": "61035dc5cd93447d84184389",
+      "name": "Trigger Optimization",
+      "method": "POST",
+      "url": "{{ base_url }}/api/budget/optimize",
+      "description": "Dispara otimização de orçamento imediatamente",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "b6acbe521e844f6087c91bdb",
+      "parentId": "61035dc5cd93447d84184389",
+      "name": "Suggestions",
+      "method": "GET",
+      "url": "{{ base_url }}/api/budget/suggestions?status=pending",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "cb98d23850ed4ecab589d6b2",
+      "parentId": "61035dc5cd93447d84184389",
+      "name": "Apply Suggestion",
+      "method": "POST",
+      "url": "{{ base_url }}/api/budget/suggestions/:id/apply",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "29c88aaaf5884c14b573bad0",
+      "parentId": "61035dc5cd93447d84184389",
+      "name": "Reject Suggestion",
+      "method": "POST",
+      "url": "{{ base_url }}/api/budget/suggestions/:id/reject",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "76f721b808b24ce2acb2fb8c",
+      "parentId": "61035dc5cd93447d84184389",
+      "name": "Apply Bulk",
+      "method": "POST",
+      "url": "{{ base_url }}/api/budget/apply-bulk",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"ids\": []\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "3c1bbd815dee4ffcbd17672c",
+      "parentId": "61035dc5cd93447d84184389",
+      "name": "Reject Bulk",
+      "method": "POST",
+      "url": "{{ base_url }}/api/budget/reject-bulk",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"ids\": []\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "3cee4b3114c7403e92cd4aa4",
+      "parentId": "61035dc5cd93447d84184389",
+      "name": "Config (GET)",
+      "method": "GET",
+      "url": "{{ base_url }}/api/budget/config",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "d2dbabe003294a789b362b65",
+      "parentId": "61035dc5cd93447d84184389",
+      "name": "Config (PATCH)",
+      "method": "PATCH",
+      "url": "{{ base_url }}/api/budget/config",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"autoOptimize\": true,\n  \"minDailyBudget\": 5\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "a0ff3498a1674263b7d292fc",
+      "parentId": "f2309766a1ac4f24b293dcaf",
+      "name": "SSE Feed",
+      "method": "GET",
+      "url": "{{ base_url }}/api/automation/feed",
+      "description": "SSE stream de eventos de automação",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "1ab0f3a425064e3fbdc687f4",
+      "parentId": "f2309766a1ac4f24b293dcaf",
+      "name": "Create Rule",
+      "method": "POST",
+      "url": "{{ base_url }}/api/automation/rules",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Regra\",\n  \"condition\": {},\n  \"action\": {}\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "5b9261f484554370a7c748df",
+      "parentId": "f2309766a1ac4f24b293dcaf",
+      "name": "List Rules",
+      "method": "GET",
+      "url": "{{ base_url }}/api/automation/rules",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "1a5274e8bdf94855a1db2cf2",
+      "parentId": "f2309766a1ac4f24b293dcaf",
+      "name": "Delete Rule",
+      "method": "DELETE",
+      "url": "{{ base_url }}/api/automation/rules/:id",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "8b6a5bf5834c42c591162765",
+      "parentId": "f2309766a1ac4f24b293dcaf",
+      "name": "Takedowns",
+      "method": "GET",
+      "url": "{{ base_url }}/api/automation/takedowns",
+      "description": "Lista de takedowns (pausas automáticas)",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "3ebf2050c02e4ac9b74c8e9f",
+      "parentId": "f2309766a1ac4f24b293dcaf",
+      "name": "Budget Smart",
+      "method": "POST",
+      "url": "{{ base_url }}/api/automation/budget-smart",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"campaignId\": \"\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "fbf8d667986e47868a1478ac",
+      "parentId": "3dc74aeb8d7847faa8dc6550",
+      "name": "Posts Ranked",
+      "method": "GET",
+      "url": "{{ base_url }}/api/instagram/posts-ranked",
+      "description": "Posts do Instagram ranqueados por engajamento",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "ff01d9257fe94799835cbd6e",
+      "parentId": "3dc74aeb8d7847faa8dc6550",
+      "name": "Media Proxy",
+      "method": "GET",
+      "url": "{{ base_url }}/api/instagram/media-proxy?url=...",
+      "description": "Proxy de mídia do Instagram (contorna CORS)",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "e846c251158c48fb8ea0a2bc",
+      "parentId": "0004f647974a47458c753e7a",
+      "name": "Instagram Insights",
+      "method": "GET",
+      "url": "{{ base_url }}/api/dashboard/instagram-insights",
+      "description": "Insights agregados do Instagram",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "17dcd889f7b04ba984ec7cd4",
+      "parentId": "8741a3ab672d4d0fb25a6ad8",
+      "name": "Start",
+      "method": "POST",
+      "url": "{{ base_url }}/api/forms/start",
+      "description": "Registra início do formulário",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"formId\": \"wizard-01\",\n  \"step\": 1\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "0bf1a4312c2242a9ab3f9403",
+      "parentId": "8741a3ab672d4d0fb25a6ad8",
+      "name": "Complete",
+      "method": "POST",
+      "url": "{{ base_url }}/api/forms/complete",
+      "description": "Registra conclusão do formulário",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"formId\": \"wizard-01\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "5ff72847d1b047af8cb8e824",
+      "parentId": "8741a3ab672d4d0fb25a6ad8",
+      "name": "Error",
+      "method": "POST",
+      "url": "{{ base_url }}/api/forms/error",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"formId\": \"wizard-01\",\n  \"step\": 3,\n  \"error\": \"...\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "7f2997a0e55a487c97a7dc39",
+      "parentId": "8741a3ab672d4d0fb25a6ad8",
+      "name": "Abandoned",
+      "method": "POST",
+      "url": "{{ base_url }}/api/forms/abandoned",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"formId\": \"wizard-01\",\n  \"lastStep\": 2\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "ead228147b7a4734b37db50f",
+      "parentId": "910b45c0a83343c99e3046d3",
+      "name": "Get Brand Kit",
+      "method": "GET",
+      "url": "{{ base_url }}/api/brand-kit",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "22b67b9cd3ae457e96175353",
+      "parentId": "910b45c0a83343c99e3046d3",
+      "name": "Upsert Brand Kit",
+      "method": "PUT",
+      "url": "{{ base_url }}/api/brand-kit",
+      "description": "Cria ou atualiza Brand Kit",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"primary_color\": \"#FF5733\",\n  \"secondary_color\": \"#333333\",\n  \"voice_tone\": \"professional\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "2341cbaee24241beb099f7d1",
+      "parentId": "910b45c0a83343c99e3046d3",
+      "name": "Upload Logo",
+      "method": "POST",
+      "url": "{{ base_url }}/api/brand-kit/logo",
+      "description": "Upload de logo (PNG/SVG, max 2MB)",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"file\": \"<multipart PNG/SVG>\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "a928d0b138314136b98b8178",
+      "parentId": "910b45c0a83343c99e3046d3",
+      "name": "Upload Photos",
+      "method": "POST",
+      "url": "{{ base_url }}/api/brand-kit/photos",
+      "description": "Upload de fotos (PNG/JPG, max 5MB cada, máx 20)",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"files\": \"<multipart PNG/JPG>\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "4de6b8900a204dd1a7be416c",
+      "parentId": "910b45c0a83343c99e3046d3",
+      "name": "Delete Photo",
+      "method": "DELETE",
+      "url": "{{ base_url }}/api/brand-kit/photos/:index",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "e68ef87e9b124c958f5e3fe5",
+      "parentId": "2b6867a8aeaa4c749ca14223",
+      "name": "Plans",
+      "method": "GET",
+      "url": "{{ base_url }}/api/billing/plans",
+      "description": "Lista planos ativos (público)",
+      "headers": [],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "8cae32f8ba7549db801f4ce8",
+      "parentId": "2b6867a8aeaa4c749ca14223",
+      "name": "Webhook Asaas",
+      "method": "POST",
+      "url": "{{ base_url }}/api/billing/webhook",
+      "description": "Webhook do Asaas (validado por header asaas-access-token)",
+      "headers": [],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "c825fb0e861a497aa05a79b3",
+      "parentId": "2b6867a8aeaa4c749ca14223",
+      "name": "My Subscription",
+      "method": "GET",
+      "url": "{{ base_url }}/api/billing/subscription",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "fd63bad13d1f447b97bb8134",
+      "parentId": "2b6867a8aeaa4c749ca14223",
+      "name": "Create Subscription",
+      "method": "POST",
+      "url": "{{ base_url }}/api/billing/subscribe",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"planId\": \"\"\n}"
+      },
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "948be11be1764a5f84e660f5",
+      "parentId": "2b6867a8aeaa4c749ca14223",
+      "name": "Cancel Subscription",
+      "method": "POST",
+      "url": "{{ base_url }}/api/billing/cancel",
+      "description": "",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ access_token }}",
+          "disabled": false
+        }
+      ],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_type": "request",
+      "_id": "6ebe3c0486ba424595077d94",
+      "parentId": "8fd274e2e56e4112a22e0180",
+      "name": "Health Check",
+      "method": "GET",
+      "url": "{{ base_url }}/api/health",
+      "description": "Status, uptime, timestamp",
+      "headers": [],
+      "parameters": [],
+      "body": {},
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    }
+  ]
+}

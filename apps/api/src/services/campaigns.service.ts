@@ -1058,7 +1058,8 @@ export async function createCampaignFromWizard(
     imageUrl = asset.url;
   }
 
-  if (!imageUrl) {
+  // ponytail: Instagram criativo nao precisa de imageUrl — usa source_instagram_media_id
+  if (!imageUrl && !args.creativeInstagramMediaId) {
     throw new AppError(400, 'CREATIVE_IMAGE_MISSING', 'Selecione uma imagem da galeria ou envie um arquivo.');
   }
 
