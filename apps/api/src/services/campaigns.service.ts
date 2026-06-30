@@ -929,6 +929,22 @@ function mapWizardMetaError(err: unknown, step: string): never {
     throw new AppError(402, 'META_INSUFFICIENT_FUNDS', 'Conta de anúncios sem saldo suficiente');
   }
 
+  // Subcode 3858258: Meta nao conseguiu baixar a imagem (robots.txt, formato invalido, etc.)
+  if (metaSubcode === 3858258) {
+    throw new AppError(502, 'META_IMAGE_DOWNLOAD_FAILED',
+      'O Meta nao conseguiu baixar a imagem do criativo. A URL pode estar bloqueada (robots.txt) ou o formato pode ser invalido. Use uma imagem JPEG ou PNG hospedada em um servidor acessivel.',
+      { step, meta_code: metaCode, meta_subcode: metaSubcode }
+    );
+  }
+
+  // Subcode 1487110: Raio geografico fora dos limites (ex: SP precisa de 15km+)
+  if (metaSubcode === 1487110) {
+    throw new AppError(400, 'META_LOCATION_RADIUS',
+      metaUserMsg || 'O raio geografico selecionado nao esta dentro dos limites. Aumente o raio (ex: Sao Paulo precisa de 15km ou mais).',
+      { step, meta_code: metaCode, meta_subcode: metaSubcode }
+    );
+  }
+
   // Usa a mensagem amigavel da Meta se disponivel, senao a mensagem original
   const userMessage = metaUserMsg || metaUserTitle
     ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}`
@@ -1155,19 +1171,33 @@ export async function createCampaignFromWizard(
       adImageHashPromise = (async () => {
         try {
           const imageResponse = await fetch(imageUrl, {
-            signal: AbortSignal.timeout(10_000),
+            signal: AbortSignal.timeout(15_000),
+            headers: { 'User-Agent': 'FURY/1.0' },
           });
           if (!imageResponse.ok) {
-            throw new Error(`Failed to download image: ${imageResponse.status}`);
+            throw new Error(`Falha ao baixar imagem (HTTP ${imageResponse.status}). Verifique se a URL está acessível.`);
           }
+
+          const contentType = imageResponse.headers.get('content-type') || '';
+          // Meta so aceita JPEG e PNG para adimages; SVG e outros formatos sao rejeitados.
+          if (!contentType.includes('jpeg') && !contentType.includes('png') && !contentType.includes('image/')) {
+            throw new Error(
+              `Formato de imagem nao suportado: ${contentType || 'desconhecido'}. ` +
+              'Use uma imagem JPEG ou PNG acessivel publicamente.'
+            );
+          }
+
           const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
           const base64 = imageBuffer.toString('base64');
-          const filename = `fury_creative_${Date.now()}.jpg`;
+          const ext = contentType.includes('png') ? 'png' : 'jpg';
+          const filename = `fury_creative_${Date.now()}.${ext}`;
           const hash = await uploadAdImage({ adAccountId, base64, filename, accessToken });
           console.log('[CampaignWizard] Imagem enviada para Meta, hash:', hash);
           return hash;
         } catch (uploadErr) {
           console.error('[CampaignWizard] Falha ao enviar imagem para Meta, usando URL original:', uploadErr);
+          // Se o upload falhar, usa a URL original como fallback.
+          // NOTA: Meta pode nao conseguir baixar a URL original se o servidor tiver robots.txt ou bloqueio.
           return undefined;
         }
       })();
@@ -1253,6 +1283,7 @@ export async function createCampaignFromWizard(
                   }
                 : { type: objectiveConfig.cta },
               ...(args.objective === 'visits' ? { link: args.destinationUrl } : {}),
+              ...(args.objective === 'engagement' ? { link: `https://www.facebook.com/${pageId}` } : {}),
               ...(messagingDestinations.includes('whatsapp') ? { link: 'https://api.whatsapp.com/send' } : {}),
             },
           },
