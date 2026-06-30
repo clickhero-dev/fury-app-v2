@@ -1,4 +1,4 @@
-name: Build, Push, and Deploy
+name: Deploy
 
 on:
   push:
@@ -7,72 +7,13 @@ on:
       - dev
 
 jobs:
-  build-and-push:
+  deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate image tags
-        id: tags
-        run: |
-          COMMIT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          DATE_TAG=$(date +%Y.%m.%d)
-          WEB_VERSION=$(node -p "require('./apps/web/package.json').version" || echo "0.0.0")
-          API_VERSION=$(node -p "require('./apps/api/package.json').version" || echo "0.0.0")
-          if [ "$WEB_VERSION" = "0.0.0" ]; then WEB_TAG="${DATE_TAG}-${COMMIT_SHA}"; else WEB_TAG="${WEB_VERSION}-${COMMIT_SHA}"; fi
-          if [ "$API_VERSION" = "0.0.0" ]; then API_TAG="${DATE_TAG}-${COMMIT_SHA}"; else API_TAG="${API_VERSION}-${COMMIT_SHA}"; fi
-          echo "web_tag=ghcr.io/clickhero-dev/fury-web:${WEB_TAG}" >> $GITHUB_OUTPUT
-          echo "api_tag=ghcr.io/clickhero-dev/fury-api:${API_TAG}" >> $GITHUB_OUTPUT
-          echo "web_latest=ghcr.io/clickhero-dev/fury-web:latest" >> $GITHUB_OUTPUT
-          echo "api_latest=ghcr.io/clickhero-dev/fury-api:latest" >> $GITHUB_OUTPUT
-
-      - name: Build and push Web image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: apps/web/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.tags.outputs.web_tag }}
-            ${{ steps.tags.outputs.web_latest }}
-          cache-from: type=registry,ref=ghcr.io/clickhero-dev/fury-web:buildcache
-          cache-to: type=registry,ref=ghcr.io/clickhero-dev/fury-web:buildcache,mode=max
-
-      - name: Build and push API image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: apps/api/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.tags.outputs.api_tag }}
-            ${{ steps.tags.outputs.api_latest }}
-          cache-from: type=registry,ref=ghcr.io/clickhero-dev/fury-api:buildcache
-          cache-to: type=registry,ref=ghcr.io/clickhero-dev/fury-api:buildcache,mode=max
-
       - name: Deploy API on EasyPanel
-        if: success()
         run: |
-          curl -s -X POST "${{ secrets.EASYPANEL_API_DEPLOY_WEBHOOK }}" \
-            -H "Content-Type: application/json" \
-            -d '{}' || true
+          curl -s -X POST "${{ secrets.EASYPANEL_API_DEPLOY_WEBHOOK }}" || true
 
       - name: Deploy Web on EasyPanel
-        if: success()
         run: |
-          curl -s -X POST "${{ secrets.EASYPANEL_WEB_DEPLOY_WEBHOOK }}" \
-            -H "Content-Type: application/json" \
-            -d '{}' || true
+          curl -s -X POST "${{ secrets.EASYPANEL_WEB_DEPLOY_WEBHOOK }}" || true
