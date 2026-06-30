@@ -824,7 +824,7 @@ function calculateDateRange(
 ): { startDate: string; endDate: string } {
   const today = new Date();
   const end = new Date(today);
-  let start = new Date(today);
+  const start = new Date(today);
 
   if (dateRange === 'last_7d') {
     start.setDate(start.getDate() - 7);
