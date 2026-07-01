@@ -61,13 +61,15 @@ export async function seedStartup(): Promise<void> {
 
       if (existing.length > 0) {
         const hash: string = existing[0].password_hash;
-        // If the hash isn't bcrypt ($2a$ / $2b$), it's broken — replace it
-        if (hash.startsWith('$2a$') || hash.startsWith('$2b$')) {
-          console.log(`  ✓ user ${seed.email} already exists with valid bcrypt`);
+        // Verify the stored hash actually matches the expected password
+        const matches = await bcrypt.compare(seed.password, hash);
+        if (matches) {
+          console.log(`  ✓ user ${seed.email} already exists with matching password`);
         } else {
+          // Hash doesn't match — update it (covers: wrong password, non-bcrypt, corrupted)
           const newHash = await bcrypt.hash(seed.password, 12);
           await sql`UPDATE "users" SET password_hash = ${newHash} WHERE id = ${existing[0].id}`;
-          console.log(`  🔧 fixed password hash for ${seed.email} (was non-bcrypt)`);
+          console.log(`  🔧 fixed password hash for ${seed.email} (wrong/corrupted hash)`);
         }
         continue;
       }
