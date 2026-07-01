@@ -13,11 +13,8 @@ import {
 import {
   Users,
   DollarSign,
-  TrendingUp,
   ShoppingBag,
   Radio,
-  ShieldCheck,
-  AlertTriangle,
   Info,
   MessageCircle,
   Bookmark,
@@ -31,7 +28,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import api from '@/lib/api';
-import { useGoalsProgress, translateObjective, type FuryAlert } from '@/hooks/useGoalsProgress';
+import { useGoalsProgress, translateObjective } from '@/hooks/useGoalsProgress';
 import { type Period, getPeriodDates, formatPeriodLabel } from '@/lib/period-utils';
 import { PeriodSelector } from '@/components/PeriodSelector';
 
@@ -69,10 +66,12 @@ type Sparkline = { date: string; value: number }[];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/*
 function formatAlertValue(type: FuryAlert['type'], value: number) {
   if (type === 'roas_low') return `${value.toFixed(1)}x`;
   return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+*/
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -185,7 +184,7 @@ function HeroStrip({
           <span className="text-white/70">Projeção:{' '}</span>
           <strong className="text-white/80 font-bold">
             {hasGoals && hasRealData
-              ? `${(goal.projected_value ?? 0).toLocaleString('pt-BR')} ${goal.metric === 'conversions' ? 'clientes' : goal.unit}`
+              ? `${(goal.projected_value ?? 0).toLocaleString('pt-BR')} ${goal.metric === 'conversions' ? 'pessoas' : goal.unit}`
               : '--'}
           </strong>
         </span>
@@ -350,7 +349,7 @@ function WeeklyChart({
     <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm space-y-4 h-full">
       <div>
         <h3 className="text-sm font-bold text-gray-900">Desempenho da Semana</h3>
-        <p className="text-xs text-gray-400 mt-0.5">Clientes conquistados nos últimos 7 dias</p>
+        <p className="text-xs text-gray-400 mt-0.5">Pessoas alcançadas nos últimos 7 dias</p>
       </div>
 
       <div className="relative" style={{ height: 200 }}>
@@ -384,7 +383,7 @@ function WeeklyChart({
                   fontSize: 12,
                 }}
                 formatter={(val, name) => [
-                  `${Number(val).toLocaleString('pt-BR')} clientes`,
+                  `${Number(val).toLocaleString('pt-BR')} pessoas`,
                   name === 'ideal' ? 'Projeção ideal' : 'Realizado',
                 ]}
                 labelFormatter={(label) => fmt(String(label))}
@@ -438,8 +437,8 @@ function WeeklyChart({
   );
 }
 
-// ─── Fury Alerts ─────────────────────────────────────────────────────────────
-
+// ─── Fury Alerts (comentado — dashboard simplificado) ───────────────────────
+/*
 const ALERT_CONFIG: Record<FuryAlert['type'], { bg: string; icon: string }> = {
   cpa_high:  { bg: 'bg-orange-50', icon: 'text-orange-500' },
   roas_low:  { bg: 'bg-red-50',    icon: 'text-red-500'    },
@@ -493,17 +492,13 @@ function FuryAlerts({ alerts }: { alerts: FuryAlert[] }) {
     </div>
   );
 }
+*/
 
 // ─── Active Campaigns Table ───────────────────────────────────────────────────
 
 function fmtBRL(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return '-';
   return `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function fmtRoas(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(v) || v === 0) return '-';
-  return `${v.toFixed(2)}x`;
 }
 
 function fmtInt(v: number | null | undefined): string {
@@ -548,9 +543,8 @@ function ActiveCampaignsTable({
               <tr className="border-b border-gray-100">
                 <th className="pb-2 text-left text-xs font-semibold text-gray-400">Campanha</th>
                 <th className="pb-2 text-right text-xs font-semibold text-gray-400">Investido</th>
-                <th className="pb-2 text-right text-xs font-semibold text-gray-400">Clientes</th>
-                <th className="pb-2 text-right text-xs font-semibold text-gray-400">Custo/Cliente</th>
-                <th className="pb-2 text-right text-xs font-semibold text-gray-400">Retorno</th>
+                <th className="pb-2 text-right text-xs font-semibold text-gray-400">Pessoas</th>
+                <th className="pb-2 text-right text-xs font-semibold text-gray-400">Custo/Pessoa</th>
               </tr>
             </thead>
             <tbody>
@@ -577,7 +571,6 @@ function ActiveCampaignsTable({
                     <td className="py-2.5 text-right text-gray-700">{fmtBRL(c.metrics.spend)}</td>
                     <td className="py-2.5 text-right text-gray-700">{fmtInt(c.metrics.conversions)}</td>
                     <td className="py-2.5 text-right text-gray-700">{fmtBRL(c.metrics.cpa)}</td>
-                    <td className="py-2.5 text-right text-gray-700">{fmtRoas(c.metrics.roas)}</td>
                   </tr>
                 );
               })}
@@ -784,7 +777,6 @@ export function Dashboard() {
   // Sparkline + progress per goal metric
   const goalConversions = g?.goals?.find((goal) => goal.metric === 'conversions');
   const goalBudget      = g?.goals?.find((goal) => goal.metric === 'spend');
-  const goalRoas        = g?.goals?.find((goal) => goal.metric === 'roas');
 
   const conversionsProgressPct = goalConversions
     ? computeProgressPercent(goalConversions.current_value, goalConversions.target_value)
@@ -797,9 +789,8 @@ export function Dashboard() {
 
   const sparkConversions = goalConversions?.sparkline;
   const sparkBudget      = goalBudget?.sparkline;
-  const sparkRoas        = goalRoas?.sparkline;
 
-  const alerts   = g?.alerts ?? [];
+  // const alerts   = g?.alerts ?? []; // comentado junto com FuryAlerts
   const idealLine = g?.ideal_line;
 
   if (loadingGoals) {
@@ -856,10 +847,10 @@ export function Dashboard() {
         )}
 
         {/* ── Metrics grid ─────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <MetricCard
             icon={Users}
-            label="Clientes"
+            label="Pessoas"
             value={hasRealData ? s.conversions.toLocaleString('pt-BR') : '--'}
             sparkline={sparkConversions}
             hasRealData={hasRealData}
@@ -886,23 +877,12 @@ export function Dashboard() {
           />
           <MetricCard
             icon={ShoppingBag}
-            label="Custo por Cliente"
+            label="Custo por Pessoa"
             value={
               hasRealData
                 ? `R$ ${s.cpa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 : '--'
             }
-          />
-          <MetricCard
-            icon={TrendingUp}
-            label="Retorno do Investimento"
-            value={hasRealData && s.roas > 0 ? `${s.roas.toFixed(1)}x` : '--'}
-            sparkline={sparkRoas}
-            hasRealData={hasRealData}
-            hasGoals={hasGoals}
-            progressPct={goalRoas?.progress_pct}
-            progressStatus={goalRoas?.status}
-            progressLabel={hasGoals && goalRoas && s.roas > 0 ? `${Math.round(goalRoas.progress_pct)}% da meta de retorno` : undefined}
           />
         </div>
 
@@ -911,18 +891,13 @@ export function Dashboard() {
           <InstagramEngagementSection startDate={startDate} endDate={endDate} />
         </ErrorBoundary>
 
-        {/* ── Bottom section: chart + alerts ───────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-          {/* Weekly performance chart (60% = 3 of 5 cols) */}
-          <div className="lg:col-span-3">
-            <WeeklyChart data={dailyData} hasRealData={hasRealData} idealLine={idealLine} />
-          </div>
+        {/* ── Weekly performance chart ──────────────────────────────────────── */}
+        <WeeklyChart data={dailyData} hasRealData={hasRealData} idealLine={idealLine} />
 
-          {/* Fury alerts (40% = 2 of 5 cols) */}
-          <div className="lg:col-span-2">
-            <FuryAlerts alerts={alerts} />
-          </div>
-        </div>
+        {/* ── Fury alerts (comentado — dashboard simplificado) ─────────────── */}
+        {/* <div className="lg:col-span-2">
+          <FuryAlerts alerts={alerts} />
+        </div> */}
 
         {/* ── Active campaigns table ────────────────────────────────────────── */}
         <div className="mt-5">

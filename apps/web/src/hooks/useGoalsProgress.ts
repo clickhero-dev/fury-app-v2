@@ -45,10 +45,10 @@ export interface GoalsProgressData {
 
 const OBJECTIVES: Record<string, string> = {
   aumentar_vendas: 'Aumentar Vendas',
-  gerar_leads: 'Gerar Leads',
-  aumentar_awareness: 'Aumentar Awareness',
-  maximizar_roas: 'Maximizar ROAS',
-  reduzir_cpa: 'Reduzir CPA',
+  gerar_leads: 'Pessoas Alcançadas',
+  aumentar_awareness: 'Ser Mais Visto',
+  maximizar_roas: 'Melhor Resultado',
+  reduzir_cpa: 'Menor Custo por Pessoa',
 };
 
 export function translateObjective(key?: string) {
