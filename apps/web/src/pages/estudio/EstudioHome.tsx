@@ -1,42 +1,17 @@
 import { useState, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, Film, ImageIcon, Loader2, Sparkles, Trash2, Wand2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Loader2, Sparkles, Trash2 } from 'lucide-react';
 import { AppLayout, Button, Card, CardContent, EmptyState, LoadingSpinner } from '@/components';
 import api from '@/lib/api';
 import { MOCK_ASSETS } from '@/lib/studio-mock';
 import type { StudioAsset, GenerateCreativePayload, GenerateCreativeResponse } from '@/types/studio';
-import { CreativeWizard } from './components/CreativeWizard';
 import { CreativeResult } from './components/CreativeResult';
 
-type ViewState = 'library' | 'wizard' | 'loading' | 'result' | 'error' | 'quick-create';
+type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create';
 
-interface ModelInfo {
-  id: string;
-  label: string;
-  description: string;
-  category: string;
-  type: 'image' | 'video';
-}
-
-const FALLBACK_IMAGE_MODELS: ModelInfo[] = [
-  { id: 'bytedance-seed/seedream-4.5', label: 'Seedream 4.5', description: 'ByteDance — Mais barato ($0.04/img)', category: 'barato', type: 'image' },
-  { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 Klein 4B', description: 'Black Forest Labs — Melhor custo-benefício', category: 'custo-beneficio', type: 'image' },
-  { id: 'black-forest-labs/flux.2-max', label: 'FLUX.2 Max', description: 'Black Forest Labs — Máxima qualidade', category: 'qualidade', type: 'image' },
-];
-
-const FALLBACK_VIDEO_MODELS: ModelInfo[] = [
-  { id: 'google/veo-3.1-lite', label: 'Veo 3.1 Lite', description: 'Google — Mais barato. Clipes curtos c/ áudio.', category: 'barato', type: 'video' },
-  { id: 'kwaivgi/kling-video-o1', label: 'Kling Video O1', description: 'Kuaishou — $0.112/s, cinematográfico.', category: 'custo-beneficio', type: 'video' },
-  { id: 'google/veo-3.1', label: 'Veo 3.1', description: 'Google — Máxima qualidade. 1080p, áudio.', category: 'qualidade', type: 'video' },
-];
-
-function categoryBadge(category: string) {
-  if (category === 'barato') return { label: '💰 Barato', class: 'bg-green-100 text-green-700' };
-  if (category === 'custo-beneficio') return { label: '⭐ Custo-benefício', class: 'bg-blue-100 text-blue-700' };
-  return { label: '👑 Qualidade', class: 'bg-purple-100 text-purple-700' };
-}
-type AssetType = 'all' | 'image' | 'video';
-type ComplianceStatus = 'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected';
+// ponytail: só imagem, só flux.2 max — sem seletor de tipo nem modelo
+const CREATIVE_TYPE = 'image' as const;
+const IMAGE_MODEL = 'black-forest-labs/flux.2-max';
 
 interface StudioAssetResponse {
   assets: StudioAsset[];
@@ -46,31 +21,13 @@ export function EstudioHome() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<ViewState>('library');
   const [generationResult, setGenerationResult] = useState<GenerateCreativeResponse | null>(null);
-  const [filterType, setFilterType] = useState<AssetType>('all');
-  const [filterStatus, setFilterStatus] = useState<ComplianceStatus>('all');
+  const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // ─── OpenRouter state ──────────────────────────────────────────────
-  const [creativeType, setCreativeType] = useState<'image' | 'video'>('image');
-  const [selectedImageModel, setSelectedImageModel] = useState('black-forest-labs/flux.2-klein-4b');
-  const [selectedVideoModel, setSelectedVideoModel] = useState('google/veo-3.1-lite');
   const [orPrompt, setOrPrompt] = useState('');
   const [progressMessage, setProgressMessage] = useState('');
-
-  const generateMutation = useMutation({
-    mutationFn: async (payload: GenerateCreativePayload) => {
-      const res = await api.post<GenerateCreativeResponse>('/studio/creative/generate', payload);
-      return res.data;
-    },
-    onSuccess: (data) => {
-      setGenerationResult(data);
-      setView('result');
-      void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
-    },
-    onError: () => {
-      setView('error');
-    },
-  });
 
   const deleteMutation = useMutation({
     mutationFn: async (assetId: string) => {
@@ -85,7 +42,7 @@ export function EstudioHome() {
     },
   });
 
-  // ─── OpenRouter mutations ──────────────────────────────────────────
+  // ─── OpenRouter image mutation (sempre flux.2 max) ─────────────────
   const orImageMutation = useMutation({
     mutationFn: async (payload: { model: string; prompt: string }) => {
       setProgressMessage('Gerando imagem...');
@@ -104,36 +61,6 @@ export function EstudioHome() {
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
     onError: () => { setView('error'); setProgressMessage(''); },
-  });
-
-  const orVideoMutation = useMutation({
-    mutationFn: async (payload: { model: string; prompt: string; duration?: number }) => {
-      setProgressMessage('Submetendo vídeo...');
-      const res = await api.post('/openrouter/generate-video', payload);
-      return res.data;
-    },
-    onSuccess: (data: any) => {
-      setGenerationResult({
-        type: 'video',
-        assetId: data.creativeAssetId,
-        imageUrl: '', // videos don't have imageUrl
-        videoUrl: data.videoUrl,
-        creativeData: { headline: '', primary_text: '', cta: '' },
-      });
-      setView('result');
-      setProgressMessage('');
-      void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
-    },
-    onError: () => { setView('error'); setProgressMessage(''); },
-  });
-
-  const modelsQuery = useQuery({
-    queryKey: ['openrouter', 'models'],
-    queryFn: async () => {
-      const res = await api.get('/openrouter/models');
-      return res.data as { image: ModelInfo[]; video: ModelInfo[] };
-    },
-    staleTime: 1000 * 60 * 60,
   });
 
   const { data, isLoading } = useQuery<StudioAssetResponse>({
@@ -155,24 +82,10 @@ export function EstudioHome() {
     });
   }, [assetList, filterType, filterStatus]);
 
-  const handleGenerate = (payload: GenerateCreativePayload) => {
-    setView('loading');
-    generateMutation.mutate(payload);
-  };
+  // ponytail: removido handleGenerate / handleSaveToLibrary / handleStartWizard / handleNewCreative
 
-  // "Salvar na Biblioteca": persiste o asset SEM trocar a view global — o
-  // usuário permanece na tela de edição. O endpoint de geração já persiste o
-  // asset; aqui não navegamos nem abrimos o fluxo de publicação. Lança em erro
-  // para o componente exibir feedback inline.
-  const handleSaveToLibrary = async (payload: GenerateCreativePayload) => {
-    await api.post<GenerateCreativeResponse>('/studio/creative/generate', payload);
-    await queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
-  };
-
-  const handleStartWizard = () => setView('wizard');
   const handleStartQuickCreate = () => {
     setOrPrompt('');
-    setCreativeType('image');
     setView('quick-create');
   };
   const handleQuickCreate = async () => {
@@ -182,37 +95,21 @@ export function EstudioHome() {
     setProgressMessage('Aprimorando prompt...');
 
     try {
-      // Enhance prompt with brand context + AI improvement
       const enhanceRes = await api.post('/openrouter/enhance-prompt', {
         prompt: finalPrompt,
-        type: creativeType,
+        type: CREATIVE_TYPE,
       });
       const { enhancedPrompt } = enhanceRes.data as { enhancedPrompt: string };
-
-      setProgressMessage(creativeType === 'image' ? 'Gerando imagem...' : 'Submetendo vídeo...');
-
-      if (creativeType === 'image') {
-        orImageMutation.mutate({ model: selectedImageModel, prompt: enhancedPrompt });
-      } else {
-        orVideoMutation.mutate({ model: selectedVideoModel, prompt: enhancedPrompt, duration: 4 });
-      }
+      setProgressMessage('Gerando imagem...');
+      orImageMutation.mutate({ model: IMAGE_MODEL, prompt: enhancedPrompt });
     } catch {
-      // Fallback: use original prompt if enhancement fails
-      setProgressMessage(creativeType === 'image' ? 'Gerando imagem...' : 'Submetendo vídeo...');
-      if (creativeType === 'image') {
-        orImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt });
-      } else {
-        orVideoMutation.mutate({ model: selectedVideoModel, prompt: finalPrompt, duration: 4 });
-      }
+      setProgressMessage('Gerando imagem...');
+      orImageMutation.mutate({ model: IMAGE_MODEL, prompt: finalPrompt });
     }
   };
   const handleBackToLibrary = () => {
     setView('library');
     setGenerationResult(null);
-  };
-  const handleNewCreative = () => {
-    setGenerationResult(null);
-    setView('wizard');
   };
 
   const handleViewDetails = (asset: StudioAsset) => {
@@ -225,21 +122,21 @@ export function EstudioHome() {
     setView('result');
   };
 
-  const typeOptions: Array<{ value: AssetType; label: string }> = [
+  const typeOptions: Array<{ value: 'all' | 'image' | 'video'; label: string }> = [
     { value: 'all', label: 'Todos' },
     { value: 'image', label: 'Imagens' },
     { value: 'video', label: 'Vídeos' },
   ];
 
-  const statusOptions: Array<{ value: ComplianceStatus; label: string }> = [
+  const statusOptions: Array<{ value: 'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'; label: string }> = [
     { value: 'all', label: 'Todos' },
     { value: 'pending_compliance', label: 'Gerado' },
     { value: 'approved', label: 'Pronto' },
   ];
 
-  const getTypeCount = (type: AssetType) =>
+  const getTypeCount = (type: string) =>
     type === 'all' ? assetList.length : assetList.filter((a) => a.type === type).length;
-  const getStatusCount = (status: ComplianceStatus) =>
+  const getStatusCount = (status: string) =>
     status === 'all' ? assetList.length : assetList.filter((a) => a.complianceStatus === status).length;
 
   const header = (
@@ -256,7 +153,6 @@ export function EstudioHome() {
             Biblioteca
           </button>
           <h2 className="text-lg font-bold text-text-primary">
-            {view === 'wizard' && 'Novo Criativo'}
             {view === 'quick-create' && 'Criação Rápida'}
             {view === 'loading' && 'Gerando...'}
             {view === 'result' && 'Seu Criativo'}
@@ -274,17 +170,17 @@ export function EstudioHome() {
         {/* LIBRARY VIEW */}
         {view === 'library' && (
           <>
-            {/* Hero */}
+            {/* Hero — só criação rápida */}
             <div className="flex flex-col items-center text-center pt-4 pb-2 space-y-4">
               <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-sm text-[#667085]">
                 <span className="flex items-center gap-2">
-                  <span className="text-base">🎯</span>
-                  Responda 5 perguntas rápidas
+                  <span className="text-base">✨</span>
+                  Descreva o criativo que deseja
                 </span>
                 <span className="text-[#D1D5DB] hidden sm:block">→</span>
                 <span className="flex items-center gap-2">
                   <span className="text-base">🤖</span>
-                  A IA cria o criativo por você
+                  A IA cria a imagem para você
                 </span>
                 <span className="text-[#D1D5DB] hidden sm:block">→</span>
                 <span className="flex items-center gap-2">
@@ -293,23 +189,13 @@ export function EstudioHome() {
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <Button
-                  onClick={handleStartQuickCreate}
-                  className="inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white px-8 py-3 text-base font-semibold rounded-2xl h-auto"
-                >
-                  <Sparkles size={18} />
-                  Criação Rápida
-                </Button>
-                <Button
-                  onClick={handleStartWizard}
-                  variant="outline"
-                  className="inline-flex items-center justify-center gap-2 border-[#EA580C] text-[#EA580C] hover:bg-[#FFF4ED] px-8 py-3 text-base font-semibold rounded-2xl h-auto"
-                >
-                  <Wand2 size={18} />
-                  Wizard Completo
-                </Button>
-              </div>
+              <Button
+                onClick={handleStartQuickCreate}
+                className="inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white px-8 py-3 text-base font-semibold rounded-2xl h-auto"
+              >
+                <Sparkles size={18} />
+                Criação Rápida
+              </Button>
             </div>
 
             {/* Library */}
@@ -370,10 +256,10 @@ export function EstudioHome() {
                   title={assetList.length === 0 ? 'Gere seu primeiro criativo com IA' : 'Nenhum ativo com esses filtros'}
                   description={
                     assetList.length === 0
-                      ? 'Clique em "Criar Novo Anúncio" para começar'
+                      ? 'Clique em "Criação Rápida" para começar'
                       : 'Ajuste os filtros ou crie novos criativos'
                   }
-                  action={{ label: 'Criar Novo Anúncio', onClick: handleStartWizard }}
+                  action={{ label: 'Criar Criativo', onClick: handleStartQuickCreate }}
                 />
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -395,96 +281,12 @@ export function EstudioHome() {
           </>
         )}
 
-        {/* WIZARD VIEW */}
-        {view === 'wizard' && (
-          <>
-            <div className="pt-2">
-              <p className="text-sm text-[#667085]">Responda as perguntas abaixo — o FURY cria o criativo completo para você</p>
-            </div>
-            <CreativeWizard onGenerate={handleGenerate} onSaveToLibrary={handleSaveToLibrary} submitting={generateMutation.isPending} onBack={handleBackToLibrary} />
-          </>
-        )}
-
-        {/* QUICK CREATE VIEW — OpenRouter */}
+        {/* QUICK CREATE VIEW — só imagem, flux.2 max */}
         {view === 'quick-create' && (
           <div className="max-w-2xl mx-auto space-y-6">
             <div className="pt-2">
-              <p className="text-sm text-[#667085]">Escolha o tipo de criativo, o modelo de IA e descreva o que deseja gerar</p>
+              <p className="text-sm text-[#667085]">Descreva o criativo que deseja gerar — o FURY usa FLUX.2 Max para máxima qualidade</p>
             </div>
-
-            {/* Tipo de criativo */}
-            <Card>
-              <CardContent className="space-y-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Tipo de criativo</p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setCreativeType('image')}
-                    className={`flex-1 rounded-xl border-2 py-4 text-center transition-all ${
-                      creativeType === 'image'
-                        ? 'border-[#E8631A] bg-[#FFF4ED]'
-                        : 'border-[#E6E8EC] hover:border-[#F0B48E]'
-                    }`}
-                  >
-                    <ImageIcon className="mx-auto h-6 w-6 text-[#E8631A]" />
-                    <p className="mt-1 text-sm font-semibold text-[#101828]">Imagem</p>
-                    <p className="text-xs text-[#667085]">Banners, anúncios estáticos</p>
-                  </button>
-                  <button
-                    onClick={() => setCreativeType('video')}
-                    className={`flex-1 rounded-xl border-2 py-4 text-center transition-all ${
-                      creativeType === 'video'
-                        ? 'border-[#E8631A] bg-[#FFF4ED]'
-                        : 'border-[#E6E8EC] hover:border-[#F0B48E]'
-                    }`}
-                  >
-                    <Film className="mx-auto h-6 w-6 text-[#E8631A]" />
-                    <p className="mt-1 text-sm font-semibold text-[#101828]">Vídeo</p>
-                    <p className="text-xs text-[#667085]">Clipes com áudio nativo</p>
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Seletor de modelo */}
-            <Card>
-              <CardContent className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">
-                  Modelo de {creativeType === 'image' ? 'imagem' : 'vídeo'}
-                </p>
-                {(creativeType === 'image'
-                  ? (modelsQuery.data?.image ?? FALLBACK_IMAGE_MODELS)
-                  : (modelsQuery.data?.video ?? FALLBACK_VIDEO_MODELS)
-                ).map((model) => {
-                  const badge = categoryBadge(model.category);
-                  const isSelected = creativeType === 'image'
-                    ? selectedImageModel === model.id
-                    : selectedVideoModel === model.id;
-                  return (
-                    <button
-                      key={model.id}
-                      onClick={() =>
-                        creativeType === 'image'
-                          ? setSelectedImageModel(model.id)
-                          : setSelectedVideoModel(model.id)
-                      }
-                      className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
-                        isSelected
-                          ? 'border-[#E8631A] bg-[#FFF4ED]'
-                          : 'border-[#E6E8EC] bg-white hover:border-[#F0B48E]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-[#101828]">{model.label}</span>
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badge.class}`}>
-                          {badge.label}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 text-xs text-[#667085]">{model.description}</p>
-                    </button>
-                  );
-                })}
-              </CardContent>
-            </Card>
 
             {/* Prompt */}
             <Card>
@@ -498,26 +300,20 @@ export function EstudioHome() {
                 />
                 <div className="flex items-center justify-between text-xs text-[#667085]">
                   <span>{orPrompt.trim().length}/1000</span>
-                  <span>{creativeType === 'image' ? 'Imagem' : 'Vídeo'} • prompt detalhado = melhor resultado</span>
+                  <span>Imagem • prompt detalhado = melhor resultado</span>
                 </div>
-                <div className="flex gap-3">
-                  <Button
-                    onClick={handleQuickCreate}
-                    disabled={orPrompt.trim().length < 10 || orImageMutation.isPending || orVideoMutation.isPending}
-                    className="flex-1 bg-[#E8631A] hover:bg-[#D45714]"
-                  >
-                    {(orImageMutation.isPending || orVideoMutation.isPending) ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="mr-2 h-4 w-4" />
-                    )}
-                    Gerar {creativeType === 'image' ? 'Imagem' : 'Vídeo'}
-                  </Button>
-                  <Button variant="outline" onClick={() => setView('wizard')} className="flex-1">
-                    <Wand2 className="mr-2 h-4 w-4" />
-                    Usar Wizard Completo
-                  </Button>
-                </div>
+                <Button
+                  onClick={handleQuickCreate}
+                  disabled={orPrompt.trim().length < 10 || orImageMutation.isPending}
+                  className="w-full bg-[#E8631A] hover:bg-[#D45714]"
+                >
+                  {orImageMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  Gerar Imagem
+                </Button>
               </CardContent>
             </Card>
           </div>
@@ -531,29 +327,17 @@ export function EstudioHome() {
             </div>
             <div>
               <h2 className="text-2xl font-bold text-[#101828]">
-                {progressMessage || (creativeType === 'video' ? 'O FURY está criando seu vídeo...' : 'O FURY está criando seu anúncio...')}
+                {progressMessage || 'O FURY está criando sua imagem...'}
               </h2>
               <p className="mt-2 text-sm text-[#667085]">
-                {creativeType === 'video'
-                  ? 'A geração de vídeo com IA pode levar até 2 minutos. Aguarde...'
-                  : 'A geração com IA e a renderização podem levar até 15 segundos'}
+                A geração com IA e a renderização podem levar até 15 segundos
               </p>
             </div>
-            {creativeType === 'video' && (
-              <div className="flex flex-col gap-1 text-xs text-[#667085]">
-                <span>✦ Aprimorando o prompt com o contexto da marca</span>
-                <span>✦ Submetendo job de vídeo ao OpenRouter</span>
-                <span>✦ Aguardando renderização (polling a cada 3s, máx 120s)</span>
-                <span>✦ Salvando na biblioteca</span>
-              </div>
-            )}
-            {creativeType === 'image' && (
-              <div className="flex flex-col gap-1 text-xs text-[#667085]">
-                <span>✦ Aprimorando o prompt com o contexto da marca</span>
-                <span>✦ Gerando imagem via IA</span>
-                <span>✦ Salvando na biblioteca</span>
-              </div>
-            )}
+            <div className="flex flex-col gap-1 text-xs text-[#667085]">
+              <span>✦ Aprimorando o prompt com o contexto da marca</span>
+              <span>✦ Gerando imagem via FLUX.2 Max</span>
+              <span>✦ Salvando na biblioteca</span>
+            </div>
           </div>
         )}
 
@@ -561,12 +345,12 @@ export function EstudioHome() {
         {view === 'result' && generationResult && (
           <>
             <div className="pt-2">
-              <p className="text-sm text-[#667085]">Edite os textos, regenere ou publique direto no Meta</p>
+              <p className="text-sm text-[#667085]">Regenere com ajustes, salve ou publique direto no Meta</p>
             </div>
             <CreativeResult
               result={generationResult}
               onBack={handleBackToLibrary}
-              onNewCreative={handleNewCreative}
+              onNewCreative={handleStartQuickCreate}
             />
           </>
         )}
@@ -582,7 +366,7 @@ export function EstudioHome() {
               <p className="mt-2 text-sm text-[#667085]">Verifique sua conexão e tente novamente</p>
             </div>
             <div className="flex gap-3">
-              <Button onClick={() => setView('wizard')} className="bg-[#EA580C] hover:bg-[#C2410C] text-white">
+              <Button onClick={handleStartQuickCreate} className="bg-[#EA580C] hover:bg-[#C2410C] text-white">
                 Tentar novamente
               </Button>
               <Button variant="outline" onClick={handleBackToLibrary}>
