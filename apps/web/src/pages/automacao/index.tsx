@@ -1,1 +1,1 @@
-export { MinhasRegras } from './MinhasRegras';
+export { MinhasRegras, MinhasRegrasContent } from './MinhasRegras';

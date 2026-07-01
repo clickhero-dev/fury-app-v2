@@ -10,7 +10,8 @@ import {
   type CreateFuryRulePayload,
 } from '@/hooks/useFuryRules';
 
-export function MinhasRegras() {
+// ponytail: conteúdo extraído para ser reutilizado na tab Configurações > Automação
+export function MinhasRegrasContent() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedRule, setSelectedRule] = useState<FuryRule | undefined>();
   const [deleteRuleId, setDeleteRuleId] = useState<string | null>(null);
@@ -181,16 +182,7 @@ export function MinhasRegras() {
   ];
 
   return (
-    <AppLayout
-      header={
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h2 className="text-lg font-bold text-text-primary">Minhas Regras</h2>
-          <Button variant="primary" size="md" onClick={() => handleOpenDialog()}>
-            +<span className="hidden sm:inline"> Nova Regra</span>
-          </Button>
-        </div>
-      }
-    >
+    <>
       <div className="space-y-6">
         <PageHeader
           title="Minhas Regras"
@@ -237,6 +229,40 @@ export function MinhasRegras() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
+}
+
+// ponytail: wrapper com AppLayout para rota standalone (backward compat)
+export function MinhasRegras() {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedRule, setSelectedRule] = useState<FuryRule | undefined>();
+  const [deleteRuleId, setDeleteRuleId] = useState<string | null>(null);
+
+  const { data, isLoading } = useGetFuryRules();
+  const createMutation = useCreateFuryRule();
+  const updateMutation = useUpdateFuryRule();
+  const deleteMutation = useDeleteFuryRule();
+
+  const rules = data?.data || [];
+
+  const handleOpenDialog = (rule?: FuryRule) => {
+    setSelectedRule(rule);
+    setIsDialogOpen(true);
+  };
+
+  return (
+    <AppLayout
+      header={
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h2 className="text-lg font-bold text-text-primary">Minhas Regras</h2>
+          <Button variant="primary" size="md" onClick={() => handleOpenDialog()}>
+            +<span className="hidden sm:inline"> Nova Regra</span>
+          </Button>
+        </div>
+      }
+    >
+      <MinhasRegrasContent />
     </AppLayout>
   );
 }

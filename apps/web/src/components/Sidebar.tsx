@@ -12,7 +12,8 @@ interface SidebarProps {
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Megaphone, label: 'Campanhas', path: '/campanhas' },
-  { icon: Zap, label: 'Automação', path: '/automacao/minhas-regras' },
+  // ponytail: automação movida para Configurações > tab Automação
+  // { icon: Zap, label: 'Automação', path: '/automacao/minhas-regras' },
   // ponytail: oculto até feature de orçamento smart estar pronta
   // { icon: Wallet, label: 'Orçamento Smart', path: '/orcamento-smart' },
   { icon: Palette, label: 'Estúdio', path: '/estudio' },

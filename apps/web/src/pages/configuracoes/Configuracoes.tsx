@@ -8,6 +8,7 @@ import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
 import { useTheme } from '@/hooks/useTheme';
 import api from '@/lib/api';
 import { MetasPage } from '../onboarding/MetasPage';
+import { MinhasRegrasContent } from '../automacao/MinhasRegras';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { ConfiguracoesTabsNav } from './ConfiguracoesTabsNav';
 import {
@@ -18,9 +19,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
-type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento' | 'integracoes' | 'fury' | 'metas';
+type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento' | 'integracoes' | 'fury' | 'metas' | 'automacao';
 
-const VALID_TABS: TabType[] = ['geral', 'notificacoes', 'seguranca', 'equipe', 'faturamento', 'integracoes', 'fury', 'metas'];
+const VALID_TABS: TabType[] = ['geral', 'notificacoes', 'seguranca', 'equipe', 'faturamento', 'integracoes', 'fury', 'metas', 'automacao'];
 
 interface NotificationPrefs {
   campanhas: boolean;
@@ -522,6 +523,15 @@ export function Configuracoes() {
           {/* Metas */}
           <TabsContent value="metas">
             <MetasPage />
+          </TabsContent>
+
+          {/* Automação — movido da leftbar para cá */}
+          <TabsContent value="automacao">
+            <Card>
+              <div className="p-6">
+                <MinhasRegrasContent />
+              </div>
+            </Card>
           </TabsContent>
         </Tabs>
     </AppLayout>
