@@ -2,19 +2,7 @@ import { db } from '@fury/db';
 import { sql } from 'drizzle-orm';
 import type { BusinessKPI, TechnicalKPI, EngagementKPI, KPIQueryParams } from '../types/observability.types.js';
 
-/**
- * TODO: SuperAdmin Authorization
- *
- * This service currently accepts tenantId as a parameter and returns cross-tenant metrics.
- * Before deployment to production, implement a SuperAdmin authorization check that:
- * 1. Validates req.user.role === 'superadmin' (or equivalent platform-wide role)
- * 2. Restricts access to authorized users only
- * 3. Logs all access to observability endpoints for audit trails
- *
- * Current architecture supports this via middleware that would be added to routes.
- */
-
-const QUERY_TIMEOUT_MS = 5000; // 5 seconds timeout per query
+const QUERY_TIMEOUT_MS = 5000;
 
 export class ObservabilityService {
   /**
@@ -85,6 +73,7 @@ export class ObservabilityService {
   }
 
   private async getMRR(params: KPIQueryParams) {
+    const tenantId = params.tenantId;
     const query = sql`
       SELECT
         COALESCE(DATE_TRUNC('month', i.created_at)::DATE, DATE_TRUNC('month', CURRENT_DATE)::DATE) as period_start,
@@ -93,6 +82,7 @@ export class ObservabilityService {
       FROM invoices i
       WHERE i.status = 'paid'
         AND i.paid_at IS NOT NULL
+        AND i.tenant_id = ${tenantId}
         AND DATE_TRUNC('month', i.created_at) = DATE_TRUNC('month', CURRENT_DATE)
       GROUP BY DATE_TRUNC('month', i.created_at)
       UNION ALL
@@ -101,7 +91,7 @@ export class ObservabilityService {
         0 as mrr_brl,
         0 as paid_subscriptions
       WHERE NOT EXISTS (
-        SELECT 1 FROM invoices WHERE status = 'paid' AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
+        SELECT 1 FROM invoices WHERE status = 'paid' AND tenant_id = ${tenantId} AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
       )
       LIMIT 1
     `;
@@ -121,6 +111,7 @@ export class ObservabilityService {
   }
 
   private async getTrialToPaid(params: KPIQueryParams) {
+    const tenantId = params.tenantId;
     const query = sql`
       SELECT
         DATE_TRUNC('month', s.created_at)::DATE as cohort_month,
@@ -134,6 +125,7 @@ export class ObservabilityService {
       FROM subscriptions s
       WHERE s.trial_ends_at IS NOT NULL
         AND s.trial_ends_at > s.created_at
+        AND s.tenant_id = ${tenantId}
       GROUP BY DATE_TRUNC('month', s.created_at)
       ORDER BY cohort_month DESC
       LIMIT 1
@@ -155,6 +147,7 @@ export class ObservabilityService {
   }
 
   private async getChurn(params: KPIQueryParams) {
+    const tenantId = params.tenantId;
     const query = sql`
       SELECT
         DATE_TRUNC('month', s.updated_at)::DATE as churn_month,
@@ -167,6 +160,7 @@ export class ObservabilityService {
         ) as churn_rate_pct
       FROM subscriptions s
       WHERE s.status = 'cancelled'
+        AND s.tenant_id = ${tenantId}
         AND s.updated_at > CURRENT_DATE - INTERVAL '6 months'
       GROUP BY DATE_TRUNC('month', s.updated_at)
       ORDER BY churn_month DESC
@@ -189,6 +183,7 @@ export class ObservabilityService {
   }
 
   private async getROAS(params: KPIQueryParams) {
+    const tenantId = params.tenantId;
     const query = sql`
       SELECT
         ROUND(AVG(CASE
@@ -201,6 +196,7 @@ export class ObservabilityService {
         COUNT(*) as campaigns_analyzed
       FROM campaigns c
       WHERE c.status IN ('active', 'paused')
+        AND c.tenant_id = ${tenantId}
         AND c.metrics ? 'spend'
         AND c.metrics ? 'revenue'
         AND (c.metrics->>'spend')::NUMERIC > 0
@@ -260,14 +256,15 @@ export class ObservabilityService {
   }
 
   private async getActiveCampaigns(params: KPIQueryParams) {
+    const tenantId = params.tenantId;
     const query = sql`
       SELECT
         COUNT(*) as active_campaigns_total,
-        COUNT(DISTINCT tenant_id) as tenants_with_active_campaigns,
         MIN(created_at) as oldest_active_campaign,
         MAX(created_at) as newest_active_campaign
       FROM campaigns
       WHERE status = 'active'
+        AND tenant_id = ${tenantId}
     `;
 
     const result = await this.executeQuery<any>(query);
@@ -284,6 +281,7 @@ export class ObservabilityService {
   }
 
   private async getLatency(params: KPIQueryParams) {
+    const tenantId = params.tenantId;
     const query = sql`
       SELECT
         PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY rl.response_time_ms) as p50_ms,
@@ -294,7 +292,8 @@ export class ObservabilityService {
         MAX(rl.response_time_ms) as max_ms,
         COUNT(*) as sample_count
       FROM request_logs rl
-      WHERE rl.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+      WHERE rl.tenant_id = ${tenantId}
+        AND rl.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
     `;
 
     const result = await this.executeQuery<any>(query);
@@ -315,6 +314,7 @@ export class ObservabilityService {
   }
 
   private async getErrorRate(params: KPIQueryParams) {
+    const tenantId = params.tenantId;
     const query = sql`
       SELECT
         COUNT(*) as total_requests,
@@ -333,7 +333,8 @@ export class ObservabilityService {
           ELSE ROUND(100.0 * COUNT(*) FILTER (WHERE rl.status_code >= 500) / COUNT(*), 2)
         END as error_5xx_pct
       FROM request_logs rl
-      WHERE rl.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+      WHERE rl.tenant_id = ${tenantId}
+        AND rl.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
     `;
 
     const result = await this.executeQuery<any>(query);
@@ -354,13 +355,15 @@ export class ObservabilityService {
   }
 
   private async getRPS(params: KPIQueryParams) {
+    const tenantId = params.tenantId;
     const query = sql`
       SELECT
         COUNT(*) as request_count,
         ROUND(COUNT(*) / 60.0, 2) as rps,
         DATE_TRUNC('minute', CURRENT_TIMESTAMP) as current_minute
       FROM request_logs rl
-      WHERE rl.created_at > CURRENT_TIMESTAMP - INTERVAL '1 minute'
+      WHERE rl.tenant_id = ${tenantId}
+        AND rl.created_at > CURRENT_TIMESTAMP - INTERVAL '1 minute'
     `;
 
     const result = await this.executeQuery<any>(query);
@@ -377,6 +380,7 @@ export class ObservabilityService {
   }
 
   private async getSlowEndpoints(params: KPIQueryParams) {
+    const tenantId = params.tenantId;
     const query = sql`
       SELECT
         COALESCE(rl.path_template, rl.path) as endpoint,
@@ -388,7 +392,8 @@ export class ObservabilityService {
         MAX(rl.response_time_ms) as max_ms,
         COUNT(*) FILTER (WHERE rl.status_code >= 500) as error_count
       FROM request_logs rl
-      WHERE rl.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days'
+      WHERE rl.tenant_id = ${tenantId}
+        AND rl.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days'
       GROUP BY COALESCE(rl.path_template, rl.path), rl.method
       HAVING COUNT(*) >= 50
       ORDER BY avg_ms DESC
@@ -441,14 +446,14 @@ export class ObservabilityService {
   }
 
   private async getActiveTenants24h(params: KPIQueryParams) {
+    const tenantId = params.tenantId;
     const query = sql`
       SELECT
-        COUNT(DISTINCT rl.tenant_id) as active_tenants_24h,
         COUNT(DISTINCT rl.user_id) as active_users_24h,
         COUNT(*) as total_requests
       FROM request_logs rl
-      WHERE rl.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
-        AND rl.tenant_id IS NOT NULL
+      WHERE rl.tenant_id = ${tenantId}
+        AND rl.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
     `;
 
     const result = await this.executeQuery<any>(query);
@@ -458,16 +463,17 @@ export class ObservabilityService {
 
     const row = result[0];
     return {
-      value: parseInt(row.active_tenants_24h) || 0,
+      value: parseInt(row.active_users_24h) || 0,
       timestamp: new Date().toISOString(),
     };
   }
 
   private async getAutomations(params: KPIQueryParams) {
+    const tenantId = params.tenantId;
     const query = sql`
       SELECT
-        (SELECT COUNT(*) FROM automation_rules WHERE DATE_TRUNC('day', created_at) = CURRENT_DATE) as created_today,
-        (SELECT COUNT(*) FROM automation_rules WHERE is_active = true) as active_rules,
+        (SELECT COUNT(*) FROM automation_rules WHERE tenant_id = ${tenantId} AND DATE_TRUNC('day', created_at) = CURRENT_DATE) as created_today,
+        (SELECT COUNT(*) FROM automation_rules WHERE tenant_id = ${tenantId} AND is_active = true) as active_rules,
         (SELECT COUNT(*) FROM rule_executions WHERE DATE_TRUNC('day', triggered_at) = CURRENT_DATE) as executions_today
     `;
 
@@ -486,6 +492,7 @@ export class ObservabilityService {
   }
 
   private async getCreatives(params: KPIQueryParams) {
+    const tenantId = params.tenantId;
     const query = sql`
       SELECT
         COUNT(*) as total_generated,
@@ -493,7 +500,8 @@ export class ObservabilityService {
         COUNT(*) FILTER (WHERE compliance_status = 'rejected') as rejected,
         COUNT(*) FILTER (WHERE compliance_status = 'pending_compliance') as pending
       FROM creative_assets
-      WHERE DATE_TRUNC('day', created_at) = CURRENT_DATE
+      WHERE tenant_id = ${tenantId}
+        AND DATE_TRUNC('day', created_at) = CURRENT_DATE
     `;
 
     const result = await this.executeQuery<any>(query);

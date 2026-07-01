@@ -35,7 +35,7 @@ router.use('/budget', budgetRoutes);
 router.use('/instagram', authMiddleware, tenantMiddleware, instagramRoutes);
 router.use('/dashboard', authMiddleware, tenantMiddleware, dashboardRoutes);
 router.use('/forms', authMiddleware, tenantMiddleware, formsRoutes);
-router.use('/observability', authMiddleware, observabilityRoutes);
+router.use('/metrics', authMiddleware, tenantMiddleware, observabilityRoutes);
 router.use('/fury', furyRoutes);
 router.use('/goals', goalsRoutes);
 router.use('/billing', billingRoutes);

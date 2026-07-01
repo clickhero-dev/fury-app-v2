@@ -35,9 +35,26 @@ services:
     networks:
       - fury-network
 
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fury-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=estagiario@2026#
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - fury-network
+    depends_on:
+      - postgres
+
 volumes:
   postgres_data:
   redis_data:
+  grafana_data:
 
 networks:
   fury-network:
