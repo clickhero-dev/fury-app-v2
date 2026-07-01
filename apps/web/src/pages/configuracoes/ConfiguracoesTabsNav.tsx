@@ -9,7 +9,8 @@ export type ConfiguracoesTab =
   | 'faturamento'
   | 'integracoes'
   | 'fury'
-  | 'brand-kit';
+  | 'brand-kit'
+  | 'metas';
 
 const TAB_LABELS: { value: ConfiguracoesTab; label: string; to: string }[] = [
   { value: 'geral', label: 'Geral', to: '/configuracoes?tab=geral' },
@@ -20,6 +21,7 @@ const TAB_LABELS: { value: ConfiguracoesTab; label: string; to: string }[] = [
   { value: 'integracoes', label: 'Integrações', to: '/configuracoes?tab=integracoes' },
   { value: 'fury', label: 'FURY Engine', to: '/configuracoes?tab=fury' },
   { value: 'brand-kit', label: 'Dados da Marca', to: '/configuracoes/brand-kit' },
+  { value: 'metas', label: 'Metas', to: '/configuracoes?tab=metas' },
 ];
 
 export function ConfiguracoesTabsNav({ activeTab }: { activeTab: ConfiguracoesTab }) {

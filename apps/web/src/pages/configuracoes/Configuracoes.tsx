@@ -7,6 +7,7 @@ import { IntegracoesContent } from './IntegracoesContent';
 import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
 import { useTheme } from '@/hooks/useTheme';
 import api from '@/lib/api';
+import { MetasPage } from '../onboarding/MetasPage';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { ConfiguracoesTabsNav } from './ConfiguracoesTabsNav';
 import {
@@ -17,9 +18,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
-type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento' | 'integracoes' | 'fury';
+type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento' | 'integracoes' | 'fury' | 'metas';
 
-const VALID_TABS: TabType[] = ['geral', 'notificacoes', 'seguranca', 'equipe', 'faturamento', 'integracoes', 'fury'];
+const VALID_TABS: TabType[] = ['geral', 'notificacoes', 'seguranca', 'equipe', 'faturamento', 'integracoes', 'fury', 'metas'];
 
 interface NotificationPrefs {
   campanhas: boolean;
@@ -516,6 +517,11 @@ export function Configuracoes() {
           {/* FURY Engine */}
           <TabsContent value="fury">
             <FuryConfig />
+          </TabsContent>
+
+          {/* Metas */}
+          <TabsContent value="metas">
+            <MetasPage />
           </TabsContent>
         </Tabs>
     </AppLayout>

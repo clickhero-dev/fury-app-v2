@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
-import { AppLayout, PageHeader } from '@/components';
+import { PageHeader } from '@/components';
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -169,7 +169,7 @@ export function MetasPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <AppLayout>
+    <>
       {/* Toast */}
       {toast && (
         <div
@@ -386,11 +386,11 @@ export function MetasPage() {
         {step === 1 && (
           <p className="text-center text-xs text-[#9CA3AF] mt-5">
             Você pode atualizar suas metas a qualquer momento em{' '}
-            <span className="font-semibold">Dashboard → Minhas Metas</span>
+            <span className="font-semibold">Configurações → Metas</span>
           </p>
         )}
       </div>
-    </AppLayout>
+    </>
   );
 }
 

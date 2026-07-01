@@ -6,6 +6,7 @@ import { MetaAuthorizePage } from './pages/onboarding/MetaAuthorizePage';
 import { MetasPage } from './pages/onboarding/MetasPage';
 import { SelecionarAtivosPage } from './pages/onboarding/SelecionarAtivosPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { AuthenticatedShell } from './components/layout/AuthenticatedShell';
 import { Dashboard } from './pages/dashboard/Dashboard';
 import { Metas } from './pages/dashboard/Metas';
@@ -57,7 +58,7 @@ export const router = createBrowserRouter([
     element: <AuthenticatedShell />,
     children: [
       { path: '/dashboard', element: <Dashboard /> },
-      { path: '/onboarding/metas', element: <MetasPage /> },
+      { path: '/onboarding/metas', element: <AppLayout><MetasPage /></AppLayout> },
       { path: '/dashboard/metas', element: <Metas /> },
       { path: '/campanhas', element: <PainelCampanhas /> },
       { path: '/campanhas/regras', element: <RegrasCampanhas /> },

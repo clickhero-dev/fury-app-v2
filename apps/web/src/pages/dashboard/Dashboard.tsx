@@ -162,7 +162,7 @@ function HeroStrip({
           {translateObjective(objective)}
         </p>
         {!hasGoals && (
-          <Link to="/onboarding/metas" className="text-xs text-[#EA580C] underline">
+          <Link to="/configuracoes?tab=metas" className="text-xs text-[#EA580C] underline">
             Configurar metas →
           </Link>
         )}
@@ -281,7 +281,7 @@ function MetricCard({
         {showProgress && (
           <div className="mt-1.5 space-y-1">
             {isNoGoals ? (
-              <Link to="/onboarding/metas" className="text-xs text-[#EA580C] underline cursor-pointer">
+              <Link to="/configuracoes?tab=metas" className="text-xs text-[#EA580C] underline cursor-pointer">
                 Defina uma meta →
               </Link>
             ) : progressLabel ? (

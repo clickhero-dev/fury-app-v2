@@ -178,7 +178,7 @@ export function Metas() {
           title="Minhas Metas"
           description="Configure e acompanhe os objetivos das suas campanhas"
           actions={
-            <Button variant="outline" size="sm" onClick={() => navigate('/onboarding/metas')}>
+            <Button variant="outline" size="sm" onClick={() => navigate('/configuracoes?tab=metas')}>
               Editar metas
             </Button>
           }
