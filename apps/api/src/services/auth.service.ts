@@ -47,6 +47,7 @@ function userToDTO(user: any): UserDTO {
     role: user.role,
     tenantId: user.tenantId,
     notificationPrefs: (user.notificationPrefs as UserDTO['notificationPrefs']) ?? DEFAULT_NOTIFICATION_PREFS,
+    audienceDefaults: user.audienceDefaults as UserDTO['audienceDefaults'],
     createdAt: user.createdAt,
   };
 }
