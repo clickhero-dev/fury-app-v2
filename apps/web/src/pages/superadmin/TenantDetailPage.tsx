@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, UserPlus, Upload, X, Trash2, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, UserPlus, Upload, X, Image as ImageIcon } from 'lucide-react';
 import api from '@/lib/api';
 import { FURY_COLORS } from '@/lib/constants';
 
@@ -51,8 +51,6 @@ const GENDERS = [
 ];
 
 const AGE_OPTIONS = [18, 21, 25, 30, 35, 40, 45, 50, 55, 60, 65];
-
-function field(name: string) { return name.replace(/([A-Z])/g, ' $1').replace('target', 'Target ').trim(); }
 
 export function TenantDetailPage() {
   const { id } = useParams();
