@@ -17,6 +17,7 @@ import furyRoutes from "./fury.routes.js";
 import goalsRoutes from "./goals.routes.js";
 import billingRoutes from "./billing.routes.js";
 import brandKitRoutes from "./brand-kit.routes.js";
+import superadminRoutes from "./superadmin.routes.js";
 
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { tenantMiddleware } from "../middleware/tenant.middleware.js";
@@ -46,5 +47,6 @@ router.use(
   tenantMiddleware,
   observabilityRoutes,
 );
+router.use("/admin", superadminRoutes);
 
 export default router;

@@ -18,7 +18,7 @@ import {
 import { sql } from 'drizzle-orm';
 
 // Enums
-export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member']);
+export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member', 'superadmin']);
 export const conditionFieldEnum = pgEnum('condition_field', ['cpc', 'ctr', 'roas', 'cpa', 'spend']);
 export const conditionOperatorEnum = pgEnum('condition_operator', ['gt', 'lt', 'eq']);
 export const ruleActionEnum = pgEnum('rule_action', ['pause_campaign', 'reduce_budget', 'notify', 'increase_budget']);

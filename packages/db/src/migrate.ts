@@ -59,6 +59,36 @@ const STEPS: MigrationStep[] = [
   { tag: '0016_fix_request_logs_user_id' },
   { tag: '0017_add_request_logs_default_partition' },
   { tag: '0018_add_audience_defaults' },
+  {
+    tag: '0019_add_superadmin_role',
+    afterHook: async (client) => {
+      // Seed superadmin user if env vars are set
+      const email = process.env.SUPERADMIN_EMAIL;
+      const password = process.env.SUPERADMIN_PASSWORD;
+      if (email && password) {
+        const existing = await client`SELECT id FROM "users" WHERE email = ${email}`;
+        if (existing.length === 0) {
+          const bcrypt = await import('bcryptjs');
+          const hash = await bcrypt.hash(password, 12);
+          // Create a tenant for the superadmin
+          const [tenant] = await client`
+            INSERT INTO "tenants" (name, slug)
+            VALUES ('FURY Superadmin', 'fury-superadmin')
+            RETURNING id
+          `;
+          await client`
+            INSERT INTO "users" (tenant_id, email, password_hash, role, name)
+            VALUES (${tenant.id}, ${email}, ${hash}, 'superadmin', 'FURY Admin')
+          `;
+          console.log('    + superadmin user created');
+        } else {
+          console.log('    + superadmin user already exists');
+        }
+      } else {
+        console.log('    - SUPERADMIN_EMAIL/PASSWORD not set, skipping superadmin seed');
+      }
+    },
+  },
 ];
 
 async function runMigrate() {

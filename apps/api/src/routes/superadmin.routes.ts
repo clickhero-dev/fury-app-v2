@@ -1,0 +1,30 @@
+import { Router } from 'express';
+import * as superadminController from '../controllers/superadmin.controller.js';
+import { authMiddleware } from '../middleware/auth.middleware.js';
+import { superadminMiddleware } from '../middleware/superadmin.middleware.js';
+
+const router = Router();
+
+// All routes require auth + superadmin role
+router.use(authMiddleware, superadminMiddleware);
+
+// Tenants
+router.get('/tenants', superadminController.listTenants);
+router.get('/tenants/:id', superadminController.getTenant);
+
+// Users
+router.post('/users', superadminController.createUser);
+router.patch('/users/:id', superadminController.updateUser);
+
+// Subscription
+router.patch('/tenants/:tenantId/subscription', superadminController.updateSubscription);
+
+// Fury Config (Configurações tab)
+router.patch('/tenants/:tenantId/fury-config', superadminController.updateFuryConfig);
+
+// Plans
+router.get('/plans', superadminController.listPlans);
+router.post('/plans', superadminController.createPlan);
+router.patch('/plans/:id', superadminController.updatePlan);
+
+export default router;

@@ -24,6 +24,11 @@ import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
 import { Subscription } from './pages/billing/Subscription';
 import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
+import { AdminLogin } from './pages/superadmin/AdminLogin';
+import { AdminLayout } from './pages/superadmin/AdminLayout';
+import { TenantsPage } from './pages/superadmin/TenantsPage';
+import { TenantDetailPage } from './pages/superadmin/TenantDetailPage';
+import { PlansPage } from './pages/superadmin/PlansPage';
 
 export const router = createBrowserRouter([
   {
@@ -75,6 +80,19 @@ export const router = createBrowserRouter([
       { path: '/assinatura', element: <Subscription /> },
       { path: '/orcamento-smart', element: <OrcamentoSmart /> },
       { path: '/components-demo', element: <ComponentsDemo /> },
+    ],
+  },
+  {
+    path: '/admin/login',
+    element: <AdminLogin />,
+  },
+  {
+    path: '/admin',
+    element: <AdminLayout />,
+    children: [
+      { index: true, element: <TenantsPage /> },
+      { path: 'tenants/:id', element: <TenantDetailPage /> },
+      { path: 'planos', element: <PlansPage /> },
     ],
   },
 ]);
