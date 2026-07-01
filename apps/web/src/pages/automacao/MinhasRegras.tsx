@@ -184,10 +184,15 @@ export function MinhasRegrasContent() {
   return (
     <>
       <div className="space-y-6">
-        <PageHeader
-          title="Minhas Regras"
-          description="Crie e gerencie regras automáticas para otimizar suas campanhas"
-        />
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <PageHeader
+            title="Minhas Regras"
+            description="Crie e gerencie regras automáticas para otimizar suas campanhas"
+          />
+          <Button variant="primary" size="md" onClick={() => handleOpenDialog()}>
+            +<span className="hidden sm:inline"> Nova Regra</span>
+          </Button>
+        </div>
 
         <DataTable
           columns={columns}
@@ -234,31 +239,13 @@ export function MinhasRegrasContent() {
 }
 
 // ponytail: wrapper com AppLayout para rota standalone (backward compat)
+// MinhasRegrasContent tem seu próprio estado interno de diálogo
 export function MinhasRegras() {
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedRule, setSelectedRule] = useState<FuryRule | undefined>();
-  const [deleteRuleId, setDeleteRuleId] = useState<string | null>(null);
-
-  const { data, isLoading } = useGetFuryRules();
-  const createMutation = useCreateFuryRule();
-  const updateMutation = useUpdateFuryRule();
-  const deleteMutation = useDeleteFuryRule();
-
-  const rules = data?.data || [];
-
-  const handleOpenDialog = (rule?: FuryRule) => {
-    setSelectedRule(rule);
-    setIsDialogOpen(true);
-  };
-
   return (
     <AppLayout
       header={
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <h2 className="text-lg font-bold text-text-primary">Minhas Regras</h2>
-          <Button variant="primary" size="md" onClick={() => handleOpenDialog()}>
-            +<span className="hidden sm:inline"> Nova Regra</span>
-          </Button>
         </div>
       }
     >

@@ -1,4 +1,4 @@
-import { LayoutDashboard, Megaphone, Palette, Settings, ChevronLeft, Zap, CreditCard, X, LogOut } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Palette, Settings, ChevronLeft, CreditCard, X, LogOut } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';

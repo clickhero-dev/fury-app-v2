@@ -20,11 +20,11 @@ O projeto tem variáveis de ambiente em 3 lugares diferentes. Cada um tem seu pr
 | `DATABASE_URL` | `postgresql://user:senha@ep-xxx.neon.tech/neondb` | URL principal do banco |
 | `TEST_DATABASE_URL` | `postgresql://user:senha@ep-xxx-teste.neon.tech/neondb` | URL do banco de testes |
 
-### Cache (Redis via Railway)
+### Cache (Redis via EasyPanel)
 
 | Variável | Exemplo | Descrição |
 |----------|---------|-----------|
-| `REDIS_URL` | `redis://default:senha@containers-us-west-xxx.railway.app:6379` | URL do Redis |
+| `REDIS_URL` | `redis://redis-click-hero:6379` | URL do Redis (hostname interno EasyPanel) |
 
 ### Autenticação JWT
 
@@ -77,8 +77,8 @@ O projeto tem variáveis de ambiente em 3 lugares diferentes. Cada um tem seu pr
 | Variável | Exemplo | Descrição |
 |----------|---------|-----------|
 | `PUBLIC_BASE_URL` | `http://localhost:3000` | URL base da API (para assets públicos) |
-| `APP_URL` | `https://fury-app-v2-production.up.railway.app` | URL da API em produção |
-| `FRONTEND_URL` | `https://fury-app-v2-web.vercel.app` | URL do frontend em produção |
+| `APP_URL` | `https://clickhero-fury-api.u7pe19.easypanel.host` | URL da API em produção |
+| `FRONTEND_URL` | `https://clickhero-fury-web.u7pe19.easypanel.host` | URL do frontend em produção |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:5174` | Origens permitidas no CORS |
 
 ### Assets do Estúdio
@@ -101,7 +101,7 @@ O projeto tem variáveis de ambiente em 3 lugares diferentes. Cada um tem seu pr
 |----------|---------|-----------|
 | `VITE_API_URL` | `http://localhost:3000/api` | URL base da API consumida pelo frontend |
 
-Em produção, esse valor aponta para a URL do Railway.
+Em produção, esse valor aponta para a URL do EasyPanel.
 
 ---
 
@@ -121,7 +121,7 @@ Em produção, esse valor aponta para a URL do Railway.
 | Credencial | Onde encontrar |
 |------------|---------------|
 | `DATABASE_URL` | Painel do Neon → seu projeto → Connection string |
-| `REDIS_URL` | Railway → seu serviço Redis → Variables |
+| `REDIS_URL` | EasyPanel → serviço `redis-click-hero` → hostname interno |
 | `META_APP_ID` / `META_APP_SECRET` | Meta for Developers → seu app |
 | `ANTHROPIC_API_KEY` | console.anthropic.com |
 | `OPENAI_API_KEY` | platform.openai.com |

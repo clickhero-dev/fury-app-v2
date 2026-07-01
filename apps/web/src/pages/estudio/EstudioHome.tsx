@@ -606,7 +606,8 @@ interface AssetCardProps {
   onViewDetails: () => void;
 }
 
-const BACKEND_URL = 'https://fury-app-v2-production.up.railway.app';
+// ponytail: relative URLs resolved against API origin, fallback for local dev
+const BACKEND_URL = api.defaults.baseURL?.replace(/\/api$/, '') ?? '';
 
 function resolveAssetUrl(url: string | null | undefined): string | null {
   if (!url) return null;

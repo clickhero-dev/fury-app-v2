@@ -142,7 +142,7 @@ export function generateMetaAuthUrl(tenantId: string, context: OAuthContext = 'o
   const appId = getRequiredEnv('META_APP_ID');
   const redirectUri =
     process.env.META_REDIRECT_URI ??
-    'https://fury-app-v2-production.up.railway.app/api/meta/auth/callback';
+    `${process.env.APP_URL ?? `https://${process.env.DOMAIN ?? 'clickhero-fury-api.u7pe19.easypanel.host'}`}/api/meta/auth/callback`;
   const state = signOAuthState({ tenantId, context, returnUrl: RETURN_URLS[context] });
 
   const authUrl = new URL(META_OAUTH_URL);
@@ -173,7 +173,7 @@ export async function handleMetaOAuthCallback(
   const appSecret = getRequiredEnv('META_APP_SECRET');
   const redirectUri =
     process.env.META_REDIRECT_URI ??
-    'https://fury-app-v2-production.up.railway.app/api/meta/auth/callback';
+    `${process.env.APP_URL ?? `https://${process.env.DOMAIN ?? 'clickhero-fury-api.u7pe19.easypanel.host'}`}/api/meta/auth/callback`;
   const shortToken = await exchangeCodeForToken({
     clientId: appId,
     clientSecret: appSecret,

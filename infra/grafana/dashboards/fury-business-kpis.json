@@ -1,0 +1,426 @@
+{
+  "id": null,
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "P8A870D41C96BBEB8"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "P8A870D41C96BBEB8"
+          },
+          "format": "table",
+          "rawSql": "SELECT status, COUNT(*) AS total FROM campaigns GROUP BY status ORDER BY total DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "Campanhas por Status",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "P8A870D41C96BBEB8"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "P8A870D41C96BBEB8"
+          },
+          "format": "table",
+          "rawSql": "SELECT t.name AS tenant, ROUND(AVG(COALESCE((ps.metrics_snapshot->>'roas')::numeric, 0)), 2) AS avg_roas FROM performance_scores ps JOIN campaigns c ON c.id = ps.campaign_id JOIN tenants t ON t.id = ps.tenant_id WHERE ps.computed_at > NOW() - INTERVAL '30 days' GROUP BY t.name ORDER BY avg_roas DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "ROAS Médio por Tenant (30d)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "P8A870D41C96BBEB8"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "P8A870D41C96BBEB8"
+          },
+          "format": "table",
+          "rawSql": "SELECT DATE_TRUNC('day', ps.computed_at) AS day, SUM(COALESCE((ps.metrics_snapshot->>'spend')::numeric, 0)) AS total_spend FROM performance_scores ps WHERE ps.computed_at > NOW() - INTERVAL '30 days' GROUP BY day ORDER BY day",
+          "refId": "A"
+        }
+      ],
+      "title": "Gasto Total Diário (30d)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "P8A870D41C96BBEB8"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "P8A870D41C96BBEB8"
+          },
+          "format": "table",
+          "rawSql": "SELECT grade, COUNT(*) AS total FROM performance_scores ps JOIN campaigns c ON c.id = ps.campaign_id WHERE c.status = 'active' AND ps.computed_at > NOW() - INTERVAL '7 days' GROUP BY grade ORDER BY CASE grade WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3 WHEN 'D' THEN 4 WHEN 'F' THEN 5 END",
+          "refId": "A"
+        }
+      ],
+      "title": "Distribuição de Notas de Performance",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "P8A870D41C96BBEB8"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "P8A870D41C96BBEB8"
+          },
+          "format": "table",
+          "rawSql": "SELECT t.name AS tenant, ROUND(AVG(COALESCE((ps.metrics_snapshot->>'cpa')::numeric, 0)), 2) AS avg_cpa FROM performance_scores ps JOIN tenants t ON t.id = ps.tenant_id WHERE ps.computed_at > NOW() - INTERVAL '30 days' GROUP BY t.name ORDER BY avg_cpa ASC",
+          "refId": "A"
+        }
+      ],
+      "title": "CPA Médio por Tenant (30d)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "P8A870D41C96BBEB8"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 6,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "P8A870D41C96BBEB8"
+          },
+          "format": "table",
+          "rawSql": "SELECT t.name AS tenant, ROUND(AVG(COALESCE((ps.metrics_snapshot->>'ctr')::numeric, 0)), 2) AS avg_ctr FROM performance_scores ps JOIN tenants t ON t.id = ps.tenant_id WHERE ps.computed_at > NOW() - INTERVAL '30 days' GROUP BY t.name ORDER BY avg_ctr DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "CTR Médio por Tenant (30d)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "P8A870D41C96BBEB8"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 7,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "P8A870D41C96BBEB8"
+          },
+          "format": "table",
+          "rawSql": "SELECT t.name AS tenant, COUNT(*) AS active_campaigns, SUM(COALESCE((c.budget->>'daily_budget')::numeric, 0)) AS total_daily_budget FROM campaigns c JOIN tenants t ON t.id = c.tenant_id WHERE c.status = 'active' GROUP BY t.name ORDER BY total_daily_budget DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "Campanhas Ativas com Budget",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "P8A870D41C96BBEB8"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 8,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "P8A870D41C96BBEB8"
+          },
+          "format": "table",
+          "rawSql": "SELECT s.status, COUNT(*) AS subscriptions, COALESCE(SUM(p.price_cents) / 100.0, 0) AS mrr_reais FROM subscriptions s JOIN plans p ON p.id = s.plan_id WHERE s.status IN ('active', 'trial', 'past_due') GROUP BY s.status ORDER BY mrr_reais DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "MRR por Status de Assinatura",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "P8A870D41C96BBEB8"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 9,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "P8A870D41C96BBEB8"
+          },
+          "format": "table",
+          "rawSql": "SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE s.status = 'active') / NULLIF(COUNT(*), 0), 1) AS conversion_pct FROM subscriptions s WHERE s.trial_ends_at IS NOT NULL AND s.created_at > NOW() - INTERVAL '90 days'",
+          "refId": "A"
+        }
+      ],
+      "title": "Conversão de Trial",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "P8A870D41C96BBEB8"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 10,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "P8A870D41C96BBEB8"
+          },
+          "format": "table",
+          "rawSql": "SELECT form_type, status, COUNT(*) AS total FROM form_submissions WHERE created_at > NOW() - INTERVAL '30 days' GROUP BY form_type, status ORDER BY form_type, total DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "Form Submissions (30d)",
+      "type": "table"
+    }
+  ],
+  "refresh": "60s",
+  "schemaVersion": 40,
+  "tags": [
+    "fury",
+    "business",
+    "clickhero"
+  ],
+  "timezone": "browser",
+  "title": "📈 FURY — KPIs de Negócio",
+  "uid": "fury-business-kpis",
+  "version": 1
+}
