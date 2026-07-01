@@ -169,7 +169,7 @@ export function TenantDetailPage() {
     setSaving(true);
     try {
       let photoUrls: string[] = [];
-      try { photoUrls = JSON.parse(brandForm.photoUrls); } catch { }
+      try { photoUrls = JSON.parse(brandForm.photoUrls); } catch { /* invalid JSON, keep empty array */ }
       await api.patch(`/admin/tenants/${id}/brand-kit`, {
         logoUrl: brandForm.logoUrl,
         primaryColor: brandForm.primaryColor,

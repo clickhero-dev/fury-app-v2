@@ -1,4 +1,3 @@
-/// <reference path="../types/express.d.ts" />
 // Unified startup seed — idempotent, safe to run every deployment.
 // Ensures: superadmin user + demo user exist with valid bcrypt hashes.
 import postgres from 'postgres';
