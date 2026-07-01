@@ -4,7 +4,7 @@ import { AlertCircle, ArrowLeft, Loader2, Sparkles, Trash2 } from 'lucide-react'
 import { AppLayout, Button, Card, CardContent, EmptyState, LoadingSpinner } from '@/components';
 import api from '@/lib/api';
 import { MOCK_ASSETS } from '@/lib/studio-mock';
-import type { StudioAsset, GenerateCreativePayload, GenerateCreativeResponse } from '@/types/studio';
+import type { StudioAsset, GenerateCreativeResponse } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
 
 type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create';
