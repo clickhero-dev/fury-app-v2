@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { eq, desc, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
-import { db, tenants, users, subscriptions, plans, furyConfig } from '@fury/db';
+import { db, tenants, users, subscriptions, plans, furyConfig, brandKits } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
 
 const createUserSchema = z.object({
@@ -17,6 +17,13 @@ const updateUserSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   email: z.string().email().optional(),
   role: z.enum(['owner', 'admin', 'member']).optional(),
+  audienceDefaults: z.object({
+    city: z.string().optional(),
+    cityKey: z.string().optional(),
+    ageMin: z.number().int().min(18).max(65).optional(),
+    ageMax: z.number().int().min(18).max(65).optional(),
+    gender: z.enum(['all', 'male', 'female']).optional(),
+  }).optional(),
 });
 
 const updateSubscriptionSchema = z.object({
@@ -32,6 +39,14 @@ const updateFuryConfigSchema = z.object({
   targetCpa: z.string().optional(),
   targetCtr: z.string().optional(),
   targetBudgetUtilization: z.string().optional(),
+});
+
+const updateBrandKitSchema = z.object({
+  logoUrl: z.string().optional(),
+  primaryColor: z.string().optional(),
+  secondaryColor: z.string().optional(),
+  voiceTone: z.string().optional(),
+  photoUrls: z.array(z.string()).optional(),
 });
 
 const createPlanSchema = z.object({
@@ -119,6 +134,10 @@ export async function getTenant(req: Request, res: Response, next: NextFunction)
       where: eq(furyConfig.tenantId, tenant.id),
     });
 
+    const brandKit = await db.query.brandKits.findFirst({
+      where: eq(brandKits.tenantId, tenant.id),
+    });
+
     res.json({
       success: true,
       data: {
@@ -126,6 +145,7 @@ export async function getTenant(req: Request, res: Response, next: NextFunction)
         users: tenantUsers,
         subscription: sub ? { ...sub, plan } : null,
         furyConfig: config,
+        brandKit,
       },
       timestamp: new Date().toISOString(),
     });
@@ -157,7 +177,6 @@ export async function createUser(req: Request, res: Response, next: NextFunction
       })
       .returning();
 
-    // Strip passwordHash
     const { passwordHash: _, ...safe } = user;
 
     res.status(201).json({ success: true, data: safe, timestamp: new Date().toISOString() });
@@ -179,6 +198,7 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
     if (body.name !== undefined) updates.name = body.name;
     if (body.email !== undefined) updates.email = body.email;
     if (body.role !== undefined) updates.role = body.role;
+    if (body.audienceDefaults !== undefined) updates.audienceDefaults = body.audienceDefaults;
 
     if (Object.keys(updates).length > 0) {
       await db.update(users).set(updates).where(eq(users.id, req.params.id));
@@ -208,7 +228,6 @@ export async function updateSubscription(req: Request, res: Response, next: Next
     if (body.trialEndsAt !== undefined) updates.trialEndsAt = new Date(body.trialEndsAt);
     if (body.currentPeriodEnd !== undefined) updates.currentPeriodEnd = new Date(body.currentPeriodEnd);
 
-    // Store billingType in asaas fields (ponytail: reuse existing column)
     if (body.billingType !== undefined) {
       updates.asaasSubscriptionId = body.billingType;
     }
@@ -248,6 +267,49 @@ export async function updateFuryConfig(req: Request, res: Response, next: NextFu
         tenantId: req.params.tenantId,
         ...values,
       } as unknown as typeof furyConfig.$inferInsert);
+    }
+
+    res.json({ success: true, data: null, timestamp: new Date().toISOString() });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── Brand Kit ─────────────────────────────────────────
+
+export async function getBrandKit(req: Request, res: Response, next: NextFunction) {
+  try {
+    const bk = await db.query.brandKits.findFirst({
+      where: eq(brandKits.tenantId, req.params.tenantId),
+    });
+
+    res.json({ success: true, data: bk, timestamp: new Date().toISOString() });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function upsertBrandKit(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = updateBrandKitSchema.parse(req.body);
+    const existing = await db.query.brandKits.findFirst({
+      where: eq(brandKits.tenantId, req.params.tenantId),
+    });
+
+    const values: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.logoUrl !== undefined) values.logoUrl = body.logoUrl;
+    if (body.primaryColor !== undefined) values.primaryColor = body.primaryColor;
+    if (body.secondaryColor !== undefined) values.secondaryColor = body.secondaryColor;
+    if (body.voiceTone !== undefined) values.voiceTone = body.voiceTone;
+    if (body.photoUrls !== undefined) values.photoUrls = JSON.stringify(body.photoUrls);
+
+    if (existing) {
+      await db.update(brandKits).set(values).where(eq(brandKits.id, existing.id));
+    } else {
+      await db.insert(brandKits).values({
+        tenantId: req.params.tenantId,
+        ...values,
+      } as unknown as typeof brandKits.$inferInsert);
     }
 
     res.json({ success: true, data: null, timestamp: new Date().toISOString() });

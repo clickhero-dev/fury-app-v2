@@ -3,14 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, UserPlus } from 'lucide-react';
 import api from '@/lib/api';
 
-type Tab = 'users' | 'subscription' | 'config';
+type Tab = 'users' | 'subscription' | 'config' | 'audience' | 'brandkit';
 
 interface TenantData {
   id: string;
   name: string;
   slug: string;
   createdAt: string;
-  users: { id: string; name: string; email: string; role: string; createdAt: string }[];
+  users: { id: string; name: string; email: string; role: string; audienceDefaults?: AudienceDefaults; createdAt: string }[];
   subscription: {
     id: string;
     planId: string;
@@ -27,6 +27,22 @@ interface TenantData {
     targetCtr: string;
     targetBudgetUtilization: string;
   } | null;
+  brandKit: {
+    id: string;
+    logoUrl: string;
+    primaryColor: string;
+    secondaryColor: string;
+    voiceTone: string;
+    photoUrls: string[];
+  } | null;
+}
+
+interface AudienceDefaults {
+  city?: string;
+  cityKey?: string;
+  ageMin?: number;
+  ageMax?: number;
+  gender?: string;
 }
 
 interface Plan {
@@ -52,6 +68,13 @@ export function TenantDetailPage() {
   const [subForm, setSubForm] = useState({ planId: '', status: '', billingType: '', trialEndsAt: '', currentPeriodEnd: '' });
   const [configForm, setConfigForm] = useState({ targetRoas: '', targetCpa: '', targetCtr: '', targetBudgetUtilization: '' });
 
+  // Audience form — applied to selected user
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [audienceForm, setAudienceForm] = useState<AudienceDefaults>({ city: '', cityKey: '', ageMin: 18, ageMax: 65, gender: 'all' });
+
+  // Brand Kit form
+  const [brandForm, setBrandForm] = useState({ logoUrl: '', primaryColor: '', secondaryColor: '', voiceTone: '', photoUrls: '' });
+
   useEffect(() => {
     Promise.all([
       api.get(`/admin/tenants/${id}`),
@@ -74,23 +97,87 @@ export function TenantDetailPage() {
         targetCtr: tenant.furyConfig?.targetCtr ?? '',
         targetBudgetUtilization: tenant.furyConfig?.targetBudgetUtilization ?? '',
       });
+
+      // Pre-select first owner user for audience
+      const owner = tenant.users.find(u => u.role === 'owner') ?? tenant.users[0];
+      if (owner) {
+        setSelectedUserId(owner.id);
+        setAudienceForm({
+          city: owner.audienceDefaults?.city ?? '',
+          cityKey: owner.audienceDefaults?.cityKey ?? '',
+          ageMin: owner.audienceDefaults?.ageMin ?? 18,
+          ageMax: owner.audienceDefaults?.ageMax ?? 65,
+          gender: owner.audienceDefaults?.gender ?? 'all',
+        });
+      }
+
+      // Brand kit
+      const bk = tenant.brandKit;
+      setBrandForm({
+        logoUrl: bk?.logoUrl ?? '',
+        primaryColor: bk?.primaryColor ?? '',
+        secondaryColor: bk?.secondaryColor ?? '',
+        voiceTone: bk?.voiceTone ?? '',
+        photoUrls: bk?.photoUrls ? JSON.stringify(bk.photoUrls, null, 2) : '[]',
+      });
     }).catch(() => {}).finally(() => setLoading(false));
   }, [id]);
 
+  // When selected user changes, update audience form
+  const selectUserForAudience = (userId: string) => {
+    setSelectedUserId(userId);
+    const u = data?.users.find(u => u.id === userId);
+    if (u) {
+      setAudienceForm({
+        city: u.audienceDefaults?.city ?? '',
+        cityKey: u.audienceDefaults?.cityKey ?? '',
+        ageMin: u.audienceDefaults?.ageMin ?? 18,
+        ageMax: u.audienceDefaults?.ageMax ?? 65,
+        gender: u.audienceDefaults?.gender ?? 'all',
+      });
+    }
+  };
+
   const saveSub = async () => {
     setSaving(true);
-    try {
-      await api.patch(`/admin/tenants/${id}/subscription`, subForm);
-      setMsg('Assinatura atualizada');
-    } catch { setMsg('Erro ao salvar'); }
+    try { await api.patch(`/admin/tenants/${id}/subscription`, subForm); setMsg('Assinatura atualizada'); }
+    catch { setMsg('Erro ao salvar'); }
     finally { setSaving(false); }
   };
 
   const saveConfig = async () => {
     setSaving(true);
+    try { await api.patch(`/admin/tenants/${id}/fury-config`, configForm); setMsg('Configurações atualizadas'); }
+    catch { setMsg('Erro ao salvar'); }
+    finally { setSaving(false); }
+  };
+
+  const saveAudience = async () => {
+    if (!selectedUserId) return;
+    setSaving(true);
     try {
-      await api.patch(`/admin/tenants/${id}/fury-config`, configForm);
-      setMsg('Configurações atualizadas');
+      await api.patch(`/admin/users/${selectedUserId}`, { audienceDefaults: audienceForm });
+      setMsg('Público atualizado');
+      // Reload
+      const tRes = await api.get(`/admin/tenants/${id}`);
+      setData(tRes.data.data);
+    } catch { setMsg('Erro ao salvar'); }
+    finally { setSaving(false); }
+  };
+
+  const saveBrandKit = async () => {
+    setSaving(true);
+    try {
+      let photoUrls: string[] = [];
+      try { photoUrls = JSON.parse(brandForm.photoUrls); } catch { }
+      await api.patch(`/admin/tenants/${id}/brand-kit`, {
+        logoUrl: brandForm.logoUrl,
+        primaryColor: brandForm.primaryColor,
+        secondaryColor: brandForm.secondaryColor,
+        voiceTone: brandForm.voiceTone,
+        photoUrls,
+      });
+      setMsg('Brand Kit atualizado');
     } catch { setMsg('Erro ao salvar'); }
     finally { setSaving(false); }
   };
@@ -101,7 +188,6 @@ export function TenantDetailPage() {
       await api.post('/admin/users', { ...newUser, tenantId: id });
       setMsg('Usuário criado');
       setNewUser({ name: '', email: '', password: '', role: 'member' });
-      // reload
       const tRes = await api.get(`/admin/tenants/${id}`);
       setData(tRes.data.data);
     } catch { setMsg('Erro ao criar usuário'); }
@@ -115,6 +201,8 @@ export function TenantDetailPage() {
     { key: 'users', label: 'Usuários' },
     { key: 'subscription', label: 'Assinatura' },
     { key: 'config', label: 'Configurações' },
+    { key: 'audience', label: 'Público' },
+    { key: 'brandkit', label: 'Brand Kit' },
   ];
 
   return (
@@ -138,7 +226,7 @@ export function TenantDetailPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-zinc-900 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 mb-6 bg-zinc-900 rounded-xl p-1 w-fit flex-wrap">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -277,6 +365,110 @@ export function TenantDetailPage() {
           <button onClick={saveConfig} disabled={saving}
             className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors">
             <Save className="w-4 h-4" /> Salvar
+          </button>
+        </div>
+      )}
+
+      {/* Audience Tab */}
+      {tab === 'audience' && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Usuário</label>
+            <select value={selectedUserId} onChange={(e) => selectUserForAudience(e.target.value)}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500/30">
+              {data.users.map((u) => (
+                <option key={u.id} value={u.id}>{u.name} ({u.email}) — {u.role}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Cidade</label>
+              <input value={audienceForm.city ?? ''} onChange={(e) => setAudienceForm({ ...audienceForm, city: e.target.value })}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">City Key (FB)</label>
+              <input value={audienceForm.cityKey ?? ''} onChange={(e) => setAudienceForm({ ...audienceForm, cityKey: e.target.value })}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Idade Mínima</label>
+              <input type="number" value={audienceForm.ageMin ?? 18} onChange={(e) => setAudienceForm({ ...audienceForm, ageMin: Number(e.target.value) })}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Idade Máxima</label>
+              <input type="number" value={audienceForm.ageMax ?? 65} onChange={(e) => setAudienceForm({ ...audienceForm, ageMax: Number(e.target.value) })}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Gênero</label>
+              <select value={audienceForm.gender ?? 'all'} onChange={(e) => setAudienceForm({ ...audienceForm, gender: e.target.value })}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500/30">
+                <option value="all">Todos</option>
+                <option value="male">Masculino</option>
+                <option value="female">Feminino</option>
+              </select>
+            </div>
+          </div>
+
+          <button onClick={saveAudience} disabled={saving}
+            className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors">
+            <Save className="w-4 h-4" /> Salvar Público
+          </button>
+        </div>
+      )}
+
+      {/* Brand Kit Tab */}
+      {tab === 'brandkit' && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Logo URL</label>
+              <input value={brandForm.logoUrl} onChange={(e) => setBrandForm({ ...brandForm, logoUrl: e.target.value })}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Cor Primária</label>
+              <div className="flex gap-2">
+                <input value={brandForm.primaryColor} onChange={(e) => setBrandForm({ ...brandForm, primaryColor: e.target.value })}
+                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
+                <div className="w-10 h-10 rounded-lg border border-zinc-700 shrink-0" style={{ backgroundColor: brandForm.primaryColor || '#000' }} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Cor Secundária</label>
+              <div className="flex gap-2">
+                <input value={brandForm.secondaryColor} onChange={(e) => setBrandForm({ ...brandForm, secondaryColor: e.target.value })}
+                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500/30" />
+                <div className="w-10 h-10 rounded-lg border border-zinc-700 shrink-0" style={{ backgroundColor: brandForm.secondaryColor || '#000' }} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Tom de Voz</label>
+              <select value={brandForm.voiceTone} onChange={(e) => setBrandForm({ ...brandForm, voiceTone: e.target.value })}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500/30">
+                <option value="">Nenhum</option>
+                <option value="casual">Casual</option>
+                <option value="professional">Profissional</option>
+                <option value="bold">Bold</option>
+                <option value="luxury">Luxo</option>
+                <option value="playful">Playful</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">URLs de Fotos (JSON array)</label>
+            <textarea value={brandForm.photoUrls} onChange={(e) => setBrandForm({ ...brandForm, photoUrls: e.target.value })}
+              rows={3}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 font-mono focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+            />
+          </div>
+          <button onClick={saveBrandKit} disabled={saving}
+            className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors">
+            <Save className="w-4 h-4" /> Salvar Brand Kit
           </button>
         </div>
       )}

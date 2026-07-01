@@ -22,6 +22,10 @@ router.patch('/tenants/:tenantId/subscription', superadminController.updateSubsc
 // Fury Config (Configurações tab)
 router.patch('/tenants/:tenantId/fury-config', superadminController.updateFuryConfig);
 
+// Brand Kit
+router.get('/tenants/:tenantId/brand-kit', superadminController.getBrandKit);
+router.patch('/tenants/:tenantId/brand-kit', superadminController.upsertBrandKit);
+
 // Plans
 router.get('/plans', superadminController.listPlans);
 router.post('/plans', superadminController.createPlan);
