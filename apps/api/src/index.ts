@@ -16,6 +16,7 @@ import { ensureStudioAssetsDir, studioAssetsDir } from './lib/temp-storage.js';
 import { startStudioGenerationWorker, stopStudioGenerationWorker } from './workers/studio-generation.worker.js';
 import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
+import { createBullBoardRouter } from './admin/bull-board.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -40,22 +41,27 @@ app.use('/api', rateLimitMiddleware);
 app.use('/api', routes);
 app.use(errorHandler);
 
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: {
-      code: 'NOT_FOUND',
-      message: 'Route not found',
-    },
-    timestamp: new Date().toISOString(),
-  });
-});
-
 // Tudo que precisa de await fica dentro da IIFE
 (async () => {
   if (NODE_ENV !== 'test') {
     // Aguarda o Redis estar pronto antes de iniciar qualquer worker
     await waitForRedisReady();
+
+    // BullMQ admin dashboard — auth + role check enforced by the router itself
+    const bullBoardRouter = await createBullBoardRouter();
+    app.use(bullBoardRouter);
+
+    // 404 handler — must be after all valid routes
+    app.use((req, res) => {
+      res.status(404).json({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Route not found',
+        },
+        timestamp: new Date().toISOString(),
+      });
+    });
 
     const server = app.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
