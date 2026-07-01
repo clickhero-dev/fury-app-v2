@@ -380,14 +380,12 @@ const createWizardSchema = z
 
     location_city: z.string().min(1),
     location_city_key: z.string().min(1).optional(),
-    location_radius_km: z.number().int().refine((v) => [5, 10, 15, 20, 30, 50].includes(v), {
-      message: 'Raio inválido. Use 5, 10, 15, 20, 30 ou 50 km.',
-    }),
+    location_radius_km: z.number().int().min(1).default(30).optional(),
     age_min: z.number().int().min(18).max(65),
     age_max: z.number().int().min(18).max(65),
     gender: z.enum(['all', 'male', 'female']),
 
-    daily_budget_brl: z.number().min(5),
+    daily_budget_brl: z.number().min(7),
     duration_days: z.number().int().min(1).optional(),
 
     whatsapp_page_id: z.string().min(1).optional(),
@@ -489,7 +487,7 @@ export async function createWizardCampaignHandler(req: Request, res: Response, n
       destinationUrl: data.destination_url,
       locationCity: data.location_city,
       locationCityKey: data.location_city_key,
-      locationRadiusKm: data.location_radius_km,
+      locationRadiusKm: data.location_radius_km ?? 30,
       ageMin: data.age_min,
       ageMax: data.age_max,
       gender: data.gender,
@@ -602,7 +600,7 @@ export async function mcpLogWizardHandler(req: Request, res: Response, _next: Ne
         destinationUrl: data.destination_url,
         locationCity: data.location_city,
         locationCityKey: data.location_city_key,
-        locationRadiusKm: data.location_radius_km,
+        locationRadiusKm: data.location_radius_km ?? 30,
         ageMin: data.age_min,
         ageMax: data.age_max,
         gender: data.gender,

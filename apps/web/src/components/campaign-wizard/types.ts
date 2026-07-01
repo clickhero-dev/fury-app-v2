@@ -2,9 +2,6 @@ export type WizardObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';
 
 export type WizardGender = 'all' | 'male' | 'female';
 
-export const RADIUS_OPTIONS = [5, 10, 15, 20, 30, 50] as const;
-export type RadiusOption = (typeof RADIUS_OPTIONS)[number];
-
 export const AGE_OPTIONS = [18, 21, 25, 30, 35, 40, 45, 50, 55, 60, 65] as const;
 
 export interface WizardCreativeState {
@@ -21,7 +18,6 @@ export interface WizardCreativeState {
 export interface WizardAudienceState {
   city: string;
   cityKey?: string;
-  radiusKm: RadiusOption;
   ageMin: number;
   ageMax: number;
   gender: WizardGender;
@@ -67,7 +63,6 @@ export interface CreateWizardCampaignPayload {
   destination_url?: string;
   location_city: string;
   location_city_key?: string;
-  location_radius_km: number;
   age_min: number;
   age_max: number;
   gender: WizardGender;

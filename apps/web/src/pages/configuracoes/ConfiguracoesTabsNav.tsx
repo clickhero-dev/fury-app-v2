@@ -11,7 +11,8 @@ export type ConfiguracoesTab =
   | 'fury'
   | 'brand-kit'
   | 'metas'
-  | 'automacao';
+  | 'automacao'
+  | 'publico';
 
 const TAB_LABELS: { value: ConfiguracoesTab; label: string; to: string }[] = [
   { value: 'geral', label: 'Geral', to: '/configuracoes?tab=geral' },
@@ -24,6 +25,7 @@ const TAB_LABELS: { value: ConfiguracoesTab; label: string; to: string }[] = [
   { value: 'brand-kit', label: 'Dados da Marca', to: '/configuracoes/brand-kit' },
   { value: 'metas', label: 'Metas', to: '/configuracoes?tab=metas' },
   { value: 'automacao', label: 'Automação', to: '/configuracoes?tab=automacao' },
+  { value: 'publico', label: 'Público', to: '/configuracoes?tab=publico' },
 ];
 
 export function ConfiguracoesTabsNav({ activeTab }: { activeTab: ConfiguracoesTab }) {

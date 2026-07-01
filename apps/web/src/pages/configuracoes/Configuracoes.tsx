@@ -9,6 +9,7 @@ import { useTheme } from '@/hooks/useTheme';
 import api from '@/lib/api';
 import { MetasPage } from '../onboarding/MetasPage';
 import { MinhasRegrasContent } from '../automacao/MinhasRegras';
+import { PublicoContent } from './PublicoContent';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { ConfiguracoesTabsNav } from './ConfiguracoesTabsNav';
 import {
@@ -19,9 +20,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
-type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento' | 'integracoes' | 'fury' | 'metas' | 'automacao';
+type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento' | 'integracoes' | 'fury' | 'metas' | 'automacao' | 'publico';
 
-const VALID_TABS: TabType[] = ['geral', 'notificacoes', 'seguranca', 'equipe', 'faturamento', 'integracoes', 'fury', 'metas', 'automacao'];
+const VALID_TABS: TabType[] = ['geral', 'notificacoes', 'seguranca', 'equipe', 'faturamento', 'integracoes', 'fury', 'metas', 'automacao', 'publico'];
 
 interface NotificationPrefs {
   campanhas: boolean;
@@ -532,6 +533,11 @@ export function Configuracoes() {
                 <MinhasRegrasContent />
               </div>
             </Card>
+          </TabsContent>
+
+          {/* Público — público-alvo padrão para campanhas */}
+          <TabsContent value="publico">
+            <PublicoContent />
           </TabsContent>
         </Tabs>
     </AppLayout>

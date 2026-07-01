@@ -10,6 +10,13 @@ const updateMeSchema = z.object({
     performance: z.boolean(),
     equipe: z.boolean(),
   }).optional(),
+  audienceDefaults: z.object({
+    city: z.string().optional(),
+    cityKey: z.string().optional(),
+    ageMin: z.number().int().min(18).max(65).optional(),
+    ageMax: z.number().int().min(18).max(65).optional(),
+    gender: z.enum(['all', 'male', 'female']).optional(),
+  }).optional(),
 });
 
 const registerSchema = z.object({

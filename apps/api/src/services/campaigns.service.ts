@@ -1215,7 +1215,7 @@ export async function createCampaignFromWizard(
 
     const targeting: Record<string, unknown> = {
       geo_locations: {
-        cities: [{ key: parseInt(cityKey, 10), radius: args.locationRadiusKm, distance_unit: 'kilometer' }],
+        cities: [{ key: parseInt(cityKey, 10), radius: args.locationRadiusKm || 30, distance_unit: 'kilometer' }],
       },
       age_min: args.ageMin,
       age_max: args.ageMax,

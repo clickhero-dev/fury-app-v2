@@ -76,6 +76,7 @@ export const users = pgTable(
     passwordHash: text('password_hash').notNull(),
     role: userRoleEnum('role').notNull().default('member'),
     notificationPrefs: jsonb('notification_prefs').default(sql`'{"campanhas":true,"performance":true,"equipe":false}'::jsonb`),
+    audienceDefaults: jsonb('audience_defaults').default(sql`'{"city":"","ageMin":18,"ageMax":65,"gender":"all"}'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({

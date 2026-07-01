@@ -6,7 +6,7 @@ interface Step4BudgetProps {
   onChange: (updates: Partial<WizardBudgetState>) => void;
 }
 
-const BUDGET_SUGGESTIONS = [10, 20, 50, 100];
+const BUDGET_SUGGESTIONS = [7, 15, 30, 50, 100];
 
 const DURATION_SUGGESTIONS: { days: number; description: string }[] = [
   { days: 7, description: 'Ideal para testar rapidamente o desempenho do anúncio.' },
@@ -31,15 +31,15 @@ export function Step4Budget({ value, onChange }: Step4BudgetProps) {
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">R$</span>
           <input
             type="number"
-            min={5}
+            min={7}
             step={1}
             value={value.dailyBudgetBrl}
             onChange={(e) => onChange({ dailyBudgetBrl: Number(e.target.value) })}
             className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20"
           />
         </div>
-        {value.dailyBudgetBrl < 5 && (
-          <p className="text-sm text-red-600 mt-1">O investimento mínimo é de R$ 5,00 por dia.</p>
+        {value.dailyBudgetBrl < 7 && (
+          <p className="text-sm text-red-600 mt-1">O investimento mínimo é de R$ 7,00/dia (equivalente a US$ 1,00 + 30%).</p>
         )}
 
         <div className="flex gap-2 mt-3">
@@ -128,7 +128,7 @@ export function Step4Budget({ value, onChange }: Step4BudgetProps) {
           </p>
         )}
         <p className="text-xs text-gray-400">
-          Investimento mínimo recomendado: R$ 10/dia para resultados consistentes.
+          Investimento mínimo: R$ 7/dia (US$ 1,00 + 30% = R$ 7 ou aproximadamente US$ 1,30/dia para Meta Ads).
         </p>
       </div>
     </div>

@@ -7,8 +7,6 @@ import { useMetaPageWhatsappNumbers } from '../hooks/useMetaPages';
 import { useMetaAssetSelection } from '../hooks/useMetaAssetSelection';
 import {
   AGE_OPTIONS,
-  RADIUS_OPTIONS,
-  type RadiusOption,
   type WizardAudienceState,
   type WizardGender,
   type WizardMessagingDestination,
@@ -306,20 +304,6 @@ export function Step3Audience({ value, onChange, objective, whatsapp, onWhatsapp
         )}
       </div>
 
-      <div>
-        <label className="text-sm font-bold text-gray-900 mb-1 block">Raio de alcance</label>
-        <Select
-          value={value.radiusKm}
-          onChange={(e) => onChange({ radiusKm: Number(e.target.value) as RadiusOption })}
-        >
-          {RADIUS_OPTIONS.map((radius) => (
-            <option key={radius} value={radius}>
-              {radius} km
-            </option>
-          ))}
-        </Select>
-        <p className="text-xs text-gray-400 mt-1">Pessoas dentro desse raio ao redor da cidade.</p>
-      </div>
 
       <div>
         <label className="text-sm font-bold text-gray-900 mb-1 block">Faixa etária</label>
