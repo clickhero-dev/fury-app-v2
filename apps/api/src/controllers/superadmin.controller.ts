@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { eq, desc, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
-import { db, tenants, users, subscriptions, plans, furyConfig, brandKits } from '@fury/db';
+import { db, tenants, users, subscriptions, plans, furyConfig, brandKits, clientGoals } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
 
 const createUserSchema = z.object({
@@ -42,11 +42,19 @@ const updateFuryConfigSchema = z.object({
 });
 
 const updateBrandKitSchema = z.object({
-  logoUrl: z.string().optional(),
-  primaryColor: z.string().optional(),
-  secondaryColor: z.string().optional(),
-  voiceTone: z.string().optional(),
-  photoUrls: z.array(z.string()).optional(),
+  logo_url: z.string().url().nullable().optional(),
+  primary_color: z.string().optional(),
+  secondary_color: z.string().optional(),
+  voice_tone: z.enum(['professional', 'casual', 'urgent', 'premium']).optional(),
+  photo_urls: z.array(z.string()).optional(),
+});
+
+const upsertGoalsSchema = z.object({
+  objective: z.string().min(1),
+  niche: z.string().min(1),
+  mainProduct: z.string().min(1),
+  monthlyBudget: z.number().positive(),
+  targetCpa: z.number().positive(),
 });
 
 const createPlanSchema = z.object({
@@ -64,6 +72,24 @@ const updatePlanSchema = z.object({
   features: z.record(z.boolean()).optional(),
   isActive: z.boolean().optional(),
 });
+
+function toMoney(v: number) {
+  return { amount: Math.round(v * 100) };
+}
+
+function fromMoney(json: unknown): number {
+  const obj = json as { amount?: unknown } | null;
+  const raw = Number(obj?.amount ?? 0);
+  return Number.isNaN(raw) ? 0 : raw / 100;
+}
+
+function serializeGoal(row: typeof clientGoals.$inferSelect) {
+  return {
+    ...row,
+    monthlyBudget: fromMoney(row.monthlyBudget),
+    targetCpa: fromMoney(row.targetCpa),
+  };
+}
 
 // ─── Tenants ───────────────────────────────────────────
 
@@ -138,6 +164,13 @@ export async function getTenant(req: Request, res: Response, next: NextFunction)
       where: eq(brandKits.tenantId, tenant.id),
     });
 
+    const goals = await db.query.clientGoals.findFirst({
+      where: eq(clientGoals.tenantId, tenant.id),
+    });
+
+    // Find the owner user (for audience defaults)
+    const owner = tenantUsers.find((u) => u.role === 'owner') ?? tenantUsers[0];
+
     res.json({
       success: true,
       data: {
@@ -146,6 +179,9 @@ export async function getTenant(req: Request, res: Response, next: NextFunction)
         subscription: sub ? { ...sub, plan } : null,
         furyConfig: config,
         brandKit,
+        goals: goals ? serializeGoal(goals) : null,
+        audienceDefaults: owner?.audienceDefaults ?? null,
+        ownerUserId: owner?.id ?? null,
       },
       timestamp: new Date().toISOString(),
     });
@@ -297,11 +333,11 @@ export async function upsertBrandKit(req: Request, res: Response, next: NextFunc
     });
 
     const values: Record<string, unknown> = { updatedAt: new Date() };
-    if (body.logoUrl !== undefined) values.logoUrl = body.logoUrl;
-    if (body.primaryColor !== undefined) values.primaryColor = body.primaryColor;
-    if (body.secondaryColor !== undefined) values.secondaryColor = body.secondaryColor;
-    if (body.voiceTone !== undefined) values.voiceTone = body.voiceTone;
-    if (body.photoUrls !== undefined) values.photoUrls = JSON.stringify(body.photoUrls);
+    if (body.logo_url !== undefined) values.logoUrl = body.logo_url;
+    if (body.primary_color !== undefined) values.primaryColor = body.primary_color;
+    if (body.secondary_color !== undefined) values.secondaryColor = body.secondary_color;
+    if (body.voice_tone !== undefined) values.voiceTone = body.voice_tone;
+    if (body.photo_urls !== undefined) values.photoUrls = body.photo_urls;
 
     if (existing) {
       await db.update(brandKits).set(values).where(eq(brandKits.id, existing.id));
@@ -311,6 +347,63 @@ export async function upsertBrandKit(req: Request, res: Response, next: NextFunc
         ...values,
       } as unknown as typeof brandKits.$inferInsert);
     }
+
+    res.json({ success: true, data: null, timestamp: new Date().toISOString() });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── Goals ─────────────────────────────────────────────
+
+export async function upsertGoals(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = upsertGoalsSchema.parse(req.body);
+    const tenantId = req.params.tenantId;
+
+    const existing = await db.query.clientGoals.findFirst({
+      where: eq(clientGoals.tenantId, tenantId),
+    });
+
+    const values = {
+      objective: body.objective,
+      niche: body.niche,
+      mainProduct: body.mainProduct,
+      monthlyBudget: toMoney(body.monthlyBudget),
+      targetCpa: toMoney(body.targetCpa),
+      updatedAt: new Date(),
+    };
+
+    if (existing) {
+      await db.update(clientGoals).set(values).where(eq(clientGoals.id, existing.id));
+    } else {
+      await db.insert(clientGoals).values({
+        tenantId,
+        ...values,
+      } as unknown as typeof clientGoals.$inferInsert);
+    }
+
+    res.json({ success: true, data: null, timestamp: new Date().toISOString() });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── Audience ──────────────────────────────────────────
+
+export async function updateAudience(req: Request, res: Response, next: NextFunction) {
+  try {
+    const tenantId = req.params.tenantId;
+
+    // Find the owner user of this tenant
+    const owner = await db.query.users.findFirst({
+      where: eq(users.tenantId, tenantId),
+    });
+    if (!owner) throw new AppError(404, 'NO_OWNER', 'Nenhum usuário encontrado neste tenant');
+
+    const body = updateUserSchema.shape.audienceDefaults.parse(req.body);
+
+    await db.update(users).set({ audienceDefaults: body }).where(eq(users.id, owner.id));
 
     res.json({ success: true, data: null, timestamp: new Date().toISOString() });
   } catch (err) {

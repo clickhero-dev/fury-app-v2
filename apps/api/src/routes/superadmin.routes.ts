@@ -19,12 +19,18 @@ router.patch('/users/:id', superadminController.updateUser);
 // Subscription
 router.patch('/tenants/:tenantId/subscription', superadminController.updateSubscription);
 
-// Fury Config (Configurações tab)
+// Fury Config (Benchmarks)
 router.patch('/tenants/:tenantId/fury-config', superadminController.updateFuryConfig);
 
 // Brand Kit
 router.get('/tenants/:tenantId/brand-kit', superadminController.getBrandKit);
 router.patch('/tenants/:tenantId/brand-kit', superadminController.upsertBrandKit);
+
+// Goals
+router.put('/tenants/:tenantId/goals', superadminController.upsertGoals);
+
+// Audience
+router.patch('/tenants/:tenantId/audience', superadminController.updateAudience);
 
 // Plans
 router.get('/plans', superadminController.listPlans);
