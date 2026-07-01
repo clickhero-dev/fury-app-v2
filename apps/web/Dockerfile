@@ -4,16 +4,18 @@ RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
-# Copy root workspace config
-COPY package.json package-lock.json ./
+# Copy root workspace config (npm workspaces, not pnpm for Docker build)
+COPY package.json ./
 
-# Copy web app and shared packages (needed for npm install workspace resolution)
+# Copy web app config files
 COPY apps/web/package.json apps/web/
 COPY apps/web/tsconfig.json apps/web/
 COPY apps/web/tsconfig.app.json apps/web/
 COPY apps/web/tsconfig.node.json apps/web/
 COPY apps/web/vite.config.ts apps/web/
 COPY apps/web/index.html apps/web/
+
+# Copy shared packages config (needed for npm install workspace resolution)
 COPY packages/ packages/
 
 RUN npm install
