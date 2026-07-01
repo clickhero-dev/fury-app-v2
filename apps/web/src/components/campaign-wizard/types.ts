@@ -43,7 +43,7 @@ export interface WizardWhatsappState {
 }
 
 export interface WizardState {
-  currentStep: 1 | 2 | 3 | 4 | 5;
+  currentStep: 1 | 2 | 3 | 4;
   objective: WizardObjective | null;
   creative: WizardCreativeState;
   audience: WizardAudienceState;
