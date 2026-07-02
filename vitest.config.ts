@@ -9,9 +9,12 @@ export default defineConfig({
     testTimeout: 30000,
     pool: 'forks',
     singleFork: true,
+    setupFiles: ['./apps/api/src/__tests__/setup.env.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      reportOnFailure: true,
+      all: true,
       exclude: [
         'node_modules/',
         'dist/',
@@ -19,6 +22,8 @@ export default defineConfig({
         'coverage/',
         '**/*.d.ts',
         '**/*.config.*',
+        '**/__tests__/**',
+        '**/setup.env.ts',
       ],
     },
   },
