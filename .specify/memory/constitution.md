@@ -1,50 +1,121 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+  Sync Impact Report:
+  - Version change: (none) → 1.0.0 (initial adoption)
+  - Modified principles: N/A (first version)
+  - Added sections: 5 Core Principles, Security Standards, Development Workflow, Governance
+  - Removed sections: N/A
+  - Templates requiring updates:
+    - .specify/templates/plan-template.md — Constitution Check section is generic; no change needed.
+    - .specify/templates/spec-template.md — Mandatory sections (testing, success criteria) align with principles; no change needed.
+    - .specify/templates/tasks-template.md — Task phases align with development workflow; no change needed.
+    - .specify/templates/commands/ — Directory not yet created; no command files to audit.
+    - CLAUDE.md — Already references QA, security, RTK workflows consistent with these principles.
+  - Follow-up TODOs: None.
+-->
+
+# FURY Platform Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Security & Multi-Tenant Isolation
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+PostgreSQL Row-Level Security (RLS) MUST be enabled on every table
+that stores tenant data. All queries MUST scope by `tenant_id` —
+no endpoint, service, or worker may access data across tenants.
+Security audits via `npm run security:audit` are mandatory before
+every deployment. JWT authentication MUST protect all authenticated
+routes.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+**Rationale**: FURY is a multi-tenant SaaS handling ad spend and
+client campaign data. A single data leak erodes trust irreparably.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. API Contracts & Validation
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+Every feature MUST expose a REST API contract first. Input validation
+via Zod schemas is mandatory on every endpoint. Responses MUST follow
+the `ApiResponse<T>` envelope for consistency. Error responses MUST
+include a machine-readable code and a human-readable message.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+**Rationale**: Multiple consumers (frontend, background workers,
+external integrations) rely on predictable contracts. Zod ensures
+type safety at the boundary.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### III. Test-First Quality Gates (NON-NEGOTIABLE)
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+Tests MUST be written and confirmed failing before implementation code
+(Red-Green-Refactor). Unit tests cover service logic; integration tests
+cover API flows end-to-end. Coverage audits (`npm run qa:audit`) run
+before every release. No PR merges without passing tests.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+**Rationale**: Ad campaign automation involves real money. Regressions
+in targeting, budgeting, or creative delivery have direct financial
+impact on clients.
+
+### IV. AI Integration Discipline
+
+All AI provider calls (Claude, DeepSeek, DALL-E) MUST have structured
+prompts with explicit expected output formats. AI outputs MUST be
+validated before use in campaigns or persistence. Every integration
+MUST implement error handling with graceful fallback (mock data or
+cached results).
+
+**Rationale**: AI is non-deterministic. A hallucinated campaign budget
+or malformed creative can cause unrecoverable Meta API errors or
+client financial loss.
+
+### V. Simplicity & YAGNI
+
+Start with the minimum implementation that solves the current need.
+Reuse existing patterns (shared types, service layer, middleware)
+before creating new abstractions. No interfaces with one implementation,
+no factories for one product, no config for values that never change.
+Complexity MUST be explicitly justified in PR descriptions.
+
+**Rationale**: Every line of unused code is a liability. In a startup
+context, speed and clarity beat speculative generality.
+
+## Security Standards
+
+- **RLS**: Enabled on all PostgreSQL tables with `tenant_id` policy.
+- **Authentication**: JWT access + refresh tokens on all protected
+  routes. Token encryption via `TOKEN_ENCRYPTION_KEY`.
+- **Rate Limiting**: All API endpoints MUST have rate limiting applied.
+- **Input Sanitization**: All user-provided data sanitized before
+  logging, storage, or rendering. Structured logging never includes
+  raw secrets or tokens.
+- **Secrets**: Zero hardcoded credentials. Every secret in environment
+  variables or a `.env` file excluded from version control.
+- **Dependency Scanning**: `npm run security:audit` runs regularly
+  to detect vulnerable dependencies.
+
+## Development Workflow
+
+- **Branch Strategy**: All work on feature branches off `dev`. PRs
+  target `dev`. Merges to `dev` trigger auto-deploy via EasyPanel.
+- **spec-kit Flow**: Features follow the full pipeline:
+  `specify → plan → implement → test → converge`.
+- **Commits**: Conventional Commits format
+  (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`).
+- **RTK**: All terminal commands prefixed with `rtk` for token-optimized
+  output during development.
+- **QA Gate**: `npm run qa:audit` before every release to verify
+  coverage thresholds are met.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This Constitution supersedes all informal practices. Amendments
+require a PR that documents the change rationale and updates this
+document. Version bumps follow semantic versioning:
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+- **MAJOR**: Backward-incompatible principle removal or redefinition.
+- **MINOR**: New principle or materially expanded guidance.
+- **PATCH**: Clarifications, wording refinements, typo fixes.
+
+Every PR review MUST include a compliance check against this
+Constitution. New team members MUST read and acknowledge these
+principles before contributing.
+
+Use `CLAUDE.md` for runtime development guidance (RTK, security
+agent, QA agent commands).
+
+**Version**: 1.0.0 | **Ratified**: 2026-07-02 | **Last Amended**: 2026-07-02
