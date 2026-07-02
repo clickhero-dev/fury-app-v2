@@ -22,11 +22,11 @@ export function TenantsPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Create user modal
+  // Create tenant + user modal
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ tenantId: '', name: '', email: '', password: '', role: 'member' });
+  const [form, setForm] = useState({ tenantName: '', userName: '', userEmail: '', userPassword: '', userRole: 'owner' });
 
   useEffect(() => {
     api.get('/admin/tenants').then((res) => {
@@ -39,16 +39,26 @@ export function TenantsPage() {
     t.slug.toLowerCase().includes(search.toLowerCase())
   );
 
-  async function handleCreateUser() {
-    if (!form.tenantId) { setError('Selecione um tenant'); return; }
+  async function handleCreateTenant() {
+    if (!form.tenantName || !form.userName || !form.userEmail || !form.userPassword) {
+      setError('Preencha todos os campos');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
-      await api.post('/admin/users', form);
+      const res = await api.post('/admin/setup-tenant', {
+        name: form.tenantName,
+        userName: form.userName,
+        userEmail: form.userEmail,
+        userPassword: form.userPassword,
+        userRole: form.userRole,
+      });
       setShowModal(false);
-      setForm({ tenantId: '', name: '', email: '', password: '', role: 'member' });
-    } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'Erro ao criar usuário');
+      setForm({ tenantName: '', userName: '', userEmail: '', userPassword: '', userRole: 'owner' });
+      navigate(`/admin/tenants/${res.data.data.tenant.id}`);
+    } catch {
+      setError('Erro ao criar cliente');
     } finally {
       setSaving(false);
     }
@@ -67,10 +77,10 @@ export function TenantsPage() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => { setForm({ tenantId: '', name: '', email: '', password: '', role: 'member' }); setError(''); setShowModal(true); }}
+            onClick={() => { setForm({ tenantName: '', userName: '', userEmail: '', userPassword: '', userRole: 'owner' }); setError(''); setShowModal(true); }}
             className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors"
           >
-            <UserPlus className="w-4 h-4" /> Criar Usuário
+            <UserPlus className="w-4 h-4" /> Novo Cliente
           </button>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -132,12 +142,12 @@ export function TenantsPage() {
         ))}
       </div>
 
-      {/* ── Create User Modal ─────────────────────────── */}
+      {/* ── Novo Cliente Modal ───────────────────────── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-zinc-100">Criar Usuário</h2>
+              <h2 className="text-lg font-semibold text-zinc-100">Novo Cliente</h2>
               <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
                 <X className="w-5 h-5" />
               </button>
@@ -145,35 +155,32 @@ export function TenantsPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Tenant</label>
-                <select value={form.tenantId} onChange={e => setForm({ ...form, tenantId: e.target.value })}
-                  className={inputCls}>
-                  <option value="">Selecione um tenant...</option>
-                  {tenants.map(t => <option key={t.id} value={t.id}>{t.name} ({t.slug})</option>)}
-                </select>
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Nome do Tenant</label>
+                <input value={form.tenantName} onChange={e => setForm({ ...form, tenantName: e.target.value })}
+                  placeholder="Ex: João Silva Empreendimentos" className={inputCls} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Nome</label>
-                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Nome do Usuário</label>
+                <input value={form.userName} onChange={e => setForm({ ...form, userName: e.target.value })}
                   placeholder="Nome do usuário" className={inputCls} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1.5">Email</label>
-                <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                <input value={form.userEmail} onChange={e => setForm({ ...form, userEmail: e.target.value })}
                   placeholder="email@exemplo.com" type="email" className={inputCls} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1.5">Senha</label>
-                <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                <input value={form.userPassword} onChange={e => setForm({ ...form, userPassword: e.target.value })}
                   placeholder="Mínimo 8 caracteres" type="password" className={inputCls} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1.5">Perfil</label>
-                <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
+                <select value={form.userRole} onChange={e => setForm({ ...form, userRole: e.target.value })}
                   className={inputCls}>
-                  <option value="member">Membro</option>
-                  <option value="admin">Admin</option>
                   <option value="owner">Owner</option>
+                  <option value="admin">Admin</option>
+                  <option value="member">Membro</option>
                 </select>
               </div>
 
@@ -184,7 +191,7 @@ export function TenantsPage() {
                   className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2.5 rounded-xl text-sm font-medium transition-colors">
                   Cancelar
                 </button>
-                <button onClick={handleCreateUser} disabled={saving}
+                <button onClick={handleCreateTenant} disabled={saving}
                   className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors">
                   {saving ? 'Criando...' : <><UserPlus className="w-4 h-4" /> Criar</>}
                 </button>

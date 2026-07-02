@@ -13,6 +13,15 @@ const createUserSchema = z.object({
   role: z.enum(['owner', 'admin', 'member']).default('member'),
 });
 
+const setupTenantSchema = z.object({
+  name: z.string().min(1).max(255),
+  slug: z.string().min(1).max(255).optional(),
+  userName: z.string().min(1).max(255),
+  userEmail: z.string().email(),
+  userPassword: z.string().min(8).max(255),
+  userRole: z.enum(['owner', 'admin', 'member']).default('owner'),
+});
+
 const updateUserSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   email: z.string().email().optional(),
@@ -216,6 +225,43 @@ export async function createUser(req: Request, res: Response, next: NextFunction
     const { passwordHash: _, ...safe } = user;
 
     res.status(201).json({ success: true, data: safe, timestamp: new Date().toISOString() });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function setupTenant(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = setupTenantSchema.parse(req.body);
+    const slug = body.slug ?? body.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+    const existingSlug = await db.query.tenants.findFirst({ where: eq(tenants.slug, slug) });
+    if (existingSlug) throw new AppError(409, 'SLUG_EXISTS', 'Slug já existe');
+
+    const existingEmail = await db.query.users.findFirst({ where: eq(users.email, body.userEmail) });
+    if (existingEmail) throw new AppError(409, 'EMAIL_EXISTS', 'Email já cadastrado');
+
+    const passwordHash = await bcrypt.hash(body.userPassword, 12);
+
+    const result = await db.transaction(async (tx) => {
+      const [tenant] = await tx.insert(tenants).values({ name: body.name, slug }).returning();
+      const [user] = await tx.insert(users).values({
+        tenantId: tenant.id,
+        name: body.userName,
+        email: body.userEmail,
+        passwordHash,
+        role: body.userRole,
+      }).returning();
+      return { tenant, user };
+    });
+
+    const { passwordHash: _, ...safeUser } = result.user;
+
+    res.status(201).json({
+      success: true,
+      data: { tenant: result.tenant, user: safeUser },
+      timestamp: new Date().toISOString(),
+    });
   } catch (err) {
     next(err);
   }

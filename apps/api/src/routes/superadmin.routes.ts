@@ -16,6 +16,9 @@ router.get('/tenants/:id', superadminController.getTenant);
 router.post('/users', superadminController.createUser);
 router.patch('/users/:id', superadminController.updateUser);
 
+// Setup tenant + user
+router.post('/setup-tenant', superadminController.setupTenant);
+
 // Subscription
 router.patch('/tenants/:tenantId/subscription', superadminController.updateSubscription);
 
