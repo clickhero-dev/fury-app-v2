@@ -1,18 +1,25 @@
-import crypto from 'node:crypto';
+import { eq, and } from 'drizzle-orm';
+import bcrypt from 'bcryptjs';
 import { db } from './client.js';
 import { tenants, users, furyConfig } from './schema.js';
-
-function simpleHash(password: string): string {
-  const salt = crypto.randomBytes(16);
-  const iterations = 10000;
-  const hash = crypto.pbkdf2Sync(password, salt, iterations, 64, 'sha256');
-  return salt.toString('hex') + ':' + hash.toString('hex') + ':' + iterations;
-}
 
 async function createDemoUser() {
   console.log('🌱 Criando usuário demo...');
 
   try {
+    const email = process.env.DEMO_EMAIL || 'dev.fashion@fury.test';
+    const password = process.env.DEMO_PASSWORD || 'Dev@12345';
+
+    // Check existing
+    const existing = await db.query.users.findFirst({
+      where: eq(users.email, email),
+    });
+
+    if (existing) {
+      console.log(`✅ Usuário demo já existe: ${existing.email}`);
+      process.exit(0);
+    }
+
     // Criar tenant demo
     const [tenant] = await db
       .insert(tenants)
@@ -22,23 +29,25 @@ async function createDemoUser() {
       })
       .returning();
 
-    console.log(`✅ Tenant criado: ${tenant.name} (${tenant.id})`);
+    console.log(`✅ Tenant: ${tenant.name} (${tenant.id})`);
 
-    // Criar usuário demo
-    const passwordHash = simpleHash('Dev@12345');
+    // Criar usuário demo com bcrypt
+    const passwordHash = await bcrypt.hash(password, 12);
+
     const [user] = await db
       .insert(users)
       .values({
         tenantId: tenant.id,
-        email: 'dev.faury.test',
+        email,
         passwordHash,
         role: 'owner',
+        name: 'Fashion Demo',
       })
       .returning();
 
-    console.log(`✅ Usuário criado: ${user.email}`);
+    console.log(`✅ Usuário: ${user.email}`);
 
-    // Criar config FURY para o tenant
+    // Criar config FURY
     await db.insert(furyConfig).values({
       tenantId: tenant.id,
       targetRoas: '4.00',
@@ -48,9 +57,9 @@ async function createDemoUser() {
     });
 
     console.log('✅ Config FURY criada');
-    console.log('\n🔐 Credenciais demo criadas:');
-    console.log('   Email: dev.fashion@fury.test');
-    console.log('   Senha: Dev@12345');
+    console.log('\n🔐 Credenciais demo:');
+    console.log(`   Email: ${email}`);
+    console.log(`   Senha: ${password}`);
 
     process.exit(0);
   } catch (error) {

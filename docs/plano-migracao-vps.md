@@ -1,9 +1,7 @@
 # Plano de Migração — Fury App V2 para VPS
 
-**Status:** 📋 Planejamento
-**Branch:** `chore/migration-vps`
-**PR #59** — já prepara centralização de env + Dockerfiles
-**Previsão:** 3 dias
+**Status:** ✅ Concluída — Fury App V2 migrada para EasyPanel VPS (Jun 2026)
+**Branch:** `dev`
 
 ---
 
@@ -117,7 +115,7 @@ Semana 1 (22-26 Jun)
 
 1. **Credenciais pendentes** — sem ANTHROPIC/OPENAI/DEEPSEEK, LLMs não funcionam na VPS
 2. **Domínio** — precisamos saber qual domínio vai ser usado
-3. **VPS não contratada** — railway/vercel ainda são os únicos ambientes ativos
+3. **VPS contratada** — migração concluída para EasyPanel
 4. **PR #59 não mergeada** — precisa ser revisada e mergeada antes do deploy
 
 ---

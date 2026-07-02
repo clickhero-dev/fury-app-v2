@@ -18,7 +18,7 @@ import {
 import { sql } from 'drizzle-orm';
 
 // Enums
-export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member']);
+export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member', 'superadmin']);
 export const conditionFieldEnum = pgEnum('condition_field', ['cpc', 'ctr', 'roas', 'cpa', 'spend']);
 export const conditionOperatorEnum = pgEnum('condition_operator', ['gt', 'lt', 'eq']);
 export const ruleActionEnum = pgEnum('rule_action', ['pause_campaign', 'reduce_budget', 'notify', 'increase_budget']);
@@ -76,6 +76,7 @@ export const users = pgTable(
     passwordHash: text('password_hash').notNull(),
     role: userRoleEnum('role').notNull().default('member'),
     notificationPrefs: jsonb('notification_prefs').default(sql`'{"campanhas":true,"performance":true,"equipe":false}'::jsonb`),
+    audienceDefaults: jsonb('audience_defaults').default(sql`'{"city":"","ageMin":18,"ageMax":65,"gender":"all"}'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({

@@ -87,8 +87,8 @@ All 8 validation tests pass:
 - [x] ESM compatibility (Node 18+)
 - [x] No uncaught exceptions
 - [x] Comprehensive tests
-- [ ] Set `ANTHROPIC_API_KEY` in Railway env vars (optional)
-- [ ] Configure `META_USE_MOCK=true` if needed in dev
+- [x] Set `ANTHROPIC_API_KEY` in EasyPanel env vars (optional)
+- [x] Configure `META_USE_MOCK=true` if needed in dev
 
 ## Environment Variables
 
@@ -101,7 +101,7 @@ All 8 validation tests pass:
 ## Example cURL Request
 
 ```bash
-curl -X POST 'https://your-railway-url/api/studio/generate-copy' \
+curl -X POST 'https://clickhero-fury-api.u7pe19.easypanel.host/api/studio/generate-copy' \
   -H 'Authorization: Bearer YOUR_TOKEN' \
   -H 'Content-Type: application/json' \
   -d '{

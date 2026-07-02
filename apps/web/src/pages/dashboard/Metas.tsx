@@ -44,7 +44,7 @@ const MOCK_PROGRESS: GoalsProgress = {
 
 const OBJECTIVES: Record<string, string> = {
   aumentar_vendas: 'Aumentar Vendas',
-  gerar_leads: 'Gerar Leads',
+  gerar_leads: 'Atrair Pessoas',
   aumentar_awareness: 'Aumentar Awareness',
   maximizar_roas: 'Maximizar ROAS',
   reduzir_cpa: 'Reduzir CPA',
@@ -178,7 +178,7 @@ export function Metas() {
           title="Minhas Metas"
           description="Configure e acompanhe os objetivos das suas campanhas"
           actions={
-            <Button variant="outline" size="sm" onClick={() => navigate('/onboarding/metas')}>
+            <Button variant="outline" size="sm" onClick={() => navigate('/configuracoes?tab=metas')}>
               Editar metas
             </Button>
           }

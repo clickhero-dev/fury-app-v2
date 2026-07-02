@@ -94,6 +94,13 @@ export interface UserDTO {
   email: string;
   role: UserRole;
   notificationPrefs: NotificationPrefs;
+  audienceDefaults?: {
+    city?: string;
+    cityKey?: string;
+    ageMin?: number;
+    ageMax?: number;
+    gender?: 'all' | 'male' | 'female';
+  };
   createdAt: Date;
 }
 

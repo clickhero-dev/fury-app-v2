@@ -16,6 +16,7 @@ import { ensureStudioAssetsDir, studioAssetsDir } from './lib/temp-storage.js';
 import { startStudioGenerationWorker, stopStudioGenerationWorker } from './workers/studio-generation.worker.js';
 import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
+import { seedStartup } from './lib/seed-superadmin.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,6 +55,9 @@ app.use((req, res) => {
 // Tudo que precisa de await fica dentro da IIFE
 (async () => {
   if (NODE_ENV !== 'test') {
+    // 🚀 Run seed: ensures superadmin + demo users exist before accepting requests
+    await seedStartup();
+
     // Aguarda o Redis estar pronto antes de iniciar qualquer worker
     await waitForRedisReady();
 

@@ -5,3 +5,4 @@
  * permitindo imports limpos como `@/pages/automacao`.
  */
 export { MinhasRegras } from './MinhasRegras';
+export { MinhasRegras, MinhasRegrasContent } from './MinhasRegras';

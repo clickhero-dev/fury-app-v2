@@ -824,7 +824,7 @@ function calculateDateRange(
 ): { startDate: string; endDate: string } {
   const today = new Date();
   const end = new Date(today);
-  let start = new Date(today);
+  const start = new Date(today);
 
   if (dateRange === 'last_7d') {
     start.setDate(start.getDate() - 7);
@@ -859,14 +859,14 @@ const WIZARD_OBJECTIVE_MAP: Record<
     label: 'Engajamento',
   },
   messages: {
-    metaObjective: 'OUTCOME_LEADS',
+    metaObjective: 'OUTCOME_ENGAGEMENT',
     optimizationGoal: 'CONVERSATIONS',
     cta: 'MESSAGE_PAGE',
     destinationType: 'MESSENGER',
     label: 'Atração de Clientes',
   },
   whatsapp: {
-    metaObjective: 'OUTCOME_LEADS',
+    metaObjective: 'OUTCOME_ENGAGEMENT',
     optimizationGoal: 'CONVERSATIONS',
     cta: 'WHATSAPP_MESSAGE',
     destinationType: 'WHATSAPP',
@@ -886,6 +886,7 @@ async function deleteMetaObject(objectId: string, accessToken: string): Promise<
 }
 
 function mapWizardMetaError(err: unknown, step: string): never {
+  // ponytail: v2026-07-01b — verifica se deploy rodou
   if (err instanceof AppError) throw err;
 
   const metaCode = (err as any).metaCode;
@@ -929,12 +930,28 @@ function mapWizardMetaError(err: unknown, step: string): never {
     throw new AppError(402, 'META_INSUFFICIENT_FUNDS', 'Conta de anúncios sem saldo suficiente');
   }
 
+  // Subcode 3858258: Meta nao conseguiu baixar a imagem (robots.txt, formato invalido, etc.)
+  if (metaSubcode === 3858258) {
+    throw new AppError(400, 'META_IMAGE_DOWNLOAD_FAILED',
+      'O Meta nao conseguiu baixar a imagem do criativo. A URL pode estar bloqueada (robots.txt) ou o formato pode ser invalido. Use uma imagem JPEG ou PNG hospedada em um servidor acessivel.',
+      { step, meta_code: metaCode, meta_subcode: metaSubcode }
+    );
+  }
+
+  // Subcode 1487110: Raio geografico fora dos limites (ex: SP precisa de 15km+)
+  if (metaSubcode === 1487110) {
+    throw new AppError(400, 'META_LOCATION_RADIUS',
+      metaUserMsg || 'O raio geografico selecionado nao esta dentro dos limites. Aumente o raio (ex: Sao Paulo precisa de 15km ou mais).',
+      { step, meta_code: metaCode, meta_subcode: metaSubcode }
+    );
+  }
+
   // Usa a mensagem amigavel da Meta se disponivel, senao a mensagem original
   const userMessage = metaUserMsg || metaUserTitle
     ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}`
     : (message || 'Erro ao publicar no Meta. Tente novamente.');
 
-  throw new AppError(502, 'META_API_ERROR', userMessage, {
+  throw new AppError(400, 'META_API_ERROR', userMessage, {
     step,
     meta_code: metaCode,
     meta_subcode: metaSubcode,
@@ -1042,7 +1059,8 @@ export async function createCampaignFromWizard(
     imageUrl = asset.url;
   }
 
-  if (!imageUrl) {
+  // ponytail: Instagram criativo nao precisa de imageUrl — usa source_instagram_media_id
+  if (!imageUrl && !args.creativeInstagramMediaId) {
     throw new AppError(400, 'CREATIVE_IMAGE_MISSING', 'Selecione uma imagem da galeria ou envie um arquivo.');
   }
 
@@ -1110,9 +1128,7 @@ export async function createCampaignFromWizard(
     if (messagingDestinations.includes('whatsapp')) {
       promotedObject.whatsapp_phone_number = args.whatsappPhoneNumber;
     }
-    if (messagingDestinations.includes('instagram_direct')) {
-      promotedObject.instagram_user_id = args.instagramUserId;
-    }
+    // ponytail: instagram_user_id nao vai em promoted_object — Meta rejeita (code 100)
 
     messagingDestinationType =
       messagingDestinations.length > 1
@@ -1155,19 +1171,33 @@ export async function createCampaignFromWizard(
       adImageHashPromise = (async () => {
         try {
           const imageResponse = await fetch(imageUrl, {
-            signal: AbortSignal.timeout(10_000),
+            signal: AbortSignal.timeout(15_000),
+            headers: { 'User-Agent': 'FURY/1.0' },
           });
           if (!imageResponse.ok) {
-            throw new Error(`Failed to download image: ${imageResponse.status}`);
+            throw new Error(`Falha ao baixar imagem (HTTP ${imageResponse.status}). Verifique se a URL está acessível.`);
           }
+
+          const contentType = imageResponse.headers.get('content-type') || '';
+          // Meta so aceita JPEG e PNG para adimages; SVG e outros formatos sao rejeitados.
+          if (!contentType.includes('jpeg') && !contentType.includes('png') && !contentType.includes('image/')) {
+            throw new Error(
+              `Formato de imagem nao suportado: ${contentType || 'desconhecido'}. ` +
+              'Use uma imagem JPEG ou PNG acessivel publicamente.'
+            );
+          }
+
           const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
           const base64 = imageBuffer.toString('base64');
-          const filename = `fury_creative_${Date.now()}.jpg`;
+          const ext = contentType.includes('png') ? 'png' : 'jpg';
+          const filename = `fury_creative_${Date.now()}.${ext}`;
           const hash = await uploadAdImage({ adAccountId, base64, filename, accessToken });
           console.log('[CampaignWizard] Imagem enviada para Meta, hash:', hash);
           return hash;
         } catch (uploadErr) {
           console.error('[CampaignWizard] Falha ao enviar imagem para Meta, usando URL original:', uploadErr);
+          // Se o upload falhar, usa a URL original como fallback.
+          // NOTA: Meta pode nao conseguir baixar a URL original se o servidor tiver robots.txt ou bloqueio.
           return undefined;
         }
       })();
@@ -1185,11 +1215,14 @@ export async function createCampaignFromWizard(
 
     const targeting: Record<string, unknown> = {
       geo_locations: {
-        cities: [{ key: cityKey, radius: args.locationRadiusKm, distance_unit: 'kilometer' }],
+        cities: [{ key: parseInt(cityKey, 10), radius: args.locationRadiusKm || 30, distance_unit: 'kilometer' }],
       },
       age_min: args.ageMin,
       age_max: args.ageMax,
       genders: args.gender === 'all' ? [1, 2] : args.gender === 'male' ? [1] : [2],
+      // Meta exige targeting_automation.advantage_audience DENTRO do targeting (erro 1870227).
+      // 0 = desabilita Advantage+ audience (targeting manual).
+      targeting_automation: { advantage_audience: 0 },
     };
 
     const adSetBody: Record<string, unknown> = {
@@ -1200,9 +1233,6 @@ export async function createCampaignFromWizard(
       optimization_goal: objectiveConfig.optimizationGoal,
       bid_strategy: 'LOWEST_COST_WITHOUT_CAP', // obrigatorio pela Meta API (erro 2490487)
       targeting,
-      // Meta exige targeting_automation.advantage_audience (erro 1870227).
-      // 0 = desabilita Advantage+ audience (targeting manual).
-      targeting_automation: { advantage_audience: 0 },
       status: 'ACTIVE',
     };
 
@@ -1231,12 +1261,16 @@ export async function createCampaignFromWizard(
 
     const creativeBody: Record<string, unknown> = instagramCreativeActorId
       ? {
-          name: 'Creative — FURY',
-          object_story_spec: {
-            page_id: instagramCreativePageId,
-            instagram_user_id: instagramCreativeActorId,
-          },
+          // ponytail: Instagram criativo usa object_id + call_to_action (formato Meta oficial)
+          // POST /adcreatives?object_id=...&instagram_user_id=...&source_instagram_media_id=...&call_to_action=...
+          // Nao usa object_story_spec nem link na raiz — JSON body nao funciona aqui.
+          object_id: instagramCreativePageId,
+          instagram_user_id: instagramCreativeActorId,
           source_instagram_media_id: args.creativeInstagramMediaId,
+          call_to_action: JSON.stringify({
+            type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE',
+            value: { link: args.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` },
+          }),
         }
       : {
           name: 'Creative — FURY',
@@ -1249,11 +1283,10 @@ export async function createCampaignFromWizard(
               call_to_action: messagingDestinationType
                 ? {
                     type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE',
-                    value: { app_destination: messagingDestinationType },
                   }
                 : { type: objectiveConfig.cta },
               ...(args.objective === 'visits' ? { link: args.destinationUrl } : {}),
-              ...(messagingDestinations.includes('whatsapp') ? { link: 'https://api.whatsapp.com/send' } : {}),
+              ...(args.objective !== 'visits' ? { link: `https://www.facebook.com/${pageId}` } : {}),
             },
           },
         };

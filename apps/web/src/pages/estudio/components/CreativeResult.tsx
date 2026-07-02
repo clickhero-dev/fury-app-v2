@@ -15,9 +15,11 @@ interface Props {
 export function CreativeResult({ result, onBack, onNewCreative }: Props) {
   const queryClient = useQueryClient();
   const [currentResult, setCurrentResult] = useState(result);
-  const [showRegenerateForm, setShowRegenerateForm] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [publishFeedback, setPublishFeedback] = useState<StudioPublishResponse | null>(null);
+
+  // ponytail: pergunta pós-criação visível por padrão no quick-create
+  const [showRegenerateForm, setShowRegenerateForm] = useState(!!currentResult.type);
 
   const isQuickCreate = !!currentResult.type; // openrouter assets have type field
   const isVideo = currentResult.type === 'video';
@@ -25,8 +27,6 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
 
   const regenerateMutation = useMutation({
     mutationFn: async ({ assetId, feedbackText }: { assetId: string; feedbackText: string }) => {
-      // Quick-create assets use /openrouter/regenerate
-      // Wizard assets use /studio/creative/regenerate
       const endpoint = isQuickCreate
         ? '/openrouter/regenerate'
         : '/studio/creative/regenerate';
@@ -39,7 +39,7 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
     onSuccess: (data) => {
       setCurrentResult(data);
       setPublishFeedback(null);
-      setShowRegenerateForm(false);
+      setShowRegenerateForm(true); // mantém a pergunta visível após regenerar
       setFeedback('');
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
@@ -138,14 +138,15 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
             </div>
           )}
 
-          {showRegenerateForm && (
+          {/* ponytail: pergunta pós-criação visível por padrão */}
+          {showRegenerateForm && isQuickCreate && (
             <div className="space-y-2 rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] p-4">
-              <p className="text-sm font-semibold text-[#101828]">O que você quer mudar?</p>
+              <p className="text-sm font-semibold text-[#101828]">Deseja incluir mais alguma coisa no criativo?</p>
               <textarea
                 autoFocus
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
-                placeholder="Ex: Deixe o título mais urgente, foque no preço, mude o tom..."
+                placeholder="Ex: Adicionar um selo de desconto, incluir logo da marca, mudar cores..."
                 rows={3}
                 className="w-full rounded-xl border border-[#E6E8EC] bg-white px-3 py-2 text-sm text-[#101828] outline-none transition focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/10 resize-none"
               />
@@ -156,10 +157,10 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
                   className="flex-1 flex items-center justify-center gap-2 bg-[#E8631A] hover:bg-[#D45714] text-white text-sm"
                 >
                   {regenerateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Regenerar
+                  Aplicar ajustes
                 </Button>
                 <Button variant="outline" onClick={() => setShowRegenerateForm(false)} className="flex items-center justify-center gap-2 text-sm">
-                  Cancelar
+                  Não, obrigado
                 </Button>
               </div>
               {regenerateMutation.isError && (
@@ -182,7 +183,7 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
           )}
 
           <div className="flex flex-col gap-2 pt-1">
-            {!showRegenerateForm && !isLegacy && (
+            {!isLegacy && !showRegenerateForm && (
               <Button variant="outline" size="sm" onClick={() => setShowRegenerateForm(true)} disabled={regenerateMutation.isPending} className="w-full flex items-center justify-center gap-2">
                 <RefreshCw className="h-4 w-4 shrink-0" />
                 Regenerar com ajuste

@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { CheckCircle2, ImagePlus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import api from '@/lib/api';
 import { useCreateCampaign } from '../hooks/useCreateCampaign';
 import type { CreateWizardCampaignPayload, WizardState } from '../types';
 
@@ -23,8 +25,32 @@ interface Step5ReviewProps {
   onBack: () => void;
 }
 
+interface AudienceDefaults {
+  city?: string;
+  cityKey?: string;
+  ageMin?: number;
+  ageMax?: number;
+  gender?: 'all' | 'male' | 'female';
+}
+
 export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }: Step5ReviewProps) {
   const mutation = useCreateCampaign();
+  const [audience, setAudience] = useState<AudienceDefaults>({});
+  const [audienceLoading, setAudienceLoading] = useState(true);
+
+  useEffect(() => {
+    api.get<{ success: boolean; data: { audienceDefaults?: AudienceDefaults } }>('/auth/me')
+      .then((res) => {
+        const defaults = res.data.data?.audienceDefaults;
+        if (defaults?.city) {
+          setAudience(defaults);
+        }
+      })
+      .catch(() => {
+        // silently ignore — audience stays empty
+      })
+      .finally(() => setAudienceLoading(false));
+  }, []);
 
   const isInstagramCreative = Boolean(state.creative.instagramMediaId);
   const imageUrl = isInstagramCreative
@@ -49,12 +75,11 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
       headline: state.creative.headline,
       primary_text: state.creative.primaryText,
       destination_url: state.creative.destinationUrl,
-      location_city: state.audience.city,
-      location_city_key: state.audience.cityKey,
-      location_radius_km: state.audience.radiusKm,
-      age_min: state.audience.ageMin,
-      age_max: state.audience.ageMax,
-      gender: state.audience.gender,
+      location_city: audience.city || '',
+      location_city_key: audience.cityKey,
+      age_min: audience.ageMin || 18,
+      age_max: audience.ageMax || 65,
+      gender: audience.gender || 'all',
       daily_budget_brl: state.budget.dailyBudgetBrl,
       duration_days: state.budget.durationDays,
       ...(state.objective === 'whatsapp'
@@ -145,12 +170,24 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
 
         <div className="p-4">
           <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Público</div>
-          <div className="text-sm font-medium text-gray-900">
-            {state.audience.city} • Raio de {state.audience.radiusKm}km
-          </div>
-          <div className="text-xs text-gray-500 mt-1">
-            {state.audience.ageMin}-{state.audience.ageMax} anos • {GENDER_LABELS[state.audience.gender]}
-          </div>
+          {audienceLoading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-400">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Carregando...
+            </div>
+          ) : audience.city ? (
+            <>
+              <div className="text-sm font-medium text-gray-900">{audience.city}</div>
+              <div className="text-xs text-gray-500 mt-1">
+                {audience.ageMin || 18}-{audience.ageMax || 65} anos •{' '}
+                {GENDER_LABELS[audience.gender || 'all']}
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-amber-700">
+              ⚠️ Público não configurado. Vá em Configurações → Público.
+            </div>
+          )}
         </div>
 
         <div className="p-4">

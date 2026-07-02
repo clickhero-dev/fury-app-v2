@@ -6,6 +6,7 @@ import { MetaAuthorizePage } from './pages/onboarding/MetaAuthorizePage';
 import { MetasPage } from './pages/onboarding/MetasPage';
 import { SelecionarAtivosPage } from './pages/onboarding/SelecionarAtivosPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { AuthenticatedShell } from './components/layout/AuthenticatedShell';
 import { Dashboard } from './pages/dashboard/Dashboard';
 import { Metas } from './pages/dashboard/Metas';
@@ -23,6 +24,11 @@ import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
 import { Subscription } from './pages/billing/Subscription';
 import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
+import { AdminLogin } from './pages/superadmin/AdminLogin';
+import { AdminLayout } from './pages/superadmin/AdminLayout';
+import { TenantsPage } from './pages/superadmin/TenantsPage';
+import { TenantDetailPage } from './pages/superadmin/TenantDetailPage';
+import { PlansPage } from './pages/superadmin/PlansPage';
 
 /**
  * Roteador principal da aplicação FURY.
@@ -116,7 +122,7 @@ export const router = createBrowserRouter([
     element: <AuthenticatedShell />,
     children: [
       { path: '/dashboard', element: <Dashboard /> },
-      { path: '/onboarding/metas', element: <MetasPage /> },
+      { path: '/onboarding/metas', element: <AppLayout><MetasPage /></AppLayout> },
       { path: '/dashboard/metas', element: <Metas /> },
       { path: '/campanhas', element: <PainelCampanhas /> },
       { path: '/campanhas/regras', element: <RegrasCampanhas /> },
@@ -134,6 +140,20 @@ export const router = createBrowserRouter([
       { path: '/components-demo', element: <ComponentsDemo /> }, // uso interno
       { path: '/orcamento-smart', element: <OrcamentoSmart /> },
       { path: '/components-demo', element: <ComponentsDemo /> },
+    ],
+  },
+]);
+  {
+    path: '/admin/login',
+    element: <AdminLogin />,
+  },
+  {
+    path: '/admin',
+    element: <AdminLayout />,
+    children: [
+      { index: true, element: <TenantsPage /> },
+      { path: 'tenants/:id', element: <TenantDetailPage /> },
+      { path: 'planos', element: <PlansPage /> },
     ],
   },
 ]);

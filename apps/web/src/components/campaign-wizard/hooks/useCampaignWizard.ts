@@ -14,7 +14,6 @@ function createInitialState(preSelectedAssetId?: string): WizardState {
     },
     audience: {
       city: '',
-      radiusKm: 10,
       ageMin: 18,
       ageMax: 65,
       gender: 'all',
@@ -75,22 +74,21 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
 
   const isStepValid = useMemo(() => {
     return {
-      1: state.objective !== null,
+      1: Boolean(
+        state.objective !== null &&
+          (state.objective !== 'whatsapp' ||
+            (state.whatsapp.pageId &&
+              state.whatsapp.destinations.length > 0 &&
+              (!state.whatsapp.destinations.includes('whatsapp') || state.whatsapp.phoneNumberId)))
+      ),
       2: Boolean(
         (state.creative.assetId || state.creative.uploadUrl || state.creative.instagramMediaId) &&
           state.creative.headline.trim().length > 0 &&
           state.creative.primaryText.trim().length > 0 &&
           (state.objective !== 'visits' || /^https?:\/\//.test(state.creative.destinationUrl?.trim() ?? ''))
       ),
-      3: Boolean(
-        state.audience.city.trim().length > 0 &&
-          (state.objective !== 'whatsapp' ||
-            (state.whatsapp.pageId &&
-              state.whatsapp.destinations.length > 0 &&
-              (!state.whatsapp.destinations.includes('whatsapp') || state.whatsapp.phoneNumberId)))
-      ),
-      4: state.budget.dailyBudgetBrl >= 5,
-      5: true,
+      3: state.budget.dailyBudgetBrl >= 7,
+      4: true,
     } as Record<WizardState['currentStep'], boolean>;
   }, [state]);
 

@@ -4,66 +4,106 @@
 
 | Serviço | Plataforma | O que roda |
 |---------|-----------|------------|
-| Frontend | Vercel | React + Vite |
-| API | Railway | Node.js Express |
-| Redis | Railway | Cache e filas |
+| API | EasyPanel (VPS) | Node.js Express |
+| Frontend | EasyPanel (VPS) | React + Vite |
+| Redis | EasyPanel (VPS) | Cache e filas BullMQ |
 | Banco de dados | Neon | PostgreSQL serverless |
 | Storage de imagens | Cloudflare R2 | Criativos gerados pelo Estúdio |
-| Observabilidade | Grafana | Dashboards de métricas |
+| Observabilidade | Grafana (EasyPanel VPS) | Dashboards de métricas |
 
 ---
 
-## Frontend — Vercel
+## EasyPanel — Deploy Automático
 
-**URL de produção:** https://fury-app-v2-web.vercel.app
+**Painel:** https://painel.nerdrico.com.br → projeto `clickhero`
 
-O deploy é automático a cada push na branch `main`.
+Ambos os serviços (`fury_api` e `fury_web`) usam build direto do GitHub:
+- **Branch monitorada:** `dev`
+- **Repositório:** `clickhero-dev/fury-app-v2`
 
-**Variável de ambiente necessária no painel da Vercel:**
+### URLs de Produção
 
-| Variável | Valor em produção |
-|----------|------------------|
-| `VITE_API_URL` | `https://fury-app-v2-production.up.railway.app/api` |
+| Serviço | URL |
+|---------|-----|
+| API | `https://clickhero-fury-api.u7pe19.easypanel.host` |
+| Frontend | `https://clickhero-fury-web.u7pe19.easypanel.host` |
 
-**Para acessar o painel:** https://vercel.com → projeto `fury-app-v2-web`
+### Webhooks de Deploy
+
+```bash
+# API
+curl -X POST http://185.111.156.157:3000/api/deploy/f8383c07327bdfbc8bc4183fc407bdd4905650d99aa76f16
+
+# Web
+curl -X POST http://185.111.156.157:3000/api/deploy/188a40b7aa994d0d54e99ec4a027de61a7138e15e450a791
+```
+
+> ⚠️ Os webhooks disparam deploy manual. Para deploy automático a cada push no `dev`, ative o "Auto Deploy" no painel (Overview do serviço → botão "Ativar Deploy Automático").
 
 ---
 
-## API — Railway
+## Build Context (Monorepo)
 
-**URL de produção:** https://fury-app-v2-production.up.railway.app
+| Serviço | Build Path | Dockerfile |
+|---------|-----------|------------|
+| `fury_api` | `/` (raiz) | `apps/api/Dockerfile` |
+| `fury_web` | `/apps/web` | `Dockerfile` |
 
-O deploy é automático a cada push na branch `main`.
+---
 
-**Variáveis de ambiente:** configurar no painel do Railway → seu projeto → aba *Variables*. Usar os mesmos valores do `apps/api/.env.example` com valores reais de produção.
+## Variáveis de Ambiente no EasyPanel
 
-**Diferenças importantes em produção:**
+Configurar na aba **Environment** de cada serviço:
+
+### fury_api
 
 ```env
 NODE_ENV=production
+DATABASE_URL=postgresql://...
+REDIS_URL=redis://redis-click-hero:6379
+JWT_SECRET=...
+JWT_REFRESH_SECRET=...
+META_APP_ID=...
+META_APP_SECRET=...
 META_USE_MOCK=false
 AUTH_BYPASS_DEV=false
 ASAAS_ENV=production
-STUDIO_ASSETS_DIR=/tmp/studio-assets   # Railway usa /tmp para arquivos temporários
+STUDIO_ASSETS_DIR=/tmp/studio-assets
+ANTHROPIC_API_KEY=...
+OPENAI_API_KEY=...
+DEEPSEEK_API_KEY=...
+R2_ENDPOINT=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_PUBLIC_URL=...
+APP_URL=https://clickhero-fury-api.u7pe19.easypanel.host
+FRONTEND_URL=https://clickhero-fury-web.u7pe19.easypanel.host
+DOMAIN=clickhero-fury-api.u7pe19.easypanel.host
+META_REDIRECT_URI=https://clickhero-fury-api.u7pe19.easypanel.host/api/meta/auth/callback
+CORS_ALLOWED_ORIGINS=https://clickhero-fury-web.u7pe19.easypanel.host
 ```
 
-**Para acessar o painel:** https://railway.app → projeto FURY
+### fury_web
+
+```env
+VITE_API_URL=https://clickhero-fury-api.u7pe19.easypanel.host/api
+```
+
+> ⚠️ `VITE_*` são build-time. Alterações exigem novo deploy.
 
 ---
 
-## Redis — Railway
+## Redis — EasyPanel
 
-Rodando como serviço separado no mesmo projeto Railway.
+Serviço `redis-click-hero` no mesmo projeto EasyPanel.
 
-A `REDIS_URL` é gerada automaticamente pelo Railway e deve ser copiada para as variáveis de ambiente da API.
+A API acessa via hostname interno: `redis://redis-click-hero:6379`
 
 ---
 
 ## Banco de Dados — Neon
 
 **Plataforma:** https://console.neon.tech
-
-O Neon é um PostgreSQL serverless — escala automaticamente e tem branching de banco (útil para criar ambientes de teste sem custo extra).
 
 **Branches recomendados:**
 
@@ -79,9 +119,7 @@ cd packages/db
 DATABASE_URL=<url_producao> npm run db:migrate
 ```
 
-> ⚠️ Sempre teste as migrations no branch `dev` antes de rodar em `main`.
-
-**Row Level Security (RLS):** o banco usa RLS para isolamento multi-tenant. As policies são aplicadas via migrations — nunca altere manualmente no painel do Neon.
+> ⚠️ Migrations NÃO rodam automaticamente. Rode manualmente após deploy que altere schema.
 
 ---
 
@@ -89,60 +127,39 @@ DATABASE_URL=<url_producao> npm run db:migrate
 
 Usado para armazenar imagens geradas pelo Estúdio Criativo de forma persistente.
 
-**Por que R2?** O Railway usa sistema de arquivos efêmero (arquivos em `/tmp` somem no próximo deploy). O R2 garante que os criativos gerados persistam.
-
 **Configuração no painel:** https://dash.cloudflare.com → R2 → seu bucket
-
-**Variáveis necessárias na API:**
-
-```env
-R2_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
-R2_ACCESS_KEY_ID=<sua_access_key>
-R2_SECRET_ACCESS_KEY=<sua_secret_key>
-R2_PUBLIC_URL=https://<seu_dominio_publico_r2>
-```
 
 ---
 
 ## Observabilidade — Grafana
 
-Grafana conecta diretamente ao Neon para criar dashboards de métricas de campanhas.
+Grafana roda como serviço `grafana` no mesmo projeto EasyPanel.
 
-**Datasource:** PostgreSQL (usar a `DATABASE_URL` de produção como string de conexão read-only)
-
-**Dashboards principais:**
-- Visão geral de campanhas ativas
-- Métricas por organização (CTR, CPM, ROAS)
-- Logs de automações do FURY Engine
+Conecta diretamente ao Neon para dashboards de métricas de campanhas.
 
 ---
 
-## Fluxo de Deploy Completo
+## Fluxo de Deploy
 
 ```
-Push na branch main
+Push na branch dev
        │
-       ├──▶ Vercel detecta mudança
-       │         └──▶ Build: npm run build (apps/web)
-       │         └──▶ Deploy automático no CDN
+       ├──▶ EasyPanel detecta mudança (se auto-deploy ATIVO)
+       │         ├── fury_api: build apps/api/Dockerfile
+       │         └── fury_web: build apps/web/Dockerfile
        │
-       └──▶ Railway detecta mudança
-                 └──▶ Build: npm run build (apps/api)
-                 └──▶ Restart do serviço Node.js
-                 └──▶ Migrations NÃO rodam automaticamente
-                            └──▶ Rodar manualmente se necessário
+       └──▶ (se auto-deploy OFF) Disparar webhook ou clicar "Implantar"
 ```
-
-> ⚠️ **Migrations não são automáticas.** Sempre que houver mudança de schema, rode manualmente antes ou logo após o deploy da API.
 
 ---
 
 ## Checklist de Deploy
 
-- [ ] Variáveis de ambiente atualizadas no Railway e Vercel
-- [ ] Migrations rodadas no banco de produção (se houver mudança de schema)
+- [ ] Auto-deploy ativo em ambos os serviços
+- [ ] Variáveis de ambiente atualizadas no EasyPanel
+- [ ] Migrations rodadas no banco de produção (se houve mudança de schema)
 - [ ] `META_USE_MOCK=false` na API de produção
 - [ ] `AUTH_BYPASS_DEV=false` na API de produção
 - [ ] `ASAAS_ENV=production` se billing estiver ativo
-- [ ] CORS atualizado com as URLs corretas de produção
+- [ ] `META_REDIRECT_URI` configurada com domínio correto
 - [ ] Testado o health check: `GET /api/health`

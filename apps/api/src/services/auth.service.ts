@@ -47,6 +47,7 @@ function userToDTO(user: any): UserDTO {
     role: user.role,
     tenantId: user.tenantId,
     notificationPrefs: (user.notificationPrefs as UserDTO['notificationPrefs']) ?? DEFAULT_NOTIFICATION_PREFS,
+    audienceDefaults: user.audienceDefaults as UserDTO['audienceDefaults'],
     createdAt: user.createdAt,
   };
 }
@@ -242,7 +243,7 @@ export async function getMe(userId: string): Promise<UserDTO & { tenantName: str
 
 export async function updateMe(
   userId: string,
-  data: { name?: string; tenantName?: string; notificationPrefs?: UserDTO['notificationPrefs'] },
+  data: { name?: string; tenantName?: string; notificationPrefs?: UserDTO['notificationPrefs']; audienceDefaults?: Record<string, unknown> },
 ): Promise<UserDTO & { tenantName: string }> {
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
@@ -255,6 +256,7 @@ export async function updateMe(
   const userUpdates: Record<string, unknown> = {};
   if (data.name !== undefined) userUpdates.name = data.name;
   if (data.notificationPrefs !== undefined) userUpdates.notificationPrefs = data.notificationPrefs;
+  if (data.audienceDefaults !== undefined) userUpdates.audienceDefaults = data.audienceDefaults;
 
   if (Object.keys(userUpdates).length > 0) {
     await db.update(users).set(userUpdates).where(eq(users.id, userId));

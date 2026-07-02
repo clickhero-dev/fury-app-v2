@@ -1,0 +1,10 @@
+#!/bin/sh
+# ponytail: pre-commit — type-check web workspace only
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$REPO_ROOT/apps/web" || exit 1
+echo "🔍 Type-checking web..."
+./node_modules/.bin/tsc --noEmit 2>&1 || {
+  echo "❌ TypeScript errors found. Fix them before committing."
+  exit 1
+}
+echo "✅ Type-check passed"
