@@ -74,7 +74,7 @@ import { PlansPage } from './pages/superadmin/PlansPage';
  * ### Configurações
  * - `/configuracoes` → configurações gerais da conta
  * - `/configuracoes/integracoes` → conexões com Meta e outras integrações
- * - `/configuracoes/brand-kit` → identidade visual da organização
+ * - `/configuracoes/brand-kit` → identidade visual da organization
  *
  * ### Billing
  * - `/planos` → planos disponíveis
@@ -137,12 +137,10 @@ export const router = createBrowserRouter([
       { path: '/configuracoes/brand-kit', element: <BrandKitPage /> },
       { path: '/planos', element: <Plans /> },
       { path: '/assinatura', element: <Subscription /> },
-      { path: '/components-demo', element: <ComponentsDemo /> }, // uso interno
       { path: '/orcamento-smart', element: <OrcamentoSmart /> },
       { path: '/components-demo', element: <ComponentsDemo /> },
     ],
   },
-]);
   {
     path: '/admin/login',
     element: <AdminLogin />,

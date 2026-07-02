@@ -28,7 +28,7 @@ import {
  * // Registrada na rota protegida `/automacao`
  * <Route path="/automacao" element={<MinhasRegras />} />
  */
-export function MinhasRegras() {
+
 // ponytail: conteúdo extraído para ser reutilizado na tab Configurações > Automação
 export function MinhasRegrasContent() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
