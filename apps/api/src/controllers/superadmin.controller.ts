@@ -304,19 +304,29 @@ export async function updateSubscription(req: Request, res: Response, next: Next
     });
     if (!sub) throw new AppError(404, 'SUBSCRIPTION_NOT_FOUND', 'Assinatura não encontrada');
 
+    const now = new Date();
     const updates: Record<string, unknown> = {};
     if (body.planId !== undefined) updates.planId = body.planId;
     if (body.status !== undefined) updates.status = body.status;
     if (body.trialEndsAt !== undefined) updates.trialEndsAt = new Date(body.trialEndsAt);
-    if (body.currentPeriodEnd !== undefined) updates.currentPeriodEnd = new Date(body.currentPeriodEnd);
+
+    if (body.currentPeriodEnd !== undefined) {
+      updates.currentPeriodEnd = new Date(body.currentPeriodEnd);
+    }
+
+    if (body.status === 'active' && !body.currentPeriodEnd) {
+      const future = new Date(now);
+      future.setDate(future.getDate() + 30);
+      updates.currentPeriodEnd = future;
+    }
 
     if (body.billingType !== undefined) {
       updates.asaasSubscriptionId = body.billingType;
     }
 
-    updates.updatedAt = new Date();
+    updates.updatedAt = now;
 
-    if (Object.keys(updates).length > 1) {
+    if (Object.keys(updates).length >= 1) {
       await db.update(subscriptions).set(updates).where(eq(subscriptions.id, sub.id));
     }
 

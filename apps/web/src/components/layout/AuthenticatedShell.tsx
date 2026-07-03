@@ -107,7 +107,7 @@ export function AuthenticatedShell() {
     }
   }, [connections, isLoading, isFetched, shouldCheck, navigate]);
 
-  // ── Verificação de assinatura ─────────────────────────────────────────
+  // ── Verificação de assinatura (deve vir ANTES do check de Meta) ──────
   const {
     data: subscription,
     isLoading: subLoading,
@@ -140,11 +140,13 @@ export function AuthenticatedShell() {
     return false;
   }, [subscription]);
 
-  useEffect(() => {
-    if (!subLoading && subFetched && shouldCheckSubscription && isExpired) {
-      navigate('/assinatura-vencida', { replace: true });
-    }
-  }, [subLoading, subFetched, shouldCheckSubscription, isExpired, navigate]);
+  const subscriptionChecked =
+    !subLoading && subFetched;
+
+  // Se a subscription está expirada, redireciona ANTES de qualquer outro check
+  if (subscriptionChecked && shouldCheckSubscription && isExpired) {
+    return <Navigate to="/assinatura-vencida" replace />;
+  }
 
   // Sem token — redireciona para login
   if (!token) return <Navigate to="/login" replace />;
