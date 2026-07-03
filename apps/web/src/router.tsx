@@ -23,6 +23,7 @@ import { MinhasRegras } from './pages/automacao/MinhasRegras';
 import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
 import { Subscription } from './pages/billing/Subscription';
+import { AssinaturaVencida } from './pages/billing/AssinaturaVencida';
 import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
 import { AdminLogin } from './pages/superadmin/AdminLogin';
 import { AdminLayout } from './pages/superadmin/AdminLayout';
@@ -139,7 +140,12 @@ export const router = createBrowserRouter([
       { path: '/assinatura', element: <Subscription /> },
       { path: '/orcamento-smart', element: <OrcamentoSmart /> },
       { path: '/components-demo', element: <ComponentsDemo /> },
+      { path: '/assinatura-vencida', element: <AssinaturaVencida /> },
     ],
+  },
+  {
+    path: '/assinatura-vencida',
+    element: <AssinaturaVencida />,
   },
   {
     path: '/admin/login',
