@@ -59,6 +59,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0016_fix_request_logs_user_id' },
   { tag: '0017_add_request_logs_default_partition' },
   { tag: '0018_add_audience_defaults' },
+  { tag: '0020_add_referer_to_request_logs' },
   {
     tag: '0019_add_superadmin_role',
     afterHook: async (client) => {

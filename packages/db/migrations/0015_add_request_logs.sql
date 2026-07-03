@@ -1,18 +1,21 @@
 CREATE TABLE IF NOT EXISTS "request_logs" (
   "id" bigserial PRIMARY KEY,
   "created_at" timestamptz DEFAULT now() NOT NULL,
-  "request_id" uuid NOT NULL,
+  "request_id" uuid,
   "tenant_id" uuid,
-  "user_id" bigint,
+  "user_id" uuid,
   "method" varchar(10) NOT NULL,
-  "path" varchar(500) NOT NULL,
-  "path_template" varchar(500),
+  "path" text NOT NULL,
+  "query_string" text,
   "status_code" smallint NOT NULL,
   "response_time_ms" integer NOT NULL,
   "ip_address" inet,
   "user_agent" text,
+  "referer" text,
   "request_headers" jsonb,
-  "request_body" jsonb
+  "request_body" jsonb,
+  "response_body" jsonb,
+  "error_message" text
 );
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_request_logs_tenant_created" ON "request_logs" ("tenant_id", "created_at" DESC);
