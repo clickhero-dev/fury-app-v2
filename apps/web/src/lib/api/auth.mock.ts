@@ -1,4 +1,4 @@
-import type { VerifyEmailRequest, VerifyEmailResponse, User } from '@/types/auth';
+import type { VerifyEmailRequest, VerifyEmailResponse, ForgotPasswordRequest, ForgotPasswordResponse, ResetPasswordRequest, ResetPasswordResponse, User } from '@/types/auth';
 
 /**
  * Mock da API de verificação de email via OTP.
@@ -63,5 +63,47 @@ export async function mockResendOtp(userId: string): Promise<{ success: boolean 
     setTimeout(() => {
       resolve({ success: true });
     }, 500);
+  });
+}
+
+/**
+ * Mock do endpoint POST /auth/forgot-password.
+ * Simula latência de rede (~1000ms).
+ *
+ * Comportamento:
+ * - Sempre retorna sucesso, independente do email (prática comum de segurança
+ *   para não revelar quais e-mails estão cadastrados no sistema)
+ *
+ * TODO: Substituir por chamada real via api.post('/auth/forgot-password', ...) quando
+ * o backend implementar este endpoint.
+ */
+export async function mockForgotPassword(data: ForgotPasswordRequest): Promise<ForgotPasswordResponse> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({ success: true });
+    }, 1000);
+  });
+}
+
+/**
+ * Mock do endpoint POST /auth/reset-password.
+ * Simula latência de rede (~1000ms).
+ *
+ * Comportamento:
+ * - Se código = "000000", retorna erro "Código inválido"
+ * - Caso contrário, retorna sucesso
+ *
+ * TODO: Substituir por chamada real via api.post('/auth/reset-password', ...) quando
+ * o backend implementar este endpoint.
+ */
+export async function mockResetPassword(data: ResetPasswordRequest): Promise<ResetPasswordResponse> {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (data.code === '000000') {
+        reject(new Error('Código inválido'));
+      } else {
+        resolve({ success: true });
+      }
+    }, 1000);
   });
 }

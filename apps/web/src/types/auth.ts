@@ -47,3 +47,25 @@ export interface VerifyEmailResponse {
   refreshToken: string;
   user: User;
 }
+
+/** Payload enviado para solicitação de recuperação de senha. */
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+/** Resposta da API após solicitação de recuperação de senha. */
+export interface ForgotPasswordResponse {
+  success: boolean;
+}
+
+/** Payload enviado para redefinição de senha via OTP. */
+export interface ResetPasswordRequest {
+  email: string;
+  code: string;
+  newPassword: string;
+}
+
+/** Resposta da API após redefinição de senha bem-sucedida. */
+export interface ResetPasswordResponse {
+  success: boolean;
+}
