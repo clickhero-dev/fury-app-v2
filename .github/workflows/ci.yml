@@ -1,4 +1,4 @@
-name: CI
+name: CI - EasyPanel
 on:
   push:
     branches: [dev, main]
