@@ -15,4 +15,4 @@ jobs:
       - run: npx tsc -b
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
-      - run: npm test:unit
+      - run: npm run test:unit
