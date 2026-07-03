@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { eq, desc, sql } from 'drizzle-orm';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { db, tenants, users, subscriptions, plans, furyConfig, brandKits, clientGoals } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -210,7 +210,7 @@ export async function createUser(req: Request, res: Response, next: NextFunction
     });
     if (existing) throw new AppError(409, 'EMAIL_EXISTS', 'Email já cadastrado');
 
-    const passwordHash = await bcrypt.hash(body.password, 12);
+    const passwordHash = await bcrypt.hash(body.password, 10);
     const [user] = await db
       .insert(users)
       .values({
@@ -241,7 +241,7 @@ export async function setupTenant(req: Request, res: Response, next: NextFunctio
     const existingEmail = await db.query.users.findFirst({ where: eq(users.email, body.userEmail) });
     if (existingEmail) throw new AppError(409, 'EMAIL_EXISTS', 'Email já cadastrado');
 
-    const passwordHash = await bcrypt.hash(body.userPassword, 12);
+    const passwordHash = await bcrypt.hash(body.userPassword, 10);
 
     const result = await db.transaction(async (tx) => {
       const [tenant] = await tx.insert(tenants).values({ name: body.name, slug }).returning();

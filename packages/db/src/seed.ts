@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { db } from './client.js';
 import * as schema from './schema.js';
 
@@ -79,8 +79,8 @@ async function seedDatabase() {
 
     // Create users with simple hash
     console.log('👤 Criando usuários...');
-    const fashionPasswordHash = await bcrypt.hash('Dev@12345', 12);
-    const dentalPasswordHash = await bcrypt.hash('Dev@12345', 12);
+    const fashionPasswordHash = await bcrypt.hash('Dev@12345', 10);
+    const dentalPasswordHash = await bcrypt.hash('Dev@12345', 10);
 
     const fashionUser = (
       await db

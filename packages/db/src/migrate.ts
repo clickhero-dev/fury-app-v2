@@ -69,8 +69,8 @@ const STEPS: MigrationStep[] = [
       if (email && password) {
         const existing = await client`SELECT id FROM "users" WHERE email = ${email}`;
         if (existing.length === 0) {
-          const bcrypt = await import('bcryptjs');
-          const hash = await bcrypt.hash(password, 12);
+          const bcrypt = await import('bcrypt');
+          const hash = await bcrypt.hash(password, 10);
           // Create a tenant for the superadmin
           const [tenant] = await client`
             INSERT INTO "tenants" (name, slug)

@@ -1,5 +1,5 @@
 import { eq, and } from 'drizzle-orm';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { db } from './client.js';
 import { tenants, users, furyConfig } from './schema.js';
 
@@ -32,7 +32,7 @@ async function createDemoUser() {
     console.log(`✅ Tenant: ${tenant.name} (${tenant.id})`);
 
     // Criar usuário demo com bcrypt
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await bcrypt.hash(password, 10);
 
     const [user] = await db
       .insert(users)

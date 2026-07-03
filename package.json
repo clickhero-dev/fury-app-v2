@@ -32,6 +32,8 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "bcrypt": "^6.0.0",
     "esbuild": "0.28.0"
   },
   "optionalDependencies": {

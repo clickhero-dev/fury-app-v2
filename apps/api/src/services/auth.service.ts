@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { db } from '../lib/db.js';
 import { tenants, users } from '../lib/db.js';
 import { eq, and } from 'drizzle-orm';
@@ -103,7 +103,7 @@ export async function register(data: {
   const slug = await ensureUniqueSlug(baseSlug);
 
   // Hash password
-  const passwordHash = await bcrypt.hash(data.password, 12);
+  const passwordHash = await bcrypt.hash(data.password, 10);
 
   // Create tenant and user in transaction
   const result = await db.transaction(async (tx) => {
