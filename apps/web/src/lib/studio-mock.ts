@@ -1,5 +1,14 @@
 import type { StudioAsset } from '../types/studio';
 
+/**
+ * Assets fictícios do Estúdio Criativo para desenvolvimento e testes.
+ *
+ * Cobre todos os tipos de asset (`image`, `copy`, `video`) e todos os
+ * status de compliance (`approved`, `pending`, `pending_compliance`, `rejected`),
+ * permitindo testar todos os estados da UI sem depender da API real.
+ *
+ * Imagens usam o serviço Picsum Photos para URLs válidas em desenvolvimento.
+ */
 export const MOCK_ASSETS: StudioAsset[] = [
   {
     id: '1',

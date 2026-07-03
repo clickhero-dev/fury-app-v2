@@ -11,6 +11,19 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 
+/**
+ * Gera as iniciais do usuário para exibição no avatar.
+ * Usa as duas primeiras palavras do nome, ou a primeira letra do email como fallback.
+ *
+ * @param name - Nome completo do usuário
+ * @param email - Email do usuário (fallback se nome não disponível)
+ * @returns Iniciais em maiúsculo (ex: "JS" para "João Silva") ou "?" se nenhum dado disponível
+ *
+ * @example
+ * getInitials('João Silva', null)  // → 'JS'
+ * getInitials(null, 'joao@fury.com') // → 'J'
+ * getInitials(null, null) // → '?'
+ */
 function getInitials(name?: string | null, email?: string | null): string {
   if (name) {
     return name
@@ -24,10 +37,25 @@ function getInitials(name?: string | null, email?: string | null): string {
   return '?';
 }
 
+/**
+ * Menu dropdown do usuário autenticado exibido no header da aplicação.
+ *
+ * Mostra um avatar com as iniciais do usuário. Ao clicar, abre um dropdown com:
+ * - Nome e email do usuário autenticado
+ * - Botão de logout
+ *
+ * Não renderiza nada enquanto os dados do usuário estão carregando
+ * ou se o usuário não estiver autenticado.
+ *
+ * @example
+ * // Usado no header do AuthenticatedShell
+ * <UserMenu />
+ */
 export function UserMenu() {
   const { user, isLoading } = useAuth();
   const logout = useLogout();
 
+  // Não renderiza durante carregamento ou sem usuário autenticado
   if (isLoading || !user) return null;
 
   return (

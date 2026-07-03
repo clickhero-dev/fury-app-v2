@@ -2,14 +2,37 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 interface MetricCardProps {
+  /** Label descritivo da métrica (ex: "ROAS", "CPA Médio"). */
   label: string;
+  /** Valor principal exibido em destaque (ex: "4.2x", "R$ 38,00"). */
   value: string | number;
+  /** Variação percentual em relação ao período anterior. Positivo = alta, negativo = baixa. */
   change?: number;
+  /** Texto complementar ao badge de variação (ex: "vs. mês anterior"). */
   changeLabel?: string;
+  /** Ícone exibido no canto superior direito do card. */
   icon?: ReactNode;
+  /** Direção da tendência — atualmente não utilizado na renderização. */
   trend?: 'up' | 'down' | 'neutral';
 }
 
+/**
+ * Card de métrica para exibição de KPIs no Dashboard.
+ *
+ * Exibe um valor principal em destaque com badge de variação percentual colorido:
+ * - Verde com seta para cima → variação positiva
+ * - Vermelho com seta para baixo → variação negativa
+ * - Cinza → sem variação (change = 0)
+ *
+ * @example
+ * <MetricCard
+ *   label="ROAS"
+ *   value="4.2x"
+ *   change={12}
+ *   changeLabel="vs. mês anterior"
+ *   icon={<TrendingUp />}
+ * />
+ */
 export function MetricCard({
   label,
   value,
@@ -22,17 +45,16 @@ export function MetricCard({
 
   return (
     <div className="bg-surface rounded-xl border border-border p-6 space-y-4 hover:shadow-lg transition-shadow">
-      {/* Header with icon and label */}
+      {/* Cabeçalho com label e ícone */}
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-text-secondary">{label}</p>
         {icon && <div className="text-accent">{icon}</div>}
       </div>
 
-      {/* Main value */}
+      {/* Valor principal e badge de variação */}
       <div className="space-y-2">
         <div className="text-4xl font-black text-text-primary">{value}</div>
 
-        {/* Change badge */}
         {change !== undefined && (
           <div className="flex items-center gap-2">
             <span

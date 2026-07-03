@@ -5,10 +5,16 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLogout } from '@/hooks/useLogout';
 
 interface SidebarProps {
+  /** Controla se a sidebar está aberta no mobile (overlay lateral). */
   mobileOpen?: boolean;
+  /** Callback chamado ao fechar a sidebar no mobile. */
   onMobileClose?: () => void;
 }
 
+/**
+ * Itens de navegação principal da sidebar.
+ * Cada item define o ícone, label e rota de destino.
+ */
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Megaphone, label: 'Campanhas', path: '/campanhas' },
@@ -21,6 +27,26 @@ const navItems = [
   { icon: CreditCard, label: 'Assinatura', path: '/assinatura' },
 ];
 
+/**
+ * Sidebar de navegação principal da aplicação.
+ *
+ * Funcionalidades:
+ * - **Desktop:** Fixada à esquerda, pode ser colapsada para modo ícones (largura reduzida).
+ * - **Mobile:** Abre como overlay lateral controlado por `mobileOpen`.
+ *   Um overlay escuro é renderizado pelo `AuthenticatedShell` ao abrir.
+ * - **Item ativo:** Destaca o item correspondente à rota atual via `useLocation`.
+ *   Suporta correspondência exata e por prefixo de rota (exceto `/configuracoes`).
+ * - **Logout:** Exibe o primeiro nome do usuário autenticado e executa logout ao clicar.
+ * - **Colapso:** Botão visível apenas no desktop para alternar entre modo expandido e colapsado.
+ *   No modo colapsado, os labels são ocultados e os ícones ficam centralizados.
+ *
+ * @param mobileOpen - Se `true`, exibe a sidebar no mobile via translateX
+ * @param onMobileClose - Callback para fechar a sidebar no mobile
+ *
+ * @example
+ * // Usado no AuthenticatedShell
+ * <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+ */
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
@@ -37,6 +63,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
       `}
     >
+      {/* Cabeçalho com logo e botão de fechar (mobile) */}
       <div className="p-6 flex items-center justify-between flex-shrink-0">
         {!collapsed && (
           <h1 className="text-xl font-bold tracking-wider !text-white">FURY</h1>
@@ -50,9 +77,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         </button>
       </div>
 
+      {/* Navegação principal */}
       <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
         <ul className="space-y-1">
           {navItems.map((item) => {
+            // Item ativo por correspondência exata ou prefixo de rota
             const isActive =
               location.pathname === item.path ||
               (item.path !== '/configuracoes' && location.pathname.startsWith(item.path + '/'));
@@ -79,11 +108,12 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         </ul>
       </nav>
 
+      {/* Rodapé: logout e botão de colapso */}
       <div className="pb-3 space-y-2 flex-shrink-0">
         <div className="px-3 border-t border-sidebar-hover pt-3">
           <button
             onClick={() => { onMobileClose?.(); logout(); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-sidebar-hover hover:text-white transition-colors ${
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-sidebar-hover hover:text-white transition-colors${
               collapsed ? 'justify-center' : ''
             }`}
             title={collapsed ? 'Sair' : undefined}
@@ -91,16 +121,18 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             <LogOut className="w-5 h-5 flex-shrink-0" />
             {!collapsed && (
               <span className="flex-1 text-left truncate">
+                {/* Exibe apenas o primeiro nome do usuário autenticado */}
                 {user?.name ? `Sair (${user.name.split(' ')[0]})` : 'Sair'}
               </span>
             )}
           </button>
         </div>
 
+        {/* Botão de colapso — visível apenas no desktop */}
         <div className="px-3 border-t border-sidebar-hover pt-3">
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden md:flex w-full items-center justify-center px-3 py-2.5 rounded-lg text-white/85 hover:bg-sidebar-hover hover:text-white transition-colors"
+            className="hidden md:flex w-full items-center justify-center px-3 py-2.5rounded-lg text-white/85 hover:bg-sidebar-hover hover:text-white transition-colors"
             title={collapsed ? 'Expandir' : 'Colapsar'}
           >
             <ChevronLeft

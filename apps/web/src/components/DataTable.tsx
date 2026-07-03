@@ -1,25 +1,75 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
+/**
+ * Definição de uma coluna da tabela.
+ * @template T - Tipo do objeto de dados de cada linha
+ */
 interface Column<T> {
+  /** Chave do campo no objeto de dados. */
   key: keyof T;
+  /** Label exibido no cabeçalho da coluna. */
   label: string;
+  /**
+   * Função de renderização customizada para a célula.
+   * Se omitida, exibe o valor convertido para string.
+   *
+   * @param value - Valor do campo na linha atual
+   * @param row - Objeto completo da linha
+   */
   render?: (value: T[keyof T], row: T) => ReactNode;
+  /** Alinhamento do conteúdo da coluna. Padrão: 'left'. */
   align?: 'left' | 'center' | 'right';
 }
 
+/**
+ * Props do componente DataTable.
+ * @template T - Tipo do objeto de dados de cada linha
+ */
 interface DataTableProps<T> {
+  /** Definição das colunas da tabela. */
   columns: Column<T>[];
+  /** Array de dados a ser exibido. */
   data: T[];
+  /** Campo usado como chave única para cada linha (equivalente ao `key` do React). */
   keyField: keyof T;
+  /** Exibe estado de carregamento com animação. */
   isLoading?: boolean;
+  /** Força exibição do estado vazio mesmo com dados. */
   isEmpty?: boolean;
+  /** Mensagem exibida quando não há dados. Padrão: 'Nenhum dado disponível'. */
   emptyMessage?: string;
   className?: string;
   theadRowClassName?: string;
   thClassName?: string;
 }
 
+/**
+ * Componente de tabela de dados genérica e reutilizável.
+ *
+ * Suporta tipagem genérica via TypeScript, renderização customizada por coluna,
+ * estados de carregamento e vazio, e alinhamento de colunas.
+ *
+ * Estados possíveis:
+ * - **Carregando** (`isLoading=true`) → exibe animação de bounce
+ * - **Vazio** (`isEmpty=true` ou `data.length === 0`) → exibe `emptyMessage`
+ * - **Com dados** → renderiza tabela completa com scroll horizontal em telas pequenas
+ *
+ * @template T - Tipo do objeto de dados. Deve ser um Record com chaves string.
+ *
+ * @example
+ * <DataTable
+ *   columns={[
+ *     { key: 'name', label: 'Nome' },
+ *     { key: 'status', label: 'Status', render: (v) => <StatusBadge status={v} /> },
+ *     { key: 'spend', label: 'Gasto', align: 'right' },
+ *   ]}
+ *   data={campaigns}
+ *   keyField="id"
+ *   isLoading={isLoading}
+ *   emptyMessage="Nenhuma campanha encontrada"
+ * />
+ */
 export function DataTable<T extends Record<string, any>>({
   columns,
   data,
@@ -78,7 +128,7 @@ export function DataTable<T extends Record<string, any>>({
               key={String(row[keyField])}
               className={cn(
                 'border-b border-border hover:bg-surface-secondary transition-colors',
-                index === data.length - 1 && 'border-b-0'
+                index === data.length - 1 && 'border-b-0' // Remove borda da última linha
               )}
             >
               {columns.map((column) => (

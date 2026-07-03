@@ -3,13 +3,22 @@ import { Button, Card, Input } from '@/components';
 import type { FuryRule, CreateFuryRulePayload } from '@/hooks/useFuryRules';
 
 interface FuryRuleDialogProps {
+  /** Controla a visibilidade do dialog. */
   isOpen: boolean;
+  /** Callback chamado ao fechar o dialog (cancelar ou após salvar). */
   onClose: () => void;
+  /**
+   * Callback assíncrono chamado ao salvar a regra.
+   * Deve lançar erro em caso de falha para que o dialog trate corretamente.
+   */
   onSave: (payload: CreateFuryRulePayload) => Promise<void>;
+  /** Regra existente para edição. Se omitida, o dialog opera em modo de criação. */
   rule?: FuryRule;
+  /** Indica se a operação de salvar está em andamento (desabilita botões). */
   isPending?: boolean;
 }
 
+/** Opções de métricas monitoráveis pelas regras do FURY Engine. */
 const METRICS = [
   { value: 'cpc', label: 'CPC (Custo por Clique)' },
   { value: 'ctr', label: 'CTR (Taxa de Cliques)' },
@@ -18,12 +27,14 @@ const METRICS = [
   { value: 'spend', label: 'Spend (Gasto)' },
 ];
 
+/** Operadores de comparação disponíveis para as condições das regras. */
 const OPERATORS = [
   { value: 'gt', label: 'Maior que (>)' },
   { value: 'lt', label: 'Menor que (<)' },
   { value: 'eq', label: 'Igual (=)' },
 ];
 
+/** Ações disponíveis para execução quando a condição da regra é satisfeita. */
 const ACTIONS = [
   { value: 'pause_campaign', label: 'Pausar Campanha' },
   { value: 'reduce_budget', label: 'Reduzir Orçamento' },
@@ -31,6 +42,37 @@ const ACTIONS = [
   { value: 'increase_budget', label: 'Aumentar Orçamento' },
 ];
 
+/**
+ * Dialog modal para criação e edição de regras de automação do FURY Engine.
+ *
+ * Permite configurar uma regra no formato: "SE [métrica] [operador] [valor] ENTÃO [ação]".
+ * Para ações de ajuste de orçamento (`reduce_budget`, `increase_budget`),
+ * exibe um campo adicional para o percentual de ajuste.
+ *
+ * Comportamento:
+ * - Em modo de **criação** (`rule` omitida): inicializa com valores padrão.
+ * - Em modo de **edição** (`rule` fornecida): pré-popula o formulário com os dados da regra.
+ * - O formulário é resetado sempre que `isOpen` ou `rule` mudam.
+ * - Fecha automaticamente após salvar com sucesso.
+ * - Não renderiza nada quando `isOpen = false`.
+ *
+ * @example
+ * <FuryRuleDialog
+ *   isOpen={dialogOpen}
+ *   onClose={() => setDialogOpen(false)}
+ *   onSave={async (payload) => await createRule(payload)}
+ * />
+ *
+ * @example
+ * // Modo edição
+ * <FuryRuleDialog
+ *   isOpen={dialogOpen}
+ *   onClose={() => setDialogOpen(false)}
+ *   onSave={async (payload) => await updateRule({ id: rule.id, payload })}
+ *   rule={selectedRule}
+ *   isPending={isUpdating}
+ * />
+ */
 export function FuryRuleDialog({
   isOpen,
   onClose,
@@ -47,6 +89,7 @@ export function FuryRuleDialog({
     isActive: true,
   });
 
+  // Sincroniza o formulário com a regra recebida ou reseta para criação
   useEffect(() => {
     if (rule) {
       setForm({
@@ -90,7 +133,7 @@ export function FuryRuleDialog({
           </h2>
 
           <div className="space-y-4">
-            {/* Nome */}
+            {/* Nome da regra */}
             <div>
               <label className="block text-sm font-semibold text-text-secondary mb-2">
                 Nome da Regra
@@ -103,49 +146,36 @@ export function FuryRuleDialog({
               />
             </div>
 
-            {/* Condição */}
+            {/* Condição: SE [métrica] [operador] [valor] */}
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-text-secondary">
                 Se
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {/* Métrica */}
                 <select
                   value={form.conditionField}
                   onChange={(e) =>
-                    setForm({
-                      ...form,
-                      conditionField: e.target.value as CreateFuryRulePayload['conditionField'],
-                    })
+                    setForm({ ...form, conditionField: e.target.value as CreateFuryRulePayload['conditionField'] })
                   }
                   className="w-full px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
                 >
                   {METRICS.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
+                    <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
                 </select>
 
-                {/* Operador */}
                 <select
                   value={form.conditionOperator}
                   onChange={(e) =>
-                    setForm({
-                      ...form,
-                      conditionOperator: e.target.value as CreateFuryRulePayload['conditionOperator'],
-                    })
+                    setForm({ ...form, conditionOperator: e.target.value as CreateFuryRulePayload['conditionOperator'] })
                   }
                   className="w-full px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
                 >
                   {OPERATORS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
+                    <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
 
-                {/* Valor */}
                 <Input
                   type="number"
                   value={form.conditionValue}
@@ -158,7 +188,7 @@ export function FuryRuleDialog({
               </div>
             </div>
 
-            {/* Ação */}
+            {/* Ação: ENTÃO [ação] */}
             <div>
               <label className="block text-sm font-semibold text-text-secondary mb-2">
                 Então
@@ -166,22 +196,17 @@ export function FuryRuleDialog({
               <select
                 value={form.action}
                 onChange={(e) =>
-                  setForm({
-                    ...form,
-                    action: e.target.value as CreateFuryRulePayload['action'],
-                  })
+                  setForm({ ...form, action: e.target.value as CreateFuryRulePayload['action'] })
                 }
                 className="w-full px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
               >
                 {ACTIONS.map((a) => (
-                  <option key={a.value} value={a.value}>
-                    {a.label}
-                  </option>
+                  <option key={a.value} value={a.value}>{a.label}</option>
                 ))}
               </select>
             </div>
 
-            {/* Action Value (opcional para reduce_budget e increase_budget) */}
+            {/* Percentual de ajuste — exibido apenas para ações de orçamento */}
             {(form.action === 'reduce_budget' || form.action === 'increase_budget') && (
               <div>
                 <label className="block text-sm font-semibold text-text-secondary mb-2">
@@ -199,7 +224,7 @@ export function FuryRuleDialog({
               </div>
             )}
 
-            {/* Status */}
+            {/* Toggle de ativação da regra */}
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
@@ -214,7 +239,7 @@ export function FuryRuleDialog({
             </div>
           </div>
 
-          {/* Botões */}
+          {/* Botões de ação */}
           <div className="flex gap-3 justify-end mt-6">
             <Button variant="ghost" onClick={onClose} disabled={isPending}>
               Cancelar

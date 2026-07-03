@@ -9,6 +9,11 @@ export default defineConfig({
     testTimeout: 30000,
     pool: 'forks',
     singleFork: true,
+    env: {
+      JWT_SECRET: 'test-jwt-secret-not-for-production',
+      JWT_REFRESH_SECRET: 'test-jwt-refresh-secret-not-for-production',
+      TOKEN_ENCRYPTION_KEY: 'test-token-encryption-key-32chars',
+    },
     setupFiles: ['./apps/api/src/__tests__/setup.env.ts'],
     coverage: {
       provider: 'v8',
