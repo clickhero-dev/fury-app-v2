@@ -34,3 +34,16 @@ export interface RegisterRequest {
 export interface RegisterResponse {
   user: User;
 }
+
+/** Payload enviado para verificação de email via OTP. */
+export interface VerifyEmailRequest {
+  userId: string;
+  code: string;
+}
+
+/** Resposta da API após verificação de email bem-sucedida. */
+export interface VerifyEmailResponse {
+  token: string;
+  refreshToken: string;
+  user: User;
+}
