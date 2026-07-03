@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, Loader2, Sparkles, Trash2 } from 'lucide-react';
 import { AppLayout, Button, Card, CardContent, EmptyState, LoadingSpinner } from '@/components';
 import api from '@/lib/api';
-import { MOCK_ASSETS } from '@/lib/studio-mock';
 import type { StudioAsset, GenerateCreativeResponse } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
 
@@ -72,7 +71,7 @@ export function EstudioHome() {
     retry: 2,
   });
 
-  const assetList = data?.assets ?? MOCK_ASSETS;
+  const assetList = data?.assets ?? [];
 
   const filteredAssets = useMemo(() => {
     return assetList.filter((asset) => {
