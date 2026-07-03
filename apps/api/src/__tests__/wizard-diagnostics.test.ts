@@ -127,7 +127,7 @@ describe('Wizard Diagnostics (dados de produção)', () => {
     mockMetaApiCall.mockRejectedValue(new Error('Connection refused'));
 
     await expect(createCampaignFromWizard(wizardPayload)).rejects.toMatchObject({
-      statusCode: 502, code: 'META_API_ERROR',
+      statusCode: 400, code: 'META_API_ERROR',
     });
   });
 
@@ -144,7 +144,7 @@ describe('Wizard Diagnostics (dados de produção)', () => {
       await createCampaignFromWizard(wizardPayload);
       expect(true).toBe(false); // não deve chegar aqui
     } catch (err: any) {
-      expect(err.statusCode).toBe(502);
+      expect(err.statusCode).toBe(400);
       expect(err.code).toBe('META_API_ERROR');
       expect(err.message).toContain('Campo X');
       expect(err.details?.step).toBe('campaign');
@@ -172,7 +172,7 @@ describe('Wizard Diagnostics (dados de produção)', () => {
       .mockRejectedValueOnce(new Error('AdSet fail'));  // adset FAIL
 
     await expect(createCampaignFromWizard(wizardPayload)).rejects.toMatchObject({
-      statusCode: 502, code: 'META_API_ERROR',
+      statusCode: 400, code: 'META_API_ERROR',
     });
   });
 
@@ -184,7 +184,7 @@ describe('Wizard Diagnostics (dados de produção)', () => {
       .mockRejectedValueOnce(new Error('Creative fail'));  // creative FAIL
 
     await expect(createCampaignFromWizard(wizardPayload)).rejects.toMatchObject({
-      statusCode: 502, code: 'META_API_ERROR',
+      statusCode: 400, code: 'META_API_ERROR',
     });
   });
 
@@ -196,7 +196,7 @@ describe('Wizard Diagnostics (dados de produção)', () => {
     );
 
     await expect(createCampaignFromWizard(wizardPayload)).rejects.toMatchObject({
-      statusCode: 502, code: 'META_API_ERROR',
+      statusCode: 400, code: 'META_API_ERROR',
     });
   });
 
@@ -247,7 +247,7 @@ describe('Wizard Diagnostics (dados de produção)', () => {
     try {
       await createCampaignFromWizard(wizardPayload);
     } catch (err: any) {
-      expect(err.statusCode).toBe(502);
+      expect(err.statusCode).toBe(400);
       expect(err.code).toBe('META_API_ERROR');
       expect(err.details?.meta_code).toBe(100);
     }

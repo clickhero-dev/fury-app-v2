@@ -73,13 +73,15 @@ vi.mock('bullmq', () => {
 });
 
 vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    chat: {
-      completions: {
-        create: state.chatCreate,
+  default: vi.fn().mockImplementation(function () {
+    return {
+      chat: {
+        completions: {
+          create: state.chatCreate,
+        },
       },
-    },
-  })),
+    };
+  }),
 }));
 
 vi.mock('@fury/db', () => {
@@ -134,6 +136,10 @@ vi.mock('../lib/sync-jobs.js', () => ({
   stopSyncJobsWorker: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../lib/seed-superadmin.js', () => ({
+  seedStartup: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../lib/rule-engine-manager.js', () => ({
   startRuleEngine: vi.fn().mockResolvedValue(undefined),
   stopRuleEngine: vi.fn().mockResolvedValue(undefined),
@@ -184,12 +190,15 @@ vi.mock('../routes/index.js', () => ({
 vi.mock('express', () => {
   const app = {
     use: vi.fn(),
+    set: vi.fn(),
+    get: vi.fn(),
     _router: { stack: [] },
     listen: vi.fn((_port: number, callback?: () => void) => {
-      callback?.();
-      return {
+      const srv = {
         close: vi.fn((done?: () => void) => done?.()),
       };
+      setImmediate(() => callback?.());
+      return srv;
     }),
   };
 

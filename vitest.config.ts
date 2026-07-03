@@ -14,9 +14,12 @@ export default defineConfig({
       JWT_REFRESH_SECRET: 'test-jwt-refresh-secret-not-for-production',
       TOKEN_ENCRYPTION_KEY: 'test-token-encryption-key-32chars',
     },
+    setupFiles: ['./apps/api/src/__tests__/setup.env.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      reportOnFailure: true,
+      all: true,
       exclude: [
         'node_modules/',
         'dist/',
@@ -24,6 +27,8 @@ export default defineConfig({
         'coverage/',
         '**/*.d.ts',
         '**/*.config.*',
+        '**/__tests__/**',
+        '**/setup.env.ts',
       ],
     },
   },

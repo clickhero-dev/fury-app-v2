@@ -165,3 +165,38 @@ meio da conversa para invocar uma auditoria completa:
 | **Infra Security** | Rate limiting, CORS, static files |
 | **Audit & Monitoring** | Audit logging, sanitização de IA |
 <!-- /security-agent-instructions -->
+
+<!-- qa-agent-instructions v1 -->
+# 🧪 FURY QA Agent
+
+## Audit automatizado
+```bash
+npm run qa:audit          # Relatório de coverage + testes falhando
+npm run test:coverage     # Coverage completo (inclui testes de DB se Postgres up)
+npm run test:unit         # Só testes unitários (sem DB)
+```
+
+## Agente opencode (`@qa`)
+O agente está definido em `.opencode/agents/qa.md`. Use `@qa` para invocar
+uma auditoria de cobertura de testes:
+
+- Executa `npm run qa:audit` automaticamente
+- Identifica files com 0% coverage, testes falhando, e gaps por módulo
+- Propõe casos de teste específicos para preencher lacunas
+- Classifica falhas: ENV (setup), STALE (assertion desatualizada), REGRESSION, FLAKY
+
+## Estado atual (Jul 2026)
+
+| Área | Source files | Test files | Coverage |
+|------|-------------|------------|----------|
+| API  | 96          | 16         | ~31% lines |
+| Web  | 134         | 0          | 0% |
+| Testes | 54 total   | 45 pass    | 9 fail |
+
+## Falhas conhecidas
+
+1. 10 suites de integração precisam PostgreSQL @ localhost:5432 (fury_test)
+2. `wizard-diagnostics.test.ts` — 6 failures: assertions esperam 502, código retorna 400 (STALE)
+3. `compliance-check.test.ts` — 3 failures: mock OpenAI usa arrow fn em vez de class (ENV)
+4. Frontend: zero test files — 134 componentes/páginas/hooks sem cobertura
+<!-- /qa-agent-instructions -->
