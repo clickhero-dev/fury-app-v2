@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from '../Sidebar';
 import api from '../../lib/api';
 import { DEMO_CREDENTIALS } from '../../lib/constants';
+import { useSubscription } from '../../hooks/useBilling';
 
 /**
  * Contexto disponível para rotas filhas via `useOutletContext`.
@@ -63,9 +64,12 @@ export function AuthenticatedShell() {
   const isDemoUser = currentUserEmail ? DEMO_USER_EMAILS.includes(currentUserEmail) : false;
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
-  
+  const isSubscriptionExempt =
+    isExempt || location.pathname.startsWith('/assinatura-vencida');
+
   // Só verifica conexão Meta se autenticado, fora de rotas isentas/onboarding e se não for usuário demo
   const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser;
+  const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoUser;
 
   const { data: connections, isLoading, isFetched } = useQuery({
     queryKey: ['meta-connections'],
@@ -102,6 +106,45 @@ export function AuthenticatedShell() {
       }
     }
   }, [connections, isLoading, isFetched, shouldCheck, navigate]);
+
+  // ── Verificação de assinatura ─────────────────────────────────────────
+  const {
+    data: subscription,
+    isLoading: subLoading,
+    isFetched: subFetched,
+  } = useSubscription();
+
+  const isExpired = useMemo(() => {
+    if (!subscription) return false;
+
+    const now = new Date();
+
+    if (['cancelled', 'inactive', 'past_due'].includes(subscription.status)) {
+      return true;
+    }
+    if (
+      subscription.status === 'trial' &&
+      subscription.trialEndsAt &&
+      now > new Date(subscription.trialEndsAt)
+    ) {
+      return true;
+    }
+    if (
+      subscription.status === 'active' &&
+      subscription.currentPeriodEnd &&
+      now > new Date(subscription.currentPeriodEnd)
+    ) {
+      return true;
+    }
+
+    return false;
+  }, [subscription]);
+
+  useEffect(() => {
+    if (!subLoading && subFetched && shouldCheckSubscription && isExpired) {
+      navigate('/assinatura-vencida', { replace: true });
+    }
+  }, [subLoading, subFetched, shouldCheckSubscription, isExpired, navigate]);
 
   // Sem token — redireciona para login
   if (!token) return <Navigate to="/login" replace />;

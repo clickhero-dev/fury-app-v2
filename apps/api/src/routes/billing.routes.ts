@@ -139,14 +139,24 @@ router.post('/subscribe', async (req: Request, res: Response, next: NextFunction
     });
     if (!plan) throw new AppError(404, 'PLAN_NOT_FOUND', 'Plano não encontrado');
 
-    // Check existing active subscription
+    // Check existing subscription — if expired, block new subscription
     const existing = await db.query.subscriptions.findFirst({
-      where: and(
-        eq(subscriptions.tenantId, tenantId),
-        eq(subscriptions.status, 'active')
-      ),
+      where: eq(subscriptions.tenantId, tenantId),
     });
-    if (existing) throw new AppError(409, 'ALREADY_SUBSCRIBED', 'Tenant já possui assinatura ativa');
+    if (existing) {
+      const now = new Date();
+      const isExpired =
+        ['cancelled', 'inactive', 'past_due'].includes(existing.status) ||
+        (existing.status === 'trial' && existing.trialEndsAt && now > existing.trialEndsAt) ||
+        (existing.status === 'active' && existing.currentPeriodEnd && now > existing.currentPeriodEnd);
+
+      if (isExpired) {
+        throw new AppError(403, 'SUBSCRIPTION_EXPIRED', 'Sua assinatura está vencida. Entre em contato com o suporte.');
+      }
+
+      // If active/trial within validity, block as already subscribed
+      throw new AppError(409, 'ALREADY_SUBSCRIBED', 'Tenant já possui assinatura ativa');
+    }
 
     // Get or create Asaas customer; patch CPF if missing
     let asaasCustomer = await findCustomerByExternalReference(tenantId);
