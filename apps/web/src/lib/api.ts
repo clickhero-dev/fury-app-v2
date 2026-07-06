@@ -1,24 +1,16 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import { queryClient } from './query-client';
+import { store } from '../store';
+import { setTokens } from '../store/slices/authSlice';
 
 const BASE_URL = 'https://clickhero-fury-api.u7pe19.easypanel.host/api';
 
 console.log(BASE_URL);
 
-/**
- * Instância principal do cliente HTTP da aplicação.
- * Configurada com a URL base da API definida em `VITE_API_URL`.
- * Todos os hooks e serviços do frontend devem usar este cliente.
- */
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
 });
 
-/**
- * Interceptor de requisição.
- * Injeta automaticamente o token JWT no header `Authorization`
- * de todas as requisições, se o token estiver salvo no localStorage.
- */
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -27,33 +19,17 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-/** Controla se já existe um refresh de token em andamento. */
 let isRefreshing = false;
 
-/**
- * Fila de callbacks aguardando o novo token.
- * Requisições que chegam enquanto o refresh está em andamento
- * são enfileiradas aqui e resolvidas assim que o novo token estiver disponível.
- */
 let refreshQueue: ((token: string) => void)[] = [];
 
-/**
- * Resolve todas as requisições enfileiradas com o novo token de acesso.
- * Chamada após o refresh ser concluído com sucesso.
- *
- * @param newToken - Novo token de acesso obtido após o refresh
- */
 function processQueue(newToken: string) {
   refreshQueue.forEach((resolve) => resolve(newToken));
   refreshQueue = [];
 }
 
-/**
- * Força o logout do usuário limpando todos os dados de sessão
- * e redirecionando para a página de login.
- * Chamada quando o refresh token expira ou é inválido.
- */
 function forceLogout() {
+  store.dispatch(setTokens({ token: '', refreshToken: '' }));
   localStorage.removeItem('token');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('user');
@@ -122,6 +98,7 @@ api.interceptors.response.use(
         const { accessToken, refreshToken: newRefreshToken } = res.data.data.tokens;
         localStorage.setItem('token', accessToken);
         localStorage.setItem('refreshToken', newRefreshToken);
+        store.dispatch(setTokens({ token: accessToken, refreshToken: newRefreshToken }));
 
         processQueue(accessToken);
 

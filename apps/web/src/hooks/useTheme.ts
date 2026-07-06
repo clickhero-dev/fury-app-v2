@@ -1,37 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { selectTheme, setTheme as setThemeAction } from '../store/slices/authSlice';
 
-/**
- * Hook para gerenciar o tema da interface (claro/escuro).
- *
- * - Persiste a preferência no localStorage sob a chave `fury-theme`.
- * - Aplica/remove a classe `dark` no elemento `<html>` para ativar o tema escuro via Tailwind.
- * - Inicializa com o tema salvo no localStorage, ou claro se não houver preferência.
- *
- * @returns `isDark` - `true` se o tema escuro está ativo
- * @returns `setDark` - Função para alternar o tema
- *
- * @example
- * const { isDark, setDark } = useTheme();
- *
- * <button onClick={() => setDark(!isDark)}>
- *   {isDark ? 'Modo claro' : 'Modo escuro'}
- * </button>
- */
 export function useTheme() {
-  const [isDark, setIsDark] = useState<boolean>(() => {
-    // Inicializa com a preferência salva no localStorage
-    return localStorage.getItem('fury-theme') === 'dark';
-  });
+  const isDark = useAppSelector(selectTheme) === 'dark';
+  const dispatch = useAppDispatch();
+
+  const setDark = (value: boolean) => {
+    const theme = value ? 'dark' : 'light';
+    dispatch(setThemeAction(theme));
+    localStorage.setItem('fury-theme', theme);
+  };
 
   useEffect(() => {
     if (isDark) {
       document.documentElement.classList.add('dark');
-      localStorage.setItem('fury-theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('fury-theme', 'light');
     }
   }, [isDark]);
 
-  return { isDark, setDark: setIsDark };
+  return { isDark, setDark };
 }

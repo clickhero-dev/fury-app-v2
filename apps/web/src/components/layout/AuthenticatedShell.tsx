@@ -5,6 +5,8 @@ import { Sidebar } from '../Sidebar';
 import api from '../../lib/api';
 import { DEMO_CREDENTIALS } from '../../lib/constants';
 import { useSubscription } from '../../hooks/useBilling';
+import { useAppDispatch } from '../../store/hooks';
+import { setMetaId, setPlan } from '../../store/slices/authSlice';
 
 /**
  * Contexto disponível para rotas filhas via `useOutletContext`.
@@ -54,6 +56,7 @@ export function AuthenticatedShell() {
   const token = localStorage.getItem('token');
   const location = useLocation();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
 
   let currentUserEmail: string | null = null;
   try {
@@ -74,7 +77,7 @@ export function AuthenticatedShell() {
   const { data: connections, isLoading, isFetched } = useQuery({
     queryKey: ['meta-connections'],
     queryFn: async () => {
-      const res = await api.get<{ data: Array<{ selectedAdAccountId: string | null }> }>(
+      const res = await api.get<{ data: Array<{ id: string; selectedAdAccountId: string | null }> }>(
         '/meta/connections'
       );
       const data = res.data.data;
@@ -97,15 +100,16 @@ export function AuthenticatedShell() {
 
   useEffect(() => {
     if (!isLoading && isFetched && shouldCheck && Array.isArray(connections)) {
+      if (connections.length > 0) {
+        dispatch(setMetaId(connections[0].id ?? null));
+      }
       if (connections.length === 0) {
-        // Sem nenhuma conexão Meta — inicia onboarding
         navigate('/onboarding/conectar-meta', { replace: true });
       } else if (!connections.some((conn) => conn.selectedAdAccountId)) {
-        // Tem conexão mas sem ad account selecionado
         navigate('/onboarding/selecionar-conta', { replace: true });
       }
     }
-  }, [connections, isLoading, isFetched, shouldCheck, navigate]);
+  }, [connections, isLoading, isFetched, shouldCheck, navigate, dispatch]);
 
   // ── Verificação de assinatura (deve vir ANTES do check de Meta) ──────
   const {
@@ -143,7 +147,14 @@ export function AuthenticatedShell() {
   const subscriptionChecked =
     !subLoading && subFetched;
 
-  // Se a subscription está expirada, redireciona ANTES de qualquer outro check
+  useEffect(() => {
+    if (subscription && subscriptionChecked) {
+      const planName = subscription.plan?.name ?? null;
+      const expiration = subscription.trialEndsAt ?? subscription.currentPeriodEnd ?? null;
+      dispatch(setPlan({ plan: planName, planExpiration: expiration }));
+    }
+  }, [subscription, subscriptionChecked, dispatch]);
+
   if (subscriptionChecked && shouldCheckSubscription && isExpired) {
     return <Navigate to="/assinatura-vencida" replace />;
   }

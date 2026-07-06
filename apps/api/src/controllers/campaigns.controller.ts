@@ -698,3 +698,16 @@ export async function searchMetaLocationsHandler(req: Request, res: Response, ne
     next(err);
   }
 }
+
+export async function createWizardCampaignDiagHandler(req: any, res: any) {
+  // DIAG: Test if createCampaignFromWizard is importable and callable
+  try {
+    const { createCampaignFromWizard } = await import('../services/campaigns.service.js');
+    if (typeof createCampaignFromWizard !== 'function') {
+      return res.json({ success: false, error: { code: 'NOT_A_FUNCTION', type: typeof createCampaignFromWizard } });
+    }
+    return res.json({ success: true, message: 'createCampaignFromWizard is a function and importable' });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: { code: 'IMPORT_FAIL', message: e.message, stack: e.stack?.split('\n').slice(0, 5) } });
+  }
+};
