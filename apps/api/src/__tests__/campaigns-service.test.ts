@@ -285,6 +285,35 @@ describe('CampaignsService.createCampaignFromWizard', () => {
       ageMin: 18, ageMax: 65, gender: 'all', dailyBudgetBrl: 50,
     })).rejects.toThrow(AppError);
   });
+
+  it('cria whatsapp_conv com URL da LP e OUTCOME_TRAFFIC', async () => {
+    const { service, repo, meta } = makeService();
+    repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+      createdAt: new Date(),
+    } as any);
+    meta.locationsResult = [{ key: 'city_key_1' }];
+    meta.uploadAdImageResult = 'img_hash';
+    meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+
+    const result = await service.createCampaignFromWizard({
+      tenantId: TENANT_ID, objective: 'whatsapp_conv',
+      headline: 'Fale conosco', primaryText: 'Clique e converse',
+      locationCity: 'Sao Paulo', locationRadiusKm: 30,
+      ageMin: 18, ageMax: 65, gender: 'all', dailyBudgetBrl: 100,
+      creativeUploadUrl: 'https://example.com/img.jpg',
+    });
+
+    expect(result.success).toBe(true);
+    expect(meta.createdCampaigns[0].objective).toBe('OUTCOME_TRAFFIC');
+    expect(meta.createdAdSets[0].optimization_goal).toBe('LINK_CLICKS');
+    const link = meta.createdAdCreatives[0].object_story_spec.link_data.link;
+    expect(link).toContain('/api/lp/');
+    expect(link).toContain(TENANT_ID);
+    expect(meta.createdAdCreatives[0].object_story_spec.link_data.call_to_action.type).toBe('LEARN_MORE');
+    expect(repo.campaigns).toHaveLength(1);
+  });
 });
 
 // ── Service: getCampaignPanelDetail ─────────────────────────────────────────
