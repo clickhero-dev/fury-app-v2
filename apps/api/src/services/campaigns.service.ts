@@ -579,7 +579,7 @@ export class CampaignsService {
       const adImageHash = await adImageHashPromise;
 
       // ponytail: compute link once instead of re-deriving in the creative spread
-      const appUrl = process.env.FURY_APP_URL || 'https://app.fury.com.br';
+      const appUrl = process.env.FURY_APP_URL || process.env.APP_URL || 'https://clickhero-fury-api.u7pe19.easypanel.host';
       const creativeLink = args.objective === 'visits'
         ? args.destinationUrl
         : args.objective === 'whatsapp_conv'
