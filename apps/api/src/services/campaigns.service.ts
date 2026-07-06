@@ -38,7 +38,7 @@ export interface CampaignListItem {
   ctr: number; cpc: number; roas: number; cpa: number; conversions: number;
 }
 
-export type WizardObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';
+export type WizardObjective = 'visits' | 'whatsapp_conv' | 'engagement' | 'messages' | 'whatsapp';
 export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'messenger';
 
 export interface CreateWizardCampaignArgs {
@@ -65,6 +65,7 @@ const WIZARD_OBJECTIVE_MAP: Record<WizardObjective, {
   destinationType?: string; label: string;
 }> = {
   visits: { metaObjective: 'OUTCOME_TRAFFIC', optimizationGoal: 'LINK_CLICKS', cta: 'LEARN_MORE', label: 'Visitas' },
+  whatsapp_conv: { metaObjective: 'OUTCOME_TRAFFIC', optimizationGoal: 'LINK_CLICKS', cta: 'LEARN_MORE', label: 'Conversas WhatsApp' },
   engagement: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'POST_ENGAGEMENT', cta: 'LIKE_PAGE', destinationType: 'ON_POST', label: 'Engajamento' },
   messages: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'CONVERSATIONS', cta: 'MESSAGE_PAGE', destinationType: 'MESSENGER', label: 'Atração de Clientes' },
   whatsapp: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'CONVERSATIONS', cta: 'WHATSAPP_MESSAGE', destinationType: 'WHATSAPP', label: 'Gerar Conversas' },
@@ -510,7 +511,7 @@ export class CampaignsService {
       messagingDestinationType = messagingDestinations.length > 1 ? 'MESSAGING_APPS'
         : messagingDestinations[0] === 'whatsapp' ? 'WHATSAPP'
         : messagingDestinations[0] === 'instagram_direct' ? 'INSTAGRAM_DIRECT' : 'MESSENGER';
-    } else if (args.objective === 'visits' || args.objective === 'engagement' || args.objective === 'messages') {
+    } else if (args.objective === 'visits' || args.objective === 'whatsapp_conv' || args.objective === 'engagement' || args.objective === 'messages') {
       promotedObject = { page_id: pageId };
     }
 
@@ -577,9 +578,17 @@ export class CampaignsService {
 
       const adImageHash = await adImageHashPromise;
 
+      // ponytail: compute link once instead of re-deriving in the creative spread
+      const appUrl = process.env.FURY_APP_URL || 'https://app.fury.com.br';
+      const creativeLink = args.objective === 'visits'
+        ? args.destinationUrl
+        : args.objective === 'whatsapp_conv'
+          ? `${appUrl}/lp/${args.tenantId}`
+          : `https://www.facebook.com/${pageId}`;
+
       const creativeBody: Record<string, unknown> = instagramCreativeActorId
         ? { object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: args.creativeInstagramMediaId, call_to_action: JSON.stringify({ type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: args.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
-        : { name: 'Creative — FURY', object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: args.primaryText, name: args.headline, call_to_action: messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'visits' ? { link: args.destinationUrl } : {}), ...(args.objective !== 'visits' ? { link: `https://www.facebook.com/${pageId}` } : {}) } } };
+        : { name: 'Creative — FURY', object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: args.primaryText, name: args.headline, call_to_action: messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, link: creativeLink } } };
 
       const adCreativeResponse = await this.meta.createAdCreative(adAccountId, accessToken, creativeBody);
       adCreativeId = adCreativeResponse.id;

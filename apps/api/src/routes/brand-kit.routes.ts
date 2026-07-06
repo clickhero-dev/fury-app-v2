@@ -45,6 +45,7 @@ function toResponse(brandKit: typeof brandKits.$inferSelect) {
     secondary_color: brandKit.secondaryColor,
     voice_tone: brandKit.voiceTone,
     photo_urls: (brandKit.photoUrls as string[] | null) ?? [],
+    whatsapp_number: brandKit.whatsappNumber ?? null,
     created_at: brandKit.createdAt,
     updated_at: brandKit.updatedAt,
   };
@@ -79,6 +80,7 @@ const upsertBrandKitSchema = z.object({
   voice_tone: z.enum(['professional', 'casual', 'urgent', 'premium']).optional(),
   logo_url: z.string().url().nullable().optional(),
   photo_urls: z.array(z.string().url()).optional(),
+  whatsapp_number: z.string().regex(/^\d{10,15}$/, 'Número WhatsApp inválido. Informe com DDI e sem + (ex: 5511999999999).').nullable().optional(),
 });
 
 // PUT /api/brand-kit
@@ -93,6 +95,7 @@ router.put('/', async (req: Request, res: Response, next: NextFunction) => {
       ...(payload.voice_tone !== undefined && { voiceTone: payload.voice_tone }),
       ...(payload.logo_url !== undefined && { logoUrl: payload.logo_url }),
       ...(payload.photo_urls !== undefined && { photoUrls: payload.photo_urls }),
+      ...(payload.whatsapp_number !== undefined && { whatsappNumber: payload.whatsapp_number }),
     };
 
     const [brandKit] = await db

@@ -12,6 +12,8 @@ export interface BrandKit {
   voice_tone: VoiceTone | null;
   /** URLs das fotos da organização armazenadas no R2. */
   photo_urls: string[];
+  /** Número de WhatsApp da empresa (com DDI, sem +) para LP de campanhas. */
+  whatsapp_number: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -23,6 +25,7 @@ export interface SaveBrandKitPayload {
   voice_tone?: VoiceTone;
   logo_url?: string | null;
   photo_urls?: string[];
+  whatsapp_number?: string | null;
 }
 
 /** Envelope padrão das respostas da API de brand kit. */

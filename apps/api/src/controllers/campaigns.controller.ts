@@ -368,7 +368,7 @@ export async function getCampaignInsightsHandler(req: Request, res: Response, ne
 
 const createWizardSchema = z
   .object({
-    objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp']),
+    objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp', 'whatsapp_conv']),
 
     creative_asset_id: z.string().min(1).optional(),
     creative_upload_url: z.string().min(1).optional(),
