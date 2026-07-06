@@ -81,7 +81,8 @@ Converse Comigo
 </div>
 </body>
 </html>`);
-  } catch {
+  } catch (e) {
+    console.error('[LP] erro:', e);
     res.status(500).send('Erro interno');
   }
 });
