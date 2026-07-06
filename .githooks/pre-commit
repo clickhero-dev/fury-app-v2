@@ -17,3 +17,11 @@ npm run test:unit 2>&1 || {
   exit 1
 }
 echo "✅ Unit tests passed"
+
+echo "Building vite..." 
+cd "$REPO_ROOT/apps/web" || exit 1
+npm run build 2>&1 || {
+  echo "❌ Vite build failed. Fix it before committing."
+  exit 1
+}
+echo "✅ Vite build passed"

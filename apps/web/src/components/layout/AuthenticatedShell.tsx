@@ -94,7 +94,7 @@ export function AuthenticatedShell() {
     // Usa cache do localStorage como placeholder para evitar redirecionamento prematuro
     placeholderData:
       localStorage.getItem('fury-meta-connected') === 'true'
-        ? [{ selectedAdAccountId: 'cached' }]
+        ? [{ id: 'cached', selectedAdAccountId: 'cached' }]
         : undefined,
   });
 
