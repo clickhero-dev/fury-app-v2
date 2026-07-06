@@ -16,6 +16,7 @@ export async function getPostsRankedHandler(req: Request, res: Response, next: N
     }
 
     const { objective, instagramUserId } = postsRankedQuerySchema.parse(req.query);
+    console.log({ objective, instagramUserId });
     const posts = await getRankedInstagramPosts(tenantId, objective, instagramUserId);
 
     res.json({

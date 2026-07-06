@@ -88,7 +88,7 @@ export function MetasPage() {
     reset,
     formState: { errors },
   } = useForm<{ objective: string; niche: string; mainProduct: string; monthlyBudget: number; targetCpa: number }>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema as any),
     defaultValues: { objective: '', niche: '', mainProduct: '', monthlyBudget: undefined, targetCpa: undefined },
   });
 

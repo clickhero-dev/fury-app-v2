@@ -39,7 +39,7 @@ export function LoginPage() {
     setValue,
     formState: { errors },
   } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
+    resolver: zodResolver(loginSchema as any),
     defaultValues: { email: '', password: '' },
   });
 
