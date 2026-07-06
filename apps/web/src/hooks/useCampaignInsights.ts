@@ -15,6 +15,18 @@ export interface DailyInsight {
   conversions: number;
 }
 
+/** Criativo de anúncio com preview visual. */
+export interface CampaignCreative {
+  id: string;
+  name: string;
+  status: string;
+  thumbnailUrl?: string;
+  imageUrl?: string;
+  headline?: string;
+  primaryText?: string;
+  isVideo: boolean;
+}
+
 /** Dados completos de insights de uma campanha com série temporal. */
 export interface CampaignInsightsData {
   campaign: {
@@ -24,6 +36,8 @@ export interface CampaignInsightsData {
   };
   /** Histórico diário de métricas no período solicitado. */
   timeseries: DailyInsight[];
+  /** Anúncios da campanha com criativos para preview visual. */
+  creatives: CampaignCreative[];
 }
 
 interface ApiResponse {

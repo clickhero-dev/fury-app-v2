@@ -10,9 +10,9 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Play, ImageIcon, FilmIcon } from 'lucide-react';
 import { AppLayout } from '@/components';
-import { useCampaignInsights, type InsightsDateRange, type DailyInsight } from '@/hooks/useCampaignInsights';
+import { useCampaignInsights, type InsightsDateRange, type DailyInsight, type CampaignCreative } from '@/hooks/useCampaignInsights';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -94,6 +94,57 @@ function ChartTooltip({ active, payload, label }: any) {
           <span className="font-semibold text-text-primary">{entry.value}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Creative card (Instagram-like preview) ────────────────────────────────────
+
+function CreativeCard({ creative }: { creative: CampaignCreative }) {
+  const imgSrc = creative.imageUrl || creative.thumbnailUrl;
+  return (
+    <div className="bg-white rounded-xl border border-border overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+      {/* Image area — Instagram square ratio */}
+      <div className="relative aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
+        {imgSrc ? (
+          <img
+            src={imgSrc}
+            alt={creative.name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <ImageIcon className="w-10 h-10 text-gray-300" />
+        )}
+        {/* Video badge */}
+        {creative.isVideo && (
+          <span className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-white rounded-full px-2 py-0.5 text-[11px] font-semibold flex items-center gap-1">
+            <FilmIcon className="w-3 h-3" />
+            Vídeo
+          </span>
+        )}
+        {/* Status dot */}
+        <span
+          className={`absolute top-2 left-2 w-2.5 h-2.5 rounded-full border-2 border-white ${
+            creative.status === 'ACTIVE' ? 'bg-green-500' : creative.status === 'PAUSED' ? 'bg-yellow-400' : 'bg-gray-400'
+          }`}
+        />
+      </div>
+      {/* Info area */}
+      <div className="px-3.5 py-3 space-y-1.5">
+        <div className="flex items-center gap-2">
+          <span className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center text-[10px] font-bold text-accent shrink-0">
+            {creative.name.charAt(0).toUpperCase()}
+          </span>
+          <p className="text-[13px] font-semibold text-text-primary truncate">{creative.name}</p>
+        </div>
+        {creative.headline && (
+          <p className="text-xs font-medium text-text-primary line-clamp-1">{creative.headline}</p>
+        )}
+        {creative.primaryText && (
+          <p className="text-[11px] text-text-secondary leading-relaxed line-clamp-2">{creative.primaryText}</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -255,6 +306,20 @@ export function InsightsCampanha() {
                 </ResponsiveContainer>
               )}
             </div>
+
+            {/* Creatives section */}
+            {data.creatives.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-text-primary">
+                  Criativos ({data.creatives.length})
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {data.creatives.map((c) => (
+                    <CreativeCard key={c.id} creative={c} />
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

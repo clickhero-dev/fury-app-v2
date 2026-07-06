@@ -9,8 +9,12 @@ import { AppError } from '../middleware/errorHandler.js';
 import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../lib/locations-cache.js';
 import { getResolvedTenantAssetSelection } from './meta.service.js';
+import { getCampaignAds } from '../lib/meta-api.js';
 import type { IMetaCampaignProvider } from '../lib/providers/meta-campaign.provider.js';
-import type { ICampaignRepository, CampaignRecord } from '../lib/providers/campaign.repository.js';
+import type {
+  ICampaignRepository,
+  CampaignRecord,
+} from '../lib/providers/campaign.repository.js';
 import { DefaultMetaCampaignProvider } from '../lib/providers/default-meta-campaign.provider.js';
 import { DefaultCampaignRepository } from '../lib/providers/default-campaign.repository.js';
 
@@ -436,7 +440,30 @@ export class CampaignsService {
         return { date: item.date_start || item.date_stop || '', spend, impressions, clicks, ctr, cpc, cpm, roas, cpa, conversions };
       });
 
-      return { campaign: campaignBlock, timeseries };
+      // ponytail: busca criativos da campanha; falha silenciosa se API não retornar dados
+      let creatives: { id: string; name: string; status: string; thumbnailUrl?: string; imageUrl?: string; headline?: string; primaryText?: string; isVideo: boolean }[] = [];
+      try {
+        const ads = await getCampaignAds(args.campaignId, accessToken);
+        creatives = ads.map((ad) => {
+          const c = ad.creative;
+          const linkData = c?.object_story_spec?.link_data;
+          const videoData = c?.object_story_spec?.video_data;
+          return {
+            id: ad.id,
+            name: ad.name,
+            status: ad.status,
+            thumbnailUrl: c?.thumbnail_url,
+            imageUrl: linkData?.image_url ?? videoData?.image_url,
+            headline: linkData?.name,
+            primaryText: linkData?.message,
+            isVideo: !!videoData?.video_id,
+          };
+        });
+      } catch {
+        console.warn('[getCampaignInsights] Failed to fetch creatives for campaign', args.campaignId);
+      }
+
+      return { campaign: campaignBlock, timeseries, creatives };
     } catch (err) {
       console.error('[getCampaignInsights] Meta API error:', err);
       const metaCode = (err as any).metaCode;
