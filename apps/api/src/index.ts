@@ -38,7 +38,7 @@ console.log('=== STATIC serving /studio-assets from:', studioAssetsDir);
 app.use('/studio-assets', express.static(studioAssetsDir));
 
 // Public LP (landing page) for WhatsApp Conversation campaigns — no auth
-app.get('/lp/:tenantId', async (req, res) => {
+app.get('/api/lp/:tenantId', async (req, res) => {
   try {
     const { db, brandKits } = await import('@fury/db');
     const { eq } = await import('drizzle-orm');

@@ -583,7 +583,7 @@ export class CampaignsService {
       const creativeLink = args.objective === 'visits'
         ? args.destinationUrl
         : args.objective === 'whatsapp_conv'
-          ? `${appUrl}/lp/${args.tenantId}`
+          ? `${appUrl}/api/lp/${args.tenantId}`
           : `https://www.facebook.com/${pageId}`;
 
       const creativeBody: Record<string, unknown> = instagramCreativeActorId
