@@ -448,19 +448,47 @@ export class CampaignsService {
           const c = ad.creative;
           const linkData = c?.object_story_spec?.link_data;
           const videoData = c?.object_story_spec?.video_data;
+          const photoData = c?.object_story_spec?.photo_data;
           return {
             id: ad.id,
             name: ad.name,
             status: ad.status,
             thumbnailUrl: c?.thumbnail_url,
-            imageUrl: linkData?.image_url ?? videoData?.image_url,
+            imageUrl: linkData?.image_url ?? videoData?.image_url ?? photoData?.url,
             headline: linkData?.name,
-            primaryText: linkData?.message,
+            primaryText: linkData?.message ?? photoData?.caption,
             isVideo: !!videoData?.video_id,
           };
         });
       } catch {
         console.warn('[getCampaignInsights] Failed to fetch creatives for campaign', args.campaignId);
+      }
+
+      // fallback: se Meta não retornou criativos, busca do banco local
+      if (creatives.length === 0 && dbCampaign) {
+        const budget = dbCampaign.budget as Record<string, unknown> | null | undefined;
+        const localImageUrl = budget?.creative_image_url as string | undefined;
+        const localAssetId = budget?.creative_asset_id as string | undefined;
+
+        let resolvedUrl = localImageUrl;
+        if (localAssetId && !resolvedUrl) {
+          try {
+            const asset = await this.repo.findCreativeAsset(localAssetId, args.tenantId);
+            if (asset) resolvedUrl = asset.url;
+          } catch { /* silêncio */ }
+        }
+
+        if (resolvedUrl) {
+          creatives.push({
+            id: `local-${dbCampaign.id}`,
+            name: dbCampaign.name,
+            status: campaignBlock.status,
+            imageUrl: resolvedUrl,
+            headline: budget?.creative_headline as string | undefined,
+            primaryText: budget?.creative_primary_text as string | undefined,
+            isVideo: false,
+          });
+        }
       }
 
       return { campaign: campaignBlock, timeseries, creatives };
@@ -636,6 +664,10 @@ export class CampaignsService {
         daily_budget: Math.round(args.dailyBudgetBrl * 100), objective: objectiveConfig.metaObjective,
         created_via: 'wizard', ad_set_id: adSetId, ad_creative_id: adCreativeId, ad_id: metaAdId,
         duration_days: args.durationDays ?? null,
+        creative_asset_id: args.creativeAssetId ?? null,
+        creative_image_url: imageUrl ?? null,
+        creative_headline: args.headline ?? null,
+        creative_primary_text: args.primaryText ?? null,
         ...(args.objective === 'whatsapp' ? {
           destinations: messagingDestinations, destination_type: messagingDestinationType,
           whatsapp_page_id: args.whatsappPageId, whatsapp_page_name: args.whatsappPageName ?? null,
