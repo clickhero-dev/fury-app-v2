@@ -20,7 +20,7 @@ export class DefaultCampaignRepository implements ICampaignRepository {
   async findMetaConnection(tenantId: string): Promise<MetaConnectionRecord | null> {
     const row = await db.query.metaConnections.findFirst({
       where: eq(metaConnections.tenantId, tenantId),
-      orderBy: [{ column: 'createdAt', direction: 'desc' } as any],
+      orderBy: [desc(metaConnections.createdAt)],
     });
     return row as MetaConnectionRecord | null;
   }
