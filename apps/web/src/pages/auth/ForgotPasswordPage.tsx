@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
 import { useForgotPassword } from '@/hooks/useForgotPassword';
+import type { ForgotPasswordRequest } from '@/types/auth';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Email inválido').nonempty('Email é obrigatório'),
@@ -35,7 +36,7 @@ export function ForgotPasswordPage() {
   const onSubmit = async (data: ForgotPasswordFormValues) => {
     try {
       setError('');
-      await forgotPasswordMutation.mutateAsync(data);
+      await forgotPasswordMutation.mutateAsync(data as ForgotPasswordRequest);
       setSuccessEmail(data.email);
       setShowSuccess(true);
     } catch (err) {
