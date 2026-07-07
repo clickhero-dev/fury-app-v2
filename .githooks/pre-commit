@@ -1,10 +1,27 @@
 #!/bin/sh
-# ponytail: pre-commit — type-check web workspace only
+# ponytail: pre-commit — type-check + unit tests
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-cd "$REPO_ROOT/apps/web" || exit 1
+
 echo "🔍 Type-checking web..."
+cd "$REPO_ROOT/apps/web" || exit 1
 ./node_modules/.bin/tsc --noEmit 2>&1 || {
   echo "❌ TypeScript errors found. Fix them before committing."
   exit 1
 }
 echo "✅ Type-check passed"
+
+echo "🧪 Running unit tests..."
+cd "$REPO_ROOT" || exit 1
+npm run test:unit 2>&1 || {
+  echo "❌ Unit tests failed. Fix them before committing."
+  exit 1
+}
+echo "✅ Unit tests passed"
+
+echo "Building vite..." 
+cd "$REPO_ROOT/apps/web" || exit 1
+npm run build 2>&1 || {
+  echo "❌ Vite build failed. Fix it before committing."
+  exit 1
+}
+echo "✅ Vite build passed"

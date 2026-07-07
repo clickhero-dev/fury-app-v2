@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from '../Sidebar';
 import api from '../../lib/api';
 import { DEMO_CREDENTIALS } from '../../lib/constants';
+import { useSubscription } from '../../hooks/useBilling';
+import { useAppDispatch } from '../../store/hooks';
+import { setMetaId, setPlan } from '../../store/slices/authSlice';
 
 /**
  * Contexto disponível para rotas filhas via `useOutletContext`.
@@ -53,6 +56,7 @@ export function AuthenticatedShell() {
   const token = localStorage.getItem('token');
   const location = useLocation();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
 
   let currentUserEmail: string | null = null;
   try {
@@ -63,14 +67,17 @@ export function AuthenticatedShell() {
   const isDemoUser = currentUserEmail ? DEMO_USER_EMAILS.includes(currentUserEmail) : false;
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
-  
+  const isSubscriptionExempt =
+    isExempt || location.pathname.startsWith('/assinatura-vencida');
+
   // Só verifica conexão Meta se autenticado, fora de rotas isentas/onboarding e se não for usuário demo
   const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser;
+  const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoUser;
 
   const { data: connections, isLoading, isFetched } = useQuery({
     queryKey: ['meta-connections'],
     queryFn: async () => {
-      const res = await api.get<{ data: Array<{ selectedAdAccountId: string | null }> }>(
+      const res = await api.get<{ data: Array<{ id: string; selectedAdAccountId: string | null }> }>(
         '/meta/connections'
       );
       const data = res.data.data;
@@ -87,21 +94,70 @@ export function AuthenticatedShell() {
     // Usa cache do localStorage como placeholder para evitar redirecionamento prematuro
     placeholderData:
       localStorage.getItem('fury-meta-connected') === 'true'
-        ? [{ selectedAdAccountId: 'cached' }]
+        ? [{ id: 'cached', selectedAdAccountId: 'cached' }]
         : undefined,
   });
 
   useEffect(() => {
     if (!isLoading && isFetched && shouldCheck && Array.isArray(connections)) {
+      if (connections.length > 0) {
+        dispatch(setMetaId(connections[0].id ?? null));
+      }
       if (connections.length === 0) {
-        // Sem nenhuma conexão Meta — inicia onboarding
         navigate('/onboarding/conectar-meta', { replace: true });
       } else if (!connections.some((conn) => conn.selectedAdAccountId)) {
-        // Tem conexão mas sem ad account selecionado
         navigate('/onboarding/selecionar-conta', { replace: true });
       }
     }
-  }, [connections, isLoading, isFetched, shouldCheck, navigate]);
+  }, [connections, isLoading, isFetched, shouldCheck, navigate, dispatch]);
+
+  // ── Verificação de assinatura (deve vir ANTES do check de Meta) ──────
+  const {
+    data: subscription,
+    isLoading: subLoading,
+    isFetched: subFetched,
+  } = useSubscription();
+
+  const isExpired = useMemo(() => {
+    if (!subscription) return false;
+
+    const now = new Date();
+
+    if (['cancelled', 'inactive', 'past_due'].includes(subscription.status)) {
+      return true;
+    }
+    if (
+      subscription.status === 'trial' &&
+      subscription.trialEndsAt &&
+      now > new Date(subscription.trialEndsAt)
+    ) {
+      return true;
+    }
+    if (
+      subscription.status === 'active' &&
+      subscription.currentPeriodEnd &&
+      now > new Date(subscription.currentPeriodEnd)
+    ) {
+      return true;
+    }
+
+    return false;
+  }, [subscription]);
+
+  const subscriptionChecked =
+    !subLoading && subFetched;
+
+  useEffect(() => {
+    if (subscription && subscriptionChecked) {
+      const planName = subscription.plan?.name ?? null;
+      const expiration = subscription.trialEndsAt ?? subscription.currentPeriodEnd ?? null;
+      dispatch(setPlan({ plan: planName, planExpiration: expiration }));
+    }
+  }, [subscription, subscriptionChecked, dispatch]);
+
+  if (subscriptionChecked && shouldCheckSubscription && isExpired) {
+    return <Navigate to="/assinatura-vencida" replace />;
+  }
 
   // Sem token — redireciona para login
   if (!token) return <Navigate to="/login" replace />;

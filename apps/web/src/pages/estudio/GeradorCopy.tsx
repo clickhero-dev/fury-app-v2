@@ -21,24 +21,6 @@ const COPY_LIMITS: Record<CopyType, number | null> = {
   completo: null,
 };
 
-const MOCK_VARIACOES: CopyVariacao[] = [
-  {
-    texto: 'Transforme seu sorriso hoje!',
-    caracteres: 28,
-    pontuacao: 9.2,
-  },
-  {
-    texto: 'Implante com condições especiais',
-    caracteres: 33,
-    pontuacao: 8.7,
-  },
-  {
-    texto: 'Agende sua avaliação gratuita',
-    caracteres: 30,
-    pontuacao: 8.1,
-  },
-];
-
 const COPY_TYPES: Array<{ value: CopyType; label: string }> = [
   { value: 'headline', label: 'Headline' },
   { value: 'descricao', label: 'Descrição' },
@@ -309,12 +291,8 @@ export function GeradorCopy() {
 
   const mutation = useMutation({
     mutationFn: async (payload: GenerateCopyPayload) => {
-      try {
-        const response = await api.post('/studio/copy/generate', payload);
-        return response.data.variations || [];
-      } catch {
-        return MOCK_VARIACOES as any;
-      }
+      const response = await api.post('/studio/copy/generate', payload);
+      return response.data.variations || [];
     },
     onSuccess: (data) => {
       const mapped = mapBackendVariations(data, form.type as CopyType);

@@ -1,0 +1,107 @@
+import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+
+export interface AuthState {
+  token: string | null;
+  refreshToken: string | null;
+  name: string | null;
+  email: string | null;
+  tenantId: string | null;
+  metaId: string | null;
+  plan: string | null;
+  planExpiration: string | null;
+  theme: 'light' | 'dark';
+}
+
+function hydrate(): AuthState {
+  try {
+    const user = JSON.parse(localStorage.getItem('user') ?? '{}');
+    return {
+      token: localStorage.getItem('token'),
+      refreshToken: localStorage.getItem('refreshToken'),
+      name: user.name ?? null,
+      email: user.email ?? null,
+      tenantId: user.tenantId ?? null,
+      metaId: null,
+      plan: null,
+      planExpiration: null,
+      theme: localStorage.getItem('fury-theme') === 'dark' ? 'dark' : 'light',
+    };
+  } catch {
+    return {
+      token: null,
+      refreshToken: null,
+      name: null,
+      email: null,
+      tenantId: null,
+      metaId: null,
+      plan: null,
+      planExpiration: null,
+      theme: 'light',
+    };
+  }
+}
+
+const initialState: AuthState = hydrate();
+
+const authSlice = createSlice({
+  name: 'auth',
+  initialState,
+  reducers: {
+    login(state, action: PayloadAction<{ token: string; refreshToken: string; name: string | null; email: string; tenantId: string }>) {
+      state.token = action.payload.token;
+      state.refreshToken = action.payload.refreshToken;
+      state.name = action.payload.name;
+      state.email = action.payload.email;
+      state.tenantId = action.payload.tenantId;
+    },
+    setTokens(state, action: PayloadAction<{ token: string; refreshToken: string }>) {
+      state.token = action.payload.token;
+      state.refreshToken = action.payload.refreshToken;
+    },
+    setUserProfile(state, action: PayloadAction<{ name: string | null }>) {
+      if (action.payload.name !== undefined) {
+        state.name = action.payload.name;
+      }
+    },
+    setMetaId(state, action: PayloadAction<string | null>) {
+      state.metaId = action.payload;
+    },
+    setPlan(state, action: PayloadAction<{ plan: string | null; planExpiration: string | null }>) {
+      state.plan = action.payload.plan;
+      state.planExpiration = action.payload.planExpiration;
+    },
+    setTheme(state, action: PayloadAction<'light' | 'dark'>) {
+      state.theme = action.payload;
+    },
+    logout(state) {
+      state.token = null;
+      state.refreshToken = null;
+      state.name = null;
+      state.email = null;
+      state.tenantId = null;
+      state.metaId = null;
+      state.plan = null;
+      state.planExpiration = null;
+    },
+  },
+});
+
+export const { login, setTokens, setUserProfile, setMetaId, setPlan, setTheme, logout } = authSlice.actions;
+
+export const selectToken = (state: { auth: AuthState }) => state.auth.token;
+export const selectRefreshToken = (state: { auth: AuthState }) => state.auth.refreshToken;
+export const selectIsAuthenticated = (state: { auth: AuthState }) => !!state.auth.token;
+export const selectUser = (state: { auth: AuthState }) => ({
+  name: state.auth.name,
+  email: state.auth.email,
+  tenantId: state.auth.tenantId,
+});
+export const selectName = (state: { auth: AuthState }) => state.auth.name;
+export const selectEmail = (state: { auth: AuthState }) => state.auth.email;
+export const selectTenantId = (state: { auth: AuthState }) => state.auth.tenantId;
+export const selectMetaId = (state: { auth: AuthState }) => state.auth.metaId;
+export const selectPlan = (state: { auth: AuthState }) => state.auth.plan;
+export const selectPlanExpiration = (state: { auth: AuthState }) => state.auth.planExpiration;
+export const selectTheme = (state: { auth: AuthState }) => state.auth.theme;
+
+export default authSlice.reducer;

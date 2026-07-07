@@ -15,6 +15,7 @@ import {
   mcpLogWizardHandler,
   searchMetaLocationsHandler,
   uploadWizardCreativeHandler,
+  createWizardCampaignDiagHandler
 } from '../controllers/campaigns.controller.js';
 
 const router = Router();
@@ -36,18 +37,7 @@ router.get('/', getCampaignsHandler);
 router.post('/create', createCampaignHandler);
 router.post('/create-wizard', createWizardCampaignHandler);
 router.post('/mcp-log', mcpLogWizardHandler);
-router.get('/create-wizard-diag', async (req: any, res: any) => {
-  // DIAG: Test if createCampaignFromWizard is importable and callable
-  try {
-    const { createCampaignFromWizard } = await import('../services/campaigns.service.js');
-    if (typeof createCampaignFromWizard !== 'function') {
-      return res.json({ success: false, error: { code: 'NOT_A_FUNCTION', type: typeof createCampaignFromWizard } });
-    }
-    return res.json({ success: true, message: 'createCampaignFromWizard is a function and importable' });
-  } catch (e: any) {
-    return res.status(500).json({ success: false, error: { code: 'IMPORT_FAIL', message: e.message, stack: e.stack?.split('\n').slice(0, 5) } });
-  }
-});
+router.get('/create-wizard-diag', createWizardCampaignDiagHandler);
 router.post('/upload-creative', creativeUpload.single('file'), uploadWizardCreativeHandler);
 router.get('/meta-locations', searchMetaLocationsHandler);
 

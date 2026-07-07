@@ -49,6 +49,7 @@ function BrandKitContent() {
   const [primaryColor, setPrimaryColor] = useState(FURY_COLORS.primary);
   const [secondaryColor, setSecondaryColor] = useState('#1C1C1E');
   const [voiceTone, setVoiceTone] = useState<VoiceTone | ''>('');
+  const [whatsappNumber, setWhatsappNumber] = useState('');
   const [initialized, setInitialized] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -60,6 +61,7 @@ function BrandKitContent() {
     setPrimaryColor(brandKit.primary_color ?? FURY_COLORS.primary);
     setSecondaryColor(brandKit.secondary_color ?? '#1C1C1E');
     setVoiceTone(brandKit.voice_tone ?? '');
+    setWhatsappNumber(brandKit.whatsapp_number ?? '');
     setInitialized(true);
   }, [brandKit, initialized]);
 
@@ -144,6 +146,7 @@ function BrandKitContent() {
         primary_color: primaryColor,
         secondary_color: secondaryColor,
         ...(voiceTone ? { voice_tone: voiceTone } : {}),
+        whatsapp_number: whatsappNumber || null,
       });
       showToast('Dados da Marca salvos com sucesso!', 'success');
     } catch {
@@ -292,7 +295,31 @@ function BrandKitContent() {
             </CardContent>
           </Card>
 
-          {/* SEÇÃO 4 - Biblioteca de Fotos */}
+          {/* SEÇÃO 4 - WhatsApp */}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Conversas WhatsApp</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-text-secondary mb-4">
+                Número usado na página de destino das campanhas de Conversas WhatsApp.
+              </p>
+              <div>
+                <label className="block text-sm font-semibold text-text-primary mb-2">Número do WhatsApp (com DDI, sem +)</label>
+                <input
+                  type="tel"
+                  placeholder="5511999999999"
+                  value={whatsappNumber}
+                  onChange={(e) => setWhatsappNumber(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8631A]/50 focus:border-[#E8631A]"
+                />
+                <p className="text-xs text-text-secondary mt-1">Informe apenas números. Ex: 5511999999999</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* SEÇÃO 5 - Biblioteca de Fotos */}
           <Card>
             <CardHeader>
               <CardTitle>Biblioteca de Fotos</CardTitle>

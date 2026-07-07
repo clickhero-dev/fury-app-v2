@@ -365,7 +365,23 @@ export function TenantDetailPage() {
               <input type="datetime-local" value={subForm.currentPeriodEnd} onChange={e => setSubForm({ ...subForm, currentPeriodEnd: e.target.value })} className={inputCls} />
             </div>
           </div>
-          <button onClick={saveSub} disabled={saving} className={btnCls}><Save className="w-4 h-4" /> Salvar</button>
+          <div className="flex items-center gap-3">
+            <button onClick={saveSub} disabled={saving} className={btnCls}><Save className="w-4 h-4" /> Salvar</button>
+            <button
+              onClick={() => {
+                const future = new Date();
+                future.setDate(future.getDate() + 30);
+                setSubForm(prev => ({
+                  ...prev,
+                  status: 'active',
+                  currentPeriodEnd: future.toISOString().slice(0, 16),
+                }));
+              }}
+              className="bg-green-700 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+            >
+              Ativar (30 dias)
+            </button>
+          </div>
         </div>
       )}
 

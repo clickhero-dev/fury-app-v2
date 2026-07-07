@@ -23,23 +23,6 @@ interface GoalsProgress {
   onTrack: boolean;
 }
 
-// ─── Mocks ────────────────────────────────────────────────────────────────────
-
-const MOCK_GOALS: Goals = {
-  objective: 'aumentar_vendas',
-  monthlyBudget: 8000,
-  targetCpa: 50,
-  niche: 'E-commerce de Moda',
-  mainProduct: 'Roupas esportivas',
-};
-
-const MOCK_PROGRESS: GoalsProgress = {
-  goal: { objective: 'aumentar_vendas', monthlyBudget: 8000, targetCpa: 50 },
-  current: { spend: 4850, roas: 3.2, cpa: 48.5, conversions: 97 },
-  progressPercent: 61,
-  onTrack: true,
-};
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const OBJECTIVES: Record<string, string> = {
@@ -111,31 +94,18 @@ export function Metas() {
   const { data: goals, isLoading: loadingGoals } = useQuery<Goals>({
     queryKey: ['goals'],
     queryFn: async () => {
-      try {
-        return await api.get('/goals').then((r) => r.data);
-      } catch {
-        return MOCK_GOALS;
-      }
+      return await api.get('/goals').then((r) => r.data);
     },
-    placeholderData: MOCK_GOALS,
   });
 
   const { data: progress, isLoading: loadingProgress } = useQuery<GoalsProgress>({
     queryKey: ['goals-progress'],
     queryFn: async () => {
-      try {
-        return await api.get('/metrics/goals-progress').then((r) => r.data);
-      } catch {
-        return MOCK_PROGRESS;
-      }
+      return await api.get('/metrics/goals-progress').then((r) => r.data);
     },
-    placeholderData: MOCK_PROGRESS,
   });
 
   const isLoading = loadingGoals || loadingProgress;
-
-  const g = goals ?? MOCK_GOALS;
-  const p = progress ?? MOCK_PROGRESS;
 
   // Month projection
   const today = new Date();
@@ -143,13 +113,12 @@ export function Metas() {
   const daysInMonth = getDaysInMonth();
   const daysRemaining = daysInMonth - dayOfMonth;
 
-  const currentConversions = p.current?.conversions ?? Math.round((p.current?.spend ?? 0) / (p.current?.cpa || 1));
+  const currentConversions = progress?.current?.conversions ?? Math.round((progress?.current?.spend ?? 0) / (progress?.current?.cpa || 1));
   const projectedConversions = dayOfMonth > 0 ? Math.round((currentConversions / dayOfMonth) * daysInMonth) : 0;
-  const projectedSpend = dayOfMonth > 0 ? Math.round(((p.current?.spend ?? 0) / dayOfMonth) * daysInMonth) : 0;
+  const projectedSpend = dayOfMonth > 0 ? Math.round(((progress?.current?.spend ?? 0) / dayOfMonth) * daysInMonth) : 0;
 
-  // Status indicator
-  const isOnTrack = p.onTrack;
-  const pct = p.progressPercent ?? 0;
+  const isOnTrack = progress?.onTrack ?? false;
+  const pct = progress?.progressPercent ?? 0;
   const isWarning = !isOnTrack && pct >= 40;
 
   const StatusIcon = isOnTrack ? CheckCircle2 : isWarning ? AlertTriangle : XCircle;
@@ -195,12 +164,12 @@ export function Metas() {
             </div>
 
             <div className="space-y-4 divide-y divide-border">
-              <GoalRow label="Objetivo" value={translateObjective(g.objective)} highlight />
+                <GoalRow label="Objetivo" value={translateObjective(goals?.objective)} highlight />
               <div className="pt-4 space-y-4">
-                <GoalRow label="Orçamento mensal" value={`R$ ${fmtBRL(g.monthlyBudget)}/mês`} />
-                <GoalRow label="CPA alvo" value={`R$ ${fmtBRL(g.targetCpa)} por conversão`} />
-                {g.niche && <GoalRow label="Nicho" value={g.niche} />}
-                {g.mainProduct && <GoalRow label="Produto principal" value={g.mainProduct} />}
+                <GoalRow label="Orçamento mensal" value={`R$ ${fmtBRL(goals?.monthlyBudget ?? 0)}/mês`} />
+                <GoalRow label="CPA alvo" value={`R$ ${fmtBRL(goals?.targetCpa ?? 0)} por conversão`} />
+                {goals?.niche && <GoalRow label="Nicho" value={goals.niche} />}
+                {goals?.mainProduct && <GoalRow label="Produto principal" value={goals.mainProduct} />}
               </div>
             </div>
           </div>
@@ -217,10 +186,10 @@ export function Metas() {
             <div className="space-y-5">
               <ComparisonRow
                 label="CPA atual vs CPA alvo"
-                currentValue={p.current?.cpa ?? 0}
-                targetValue={p.goal?.targetCpa ?? g.targetCpa}
-                currentLabel={`R$ ${fmtBRL(p.current?.cpa ?? 0)}`}
-                targetLabel={`R$ ${fmtBRL(p.goal?.targetCpa ?? g.targetCpa)}`}
+                currentValue={progress?.current?.cpa ?? 0}
+                targetValue={progress?.goal?.targetCpa ?? goals?.targetCpa ?? 0}
+                currentLabel={`R$ ${fmtBRL(progress?.current?.cpa ?? 0)}`}
+                targetLabel={`R$ ${fmtBRL(progress?.goal?.targetCpa ?? goals?.targetCpa ?? 0)}`}
                 lowerIsBetter
               />
 
@@ -229,10 +198,10 @@ export function Metas() {
                 <span
                   className={cn(
                     'font-bold text-base',
-                    (p.current?.roas ?? 0) >= 2 ? 'text-success' : 'text-error'
+                    (progress?.current?.roas ?? 0) >= 2 ? 'text-success' : 'text-error'
                   )}
                 >
-                  {(p.current?.roas ?? 0).toFixed(1)}x
+                  {(progress?.current?.roas ?? 0).toFixed(1)}x
                 </span>
               </div>
             </div>
@@ -276,7 +245,7 @@ export function Metas() {
             <ProjectionCard
               label="Investimento projetado"
               value={`R$ ${projectedSpend.toLocaleString('pt-BR')}`}
-              sub={`de R$ ${(g.monthlyBudget ?? 0).toLocaleString('pt-BR')} de orçamento`}
+              sub={`de R$ ${(goals?.monthlyBudget ?? 0).toLocaleString('pt-BR')} de orçamento`}
             />
             <ProjectionCard
               label="Dias restantes"

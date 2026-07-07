@@ -132,6 +132,7 @@ export async function getRankedInstagramPosts(
     }
 
     const media = await getInstagramMedia(igUserId, accessToken);
+    console.log("Getting media ", media.length);
 
     const posts = await Promise.all(
       media.map(async (item) => {

@@ -59,6 +59,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0016_fix_request_logs_user_id' },
   { tag: '0017_add_request_logs_default_partition' },
   { tag: '0018_add_audience_defaults' },
+  { tag: '0020_add_referer_to_request_logs' },
   {
     tag: '0019_add_superadmin_role',
     afterHook: async (client) => {
@@ -68,8 +69,8 @@ const STEPS: MigrationStep[] = [
       if (email && password) {
         const existing = await client`SELECT id FROM "users" WHERE email = ${email}`;
         if (existing.length === 0) {
-          const bcrypt = await import('bcryptjs');
-          const hash = await bcrypt.hash(password, 12);
+          const bcrypt = await import('bcrypt');
+          const hash = await bcrypt.hash(password, 10);
           // Create a tenant for the superadmin
           const [tenant] = await client`
             INSERT INTO "tenants" (name, slug)

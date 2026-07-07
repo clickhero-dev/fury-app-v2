@@ -433,6 +433,7 @@ export const brandKits = pgTable(
     secondaryColor: varchar('secondary_color', { length: 7 }),
     voiceTone: voiceToneEnum('voice_tone'),
     photoUrls: jsonb('photo_urls').default(sql`'[]'::jsonb`),
+    whatsappNumber: text('whatsapp_number'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

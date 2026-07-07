@@ -1,7 +1,7 @@
 // Unified startup seed — idempotent, safe to run every deployment.
 // Ensures: superadmin user + demo user exist with valid bcrypt hashes.
 import postgres from 'postgres';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 const connectionString =
   process.env.NODE_ENV === 'test'
@@ -67,7 +67,7 @@ export async function seedStartup(): Promise<void> {
           console.log(`  ✓ user ${seed.email} already exists with matching password`);
         } else {
           // Hash doesn't match — update it (covers: wrong password, non-bcrypt, corrupted)
-          const newHash = await bcrypt.hash(seed.password, 12);
+          const newHash = await bcrypt.hash(seed.password, 10);
           await sql`UPDATE "users" SET password_hash = ${newHash} WHERE id = ${existing[0].id}`;
           console.log(`  🔧 fixed password hash for ${seed.email} (wrong/corrupted hash)`);
         }
@@ -83,7 +83,7 @@ export async function seedStartup(): Promise<void> {
       `;
 
       // Create user with bcrypt
-      const hash = await bcrypt.hash(seed.password, 12);
+      const hash = await bcrypt.hash(seed.password, 10);
       await sql`
         INSERT INTO "users" (tenant_id, email, password_hash, role, name)
         VALUES (${tenant.id}, ${seed.email}, ${hash}, ${seed.role}, ${seed.name})

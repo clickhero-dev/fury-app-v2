@@ -1,4 +1,5 @@
-import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
+import bcrypt from 'bcrypt';
 import { db } from '../lib/db.js';
 import { tenants, users } from '../lib/db.js';
 import { eq, and } from 'drizzle-orm';
@@ -54,7 +55,7 @@ function userToDTO(user: any): UserDTO {
 
 async function storeRefreshTokenHash(userId: string, refreshToken: string): Promise<void> {
   const redis = getRedis();
-  const hash = await bcrypt.hash(refreshToken, 12);
+  const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
   const key = `refresh:${userId}`;
 
   await redis.setex(key, REFRESH_TOKEN_TTL, hash);
@@ -69,7 +70,11 @@ async function verifyRefreshTokenHash(userId: string, refreshToken: string): Pro
     return false;
   }
 
-  return bcrypt.compare(refreshToken, hash);
+  const computedHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  if (hash.length !== computedHash.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(computedHash));
 }
 
 async function revokeRefreshToken(userId: string): Promise<void> {
@@ -98,7 +103,7 @@ export async function register(data: {
   const slug = await ensureUniqueSlug(baseSlug);
 
   // Hash password
-  const passwordHash = await bcrypt.hash(data.password, 12);
+  const passwordHash = await bcrypt.hash(data.password, 10);
 
   // Create tenant and user in transaction
   const result = await db.transaction(async (tx) => {
@@ -182,10 +187,13 @@ export async function login(data: {
 export async function refresh(data: {
   refreshToken: string;
 }): Promise<{ tokens: { accessToken: string; refreshToken: string } }> {
+  const t0 = Date.now();
   const payload = verifyRefreshToken(data.refreshToken);
+  const t1 = Date.now();
 
   // Verify refresh token hash in Redis
   const isValid = await verifyRefreshTokenHash(payload.userId, data.refreshToken);
+  const t2 = Date.now();
 
   if (!isValid) {
     throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Invalid or revoked refresh token');
@@ -195,6 +203,7 @@ export async function refresh(data: {
   const user = await db.query.users.findFirst({
     where: eq(users.id, payload.userId),
   });
+  const t3 = Date.now();
 
   if (!user) {
     throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
@@ -215,6 +224,9 @@ export async function refresh(data: {
 
   // Store new refresh token hash
   await storeRefreshTokenHash(user.id, refreshToken);
+  const t4 = Date.now();
+
+  console.log(`[refresh] jwt=${t1-t0}ms redis.get=${t2-t1}ms pg.user=${t3-t2}ms redis.setex=${t4-t3}ms total=${t4-t0}ms`);
 
   return {
     tokens: { accessToken, refreshToken },

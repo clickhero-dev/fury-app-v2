@@ -10,6 +10,7 @@ const OBJECTIVE_LABELS: Record<NonNullable<WizardState['objective']>, string> = 
   engagement: 'Engajamento',
   messages: 'Atração de Clientes',
   whatsapp: 'Conversas no WhatsApp',
+  whatsapp_conv: 'Conversas WhatsApp',
 };
 
 const GENDER_LABELS: Record<WizardState['audience']['gender'], string> = {

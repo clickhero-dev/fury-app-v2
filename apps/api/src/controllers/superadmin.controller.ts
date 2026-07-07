@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { eq, desc, sql } from 'drizzle-orm';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { db, tenants, users, subscriptions, plans, furyConfig, brandKits, clientGoals } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -210,7 +210,7 @@ export async function createUser(req: Request, res: Response, next: NextFunction
     });
     if (existing) throw new AppError(409, 'EMAIL_EXISTS', 'Email já cadastrado');
 
-    const passwordHash = await bcrypt.hash(body.password, 12);
+    const passwordHash = await bcrypt.hash(body.password, 10);
     const [user] = await db
       .insert(users)
       .values({
@@ -241,7 +241,7 @@ export async function setupTenant(req: Request, res: Response, next: NextFunctio
     const existingEmail = await db.query.users.findFirst({ where: eq(users.email, body.userEmail) });
     if (existingEmail) throw new AppError(409, 'EMAIL_EXISTS', 'Email já cadastrado');
 
-    const passwordHash = await bcrypt.hash(body.userPassword, 12);
+    const passwordHash = await bcrypt.hash(body.userPassword, 10);
 
     const result = await db.transaction(async (tx) => {
       const [tenant] = await tx.insert(tenants).values({ name: body.name, slug }).returning();
@@ -304,19 +304,29 @@ export async function updateSubscription(req: Request, res: Response, next: Next
     });
     if (!sub) throw new AppError(404, 'SUBSCRIPTION_NOT_FOUND', 'Assinatura não encontrada');
 
+    const now = new Date();
     const updates: Record<string, unknown> = {};
     if (body.planId !== undefined) updates.planId = body.planId;
     if (body.status !== undefined) updates.status = body.status;
     if (body.trialEndsAt !== undefined) updates.trialEndsAt = new Date(body.trialEndsAt);
-    if (body.currentPeriodEnd !== undefined) updates.currentPeriodEnd = new Date(body.currentPeriodEnd);
+
+    if (body.currentPeriodEnd !== undefined) {
+      updates.currentPeriodEnd = new Date(body.currentPeriodEnd);
+    }
+
+    if (body.status === 'active' && !body.currentPeriodEnd) {
+      const future = new Date(now);
+      future.setDate(future.getDate() + 30);
+      updates.currentPeriodEnd = future;
+    }
 
     if (body.billingType !== undefined) {
       updates.asaasSubscriptionId = body.billingType;
     }
 
-    updates.updatedAt = new Date();
+    updates.updatedAt = now;
 
-    if (Object.keys(updates).length > 1) {
+    if (Object.keys(updates).length >= 1) {
       await db.update(subscriptions).set(updates).where(eq(subscriptions.id, sub.id));
     }
 

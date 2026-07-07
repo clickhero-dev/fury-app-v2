@@ -1339,6 +1339,41 @@ export async function getMetaInsights(params: {
   return metaApiCall<MetaInsightsResponse>(fullPath, params.accessToken);
 }
 
+export interface CampaignAdItem {
+  id: string;
+  name: string;
+  status: string;
+  creative?: {
+    id: string;
+    thumbnail_url?: string;
+    object_story_spec?: {
+      link_data?: {
+        image_url?: string;
+        message?: string;
+        name?: string;
+      };
+      video_data?: {
+        image_url?: string;
+        video_id?: string;
+      };
+    };
+  };
+}
+
+interface CampaignAdsResponse {
+  data: CampaignAdItem[];
+}
+
+/** Busca os anúncios (ads) de uma campanha com dados do criativo (thumbnail, texto, mídia). */
+export async function getCampaignAds(campaignId: string, accessToken: string): Promise<CampaignAdItem[]> {
+  const fields = 'name,status,creative{thumbnail_url,object_story_spec{link_data{image_url,message,name},video_data{image_url,video_id}}}';
+  const response = await metaApiCall<CampaignAdsResponse>(
+    `/${campaignId}/ads?fields=${fields}&limit=25`,
+    accessToken
+  );
+  return response.data || [];
+}
+
 export interface MetaAdImageUploadResponse {
   images: Record<string, { hash: string; url?: string }>;
 }
