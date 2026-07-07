@@ -14,8 +14,7 @@ const navItems: NavItem[] = [
   { path: '/admin/users', label: 'Usuários', icon: Users },
   // "Configurações" aponta para /admin/planos (gerencia planos e configurações globais do sistema)
   { path: '/admin/planos', label: 'Configurações', icon: Settings },
-  // "Campanhas" aponta para /admin por enquanto — idealmente acessado dentro de cada tenant
-  // Ver comentário no handleCampanhasClick para detalhes arquiteturais
+  // "Campanhas" recebe tratamento especial via handleCampanhasClick — ver comentário abaixo
   { path: '/admin', label: 'Campanhas', icon: Zap, end: true },
 ];
 
@@ -61,17 +60,22 @@ export function AdminShell() {
     navigate('/admin/login');
   };
 
-  // Decisão arquitetural: "Campanhas" na sidebar global aponta para /admin (lista de tenants)
-  // porque campanhas são resources aninhadas (/admin/tenants/:id/campaigns).
-  // O fluxo ideal: usuário vai para um tenant > acessa campanhas daquele tenant contextualmente.
-  // Por enquanto, o botão "Campanhas" redireciona para /admin (home, lista de tenants)
-  // e é necessário abrir um tenant para acessar suas campanhas.
+  // Decisão arquitetural: campanhas são um resource aninhado a um tenant
+  // (/admin/tenants/:id/campaigns). O botão "Campanhas" na sidebar global
+  // se comporta de forma contextual:
+  // - Se já estamos dentro de um tenant (tenantId presente via useParams),
+  //   navega direto para as campanhas DAQUELE tenant.
+  // - Se não há tenant selecionado (estamos na lista global /admin, por
+  //   exemplo), mostra um toast avisando e manda para a lista de tenants,
+  //   já que não há campanhas "globais" para mostrar.
   const handleCampanhasClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!tenantId) {
+    if (tenantId) {
+      navigate(`/admin/tenants/${tenantId}/campaigns`);
+    } else {
       setToastMessage('Selecione um cliente primeiro para ver suas campanhas');
+      navigate('/admin');
     }
-    navigate('/admin');
   };
 
   return (
@@ -111,10 +115,6 @@ export function AdminShell() {
                 key={item.path}
                 to={item.path}
                 end={item.end}
-                onClick={(e) => {
-                  // Se está em /admin/tenants/:id e clica em um navItem que não é "Campanhas",
-                  // deixa navLink funcionar normalmente
-                }}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                     isActive
