@@ -6,6 +6,9 @@
   --color-sidebar: #E8631A;
   --color-sidebar-hover: #D45714;
   --color-sidebar-active: #BF4B10;
+  --color-sidebar-bg: #E8631A;
+  --color-sidebar-text: #ffffff;
+  --color-sidebar-icon: #ffffff;
 
   /* Accent */
   --color-accent: #e8631a;
@@ -46,6 +49,11 @@ html.dark {
   --color-success-light: #0d2e1a;
   --color-warning-light: #2e2200;
   --color-error-light: #2e0d0d;
+  --color-sidebar-bg: #141820;
+  --color-sidebar-hover: #1c2028;
+  --color-sidebar-active: rgba(232, 99, 26, 0.15);
+  --color-sidebar-text: #e8631a;
+  --color-sidebar-icon: #e8631a;
 }
 
 body {

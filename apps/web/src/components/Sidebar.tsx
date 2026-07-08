@@ -56,7 +56,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   return (
     <aside
       className={`
-        bg-sidebar text-white flex flex-col border-r border-sidebar-hover
+        bg-sidebar-bg text-sidebar-text flex flex-col border-r border-sidebar-hover
         fixed inset-y-0 left-0 z-40 transition-transform duration-300 ease-out
         md:static md:z-auto md:translate-x-0 md:transition-all md:duration-300
         w-64 ${collapsed ? 'md:w-20' : 'md:w-64'}
@@ -70,7 +70,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         )}
         <button
           onClick={onMobileClose}
-          className="md:hidden ml-auto p-1 rounded text-white/70 hover:text-white transition-colors"
+          className="md:hidden ml-auto p-1 rounded text-sidebar-icon/70 hover:text-sidebar-text transition-colors"
           aria-label="Fechar menu"
         >
           <X className="w-5 h-5" />
@@ -94,8 +94,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                   onClick={onMobileClose}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
-                      ? 'bg-sidebar-active text-white'
-                      : 'text-white/85 hover:bg-sidebar-hover hover:text-white'
+                      ? 'bg-sidebar-active text-sidebar-text'
+                      : 'text-sidebar-icon/85 hover:bg-sidebar-hover hover:text-sidebar-text'
                   }`}
                   title={collapsed ? item.label : undefined}
                 >
@@ -113,7 +113,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         <div className="px-3 border-t border-sidebar-hover pt-3">
           <button
             onClick={() => { onMobileClose?.(); logout(); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-sidebar-hover hover:text-white transition-colors${
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-icon/70 hover:bg-sidebar-hover hover:text-sidebar-text transition-colors${
               collapsed ? 'justify-center' : ''
             }`}
             title={collapsed ? 'Sair' : undefined}
@@ -132,7 +132,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         <div className="px-3 border-t border-sidebar-hover pt-3">
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden md:flex w-full items-center justify-center px-3 py-2.5rounded-lg text-white/85 hover:bg-sidebar-hover hover:text-white transition-colors"
+            className="hidden md:flex w-full items-center justify-center px-3 py-2.5rounded-lg text-sidebar-icon/85 hover:bg-sidebar-hover hover:text-sidebar-text transition-colors"
             title={collapsed ? 'Expandir' : 'Colapsar'}
           >
             <ChevronLeft

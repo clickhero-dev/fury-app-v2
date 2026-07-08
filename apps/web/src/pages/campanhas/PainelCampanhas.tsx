@@ -163,7 +163,7 @@ export function PainelCampanhas() {
             {row.status === 'ativo' && (
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-red-600 hover:bg-error-light rounded-lg transition-colors disabled:opacity-50"
                 disabled={pauseMutation.isPending}
                 onClick={() => setCampaignToPause(row)}
               >
@@ -174,7 +174,7 @@ export function PainelCampanhas() {
             {row.status === 'pausado' && (
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-green-700 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-green-700 hover:bg-success-light rounded-lg transition-colors disabled:opacity-50"
                 disabled={pauseMutation.isPending}
                 onClick={() => handleResume(row)}
               >
@@ -207,11 +207,11 @@ export function PainelCampanhas() {
           title="Gerenciamento de Campanhas"
           description="Monitore e otimize o desempenho de todas as suas campanhas"
         />
-        <p className="text-xs text-gray-400 -mt-3">{formatPeriodLabel(startDate, endDate)}</p>
+        <p className="text-xs text-text-tertiary -mt-3">{formatPeriodLabel(startDate, endDate)}</p>
 
         {/* Action error banner */}
         {actionError && (
-          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+          <div className="flex items-start gap-3 bg-error-light border border-error/20 rounded-xl px-4 py-3 text-sm text-error">
             <span className="shrink-0 mt-0.5">⚠️</span>
             <span className="flex-1">{actionError}</span>
             <button
@@ -229,13 +229,13 @@ export function PainelCampanhas() {
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Search */}
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary pointer-events-none" />
             <input
               type="text"
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
               placeholder="Buscar campanha..."
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors"
+              className="w-full pl-9 pr-4 py-2 text-sm border border-border rounded-xl bg-surface focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors"
             />
           </div>
 
@@ -243,7 +243,7 @@ export function PainelCampanhas() {
           <select
             value={filter}
             onChange={(e) => handleFilterChange(e.target.value as FilterType)}
-            className="sm:w-48 px-4 py-2 text-sm border border-gray-200 rounded-xl bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors cursor-pointer"
+            className="sm:w-48 px-4 py-2 text-sm border border-border rounded-xl bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors cursor-pointer"
           >
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -275,7 +275,7 @@ export function PainelCampanhas() {
                 <button
                   onClick={() => setPage((p) => p - 1)}
                   disabled={page === 1}
-                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="border border-border rounded-lg px-3 py-1.5 text-sm hover:bg-surface-secondary disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   ‹ Anterior
                 </button>
@@ -283,7 +283,7 @@ export function PainelCampanhas() {
                 <button
                   onClick={() => setPage((p) => p + 1)}
                   disabled={page === totalPages}
-                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="border border-border rounded-lg px-3 py-1.5 text-sm hover:bg-surface-secondary disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Próxima ›
                 </button>
