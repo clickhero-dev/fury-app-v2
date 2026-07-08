@@ -9,15 +9,16 @@ function getTransporter(): EmailTransporter {
     return transporter;
   }
 
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-  const smtpUser = process.env.SMTP_USER || '';
-  const smtpPass = process.env.SMTP_PASS || '';
+  // Configurações oficiais do SMTP do Resend
+  const smtpHost = 'smtp.resend.com';
+  const smtpPort = 465; 
+  const smtpUser = 'resend'; // O usuário para o SMTP do Resend é sempre fixo como 'resend'
+  const smtpPass = process.env.RESEND_API_KEY || ''; // Utiliza a chave enviada pelo sênior
 
   transporter = nodemailer.createTransport({
     host: smtpHost,
     port: smtpPort,
-    secure: smtpPort === 465,
+    secure: true, // true para a porta segura 465
     auth: {
       user: smtpUser,
       pass: smtpPass,
@@ -35,7 +36,9 @@ interface SendEmailOptions {
 
 async function sendEmail(options: SendEmailOptions): Promise<void> {
   const transport = getTransporter();
-  const from = process.env.SMTP_USER || 'noreply@fury.app';
+  
+  // O Resend em contas gratuitas exige o uso deste remetente padrão para testes
+  const from = 'onboarding@resend.dev';
 
   try {
     await transport.sendMail({
