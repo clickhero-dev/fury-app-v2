@@ -62,7 +62,7 @@ export function AppLayout({ children, header, className }: AppLayoutProps) {
   return (
     <main className="flex-1 min-w-0 transition-all duration-300">
       {/* Header principal — fixo no topo */}
-      <div className="flex items-center h-14 px-4 border-b border-border bg-white sticky top-0 z-20">
+      <div className="flex items-center h-14 px-4 border-b border-border bg-background sticky top-0 z-20">
         {/* Botão de menu — visível apenas no mobile */}
         <button
           onClick={() => setMobileOpen(true)}

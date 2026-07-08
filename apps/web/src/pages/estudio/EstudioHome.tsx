@@ -146,7 +146,7 @@ export function EstudioHome() {
         <>
           <button
             onClick={handleBackToLibrary}
-            className="flex items-center gap-1.5 text-sm font-semibold text-[#667085] hover:text-[#101828] transition-colors"
+            className="flex items-center gap-1.5 text-sm font-semibold text-text-tertiary hover:text-text-primary transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             Biblioteca
@@ -171,17 +171,17 @@ export function EstudioHome() {
           <>
             {/* Hero — só criação rápida */}
             <div className="flex flex-col items-center text-center pt-4 pb-2 space-y-4">
-              <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-sm text-[#667085]">
+              <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-sm text-text-tertiary">
                 <span className="flex items-center gap-2">
                   <span className="text-base">✨</span>
                   Descreva o criativo que deseja
                 </span>
-                <span className="text-[#D1D5DB] hidden sm:block">→</span>
+                <span className="text-border hidden sm:block">→</span>
                 <span className="flex items-center gap-2">
                   <span className="text-base">🤖</span>
                   A IA cria a imagem para você
                 </span>
-                <span className="text-[#D1D5DB] hidden sm:block">→</span>
+                <span className="text-border hidden sm:block">→</span>
                 <span className="flex items-center gap-2">
                   <span className="text-base">📤</span>
                   Publique direto no Meta
@@ -198,16 +198,16 @@ export function EstudioHome() {
             </div>
 
             {/* Library */}
-            <div className="border-t border-[#E6E8EC] pt-8 space-y-6">
+            <div className="border-t border-border pt-8 space-y-6">
               <div className="flex items-center justify-between">
-                <h3 className="text-base font-bold text-[#101828]">Biblioteca de Criativos</h3>
-                <span className="text-sm text-[#667085]">
+                <h3 className="text-base font-bold text-text-primary">Biblioteca de Criativos</h3>
+                <span className="text-sm text-text-tertiary">
                   {assetList.length} ativo{assetList.length !== 1 ? 's' : ''}
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-white border border-[#E6E8EC] rounded-xl">
-                <span className="text-xs font-semibold text-[#667085] shrink-0">Tipo:</span>
+              <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-surface border border-border rounded-xl">
+                <span className="text-xs font-semibold text-text-tertiary shrink-0">Tipo:</span>
                 {typeOptions.map((option) => (
                   <button
                     key={option.value}
@@ -215,7 +215,7 @@ export function EstudioHome() {
                     className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md font-semibold text-xs transition-all ${
                       filterType === option.value
                         ? 'bg-[#EA580C] text-white'
-                        : 'bg-[#F2F4F7] text-[#667085] hover:bg-[#E6E8EC]'
+                        : 'bg-surface-secondary text-text-tertiary hover:bg-border-light'
                     }`}
                   >
                     {option.label}
@@ -225,9 +225,9 @@ export function EstudioHome() {
                   </button>
                 ))}
 
-                <span className="border-l border-[#E6E8EC] self-stretch mx-1" />
+                <span className="border-l border-border self-stretch mx-1" />
 
-                <span className="text-xs font-semibold text-[#667085] shrink-0">Status:</span>
+                <span className="text-xs font-semibold text-text-tertiary shrink-0">Status:</span>
                 {statusOptions.map((option) => (
                   <button
                     key={option.value}
@@ -235,7 +235,7 @@ export function EstudioHome() {
                     className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md font-semibold text-xs transition-all ${
                       filterStatus === option.value
                         ? 'bg-[#EA580C] text-white'
-                        : 'bg-[#F2F4F7] text-[#667085] hover:bg-[#E6E8EC]'
+                        : 'bg-surface-secondary text-text-tertiary hover:bg-border-light'
                     }`}
                   >
                     {option.label}
@@ -284,20 +284,20 @@ export function EstudioHome() {
         {view === 'quick-create' && (
           <div className="max-w-2xl mx-auto space-y-6">
             <div className="pt-2">
-              <p className="text-sm text-[#667085]">Descreva o criativo que deseja gerar — o FURY usa FLUX.2 Max para máxima qualidade</p>
+              <p className="text-sm text-text-tertiary">Descreva o criativo que deseja gerar — o FURY usa FLUX.2 Max para máxima qualidade</p>
             </div>
 
             {/* Prompt */}
             <Card>
               <CardContent className="space-y-4">
-                <label className="text-sm font-semibold text-[#101828]">Descreva o criativo</label>
+                <label className="text-sm font-semibold text-text-primary">Descreva o criativo</label>
                 <textarea
                   value={orPrompt}
                   onChange={(e) => setOrPrompt(e.target.value)}
                   placeholder="Ex: Anúncio fashion minimalista com luz natural, modelo feminina, fundo branco, cores suaves..."
-                  className="min-h-36 w-full rounded-2xl border border-[#E6E8EC] bg-[#FCFCFD] px-4 py-3 text-sm text-[#101828] outline-none transition focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/10 resize-none"
+                  className="min-h-36 w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-text-primary outline-none transition focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/10 resize-none"
                 />
-                <div className="flex items-center justify-between text-xs text-[#667085]">
+                <div className="flex items-center justify-between text-xs text-text-tertiary">
                   <span>{orPrompt.trim().length}/1000</span>
                   <span>Imagem • prompt detalhado = melhor resultado</span>
                 </div>
@@ -325,14 +325,14 @@ export function EstudioHome() {
               <Loader2 className="h-10 w-10 animate-spin text-[#EA580C]" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-[#101828]">
+              <h2 className="text-2xl font-bold text-text-primary">
                 {progressMessage || 'O FURY está criando sua imagem...'}
               </h2>
-              <p className="mt-2 text-sm text-[#667085]">
+              <p className="mt-2 text-sm text-text-tertiary">
                 A geração com IA e a renderização podem levar até 15 segundos
               </p>
             </div>
-            <div className="flex flex-col gap-1 text-xs text-[#667085]">
+            <div className="flex flex-col gap-1 text-xs text-text-tertiary">
               <span>✦ Aprimorando o prompt com o contexto da marca</span>
               <span>✦ Gerando imagem via FLUX.2 Max</span>
               <span>✦ Salvando na biblioteca</span>
@@ -344,7 +344,7 @@ export function EstudioHome() {
         {view === 'result' && generationResult && (
           <>
             <div className="pt-2">
-              <p className="text-sm text-[#667085]">Regenere com ajustes, salve ou publique direto no Meta</p>
+              <p className="text-sm text-text-tertiary">Regenere com ajustes, salve ou publique direto no Meta</p>
             </div>
             <CreativeResult
               result={generationResult}
@@ -361,8 +361,8 @@ export function EstudioHome() {
               <AlertCircle className="h-10 w-10 text-red-500" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-[#101828]">Não foi possível gerar o criativo</h2>
-              <p className="mt-2 text-sm text-[#667085]">Verifique sua conexão e tente novamente</p>
+              <h2 className="text-2xl font-bold text-text-primary">Não foi possível gerar o criativo</h2>
+              <p className="mt-2 text-sm text-text-tertiary">Verifique sua conexão e tente novamente</p>
             </div>
             <div className="flex gap-3">
               <Button onClick={handleStartQuickCreate} className="bg-[#EA580C] hover:bg-[#C2410C] text-white">
@@ -400,9 +400,9 @@ function resolveAssetUrl(url: string | null | undefined): string | null {
 function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDeleteConfirm, onDeleteCancel, onViewDetails }: AssetCardProps) {
   const imageUrl = resolveAssetUrl(asset.url);
   return (
-    <div className="bg-white rounded-lg border border-border overflow-hidden hover:shadow-lg transition-shadow">
+    <div className="bg-surface rounded-lg border border-border overflow-hidden hover:shadow-lg transition-shadow">
       {imageUrl && asset.type === 'image' ? (
-        <div className="relative w-full aspect-square bg-gray-100 overflow-hidden">
+        <div className="relative w-full aspect-square bg-surface-secondary overflow-hidden">
           <img
             src={imageUrl}
             alt={asset.name}
@@ -427,7 +427,7 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
           <button
             type="button"
             onClick={onDeleteRequest}
-            className="shrink-0 p-1 rounded text-text-secondary hover:text-red-500 hover:bg-red-50 transition-colors"
+            className="shrink-0 p-1 rounded text-text-secondary hover:text-red-500 hover:bg-error-light transition-colors"
             title="Excluir criativo"
           >
             <Trash2 className="w-4 h-4" />

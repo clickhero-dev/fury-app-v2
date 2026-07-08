@@ -248,7 +248,7 @@ function MetricCard({
 
   return (
     <div
-      className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex items-center gap-3 relative"
+      className="bg-surface border border-border rounded-xl p-4 shadow-sm flex items-center gap-3 relative"
       style={statusColor ? { borderTopColor: statusColor, borderTopWidth: 2 } : undefined}
     >
       {statusColor && (
@@ -257,11 +257,11 @@ function MetricCard({
           style={{ backgroundColor: statusColor }}
         />
       )}
-      <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
+      <div className="w-10 h-10 rounded-lg bg-surface-secondary flex items-center justify-center shrink-0">
         <Icon className="w-5 h-5" style={{ color: statusColor ?? '#9ca3af' }} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-gray-500 leading-tight flex items-center gap-1">
+        <p className="text-xs font-medium text-text-secondary leading-tight flex items-center gap-1">
           {label}
           {tooltip && (
             <UiTooltip>
@@ -287,7 +287,7 @@ function MetricCard({
             ) : progressLabel ? (
               <p className="text-xs text-muted-foreground">{progressLabel}</p>
             ) : null}
-            <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+            <div className="h-1 rounded-full bg-surface-secondary overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-700"
                 style={{ width: `${barWidth}%`, backgroundColor: barColor }}
@@ -346,10 +346,10 @@ function WeeklyChart({
       : data;
 
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm space-y-4 h-full">
+    <div className="bg-surface border border-border rounded-xl p-5 shadow-sm space-y-4 h-full">
       <div>
-        <h3 className="text-sm font-bold text-gray-900">Desempenho da Semana</h3>
-        <p className="text-xs text-gray-400 mt-0.5">Pessoas alcançadas nos últimos 7 dias</p>
+        <h3 className="text-sm font-bold text-text-primary">Desempenho da Semana</h3>
+        <p className="text-xs text-text-tertiary mt-0.5">Pessoas alcançadas nos últimos 7 dias</p>
       </div>
 
       <div className="relative" style={{ height: 200 }}>
@@ -358,17 +358,17 @@ function WeeklyChart({
             data={chartData}
             margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
             <XAxis
               dataKey="date"
               tickFormatter={isEmpty ? (v) => v : fmt}
-              tick={{ fontSize: 11, fill: '#9ca3af' }}
+              tick={{ fontSize: 11, fill: 'var(--color-text-tertiary)' }}
               tickLine={false}
               axisLine={false}
               interval="preserveStartEnd"
             />
             <YAxis
-              tick={{ fontSize: 11, fill: '#9ca3af' }}
+              tick={{ fontSize: 11, fill: 'var(--color-text-tertiary)' }}
               tickLine={false}
               axisLine={false}
               allowDecimals={false}
@@ -414,8 +414,8 @@ function WeeklyChart({
 
         {isEmpty && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="bg-white/90 border border-gray-200 rounded-lg px-4 py-2 shadow-sm text-center">
-              <p className="text-xs font-semibold text-gray-400">Aguardando dados do Meta Ads</p>
+            <div className="bg-surface/90 border border-border rounded-lg px-4 py-2 shadow-sm text-center">
+              <p className="text-xs font-semibold text-text-tertiary">Aguardando dados do Meta Ads</p>
             </div>
           </div>
         )}
@@ -423,11 +423,11 @@ function WeeklyChart({
 
       {hasIdealLine && (
         <div className="flex items-center gap-4 pt-1">
-          <span className="flex items-center gap-1.5 text-xs text-gray-500">
+          <span className="flex items-center gap-1.5 text-xs text-text-secondary">
             <span className="w-3 h-0.5 rounded-full bg-[#e8631a] inline-block" />
             Realizado
           </span>
-          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+          <span className="flex items-center gap-1.5 text-xs text-text-tertiary">
             <span className="w-3 border-t border-dashed border-gray-400 inline-block" />
             Projeção ideal
           </span>
@@ -518,11 +518,11 @@ function ActiveCampaignsTable({
   const topId = sorted[0]?.id;
 
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
+    <div className="bg-surface border border-border rounded-xl p-5 shadow-sm">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-sm font-bold text-gray-900">Campanhas Ativas</h3>
-          <p className="text-xs text-gray-400 mt-0.5">Ordenadas por performance</p>
+          <h3 className="text-sm font-bold text-text-primary">Campanhas Ativas</h3>
+          <p className="text-xs text-text-tertiary mt-0.5">Ordenadas por performance</p>
         </div>
         <Link to="/campanhas" className="text-xs text-[#EA580C] font-medium hover:underline">
           Ver todas →
@@ -601,12 +601,12 @@ function InstagramMetricCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex items-center gap-3">
-      <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
-        <Icon className="w-5 h-5 text-gray-400" />
+    <div className="bg-surface border border-border rounded-xl p-4 shadow-sm flex items-center gap-3">
+      <div className="w-10 h-10 rounded-lg bg-surface-secondary flex items-center justify-center shrink-0">
+        <Icon className="w-5 h-5 text-text-tertiary" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-gray-500 leading-tight">{label}</p>
+        <p className="text-xs font-medium text-text-secondary leading-tight">{label}</p>
         {children}
       </div>
     </div>
@@ -620,7 +620,7 @@ function FollowersValue({ value }: { value: number }) {
   if (value < 0) {
     return <p className="text-lg md:text-xl font-black leading-tight text-red-600">{value.toLocaleString('pt-BR')}</p>;
   }
-  return <p className="text-lg md:text-xl font-black leading-tight text-gray-900">0</p>;
+  return <p className="text-lg md:text-xl font-black leading-tight text-text-primary">0</p>;
 }
 
 function InstagramEngagementSection({ startDate, endDate }: { startDate: string; endDate: string }) {
@@ -642,15 +642,15 @@ function InstagramEngagementSection({ startDate, endDate }: { startDate: string;
   });
 
   return (
-    <div className="space-y-3">
+      <div className="space-y-3">
       <div>
-        <h3 className="text-sm font-bold text-gray-900">Engajamento Instagram</h3>
-        <p className="text-xs text-gray-400 mt-0.5">Métricas orgânicas no período selecionado</p>
+        <h3 className="text-sm font-bold text-text-primary">Engajamento Instagram</h3>
+        <p className="text-xs text-text-tertiary mt-0.5">Métricas orgânicas no período selecionado</p>
       </div>
 
       {!isLoading && data == null ? (
-        <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm text-center">
-          <p className="text-sm text-gray-400 mb-2">Conecte seu Instagram para ver métricas</p>
+        <div className="bg-surface border border-border rounded-xl p-5 shadow-sm text-center">
+          <p className="text-sm text-text-tertiary mb-2">Conecte seu Instagram para ver métricas</p>
           <Link to="/configuracoes/integracoes" className="text-xs text-[#EA580C] font-medium hover:underline">
             Ir para Integrações →
           </Link>
@@ -658,12 +658,12 @@ function InstagramEngagementSection({ startDate, endDate }: { startDate: string;
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <InstagramMetricCard icon={MessageCircle} label="💬 Comentários">
-            <p className="text-lg md:text-xl font-black leading-tight text-gray-900">
+            <p className="text-lg md:text-xl font-black leading-tight text-text-primary">
               {(data?.comments ?? 0).toLocaleString('pt-BR')}
             </p>
           </InstagramMetricCard>
           <InstagramMetricCard icon={Bookmark} label="🔖 Salvamentos">
-            <p className="text-lg md:text-xl font-black leading-tight text-gray-900">
+            <p className="text-lg md:text-xl font-black leading-tight text-text-primary">
               {(data?.saves ?? 0).toLocaleString('pt-BR')}
             </p>
           </InstagramMetricCard>
@@ -830,7 +830,7 @@ export function Dashboard() {
             </div>
           }
         />
-        <p className="text-xs text-gray-400 -mt-3">{formatPeriodLabel(startDate, endDate)}</p>
+        <p className="text-xs text-text-tertiary -mt-3">{formatPeriodLabel(startDate, endDate)}</p>
 
         {/* ── Meta connection banner ───────────────────────────────────────── */}
         {!isMetaConnected && <MetaBanner />}

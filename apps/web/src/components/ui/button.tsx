@@ -27,13 +27,13 @@ export function Button({
       className={cn(
         'font-bold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed relative',
         !isPrimary && variant === 'default' &&
-          'bg-gray-100 text-gray-900 hover:bg-gray-200 active:bg-gray-300 shadow-sm',
+          'bg-surface-secondary text-text-primary hover:bg-border-light active:bg-border shadow-sm border border-border',
         isPrimary &&
           'text-white shadow-xl hover:shadow-2xl hover:shadow-[#FF6B35]/60 active:shadow-lg hover:brightness-125 active:brightness-110',
         variant === 'outline' &&
           'border-2 border-[#E8631A] text-[#E8631A] hover:bg-orange-50 active:bg-orange-100 font-bold',
         variant === 'ghost' &&
-          'text-gray-700 hover:bg-gray-100 active:bg-gray-200',
+          'text-text-secondary hover:bg-surface-secondary active:bg-border-light',
         variant === 'destructive' &&
           'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-sm',
         size === 'sm' && 'px-4 py-2.5 text-sm',

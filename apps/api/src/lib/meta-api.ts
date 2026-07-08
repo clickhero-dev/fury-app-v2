@@ -1356,6 +1356,10 @@ export interface CampaignAdItem {
         image_url?: string;
         video_id?: string;
       };
+      photo_data?: {
+        url?: string;
+        caption?: string;
+      };
     };
   };
 }
@@ -1366,7 +1370,7 @@ interface CampaignAdsResponse {
 
 /** Busca os anúncios (ads) de uma campanha com dados do criativo (thumbnail, texto, mídia). */
 export async function getCampaignAds(campaignId: string, accessToken: string): Promise<CampaignAdItem[]> {
-  const fields = 'name,status,creative{thumbnail_url,object_story_spec{link_data{image_url,message,name},video_data{image_url,video_id}}}';
+  const fields = 'name,status,creative{thumbnail_url,object_story_spec{link_data{image_url,message,name},video_data{image_url,video_id},photo_data{url,caption}}}';
   const response = await metaApiCall<CampaignAdsResponse>(
     `/${campaignId}/ads?fields=${fields}&limit=25`,
     accessToken
