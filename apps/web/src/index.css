@@ -149,9 +149,7 @@ html.dark .bg-\[#FCFCFD\] {
 html.dark .bg-\[#F2F4F7\] {
   background-color: var(--color-surface-secondary) !important;
 }
-html.dark .bg-\[#FFF4ED\] {
+/* Avoid CSS escape issues with \[#...\] by using attribute selector */
+html.dark [class*="bg-[#FFF4ED]"] {
   background-color: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface)) !important;
-}
-html.dark .bg-\[#FAFAFA\] {
-  background-color: var(--color-background) !important;
 }
