@@ -153,3 +153,7 @@ html.dark .bg-\[#F2F4F7\] {
 html.dark [class*="bg-[#FFF4ED]"] {
   background-color: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface)) !important;
 }
+/* Wizard objective/selected cards: orange-50 stays light in dark mode */
+html.dark .bg-orange-50 {
+  background-color: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface)) !important;
+}
