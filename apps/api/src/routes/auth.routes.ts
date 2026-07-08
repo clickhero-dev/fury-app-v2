@@ -8,6 +8,7 @@ const router = Router();
 router.post('/register', authController.register);
 router.post('/login', authController.login);
 router.post('/refresh', authController.refresh);
+router.post('/verify-email', authController.verifyEmail);
 
 // Protected routes
 router.post('/logout', authMiddleware, authController.logout);
