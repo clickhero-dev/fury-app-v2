@@ -125,8 +125,7 @@ html.dark .border-\[#E6E8EC\] {
   border-color: var(--color-border) !important;
 }
 
-html.dark .text-gray-400,
-html.dark .text-\[#667085\] {
+html.dark .text-gray-400 {
   color: var(--color-text-tertiary) !important;
 }
 html.dark .text-gray-500 {
@@ -138,8 +137,7 @@ html.dark .text-gray-600 {
 html.dark .text-gray-700 {
   color: var(--color-text-secondary) !important;
 }
-html.dark .text-gray-900,
-html.dark .text-\[#101828\] {
+html.dark .text-gray-900 {
   color: var(--color-text-primary) !important;
 }
 
