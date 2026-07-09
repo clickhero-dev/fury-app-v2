@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { db, creativeAssets } from '@fury/db';
+import { sanitizeTypos } from '../utils/sanitize-typos.js';
 
 type AdCopyInput = {
   objective?: string;
@@ -11,12 +12,12 @@ type AdCopyInput = {
 };
 
 function buildSystemPrompt() {
-  return 'Você é copywriter especialista em Meta Ads.';
+  return 'Você é copywriter especialista em Meta Ads. Revise a ortografia cuidadosamente.';
 }
 
 function buildUserPrompt(input: AdCopyInput) {
   const qty = input.quantity ?? 3;
-  return `Você é copywriter especialista em Meta Ads. Gere ${qty} variações com o seguinte formato por item: {"headline":"...","primary_text":"...","cta":"...","reasoning":"..."}.\n\nObjetivo: ${input.objective || ''} | Produto: ${input.product || ''} | Público: ${input.audience || ''} | Tom: ${input.tone || ''} | BrandVoice: ${input.brandVoice || ''} \n\nRegras: Headline máximo 40 chars; Texto primário máximo 125 chars; CTA máximo 20 chars. Responda APENAS um JSON com um array no corpo principal, por exemplo: [{"headline":"...","primary_text":"...","cta":"...","reasoning":"..."}]`;
+  return `Você é copywriter especialista em Meta Ads. Gere ${qty} variações com o seguinte formato por item: {"headline":"...","primary_text":"...","cta":"...","reasoning":"..."}.\n\nObjetivo: ${input.objective || ''} | Produto: ${input.product || ''} | Público: ${input.audience || ''} | Tom: ${input.tone || ''} | BrandVoice: ${input.brandVoice || ''} \n\nRegras: Headline máximo 40 chars; Texto primário máximo 125 chars; CTA máximo 20 chars. Sem erros ortográficos — cada palavra deve estar em português brasileiro correto. Responda APENAS um JSON com um array no corpo principal, por exemplo: [{"headline":"...","primary_text":"...","cta":"...","reasoning":"..."}]`;
 }
 
 function buildOpenAIClient() {
@@ -112,9 +113,9 @@ export async function generateAdCopy(input: AdCopyInput, tenantId: string) {
   }
 
   const variations = parsed.slice(0, qty).map((v: any) => ({
-    headline: String(v.headline || v.title || ''),
-    primary_text: String(v.primary_text || v.text || v.body || ''),
-    cta: String(v.cta || v.call_to_action || ''),
+    headline: sanitizeTypos(String(v.headline || v.title || '')),
+    primary_text: sanitizeTypos(String(v.primary_text || v.text || v.body || '')),
+    cta: sanitizeTypos(String(v.cta || v.call_to_action || '')),
     reasoning: String(v.reasoning || ''),
   }));
 

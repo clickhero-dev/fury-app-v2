@@ -57,6 +57,8 @@ ARQUÉTIPO: ${context.layout}
 INSTRUÇÕES DE COPY PARA ESTE ARQUÉTIPO:
 ${layoutInstructions}
 
+Verifique a ortografia — erros como "internacionales" ou "Inscriçcões" são inaceitáveis. Revise cada palavra antes de responder.
+
 Responda SOMENTE em JSON válido. Inclua apenas os campos pedidos para o arquétipo
 e ecoe "layout" exatamente como "${context.layout}":
 {

@@ -29,6 +29,49 @@ export type StudioComplianceStatusResult = {
   createdAt: string;
 };
 
+async function enhancePromptForImage(prompt: string): Promise<string> {
+  if (prompt.length >= 100) return prompt;
+
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return prompt;
+
+  const systemMessage = [
+    'Você é um especialista em publicidade digital especializado em descrições de imagens.',
+    'Preserve o tema principal do prompt original. Adicione detalhes visuais (iluminação, composição, ângulo, cores) SEM mudar o assunto principal.',
+    'O prompt melhorado deve ter entre 150 e 400 caracteres e estar em português.',
+    'Retorne APENAS o prompt melhorado, sem aspas, sem introdução.',
+  ].join('\n');
+
+  const userMessage = `Prompt original: "${prompt}"`;
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek/deepseek-chat',
+        messages: [
+          { role: 'system', content: systemMessage },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.7,
+        max_tokens: 600,
+      }),
+    });
+
+    if (!response.ok) return prompt;
+
+    const data = await response.json() as { choices?: { message?: { content: string } }[] };
+    const improved = data?.choices?.[0]?.message?.content?.trim();
+    return improved && improved.length > 0 ? improved : prompt;
+  } catch {
+    return prompt;
+  }
+}
+
 const OPENAI_IMAGE_MODEL = 'dall-e-3';
 const STUDIO_IMAGE_SIZE = '1024x1024';
 const STUDIO_IMAGE_QUALITY = 'standard';
@@ -164,15 +207,16 @@ async function persistGeneratedImage(params: {
   prompt: string;
   publicBaseUrl: string;
 }): Promise<StudioImageGenerationResult> {
-  // Se OPENROUTER_API_KEY estiver configurada, usa OpenRouter em vez de OpenAI
+  const enhancedPrompt = await enhancePromptForImage(params.prompt);
+
   let sourceUrl: string;
   if (process.env.OPENROUTER_API_KEY) {
     sourceUrl = await openrouterService.generateImage({
       model: 'black-forest-labs/flux.2-klein-4b',
-      prompt: params.prompt,
+      prompt: enhancedPrompt,
     });
   } else {
-    sourceUrl = await generateOpenAIImage(params.prompt);
+    sourceUrl = await generateOpenAIImage(enhancedPrompt);
   }
 
   // OpenAI returns a temporary CDN URL — use it directly so the browser can

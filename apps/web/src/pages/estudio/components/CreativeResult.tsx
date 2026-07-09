@@ -109,7 +109,7 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
         <div className="space-y-4">
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E8631A]">
-              {isVideo ? 'Seu vídeo' : 'Seu criativo'}
+              {isVideo ? 'Seu vídeo' : 'Seu anúncio'}
             </p>
             {cd.layout && (
               <div className="flex items-center gap-2">
@@ -122,7 +122,7 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
               </div>
             )}
             <p className="text-sm text-[#667085]">
-              {isLegacy ? 'Este modelo foi descontinuado. Crie um novo criativo para usar os formatos atuais.' : isQuickCreate ? 'Criado via Criação Rápida. Regenere com ajustes ou salve na biblioteca.' : 'Pronto. Regenere com ajustes, salve ou publique no Meta.'}
+              {isLegacy ? 'Este modelo foi descontinuado. Crie um novo anúncio para usar os formatos atuais.' : isQuickCreate ? 'Criado via Criação Rápida. Regenere com ajustes ou salve na biblioteca.' : 'Pronto. Regenere com ajustes, salve ou publique no Meta.'}
             </p>
           </div>
 
@@ -141,7 +141,7 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
           {/* ponytail: pergunta pós-criação visível por padrão */}
           {showRegenerateForm && isQuickCreate && (
             <div className="space-y-2 rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] p-4">
-              <p className="text-sm font-semibold text-[#101828]">Deseja incluir mais alguma coisa no criativo?</p>
+              <p className="text-sm font-semibold text-[#101828]">Deseja incluir mais alguma coisa no anúncio?</p>
               <textarea
                 autoFocus
                 value={feedback}
@@ -211,7 +211,7 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
               </div>
             )}
             <button onClick={onNewCreative} className="text-center text-xs text-[#667085] hover:text-[#E8631A] transition-colors pt-1">
-              Criar outro criativo →
+              Criar outro anúncio →
             </button>
           </div>
         </div>

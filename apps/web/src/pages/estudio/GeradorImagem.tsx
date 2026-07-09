@@ -405,7 +405,7 @@ export function GeradorImagem() {
                       {renderMutation.isPending ? (
                         <span className="inline-flex items-center gap-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          Montando criativo...
+                          Montando anúncio...
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-2">
@@ -416,7 +416,7 @@ export function GeradorImagem() {
                     </Button>
                     {renderMutation.isError && (
                       <p className="text-xs text-red-500 mt-2 text-center">
-                        Erro ao montar criativo. Verifique a imagem e tente novamente.
+                        Erro ao montar anúncio. Verifique a imagem e tente novamente.
                       </p>
                     )}
                   </div>
@@ -435,7 +435,7 @@ export function GeradorImagem() {
               </div>
               <div className="p-6 space-y-4">
                 <div>
-                  <p className="text-sm font-semibold text-text-primary mb-1">Preview do seu criativo</p>
+                  <p className="text-sm font-semibold text-text-primary mb-1">Preview do seu anúncio</p>
                   <p className="text-xs text-text-secondary">
                     Antes de salvar, verificamos o compliance com as políticas do Meta.
                   </p>
@@ -493,7 +493,7 @@ export function GeradorImagem() {
                         Ver biblioteca
                       </Button>
                       <Button type="button" variant="outline" onClick={handleReset} className="flex-1">
-                        Criar novo criativo
+                        Criar novo anúncio
                       </Button>
                     </div>
                   </div>
