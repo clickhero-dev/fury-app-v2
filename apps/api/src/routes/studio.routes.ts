@@ -318,7 +318,7 @@ const VOICE_TONE_LABELS: Record<string, string> = {
   premium: 'Premium/Sofisticado',
 };
 
-async function getBrandKitContext(tenantId: string): Promise<{ tone?: string; colors?: BrandColors }> {
+export async function getBrandKitContext(tenantId: string): Promise<{ tone?: string; colors?: BrandColors }> {
   const brandKit = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, tenantId) });
   if (!brandKit) return {};
 
