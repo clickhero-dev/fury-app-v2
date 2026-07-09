@@ -140,15 +140,15 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
 
           {/* ponytail: pergunta pós-criação visível por padrão */}
           {showRegenerateForm && isQuickCreate && (
-            <div className="space-y-2 rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] p-4">
-              <p className="text-sm font-semibold text-[#101828]">Deseja incluir mais alguma coisa no anúncio?</p>
+            <div className="space-y-2 rounded-xl border border-border bg-surface-secondary p-4">
+              <p className="text-sm font-semibold text-text-primary">Deseja incluir mais alguma coisa no anúncio?</p>
               <textarea
                 autoFocus
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
                 placeholder="Ex: Adicionar um selo de desconto, incluir logo da marca, mudar cores..."
                 rows={3}
-                className="w-full rounded-xl border border-[#E6E8EC] bg-white px-3 py-2 text-sm text-[#101828] outline-none transition focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/10 resize-none"
+                className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none transition focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/10 resize-none"
               />
               <div className="flex gap-2">
                 <Button
