@@ -95,8 +95,8 @@ export async function renderCreative(input: RenderCreativeInput): Promise<Render
         .png()
         .toBuffer();
       composites.push({ input: logoResized, top: 620, left: 40 });
-    } catch {
-      // fallback silencioso — se o logo não carregar, o anúncio ainda funciona
+    } catch (err) {
+      console.warn('[studio-render] Logo fetch failed, skipping:', (err as Error).message);
     }
   }
 

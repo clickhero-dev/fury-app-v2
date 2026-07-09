@@ -11,7 +11,8 @@ import {
   publishStudioAssetToMeta,
 } from '../services/studio-image.service.js';
 import { renderCreative as renderCreativeService } from '../services/studio-render.service.js';
-import { getBrandKitContext } from '../routes/studio.routes.js';
+import { db, brandKits } from '@fury/db';
+import { eq } from 'drizzle-orm';
 
 const generateImageSchema = z.object({
   prompt: z.string().min(10, 'Prompt deve ter no minimo 10 caracteres').max(1000, 'Prompt deve ter no maximo 1000 caracteres').optional(),
@@ -148,8 +149,8 @@ export async function renderCreative(req: Request, res: Response, next: NextFunc
 
     let logoUrl: string | undefined;
     if (body.includeLogo) {
-      const brandCtx = await getBrandKitContext(req.tenant.tenantId);
-      logoUrl = brandCtx.colors?.logoUrl ?? undefined;
+      const brandKit = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, req.tenant.tenantId) });
+      logoUrl = brandKit?.logoUrl ?? undefined;
     }
 
     const result = await renderCreativeService({
