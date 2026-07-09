@@ -38,6 +38,7 @@ export const openrouterService = {
     prompt: string;
     aspect_ratio?: string;
     resolution?: string;
+    logoUrl?: string;
   }): Promise<string> {
     const apiKey = getClient();
     const response = await fetch(`${OPENROUTER_BASE}/images`, {
@@ -56,13 +57,35 @@ export const openrouterService = {
     }
     const data = (await response.json()) as any;
     const imageData = data.data?.[0];
-    if (imageData?.b64_json) return `data:image/png;base64,${imageData.b64_json}`;
-    if (imageData?.url) {
+    let result: string;
+    if (imageData?.b64_json) result = `data:image/png;base64,${imageData.b64_json}`;
+    else if (imageData?.url) {
       const imgResponse = await fetch(imageData.url);
       const buffer = await imgResponse.arrayBuffer();
-      return `data:image/png;base64,${Buffer.from(buffer).toString('base64')}`;
+      result = `data:image/png;base64,${Buffer.from(buffer).toString('base64')}`;
+    } else throw new AppError(502, 'OPENROUTER_IMAGE_EMPTY', 'OpenRouter não retornou imagem.');
+
+    // ponytail: composite logo onto generated image if provided
+    if (options.logoUrl) {
+      try {
+        const { default: sharp } = await import('sharp');
+        const match = result.match(/^data:image\/\w+;base64,(.+)$/);
+        if (match) {
+          const imgBuf = Buffer.from(match[1], 'base64');
+          const logoResp = await fetch(options.logoUrl);
+          const logoBuf = Buffer.from(await logoResp.arrayBuffer());
+          const logoResized = await sharp(logoBuf).resize(120, null, { fit: 'inside', withoutEnlargement: true }).png().toBuffer();
+          const composited = await sharp(imgBuf).resize(1080, 1080, { fit: 'inside' }).composite([
+            { input: logoResized, top: 20, left: 20 },
+          ]).png().toBuffer();
+          result = `data:image/png;base64,${composited.toString('base64')}`;
+        }
+      } catch (err) {
+        console.warn('[openrouter] Logo overlay failed:', (err as Error).message);
+      }
     }
-    throw new AppError(502, 'OPENROUTER_IMAGE_EMPTY', 'OpenRouter não retornou imagem.');
+
+    return result;
   },
 
   async generateVideo(options: {
