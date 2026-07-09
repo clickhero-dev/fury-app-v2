@@ -185,15 +185,17 @@ router.post('/generate-image', authMiddleware, tenantMiddleware, async (req: Req
     const tenantId = (req as any).tenant?.tenantId as string;
     const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.APP_URL || `https://${req.get('host')}`;
 
+    const brand = await getBrandContext(tenantId);
+
     const base64Image = await openrouterService.generateImage({
       model: body.model,
       prompt: body.prompt,
       aspect_ratio: body.aspect_ratio,
       resolution: body.resolution,
+      logoUrl: brand.logoUrl,
     });
 
     const imageUrl = await uploadImageToStorage(base64Image);
-    const brand = await getBrandContext(tenantId);
     const [asset] = await db
       .insert(creativeAssets)
       .values({
@@ -372,6 +374,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
     const base64Image = await openrouterService.generateImage({
       model: originalModel,
       prompt: newPrompt,
+      logoUrl: brand.logoUrl,
     });
 
     const imageUrl = await uploadImageToStorage(base64Image);

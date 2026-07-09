@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { and, eq } from 'drizzle-orm';
-import { db, creativeAssets, metaConnections } from '@fury/db';
+import { db, creativeAssets, metaConnections, brandKits } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
 import { createAdCreativeFromCopy, uploadAdImage } from '../lib/meta-api.js';
 import { decryptMetaToken } from '../utils/crypto.js';
@@ -211,9 +211,11 @@ async function persistGeneratedImage(params: {
 
   let sourceUrl: string;
   if (process.env.OPENROUTER_API_KEY) {
+    const brandKit = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, params.tenantId) });
     sourceUrl = await openrouterService.generateImage({
       model: 'black-forest-labs/flux.2-klein-4b',
       prompt: enhancedPrompt,
+      logoUrl: brandKit?.logoUrl ?? undefined,
     });
   } else {
     sourceUrl = await generateOpenAIImage(enhancedPrompt);
