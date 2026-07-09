@@ -49,6 +49,7 @@ export const openrouterService = {
         prompt: options.prompt,
         ...(options.aspect_ratio ? { aspect_ratio: options.aspect_ratio } : {}),
         ...(options.resolution ? { resolution: options.resolution } : {}),
+        ...(options.logoUrl ? { image: options.logoUrl } : {}),
       }),
     });
     if (!response.ok) {
