@@ -178,3 +178,26 @@ export async function checkForgotPasswordRateLimit(email: string): Promise<{ all
     return { allowed: true, remaining: maxAttempts };
   }
 }
+
+export async function checkResetPasswordRateLimit(email: string): Promise<{ allowed: boolean; remaining: number }> {
+  const redis = getRedis();
+  const key = `reset_password:${email}`;
+  const maxAttempts = 3;
+  const windowMs = 15 * 60 * 1000; // 15 minutes
+
+  try {
+    const current = await redis.incr(key);
+
+    if (current === 1) {
+      await redis.pexpire(key, windowMs);
+    }
+
+    const allowed = current <= maxAttempts;
+    const remaining = Math.max(0, maxAttempts - current);
+
+    return { allowed, remaining };
+  } catch (err) {
+    console.error('Reset password rate limit check failed, allowing request:', err);
+    return { allowed: true, remaining: maxAttempts };
+  }
+}

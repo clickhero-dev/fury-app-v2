@@ -6,7 +6,7 @@ import { eq, and } from 'drizzle-orm';
 import { getRedis } from '../lib/redis.js';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../lib/jwt.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { sendWelcomeEmail, sendOtpEmail } from './email.service.js';
+import { sendWelcomeEmail, sendOtpEmail, sendPasswordResetConfirmation } from './email.service.js';
 import type { UserDTO } from '../lib/shared.js';
 
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
@@ -354,4 +354,54 @@ export async function forgotPassword(email: string): Promise<void> {
       console.error(`[forgotPassword] Failed to send OTP email to ${user.email}:`, errorMessage);
     });
   }
+}
+
+export async function resetPassword(email: string, otp: string, newPassword: string): Promise<UserDTO> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, email),
+  });
+
+  if (!user) {
+    throw new AppError(400, 'INVALID_OR_EXPIRED_OTP', 'Código inválido ou expirado');
+  }
+
+  const now = new Date();
+  const isOtpValid =
+    user.otpCode === otp &&
+    user.otpExpiresAt !== null &&
+    user.otpExpiresAt > now;
+
+  if (!isOtpValid) {
+    throw new AppError(400, 'INVALID_OR_EXPIRED_OTP', 'Código inválido ou expirado');
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+
+  await db
+    .update(users)
+    .set({
+      passwordHash,
+      otpCode: null,
+      otpExpiresAt: null,
+      resetToken: null,
+      resetTokenExpiresAt: null,
+    })
+    .where(eq(users.id, user.id));
+
+  await revokeRefreshToken(user.id);
+
+  sendPasswordResetConfirmation(user.email).catch((error) => {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[resetPassword] Failed to send password reset confirmation to ${user.email}:`, errorMessage);
+  });
+
+  const updatedUser = await db.query.users.findFirst({
+    where: eq(users.id, user.id),
+  });
+
+  if (!updatedUser) {
+    throw new AppError(500, 'USER_NOT_FOUND', 'Usuário não encontrado');
+  }
+
+  return userToDTO(updatedUser);
 }

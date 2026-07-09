@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as authService from '../services/auth.service.js';
-import { checkEmailVerificationRateLimit, checkForgotPasswordRateLimit } from '../middleware/rate-limit.middleware.js';
+import { checkEmailVerificationRateLimit, checkForgotPasswordRateLimit, checkResetPasswordRateLimit } from '../middleware/rate-limit.middleware.js';
 
 const updateMeSchema = z.object({
   name: z.string().min(1).max(255).optional(),
@@ -43,6 +43,12 @@ const verifyEmailSchema = z.object({
 
 const forgotPasswordSchema = z.object({
   email: z.string().email(),
+});
+
+const resetPasswordSchema = z.object({
+  email: z.string().email(),
+  otp: z.string().length(6).regex(/^\d+$/, 'OTP must contain only digits'),
+  newPassword: z.string().min(8).max(255),
 });
 
 export async function register(req: Request, res: Response, next: NextFunction) {
@@ -220,6 +226,42 @@ export async function forgotPassword(req: Request, res: Response, next: NextFunc
       success: true,
       data: null,
       message: 'Se o email existe em nossa base, você receberá instruções para redefinir sua senha.',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function resetPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = resetPasswordSchema.parse(req.body);
+
+    const { allowed } = await checkResetPasswordRateLimit(body.email);
+
+    if (!allowed) {
+      return res.status(429).json({
+        success: false,
+        error: {
+          code: 'TOO_MANY_ATTEMPTS',
+          message: 'Muitas tentativas de redefinição. Tente novamente em 15 minutos.',
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const user = await authService.resetPassword(body.email, body.otp, body.newPassword);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          tenantId: user.tenantId,
+        },
+      },
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
