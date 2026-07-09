@@ -21,6 +21,7 @@ export interface WizardAudienceState {
   ageMin: number;
   ageMax: number;
   gender: WizardGender;
+  audienceInterests: { id: string; name: string }[];
 }
 
 export interface WizardBudgetState {
@@ -66,6 +67,7 @@ export interface CreateWizardCampaignPayload {
   age_min: number;
   age_max: number;
   gender: WizardGender;
+  audience_interests?: { id: string; name: string }[];
   daily_budget_brl: number;
   duration_days?: number;
   whatsapp_page_id?: string;

@@ -9,7 +9,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../lib/locations-cache.js';
 import { getResolvedTenantAssetSelection } from './meta.service.js';
-import { getCampaignAds } from '../lib/meta-api.js';
+import { getCampaignAds, searchMetaInterests as searchMetaInterestsLib } from '../lib/meta-api.js';
 import type { IMetaCampaignProvider } from '../lib/providers/meta-campaign.provider.js';
 import type {
   ICampaignRepository,
@@ -56,6 +56,7 @@ export interface CreateWizardCampaignArgs {
   whatsappPhoneNumberId?: string; whatsappPhoneNumber?: string;
   destinations?: WizardMessagingDestination[]; instagramUserId?: string;
   instagramUsername?: string;
+  audienceInterests?: { id: string; name: string }[];
 }
 
 export interface CreateWizardCampaignResult {
@@ -615,6 +616,10 @@ export class CampaignsService {
         targeting_automation: { advantage_audience: 0 },
       };
 
+      if (args.audienceInterests && args.audienceInterests.length > 0) {
+        targeting.flexible_spec = [{ interests: args.audienceInterests }];
+      }
+
       const adSetBody: Record<string, unknown> = {
         name: `AdSet — ${args.locationCity} — FURY`, campaign_id: metaCampaignId,
         daily_budget: Math.round(args.dailyBudgetBrl * 100),
@@ -697,6 +702,14 @@ export class CampaignsService {
     await this.deps.setMetaLocationsCache(args.query, results);
     return results;
   }
+
+  async searchMetaInterests(args: { tenantId: string; query: string }): Promise<any[]> {
+    const accessToken = await this.getAccessToken(args.tenantId);
+    let results: any[];
+    try { results = await searchMetaInterestsLib(args.query, accessToken); }
+    catch (err) { return []; }
+    return results;
+  }
 }
 
 // ── Default instance + backward-compatible wrappers ─────────────────────────
@@ -729,3 +742,4 @@ export const softDeleteCampaign = (args: Parameters<CampaignsService['softDelete
 export const getCampaignInsights = (args: Parameters<CampaignsService['getCampaignInsights']>[0]) => defaultService.getCampaignInsights(args);
 export const createCampaignFromWizard = (args: Parameters<CampaignsService['createCampaignFromWizard']>[0]) => defaultService.createCampaignFromWizard(args);
 export const searchMetaLocations = (args: Parameters<CampaignsService['searchMetaLocations']>[0]) => defaultService.searchMetaLocations(args);
+export const searchMetaInterests = (args: Parameters<CampaignsService['searchMetaInterests']>[0]) => defaultService.searchMetaInterests(args);

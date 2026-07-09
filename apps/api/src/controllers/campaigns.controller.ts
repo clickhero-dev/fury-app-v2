@@ -16,6 +16,7 @@ import {
   getCampaignInsights,
   createCampaignFromWizard,
   searchMetaLocations,
+  searchMetaInterests,
 } from '../services/campaigns.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import {
@@ -384,6 +385,7 @@ const createWizardSchema = z
     age_min: z.number().int().min(18).max(65),
     age_max: z.number().int().min(18).max(65),
     gender: z.enum(['all', 'male', 'female']),
+    audience_interests: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
 
     daily_budget_brl: z.number().min(7),
     duration_days: z.number().int().min(1).optional(),
@@ -500,6 +502,7 @@ export async function createWizardCampaignHandler(req: Request, res: Response, n
       destinations: data.destinations,
       instagramUserId: data.instagram_user_id,
       instagramUsername: data.instagram_username,
+      audienceInterests: data.audience_interests,
     });
 
     if (timedOut) return;
@@ -688,6 +691,26 @@ export async function searchMetaLocationsHandler(req: Request, res: Response, ne
     }
 
     const results = await searchMetaLocations({ tenantId, query: query.q });
+
+    res.json({
+      success: true,
+      data: results,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function searchMetaInterestsHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const query = metaLocationsSchema.parse(req.query);
+    const tenantId = req.tenant?.tenantId || '';
+    if (!tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+    }
+
+    const results = await searchMetaInterests({ tenantId, query: query.q });
 
     res.json({
       success: true,

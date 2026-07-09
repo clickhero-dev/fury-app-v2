@@ -1499,3 +1499,21 @@ export async function uploadAdImage(params: {
   // exige uma URL valida — hash puro causa erro 100 "picture should represent a valid URL".
   return imageData.url || imageData.hash;
 }
+
+export interface MetaInterestResult {
+  id: string;
+  name: string;
+  audience_size?: number;
+  path?: string[];
+}
+
+interface MetaInterestSearchResponse {
+  data: MetaInterestResult[];
+}
+
+/** Busca interesses do Meta via /search?type=adinterest para detalhamento de público-alvo. */
+export async function searchMetaInterests(query: string, accessToken: string): Promise<MetaInterestResult[]> {
+  const path = `/search?type=adinterest&q=${encodeURIComponent(query)}&limit=10`;
+  const response = await metaApiCall<MetaInterestSearchResponse>(path, accessToken);
+  return (response.data || []).filter((item) => item.id && item.name);
+}
