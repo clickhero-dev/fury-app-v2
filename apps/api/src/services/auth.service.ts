@@ -6,7 +6,7 @@ import { eq, and } from 'drizzle-orm';
 import { getRedis } from '../lib/redis.js';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../lib/jwt.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { sendWelcomeEmail } from './email.service.js';
+import { sendWelcomeEmail, sendOtpEmail } from './email.service.js';
 import type { UserDTO } from '../lib/shared.js';
 
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
@@ -326,4 +326,32 @@ export async function verifyEmail(email: string, otp: string): Promise<UserDTO> 
   }
 
   return userToDTO(updatedUser);
+}
+
+function generateSecureOtp(): string {
+  return crypto.randomInt(0, 1000000).toString().padStart(6, '0');
+}
+
+export async function forgotPassword(email: string): Promise<void> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, email),
+  });
+
+  if (user) {
+    const otp = generateSecureOtp();
+    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await db
+      .update(users)
+      .set({
+        otpCode: otp,
+        otpExpiresAt,
+      })
+      .where(eq(users.id, user.id));
+
+    sendOtpEmail(user.email, otp).catch((error) => {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[forgotPassword] Failed to send OTP email to ${user.email}:`, errorMessage);
+    });
+  }
 }

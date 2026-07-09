@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as authService from '../services/auth.service.js';
-import { checkEmailVerificationRateLimit } from '../middleware/rate-limit.middleware.js';
+import { checkEmailVerificationRateLimit, checkForgotPasswordRateLimit } from '../middleware/rate-limit.middleware.js';
 
 const updateMeSchema = z.object({
   name: z.string().min(1).max(255).optional(),
@@ -39,6 +39,10 @@ const refreshSchema = z.object({
 const verifyEmailSchema = z.object({
   email: z.string().email(),
   otp: z.string().length(6).regex(/^\d+$/, 'OTP must contain only digits'),
+});
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
 });
 
 export async function register(req: Request, res: Response, next: NextFunction) {
@@ -186,6 +190,36 @@ export async function verifyEmail(req: Request, res: Response, next: NextFunctio
           tenantId: user.tenantId,
         },
       },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function forgotPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = forgotPasswordSchema.parse(req.body);
+
+    const { allowed } = await checkForgotPasswordRateLimit(body.email);
+
+    if (!allowed) {
+      return res.status(429).json({
+        success: false,
+        error: {
+          code: 'TOO_MANY_ATTEMPTS',
+          message: 'Muitas tentativas de redefinição. Tente novamente em 15 minutos.',
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    await authService.forgotPassword(body.email);
+
+    res.status(200).json({
+      success: true,
+      data: null,
+      message: 'Se o email existe em nossa base, você receberá instruções para redefinir sua senha.',
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
