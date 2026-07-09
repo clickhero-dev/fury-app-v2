@@ -174,7 +174,7 @@ export function EstudioHome() {
               <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-sm text-text-tertiary">
                 <span className="flex items-center gap-2">
                   <span className="text-base">✨</span>
-                  Descreva o criativo que deseja
+                  Descreva o anúncio que deseja
                 </span>
                 <span className="text-border hidden sm:block">→</span>
                 <span className="flex items-center gap-2">
@@ -252,13 +252,13 @@ export function EstudioHome() {
                 </div>
               ) : filteredAssets.length === 0 ? (
                 <EmptyState
-                  title={assetList.length === 0 ? 'Gere seu primeiro criativo com IA' : 'Nenhum ativo com esses filtros'}
+                  title={assetList.length === 0 ? 'Gere seu primeiro anúncio com IA' : 'Nenhum ativo com esses filtros'}
                   description={
                     assetList.length === 0
                       ? 'Clique em "Criação Rápida" para começar'
-                      : 'Ajuste os filtros ou crie novos criativos'
+                      : 'Ajuste os filtros ou crie novos anúncios'
                   }
-                  action={{ label: 'Criar Criativo', onClick: handleStartQuickCreate }}
+                  action={{ label: 'Criar Anúncio', onClick: handleStartQuickCreate }}
                 />
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -284,7 +284,7 @@ export function EstudioHome() {
         {view === 'quick-create' && (
           <div className="max-w-2xl mx-auto space-y-6">
             <div className="pt-2">
-              <p className="text-sm text-text-tertiary">Descreva o criativo que deseja gerar — o FURY usa FLUX.2 Max para máxima qualidade</p>
+              <p className="text-sm text-text-tertiary">Descreva o anúncio que deseja gerar para criar a imagem ideal</p>
             </div>
 
             {/* Prompt */}
@@ -334,7 +334,7 @@ export function EstudioHome() {
             </div>
             <div className="flex flex-col gap-1 text-xs text-text-tertiary">
               <span>✦ Aprimorando o prompt com o contexto da marca</span>
-              <span>✦ Gerando imagem via FLUX.2 Max</span>
+              <span>✦ Gerando imagem com IA</span>
               <span>✦ Salvando na biblioteca</span>
             </div>
           </div>
@@ -361,7 +361,7 @@ export function EstudioHome() {
               <AlertCircle className="h-10 w-10 text-red-500" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-text-primary">Não foi possível gerar o criativo</h2>
+              <h2 className="text-2xl font-bold text-text-primary">Não foi possível gerar o anúncio</h2>
               <p className="mt-2 text-sm text-text-tertiary">Verifique sua conexão e tente novamente</p>
             </div>
             <div className="flex gap-3">
@@ -428,7 +428,7 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
             type="button"
             onClick={onDeleteRequest}
             className="shrink-0 p-1 rounded text-text-secondary hover:text-red-500 hover:bg-error-light transition-colors"
-            title="Excluir criativo"
+            title="Excluir anúncio"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -436,7 +436,7 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
 
         {isDeleting ? (
           <div className="space-y-2 pt-1">
-            <p className="text-xs text-red-600 font-medium">Excluir este criativo?</p>
+            <p className="text-xs text-red-600 font-medium">Excluir este anúncio?</p>
             <div className="flex gap-2">
               <button
                 type="button"

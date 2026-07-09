@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, CheckCircle2, XCircle, ArrowLeft, Upload, ImageIcon, Save } from 'lucide-react';
 import { AppLayout, PageHeader, Button, Card } from '@/components';
 import api from '@/lib/api';
+import { useBrandKit } from '@/hooks/useBrandKit';
 import type {
   RenderCreativePayload,
   RenderCreativeResponse,
@@ -132,6 +133,9 @@ export function GeradorImagem() {
   const [headline, setHeadline] = useState('');
   const [cta, setCta] = useState('Saiba mais');
   const [brandColor, setBrandColor] = useState('#E8631A');
+  const [includeLogo, setIncludeLogo] = useState(true);
+
+  const { brandKit, isLoading: brandKitLoading } = useBrandKit();
 
   // Result state
   const [creativeAssetId, setCreativeAssetId] = useState<string | null>(null);
@@ -217,6 +221,7 @@ export function GeradorImagem() {
       cta: cta.trim(),
       brandColor,
       imageUrl: productImageDataUrl!,
+      includeLogo,
     });
   }
 
@@ -395,6 +400,20 @@ export function GeradorImagem() {
                     </div>
                   </div>
 
+                  {brandKit?.logo_url && (
+                    <label className="flex items-center gap-3 pt-1 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={includeLogo}
+                        onChange={(e) => setIncludeLogo(e.target.checked)}
+                        className="w-4 h-4 rounded border-border text-[#E8631A] focus:ring-[#E8631A]/30 accent-[#E8631A]"
+                      />
+                      <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">
+                        Incluir logo da empresa no anúncio
+                      </span>
+                    </label>
+                  )}
+
                   <div className="pt-2">
                     <Button
                       type="button"
@@ -405,7 +424,7 @@ export function GeradorImagem() {
                       {renderMutation.isPending ? (
                         <span className="inline-flex items-center gap-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          Montando criativo...
+                          Montando anúncio...
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-2">
@@ -416,7 +435,7 @@ export function GeradorImagem() {
                     </Button>
                     {renderMutation.isError && (
                       <p className="text-xs text-red-500 mt-2 text-center">
-                        Erro ao montar criativo. Verifique a imagem e tente novamente.
+                        Erro ao montar anúncio. Verifique a imagem e tente novamente.
                       </p>
                     )}
                   </div>
@@ -435,7 +454,7 @@ export function GeradorImagem() {
               </div>
               <div className="p-6 space-y-4">
                 <div>
-                  <p className="text-sm font-semibold text-text-primary mb-1">Preview do seu criativo</p>
+                  <p className="text-sm font-semibold text-text-primary mb-1">Preview do seu anúncio</p>
                   <p className="text-xs text-text-secondary">
                     Antes de salvar, verificamos o compliance com as políticas do Meta.
                   </p>
@@ -493,7 +512,7 @@ export function GeradorImagem() {
                         Ver biblioteca
                       </Button>
                       <Button type="button" variant="outline" onClick={handleReset} className="flex-1">
-                        Criar novo criativo
+                        Criar novo anúncio
                       </Button>
                     </div>
                   </div>

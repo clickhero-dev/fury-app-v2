@@ -140,7 +140,7 @@ router.post('/enhance-prompt', authMiddleware, tenantMiddleware, async (req: Req
       const enhancePrompt = [
         `Você é um especialista em publicidade digital. Melhore o prompt abaixo para gerar um ${typeLabel} profissional.`,
         `Contexto da marca: ${brandContext}`,
-        `Adicione detalhes visuais, iluminação, composição, cores da marca e tom de comunicação.`,
+        `Adicione detalhes visuais, iluminação, composição, cores da marca e tom de comunicação. PRESERVE RIGOROSAMENTE o tema principal do prompt original.`,
         `O prompt melhorado deve ter entre 150 e 400 caracteres e estar em português.`,
         ``,
         `Prompt original: "${body.prompt}"`,

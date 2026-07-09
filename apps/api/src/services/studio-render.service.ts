@@ -9,6 +9,7 @@ export type RenderCreativeInput = {
   cta: string;
   brandColor: string;
   imageUrl: string;
+  logoUrl?: string;
 };
 
 export type RenderCreativeResult = {
@@ -52,7 +53,7 @@ function buildCtaShapeSvg(): Buffer {
 }
 
 export async function renderCreative(input: RenderCreativeInput): Promise<RenderCreativeResult> {
-  const { tenantId, headline, cta, brandColor, imageUrl } = input;
+  const { tenantId, headline, cta, brandColor, imageUrl, logoUrl } = input;
 
   if (!headline.trim()) throw new AppError(400, 'INVALID_HEADLINE', 'Headline é obrigatória.');
   if (!cta.trim()) throw new AppError(400, 'INVALID_CTA', 'CTA é obrigatório.');
@@ -79,14 +80,30 @@ export async function renderCreative(input: RenderCreativeInput): Promise<Render
   // CTA pill shape at y=912 (80% of strip height from strip top)
   const ctaShape = buildCtaShapeSvg();
 
+  const composites: sharp.OverlayOptions[] = [
+    { input: productResized, top: 0, left: 0 },
+    { input: stripBuffer, top: 600, left: 0 },
+    { input: ctaShape, top: 912, left: 290 },
+  ];
+
+  // Se tiver logo e includeLogo=true, baixa e compõe no canto superior esquerdo da faixa
+  if (logoUrl) {
+    try {
+      const logoBuffer = await fetchImageBuffer(logoUrl);
+      const logoResized = await sharp(logoBuffer)
+        .resize(120, null, { fit: 'inside', withoutEnlargement: true })
+        .png()
+        .toBuffer();
+      composites.push({ input: logoResized, top: 620, left: 40 });
+    } catch (err) {
+      console.warn('[studio-render] Logo fetch failed, skipping:', (err as Error).message);
+    }
+  }
+
   const finalBuffer = await sharp({
     create: { width: 1080, height: 1080, channels: 3, background: { r: 255, g: 255, b: 255 } },
   })
-    .composite([
-      { input: productResized, top: 0, left: 0 },
-      { input: stripBuffer, top: 600, left: 0 },
-      { input: ctaShape, top: 912, left: 290 },
-    ])
+    .composite(composites)
     .jpeg({ quality: 90 })
     .toBuffer();
 
