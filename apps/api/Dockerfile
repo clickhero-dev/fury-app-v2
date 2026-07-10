@@ -26,7 +26,8 @@ RUN apk add --no-cache fontconfig font-opensans font-dejavu
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV NODE_OPTIONS="--max-old-space-size=384"
+# 2GB container: ~1.5GB heap leaves room for native memory (sharp, workers, buffers)
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json /app/tsconfig.json ./
