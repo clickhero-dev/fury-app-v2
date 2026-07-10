@@ -1,12 +1,14 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { db, creativeAssets } from '@fury/db';
 import { eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import { openrouterService } from '../services/openrouter.service.js';
-import { saveTemporaryStudioImage } from '../lib/temp-storage.js';
+import { saveTemporaryStudioImage, studioAssetsDir } from '../lib/temp-storage.js';
 import { uploadAsset } from '../services/storage.service.js';
 
 const router = Router();
@@ -89,7 +91,17 @@ async function uploadImageToStorage(base64DataUrl: string): Promise<string> {
       return uploadAsset(buffer, fileName, mimeType);
     }
   }
-  // Fallback to local storage
+  // ponytail: data URL → salva direto, sem fetch (evita cópia extra na memória)
+  if (base64DataUrl.startsWith('data:')) {
+    const match = base64DataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+    if (match) {
+      const ext = match[1].includes('jpeg') ? 'jpg' : match[1].includes('webp') ? 'webp' : 'png';
+      const fileName = `${randomUUID()}.${ext}`;
+      await writeFile(join(studioAssetsDir, fileName), Buffer.from(match[2], 'base64'));
+      return `https://${process.env.DOMAIN || 'clickhero-fury-api.u7pe19.easypanel.host'}/studio-assets/${fileName}`;
+    }
+  }
+  // Fallback to local storage (fetch remote URL)
   const { fileName } = await saveTemporaryStudioImage(base64DataUrl);
   // Use PUBLIC_BASE_URL or construct from request host
   return `https://${process.env.DOMAIN || 'clickhero-fury-api.u7pe19.easypanel.host'}/studio-assets/${fileName}`;
