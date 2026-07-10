@@ -425,17 +425,31 @@ router.post('/regenerate-ad', authMiddleware, tenantMiddleware, async (req: Requ
       return res.status(404).json({ error: 'Asset não encontrado' });
     }
 
-    // ponytail: se tem máscara → inpainting preciso, senão → edição por texto
-    const editedImage = body.maskBase64
-      ? await openrouterService.inpaintImage({
+    // ponytail: se tem máscara → inpainting, com fallback pra editImage
+    let editedImage: string;
+    let source = 'openrouter-edit-image';
+    if (body.maskBase64) {
+      try {
+        editedImage = await openrouterService.inpaintImage({
           imageUrl: asset.url,
           maskBase64: body.maskBase64,
           prompt: body.feedback,
-        })
-      : await openrouterService.editImage({
+        });
+        source = 'openrouter-inpaint';
+      } catch (e) {
+        console.error('[regenerate-ad] inpaint failed, falling back to editImage:', (e as Error).message);
+        editedImage = await openrouterService.editImage({
           imageUrl: asset.url,
           instructions: body.feedback,
         });
+        source = 'openrouter-edit-image-fallback';
+      }
+    } else {
+      editedImage = await openrouterService.editImage({
+        imageUrl: asset.url,
+        instructions: body.feedback,
+      });
+    }
 
     const imageUrl = await uploadImageToStorage(editedImage);
     const [newAsset] = await db.insert(creativeAssets).values({
@@ -445,7 +459,7 @@ router.post('/regenerate-ad', authMiddleware, tenantMiddleware, async (req: Requ
       complianceStatus: 'pending_compliance',
       complianceNotes: JSON.stringify({
         generatedAt: new Date().toISOString(),
-        source: 'openrouter-edit-image',
+        source,
         originalAssetId: body.assetId,
         feedback: body.feedback,
       }),
