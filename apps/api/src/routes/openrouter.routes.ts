@@ -419,49 +419,57 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
 });
 
 // ─── Regenerate ad preserving original as reference ────────────
-const regenerateAdSchema = z.object({
-  assetId: z.string().uuid(),
-  feedback: z.string().min(3),
-  maskBase64: z.string().optional(),
+// ponytail: multer diskStorage — mask vai direto pro disco, zero heap
+import multer from 'multer';
+import { tmpdir } from 'node:os';
+import { unlink } from 'node:fs/promises';
+
+const maskUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, tmpdir()),
+    filename: (_req, file, cb) => cb(null, `mask-${randomUUID()}.${file.mimetype.includes('png') ? 'png' : 'jpg'}`),
+  }),
+  limits: { fileSize: 1 * 1024 * 1024 },
 });
 
-router.post('/regenerate-ad', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/regenerate-ad', authMiddleware, tenantMiddleware, maskUpload.single('mask'), async (req: Request, res: Response, next: NextFunction) => {
+  const maskFile = (req as any).file as Express.Multer.File | undefined;
   try {
-    const body = regenerateAdSchema.parse(req.body);
+    const { assetId, feedback } = req.body as { assetId: string; feedback: string };
+    if (!assetId || !feedback || feedback.length < 3) {
+      return res.status(400).json({ error: 'assetId e feedback são obrigatórios' });
+    }
     const tenantId = (req as any).tenant?.tenantId as string;
 
     const asset = await db.query.creativeAssets.findFirst({
-      where: eq(creativeAssets.id, body.assetId),
+      where: eq(creativeAssets.id, assetId),
     });
     if (!asset || asset.tenantId !== tenantId) {
       return res.status(404).json({ error: 'Asset não encontrado' });
     }
 
-    // ponytail: se tem máscara → inpainting, com fallback pra editImage
     let imageUrl: string;
     let source = 'openrouter-edit-image';
-    if (body.maskBase64) {
+    if (maskFile?.path) {
       try {
-        const inpaintResult = await openrouterService.inpaintImage({
+        imageUrl = await openrouterService.inpaintImage({
           imageUrl: asset.url,
-          maskBase64: body.maskBase64,
-          prompt: body.feedback,
+          maskPath: maskFile.path,
+          prompt: feedback,
         });
-        imageUrl = await uploadImageToStorage(inpaintResult);
         source = 'openrouter-inpaint';
       } catch (e) {
         console.error('[regenerate-ad] inpaint failed, falling back to editImage:', (e as Error).message);
         imageUrl = await openrouterService.editImage({
           imageUrl: asset.url,
-          instructions: body.feedback,
+          instructions: feedback,
         });
         source = 'openrouter-edit-image-fallback';
       }
     } else {
-      // editImage persiste a imagem via streaming — não passa por uploadImageToStorage
       imageUrl = await openrouterService.editImage({
         imageUrl: asset.url,
-        instructions: body.feedback,
+        instructions: feedback,
       });
     }
 
@@ -473,8 +481,8 @@ router.post('/regenerate-ad', authMiddleware, tenantMiddleware, async (req: Requ
       complianceNotes: JSON.stringify({
         generatedAt: new Date().toISOString(),
         source,
-        originalAssetId: body.assetId,
-        feedback: body.feedback,
+        originalAssetId: assetId,
+        feedback,
       }),
     }).returning();
 
@@ -486,6 +494,9 @@ router.post('/regenerate-ad', authMiddleware, tenantMiddleware, async (req: Requ
     });
   } catch (error) {
     next(error);
+  } finally {
+    // ponytail: limpa mask temp
+    if (maskFile?.path) await unlink(maskFile.path).catch(() => {});
   }
 });
 

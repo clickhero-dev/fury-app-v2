@@ -13,9 +13,8 @@ interface Props {
 }
 
 // ponytail: gera máscara de inpainting a partir do canvas de pintura
-function generateMaskFromCanvas(source: HTMLCanvasElement): string | null {
+function generateMaskBlob(source: HTMLCanvasElement): Blob | null {
   if (source.width === 0 || source.height === 0) return null;
-  // ponytail: escala pra 256px — DALL-E redimensiona; evita OOM no base64
   const SIZE = 256;
   const tiny = document.createElement('canvas');
   tiny.width = SIZE;
@@ -29,7 +28,8 @@ function generateMaskFromCanvas(source: HTMLCanvasElement): string | null {
   ctx.fillRect(0, 0, SIZE, SIZE);
   ctx.globalCompositeOperation = 'destination-out';
   ctx.drawImage(tiny, 0, 0);
-  return mask.toDataURL('image/png');
+  // ponytail: toBlob é async via callback — usamos Promise
+  return new Promise((resolve) => mask.toBlob((b) => resolve(b), 'image/png')) as unknown as Blob | null;
 }
 
 export function CreativeResult({ result, onBack, onNewCreative }: Props) {
@@ -110,12 +110,16 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
 
   const regenerateMutation = useMutation({
     mutationFn: async ({ assetId, feedbackText }: { assetId: string; feedbackText: string }) => {
-      const endpoint = isQuickCreate
-        ? '/openrouter/regenerate-ad'
-        : '/studio/creative/regenerate';
-      const res = await api.post<GenerateCreativeResponse>(endpoint, {
-        assetId,
-        feedback: feedbackText,
+      // ponytail: FormData multipart — mask vai como arquivo, não base64 no JSON
+      const maskBlob = maskCanvasRef.current ? await generateMaskBlob(maskCanvasRef.current) : null;
+      const fd = new FormData();
+      fd.append('assetId', assetId);
+      fd.append('feedback', feedbackText);
+      if (maskBlob) fd.append('mask', maskBlob, 'mask.png');
+
+      const endpoint = isQuickCreate ? '/openrouter/regenerate-ad' : '/studio/creative/regenerate';
+      const res = await api.post<GenerateCreativeResponse>(endpoint, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       return res.data;
     },

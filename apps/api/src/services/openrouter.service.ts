@@ -261,10 +261,10 @@ export const openrouterService = {
     }
   },
 
-  // ponytail: DALL-E 2 inpainting com máscara via OpenAI (já instalado)
+  // ponytail: DALL-E 2 inpainting — lê img+mask do disco com sharp stream, zero heap
   async inpaintImage(options: {
     imageUrl: string;
-    maskBase64: string;
+    maskPath: string;
     prompt: string;
   }): Promise<string> {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -272,36 +272,44 @@ export const openrouterService = {
 
     const openai = new OpenAI({ apiKey });
 
-    // Download original image as buffer
+    // ponytail: download original to temp file, sharp streams from disk
+    const { default: sharp } = await import('sharp');
+    const { join } = await import('node:path');
+    const { writeFile, unlink } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+
+    const imgTmpPath = join(tmpdir(), `inpaint-img-${Date.now()}.png`);
     const imgResp = await fetch(options.imageUrl);
     if (!imgResp.ok) throw new AppError(502, 'IMAGE_DOWNLOAD_FAILED', 'Falha ao baixar imagem original.');
-    const imgBuffer = Buffer.from(await imgResp.arrayBuffer());
+    await writeFile(imgTmpPath, Buffer.from(await imgResp.arrayBuffer()));
 
-    // Convert mask from base64 to buffer
-    const maskMatch = options.maskBase64.match(/^data:image\/\w+;base64,(.+)$/);
-    const maskBuffer = maskMatch
-      ? Buffer.from(maskMatch[1], 'base64')
-      : Buffer.from(options.maskBase64, 'base64');
+    try {
+      // ponytail: sharp streams disk→disk, only 1024×1024 buffer in native memory
+      const imgResizedPath = join(tmpdir(), `inpaint-resized-${Date.now()}.png`);
+      const maskResizedPath = join(tmpdir(), `inpaint-mask-${Date.now()}.png`);
 
-    // Resize both to 1024x1024 (DALL-E 2 requirement)
-    const { default: sharp } = await import('sharp');
-    const imgResized = await sharp(imgBuffer).resize(1024, 1024, { fit: 'fill' }).png().toBuffer();
-    const maskResized = await sharp(maskBuffer).resize(1024, 1024, { fit: 'fill' }).png().toBuffer();
+      await sharp(imgTmpPath).resize(1024, 1024, { fit: 'fill' }).png().toFile(imgResizedPath);
+      await sharp(options.maskPath).resize(1024, 1024, { fit: 'fill' }).png().toFile(maskResizedPath);
 
-    // DALL-E 2 inpainting: transparent mask area = where to edit
-    // ponytail: as any — Buffer works at runtime, Bun types reject it
-    const response = await openai.images.edit({
-      image: imgResized as any,
-      mask: maskResized as any,
-      prompt: options.prompt,
-      n: 1,
-      size: '1024x1024',
-    });
+      const { createReadStream } = await import('node:fs');
+      const response = await openai.images.edit({
+        image: createReadStream(imgResizedPath) as any,
+        mask: createReadStream(maskResizedPath) as any,
+        prompt: options.prompt,
+        n: 1,
+        size: '1024x1024',
+      });
 
-    const resultUrl = response.data?.[0]?.url;
-    const resultB64 = response.data?.[0]?.b64_json;
-    if (resultUrl) return resultUrl;
-    if (resultB64) return `data:image/png;base64,${resultB64}`;
-    throw new AppError(502, 'INPAINT_FAILED', 'OpenAI não retornou imagem editada.');
+      await unlink(imgResizedPath).catch(() => {});
+      await unlink(maskResizedPath).catch(() => {});
+
+      const resultUrl = response.data?.[0]?.url;
+      const resultB64 = response.data?.[0]?.b64_json;
+      if (resultUrl) return resultUrl;
+      if (resultB64) return `data:image/png;base64,${resultB64}`;
+      throw new AppError(502, 'INPAINT_FAILED', 'OpenAI não retornou imagem editada.');
+    } finally {
+      await unlink(imgTmpPath).catch(() => {});
+    }
   },
 };
