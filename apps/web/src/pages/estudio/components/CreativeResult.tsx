@@ -113,13 +113,9 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
       const endpoint = isQuickCreate
         ? '/openrouter/regenerate-ad'
         : '/studio/creative/regenerate';
-      const maskBase64 = maskCanvasRef.current
-        ? generateMaskFromCanvas(maskCanvasRef.current)
-        : null;
       const res = await api.post<GenerateCreativeResponse>(endpoint, {
         assetId,
         feedback: feedbackText,
-        ...(maskBase64 ? { maskBase64 } : {}),
       });
       return res.data;
     },
