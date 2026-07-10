@@ -148,10 +148,48 @@ html.dark .bg-\[#F2F4F7\] {
   background-color: var(--color-surface-secondary) !important;
 }
 /* Avoid CSS escape issues with \[#...\] by using attribute selector */
-html.dark [class*="bg-[#FFF4ED]"] {
+html.dark [class*="bg-[#FFF4ED]"],
+html.dark [class*="bg-[#FFF7F4]"] {
   background-color: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface)) !important;
 }
 /* Wizard objective/selected cards: orange-50 stays light in dark mode */
 html.dark .bg-orange-50 {
   background-color: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface)) !important;
+}
+
+/* === Onboarding pages dark mode overrides === */
+/* Text colors used in ConectarMetaPage, MetaAuthorizePage, SelecionarAtivosPage */
+html.dark [class*="text-[#1C1C1E]"] {
+  color: var(--color-text-primary) !important;
+}
+html.dark [class*="text-[#6E7681]"] {
+  color: var(--color-text-secondary) !important;
+}
+html.dark [class*="text-[#9CA3AF]"] {
+  color: var(--color-text-tertiary) !important;
+}
+
+/* Background colors */
+html.dark .bg-\[#E5E7EB\] {
+  background-color: var(--color-surface-secondary) !important;
+}
+html.dark .bg-\[#F3F4F6\] {
+  background-color: var(--color-surface-secondary) !important;
+}
+html.dark .bg-\[#D1D5DB\] {
+  background-color: var(--color-text-tertiary) !important;
+}
+html.dark [class*="bg-[#FDDCCC]"] {
+  background-color: color-mix(in srgb, var(--color-accent) 20%, var(--color-surface-secondary)) !important;
+}
+
+/* Border colors */
+html.dark .border-\[#E5E7EB\] {
+  border-color: var(--color-border) !important;
+}
+html.dark .border-\[#F3F4F6\] {
+  border-color: var(--color-border) !important;
+}
+html.dark .border-\[#FDDCCC\] {
+  border-color: color-mix(in srgb, var(--color-accent) 30%, var(--color-border)) !important;
 }
