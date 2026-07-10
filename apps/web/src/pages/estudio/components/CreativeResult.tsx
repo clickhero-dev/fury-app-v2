@@ -28,7 +28,7 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
   const regenerateMutation = useMutation({
     mutationFn: async ({ assetId, feedbackText }: { assetId: string; feedbackText: string }) => {
       const endpoint = isQuickCreate
-        ? '/openrouter/regenerate'
+        ? '/openrouter/regenerate-ad'
         : '/studio/creative/regenerate';
       const res = await api.post<GenerateCreativeResponse>(endpoint, {
         assetId,

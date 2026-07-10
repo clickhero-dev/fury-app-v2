@@ -129,11 +129,20 @@ IMPORTANTE:
 Responda SOMENTE em JSON válido.`;
 }
 
-export function buildRegeneratePrompt(context: CreativeContext, feedback: string): string {
-  return `${buildCreativePrompt(context)}
+export function buildRegeneratePrompt(context: CreativeContext, feedback: string, originalCopy?: Record<string, string | string[] | undefined>): string {
+  const originalBlock = originalCopy
+    ? `\nCRIATIVO ORIGINAL (preserve estes valores — altere APENAS o que o feedback pede):
+${JSON.stringify(originalCopy, null, 2)}
+`
+    : '';
 
+  return `${buildCreativePrompt(context)}
+${originalBlock}
 FEEDBACK DO USUÁRIO SOBRE O CRIATIVO ANTERIOR:
 ${feedback}
 
-Leve o feedback em consideração e gere um novo criativo melhorado.`;
-}
+PRESERVE RIGOROSAMENTE todos os campos do criativo original que não forem
+mencionados no feedback. Altere APENAS o que o feedback pede explicitamente.
+Não reescreva a copy inteira — o objetivo é aplicar UM ajuste localizado.
+
+Leve o feedback em consideração e gere um criativo atualizado.`;}

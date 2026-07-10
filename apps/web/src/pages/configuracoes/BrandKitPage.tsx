@@ -319,62 +319,64 @@ function BrandKitContent() {
             </CardContent>
           </Card>
 
-          {/* SEÇÃO 5 - Biblioteca de Fotos */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Biblioteca de Fotos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-sm text-text-secondary">
-                  Fotos do produto disponíveis para uso no Estúdio Criativo.
-                </p>
-                <span className="text-sm font-semibold text-text-secondary">
-                  {photoUrls.length}/{MAX_PHOTOS} fotos
-                </span>
-              </div>
+          {/* ponytail: Biblioteca de Fotos oculta — reactivar quando Estúdio precisar de upload dedicado */}
+          {false && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Biblioteca de Fotos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm text-text-secondary">
+                    Fotos do produto disponíveis para uso no Estúdio Criativo.
+                  </p>
+                  <span className="text-sm font-semibold text-text-secondary">
+                    {photoUrls.length}/{MAX_PHOTOS} fotos
+                  </span>
+                </div>
 
-              <input
-                ref={photosInputRef}
-                type="file"
-                accept="image/png,image/jpeg"
-                multiple
-                className="hidden"
-                onChange={handlePhotosSelect}
-              />
+                <input
+                  ref={photosInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  multiple
+                  className="hidden"
+                  onChange={handlePhotosSelect}
+                />
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {photoUrls.map((url) => (
-                  <div key={url} className="relative group aspect-square rounded-lg overflow-hidden border border-gray-200">
-                    <img src={url} alt="Foto da biblioteca" className="w-full h-full object-cover" />
-                    <button
-                      onClick={() => handleDeletePhoto(url)}
-                      disabled={deletePhoto.isPending}
-                      className="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors disabled:opacity-50"
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  {photoUrls.map((url) => (
+                    <div key={url} className="relative group aspect-square rounded-lg overflow-hidden border border-gray-200">
+                      <img src={url} alt="Foto da biblioteca" className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => handleDeletePhoto(url)}
+                        disabled={deletePhoto.isPending}
+                        className="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors disabled:opacity-50"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {photoUrls.length < MAX_PHOTOS && (
+                    <div
+                      onClick={() => photosInputRef.current?.click()}
+                      className="aspect-square flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#E8631A]/50 hover:bg-orange-50/40 transition-colors"
                     >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-
-                {photoUrls.length < MAX_PHOTOS && (
-                  <div
-                    onClick={() => photosInputRef.current?.click()}
-                    className="aspect-square flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#E8631A]/50 hover:bg-orange-50/40 transition-colors"
-                  >
-                    {uploadPhotos.isPending ? (
-                      <p className="text-xs text-text-secondary text-center px-2">Enviando...</p>
-                    ) : (
-                      <>
-                        <ImageIcon className="w-5 h-5 text-gray-400" />
-                        <p className="text-xs text-text-secondary text-center px-2">Adicionar fotos</p>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                      {uploadPhotos.isPending ? (
+                        <p className="text-xs text-text-secondary text-center px-2">Enviando...</p>
+                      ) : (
+                        <>
+                          <ImageIcon className="w-5 h-5 text-gray-400" />
+                          <p className="text-xs text-text-secondary text-center px-2">Adicionar fotos</p>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 

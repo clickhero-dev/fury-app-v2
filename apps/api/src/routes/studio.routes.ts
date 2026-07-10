@@ -539,10 +539,11 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
     }
 
     let savedContext: CreativeContext | undefined;
+    let savedCreativeData: Record<string, unknown> | undefined;
     try {
       const meta = JSON.parse(asset.complianceNotes ?? '{}');
       savedContext = meta.context as CreativeContext;
-      const savedCreativeData = meta as Record<string, unknown>;
+      savedCreativeData = meta as Record<string, unknown>;
 
       // Detecta feedback de correção simples: "corrigir 'X' para 'Y'" ou "trocar X por Y"
       const simpleFixMatch = feedback.match(
@@ -610,7 +611,7 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
       savedContext.layout = 'offer_burst';
     }
 
-    const prompt = buildRegeneratePrompt(savedContext, feedback);
+    const prompt = buildRegeneratePrompt(savedContext, feedback, savedCreativeData as Record<string, string | string[] | undefined>);
     const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.9 });
     const copy = parseCreativeJSON(raw);
     if (copy.headline) copy.headline = sanitizeTypos(copy.headline);

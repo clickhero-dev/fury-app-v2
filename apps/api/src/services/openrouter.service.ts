@@ -39,6 +39,7 @@ export const openrouterService = {
     aspect_ratio?: string;
     resolution?: string;
     logoUrl?: string;
+    previousImageUrl?: string;
   }): Promise<string> {
     const apiKey = getClient();
     const response = await fetch(`${OPENROUTER_BASE}/images`, {
@@ -49,7 +50,7 @@ export const openrouterService = {
         prompt: options.prompt,
         ...(options.aspect_ratio ? { aspect_ratio: options.aspect_ratio } : {}),
         ...(options.resolution ? { resolution: options.resolution } : {}),
-        ...(options.logoUrl ? { image: options.logoUrl } : {}),
+        ...(options.previousImageUrl ? { image: options.previousImageUrl } : options.logoUrl ? { image: options.logoUrl } : {}),
       }),
     });
     if (!response.ok) {
@@ -165,5 +166,55 @@ export const openrouterService = {
     }
 
     throw new AppError(500, 'OPENROUTER_VIDEO_FAILED', 'Job completed mas sem URL de vídeo (conteúdo pode ter sido filtrado).');
+  },
+
+  // ponytail: regenera anúncio preservando o original como referência visual
+  async regenerateAd(options: {
+    previousAdUrl: string;
+    feedback: string;
+    originalPrompt: string;
+    model: string;
+    businessName: string;
+    voiceTone?: string;
+    primaryColor?: string;
+    logoUrl?: string;
+  }): Promise<string> {
+    const apiKey = getClient();
+    const enhancePrompt = [
+      'Você é um especialista em publicidade digital.',
+      `Prompt original: "${options.originalPrompt}"`,
+      `Feedback do usuário: "${options.feedback}"`,
+      `Marca: ${options.businessName}.`,
+      options.voiceTone ? `Tom: ${options.voiceTone}.` : '',
+      options.primaryColor ? `Cor primária: ${options.primaryColor}.` : '',
+      '',
+      'Reescreva o prompt incorporando o feedback, mantendo o contexto da marca.',
+      'PRESERVE o tema, estilo e composição do anúncio original. Aplique APENAS o ajuste solicitado.',
+      'Retorne APENAS o prompt revisado, sem aspas, sem introdução.',
+    ].filter(Boolean).join('\n');
+
+    const chatResponse = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'deepseek/deepseek-chat',
+        messages: [{ role: 'user', content: enhancePrompt }],
+        temperature: 0.8,
+        max_tokens: 600,
+      }),
+    });
+    if (!chatResponse.ok) {
+      const err = await chatResponse.text();
+      throw new AppError(502, 'OPENROUTER_CHAT_ERROR', `OpenRouter chat error: ${err}`);
+    }
+    const chatData = (await chatResponse.json()) as any;
+    const newPrompt = (chatData.choices?.[0]?.message?.content ?? options.originalPrompt).trim();
+
+    return openrouterService.generateImage({
+      model: options.model,
+      prompt: newPrompt,
+      previousImageUrl: options.previousAdUrl,
+      logoUrl: options.logoUrl,
+    });
   },
 };
