@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -70,9 +69,8 @@ function ProgressSteps({ current }: { current: number }) {
 
 const SUB_STEPS = [
   { label: 'Business Managers' },
-  { label: 'Páginas' },
   { label: 'Contas de Anúncio' },
-  { label: 'WhatsApp' },
+  { label: 'Páginas' },
   { label: 'Resumo' },
 ];
 
@@ -122,12 +120,6 @@ interface MetaAdAccountOption {
   name: string;
   status: number;
   businessId: string;
-}
-
-interface MetaWhatsappOption {
-  phoneNumberId: string;
-  displayPhoneNumber: string;
-  pageId: string;
 }
 
 interface ApiListResponse<T> {
@@ -208,14 +200,12 @@ function LoadingSpinner() {
 // ─── Componente principal ────────────────────────────────────────────────────────
 
 export function SelecionarAtivosPage() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [subStep, setSubStep] = useState(1);
   const [businessIds, setBusinessIds] = useState<string[]>([]);
   const [pageIds, setPageIds] = useState<string[]>([]);
   const [adAccountIds, setAdAccountIds] = useState<string[]>([]);
-  const [whatsappNumberIds, setWhatsappNumberIds] = useState<string[]>([]);
 
   function toggle(list: string[], id: string, setter: (value: string[]) => void) {
     setter(list.includes(id) ? list.filter((item) => item !== id) : [...list, id]);
@@ -233,20 +223,7 @@ export function SelecionarAtivosPage() {
   });
   const businesses = businessesQuery.data ?? [];
 
-  // ── Step 2: Páginas (filtradas pelas BMs selecionadas) ──────────────────────────
-  const pagesQuery = useQuery({
-    queryKey: ['meta-pages-by-business', businessIds],
-    queryFn: async () => {
-      const res = await api.post<ApiListResponse<MetaPageOption>>('/meta/pages-by-business', { businessIds });
-      return res.data.data;
-    },
-    enabled: subStep >= 2 && businessIds.length > 0,
-    staleTime: 0,
-    retry: false,
-  });
-  const pages = pagesQuery.data ?? [];
-
-  // ── Step 3: Contas de Anúncio (filtradas pelas BMs selecionadas) ────────────────
+  // ── Step 2: Contas de Anúncio (filtradas pelas BMs selecionadas) ─────────────────
   const adAccountsQuery = useQuery({
     queryKey: ['meta-adaccounts-by-business', businessIds],
     queryFn: async () => {
@@ -255,27 +232,24 @@ export function SelecionarAtivosPage() {
       });
       return res.data.data;
     },
-    enabled: subStep >= 3 && businessIds.length > 0,
+    enabled: subStep >= 2 && businessIds.length > 0,
     staleTime: 0,
     retry: false,
   });
   const adAccounts = adAccountsQuery.data ?? [];
 
-  // ── Step 4: WhatsApp (filtrado pelas BMs e Páginas selecionadas) ─────────────
-  const whatsappQuery = useQuery({
-    queryKey: ['meta-whatsapp-by-assets', businessIds, pageIds],
+  // ── Step 3: Páginas (filtradas pelas BMs selecionadas) ──────────────────────────
+  const pagesQuery = useQuery({
+    queryKey: ['meta-pages-by-business', businessIds],
     queryFn: async () => {
-      const res = await api.post<ApiListResponse<MetaWhatsappOption>>('/meta/whatsapp-by-pages', {
-        businessIds,
-        pageIds,
-      });
+      const res = await api.post<ApiListResponse<MetaPageOption>>('/meta/pages-by-business', { businessIds });
       return res.data.data;
     },
-    enabled: subStep >= 4 && businessIds.length > 0,
+    enabled: subStep >= 3 && businessIds.length > 0,
     staleTime: 0,
     retry: false,
   });
-  const whatsappNumbers = whatsappQuery.data ?? [];
+  const pages = pagesQuery.data ?? [];
 
   // ── Salvar seleção ───────────────────────────────────────────────────────────
   const saveMutation = useMutation({
@@ -284,7 +258,6 @@ export function SelecionarAtivosPage() {
         businessIds,
         pageIds,
         adAccountIds,
-        whatsappNumberIds,
       });
     },
     onSuccess: async () => {
@@ -294,7 +267,7 @@ export function SelecionarAtivosPage() {
       // com type 'all' para garantir que o cache ja tenha selectedAdAccountId antes do
       // AuthenticatedShell decidir se redireciona de volta para o onboarding.
       await queryClient.refetchQueries({ queryKey: ['meta-connections'], type: 'all' });
-      navigate('/dashboard');
+      window.location.href = '/dashboard';
     },
     onError: async () => {
     },
@@ -305,10 +278,8 @@ export function SelecionarAtivosPage() {
   const selectedAdAccountNames = adAccounts
     .filter((a) => adAccountIds.includes(a.adAccountId))
     .map((a) => a.name);
-  const selectedWhatsappNumbers = whatsappNumbers.filter((n) => whatsappNumberIds.includes(n.phoneNumberId));
-
   function handleContinue() {
-    setSubStep((current) => Math.min(current + 1, 5));
+    setSubStep((current) => Math.min(current + 1, 4));
   }
 
   function handleBack() {
@@ -342,7 +313,7 @@ export function SelecionarAtivosPage() {
                   Quais Business Managers você quer gerenciar?
                 </h1>
                 <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Selecione uma ou mais. As Páginas, contas de anúncio e números de WhatsApp das próximas etapas
+                  Selecione uma ou mais. As Páginas e contas de anúncio das próximas etapas
                   serão filtrados por essas Business Managers.
                 </p>
               </div>
@@ -380,54 +351,8 @@ export function SelecionarAtivosPage() {
             </>
           )}
 
-          {/* ── Step 2: Páginas ────────────────────────────────────────────── */}
+          {/* ── Step 2: Contas de Anúncio ──────────────────────────────────── */}
           {subStep === 2 && (
-            <>
-              <div className="text-center space-y-3">
-                <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
-                  Quais Páginas você vai usar?
-                </h1>
-                <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Apenas Páginas das Business Managers selecionadas aparecem aqui. Se você não usa Páginas,
-                  pode continuar sem marcar nenhuma.
-                </p>
-              </div>
-
-              {pagesQuery.isLoading ? (
-                <LoadingSpinner />
-              ) : pages.length === 0 ? (
-                <EmptyState
-                  title="Nenhuma Página nestas Business Managers"
-                  description="As Business Managers selecionadas não têm Páginas vinculadas. Você pode continuar sem selecionar nenhuma."
-                />
-              ) : (
-                <div className="space-y-3">
-                  {pages.map((page) => (
-                    <CheckboxCard
-                      key={page.pageId}
-                      checked={pageIds.includes(page.pageId)}
-                      title={page.name}
-                      subtitle={page.pageId}
-                      badge={page.hasInstagram ? { label: 'Instagram vinculado', tone: 'green' } : undefined}
-                      onClick={() => toggle(pageIds, page.pageId, setPageIds)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <Button onClick={handleBack} variant="outline" size="md" className="flex-1">
-                  Voltar
-                </Button>
-                <Button onClick={handleContinue} variant="primary" size="md" className="flex-1">
-                  Continuar
-                </Button>
-              </div>
-            </>
-          )}
-
-          {/* ── Step 3: Contas de Anúncio ──────────────────────────────────── */}
-          {subStep === 3 && (
             <>
               <div className="text-center space-y-3">
                 <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
@@ -480,35 +405,36 @@ export function SelecionarAtivosPage() {
             </>
           )}
 
-          {/* ── Step 4: WhatsApp ───────────────────────────────────────────── */}
-          {subStep === 4 && (
+          {/* ── Step 3: Páginas ────────────────────────────────────────────── */}
+          {subStep === 3 && (
             <>
               <div className="text-center space-y-3">
                 <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
-                  Quais números de WhatsApp você vai usar?
+                  Quais Páginas você vai usar?
                 </h1>
                 <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Números das Business Managers selecionadas e das Páginas vinculadas. Se você não usa WhatsApp,
-                  pode continuar sem marcar nenhum.
+                  Apenas Páginas das Business Managers selecionadas aparecem aqui. Se você não usa Páginas,
+                  pode continuar sem marcar nenhuma.
                 </p>
               </div>
 
-              {whatsappQuery.isLoading ? (
+              {pagesQuery.isLoading ? (
                 <LoadingSpinner />
-              ) : whatsappNumbers.length === 0 ? (
+              ) : pages.length === 0 ? (
                 <EmptyState
-                  title="Nenhum número de WhatsApp encontrado"
-                  description="As Business Managers selecionadas não têm números de WhatsApp Business vinculados. Você pode continuar sem selecionar nenhum."
+                  title="Nenhuma Página nestas Business Managers"
+                  description="As Business Managers selecionadas não têm Páginas vinculadas. Você pode continuar sem selecionar nenhuma."
                 />
               ) : (
                 <div className="space-y-3">
-                  {whatsappNumbers.map((number) => (
+                  {pages.map((page) => (
                     <CheckboxCard
-                      key={number.phoneNumberId}
-                      checked={whatsappNumberIds.includes(number.phoneNumberId)}
-                      title={number.displayPhoneNumber}
-                      subtitle={number.phoneNumberId}
-                      onClick={() => toggle(whatsappNumberIds, number.phoneNumberId, setWhatsappNumberIds)}
+                      key={page.pageId}
+                      checked={pageIds.includes(page.pageId)}
+                      title={page.name}
+                      subtitle={page.pageId}
+                      badge={page.hasInstagram ? { label: 'Instagram vinculado', tone: 'green' } : undefined}
+                      onClick={() => toggle(pageIds, page.pageId, setPageIds)}
                     />
                   ))}
                 </div>
@@ -525,8 +451,8 @@ export function SelecionarAtivosPage() {
             </>
           )}
 
-          {/* ── Step 5: Resumo ─────────────────────────────────────────────── */}
-          {subStep === 5 && (
+          {/* ── Step 4: Resumo ─────────────────────────────────────────────── */}
+          {subStep === 4 && (
             <>
               <div className="text-center space-y-3">
                 <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">Confira sua seleção</h1>
@@ -547,15 +473,6 @@ export function SelecionarAtivosPage() {
 
                 <div className="p-4">
                   <div className="text-xs font-bold text-[#9CA3AF] uppercase tracking-wide mb-1">
-                    Páginas ({selectedPageNames.length})
-                  </div>
-                  <div className="text-sm font-medium text-[#1C1C1E]">
-                    {selectedPageNames.length > 0 ? selectedPageNames.join(', ') : 'Nenhuma'}
-                  </div>
-                </div>
-
-                <div className="p-4">
-                  <div className="text-xs font-bold text-[#9CA3AF] uppercase tracking-wide mb-1">
                     Contas de Anúncio ({selectedAdAccountNames.length})
                   </div>
                   <div className="text-sm font-medium text-[#1C1C1E]">
@@ -565,12 +482,10 @@ export function SelecionarAtivosPage() {
 
                 <div className="p-4">
                   <div className="text-xs font-bold text-[#9CA3AF] uppercase tracking-wide mb-1">
-                    Números de WhatsApp ({selectedWhatsappNumbers.length})
+                    Páginas ({selectedPageNames.length})
                   </div>
                   <div className="text-sm font-medium text-[#1C1C1E]">
-                    {selectedWhatsappNumbers.length > 0
-                      ? selectedWhatsappNumbers.map((n) => n.displayPhoneNumber).join(', ')
-                      : 'Nenhum'}
+                    {selectedPageNames.length > 0 ? selectedPageNames.join(', ') : 'Nenhuma'}
                   </div>
                 </div>
               </div>
