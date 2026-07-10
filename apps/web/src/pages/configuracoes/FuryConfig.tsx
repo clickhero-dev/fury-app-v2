@@ -118,18 +118,18 @@ export function FuryConfig() {
       <Card>
         <div className="p-6 space-y-6">
           <div>
-            <h3 className="text-lg font-bold text-text-primary mb-1">Benchmarks de Performance</h3>
+            <h3 className="text-lg font-bold text-text-primary mb-1">Metas de Performance</h3>
             <p className="text-sm text-text-secondary">
-              Defina as metas que o FURY usa para calcular o score (0–100) de cada campanha.
+              Defina as metas que o FURY usa para calcular a nota (0–100) de cada campanha.
             </p>
           </div>
 
           <div className="space-y-5">
-            {/* ROAS */}
+            {/* ROAS — simplified label */}
             <div>
               <label className="flex items-center text-sm font-semibold text-text-secondary mb-2">
-                Meta de ROAS
-                <Tooltip text="Retorno sobre investimento em anúncios. Um ROAS igual ou acima da meta vale 40 pts no score." />
+                Retorno sobre Anúncios
+                <Tooltip text="Quanto cada R$1 investido em anúncios traz de retorno. Ex: 4x = R$4 de retorno para cada R$1." />
               </label>
               <div className="flex items-center gap-3">
                 <input
@@ -141,15 +141,15 @@ export function FuryConfig() {
                   className="w-32 px-4 py-2 border border-border rounded-lg text-text-primary bg-transparent focus:outline-none focus:ring-2 focus:ring-accent"
                 />
                 <span className="text-text-secondary text-sm">x</span>
-                <span className="text-xs text-text-secondary">Ex: 4.0x significa R$4 de retorno para cada R$1 investido</span>
+                <span className="text-xs text-text-secondary">Ex: 4.0x = R$4 de retorno para cada R$1 investido</span>
               </div>
             </div>
 
-            {/* CPA */}
+            {/* CPA — simplified label */}
             <div>
               <label className="flex items-center text-sm font-semibold text-text-secondary mb-2">
-                Meta de CPA
-                <Tooltip text="Custo por aquisição/conversão. CPAs abaixo da meta valem até 20 pts. Quanto menor o CPA real, melhor." />
+                Custo Máximo por Conversão
+                <Tooltip text="Valor máximo que você quer pagar por cada venda ou conversão gerada pelo anúncio." />
               </label>
               <div className="flex items-center gap-3">
                 <span className="text-text-secondary text-sm">R$</span>
@@ -165,11 +165,11 @@ export function FuryConfig() {
               </div>
             </div>
 
-            {/* CTR */}
+            {/* CTR — simplified label */}
             <div>
               <label className="flex items-center text-sm font-semibold text-text-secondary mb-2">
-                Meta de CTR
-                <Tooltip text="Taxa de cliques. Um CTR igual ou acima da meta vale 30 pts. Média de mercado: 1–3%." />
+                Taxa de Cliques
+                <Tooltip text="Porcentagem de pessoas que clicam no anúncio depois de vê-lo. Uma taxa alta significa que o anúncio é relevante para o público." />
               </label>
               <div className="flex items-center gap-3">
                 <input
@@ -181,15 +181,15 @@ export function FuryConfig() {
                   className="w-32 px-4 py-2 border border-border rounded-lg text-text-primary bg-transparent focus:outline-none focus:ring-2 focus:ring-accent"
                 />
                 <span className="text-text-secondary text-sm">%</span>
-                <span className="text-xs text-text-secondary">Percentual de cliques sobre impressões</span>
+                <span className="text-xs text-text-secondary">Percentual de pessoas que clicam no anúncio</span>
               </div>
             </div>
 
-            {/* Budget utilization */}
+            {/* Budget utilization — simplified label */}
             <div>
               <label className="flex items-center text-sm font-semibold text-text-secondary mb-2">
-                Utilização de budget alvo
-                <Tooltip text="Percentual ideal do orçamento diário a ser utilizado. Estar ±10% da meta vale 10 pts; ±20% vale 5 pts." />
+                Uso do Orçamento
+                <Tooltip text="Percentual ideal do orçamento diário a ser gasto. Ficar perto da meta mostra que o anúncio está bem ajustado." />
               </label>
               <div className="space-y-2">
                 <div className="flex items-center gap-4">
@@ -207,7 +207,7 @@ export function FuryConfig() {
                   </span>
                 </div>
                 <p className="text-xs text-text-secondary">
-                  Score cheio se spend estiver entre {Math.max(0, targetBudgetUtilization - 10)}% e {Math.min(100, targetBudgetUtilization + 10)}% do orçamento
+                  Nota máxima se o gasto estiver entre {Math.max(0, targetBudgetUtilization - 10)}% e {Math.min(100, targetBudgetUtilization + 10)}% do orçamento
                 </p>
               </div>
             </div>
@@ -219,7 +219,7 @@ export function FuryConfig() {
       <Card>
         <div className="p-6">
           <h3 className="text-sm font-semibold text-text-secondary mb-4">
-            Preview do score — campanha de exemplo
+            Preview da nota — campanha de exemplo
           </h3>
           <div className="flex items-center gap-6">
             <div className="flex flex-col items-center gap-1">
@@ -240,7 +240,7 @@ export function FuryConfig() {
                 <span className="text-2xl font-bold text-text-primary w-14 text-right">{previewScore}</span>
               </div>
               <p className="text-xs text-text-secondary">
-                Métricas do exemplo: ROAS {EXAMPLE_METRICS.roas}x · CPA R${EXAMPLE_METRICS.cpa} · CTR {EXAMPLE_METRICS.ctr}% · Budget {Math.round((EXAMPLE_METRICS.spend / EXAMPLE_METRICS.budget) * 100)}% utilizado
+                Exemplo: Retorno {EXAMPLE_METRICS.roas}x · Custo R${EXAMPLE_METRICS.cpa} · Cliques {EXAMPLE_METRICS.ctr}% · Orçamento {Math.round((EXAMPLE_METRICS.spend / EXAMPLE_METRICS.budget) * 100)}% usado
               </p>
             </div>
           </div>
