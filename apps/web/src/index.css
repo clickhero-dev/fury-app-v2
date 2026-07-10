@@ -166,7 +166,7 @@ html.dark [class*="text-[#6E7681]"] {
   color: var(--color-text-secondary) !important;
 }
 html.dark [class*="text-[#9CA3AF]"] {
-  color: var(--color-text-tertiary) !important;
+  color: var(--color-text-secondary) !important;
 }
 
 /* Background colors */
