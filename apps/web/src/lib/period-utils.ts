@@ -16,10 +16,10 @@ export const PERIOD_LABELS: Record<Period, string> = {
  * sempre no horário de Brasília.
  *
  * Regras:
- * - `today`: início e fim são o dia atual.
+ * - `today`: início e fim são ontem (dado de hoje é parcial na Meta).
  * - `last_7d`: D-7 até D-1 (exclui o dia atual, cujos dados ainda são parciais).
  * - `last_month`: do primeiro ao último dia do mês anterior.
- * - `this_month`: do dia 1 do mês atual até hoje.
+ * - `this_month`: do dia 1 até ontem (dados de hoje ainda parciais).
  *
  * @param period - Período desejado
  * @returns Objeto com `startDate` e `endDate` no formato YYYY-MM-DD
@@ -29,11 +29,10 @@ export const PERIOD_LABELS: Record<Period, string> = {
  */
 export function getPeriodDates(period: Period): { startDate: string; endDate: string } {
   const now = getSaoPauloYMD();
-  const today = formatYMD(now);
   const yesterday = formatYMD(addDaysToYMD(now, -1));
 
   if (period === 'today') {
-    return { startDate: today, endDate: today };
+    return { startDate: yesterday, endDate: yesterday };
   }
   if (period === 'last_7d') {
     const start = addDaysToYMD(now, -7);
@@ -44,8 +43,8 @@ export function getPeriodDates(period: Period): { startDate: string; endDate: st
     const firstOfLastMonth = { year: lastOfLastMonth.year, month: lastOfLastMonth.month, day: 1 };
     return { startDate: formatYMD(firstOfLastMonth), endDate: formatYMD(lastOfLastMonth) };
   }
-  // this_month: do dia 1 do mês atual até hoje
-  return { startDate: formatYMD({ year: now.year, month: now.month, day: 1 }), endDate: today };
+  // this_month: do dia 1 do mês atual até ontem
+  return { startDate: formatYMD({ year: now.year, month: now.month, day: 1 }), endDate: yesterday };
 }
 
 /**

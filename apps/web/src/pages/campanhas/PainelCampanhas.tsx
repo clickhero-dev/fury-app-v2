@@ -100,6 +100,14 @@ export function PainelCampanhas() {
   const totalPages = Math.max(1, Math.ceil(filteredCampaigns.length / PAGE_SIZE));
   const pagedCampaigns = filteredCampaigns.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const summary = useMemo(() => {
+    if (filteredCampaigns.length === 0) return null;
+    const totalInvestido = filteredCampaigns.reduce((sum, c) => sum + c.investido, 0);
+    const totalConversoes = filteredCampaigns.reduce((sum, c) => sum + (c.conversoes ?? 0), 0);
+    const cpaMedia = totalConversoes > 0 ? totalInvestido / totalConversoes : null;
+    return { totalInvestido, totalConversoes, cpaMedia };
+  }, [filteredCampaigns]);
+
   const columns = [
     {
       key: 'name' as const,
@@ -287,6 +295,25 @@ export function PainelCampanhas() {
                 >
                   Próxima ›
                 </button>
+              </div>
+            </div>
+          )}
+
+          {summary && (
+            <div className="bg-surface rounded-xl border border-border overflow-hidden">
+              <div className="grid grid-cols-3 divide-x divide-border">
+                <div className="px-6 py-4">
+                  <p className="text-xs text-text-tertiary uppercase font-semibold tracking-wide">Total investido</p>
+                  <p className="text-lg font-bold text-text-primary mt-1">{formatInvestidoBRL(summary.totalInvestido)}</p>
+                </div>
+                <div className="px-6 py-4">
+                  <p className="text-xs text-text-tertiary uppercase font-semibold tracking-wide">Clientes</p>
+                  <p className="text-lg font-bold text-text-primary mt-1">{formatConversions(summary.totalConversoes)}</p>
+                </div>
+                <div className="px-6 py-4">
+                  <p className="text-xs text-text-tertiary uppercase font-semibold tracking-wide">CPA médio</p>
+                  <p className="text-lg font-bold text-text-primary mt-1">{formatCpaBRL(summary.cpaMedia)}</p>
+                </div>
               </div>
             </div>
           )}

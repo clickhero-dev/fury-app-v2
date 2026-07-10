@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import api from '../lib/api';
 import { getSaoPauloYMD, formatYMD } from '../lib/date-sao-paulo';
 import {
@@ -41,6 +41,7 @@ export function useCampaigns(period?: CampaignsPeriod) {
       if (items.length === 0) return [];
       return items.map(mapCampaignApiToRow);
     },
+    placeholderData: keepPreviousData,
     staleTime: 30 * 1000,
     refetchInterval: 30 * 1000,
   });

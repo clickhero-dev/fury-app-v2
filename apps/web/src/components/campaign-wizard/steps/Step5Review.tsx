@@ -227,7 +227,7 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
           size="lg"
           className="flex-1"
           onClick={handlePublish}
-          disabled={mutation.isPending}
+          disabled={mutation.isPending || audienceLoading || !audience.city}
         >
           {mutation.isPending ? (
             <span className="flex items-center justify-center gap-2">
