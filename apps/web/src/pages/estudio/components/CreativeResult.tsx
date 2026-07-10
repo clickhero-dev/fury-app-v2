@@ -87,7 +87,7 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
       const rect = c.getBoundingClientRect();
       const ctx = c.getContext('2d')!;
       ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-      ctx.strokeStyle = 'rgba(232,99,26,0.15)';
+      ctx.strokeStyle = 'rgba(232,99,26,1.0)';
       ctx.lineWidth = 40;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -183,7 +183,7 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
                   <canvas
                     ref={maskCanvasRef}
                     className="absolute inset-0 w-full h-full rounded-lg"
-                    style={{ cursor: 'crosshair', touchAction: 'none' }}
+                    style={{ cursor: 'crosshair', touchAction: 'none', opacity: 0.15 }}
                     {...canvasEvents}
                   />
                 )}
