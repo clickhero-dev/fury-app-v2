@@ -193,3 +193,37 @@ html.dark .border-\[#F3F4F6\] {
 html.dark .border-\[#FDDCCC\] {
   border-color: color-mix(in srgb, var(--color-accent) 30%, var(--color-border)) !important;
 }
+/* === Status colors (green/red) in dark mode === */
+html.dark .bg-green-50 {
+  background-color: color-mix(in srgb, var(--color-success) 15%, var(--color-surface)) !important;
+}
+html.dark .border-green-200 {
+  border-color: color-mix(in srgb, var(--color-success) 30%, var(--color-border)) !important;
+}
+html.dark .text-green-500 {
+  color: #3fb950 !important;
+}
+html.dark .text-green-700 {
+  color: #3fb950 !important;
+}
+html.dark .text-red-500 {
+  color: #f85149 !important;
+}
+html.dark .text-red-600 {
+  color: #f85149 !important;
+}
+
+/* === CheckboxCard accent colors (SelecionarAtivosPage) === */
+html.dark [class*="border-[#D1D5DB]"] {
+  border-color: var(--color-border) !important;
+}
+html.dark [class*="border-[#EA580C]"] {
+  border-color: var(--color-accent) !important;
+}
+html.dark [class*="bg-[#EA580C]"] {
+  background-color: var(--color-accent) !important;
+}
+html.dark [class*="text-[#EA580C]"] {
+  color: var(--color-accent-light) !important;
+}
+
