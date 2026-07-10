@@ -291,9 +291,10 @@ export const openrouterService = {
     const maskResized = await sharp(maskBuffer).resize(1024, 1024, { fit: 'fill' }).png().toBuffer();
 
     // DALL-E 2 inpainting: transparent mask area = where to edit
+    // ponytail: as any — Buffer works at runtime, Bun types reject it
     const response = await openai.images.edit({
-      image: imgResized,
-      mask: maskResized,
+      image: imgResized as any,
+      mask: maskResized as any,
       prompt: options.prompt,
       n: 1,
       size: '1024x1024',
