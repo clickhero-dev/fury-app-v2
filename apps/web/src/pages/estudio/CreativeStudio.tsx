@@ -28,7 +28,7 @@ const TEMPLATES: StudioTemplate[] = [
     id: 'ecommerce',
     label: 'E-commerce',
     niche: 'ecommerce',
-    prompt: 'Criativo para loja online de produto em destaque, composição limpa, foco no benefício principal e call-to-action visual.',
+    prompt: 'Anúncio para loja online de produto em destaque, composição limpa, foco no benefício principal e call-to-action visual.',
   },
   {
     id: 'saas',
@@ -418,7 +418,7 @@ export function CreativeStudio() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Preview</p>
-                  <h2 className="text-2xl font-bold text-[#101828]">Criativo gerado</h2>
+                  <h2 className="text-2xl font-bold text-[#101828]">Anúncio gerado</h2>
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={complianceStatus} />
@@ -434,7 +434,7 @@ export function CreativeStudio() {
                     <Sparkles className="h-7 w-7" />
                   </div>
                   <h3 className="mt-4 text-xl font-semibold text-[#101828]">Pronto para gerar</h3>
-                  <p className="mt-2 max-w-md text-sm text-[#667085]">Escolha um modelo, um template ou escreva um prompt detalhado. O preview, o status de compliance e a publicação aparecem aqui.</p>
+                   <p className="mt-2 max-w-md text-sm text-[#667085]">Escolha um modelo, um template ou escreva uma explicação detalhada. O preview, o status de compliance e a publicação aparecem aqui.</p>
                 </div>
               )}
 

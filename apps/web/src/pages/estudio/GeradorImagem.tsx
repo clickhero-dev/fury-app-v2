@@ -88,7 +88,7 @@ function CreativePreview({
 }) {
   return (
     <div className="relative" style={{ aspectRatio: '1/1' }}>
-      <img src={imageUrl} alt="Criativo gerado" className="w-full h-full block object-cover" />
+      <img src={imageUrl} alt="Anúncio gerado" className="w-full h-full block object-cover" />
       {/* Headline — vertically centered in the brand strip above the CTA pill */}
       <div
         className="absolute inset-x-0 flex items-center justify-center px-8 pointer-events-none"
@@ -250,14 +250,14 @@ export function GeradorImagem() {
             Voltar
           </button>
           <span className="text-border">·</span>
-          <h2 className="text-lg font-bold text-text-primary">Gerar Novo Criativo</h2>
+          <h2 className="text-lg font-bold text-text-primary">Gerar Novo Anúncio</h2>
         </div>
       }
     >
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <PageHeader
-            title="Gerador de Criativos com IA"
+            title="Gerador de Anúncios com IA"
             description="Monte seu anúncio em 3 passos: foto, texto e publicação"
           />
           <StepIndicator step={step} />
@@ -505,7 +505,7 @@ export function GeradorImagem() {
                   <div className="space-y-4">
                     <div className="flex items-start gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-3 rounded-lg">
                       <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                      <span>Criativo salvo na biblioteca! Você pode usá-lo ao criar uma campanha.</span>
+                      <span>Anúncio salvo na biblioteca! Você pode usá-lo ao criar uma campanha.</span>
                     </div>
                     <div className="flex gap-3">
                       <Button type="button" variant="outline" onClick={() => navigate('/estudio')} className="flex-1">

@@ -91,7 +91,7 @@ export function EstudioHome() {
     const finalPrompt = orPrompt.trim();
     if (finalPrompt.length < 10) return;
     setView('loading');
-    setProgressMessage('Aprimorando prompt...');
+    setProgressMessage('Aprimorando explicação detalhada...');
 
     try {
       const enhanceRes = await api.post('/openrouter/enhance-prompt', {
@@ -141,7 +141,7 @@ export function EstudioHome() {
   const header = (
     <div className="flex items-center justify-between">
       {view === 'library' ? (
-        <h2 className="text-lg font-bold text-text-primary">Estúdio Criativo</h2>
+        <h2 className="text-lg font-bold text-text-primary">Estúdio de Anúncios</h2>
       ) : (
         <>
           <button
@@ -154,7 +154,7 @@ export function EstudioHome() {
           <h2 className="text-lg font-bold text-text-primary">
             {view === 'quick-create' && 'Criação Rápida'}
             {view === 'loading' && 'Gerando...'}
-            {view === 'result' && 'Seu Criativo'}
+            {view === 'result' && 'Seu Anúncio'}
             {view === 'error' && 'Erro na geração'}
           </h2>
         </>
@@ -200,7 +200,7 @@ export function EstudioHome() {
             {/* Library */}
             <div className="border-t border-border pt-8 space-y-6">
               <div className="flex items-center justify-between">
-                <h3 className="text-base font-bold text-text-primary">Biblioteca de Criativos</h3>
+                <h3 className="text-base font-bold text-text-primary">Biblioteca de Anúncios</h3>
                 <span className="text-sm text-text-tertiary">
                   {assetList.length} ativo{assetList.length !== 1 ? 's' : ''}
                 </span>
@@ -290,7 +290,7 @@ export function EstudioHome() {
             {/* Prompt */}
             <Card>
               <CardContent className="space-y-4">
-                <label className="text-sm font-semibold text-text-primary">Descreva o criativo</label>
+                <label className="text-sm font-semibold text-text-primary">Descreva o anúncio</label>
                 <textarea
                   value={orPrompt}
                   onChange={(e) => setOrPrompt(e.target.value)}
@@ -299,7 +299,7 @@ export function EstudioHome() {
                 />
                 <div className="flex items-center justify-between text-xs text-text-tertiary">
                   <span>{orPrompt.trim().length}/1000</span>
-                  <span>Imagem • prompt detalhado = melhor resultado</span>
+                  <span>Imagem • explicação detalhada = melhor resultado</span>
                 </div>
                 <Button
                   onClick={handleQuickCreate}
@@ -333,7 +333,7 @@ export function EstudioHome() {
               </p>
             </div>
             <div className="flex flex-col gap-1 text-xs text-text-tertiary">
-              <span>✦ Aprimorando o prompt com o contexto da marca</span>
+              <span>✦ Aprimorando a explicação detalhada com o contexto da marca</span>
               <span>✦ Gerando imagem com IA</span>
               <span>✦ Salvando na biblioteca</span>
             </div>
@@ -422,7 +422,7 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
       <div className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-semibold text-text-primary text-sm flex-1 line-clamp-2">
-            {asset.name ?? `Criativo de ${asset.type === 'image' ? 'imagem' : asset.type}`}
+            {asset.name ?? `Anúncio de ${asset.type === 'image' ? 'imagem' : asset.type}`}
           </h3>
           <button
             type="button"
