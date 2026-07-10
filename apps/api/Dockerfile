@@ -26,6 +26,7 @@ RUN apk add --no-cache fontconfig font-opensans font-dejavu
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=384"
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json /app/tsconfig.json ./

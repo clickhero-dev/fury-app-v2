@@ -1,5 +1,6 @@
 import { AppError } from '../middleware/errorHandler.js';
 import OpenAI from 'openai';
+import { persistOpenRouterImageResponse } from '../lib/openrouter-image-response.js';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
@@ -252,15 +253,12 @@ export const openrouterService = {
       const err = await response.text();
       throw new AppError(502, 'IMAGE_EDIT_ERROR', `Image edit error: ${err}`);
     }
-    const data = (await response.json()) as any;
-    // Gemini returns image in the assistant message content
-    const content = data.choices?.[0]?.message?.content;
-    if (typeof content === 'string') return content; // base64 data URL
-    if (Array.isArray(content)) {
-      const imagePart = content.find((p: any) => p.type === 'image_url');
-      if (imagePart?.image_url?.url) return imagePart.image_url.url;
+
+    try {
+      return await persistOpenRouterImageResponse(response);
+    } catch (err) {
+      throw new AppError(502, 'IMAGE_EDIT_EMPTY', (err as Error).message || 'Modelo não retornou imagem editada.');
     }
-    throw new AppError(502, 'IMAGE_EDIT_EMPTY', 'Modelo não retornou imagem editada.');
   },
 
   // ponytail: DALL-E 2 inpainting com máscara via OpenAI (já instalado)

@@ -438,32 +438,33 @@ router.post('/regenerate-ad', authMiddleware, tenantMiddleware, async (req: Requ
     }
 
     // ponytail: se tem máscara → inpainting, com fallback pra editImage
-    let editedImage: string;
+    let imageUrl: string;
     let source = 'openrouter-edit-image';
     if (body.maskBase64) {
       try {
-        editedImage = await openrouterService.inpaintImage({
+        const inpaintResult = await openrouterService.inpaintImage({
           imageUrl: asset.url,
           maskBase64: body.maskBase64,
           prompt: body.feedback,
         });
+        imageUrl = await uploadImageToStorage(inpaintResult);
         source = 'openrouter-inpaint';
       } catch (e) {
         console.error('[regenerate-ad] inpaint failed, falling back to editImage:', (e as Error).message);
-        editedImage = await openrouterService.editImage({
+        imageUrl = await openrouterService.editImage({
           imageUrl: asset.url,
           instructions: body.feedback,
         });
         source = 'openrouter-edit-image-fallback';
       }
     } else {
-      editedImage = await openrouterService.editImage({
+      // editImage persiste a imagem via streaming — não passa por uploadImageToStorage
+      imageUrl = await openrouterService.editImage({
         imageUrl: asset.url,
         instructions: body.feedback,
       });
     }
 
-    const imageUrl = await uploadImageToStorage(editedImage);
     const [newAsset] = await db.insert(creativeAssets).values({
       tenantId,
       type: 'image',
