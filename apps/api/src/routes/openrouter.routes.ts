@@ -315,25 +315,26 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
     // Enhance the prompt with feedback
     const brand = await getBrandContext(tenantId);
     const enhancePrompt = [
-      `Você é um especialista em publicidade digital.`,
       `Prompt original: "${originalPrompt}"`,
-      `Feedback do usuário: "${body.feedback}"`,
+      `Feedback: "${body.feedback}"`,
       `Marca: ${brand.businessName}.`,
-      brand.voiceTone ? `Tom: ${brand.voiceTone}.` : '',
-      brand.primaryColor ? `Cor primária: ${brand.primaryColor}.` : '',
       ``,
-      `Reescreva o prompt incorporando o feedback, mantendo o contexto da marca.`,
-      `Retorne APENAS o prompt revisado, sem aspas, sem introdução.`,
+      `REGRAS (OBRIGATÓRIO):`,
+      `- Edite APENAS o trecho do prompt que o feedback menciona.`,
+      `- PRESERVE rigorosamente todo o restante (tema, estilo, cores, composição).`,
+      `- NÃO adicione logotipos, NÃO mude o layout, NÃO reescreva frases não mencionadas.`,
+      `- Faça a MENOR alteração possível.`,
+      `Retorne APENAS o prompt editado, sem aspas, sem introdução.`,
     ].filter(Boolean).join('\n');
 
     let newPrompt: string;
     try {
       newPrompt = (await openrouterService.chat(
         [{ role: 'user', content: enhancePrompt }],
-        { temperature: 0.8, max_tokens: 600 },
+        { temperature: 0.1, max_tokens: 800 },
       )).trim();
     } catch {
-      newPrompt = `${originalPrompt}. ${body.feedback}`;
+      newPrompt = `${originalPrompt}. Ajuste: ${body.feedback}`;
     }
 
     // Generate new asset

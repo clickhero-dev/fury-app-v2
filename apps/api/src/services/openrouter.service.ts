@@ -181,16 +181,19 @@ export const openrouterService = {
   }): Promise<string> {
     const apiKey = getClient();
     const enhancePrompt = [
-      'Você é um especialista em publicidade digital.',
+      'Você recebe um prompt original de anúncio e um feedback de ajuste.',
       `Prompt original: "${options.originalPrompt}"`,
-      `Feedback do usuário: "${options.feedback}"`,
+      `Feedback: "${options.feedback}"`,
       `Marca: ${options.businessName}.`,
-      options.voiceTone ? `Tom: ${options.voiceTone}.` : '',
-      options.primaryColor ? `Cor primária: ${options.primaryColor}.` : '',
       '',
-      'Reescreva o prompt incorporando o feedback, mantendo o contexto da marca.',
-      'PRESERVE o tema, estilo e composição do anúncio original. Aplique APENAS o ajuste solicitado.',
-      'Retorne APENAS o prompt revisado, sem aspas, sem introdução.',
+      'REGRAS (OBRIGATÓRIO):',
+      '- Edite APENAS o trecho do prompt que o feedback menciona.',
+      '- PRESERVE rigorosamente todo o restante do prompt original (tema, estilo, cores, composição).',
+      '- NÃO adicione logotipos, NÃO mude o layout do anúncio, NÃO reescreva frases não mencionadas.',
+      '- Mantenha a identidade visual e a descrição exata do anúncio original.',
+      '- Faça a MENOR alteração possível que atenda ao feedback.',
+      '',
+      'Retorne APENAS o prompt editado, sem aspas, sem introdução, sem explicações.',
     ].filter(Boolean).join('\n');
 
     const chatResponse = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
@@ -199,13 +202,19 @@ export const openrouterService = {
       body: JSON.stringify({
         model: 'deepseek/deepseek-chat',
         messages: [{ role: 'user', content: enhancePrompt }],
-        temperature: 0.8,
-        max_tokens: 600,
+        temperature: 0.1,
+        max_tokens: 800,
       }),
     });
     if (!chatResponse.ok) {
       const err = await chatResponse.text();
-      throw new AppError(502, 'OPENROUTER_CHAT_ERROR', `OpenRouter chat error: ${err}`);
+      // fallback: concat feedback ao original sem LLM
+      return openrouterService.generateImage({
+        model: options.model,
+        prompt: `${options.originalPrompt}. Ajuste: ${options.feedback}`,
+        previousImageUrl: options.previousAdUrl,
+        logoUrl: options.logoUrl,
+      });
     }
     const chatData = (await chatResponse.json()) as any;
     const newPrompt = (chatData.choices?.[0]?.message?.content ?? options.originalPrompt).trim();
