@@ -1,4 +1,5 @@
 import { AppError } from '../middleware/errorHandler.js';
+import OpenAI from 'openai';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
@@ -225,5 +226,83 @@ export const openrouterService = {
       previousImageUrl: options.previousAdUrl,
       logoUrl: options.logoUrl,
     });
+  },
+
+  // ponytail: edição precisa via modelo multimodal (Gemini Nano Banana 2)
+  async editImage(options: {
+    imageUrl: string;
+    instructions: string;
+  }): Promise<string> {
+    const apiKey = getClient();
+    const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'google/gemini-3.1-flash-image',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: options.imageUrl } },
+            { type: 'text', text: `Edite esta imagem com a seguinte instrução: ${options.instructions}. Preserve rigorosamente todo o resto da imagem. Altere APENAS o que foi pedido.` },
+          ],
+        }],
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new AppError(502, 'IMAGE_EDIT_ERROR', `Image edit error: ${err}`);
+    }
+    const data = (await response.json()) as any;
+    // Gemini returns image in the assistant message content
+    const content = data.choices?.[0]?.message?.content;
+    if (typeof content === 'string') return content; // base64 data URL
+    if (Array.isArray(content)) {
+      const imagePart = content.find((p: any) => p.type === 'image_url');
+      if (imagePart?.image_url?.url) return imagePart.image_url.url;
+    }
+    throw new AppError(502, 'IMAGE_EDIT_EMPTY', 'Modelo não retornou imagem editada.');
+  },
+
+  // ponytail: DALL-E 2 inpainting com máscara via OpenAI (já instalado)
+  async inpaintImage(options: {
+    imageUrl: string;
+    maskBase64: string;
+    prompt: string;
+  }): Promise<string> {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new AppError(500, 'OPENAI_API_KEY_MISSING', 'OPENAI_API_KEY não configurada.');
+
+    const openai = new OpenAI({ apiKey });
+
+    // Download original image as buffer
+    const imgResp = await fetch(options.imageUrl);
+    if (!imgResp.ok) throw new AppError(502, 'IMAGE_DOWNLOAD_FAILED', 'Falha ao baixar imagem original.');
+    const imgBuffer = Buffer.from(await imgResp.arrayBuffer());
+
+    // Convert mask from base64 to buffer
+    const maskMatch = options.maskBase64.match(/^data:image\/\w+;base64,(.+)$/);
+    const maskBuffer = maskMatch
+      ? Buffer.from(maskMatch[1], 'base64')
+      : Buffer.from(options.maskBase64, 'base64');
+
+    // Resize both to 1024x1024 (DALL-E 2 requirement)
+    const { default: sharp } = await import('sharp');
+    const imgResized = await sharp(imgBuffer).resize(1024, 1024, { fit: 'fill' }).png().toBuffer();
+    const maskResized = await sharp(maskBuffer).resize(1024, 1024, { fit: 'fill' }).png().toBuffer();
+
+    // DALL-E 2 inpainting: transparent mask area = where to edit
+    const response = await openai.images.edit({
+      image: imgResized,
+      mask: maskResized,
+      prompt: options.prompt,
+      n: 1,
+      size: '1024x1024',
+    });
+
+    const resultUrl = response.data?.[0]?.url;
+    const resultB64 = response.data?.[0]?.b64_json;
+    if (resultUrl) return resultUrl;
+    if (resultB64) return `data:image/png;base64,${resultB64}`;
+    throw new AppError(502, 'INPAINT_FAILED', 'OpenAI não retornou imagem editada.');
   },
 };

@@ -410,6 +410,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
 const regenerateAdSchema = z.object({
   assetId: z.string().uuid(),
   feedback: z.string().min(3),
+  maskBase64: z.string().optional(),
 });
 
 router.post('/regenerate-ad', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
@@ -424,42 +425,27 @@ router.post('/regenerate-ad', authMiddleware, tenantMiddleware, async (req: Requ
       return res.status(404).json({ error: 'Asset não encontrado' });
     }
 
-    let originalPrompt = '';
-    let originalModel = '';
-    try {
-      const meta = JSON.parse(asset.complianceNotes ?? '{}');
-      originalPrompt = meta.prompt ?? '';
-      originalModel = meta.model ?? '';
-    } catch { /* fallback */ }
+    // ponytail: se tem máscara → inpainting preciso, senão → edição por texto
+    const editedImage = body.maskBase64
+      ? await openrouterService.inpaintImage({
+          imageUrl: asset.url,
+          maskBase64: body.maskBase64,
+          prompt: body.feedback,
+        })
+      : await openrouterService.editImage({
+          imageUrl: asset.url,
+          instructions: body.feedback,
+        });
 
-    if (!originalPrompt || !originalModel) {
-      return res.status(400).json({ error: 'Asset original sem dados para regeneração' });
-    }
-
-    const brand = await getBrandContext(tenantId);
-
-    const base64Image = await openrouterService.regenerateAd({
-      previousAdUrl: asset.url,
-      feedback: body.feedback,
-      originalPrompt,
-      model: originalModel,
-      businessName: brand.businessName,
-      voiceTone: brand.voiceTone,
-      primaryColor: brand.primaryColor,
-      logoUrl: brand.logoUrl,
-    });
-
-    const imageUrl = await uploadImageToStorage(base64Image);
+    const imageUrl = await uploadImageToStorage(editedImage);
     const [newAsset] = await db.insert(creativeAssets).values({
       tenantId,
       type: 'image',
       url: imageUrl,
       complianceStatus: 'pending_compliance',
       complianceNotes: JSON.stringify({
-        prompt: body.feedback,
-        model: originalModel,
         generatedAt: new Date().toISOString(),
-        source: 'openrouter-regenerate-ad',
+        source: 'openrouter-edit-image',
         originalAssetId: body.assetId,
         feedback: body.feedback,
       }),

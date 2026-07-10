@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, BookmarkCheck, Loader2, RefreshCw, Upload } from 'lucide-react';
+import { AlertCircle, BookmarkCheck, Loader2, RefreshCw, Upload, X } from 'lucide-react';
 import { Button } from '@/components';
 import api from '@/lib/api';
 import { layoutLabel, isKnownLayout } from '@/lib/layout-labels';
@@ -12,35 +12,119 @@ interface Props {
   onNewCreative: () => void;
 }
 
+// ponytail: gera máscara de inpainting a partir do canvas de pintura
+function generateMaskFromCanvas(source: HTMLCanvasElement): string | null {
+  const w = source.width;
+  const h = source.height;
+  if (w === 0 || h === 0) return null;
+  const mask = document.createElement('canvas');
+  mask.width = w;
+  mask.height = h;
+  const ctx = mask.getContext('2d')!;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.drawImage(source, 0, 0);
+  return mask.toDataURL('image/png');
+}
+
 export function CreativeResult({ result, onBack, onNewCreative }: Props) {
   const queryClient = useQueryClient();
   const [currentResult, setCurrentResult] = useState(result);
   const [feedback, setFeedback] = useState('');
   const [publishFeedback, setPublishFeedback] = useState<StudioPublishResponse | null>(null);
 
+  // ponytail: máscara canvas — pintura contínua (mousedown + drag)
+  const [hasMask, setHasMask] = useState(false);
+  const maskCanvasRef = useRef<HTMLCanvasElement>(null);
+  const paintingRef = useRef(false);
+
   // ponytail: pergunta pós-criação visível por padrão no quick-create
   const [showRegenerateForm, setShowRegenerateForm] = useState(!!currentResult.type);
 
-  const isQuickCreate = !!currentResult.type; // openrouter assets have type field
+  const isQuickCreate = !!currentResult.type;
   const isVideo = currentResult.type === 'video';
   const displayUrl = isVideo ? (currentResult.videoUrl ?? currentResult.imageUrl) : currentResult.imageUrl;
+
+  const clearMask = useCallback(() => {
+    const c = maskCanvasRef.current;
+    if (c) {
+      const ctx = c.getContext('2d')!;
+      ctx.clearRect(0, 0, c.width, c.height);
+    }
+    setHasMask(false);
+  }, []);
+
+  // resync canvas size with container
+  useEffect(() => {
+    const c = maskCanvasRef.current;
+    if (!c || !c.parentElement) return;
+    const sync = () => {
+      const rect = c.parentElement!.getBoundingClientRect();
+      if (c.width !== rect.width || c.height !== rect.height) {
+        c.width = rect.width;
+        c.height = rect.height;
+        clearMask();
+      }
+    };
+    sync();
+    window.addEventListener('resize', sync);
+    return () => window.removeEventListener('resize', sync);
+  }, [currentResult, clearMask]);
+
+  const canvasEvents = isQuickCreate && !isVideo ? {
+    onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+      paintingRef.current = true;
+      const c = maskCanvasRef.current!;
+      const rect = c.getBoundingClientRect();
+      const ctx = c.getContext('2d')!;
+      ctx.beginPath();
+      ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    },
+    onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+      if (!paintingRef.current) return;
+      const c = maskCanvasRef.current!;
+      const rect = c.getBoundingClientRect();
+      const ctx = c.getContext('2d')!;
+      ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+      ctx.strokeStyle = 'rgba(232,99,26,0.15)';
+      ctx.lineWidth = 40;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+      setHasMask(true);
+    },
+    onPointerUp() {
+      paintingRef.current = false;
+    },
+    onPointerLeave() {
+      paintingRef.current = false;
+    },
+  } : {};
 
   const regenerateMutation = useMutation({
     mutationFn: async ({ assetId, feedbackText }: { assetId: string; feedbackText: string }) => {
       const endpoint = isQuickCreate
         ? '/openrouter/regenerate-ad'
         : '/studio/creative/regenerate';
+      const maskBase64 = maskCanvasRef.current
+        ? generateMaskFromCanvas(maskCanvasRef.current)
+        : null;
       const res = await api.post<GenerateCreativeResponse>(endpoint, {
         assetId,
         feedback: feedbackText,
+        ...(maskBase64 ? { maskBase64 } : {}),
       });
       return res.data;
     },
     onSuccess: (data) => {
       setCurrentResult(data);
       setPublishFeedback(null);
-      setShowRegenerateForm(true); // mantém a pergunta visível após regenerar
+      setShowRegenerateForm(true);
       setFeedback('');
+      clearMask();
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
   });
@@ -83,16 +167,27 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
                 }}
               />
             ) : (
-              <img
-                src={displayUrl}
-                alt="Criativo gerado"
-                className="w-full h-full object-cover block rounded-lg"
-                style={{ opacity: regenerateMutation.isPending ? 0.5 : 1, transition: 'opacity 0.2s' }}
-                onError={(e) => {
-                  console.error('=== Image failed to load:', displayUrl);
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
+              <>
+                <img
+                  src={displayUrl}
+                  alt="Criativo gerado"
+                  className="w-full h-full object-cover block rounded-lg"
+                  style={{ opacity: regenerateMutation.isPending ? 0.5 : 1, transition: 'opacity 0.2s' }}
+                  onError={(e) => {
+                    console.error('=== Image failed to load:', displayUrl);
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+                {/* ponytail: canvas de pintura sobre a imagem */}
+                {isQuickCreate && (
+                  <canvas
+                    ref={maskCanvasRef}
+                    className="absolute inset-0 w-full h-full rounded-lg"
+                    style={{ cursor: 'crosshair', touchAction: 'none' }}
+                    {...canvasEvents}
+                  />
+                )}
+              </>
             )}
             {regenerateMutation.isPending && (
               <div className="absolute inset-0 flex items-center justify-center">
@@ -142,11 +237,17 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
           {showRegenerateForm && isQuickCreate && (
             <div className="space-y-2 rounded-xl border border-border bg-surface-secondary p-4">
               <p className="text-sm font-semibold text-text-primary">Deseja incluir mais alguma coisa no anúncio?</p>
+              <p className="text-xs text-[#98A2B3]">Segure e arraste sobre a imagem para marcar a área. Depois descreva o ajuste abaixo.</p>
+              {hasMask && (
+                <button onClick={clearMask} className="flex items-center gap-1 text-xs text-[#E8631A] hover:underline">
+                  <X className="h-3 w-3" /> Limpar marcação
+                </button>
+              )}
               <textarea
                 autoFocus
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
-                placeholder="Ex: Adicionar um selo de desconto, incluir logo da marca, mudar cores..."
+                placeholder="Ex: Remover este texto, trocar cor de fundo, adicionar ícone..."
                 rows={3}
                 className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none transition focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/10 resize-none"
               />
