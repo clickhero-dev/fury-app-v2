@@ -14,17 +14,21 @@ interface Props {
 
 // ponytail: gera máscara de inpainting a partir do canvas de pintura
 function generateMaskFromCanvas(source: HTMLCanvasElement): string | null {
-  const w = source.width;
-  const h = source.height;
-  if (w === 0 || h === 0) return null;
+  if (source.width === 0 || source.height === 0) return null;
+  // ponytail: escala pra 256px — DALL-E redimensiona; evita OOM no base64
+  const SIZE = 256;
+  const tiny = document.createElement('canvas');
+  tiny.width = SIZE;
+  tiny.height = SIZE;
+  tiny.getContext('2d')!.drawImage(source, 0, 0, SIZE, SIZE);
   const mask = document.createElement('canvas');
-  mask.width = w;
-  mask.height = h;
+  mask.width = SIZE;
+  mask.height = SIZE;
   const ctx = mask.getContext('2d')!;
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, w, h);
+  ctx.fillRect(0, 0, SIZE, SIZE);
   ctx.globalCompositeOperation = 'destination-out';
-  ctx.drawImage(source, 0, 0);
+  ctx.drawImage(tiny, 0, 0);
   return mask.toDataURL('image/png');
 }
 
