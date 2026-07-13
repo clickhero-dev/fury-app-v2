@@ -35,6 +35,7 @@ interface MeResponse {
   name: string | null;
   email: string;
   tenantName: string;
+  tenantSlug: string;
   role: string;
   tenantId: string;
   notificationPrefs: NotificationPrefs;
@@ -240,6 +241,50 @@ export function Configuracoes() {
                     </label>
                   </div>
                 </div>
+
+                {/* Página de Destino (Landing Page) */}
+                {meData?.tenantId && (
+                  <div className="border-t border-border pt-6">
+                    <h3 className="text-lg font-bold text-text-primary mb-4">Página de Destino</h3>
+                    <p className="text-sm text-text-secondary mb-4">
+                      Compartilhe este link com seus clientes para eles entrarem em contato pelo WhatsApp.
+                    </p>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                      <input
+                        type="text"
+                        readOnly
+                        value={`${window.location.origin}/l/${meData.tenantSlug}`}
+                        className="flex-1 px-4 py-3 border border-border rounded-lg text-sm text-text-primary bg-surface-secondary focus:outline-none select-all cursor-text"
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                      />
+                      <Button
+                        variant="primary"
+                        size="md"
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            `${window.location.origin}/l/${meData.tenantSlug}`
+                          );
+                          showToast('Link copiado!', 'success');
+                        }}
+                      >
+                        Copiar Link
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="md"
+                        onClick={() =>
+                          window.open(
+                            `${window.location.origin}/l/${meData.tenantSlug}`,
+                            '_blank',
+                            'noopener'
+                          )
+                        }
+                      >
+                        Visualizar
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-border">
                   <Button

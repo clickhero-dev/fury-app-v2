@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { LandingPage } from './pages/landing/LandingPage';
 import { ConectarMetaPage } from './pages/onboarding/ConectarMetaPage';
 import { MetaAuthorizePage } from './pages/onboarding/MetaAuthorizePage';
 import { MetasPage } from './pages/onboarding/MetasPage';
@@ -116,6 +117,10 @@ export const router = createBrowserRouter([
         <SelecionarAtivosPage />
       </ProtectedRoute>
     ),
+  },
+  {
+    path: '/l/:slug',
+    element: <LandingPage />,
   },
   {
     // Layout autenticado: todas as rotas filhas exigem login

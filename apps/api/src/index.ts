@@ -38,11 +38,28 @@ console.log('=== STATIC serving /studio-assets from:', studioAssetsDir);
 app.use('/studio-assets', express.static(studioAssetsDir));
 
 // Public LP (landing page) for WhatsApp Conversation campaigns — no auth
-app.get('/api/lp/:tenantId', async (req, res) => {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolveTenantId(slugOrId: string): Promise<string | null> {
+  const { db, tenants } = await import('@fury/db');
+  const { eq } = await import('drizzle-orm');
+  const column = UUID_RE.test(slugOrId) ? tenants.id : tenants.slug;
+  const tenant = await db.query.tenants.findFirst({ where: eq(column, slugOrId) });
+  return tenant?.id ?? null;
+}
+
+app.get('/api/lp/:slug', async (req, res) => {
   try {
     const { db, brandKits } = await import('@fury/db');
     const { eq } = await import('drizzle-orm');
-    const bk = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, req.params.tenantId) });
+
+    const tenantId = await resolveTenantId(req.params.slug);
+    if (!tenantId) {
+      res.status(404).send('Página não encontrada');
+      return;
+    }
+
+    const bk = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, tenantId) });
     const waNum = bk?.whatsappNumber as string | null;
     const primary = bk?.primaryColor || '#E8631A';
     const secondary = bk?.secondaryColor || '#f5f5f5';
@@ -84,6 +101,43 @@ Converse Comigo
   } catch (e) {
     console.error('[LP] erro:', e);
     res.status(500).send('Erro interno');
+  }
+});
+
+// Public JSON endpoint for frontend LP — no auth
+app.get('/api/public/brand-kit/:slug', async (req, res) => {
+  try {
+    const { db, brandKits, tenants } = await import('@fury/db');
+    const { eq } = await import('drizzle-orm');
+
+    const tenantId = await resolveTenantId(req.params.slug);
+    if (!tenantId) {
+      return res.status(404).json({ success: false, message: 'Tenant não encontrado' });
+    }
+
+    // Fetch tenant name and brand kit in parallel
+    const [tenant, bk] = await Promise.all([
+      db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) }),
+      db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, tenantId) }),
+    ]);
+
+    if (!tenant) {
+      return res.status(404).json({ success: false, message: 'Tenant não encontrado' });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        tenantName: tenant.name,
+        logo_url: bk?.logoUrl ?? null,
+        whatsapp_number: bk?.whatsappNumber as string | null,
+        primary_color: bk?.primaryColor ?? '#E8631A',
+        secondary_color: bk?.secondaryColor ?? '#f5f5f5',
+      },
+    });
+  } catch (e) {
+    console.error('[LP-API] erro:', e);
+    res.status(500).json({ success: false, message: 'Erro interno' });
   }
 });
 
