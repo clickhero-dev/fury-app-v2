@@ -90,6 +90,7 @@ const STEPS: MigrationStep[] = [
       }
     },
   },
+  { tag: '0021_add_tenant_codigo' },
 ];
 
 async function runMigrate() {
