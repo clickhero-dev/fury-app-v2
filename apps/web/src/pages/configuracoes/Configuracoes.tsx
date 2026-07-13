@@ -3,13 +3,13 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppLayout, Button, Card } from '@/components';
 import { FuryConfig } from './FuryConfig';
-import { IntegracoesContent } from './IntegracoesContent';
 import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
 import { useTheme } from '@/hooks/useTheme';
 import api from '@/lib/api';
 import { MetasPage } from '../onboarding/MetasPage';
 import { MinhasRegrasContent } from '../automacao/MinhasRegras';
 import { PublicoContent } from './PublicoContent';
+import { BrandKitContent } from './BrandKitPage';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { ConfiguracoesTabsNav } from './ConfiguracoesTabsNav';
 import {
@@ -20,9 +20,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
-type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento' | 'integracoes' | 'fury' | 'metas' | 'automacao' | 'publico';
+type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'faturamento' | 'fury' | 'metas' | 'automacao' | 'publico';
 
-const VALID_TABS: TabType[] = ['geral', 'notificacoes', 'seguranca', 'equipe', 'faturamento', 'integracoes', 'fury', 'metas', 'automacao', 'publico'];
+const VALID_TABS: TabType[] = ['geral', 'notificacoes', 'seguranca', 'faturamento', 'fury', 'metas', 'automacao', 'publico'];
 
 interface NotificationPrefs {
   campanhas: boolean;
@@ -404,34 +404,6 @@ export function Configuracoes() {
             </Card>
           </TabsContent>
 
-          {/* Equipe */}
-          <TabsContent value="equipe">
-            <Card>
-              <div className="p-6 space-y-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-text-primary">Membros da Equipe</h3>
-                  <Button variant="primary" size="sm">+ Convidar Membro</Button>
-                </div>
-
-                <div className="space-y-3">
-                  {[
-                    { name: 'Mallyssa Silva', email: 'mallyssa@example.com', role: 'Proprietário', color: 'text-accent' },
-                    { name: 'Ricardo Silva', email: 'ricardo@example.com', role: 'Admin', color: 'text-success' },
-                    { name: 'Gabrielle Silva', email: 'gabrielle@example.com', role: 'Membro', color: 'text-text-secondary' },
-                  ].map(({ name: n, email, role, color }) => (
-                    <div key={email} className="p-4 border border-border rounded-lg flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-text-primary">{n}</p>
-                        <p className="text-sm text-text-secondary">{email}</p>
-                      </div>
-                      <span className={`text-xs font-bold ${color}`}>{role}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-
           {/* Faturamento */}
           <TabsContent value="faturamento">
             <Card>
@@ -553,13 +525,12 @@ export function Configuracoes() {
             </Dialog>
           </TabsContent>
 
-          {/* Integrações */}
-          <TabsContent value="integracoes">
-            <Card>
-              <div className="p-6">
-                <IntegracoesContent />
-              </div>
-            </Card>
+          {/* Dados da Marca e Público — fundido */}
+          <TabsContent value="publico">
+            <div className="space-y-6">
+              <BrandKitContent />
+              <PublicoContent />
+            </div>
           </TabsContent>
 
           {/* FURY Engine */}
@@ -572,18 +543,13 @@ export function Configuracoes() {
             <MetasPage />
           </TabsContent>
 
-          {/* Automação — movido da leftbar para cá */}
+          {/* Automação */}
           <TabsContent value="automacao">
             <Card>
               <div className="p-6">
                 <MinhasRegrasContent />
               </div>
             </Card>
-          </TabsContent>
-
-          {/* Público — público-alvo padrão para campanhas */}
-          <TabsContent value="publico">
-            <PublicoContent />
           </TabsContent>
         </Tabs>
     </AppLayout>

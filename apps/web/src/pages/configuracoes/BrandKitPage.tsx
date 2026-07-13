@@ -39,7 +39,7 @@ export function BrandKitPage() {
   );
 }
 
-function BrandKitContent() {
+export function BrandKitContent() {
   const { brandKit, isLoading } = useBrandKit();
   const saveBrandKit = useSaveBrandKit();
   const uploadLogo = useUploadLogo();
