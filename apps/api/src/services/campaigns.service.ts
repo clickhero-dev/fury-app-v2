@@ -177,8 +177,12 @@ export class CampaignsService {
 
   private handleMetaError(err: unknown): never {
     const metaCode = (err as any).metaCode;
+    const metaSubcode = (err as any).metaSubcode;
     if (metaCode === 190) {
       throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
+    }
+    if (metaCode === 100 && metaSubcode === 1487566) {
+      throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser pausada. Se quiser reativar, duplique a campanha.');
     }
     if (metaCode === 100) {
       throw new AppError(400, 'INVALID_PARAMETER', (err as Error).message);
