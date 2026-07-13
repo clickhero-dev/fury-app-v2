@@ -1,4 +1,5 @@
 import * as nodemailer from 'nodemailer';
+import { otpEmailTemplate, welcomeEmailTemplate, passwordResetConfirmationTemplate } from './email-templates.js';
 
 type EmailTransporter = ReturnType<typeof nodemailer.createTransport>;
 
@@ -55,16 +56,7 @@ async function sendEmail(options: SendEmailOptions): Promise<void> {
 }
 
 export async function sendOtpEmail(to: string, otp: string): Promise<void> {
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #333;">Código de Verificação</h2>
-      <p style="color: #666; font-size: 16px;">Seu código OTP é:</p>
-      <div style="background-color: #f0f0f0; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
-        <span style="font-size: 32px; font-weight: bold; color: #2196F3; letter-spacing: 8px;">${otp}</span>
-      </div>
-      <p style="color: #999; font-size: 14px;">Este código expira em 10 minutos. Não compartilhe este código com ninguém.</p>
-    </div>
-  `;
+  const html = otpEmailTemplate(otp);
 
   await sendEmail({
     to,
@@ -74,21 +66,7 @@ export async function sendOtpEmail(to: string, otp: string): Promise<void> {
 }
 
 export async function sendWelcomeEmail(to: string, name: string): Promise<void> {
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #333;">Bem-vindo ao FURY, ${name}!</h2>
-      <p style="color: #666; font-size: 16px;">Sua conta foi criada com sucesso.</p>
-      <p style="color: #666; font-size: 16px;">
-        Você está pronto para começar a gerenciar suas campanhas de publicidade e potencializar seus resultados com FURY.
-      </p>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${process.env.APP_URL}" style="background-color: #2196F3; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
-          Acessar Dashboard
-        </a>
-      </div>
-      <p style="color: #999; font-size: 14px;">Se você tiver dúvidas, entre em contato conosco.</p>
-    </div>
-  `;
+  const html = welcomeEmailTemplate(name);
 
   await sendEmail({
     to,
@@ -98,21 +76,7 @@ export async function sendWelcomeEmail(to: string, name: string): Promise<void> 
 }
 
 export async function sendPasswordResetConfirmation(to: string): Promise<void> {
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #333;">Sua Senha Foi Redefinida</h2>
-      <p style="color: #666; font-size: 16px;">Sua senha foi alterada com sucesso.</p>
-      <p style="color: #666; font-size: 16px;">
-        Se você não realizou esta mudança, altere sua senha imediatamente acessando sua conta.
-      </p>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${process.env.APP_URL}/login" style="background-color: #2196F3; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
-          Fazer Login
-        </a>
-      </div>
-      <p style="color: #999; font-size: 14px;">Se você tiver dúvidas, entre em contato conosco.</p>
-    </div>
-  `;
+  const html = passwordResetConfirmationTemplate();
 
   await sendEmail({
     to,
