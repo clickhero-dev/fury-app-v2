@@ -229,7 +229,7 @@ export function Configuracoes() {
                       <input
                         type="text"
                         readOnly
-                        value={`${window.location.origin}/l/${meData.tenantCodigo}`}
+                        value={`${window.location.origin}/l/${meData.tenantCodigo || meData.tenantSlug}`}
                         className="flex-1 px-4 py-3 border border-border rounded-lg text-sm text-text-primary bg-surface-secondary focus:outline-none select-all cursor-text"
                         onClick={(e) => (e.target as HTMLInputElement).select()}
                       />
@@ -238,7 +238,7 @@ export function Configuracoes() {
                         size="md"
                         onClick={() => {
                           navigator.clipboard.writeText(
-                            `${window.location.origin}/l/${meData.tenantCodigo}`
+                            `${window.location.origin}/l/${meData.tenantCodigo || meData.tenantSlug}`
                           );
                           showToast('Link copiado!', 'success');
                         }}
@@ -250,7 +250,7 @@ export function Configuracoes() {
                         size="md"
                         onClick={() =>
                           window.open(
-                            `${window.location.origin}/l/${meData.tenantCodigo}`,
+                            `${window.location.origin}/l/${meData.tenantCodigo || meData.tenantSlug}`,
                             '_blank',
                             'noopener'
                           )
