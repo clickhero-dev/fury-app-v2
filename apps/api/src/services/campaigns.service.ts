@@ -240,10 +240,18 @@ export class CampaignsService {
     return campaign;
   }
 
-  private async checkDeletedOnMeta(campaignMeta: Record<string, unknown>, campaignId: string): Promise<boolean> {
+  private async resolveCampaignIds(campaignId: string, tenantId: string): Promise<{ localId: string | null; metaCampaignId: string }> {
+    const byId = await this.repo.findCampaignById(campaignId);
+    if (byId) return { localId: byId.id, metaCampaignId: byId.metaCampaignId };
+    const byMeta = await this.repo.findCampaignByMetaId(tenantId, campaignId);
+    if (byMeta) return { localId: byMeta.id, metaCampaignId: byMeta.metaCampaignId };
+    return { localId: null, metaCampaignId: campaignId };
+  }
+
+  private async checkDeletedOnMeta(campaignMeta: Record<string, unknown>, localId: string | null): Promise<boolean> {
     const metaStatus = campaignMeta.status as string | undefined;
     if (metaStatus === 'DELETED' || metaStatus === 'ARCHIVED') {
-      await this.repo.updateCampaign(campaignId, { status: 'archived' });
+      if (localId) await this.repo.updateCampaign(localId, { status: 'archived' });
       return true;
     }
     return false;
@@ -251,9 +259,10 @@ export class CampaignsService {
 
   async pauseCampaign(args: { tenantId: string; campaignId: string }) {
     const accessToken = await this.getAccessToken(args.tenantId);
+    const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
 
-    const campaignMeta = await this.meta.getCampaign(args.campaignId, accessToken, 'account_id,status');
-    if (await this.checkDeletedOnMeta(campaignMeta, args.campaignId)) {
+    const campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status');
+    if (await this.checkDeletedOnMeta(campaignMeta, localId)) {
       throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser pausada.');
     }
     if (campaignMeta.account_id) {
@@ -265,16 +274,17 @@ export class CampaignsService {
       }
     }
 
-    try { await this.meta.updateCampaign(args.campaignId, accessToken, { status: 'PAUSED' }); }
+    try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'PAUSED' }); }
     catch (err) { this.handleMetaError(err); }
     return { campaignId: args.campaignId, status: 'PAUSED' as const };
   }
 
   async resumeCampaign(args: { tenantId: string; campaignId: string }) {
     const accessToken = await this.getAccessToken(args.tenantId);
+    const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
 
-    const campaignMeta = await this.meta.getCampaign(args.campaignId, accessToken, 'account_id,status');
-    if (await this.checkDeletedOnMeta(campaignMeta, args.campaignId)) {
+    const campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status');
+    if (await this.checkDeletedOnMeta(campaignMeta, localId)) {
       throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser reativada.');
     }
     if (campaignMeta.account_id) {
@@ -286,7 +296,7 @@ export class CampaignsService {
       }
     }
 
-    try { await this.meta.updateCampaign(args.campaignId, accessToken, { status: 'ACTIVE' }); }
+    try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'ACTIVE' }); }
     catch (err) { this.handleMetaError(err); }
     return { campaignId: args.campaignId, status: 'ACTIVE' as const };
   }
