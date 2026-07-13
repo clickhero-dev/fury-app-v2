@@ -3,24 +3,20 @@ import { cn } from '@/lib/utils';
 
 export type ConfiguracoesTab =
   | 'geral'
-  | 'notificacoes'
   | 'seguranca'
   | 'faturamento'
-  | 'fury'
-  | 'brand-kit'
+  | 'publico'
   | 'metas'
   | 'automacao'
   | 'publico';
 
 const TAB_LABELS: { value: ConfiguracoesTab; label: string; to: string }[] = [
   { value: 'geral', label: 'Geral', to: '/configuracoes?tab=geral' },
-  { value: 'notificacoes', label: 'Notificações', to: '/configuracoes?tab=notificacoes' },
   { value: 'seguranca', label: 'Segurança', to: '/configuracoes?tab=seguranca' },
   { value: 'faturamento', label: 'Faturamento', to: '/configuracoes?tab=faturamento' },
   { value: 'publico', label: 'Dados da Marca e Público', to: '/configuracoes?tab=publico' },
   { value: 'metas', label: 'Metas', to: '/configuracoes?tab=metas' },
   { value: 'automacao', label: 'Automação', to: '/configuracoes?tab=automacao' },
-  { value: 'fury', label: 'FURY Engine', to: '/configuracoes?tab=fury' },
 ];
 
 export function ConfiguracoesTabsNav({ activeTab }: { activeTab: ConfiguracoesTab }) {

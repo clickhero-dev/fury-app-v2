@@ -4,8 +4,6 @@ import { useSaveAutomationRules, type AutomationRules } from '@/hooks/useSaveAut
 
 export function RegrasCampanhas() {
   const [rules, setRules] = useState<AutomationRules>({
-    pauseHighCpa: false,
-    pauseHighCpaThreshold: 50,
     pauseLowRoas: true,
     pauseLowRoasThreshold: 1.5,
     pauseNoConversions: true,
@@ -14,7 +12,7 @@ export function RegrasCampanhas() {
 
   const saveRulesMutation = useSaveAutomationRules();
 
-  const handleToggle = (key: 'pauseHighCpa' | 'pauseLowRoas' | 'pauseNoConversions') => {
+  const handleToggle = (key: 'pauseLowRoas' | 'pauseNoConversions') => {
     setRules((prev) => ({
       ...prev,
       [key]: !prev[key],
@@ -49,51 +47,6 @@ export function RegrasCampanhas() {
           title="Regras de Automação"
           description="Configure regras automáticas para gerenciar suas campanhas"
         />
-
-        {/* Pausar com CPA Alto */}
-        <Card>
-          <div className="p-6 space-y-6">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-text-primary">Pausar com CPA Alto</h3>
-                  <p className="text-sm text-text-secondary mt-1">
-                    Pausa automaticamente campanhas quando o custo por aquisição fica muito alto
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleToggle('pauseHighCpa')}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    rules.pauseHighCpa ? 'bg-green-500' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      rules.pauseHighCpa ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-              {rules.pauseHighCpa && (
-                <div className="space-y-3">
-                  <label className="block text-sm font-medium text-text-primary">
-                    Pausar se CPA acima de R$
-                  </label>
-                  <Input
-                    type="number"
-                    value={rules.pauseHighCpaThreshold}
-                    onChange={(e) =>
-                      handleInputChange('pauseHighCpaThreshold', parseFloat(e.target.value))
-                    }
-                    min="1"
-                    step="0.01"
-                    placeholder="50.00"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
 
         {/* Pausar com ROAS Baixo */}
         <Card>

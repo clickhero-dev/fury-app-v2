@@ -6,10 +6,6 @@ import api from '../lib/api';
  * Define quais condições automáticas devem pausar campanhas com baixo desempenho.
  */
 export interface AutomationRules {
-  /** Ativa a regra de pausa por CPA alto. */
-  pauseHighCpa: boolean;
-  /** Valor de CPA (em reais) acima do qual a campanha é pausada automaticamente. */
-  pauseHighCpaThreshold: number;
   /** Ativa a regra de pausa por ROAS baixo. */
   pauseLowRoas: boolean;
   /** Valor de ROAS abaixo do qual a campanha é pausada automaticamente. */
@@ -32,8 +28,6 @@ export interface AutomationRules {
  * const { mutate: saveRules, isPending } = useSaveAutomationRules();
  *
  * saveRules({
- *   pauseHighCpa: true,
- *   pauseHighCpaThreshold: 80,
  *   pauseLowRoas: false,
  *   pauseLowRoasThreshold: 2,
  *   pauseNoConversions: true,

@@ -26,6 +26,7 @@ import { Subscription } from './pages/billing/Subscription';
 import { AssinaturaVencida } from './pages/billing/AssinaturaVencida';
 import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
 import { AdminLogin } from './pages/superadmin/AdminLogin';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { AdminLayout } from './pages/superadmin/AdminLayout';
 import { TenantsPage } from './pages/superadmin/TenantsPage';
 import { TenantDetailPage } from './pages/superadmin/TenantDetailPage';
@@ -163,5 +164,10 @@ export const router = createBrowserRouter([
       { path: 'tenants/:id', element: <TenantDetailPage /> },
       { path: 'planos', element: <PlansPage /> },
     ],
+  },
+  // Catch-all: qualquer rota não definida acima exibe a página 404
+  {
+    path: '*',
+    element: <NotFoundPage />,
   },
 ]);

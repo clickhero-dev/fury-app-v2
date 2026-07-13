@@ -16,7 +16,6 @@ import { usePauseCampaign, getFriendlyPauseError } from '@/hooks/usePauseCampaig
 import type { CampaignData } from '@/types/campaigns';
 import {
   formatConversions,
-  formatCpaBRL,
   formatInvestidoBRL,
   formatRoas,
 } from '@/lib/format-campaign-metrics';
@@ -104,8 +103,7 @@ export function PainelCampanhas() {
     if (filteredCampaigns.length === 0) return null;
     const totalInvestido = filteredCampaigns.reduce((sum, c) => sum + c.investido, 0);
     const totalConversoes = filteredCampaigns.reduce((sum, c) => sum + (c.conversoes ?? 0), 0);
-    const cpaMedia = totalConversoes > 0 ? totalInvestido / totalConversoes : null;
-    return { totalInvestido, totalConversoes, cpaMedia };
+    return { totalInvestido, totalConversoes };
   }, [filteredCampaigns]);
 
   const columns = [
@@ -140,19 +138,6 @@ export function PainelCampanhas() {
       label: 'Retorno sobre Investimento',
       align: 'right' as const,
       render: (value: unknown) => formatRoas(value as number | null),
-    },
-    {
-      key: 'cpa' as const,
-      label: 'Custo por Resultado',
-      align: 'right' as const,
-      render: (value: unknown) => {
-        const cpaValue = value as number | null;
-        return (
-          <span className={cpaValue != null && cpaValue > 60 ? 'text-red-600 font-semibold' : 'text-text-primary'}>
-            {formatCpaBRL(cpaValue)}
-          </span>
-        );
-      },
     },
     {
       key: 'conversoes' as const,
@@ -301,7 +286,7 @@ export function PainelCampanhas() {
 
           {summary && (
             <div className="bg-surface rounded-xl border border-border overflow-hidden">
-              <div className="grid grid-cols-3 divide-x divide-border">
+              <div className="grid grid-cols-2 divide-x divide-border">
                 <div className="px-6 py-4">
                   <p className="text-xs text-text-tertiary uppercase font-semibold tracking-wide">Total investido</p>
                   <p className="text-lg font-bold text-text-primary mt-1">{formatInvestidoBRL(summary.totalInvestido)}</p>
@@ -309,10 +294,6 @@ export function PainelCampanhas() {
                 <div className="px-6 py-4">
                   <p className="text-xs text-text-tertiary uppercase font-semibold tracking-wide">Clientes</p>
                   <p className="text-lg font-bold text-text-primary mt-1">{formatConversions(summary.totalConversoes)}</p>
-                </div>
-                <div className="px-6 py-4">
-                  <p className="text-xs text-text-tertiary uppercase font-semibold tracking-wide">CPA médio</p>
-                  <p className="text-lg font-bold text-text-primary mt-1">{formatCpaBRL(summary.cpaMedia)}</p>
                 </div>
               </div>
             </div>

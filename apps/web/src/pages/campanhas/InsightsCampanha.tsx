@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { ArrowLeft, Loader2, Play, ImageIcon, FilmIcon } from 'lucide-react';
+import { ArrowLeft, Loader2, ImageIcon, FilmIcon } from 'lucide-react';
 import { AppLayout } from '@/components';
 import { useCampaignInsights, type InsightsDateRange, type DailyInsight, type CampaignCreative } from '@/hooks/useCampaignInsights';
 
@@ -38,8 +38,7 @@ function aggregate(ts: DailyInsight[]) {
   const impressions = ts.reduce((s, d) => s + d.impressions, 0);
   const conversions = ts.reduce((s, d) => s + d.conversions, 0);
   const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
-  const cpa = conversions > 0 ? spend / conversions : null;
-  return { spend, clicks, impressions, conversions, ctr, cpa };
+  return { spend, clicks, impressions, conversions, ctr };
 }
 
 // ── Status badge ──────────────────────────────────────────────────────────────
@@ -209,10 +208,8 @@ export function InsightsCampanha() {
         {data && totals && (
           <>
             {/* Metric cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <Card label="Investimento" value={fmtBRL(totals.spend)} />
-              <Card label="Retorno sobre Investimento" value="--" />
-              <Card label="Custo por Resultado" value={totals.cpa != null ? fmtBRL(totals.cpa) : '--'} />
               <Card label="Resultados" value={fmtInt(totals.conversions)} />
               <Card label="Cliques" value={fmtInt(totals.clicks)} />
             </div>
