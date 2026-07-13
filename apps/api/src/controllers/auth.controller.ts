@@ -17,6 +17,7 @@ const updateMeSchema = z.object({
     ageMax: z.number().int().min(18).max(65).optional(),
     gender: z.enum(['all', 'male', 'female']).optional(),
   }).optional(),
+  businessContext: z.string().optional(),
 });
 
 const registerSchema = z.object({

@@ -91,6 +91,7 @@ const STEPS: MigrationStep[] = [
     },
   },
   { tag: '0021_add_tenant_codigo' },
+  { tag: '0022_add_tenant_business_context' },
 ];
 
 async function runMigrate() {

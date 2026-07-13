@@ -248,7 +248,7 @@ export async function logout(userId: string): Promise<void> {
   await revokeRefreshToken(userId);
 }
 
-export async function getMe(userId: string): Promise<UserDTO & { tenantName: string; tenantSlug: string; tenantCodigo: string }> {
+export async function getMe(userId: string): Promise<UserDTO & { tenantName: string; tenantSlug: string; tenantCodigo: string; businessContext: string | null }> {
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
   });
@@ -261,13 +261,13 @@ export async function getMe(userId: string): Promise<UserDTO & { tenantName: str
     where: eq(tenants.id, user.tenantId),
   });
 
-  return { ...userToDTO(user), tenantName: tenant?.name ?? '', tenantSlug: tenant?.slug ?? '', tenantCodigo: tenant?.codigo ?? '' };
+  return { ...userToDTO(user), tenantName: tenant?.name ?? '', tenantSlug: tenant?.slug ?? '', tenantCodigo: tenant?.codigo ?? '', businessContext: tenant?.businessContext ?? null };
 }
 
 export async function updateMe(
   userId: string,
-  data: { name?: string; tenantName?: string; notificationPrefs?: UserDTO['notificationPrefs']; audienceDefaults?: Record<string, unknown> },
-): Promise<UserDTO & { tenantName: string; tenantSlug: string; tenantCodigo: string }> {
+  data: { name?: string; tenantName?: string; notificationPrefs?: UserDTO['notificationPrefs']; audienceDefaults?: Record<string, unknown>; businessContext?: string },
+): Promise<UserDTO & { tenantName: string; tenantSlug: string; tenantCodigo: string; businessContext: string | null }> {
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
   });
@@ -287,6 +287,10 @@ export async function updateMe(
 
   if (data.tenantName !== undefined) {
     await db.update(tenants).set({ name: data.tenantName }).where(eq(tenants.id, user.tenantId));
+  }
+
+  if (data.businessContext !== undefined) {
+    await db.update(tenants).set({ businessContext: data.businessContext || null }).where(eq(tenants.id, user.tenantId));
   }
 
   return getMe(userId);

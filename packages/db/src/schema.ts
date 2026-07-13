@@ -57,6 +57,7 @@ export const tenants = pgTable(
     name: varchar('name', { length: 255 }).notNull(),
     slug: varchar('slug', { length: 255 }).notNull().unique(),
     codigo: varchar('codigo', { length: 20 }).unique(),
+    businessContext: text('business_context'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
