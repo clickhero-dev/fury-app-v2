@@ -1,12 +1,14 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { db, creativeAssets } from '@fury/db';
 import { eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import { openrouterService } from '../services/openrouter.service.js';
-import { saveTemporaryStudioImage } from '../lib/temp-storage.js';
+import { saveTemporaryStudioImage, studioAssetsDir } from '../lib/temp-storage.js';
 import { uploadAsset } from '../services/storage.service.js';
 
 const router = Router();
@@ -89,7 +91,17 @@ async function uploadImageToStorage(base64DataUrl: string): Promise<string> {
       return uploadAsset(buffer, fileName, mimeType);
     }
   }
-  // Fallback to local storage
+  // ponytail: data URL → salva direto, sem fetch (evita cópia extra na memória)
+  if (base64DataUrl.startsWith('data:')) {
+    const match = base64DataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
+    if (match) {
+      const ext = match[1].includes('jpeg') ? 'jpg' : match[1].includes('webp') ? 'webp' : 'png';
+      const fileName = `${randomUUID()}.${ext}`;
+      await writeFile(join(studioAssetsDir, fileName), Buffer.from(match[2], 'base64'));
+      return `https://${process.env.DOMAIN || 'clickhero-fury-api.u7pe19.easypanel.host'}/studio-assets/${fileName}`;
+    }
+  }
+  // Fallback to local storage (fetch remote URL)
   const { fileName } = await saveTemporaryStudioImage(base64DataUrl);
   // Use PUBLIC_BASE_URL or construct from request host
   return `https://${process.env.DOMAIN || 'clickhero-fury-api.u7pe19.easypanel.host'}/studio-assets/${fileName}`;
@@ -140,7 +152,7 @@ router.post('/enhance-prompt', authMiddleware, tenantMiddleware, async (req: Req
       const enhancePrompt = [
         `Você é um especialista em publicidade digital. Melhore o prompt abaixo para gerar um ${typeLabel} profissional.`,
         `Contexto da marca: ${brandContext}`,
-        `Adicione detalhes visuais, iluminação, composição, cores da marca e tom de comunicação.`,
+        `Adicione detalhes visuais, iluminação, composição, cores da marca e tom de comunicação. PRESERVE RIGOROSAMENTE o tema principal do prompt original.`,
         `O prompt melhorado deve ter entre 150 e 400 caracteres e estar em português.`,
         ``,
         `Prompt original: "${body.prompt}"`,
@@ -185,15 +197,17 @@ router.post('/generate-image', authMiddleware, tenantMiddleware, async (req: Req
     const tenantId = (req as any).tenant?.tenantId as string;
     const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.APP_URL || `https://${req.get('host')}`;
 
+    const brand = await getBrandContext(tenantId);
+
     const base64Image = await openrouterService.generateImage({
       model: body.model,
       prompt: body.prompt,
       aspect_ratio: body.aspect_ratio,
       resolution: body.resolution,
+      logoUrl: brand.logoUrl,
     });
 
     const imageUrl = await uploadImageToStorage(base64Image);
-    const brand = await getBrandContext(tenantId);
     const [asset] = await db
       .insert(creativeAssets)
       .values({
@@ -313,25 +327,26 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
     // Enhance the prompt with feedback
     const brand = await getBrandContext(tenantId);
     const enhancePrompt = [
-      `Você é um especialista em publicidade digital.`,
       `Prompt original: "${originalPrompt}"`,
-      `Feedback do usuário: "${body.feedback}"`,
+      `Feedback: "${body.feedback}"`,
       `Marca: ${brand.businessName}.`,
-      brand.voiceTone ? `Tom: ${brand.voiceTone}.` : '',
-      brand.primaryColor ? `Cor primária: ${brand.primaryColor}.` : '',
       ``,
-      `Reescreva o prompt incorporando o feedback, mantendo o contexto da marca.`,
-      `Retorne APENAS o prompt revisado, sem aspas, sem introdução.`,
+      `REGRAS (OBRIGATÓRIO):`,
+      `- Edite APENAS o trecho do prompt que o feedback menciona.`,
+      `- PRESERVE rigorosamente todo o restante (tema, estilo, cores, composição).`,
+      `- NÃO adicione logotipos, NÃO mude o layout, NÃO reescreva frases não mencionadas.`,
+      `- Faça a MENOR alteração possível.`,
+      `Retorne APENAS o prompt editado, sem aspas, sem introdução.`,
     ].filter(Boolean).join('\n');
 
     let newPrompt: string;
     try {
       newPrompt = (await openrouterService.chat(
         [{ role: 'user', content: enhancePrompt }],
-        { temperature: 0.8, max_tokens: 600 },
+        { temperature: 0.1, max_tokens: 800 },
       )).trim();
     } catch {
-      newPrompt = `${originalPrompt}. ${body.feedback}`;
+      newPrompt = `${originalPrompt}. Ajuste: ${body.feedback}`;
     }
 
     // Generate new asset
@@ -372,6 +387,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
     const base64Image = await openrouterService.generateImage({
       model: originalModel,
       prompt: newPrompt,
+      logoUrl: brand.logoUrl,
     });
 
     const imageUrl = await uploadImageToStorage(base64Image);
@@ -399,6 +415,88 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
   } catch (error) {
     if (error instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: error.errors });
     next(error);
+  }
+});
+
+// ─── Regenerate ad preserving original as reference ────────────
+// ponytail: multer diskStorage — mask vai direto pro disco, zero heap
+import multer from 'multer';
+import { tmpdir } from 'node:os';
+import { unlink } from 'node:fs/promises';
+
+const maskUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, tmpdir()),
+    filename: (_req, file, cb) => cb(null, `mask-${randomUUID()}.${file.mimetype.includes('png') ? 'png' : 'jpg'}`),
+  }),
+  limits: { fileSize: 1 * 1024 * 1024 },
+});
+
+router.post('/regenerate-ad', authMiddleware, tenantMiddleware, maskUpload.single('mask'), async (req: Request, res: Response, next: NextFunction) => {
+  const maskFile = (req as any).file as Express.Multer.File | undefined;
+  try {
+    const { assetId, feedback } = req.body as { assetId: string; feedback: string };
+    if (!assetId || !feedback || feedback.length < 3) {
+      return res.status(400).json({ error: 'assetId e feedback são obrigatórios' });
+    }
+    const tenantId = (req as any).tenant?.tenantId as string;
+
+    const asset = await db.query.creativeAssets.findFirst({
+      where: eq(creativeAssets.id, assetId),
+    });
+    if (!asset || asset.tenantId !== tenantId) {
+      return res.status(404).json({ error: 'Asset não encontrado' });
+    }
+
+    let imageUrl: string;
+    let source = 'openrouter-edit-image';
+    if (maskFile?.path) {
+      try {
+        imageUrl = await openrouterService.inpaintImage({
+          imageUrl: asset.url,
+          maskPath: maskFile.path,
+          prompt: feedback,
+        });
+        source = 'openrouter-inpaint';
+      } catch (e) {
+        console.error('[regenerate-ad] inpaint failed, falling back to editImage:', (e as Error).message);
+        imageUrl = await openrouterService.editImage({
+          imageUrl: asset.url,
+          instructions: feedback,
+        });
+        source = 'openrouter-edit-image-fallback';
+      }
+    } else {
+      imageUrl = await openrouterService.editImage({
+        imageUrl: asset.url,
+        instructions: feedback,
+      });
+    }
+
+    const [newAsset] = await db.insert(creativeAssets).values({
+      tenantId,
+      type: 'image',
+      url: imageUrl,
+      complianceStatus: 'pending_compliance',
+      complianceNotes: JSON.stringify({
+        generatedAt: new Date().toISOString(),
+        source,
+        originalAssetId: assetId,
+        feedback,
+      }),
+    }).returning();
+
+    res.json({
+      type: 'image' as const,
+      assetId: newAsset.id,
+      imageUrl,
+      creativeData: { headline: '', primary_text: '', cta: '' },
+    });
+  } catch (error) {
+    next(error);
+  } finally {
+    // ponytail: limpa mask temp
+    if (maskFile?.path) await unlink(maskFile.path).catch(() => {});
   }
 });
 

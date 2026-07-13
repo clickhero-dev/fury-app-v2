@@ -1356,6 +1356,10 @@ export interface CampaignAdItem {
         image_url?: string;
         video_id?: string;
       };
+      photo_data?: {
+        url?: string;
+        caption?: string;
+      };
     };
   };
 }
@@ -1366,7 +1370,7 @@ interface CampaignAdsResponse {
 
 /** Busca os anúncios (ads) de uma campanha com dados do criativo (thumbnail, texto, mídia). */
 export async function getCampaignAds(campaignId: string, accessToken: string): Promise<CampaignAdItem[]> {
-  const fields = 'name,status,creative{thumbnail_url,object_story_spec{link_data{image_url,message,name},video_data{image_url,video_id}}}';
+  const fields = 'name,status,creative{thumbnail_url,object_story_spec{link_data{image_url,message,name},video_data{image_url,video_id},photo_data{url,caption}}}';
   const response = await metaApiCall<CampaignAdsResponse>(
     `/${campaignId}/ads?fields=${fields}&limit=25`,
     accessToken
@@ -1494,4 +1498,22 @@ export async function uploadAdImage(params: {
   // A Meta devolve uma URL CDN no campo `url`. O campo `picture` do criativo
   // exige uma URL valida — hash puro causa erro 100 "picture should represent a valid URL".
   return imageData.url || imageData.hash;
+}
+
+export interface MetaInterestResult {
+  id: string;
+  name: string;
+  audience_size?: number;
+  path?: string[];
+}
+
+interface MetaInterestSearchResponse {
+  data: MetaInterestResult[];
+}
+
+/** Busca interesses do Meta via /search?type=adinterest para detalhamento de público-alvo. */
+export async function searchMetaInterests(query: string, accessToken: string): Promise<MetaInterestResult[]> {
+  const path = `/search?type=adinterest&q=${encodeURIComponent(query)}&limit=10`;
+  const response = await metaApiCall<MetaInterestSearchResponse>(path, accessToken);
+  return (response.data || []).filter((item) => item.id && item.name);
 }

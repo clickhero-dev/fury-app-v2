@@ -1,3 +1,4 @@
+import { createReadStream } from 'node:fs';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 const r2 = new S3Client({
@@ -17,6 +18,17 @@ export async function uploadAsset(buffer: Buffer, fileName: string, mimeType = '
     Bucket: BUCKET,
     Key: fileName,
     Body: buffer,
+    ContentType: mimeType,
+  }));
+
+  return `${PUBLIC_URL}/${fileName}`;
+}
+
+export async function uploadAssetFromPath(filePath: string, fileName: string, mimeType = 'image/png'): Promise<string> {
+  await r2.send(new PutObjectCommand({
+    Bucket: BUCKET,
+    Key: fileName,
+    Body: createReadStream(filePath),
     ContentType: mimeType,
   }));
 

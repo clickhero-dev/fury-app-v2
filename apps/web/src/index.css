@@ -6,6 +6,9 @@
   --color-sidebar: #E8631A;
   --color-sidebar-hover: #D45714;
   --color-sidebar-active: #BF4B10;
+  --color-sidebar-bg: #E8631A;
+  --color-sidebar-text: #ffffff;
+  --color-sidebar-icon: #ffffff;
 
   /* Accent */
   --color-accent: #e8631a;
@@ -39,13 +42,18 @@ html.dark {
   --color-surface-secondary: #252b36;
   --color-background: #141820;
   --color-text-primary: #e4e8f0;
-  --color-text-secondary: #8b96a8;
-  --color-text-tertiary: #6b7785;
+  --color-text-secondary: #9aa8ba;
+  --color-text-tertiary: #8190a3;
   --color-border: #2d3748;
   --color-border-light: #3a4556;
   --color-success-light: #0d2e1a;
   --color-warning-light: #2e2200;
   --color-error-light: #2e0d0d;
+  --color-sidebar-bg: #141820;
+  --color-sidebar-hover: #1c2028;
+  --color-sidebar-active: rgba(232, 99, 26, 0.15);
+  --color-sidebar-text: #e8631a;
+  --color-sidebar-icon: #e8631a;
 }
 
 body {
@@ -89,3 +97,133 @@ p {
   margin: 0;
   color: var(--color-text-secondary);
 }
+
+/* === Global overrides: dark mode === */
+/* Tudo que era branco/cinza claro vira escuro usando as vars do tema */
+html.dark .bg-white,
+html.dark .bg-white\/80,
+html.dark .bg-white\/90 {
+  background-color: var(--color-surface) !important;
+}
+
+html.dark .bg-gray-50,
+html.dark .bg-gray-50\/50 {
+  background-color: var(--color-surface-secondary) !important;
+}
+html.dark .bg-gray-100,
+html.dark .bg-gray-100\/80 {
+  background-color: var(--color-surface-secondary) !important;
+}
+
+html.dark .border-gray-100,
+html.dark .border-gray-200,
+html.dark .border-gray-300 {
+  border-color: var(--color-border) !important;
+}
+html.dark .border-\[#E0E0E0\],
+html.dark .border-\[#E6E8EC\] {
+  border-color: var(--color-border) !important;
+}
+
+html.dark .text-gray-400 {
+  color: var(--color-text-tertiary) !important;
+}
+html.dark .text-gray-500 {
+  color: var(--color-text-secondary) !important;
+}
+html.dark .text-gray-600 {
+  color: var(--color-text-secondary) !important;
+}
+html.dark .text-gray-700 {
+  color: var(--color-text-secondary) !important;
+}
+html.dark .text-gray-900 {
+  color: var(--color-text-primary) !important;
+}
+
+html.dark .bg-\[#FCFCFD\] {
+  background-color: var(--color-surface) !important;
+}
+html.dark .bg-\[#F2F4F7\] {
+  background-color: var(--color-surface-secondary) !important;
+}
+/* Avoid CSS escape issues with \[#...\] by using attribute selector */
+html.dark [class*="bg-[#FFF4ED]"],
+html.dark [class*="bg-[#FFF7F4]"] {
+  background-color: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface)) !important;
+}
+/* Wizard objective/selected cards: orange-50 stays light in dark mode */
+html.dark .bg-orange-50 {
+  background-color: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface)) !important;
+}
+
+/* === Onboarding pages dark mode overrides === */
+/* Text colors used in ConectarMetaPage, MetaAuthorizePage, SelecionarAtivosPage */
+html.dark [class*="text-[#1C1C1E]"] {
+  color: var(--color-text-primary) !important;
+}
+html.dark [class*="text-[#6E7681]"] {
+  color: var(--color-text-secondary) !important;
+}
+html.dark [class*="text-[#9CA3AF]"] {
+  color: var(--color-text-secondary) !important;
+}
+
+/* Background colors */
+html.dark .bg-\[#E5E7EB\] {
+  background-color: var(--color-surface-secondary) !important;
+}
+html.dark .bg-\[#F3F4F6\] {
+  background-color: var(--color-surface-secondary) !important;
+}
+html.dark .bg-\[#D1D5DB\] {
+  background-color: var(--color-text-tertiary) !important;
+}
+html.dark [class*="bg-[#FDDCCC]"] {
+  background-color: color-mix(in srgb, var(--color-accent) 20%, var(--color-surface-secondary)) !important;
+}
+
+/* Border colors */
+html.dark .border-\[#E5E7EB\] {
+  border-color: var(--color-border) !important;
+}
+html.dark .border-\[#F3F4F6\] {
+  border-color: var(--color-border) !important;
+}
+html.dark .border-\[#FDDCCC\] {
+  border-color: color-mix(in srgb, var(--color-accent) 30%, var(--color-border)) !important;
+}
+/* === Status colors (green/red) in dark mode === */
+html.dark .bg-green-50 {
+  background-color: color-mix(in srgb, var(--color-success) 15%, var(--color-surface)) !important;
+}
+html.dark .border-green-200 {
+  border-color: color-mix(in srgb, var(--color-success) 30%, var(--color-border)) !important;
+}
+html.dark .text-green-500 {
+  color: #3fb950 !important;
+}
+html.dark .text-green-700 {
+  color: #3fb950 !important;
+}
+html.dark .text-red-500 {
+  color: #f85149 !important;
+}
+html.dark .text-red-600 {
+  color: #f85149 !important;
+}
+
+/* === CheckboxCard accent colors (SelecionarAtivosPage) === */
+html.dark [class*="border-[#D1D5DB]"] {
+  border-color: var(--color-border) !important;
+}
+html.dark [class*="border-[#EA580C]"] {
+  border-color: var(--color-accent) !important;
+}
+html.dark [class*="bg-[#EA580C]"] {
+  background-color: var(--color-accent) !important;
+}
+html.dark [class*="text-[#EA580C]"] {
+  color: var(--color-accent-light) !important;
+}
+

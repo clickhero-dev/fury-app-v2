@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Loader2, MapPin } from 'lucide-react';
+import { Loader2, MapPin, X } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useMetaLocations } from '../hooks/useMetaLocations';
+import { useMetaInterests } from '../hooks/useMetaInterests';
 import { useMetaPageWhatsappNumbers } from '../hooks/useMetaPages';
 import { useMetaAssetSelection } from '../hooks/useMetaAssetSelection';
 import {
@@ -248,7 +249,10 @@ const GENDER_OPTIONS: { value: WizardGender; label: string }[] = [
 export function Step3Audience({ value, onChange, objective, whatsapp, onWhatsappChange }: Step3AudienceProps) {
   const [cityQuery, setCityQuery] = useState(value.city);
   const [showDropdown, setShowDropdown] = useState(false);
-  const { locations, isLoading } = useMetaLocations(cityQuery);
+  const [interestQuery, setInterestQuery] = useState('');
+  const [showInterestDropdown, setShowInterestDropdown] = useState(false);
+  const { locations, isLoading: locationsLoading } = useMetaLocations(cityQuery);
+  const { interests, isLoading: interestsLoading } = useMetaInterests(interestQuery);
 
   function handleSelectLocation(location: { key: string; name: string; region?: string }) {
     const label = location.region ? `${location.name}, ${location.region}` : location.name;
@@ -285,7 +289,7 @@ export function Step3Audience({ value, onChange, objective, whatsapp, onWhatsapp
             placeholder="Digite o nome da cidade"
             className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20"
           />
-          {isLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
+          {locationsLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
         </div>
 
         {showDropdown && locations.length > 0 && (
@@ -358,6 +362,75 @@ export function Step3Audience({ value, onChange, objective, whatsapp, onWhatsapp
           ))}
         </div>
       </div>
+
+      {/* Interesses (detalhamento de público) */}
+      <div>
+        <label className="text-sm font-bold text-gray-900 mb-1 block">Interesses</label>
+        <p className="text-xs text-gray-500 mb-2">Adicione interesses para segmentar o público (ex: vagas de emprego, moda)</p>
+
+        {value.audienceInterests.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {value.audienceInterests.map((interest) => (
+              <span
+                key={interest.id}
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-orange-50 text-[#E8631A] text-sm rounded-full border border-[#E8631A]/20"
+              >
+                {interest.name}
+                <button
+                  type="button"
+                  onClick={() => onChange({ audienceInterests: value.audienceInterests.filter((i) => i.id !== interest.id) })}
+                  className="hover:text-red-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="relative">
+          <input
+            type="text"
+            value={interestQuery}
+            onChange={(e) => {
+              setInterestQuery(e.target.value);
+              setShowInterestDropdown(true);
+            }}
+            onFocus={() => setShowInterestDropdown(true)}
+            onBlur={() => setTimeout(() => setShowInterestDropdown(false), 150)}
+            placeholder="Digite para buscar interesses..."
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20"
+          />
+          {interestsLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
+
+          {showInterestDropdown && interests.length > 0 && (
+            <div className="absolute z-10 mt-1 left-0 right-0 top-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+            {interests.map((interest) => {
+              const alreadySelected = value.audienceInterests.some((i) => i.id === interest.id);
+              return (
+                <button
+                  key={interest.id}
+                  type="button"
+                  disabled={alreadySelected}
+                  onMouseDown={() => {
+                    if (!alreadySelected) {
+                      onChange({ audienceInterests: [...value.audienceInterests, { id: interest.id, name: interest.name }] });
+                      setInterestQuery('');
+                    }
+                  }}
+                  className={`w-full text-left px-4 py-2 hover:bg-orange-50 text-sm ${
+                    alreadySelected ? 'text-gray-300 cursor-not-allowed' : 'text-gray-900'
+                  }`}
+                >
+                  {interest.name}
+                  {interest.path?.length ? <span className="text-gray-400 ml-1">— {interest.path.slice(-2).join(' > ')}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
+  </div>
   );
 }

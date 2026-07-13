@@ -132,10 +132,14 @@ export async function getRankedInstagramPosts(
     }
 
     const media = await getInstagramMedia(igUserId, accessToken);
-    console.log("Getting media ", media.length);
+
+    // Filtra apenas tipos de midia com imagem exibivel (imagens diretas e
+    // albuns de carrossel). Videos/Reels nao tem `media_url` estatica e a
+    // thumbnail usada como fallback nao representa o post real.
+    const imageMedia = media.filter((item) => item.media_type === 'IMAGE' || item.media_type === 'CAROUSEL_ALBUM');
 
     const posts = await Promise.all(
-      media.map(async (item) => {
+      imageMedia.map(async (item) => {
         const insights = await getInstagramMediaInsights(item.id, accessToken, item.media_product_type);
         const likeCount = item.like_count ?? 0;
         const commentsCount = item.comments_count ?? 0;

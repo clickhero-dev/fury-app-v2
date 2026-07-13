@@ -115,6 +115,7 @@ export interface RenderCreativePayload {
   cta: string;
   brandColor: string;
   imageUrl: string;
+  includeLogo?: boolean;
 }
 
 /** Resposta da API após renderização de criativo. */

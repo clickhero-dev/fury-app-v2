@@ -11,6 +11,8 @@ import {
   publishStudioAssetToMeta,
 } from '../services/studio-image.service.js';
 import { renderCreative as renderCreativeService } from '../services/studio-render.service.js';
+import { db, brandKits } from '@fury/db';
+import { eq } from 'drizzle-orm';
 
 const generateImageSchema = z.object({
   prompt: z.string().min(10, 'Prompt deve ter no minimo 10 caracteres').max(1000, 'Prompt deve ter no maximo 1000 caracteres').optional(),
@@ -134,6 +136,7 @@ const renderCreativeSchema = z.object({
   cta: z.string().min(1, 'CTA é obrigatório').max(40, 'Máximo 40 caracteres'),
   brandColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Cor inválida (use #RRGGBB)').default('#E8631A'),
   imageUrl: z.string().min(1, 'Imagem do produto é obrigatória'),
+  includeLogo: z.boolean().optional().default(true),
 });
 
 export async function renderCreative(req: Request, res: Response, next: NextFunction) {
@@ -143,12 +146,20 @@ export async function renderCreative(req: Request, res: Response, next: NextFunc
     }
 
     const body = renderCreativeSchema.parse(req.body);
+
+    let logoUrl: string | undefined;
+    if (body.includeLogo) {
+      const brandKit = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, req.tenant.tenantId) });
+      logoUrl = brandKit?.logoUrl ?? undefined;
+    }
+
     const result = await renderCreativeService({
       tenantId: req.tenant.tenantId,
       headline: body.headline,
       cta: body.cta,
       brandColor: body.brandColor,
       imageUrl: body.imageUrl,
+      logoUrl,
     });
 
     return res.status(200).json(result);

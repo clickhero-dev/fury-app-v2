@@ -28,7 +28,7 @@ const TEMPLATES: StudioTemplate[] = [
     id: 'ecommerce',
     label: 'E-commerce',
     niche: 'ecommerce',
-    prompt: 'Criativo para loja online de produto em destaque, composição limpa, foco no benefício principal e call-to-action visual.',
+    prompt: 'Anúncio para loja online de produto em destaque, composição limpa, foco no benefício principal e call-to-action visual.',
   },
   {
     id: 'saas',
@@ -223,16 +223,16 @@ export function CreativeStudio() {
       <div className="space-y-8 bg-[radial-gradient(circle_at_top_right,_rgba(232,99,26,0.08),_transparent_30%),radial-gradient(circle_at_bottom_left,_rgba(0,0,0,0.04),_transparent_25%)]">
         <PageHeader
           title="Creative Studio"
-          description="FURY gera criativos com IA via OpenRouter — escolha entre 3 modelos de imagem e 3 de vídeo."
+          description="FURY gera anúncios com IA via OpenRouter"
           actions={<StatusBadge status={complianceStatus} />}
         />
 
         <div className="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-6">
           <Card className="overflow-hidden border-[#E6E8EC] shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
             <CardContent className="space-y-6">
-              {/* Seletor de tipo de criativo */}
+              {/* Seletor de tipo de anúncio */}
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Tipo de criativo</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Tipo de anúncio</p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setCreativeType('image')}
@@ -359,7 +359,7 @@ export function CreativeStudio() {
               <div className="rounded-2xl bg-[#FFF7F2] p-4 text-sm text-[#7A4A27]">
                 <div className="flex items-start gap-3">
                   <Sparkles className="mt-0.5 h-4 w-4 text-[#E8631A]" />
-                  <p>Use um prompt específico com produto, cenário e objetivo. Quanto mais detalhado, melhor o resultado e a análise de compliance.</p>
+                  <p>Descreva detalhadamente seu produto, cenário e objetivo. Quanto mais específico, melhor o resultado.</p>
                 </div>
               </div>
 
@@ -418,7 +418,7 @@ export function CreativeStudio() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Preview</p>
-                  <h2 className="text-2xl font-bold text-[#101828]">Criativo gerado</h2>
+                  <h2 className="text-2xl font-bold text-[#101828]">Anúncio gerado</h2>
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={complianceStatus} />
@@ -434,7 +434,7 @@ export function CreativeStudio() {
                     <Sparkles className="h-7 w-7" />
                   </div>
                   <h3 className="mt-4 text-xl font-semibold text-[#101828]">Pronto para gerar</h3>
-                  <p className="mt-2 max-w-md text-sm text-[#667085]">Escolha um modelo, um template ou escreva um prompt detalhado. O preview, o status de compliance e a publicação aparecem aqui.</p>
+                   <p className="mt-2 max-w-md text-sm text-[#667085]">Escolha um modelo, um template ou escreva uma explicação detalhada. O preview, o status de compliance e a publicação aparecem aqui.</p>
                 </div>
               )}
 
@@ -473,13 +473,13 @@ export function CreativeStudio() {
                       ) : generatedUrl ? (
                         <img
                           src={generatedUrl}
-                          alt="Preview do criativo"
+                          alt="Preview do anúncio"
                           className="h-full w-full object-cover"
                         />
                       ) : (
                         <img
                           src={currentCompliance.imageUrl}
-                          alt="Preview do criativo"
+                          alt="Preview do anúncio"
                           className="h-full w-full object-cover"
                         />
                       )}
@@ -492,7 +492,7 @@ export function CreativeStudio() {
 
                   <div className="grid gap-4 md:grid-cols-3">
                     <div className="rounded-2xl bg-[#FCFCFD] p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-[#667085]">Prompt</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[#667085]">Explicação detalhada sobre seu anúncio</p>
                       <p className="mt-2 text-sm text-[#101828]">{prompt}</p>
                     </div>
                     <div className="rounded-2xl bg-[#FCFCFD] p-4">
@@ -511,7 +511,7 @@ export function CreativeStudio() {
                     <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
                       <div className="flex items-center gap-2 text-sm font-semibold text-red-700">
                         <AlertCircle className="h-4 w-4" />
-                        Por que o criativo foi reprovado
+                        Por que o anúncio foi reprovado
                       </div>
                       <ul className="mt-3 space-y-2 text-sm text-red-700">
                         {currentCompliance.issues.map((issue) => (

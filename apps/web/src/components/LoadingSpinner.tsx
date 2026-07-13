@@ -50,7 +50,7 @@ export function LoadingSpinner({ size = 'md', fullPage = false }: LoadingSpinner
 
   if (fullPage) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-white/80 z-50">
+      <div className="fixed inset-0 flex items-center justify-center bg-background/80 z-50">
         {spinner}
       </div>
     );

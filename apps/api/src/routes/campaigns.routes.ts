@@ -15,7 +15,8 @@ import {
   mcpLogWizardHandler,
   searchMetaLocationsHandler,
   uploadWizardCreativeHandler,
-  createWizardCampaignDiagHandler
+  createWizardCampaignDiagHandler,
+  searchMetaInterestsHandler
 } from '../controllers/campaigns.controller.js';
 
 const router = Router();
@@ -40,6 +41,7 @@ router.post('/mcp-log', mcpLogWizardHandler);
 router.get('/create-wizard-diag', createWizardCampaignDiagHandler);
 router.post('/upload-creative', creativeUpload.single('file'), uploadWizardCreativeHandler);
 router.get('/meta-locations', searchMetaLocationsHandler);
+router.get('/meta-interests', searchMetaInterestsHandler);
 
 // Specific sub-resource routes before generic /:id to avoid Express matching /:id first
 router.patch('/:id/pause', pauseCampaignHandler);

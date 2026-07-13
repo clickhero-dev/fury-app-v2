@@ -14,6 +14,7 @@ import { studioCopyService } from '../services/studio-copy.service.js';
 import { deepseekService } from '../services/deepseek.service.js';
 import { buildCreativePrompt, buildRegeneratePrompt, buildValidationPrompt, type CreativeContext } from '../prompts/creative-studio.prompt.js';
 import { convertHTMLToPNG, type BrandColors } from '../services/html-to-png.service.js';
+import { sanitizeTypos } from '../utils/sanitize-typos.js';
 import type { CreativeData } from '../services/creative-data.js';
 import { selectLayout } from '../services/layout-selector.service.js';
 import type { CreativeLayout } from '@fury/shared';
@@ -504,6 +505,18 @@ router.post('/creative/generate', authMiddleware, tenantMiddleware, async (req: 
       confidence: layoutResult.confidence,
       justification: layoutResult.justification,
     });
+    if (result.creativeData) {
+      result.creativeData.headline = sanitizeTypos(result.creativeData.headline);
+      result.creativeData.subheadline = result.creativeData.subheadline ? sanitizeTypos(result.creativeData.subheadline) : undefined;
+      result.creativeData.qualifier = result.creativeData.qualifier ? sanitizeTypos(result.creativeData.qualifier) : undefined;
+      result.creativeData.offer_text = result.creativeData.offer_text ? sanitizeTypos(result.creativeData.offer_text) : undefined;
+      result.creativeData.subtitle = result.creativeData.subtitle ? sanitizeTypos(result.creativeData.subtitle) : undefined;
+      result.creativeData.subtitle_highlight = result.creativeData.subtitle_highlight ? sanitizeTypos(result.creativeData.subtitle_highlight) : undefined;
+      result.creativeData.cta = result.creativeData.cta ? sanitizeTypos(result.creativeData.cta) : undefined;
+      if (result.creativeData.benefits) {
+        result.creativeData.benefits = result.creativeData.benefits.map(b => sanitizeTypos(b));
+      }
+    }
     return res.status(201).json(result);
   } catch (err) {
     if (err instanceof z.ZodError) return res.status(400).json({ error: 'Validation error', details: err.errors });
@@ -526,9 +539,64 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
     }
 
     let savedContext: CreativeContext | undefined;
+    let savedCreativeData: Record<string, unknown> | undefined;
     try {
       const meta = JSON.parse(asset.complianceNotes ?? '{}');
       savedContext = meta.context as CreativeContext;
+      savedCreativeData = meta as Record<string, unknown>;
+
+      // Detecta feedback de correção simples: "corrigir 'X' para 'Y'" ou "trocar X por Y"
+      const simpleFixMatch = feedback.match(
+        /(?:corrigir|trocar|substituir|alterar)\s+['"](.+)['"]\s+(?:para|por)\s+['"](.+)['"]/i,
+      );
+      if (simpleFixMatch) {
+        const [, oldText, newText] = simpleFixMatch;
+        let modified = false;
+        const fields = ['headline', 'subheadline', 'qualifier', 'offer_text', 'subtitle', 'subtitle_highlight', 'cta'];
+        for (const field of fields) {
+          const val = savedCreativeData[field];
+          if (typeof val === 'string' && val.includes(oldText)) {
+            savedCreativeData[field] = val.replace(new RegExp(oldText, 'g'), newText);
+            modified = true;
+          }
+        }
+        if (savedCreativeData.benefits && Array.isArray(savedCreativeData.benefits)) {
+          savedCreativeData.benefits = savedCreativeData.benefits.map((b: unknown) =>
+            typeof b === 'string' ? b.replace(new RegExp(oldText, 'g'), newText) : b,
+          );
+          modified = true;
+        }
+        if (modified) {
+          const brandKitContext = await getBrandKitContext(tenantId);
+          const creativeData: CreativeData = {
+            layout: savedContext.layout || 'offer_burst',
+            headline: String(savedCreativeData.headline || ''),
+            subheadline: savedCreativeData.subheadline as string | undefined,
+            qualifier: savedCreativeData.qualifier as string | undefined,
+            offer_text: savedCreativeData.offer_text as string | undefined,
+            subtitle: savedCreativeData.subtitle as string | undefined,
+            subtitle_highlight: savedCreativeData.subtitle_highlight as string | undefined,
+            benefits: Array.isArray(savedCreativeData.benefits) ? savedCreativeData.benefits as string[] : undefined,
+            cta: savedCreativeData.cta as string | undefined,
+            businessName: savedContext.businessName,
+            includeLogo: true,
+            brand_colors: {
+              primary: brandKitContext.colors?.primary || '#EA580C',
+              accent: brandKitContext.colors?.secondary || undefined,
+            },
+          };
+          const pngBuffer = await convertHTMLToPNG(creativeData, brandKitContext.colors);
+          let imageUrl: string;
+          if (process.env.R2_ENDPOINT && process.env.R2_PUBLIC_URL) {
+            const fileName = `${randomUUID()}.png`;
+            imageUrl = await uploadAsset(pngBuffer, fileName);
+          } else {
+            const { fileName } = await savePNG(pngBuffer);
+            imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
+          }
+          return res.json({ creativeData, imageUrl, fixType: 'direct_replace' });
+        }
+      }
     } catch {
       // context not recoverable
     }
@@ -543,9 +611,19 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
       savedContext.layout = 'offer_burst';
     }
 
-    const prompt = buildRegeneratePrompt(savedContext, feedback);
+    const prompt = buildRegeneratePrompt(savedContext, feedback, savedCreativeData as Record<string, string | string[] | undefined>);
     const raw = await deepseekService.chat([{ role: 'user', content: prompt }], { temperature: 0.9 });
     const copy = parseCreativeJSON(raw);
+    if (copy.headline) copy.headline = sanitizeTypos(copy.headline);
+    if (copy.subheadline) copy.subheadline = sanitizeTypos(copy.subheadline);
+    if (copy.qualifier) copy.qualifier = sanitizeTypos(copy.qualifier);
+    if (copy.offer_text) copy.offer_text = sanitizeTypos(copy.offer_text);
+    if (copy.subtitle) copy.subtitle = sanitizeTypos(copy.subtitle);
+    if (copy.subtitle_highlight) copy.subtitle_highlight = sanitizeTypos(copy.subtitle_highlight);
+    if (copy.cta) copy.cta = sanitizeTypos(copy.cta);
+    if (copy.benefits && Array.isArray(copy.benefits)) {
+      copy.benefits = copy.benefits.map((b: string) => sanitizeTypos(b));
+    }
 
     const brandKitContext = await getBrandKitContext(tenantId);
 

@@ -9,7 +9,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../lib/locations-cache.js';
 import { getResolvedTenantAssetSelection } from './meta.service.js';
-import { getCampaignAds } from '../lib/meta-api.js';
+import { getCampaignAds, searchMetaInterests as searchMetaInterestsLib } from '../lib/meta-api.js';
 import type { IMetaCampaignProvider } from '../lib/providers/meta-campaign.provider.js';
 import type {
   ICampaignRepository,
@@ -56,6 +56,7 @@ export interface CreateWizardCampaignArgs {
   whatsappPhoneNumberId?: string; whatsappPhoneNumber?: string;
   destinations?: WizardMessagingDestination[]; instagramUserId?: string;
   instagramUsername?: string;
+  audienceInterests?: { id: string; name: string }[];
 }
 
 export interface CreateWizardCampaignResult {
@@ -448,19 +449,47 @@ export class CampaignsService {
           const c = ad.creative;
           const linkData = c?.object_story_spec?.link_data;
           const videoData = c?.object_story_spec?.video_data;
+          const photoData = c?.object_story_spec?.photo_data;
           return {
             id: ad.id,
             name: ad.name,
             status: ad.status,
             thumbnailUrl: c?.thumbnail_url,
-            imageUrl: linkData?.image_url ?? videoData?.image_url,
+            imageUrl: linkData?.image_url ?? videoData?.image_url ?? photoData?.url,
             headline: linkData?.name,
-            primaryText: linkData?.message,
+            primaryText: linkData?.message ?? photoData?.caption,
             isVideo: !!videoData?.video_id,
           };
         });
       } catch {
         console.warn('[getCampaignInsights] Failed to fetch creatives for campaign', args.campaignId);
+      }
+
+      // fallback: se Meta não retornou criativos, busca do banco local
+      if (creatives.length === 0 && dbCampaign) {
+        const budget = dbCampaign.budget as Record<string, unknown> | null | undefined;
+        const localImageUrl = budget?.creative_image_url as string | undefined;
+        const localAssetId = budget?.creative_asset_id as string | undefined;
+
+        let resolvedUrl = localImageUrl;
+        if (localAssetId && !resolvedUrl) {
+          try {
+            const asset = await this.repo.findCreativeAsset(localAssetId, args.tenantId);
+            if (asset) resolvedUrl = asset.url;
+          } catch { /* silêncio */ }
+        }
+
+        if (resolvedUrl) {
+          creatives.push({
+            id: `local-${dbCampaign.id}`,
+            name: dbCampaign.name,
+            status: campaignBlock.status,
+            imageUrl: resolvedUrl,
+            headline: budget?.creative_headline as string | undefined,
+            primaryText: budget?.creative_primary_text as string | undefined,
+            isVideo: false,
+          });
+        }
       }
 
       return { campaign: campaignBlock, timeseries, creatives };
@@ -587,6 +616,10 @@ export class CampaignsService {
         targeting_automation: { advantage_audience: 0 },
       };
 
+      if (args.audienceInterests && args.audienceInterests.length > 0) {
+        targeting.flexible_spec = [{ interests: args.audienceInterests }];
+      }
+
       const adSetBody: Record<string, unknown> = {
         name: `AdSet — ${args.locationCity} — FURY`, campaign_id: metaCampaignId,
         daily_budget: Math.round(args.dailyBudgetBrl * 100),
@@ -636,6 +669,10 @@ export class CampaignsService {
         daily_budget: Math.round(args.dailyBudgetBrl * 100), objective: objectiveConfig.metaObjective,
         created_via: 'wizard', ad_set_id: adSetId, ad_creative_id: adCreativeId, ad_id: metaAdId,
         duration_days: args.durationDays ?? null,
+        creative_asset_id: args.creativeAssetId ?? null,
+        creative_image_url: imageUrl ?? null,
+        creative_headline: args.headline ?? null,
+        creative_primary_text: args.primaryText ?? null,
         ...(args.objective === 'whatsapp' ? {
           destinations: messagingDestinations, destination_type: messagingDestinationType,
           whatsapp_page_id: args.whatsappPageId, whatsapp_page_name: args.whatsappPageName ?? null,
@@ -663,6 +700,14 @@ export class CampaignsService {
     catch (err) { mapWizardMetaError(err, 'location_search'); }
 
     await this.deps.setMetaLocationsCache(args.query, results);
+    return results;
+  }
+
+  async searchMetaInterests(args: { tenantId: string; query: string }): Promise<any[]> {
+    const accessToken = await this.getAccessToken(args.tenantId);
+    let results: any[];
+    try { results = await searchMetaInterestsLib(args.query, accessToken); }
+    catch (err) { return []; }
     return results;
   }
 }
@@ -697,3 +742,4 @@ export const softDeleteCampaign = (args: Parameters<CampaignsService['softDelete
 export const getCampaignInsights = (args: Parameters<CampaignsService['getCampaignInsights']>[0]) => defaultService.getCampaignInsights(args);
 export const createCampaignFromWizard = (args: Parameters<CampaignsService['createCampaignFromWizard']>[0]) => defaultService.createCampaignFromWizard(args);
 export const searchMetaLocations = (args: Parameters<CampaignsService['searchMetaLocations']>[0]) => defaultService.searchMetaLocations(args);
+export const searchMetaInterests = (args: Parameters<CampaignsService['searchMetaInterests']>[0]) => defaultService.searchMetaInterests(args);

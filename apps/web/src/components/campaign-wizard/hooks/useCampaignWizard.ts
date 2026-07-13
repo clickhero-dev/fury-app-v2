@@ -17,6 +17,7 @@ function createInitialState(preSelectedAssetId?: string): WizardState {
       ageMin: 18,
       ageMax: 65,
       gender: 'all',
+      audienceInterests: [],
     },
     budget: {
       dailyBudgetBrl: 20,

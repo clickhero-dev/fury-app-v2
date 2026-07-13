@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, CheckCircle2, XCircle, ArrowLeft, Upload, ImageIcon, Save } from 'lucide-react';
 import { AppLayout, PageHeader, Button, Card } from '@/components';
 import api from '@/lib/api';
+import { useBrandKit } from '@/hooks/useBrandKit';
 import type {
   RenderCreativePayload,
   RenderCreativeResponse,
@@ -87,7 +88,7 @@ function CreativePreview({
 }) {
   return (
     <div className="relative" style={{ aspectRatio: '1/1' }}>
-      <img src={imageUrl} alt="Criativo gerado" className="w-full h-full block object-cover" />
+      <img src={imageUrl} alt="Anúncio gerado" className="w-full h-full block object-cover" />
       {/* Headline — vertically centered in the brand strip above the CTA pill */}
       <div
         className="absolute inset-x-0 flex items-center justify-center px-8 pointer-events-none"
@@ -132,6 +133,9 @@ export function GeradorImagem() {
   const [headline, setHeadline] = useState('');
   const [cta, setCta] = useState('Saiba mais');
   const [brandColor, setBrandColor] = useState('#E8631A');
+  const [includeLogo, setIncludeLogo] = useState(true);
+
+  const { brandKit, isLoading: brandKitLoading } = useBrandKit();
 
   // Result state
   const [creativeAssetId, setCreativeAssetId] = useState<string | null>(null);
@@ -217,6 +221,7 @@ export function GeradorImagem() {
       cta: cta.trim(),
       brandColor,
       imageUrl: productImageDataUrl!,
+      includeLogo,
     });
   }
 
@@ -245,14 +250,14 @@ export function GeradorImagem() {
             Voltar
           </button>
           <span className="text-border">·</span>
-          <h2 className="text-lg font-bold text-text-primary">Gerar Novo Criativo</h2>
+          <h2 className="text-lg font-bold text-text-primary">Gerar Novo Anúncio</h2>
         </div>
       }
     >
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <PageHeader
-            title="Gerador de Criativos com IA"
+            title="Gerador de Anúncios com IA"
             description="Monte seu anúncio em 3 passos: foto, texto e publicação"
           />
           <StepIndicator step={step} />
@@ -395,6 +400,20 @@ export function GeradorImagem() {
                     </div>
                   </div>
 
+                  {brandKit?.logo_url && (
+                    <label className="flex items-center gap-3 pt-1 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={includeLogo}
+                        onChange={(e) => setIncludeLogo(e.target.checked)}
+                        className="w-4 h-4 rounded border-border text-[#E8631A] focus:ring-[#E8631A]/30 accent-[#E8631A]"
+                      />
+                      <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">
+                        Incluir logo da empresa no anúncio
+                      </span>
+                    </label>
+                  )}
+
                   <div className="pt-2">
                     <Button
                       type="button"
@@ -405,7 +424,7 @@ export function GeradorImagem() {
                       {renderMutation.isPending ? (
                         <span className="inline-flex items-center gap-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          Montando criativo...
+                          Montando anúncio...
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-2">
@@ -416,7 +435,7 @@ export function GeradorImagem() {
                     </Button>
                     {renderMutation.isError && (
                       <p className="text-xs text-red-500 mt-2 text-center">
-                        Erro ao montar criativo. Verifique a imagem e tente novamente.
+                        Erro ao montar anúncio. Verifique a imagem e tente novamente.
                       </p>
                     )}
                   </div>
@@ -435,7 +454,7 @@ export function GeradorImagem() {
               </div>
               <div className="p-6 space-y-4">
                 <div>
-                  <p className="text-sm font-semibold text-text-primary mb-1">Preview do seu criativo</p>
+                  <p className="text-sm font-semibold text-text-primary mb-1">Preview do seu anúncio</p>
                   <p className="text-xs text-text-secondary">
                     Antes de salvar, verificamos o compliance com as políticas do Meta.
                   </p>
@@ -486,14 +505,14 @@ export function GeradorImagem() {
                   <div className="space-y-4">
                     <div className="flex items-start gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-3 rounded-lg">
                       <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                      <span>Criativo salvo na biblioteca! Você pode usá-lo ao criar uma campanha.</span>
+                      <span>Anúncio salvo na biblioteca! Você pode usá-lo ao criar uma campanha.</span>
                     </div>
                     <div className="flex gap-3">
                       <Button type="button" variant="outline" onClick={() => navigate('/estudio')} className="flex-1">
                         Ver biblioteca
                       </Button>
                       <Button type="button" variant="outline" onClick={handleReset} className="flex-1">
-                        Criar novo criativo
+                        Criar novo anúncio
                       </Button>
                     </div>
                   </div>
