@@ -2,6 +2,9 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { db } from "../lib/db.js";
 import { sql } from "drizzle-orm";
+import { getRedis } from "../lib/redis.js";
+
+const CACHE_TTL = 60; // 60 seconds for observability KPIs
 
 const router = Router();
 
