@@ -40,6 +40,9 @@ export function getFriendlyPauseError(err: unknown): string {
     if (code === 'META_TOKEN_EXPIRED') {
       return 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações.';
     }
+    if (code === 'CAMPAIGN_DELETED') {
+      return message || 'Esta campanha foi excluída no Meta. Atualize a página para ver o status correto.';
+    }
     if (code === 'META_CONNECTION_NOT_FOUND') {
       return 'Conta Meta não conectada. Acesse Configurações > Integrações.';
     }

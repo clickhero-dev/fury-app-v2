@@ -410,8 +410,13 @@ export class CampaignsService {
     const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
     const accessToken = await this.getAccessToken(args.tenantId);
 
-    try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, { status: 'ARCHIVED' }); }
-    catch (err) { this.handleMetaError(err); }
+    // Check if already deleted on Meta before calling update
+    const campaignMeta = await this.meta.getCampaign(campaign.metaCampaignId, accessToken, 'status');
+    const metaStatus = campaignMeta?.status as string | undefined;
+    if (metaStatus !== 'DELETED' && metaStatus !== 'ARCHIVED') {
+      try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, { status: 'ARCHIVED' }); }
+      catch (err) { this.handleMetaError(err); }
+    }
 
     const deleted = await this.repo.updateCampaign(args.campaignId, { status: 'archived' } as any);
 
