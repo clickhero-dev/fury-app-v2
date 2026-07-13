@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Check, ImagePlus, Loader2, UploadCloud } from 'lucide-react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Check, ImagePlus, Loader2, Sparkles, UploadCloud } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
@@ -38,6 +38,16 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
       }
     }
   }, [canUseInstagramPost, tab, value.instagramMediaId, onChange]);
+
+  const suggestMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post('/campaigns/suggest-text');
+      return res.data.data as { headline: string; primaryText: string };
+    },
+    onSuccess: (data) => {
+      onChange({ headline: data.headline, primaryText: data.primaryText });
+    },
+  });
 
   const { data, isLoading } = useQuery<StudioAssetResponse>({
     queryKey: ['studio/assets'],
@@ -197,7 +207,19 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-sm font-bold text-gray-900">Título do anúncio</label>
-            <span className="text-xs text-gray-400">{value.headline.length}/40</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => suggestMutation.mutate()}
+                disabled={suggestMutation.isPending}
+                className="inline-flex items-center gap-1 text-xs font-medium text-[#E8631A] hover:text-[#D4550F] disabled:opacity-50 transition-colors"
+                title="Sugerir com IA"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                {suggestMutation.isPending ? 'Gerando...' : 'Sugestão IA'}
+              </button>
+              <span className="text-xs text-gray-400">{value.headline.length}/40</span>
+            </div>
           </div>
           <input
             type="text"

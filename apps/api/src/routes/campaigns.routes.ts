@@ -16,7 +16,8 @@ import {
   searchMetaLocationsHandler,
   uploadWizardCreativeHandler,
   createWizardCampaignDiagHandler,
-  searchMetaInterestsHandler
+  searchMetaInterestsHandler,
+  suggestTextHandler
 } from '../controllers/campaigns.controller.js';
 
 const router = Router();
@@ -42,6 +43,7 @@ router.get('/create-wizard-diag', createWizardCampaignDiagHandler);
 router.post('/upload-creative', creativeUpload.single('file'), uploadWizardCreativeHandler);
 router.get('/meta-locations', searchMetaLocationsHandler);
 router.get('/meta-interests', searchMetaInterestsHandler);
+router.post('/suggest-text', suggestTextHandler);
 
 // Specific sub-resource routes before generic /:id to avoid Express matching /:id first
 router.patch('/:id/pause', pauseCampaignHandler);
