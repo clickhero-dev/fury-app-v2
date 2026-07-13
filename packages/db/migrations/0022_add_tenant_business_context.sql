@@ -1,1 +1,1 @@
-ALTER TABLE "tenants" ADD COLUMN "business_context" TEXT;
+ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "business_context" TEXT;
