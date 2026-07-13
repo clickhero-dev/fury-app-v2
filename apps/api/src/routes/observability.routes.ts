@@ -2,10 +2,8 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { db } from "../lib/db.js";
 import { sql } from "drizzle-orm";
-import { getRedis } from "../lib/redis.js";
 
 const router = Router();
-const CACHE_TTL = 60; // seconds
 
 // Defined query IDs
 const QUERIES: Record<

@@ -42,9 +42,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 async function resolveTenantId(slugOrId: string): Promise<string | null> {
   const { db, tenants } = await import('@fury/db');
-  const { eq } = await import('drizzle-orm');
-  const column = UUID_RE.test(slugOrId) ? tenants.id : tenants.slug;
-  const tenant = await db.query.tenants.findFirst({ where: eq(column, slugOrId) });
+  const { eq, or } = await import('drizzle-orm');
+  if (UUID_RE.test(slugOrId)) {
+    const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, slugOrId) });
+    return tenant?.id ?? null;
+  }
+  const tenant = await db.query.tenants.findFirst({
+    where: or(eq(tenants.slug, slugOrId), eq(tenants.codigo, slugOrId)),
+  });
   return tenant?.id ?? null;
 }
 

@@ -13,13 +13,13 @@ interface PublicBrandKitData {
 }
 
 export function LandingPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const { codigo } = useParams<{ codigo: string }>();
   const navigate = useNavigate();
 
   const { data, isLoading, error } = useQuery<PublicBrandKitData>({
-    queryKey: ['public-brand-kit', slug],
+    queryKey: ['public-brand-kit', codigo],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/public/brand-kit/${slug}`);
+      const res = await fetch(`${API_BASE}/public/brand-kit/${codigo}`);
       if (!res.ok) throw new Error('Tenant não encontrado');
       const json = await res.json();
       return json.data;

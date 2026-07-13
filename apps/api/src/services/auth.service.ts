@@ -10,6 +10,14 @@ import type { UserDTO } from '../lib/shared.js';
 
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 
+function generateCodigo(companyName: string, tenantId: string): string {
+  const slug = generateSlug(companyName);
+  const prefix = slug.slice(0, 3).toUpperCase().padEnd(3, 'X');
+  const hash = crypto.createHash('md5').update(tenantId).digest('hex');
+  const digits = String(parseInt(hash.slice(0, 8), 16) % 100000).padStart(5, '0');
+  return `${prefix}${digits}`;
+}
+
 function generateSlug(companyName: string): string {
   return companyName
     .toLowerCase()
@@ -115,6 +123,9 @@ export async function register(data: {
       })
       .returning();
 
+    const codigo = generateCodigo(data.companyName, tenant.id);
+    await tx.update(tenants).set({ codigo }).where(eq(tenants.id, tenant.id));
+
     const [user] = await tx
       .insert(users)
       .values({
@@ -125,7 +136,7 @@ export async function register(data: {
       })
       .returning();
 
-    return { tenant, user };
+    return { tenant: { ...tenant, codigo }, user };
   });
 
   // Generate tokens
@@ -237,7 +248,7 @@ export async function logout(userId: string): Promise<void> {
   await revokeRefreshToken(userId);
 }
 
-export async function getMe(userId: string): Promise<UserDTO & { tenantName: string }> {
+export async function getMe(userId: string): Promise<UserDTO & { tenantName: string; tenantSlug: string; tenantCodigo: string }> {
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
   });
@@ -250,13 +261,13 @@ export async function getMe(userId: string): Promise<UserDTO & { tenantName: str
     where: eq(tenants.id, user.tenantId),
   });
 
-  return { ...userToDTO(user), tenantName: tenant?.name ?? '' };
+  return { ...userToDTO(user), tenantName: tenant?.name ?? '', tenantSlug: tenant?.slug ?? '', tenantCodigo: tenant?.codigo ?? '' };
 }
 
 export async function updateMe(
   userId: string,
   data: { name?: string; tenantName?: string; notificationPrefs?: UserDTO['notificationPrefs']; audienceDefaults?: Record<string, unknown> },
-): Promise<UserDTO & { tenantName: string }> {
+): Promise<UserDTO & { tenantName: string; tenantSlug: string; tenantCodigo: string }> {
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
   });

@@ -36,6 +36,7 @@ interface MeResponse {
   email: string;
   tenantName: string;
   tenantSlug: string;
+  tenantCodigo: string;
   role: string;
   tenantId: string;
   notificationPrefs: NotificationPrefs;
@@ -253,7 +254,7 @@ export function Configuracoes() {
                       <input
                         type="text"
                         readOnly
-                        value={`${window.location.origin}/l/${meData.tenantSlug}`}
+                        value={`${window.location.origin}/l/${meData.tenantCodigo}`}
                         className="flex-1 px-4 py-3 border border-border rounded-lg text-sm text-text-primary bg-surface-secondary focus:outline-none select-all cursor-text"
                         onClick={(e) => (e.target as HTMLInputElement).select()}
                       />
@@ -262,7 +263,7 @@ export function Configuracoes() {
                         size="md"
                         onClick={() => {
                           navigator.clipboard.writeText(
-                            `${window.location.origin}/l/${meData.tenantSlug}`
+                            `${window.location.origin}/l/${meData.tenantCodigo}`
                           );
                           showToast('Link copiado!', 'success');
                         }}
@@ -274,7 +275,7 @@ export function Configuracoes() {
                         size="md"
                         onClick={() =>
                           window.open(
-                            `${window.location.origin}/l/${meData.tenantSlug}`,
+                            `${window.location.origin}/l/${meData.tenantCodigo}`,
                             '_blank',
                             'noopener'
                           )

@@ -227,3 +227,26 @@ html.dark [class*="text-[#EA580C]"] {
   color: var(--color-accent-light) !important;
 }
 
+/* === MetaBanner blue colors in dark mode === */
+html.dark .bg-blue-50 {
+  background-color: color-mix(in srgb, #3b82f6 12%, var(--color-surface)) !important;
+}
+html.dark .bg-blue-100 {
+  background-color: color-mix(in srgb, #3b82f6 22%, var(--color-surface-secondary)) !important;
+}
+html.dark .border-blue-200 {
+  border-color: color-mix(in srgb, #3b82f6 25%, var(--color-border)) !important;
+}
+html.dark .text-blue-600 {
+  color: #60a5fa !important;
+}
+html.dark .text-blue-900 {
+  color: #93c5fd !important;
+}
+html.dark .bg-blue-600 {
+  background-color: #2563eb !important;
+}
+html.dark .hover\:bg-blue-700:hover {
+  background-color: #1d4ed8 !important;
+}
+

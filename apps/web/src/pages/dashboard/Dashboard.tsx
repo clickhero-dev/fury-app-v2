@@ -273,8 +273,7 @@ function MetricCard({
           )}
         </p>
         <p
-          className="text-lg md:text-xl font-black leading-tight"
-          style={{ color: hasRealData ? '#EA580C' : '#111827' }}
+          className={`text-lg md:text-xl font-black leading-tight ${hasRealData ? 'text-[#EA580C]' : 'text-text-secondary'}`}
         >
           {value}
         </p>

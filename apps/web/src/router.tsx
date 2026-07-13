@@ -119,7 +119,7 @@ export const router = createBrowserRouter([
     ),
   },
   {
-    path: '/l/:slug',
+    path: '/l/:codigo',
     element: <LandingPage />,
   },
   {

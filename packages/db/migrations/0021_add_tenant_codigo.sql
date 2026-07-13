@@ -1,0 +1,1 @@
+ALTER TABLE "tenants" ADD COLUMN "codigo" VARCHAR(20) UNIQUE;

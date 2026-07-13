@@ -56,10 +56,12 @@ export const tenants = pgTable(
     id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
     name: varchar('name', { length: 255 }).notNull(),
     slug: varchar('slug', { length: 255 }).notNull().unique(),
+    codigo: varchar('codigo', { length: 20 }).unique(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
     slugIdx: index('tenants_slug_idx').on(table.slug),
+    codigoIdx: index('tenants_codigo_idx').on(table.codigo),
   })
 );
 

@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { db, clientGoals, campaigns } from '@fury/db';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
-import { cacheMiddleware } from '../middleware/cache.middleware.js';
 import { MockMetricsProvider } from '../lib/providers/mock-metrics.provider.js';
 import { DatabaseMetricsProvider } from '../lib/providers/db-metrics.provider.js';
 import type { DailyMetricsResponse } from '../types/metrics.types.js';
@@ -185,7 +184,6 @@ router.put(
 
 router.get(
   '/progress',
-  cacheMiddleware({ ttl: 360 }),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { tenantId } = req.tenant!;
