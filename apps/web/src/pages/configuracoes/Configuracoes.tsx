@@ -529,6 +529,7 @@ export function Configuracoes() {
           <TabsContent value="publico">
             <div className="space-y-6">
               <BrandKitContent />
+              <div className="h-6" />
               <PublicoContent />
             </div>
           </TabsContent>

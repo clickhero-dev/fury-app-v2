@@ -19,7 +19,6 @@ import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
 import { Configuracoes } from './pages/configuracoes/Configuracoes';
 import { Integracoes } from './pages/configuracoes/Integracoes';
-import { BrandKitPage } from './pages/configuracoes/BrandKitPage';
 import { MinhasRegras } from './pages/automacao/MinhasRegras';
 import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
@@ -140,7 +139,7 @@ export const router = createBrowserRouter([
       { path: '/estudio/imagem', element: <GeradorImagem /> },
       { path: '/configuracoes', element: <Configuracoes /> },
       { path: '/configuracoes/integracoes', element: <Integracoes /> },
-      { path: '/configuracoes/brand-kit', element: <BrandKitPage /> },
+      { path: '/configuracoes/brand-kit', element: <Navigate to="/configuracoes?tab=publico" replace /> },
       { path: '/planos', element: <Plans /> },
       { path: '/assinatura', element: <Subscription /> },
       { path: '/orcamento-smart', element: <OrcamentoSmart /> },

@@ -56,12 +56,21 @@ export function BrandKitContent() {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const photosInputRef = useRef<HTMLInputElement>(null);
 
+  function fmtPhone(raw: string): string {
+    const d = raw.replace(/\D/g, '');
+    if (d.length <= 2) return d;
+    if (d.length <= 7) return `(${d.slice(0,2)}) ${d.slice(2)}`;
+    return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7,11)}`;
+  }
+  const digitsOnly = whatsappNumber.replace(/\D/g, '');
+  const phoneValid = digitsOnly.length === 0 || digitsOnly.length >= 10;
+
   useEffect(() => {
     if (!brandKit || initialized) return;
     setPrimaryColor(brandKit.primary_color ?? FURY_COLORS.primary);
     setSecondaryColor(brandKit.secondary_color ?? '#1C1C1E');
     setVoiceTone(brandKit.voice_tone ?? '');
-    setWhatsappNumber(brandKit.whatsapp_number ?? '');
+    setWhatsappNumber(brandKit.whatsapp_number ? fmtPhone(brandKit.whatsapp_number) : '');
     setInitialized(true);
   }, [brandKit, initialized]);
 
@@ -146,7 +155,7 @@ export function BrandKitContent() {
         primary_color: primaryColor,
         secondary_color: secondaryColor,
         ...(voiceTone ? { voice_tone: voiceTone } : {}),
-        whatsapp_number: whatsappNumber || null,
+        whatsapp_number: digitsOnly || null,
       });
       showToast('Dados da Marca salvos com sucesso!', 'success');
     } catch {
@@ -157,15 +166,8 @@ export function BrandKitContent() {
   const photoUrls = brandKit?.photo_urls ?? [];
 
   return (
-    <div className="space-y-8 pb-28">
+    <div className="space-y-6">
       {toast && <Toast message={toast.message} type={toast.type} />}
-
-      <PageHeader
-        title="Dados da Marca"
-        description="Configure a identidade visual e o tom de voz da sua marca para personalizar os criativos gerados automaticamente."
-      />
-
-      <ConfiguracoesTabsNav activeTab="brand-kit" />
 
       {isLoading ? (
         <Card>
@@ -306,15 +308,18 @@ export function BrandKitContent() {
                 Número usado na página de destino das campanhas de Conversas WhatsApp.
               </p>
               <div>
-                <label className="block text-sm font-semibold text-text-primary mb-2">Número do WhatsApp (com DDI, sem +)</label>
+                <label className="block text-sm font-semibold text-text-primary mb-2">Número do WhatsApp</label>
                 <input
                   type="tel"
-                  placeholder="5511999999999"
+                  placeholder="(11) 99999-9999"
                   value={whatsappNumber}
-                  onChange={(e) => setWhatsappNumber(e.target.value)}
+                  onChange={(e) => setWhatsappNumber(fmtPhone(e.target.value))}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8631A]/50 focus:border-[#E8631A]"
                 />
-                <p className="text-xs text-text-secondary mt-1">Informe apenas números. Ex: 5511999999999</p>
+                {!phoneValid && digitsOnly.length > 0 && (
+                  <p className="text-xs text-red-500 mt-1">Número incompleto. Informe com DDD + 8 ou 9 dígitos.</p>
+                )}
+                <p className="text-xs text-text-secondary mt-1">Formato: (DD) XXXXX-XXXX. O sistema salva apenas os números.</p>
               </div>
             </CardContent>
           </Card>
@@ -380,10 +385,10 @@ export function BrandKitContent() {
         </div>
       )}
 
-      {/* Sticky save button */}
-      <div className="sticky bottom-0 -mx-6 -mb-6 lg:-mx-8 lg:-mb-8 bg-white border-t border-gray-200 px-6 lg:px-8 py-4 flex justify-end">
+      {/* Save button */}
+      <div className="flex justify-start pt-4 border-t border-border">
         <Button variant="primary" size="md" onClick={handleSave} disabled={saveBrandKit.isPending}>
-          {saveBrandKit.isPending ? 'Salvando...' : 'Salvar Dados da Marca'}
+          {saveBrandKit.isPending ? 'Salvando...' : 'Salvar'}
         </Button>
       </div>
     </div>
