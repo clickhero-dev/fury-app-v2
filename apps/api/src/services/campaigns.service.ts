@@ -407,21 +407,22 @@ export class CampaignsService {
   }
 
   async softDeleteCampaign(args: { tenantId: string; campaignId: string; userId: string }) {
-    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
     const accessToken = await this.getAccessToken(args.tenantId);
+    const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
+    if (!localId) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
 
     // Check if already deleted on Meta before calling update
-    const campaignMeta = await this.meta.getCampaign(campaign.metaCampaignId, accessToken, 'status');
+    const campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'status');
     const metaStatus = campaignMeta?.status as string | undefined;
     if (metaStatus !== 'DELETED' && metaStatus !== 'ARCHIVED') {
-      try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, { status: 'ARCHIVED' }); }
+      try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'ARCHIVED' }); }
       catch (err) { this.handleMetaError(err); }
     }
 
-    const deleted = await this.repo.updateCampaign(args.campaignId, { status: 'archived' } as any);
+    const deleted = await this.repo.updateCampaign(localId, { status: 'archived' } as any);
 
     await this.repo.insertFuryInsight({
-      tenantId: args.tenantId, campaignId: args.campaignId,
+      tenantId: args.tenantId, campaignId: localId,
       suggestionType: 'campaign_archived',
       suggestionData: { userId: args.userId, timestamp: new Date().toISOString(), action: 'manual' },
     } as any);

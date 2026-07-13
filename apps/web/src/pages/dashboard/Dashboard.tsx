@@ -540,10 +540,10 @@ function ActiveCampaignsTable({
           <table className="w-full min-w-[600px] text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="pb-2 text-left text-xs font-semibold text-gray-400">Campanha</th>
-                <th className="pb-2 text-right text-xs font-semibold text-gray-400">Investido</th>
-                <th className="pb-2 text-right text-xs font-semibold text-gray-400">Pessoas</th>
-                <th className="pb-2 text-right text-xs font-semibold text-gray-400">Custo/Pessoa</th>
+                <th className="pb-2 text-left text-xs font-semibold text-text-tertiary">Campanha</th>
+                <th className="pb-2 text-right text-xs font-semibold text-text-tertiary">Investido</th>
+                <th className="pb-2 text-right text-xs font-semibold text-text-tertiary">Pessoas</th>
+                <th className="pb-2 text-right text-xs font-semibold text-text-tertiary">Custo/Pessoa</th>
               </tr>
             </thead>
             <tbody>
@@ -557,7 +557,7 @@ function ActiveCampaignsTable({
                     <td className="py-2.5 pr-4">
                       <div className="flex items-center gap-2">
                         <span
-                          className="truncate max-w-[200px] block text-gray-800"
+                          className="truncate max-w-[200px] block text-text-secondary"
                           title={c.name}
                         >
                           {c.name}
@@ -567,9 +567,9 @@ function ActiveCampaignsTable({
                         )}
                       </div>
                     </td>
-                    <td className="py-2.5 text-right text-gray-700">{fmtBRL(c.metrics.spend)}</td>
-                    <td className="py-2.5 text-right text-gray-700">{fmtInt(c.metrics.conversions)}</td>
-                    <td className="py-2.5 text-right text-gray-700">{fmtBRL(c.metrics.cpa)}</td>
+                    <td className="py-2.5 text-right text-text-secondary">{fmtBRL(c.metrics.spend)}</td>
+                    <td className="py-2.5 text-right text-text-secondary">{fmtInt(c.metrics.conversions)}</td>
+                    <td className="py-2.5 text-right text-text-secondary">{fmtBRL(c.metrics.cpa)}</td>
                   </tr>
                 );
               })}

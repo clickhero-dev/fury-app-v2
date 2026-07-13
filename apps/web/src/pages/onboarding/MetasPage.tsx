@@ -317,9 +317,9 @@ export function MetasPage() {
               {/* ── Step 3: Revisão ─────────────────────────────────────── */}
               {step === 3 && (
                 <div className="space-y-4">
-                  <p className="text-sm text-[#6E7681]">Confirme os dados antes de salvar:</p>
+                  <p className="text-sm text-text-secondary">Confirme os dados antes de salvar:</p>
 
-                  <div className="bg-[#F6F8FA] rounded-2xl divide-y divide-[#E0E0E0] overflow-hidden">
+                  <div className="bg-surface-secondary rounded-2xl divide-y divide-border overflow-hidden">
                     <ReviewRow label="Objetivo" value={translateObjective(values.objective)} />
                     <ReviewRow label="Nicho" value={values.niche} />
                     <ReviewRow label="Produto principal" value={values.mainProduct} />
@@ -425,8 +425,8 @@ function Field({
 function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between items-center px-4 py-3.5">
-      <span className="text-sm text-[#6E7681]">{label}</span>
-      <span className="text-sm font-semibold text-[#1C1C1E] text-right max-w-[60%] truncate">{value}</span>
+      <span className="text-sm text-text-secondary">{label}</span>
+      <span className="text-sm font-semibold text-text-primary text-right max-w-[60%] truncate">{value}</span>
     </div>
   );
 }
