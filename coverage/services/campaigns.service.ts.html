@@ -1,0 +1,2074 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for services/campaigns.service.ts</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../prettify.css" />
+    <link rel="stylesheet" href="../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../index.html">All files</a> / <a href="index.html">services</a> campaigns.service.ts</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">72.46% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>250/345</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">48.9% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>157/321</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">60.78% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>31/51</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">78.59% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>224/285</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line medium'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a>
+<a name='L65'></a><a href='#L65'>65</a>
+<a name='L66'></a><a href='#L66'>66</a>
+<a name='L67'></a><a href='#L67'>67</a>
+<a name='L68'></a><a href='#L68'>68</a>
+<a name='L69'></a><a href='#L69'>69</a>
+<a name='L70'></a><a href='#L70'>70</a>
+<a name='L71'></a><a href='#L71'>71</a>
+<a name='L72'></a><a href='#L72'>72</a>
+<a name='L73'></a><a href='#L73'>73</a>
+<a name='L74'></a><a href='#L74'>74</a>
+<a name='L75'></a><a href='#L75'>75</a>
+<a name='L76'></a><a href='#L76'>76</a>
+<a name='L77'></a><a href='#L77'>77</a>
+<a name='L78'></a><a href='#L78'>78</a>
+<a name='L79'></a><a href='#L79'>79</a>
+<a name='L80'></a><a href='#L80'>80</a>
+<a name='L81'></a><a href='#L81'>81</a>
+<a name='L82'></a><a href='#L82'>82</a>
+<a name='L83'></a><a href='#L83'>83</a>
+<a name='L84'></a><a href='#L84'>84</a>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a>
+<a name='L98'></a><a href='#L98'>98</a>
+<a name='L99'></a><a href='#L99'>99</a>
+<a name='L100'></a><a href='#L100'>100</a>
+<a name='L101'></a><a href='#L101'>101</a>
+<a name='L102'></a><a href='#L102'>102</a>
+<a name='L103'></a><a href='#L103'>103</a>
+<a name='L104'></a><a href='#L104'>104</a>
+<a name='L105'></a><a href='#L105'>105</a>
+<a name='L106'></a><a href='#L106'>106</a>
+<a name='L107'></a><a href='#L107'>107</a>
+<a name='L108'></a><a href='#L108'>108</a>
+<a name='L109'></a><a href='#L109'>109</a>
+<a name='L110'></a><a href='#L110'>110</a>
+<a name='L111'></a><a href='#L111'>111</a>
+<a name='L112'></a><a href='#L112'>112</a>
+<a name='L113'></a><a href='#L113'>113</a>
+<a name='L114'></a><a href='#L114'>114</a>
+<a name='L115'></a><a href='#L115'>115</a>
+<a name='L116'></a><a href='#L116'>116</a>
+<a name='L117'></a><a href='#L117'>117</a>
+<a name='L118'></a><a href='#L118'>118</a>
+<a name='L119'></a><a href='#L119'>119</a>
+<a name='L120'></a><a href='#L120'>120</a>
+<a name='L121'></a><a href='#L121'>121</a>
+<a name='L122'></a><a href='#L122'>122</a>
+<a name='L123'></a><a href='#L123'>123</a>
+<a name='L124'></a><a href='#L124'>124</a>
+<a name='L125'></a><a href='#L125'>125</a>
+<a name='L126'></a><a href='#L126'>126</a>
+<a name='L127'></a><a href='#L127'>127</a>
+<a name='L128'></a><a href='#L128'>128</a>
+<a name='L129'></a><a href='#L129'>129</a>
+<a name='L130'></a><a href='#L130'>130</a>
+<a name='L131'></a><a href='#L131'>131</a>
+<a name='L132'></a><a href='#L132'>132</a>
+<a name='L133'></a><a href='#L133'>133</a>
+<a name='L134'></a><a href='#L134'>134</a>
+<a name='L135'></a><a href='#L135'>135</a>
+<a name='L136'></a><a href='#L136'>136</a>
+<a name='L137'></a><a href='#L137'>137</a>
+<a name='L138'></a><a href='#L138'>138</a>
+<a name='L139'></a><a href='#L139'>139</a>
+<a name='L140'></a><a href='#L140'>140</a>
+<a name='L141'></a><a href='#L141'>141</a>
+<a name='L142'></a><a href='#L142'>142</a>
+<a name='L143'></a><a href='#L143'>143</a>
+<a name='L144'></a><a href='#L144'>144</a>
+<a name='L145'></a><a href='#L145'>145</a>
+<a name='L146'></a><a href='#L146'>146</a>
+<a name='L147'></a><a href='#L147'>147</a>
+<a name='L148'></a><a href='#L148'>148</a>
+<a name='L149'></a><a href='#L149'>149</a>
+<a name='L150'></a><a href='#L150'>150</a>
+<a name='L151'></a><a href='#L151'>151</a>
+<a name='L152'></a><a href='#L152'>152</a>
+<a name='L153'></a><a href='#L153'>153</a>
+<a name='L154'></a><a href='#L154'>154</a>
+<a name='L155'></a><a href='#L155'>155</a>
+<a name='L156'></a><a href='#L156'>156</a>
+<a name='L157'></a><a href='#L157'>157</a>
+<a name='L158'></a><a href='#L158'>158</a>
+<a name='L159'></a><a href='#L159'>159</a>
+<a name='L160'></a><a href='#L160'>160</a>
+<a name='L161'></a><a href='#L161'>161</a>
+<a name='L162'></a><a href='#L162'>162</a>
+<a name='L163'></a><a href='#L163'>163</a>
+<a name='L164'></a><a href='#L164'>164</a>
+<a name='L165'></a><a href='#L165'>165</a>
+<a name='L166'></a><a href='#L166'>166</a>
+<a name='L167'></a><a href='#L167'>167</a>
+<a name='L168'></a><a href='#L168'>168</a>
+<a name='L169'></a><a href='#L169'>169</a>
+<a name='L170'></a><a href='#L170'>170</a>
+<a name='L171'></a><a href='#L171'>171</a>
+<a name='L172'></a><a href='#L172'>172</a>
+<a name='L173'></a><a href='#L173'>173</a>
+<a name='L174'></a><a href='#L174'>174</a>
+<a name='L175'></a><a href='#L175'>175</a>
+<a name='L176'></a><a href='#L176'>176</a>
+<a name='L177'></a><a href='#L177'>177</a>
+<a name='L178'></a><a href='#L178'>178</a>
+<a name='L179'></a><a href='#L179'>179</a>
+<a name='L180'></a><a href='#L180'>180</a>
+<a name='L181'></a><a href='#L181'>181</a>
+<a name='L182'></a><a href='#L182'>182</a>
+<a name='L183'></a><a href='#L183'>183</a>
+<a name='L184'></a><a href='#L184'>184</a>
+<a name='L185'></a><a href='#L185'>185</a>
+<a name='L186'></a><a href='#L186'>186</a>
+<a name='L187'></a><a href='#L187'>187</a>
+<a name='L188'></a><a href='#L188'>188</a>
+<a name='L189'></a><a href='#L189'>189</a>
+<a name='L190'></a><a href='#L190'>190</a>
+<a name='L191'></a><a href='#L191'>191</a>
+<a name='L192'></a><a href='#L192'>192</a>
+<a name='L193'></a><a href='#L193'>193</a>
+<a name='L194'></a><a href='#L194'>194</a>
+<a name='L195'></a><a href='#L195'>195</a>
+<a name='L196'></a><a href='#L196'>196</a>
+<a name='L197'></a><a href='#L197'>197</a>
+<a name='L198'></a><a href='#L198'>198</a>
+<a name='L199'></a><a href='#L199'>199</a>
+<a name='L200'></a><a href='#L200'>200</a>
+<a name='L201'></a><a href='#L201'>201</a>
+<a name='L202'></a><a href='#L202'>202</a>
+<a name='L203'></a><a href='#L203'>203</a>
+<a name='L204'></a><a href='#L204'>204</a>
+<a name='L205'></a><a href='#L205'>205</a>
+<a name='L206'></a><a href='#L206'>206</a>
+<a name='L207'></a><a href='#L207'>207</a>
+<a name='L208'></a><a href='#L208'>208</a>
+<a name='L209'></a><a href='#L209'>209</a>
+<a name='L210'></a><a href='#L210'>210</a>
+<a name='L211'></a><a href='#L211'>211</a>
+<a name='L212'></a><a href='#L212'>212</a>
+<a name='L213'></a><a href='#L213'>213</a>
+<a name='L214'></a><a href='#L214'>214</a>
+<a name='L215'></a><a href='#L215'>215</a>
+<a name='L216'></a><a href='#L216'>216</a>
+<a name='L217'></a><a href='#L217'>217</a>
+<a name='L218'></a><a href='#L218'>218</a>
+<a name='L219'></a><a href='#L219'>219</a>
+<a name='L220'></a><a href='#L220'>220</a>
+<a name='L221'></a><a href='#L221'>221</a>
+<a name='L222'></a><a href='#L222'>222</a>
+<a name='L223'></a><a href='#L223'>223</a>
+<a name='L224'></a><a href='#L224'>224</a>
+<a name='L225'></a><a href='#L225'>225</a>
+<a name='L226'></a><a href='#L226'>226</a>
+<a name='L227'></a><a href='#L227'>227</a>
+<a name='L228'></a><a href='#L228'>228</a>
+<a name='L229'></a><a href='#L229'>229</a>
+<a name='L230'></a><a href='#L230'>230</a>
+<a name='L231'></a><a href='#L231'>231</a>
+<a name='L232'></a><a href='#L232'>232</a>
+<a name='L233'></a><a href='#L233'>233</a>
+<a name='L234'></a><a href='#L234'>234</a>
+<a name='L235'></a><a href='#L235'>235</a>
+<a name='L236'></a><a href='#L236'>236</a>
+<a name='L237'></a><a href='#L237'>237</a>
+<a name='L238'></a><a href='#L238'>238</a>
+<a name='L239'></a><a href='#L239'>239</a>
+<a name='L240'></a><a href='#L240'>240</a>
+<a name='L241'></a><a href='#L241'>241</a>
+<a name='L242'></a><a href='#L242'>242</a>
+<a name='L243'></a><a href='#L243'>243</a>
+<a name='L244'></a><a href='#L244'>244</a>
+<a name='L245'></a><a href='#L245'>245</a>
+<a name='L246'></a><a href='#L246'>246</a>
+<a name='L247'></a><a href='#L247'>247</a>
+<a name='L248'></a><a href='#L248'>248</a>
+<a name='L249'></a><a href='#L249'>249</a>
+<a name='L250'></a><a href='#L250'>250</a>
+<a name='L251'></a><a href='#L251'>251</a>
+<a name='L252'></a><a href='#L252'>252</a>
+<a name='L253'></a><a href='#L253'>253</a>
+<a name='L254'></a><a href='#L254'>254</a>
+<a name='L255'></a><a href='#L255'>255</a>
+<a name='L256'></a><a href='#L256'>256</a>
+<a name='L257'></a><a href='#L257'>257</a>
+<a name='L258'></a><a href='#L258'>258</a>
+<a name='L259'></a><a href='#L259'>259</a>
+<a name='L260'></a><a href='#L260'>260</a>
+<a name='L261'></a><a href='#L261'>261</a>
+<a name='L262'></a><a href='#L262'>262</a>
+<a name='L263'></a><a href='#L263'>263</a>
+<a name='L264'></a><a href='#L264'>264</a>
+<a name='L265'></a><a href='#L265'>265</a>
+<a name='L266'></a><a href='#L266'>266</a>
+<a name='L267'></a><a href='#L267'>267</a>
+<a name='L268'></a><a href='#L268'>268</a>
+<a name='L269'></a><a href='#L269'>269</a>
+<a name='L270'></a><a href='#L270'>270</a>
+<a name='L271'></a><a href='#L271'>271</a>
+<a name='L272'></a><a href='#L272'>272</a>
+<a name='L273'></a><a href='#L273'>273</a>
+<a name='L274'></a><a href='#L274'>274</a>
+<a name='L275'></a><a href='#L275'>275</a>
+<a name='L276'></a><a href='#L276'>276</a>
+<a name='L277'></a><a href='#L277'>277</a>
+<a name='L278'></a><a href='#L278'>278</a>
+<a name='L279'></a><a href='#L279'>279</a>
+<a name='L280'></a><a href='#L280'>280</a>
+<a name='L281'></a><a href='#L281'>281</a>
+<a name='L282'></a><a href='#L282'>282</a>
+<a name='L283'></a><a href='#L283'>283</a>
+<a name='L284'></a><a href='#L284'>284</a>
+<a name='L285'></a><a href='#L285'>285</a>
+<a name='L286'></a><a href='#L286'>286</a>
+<a name='L287'></a><a href='#L287'>287</a>
+<a name='L288'></a><a href='#L288'>288</a>
+<a name='L289'></a><a href='#L289'>289</a>
+<a name='L290'></a><a href='#L290'>290</a>
+<a name='L291'></a><a href='#L291'>291</a>
+<a name='L292'></a><a href='#L292'>292</a>
+<a name='L293'></a><a href='#L293'>293</a>
+<a name='L294'></a><a href='#L294'>294</a>
+<a name='L295'></a><a href='#L295'>295</a>
+<a name='L296'></a><a href='#L296'>296</a>
+<a name='L297'></a><a href='#L297'>297</a>
+<a name='L298'></a><a href='#L298'>298</a>
+<a name='L299'></a><a href='#L299'>299</a>
+<a name='L300'></a><a href='#L300'>300</a>
+<a name='L301'></a><a href='#L301'>301</a>
+<a name='L302'></a><a href='#L302'>302</a>
+<a name='L303'></a><a href='#L303'>303</a>
+<a name='L304'></a><a href='#L304'>304</a>
+<a name='L305'></a><a href='#L305'>305</a>
+<a name='L306'></a><a href='#L306'>306</a>
+<a name='L307'></a><a href='#L307'>307</a>
+<a name='L308'></a><a href='#L308'>308</a>
+<a name='L309'></a><a href='#L309'>309</a>
+<a name='L310'></a><a href='#L310'>310</a>
+<a name='L311'></a><a href='#L311'>311</a>
+<a name='L312'></a><a href='#L312'>312</a>
+<a name='L313'></a><a href='#L313'>313</a>
+<a name='L314'></a><a href='#L314'>314</a>
+<a name='L315'></a><a href='#L315'>315</a>
+<a name='L316'></a><a href='#L316'>316</a>
+<a name='L317'></a><a href='#L317'>317</a>
+<a name='L318'></a><a href='#L318'>318</a>
+<a name='L319'></a><a href='#L319'>319</a>
+<a name='L320'></a><a href='#L320'>320</a>
+<a name='L321'></a><a href='#L321'>321</a>
+<a name='L322'></a><a href='#L322'>322</a>
+<a name='L323'></a><a href='#L323'>323</a>
+<a name='L324'></a><a href='#L324'>324</a>
+<a name='L325'></a><a href='#L325'>325</a>
+<a name='L326'></a><a href='#L326'>326</a>
+<a name='L327'></a><a href='#L327'>327</a>
+<a name='L328'></a><a href='#L328'>328</a>
+<a name='L329'></a><a href='#L329'>329</a>
+<a name='L330'></a><a href='#L330'>330</a>
+<a name='L331'></a><a href='#L331'>331</a>
+<a name='L332'></a><a href='#L332'>332</a>
+<a name='L333'></a><a href='#L333'>333</a>
+<a name='L334'></a><a href='#L334'>334</a>
+<a name='L335'></a><a href='#L335'>335</a>
+<a name='L336'></a><a href='#L336'>336</a>
+<a name='L337'></a><a href='#L337'>337</a>
+<a name='L338'></a><a href='#L338'>338</a>
+<a name='L339'></a><a href='#L339'>339</a>
+<a name='L340'></a><a href='#L340'>340</a>
+<a name='L341'></a><a href='#L341'>341</a>
+<a name='L342'></a><a href='#L342'>342</a>
+<a name='L343'></a><a href='#L343'>343</a>
+<a name='L344'></a><a href='#L344'>344</a>
+<a name='L345'></a><a href='#L345'>345</a>
+<a name='L346'></a><a href='#L346'>346</a>
+<a name='L347'></a><a href='#L347'>347</a>
+<a name='L348'></a><a href='#L348'>348</a>
+<a name='L349'></a><a href='#L349'>349</a>
+<a name='L350'></a><a href='#L350'>350</a>
+<a name='L351'></a><a href='#L351'>351</a>
+<a name='L352'></a><a href='#L352'>352</a>
+<a name='L353'></a><a href='#L353'>353</a>
+<a name='L354'></a><a href='#L354'>354</a>
+<a name='L355'></a><a href='#L355'>355</a>
+<a name='L356'></a><a href='#L356'>356</a>
+<a name='L357'></a><a href='#L357'>357</a>
+<a name='L358'></a><a href='#L358'>358</a>
+<a name='L359'></a><a href='#L359'>359</a>
+<a name='L360'></a><a href='#L360'>360</a>
+<a name='L361'></a><a href='#L361'>361</a>
+<a name='L362'></a><a href='#L362'>362</a>
+<a name='L363'></a><a href='#L363'>363</a>
+<a name='L364'></a><a href='#L364'>364</a>
+<a name='L365'></a><a href='#L365'>365</a>
+<a name='L366'></a><a href='#L366'>366</a>
+<a name='L367'></a><a href='#L367'>367</a>
+<a name='L368'></a><a href='#L368'>368</a>
+<a name='L369'></a><a href='#L369'>369</a>
+<a name='L370'></a><a href='#L370'>370</a>
+<a name='L371'></a><a href='#L371'>371</a>
+<a name='L372'></a><a href='#L372'>372</a>
+<a name='L373'></a><a href='#L373'>373</a>
+<a name='L374'></a><a href='#L374'>374</a>
+<a name='L375'></a><a href='#L375'>375</a>
+<a name='L376'></a><a href='#L376'>376</a>
+<a name='L377'></a><a href='#L377'>377</a>
+<a name='L378'></a><a href='#L378'>378</a>
+<a name='L379'></a><a href='#L379'>379</a>
+<a name='L380'></a><a href='#L380'>380</a>
+<a name='L381'></a><a href='#L381'>381</a>
+<a name='L382'></a><a href='#L382'>382</a>
+<a name='L383'></a><a href='#L383'>383</a>
+<a name='L384'></a><a href='#L384'>384</a>
+<a name='L385'></a><a href='#L385'>385</a>
+<a name='L386'></a><a href='#L386'>386</a>
+<a name='L387'></a><a href='#L387'>387</a>
+<a name='L388'></a><a href='#L388'>388</a>
+<a name='L389'></a><a href='#L389'>389</a>
+<a name='L390'></a><a href='#L390'>390</a>
+<a name='L391'></a><a href='#L391'>391</a>
+<a name='L392'></a><a href='#L392'>392</a>
+<a name='L393'></a><a href='#L393'>393</a>
+<a name='L394'></a><a href='#L394'>394</a>
+<a name='L395'></a><a href='#L395'>395</a>
+<a name='L396'></a><a href='#L396'>396</a>
+<a name='L397'></a><a href='#L397'>397</a>
+<a name='L398'></a><a href='#L398'>398</a>
+<a name='L399'></a><a href='#L399'>399</a>
+<a name='L400'></a><a href='#L400'>400</a>
+<a name='L401'></a><a href='#L401'>401</a>
+<a name='L402'></a><a href='#L402'>402</a>
+<a name='L403'></a><a href='#L403'>403</a>
+<a name='L404'></a><a href='#L404'>404</a>
+<a name='L405'></a><a href='#L405'>405</a>
+<a name='L406'></a><a href='#L406'>406</a>
+<a name='L407'></a><a href='#L407'>407</a>
+<a name='L408'></a><a href='#L408'>408</a>
+<a name='L409'></a><a href='#L409'>409</a>
+<a name='L410'></a><a href='#L410'>410</a>
+<a name='L411'></a><a href='#L411'>411</a>
+<a name='L412'></a><a href='#L412'>412</a>
+<a name='L413'></a><a href='#L413'>413</a>
+<a name='L414'></a><a href='#L414'>414</a>
+<a name='L415'></a><a href='#L415'>415</a>
+<a name='L416'></a><a href='#L416'>416</a>
+<a name='L417'></a><a href='#L417'>417</a>
+<a name='L418'></a><a href='#L418'>418</a>
+<a name='L419'></a><a href='#L419'>419</a>
+<a name='L420'></a><a href='#L420'>420</a>
+<a name='L421'></a><a href='#L421'>421</a>
+<a name='L422'></a><a href='#L422'>422</a>
+<a name='L423'></a><a href='#L423'>423</a>
+<a name='L424'></a><a href='#L424'>424</a>
+<a name='L425'></a><a href='#L425'>425</a>
+<a name='L426'></a><a href='#L426'>426</a>
+<a name='L427'></a><a href='#L427'>427</a>
+<a name='L428'></a><a href='#L428'>428</a>
+<a name='L429'></a><a href='#L429'>429</a>
+<a name='L430'></a><a href='#L430'>430</a>
+<a name='L431'></a><a href='#L431'>431</a>
+<a name='L432'></a><a href='#L432'>432</a>
+<a name='L433'></a><a href='#L433'>433</a>
+<a name='L434'></a><a href='#L434'>434</a>
+<a name='L435'></a><a href='#L435'>435</a>
+<a name='L436'></a><a href='#L436'>436</a>
+<a name='L437'></a><a href='#L437'>437</a>
+<a name='L438'></a><a href='#L438'>438</a>
+<a name='L439'></a><a href='#L439'>439</a>
+<a name='L440'></a><a href='#L440'>440</a>
+<a name='L441'></a><a href='#L441'>441</a>
+<a name='L442'></a><a href='#L442'>442</a>
+<a name='L443'></a><a href='#L443'>443</a>
+<a name='L444'></a><a href='#L444'>444</a>
+<a name='L445'></a><a href='#L445'>445</a>
+<a name='L446'></a><a href='#L446'>446</a>
+<a name='L447'></a><a href='#L447'>447</a>
+<a name='L448'></a><a href='#L448'>448</a>
+<a name='L449'></a><a href='#L449'>449</a>
+<a name='L450'></a><a href='#L450'>450</a>
+<a name='L451'></a><a href='#L451'>451</a>
+<a name='L452'></a><a href='#L452'>452</a>
+<a name='L453'></a><a href='#L453'>453</a>
+<a name='L454'></a><a href='#L454'>454</a>
+<a name='L455'></a><a href='#L455'>455</a>
+<a name='L456'></a><a href='#L456'>456</a>
+<a name='L457'></a><a href='#L457'>457</a>
+<a name='L458'></a><a href='#L458'>458</a>
+<a name='L459'></a><a href='#L459'>459</a>
+<a name='L460'></a><a href='#L460'>460</a>
+<a name='L461'></a><a href='#L461'>461</a>
+<a name='L462'></a><a href='#L462'>462</a>
+<a name='L463'></a><a href='#L463'>463</a>
+<a name='L464'></a><a href='#L464'>464</a>
+<a name='L465'></a><a href='#L465'>465</a>
+<a name='L466'></a><a href='#L466'>466</a>
+<a name='L467'></a><a href='#L467'>467</a>
+<a name='L468'></a><a href='#L468'>468</a>
+<a name='L469'></a><a href='#L469'>469</a>
+<a name='L470'></a><a href='#L470'>470</a>
+<a name='L471'></a><a href='#L471'>471</a>
+<a name='L472'></a><a href='#L472'>472</a>
+<a name='L473'></a><a href='#L473'>473</a>
+<a name='L474'></a><a href='#L474'>474</a>
+<a name='L475'></a><a href='#L475'>475</a>
+<a name='L476'></a><a href='#L476'>476</a>
+<a name='L477'></a><a href='#L477'>477</a>
+<a name='L478'></a><a href='#L478'>478</a>
+<a name='L479'></a><a href='#L479'>479</a>
+<a name='L480'></a><a href='#L480'>480</a>
+<a name='L481'></a><a href='#L481'>481</a>
+<a name='L482'></a><a href='#L482'>482</a>
+<a name='L483'></a><a href='#L483'>483</a>
+<a name='L484'></a><a href='#L484'>484</a>
+<a name='L485'></a><a href='#L485'>485</a>
+<a name='L486'></a><a href='#L486'>486</a>
+<a name='L487'></a><a href='#L487'>487</a>
+<a name='L488'></a><a href='#L488'>488</a>
+<a name='L489'></a><a href='#L489'>489</a>
+<a name='L490'></a><a href='#L490'>490</a>
+<a name='L491'></a><a href='#L491'>491</a>
+<a name='L492'></a><a href='#L492'>492</a>
+<a name='L493'></a><a href='#L493'>493</a>
+<a name='L494'></a><a href='#L494'>494</a>
+<a name='L495'></a><a href='#L495'>495</a>
+<a name='L496'></a><a href='#L496'>496</a>
+<a name='L497'></a><a href='#L497'>497</a>
+<a name='L498'></a><a href='#L498'>498</a>
+<a name='L499'></a><a href='#L499'>499</a>
+<a name='L500'></a><a href='#L500'>500</a>
+<a name='L501'></a><a href='#L501'>501</a>
+<a name='L502'></a><a href='#L502'>502</a>
+<a name='L503'></a><a href='#L503'>503</a>
+<a name='L504'></a><a href='#L504'>504</a>
+<a name='L505'></a><a href='#L505'>505</a>
+<a name='L506'></a><a href='#L506'>506</a>
+<a name='L507'></a><a href='#L507'>507</a>
+<a name='L508'></a><a href='#L508'>508</a>
+<a name='L509'></a><a href='#L509'>509</a>
+<a name='L510'></a><a href='#L510'>510</a>
+<a name='L511'></a><a href='#L511'>511</a>
+<a name='L512'></a><a href='#L512'>512</a>
+<a name='L513'></a><a href='#L513'>513</a>
+<a name='L514'></a><a href='#L514'>514</a>
+<a name='L515'></a><a href='#L515'>515</a>
+<a name='L516'></a><a href='#L516'>516</a>
+<a name='L517'></a><a href='#L517'>517</a>
+<a name='L518'></a><a href='#L518'>518</a>
+<a name='L519'></a><a href='#L519'>519</a>
+<a name='L520'></a><a href='#L520'>520</a>
+<a name='L521'></a><a href='#L521'>521</a>
+<a name='L522'></a><a href='#L522'>522</a>
+<a name='L523'></a><a href='#L523'>523</a>
+<a name='L524'></a><a href='#L524'>524</a>
+<a name='L525'></a><a href='#L525'>525</a>
+<a name='L526'></a><a href='#L526'>526</a>
+<a name='L527'></a><a href='#L527'>527</a>
+<a name='L528'></a><a href='#L528'>528</a>
+<a name='L529'></a><a href='#L529'>529</a>
+<a name='L530'></a><a href='#L530'>530</a>
+<a name='L531'></a><a href='#L531'>531</a>
+<a name='L532'></a><a href='#L532'>532</a>
+<a name='L533'></a><a href='#L533'>533</a>
+<a name='L534'></a><a href='#L534'>534</a>
+<a name='L535'></a><a href='#L535'>535</a>
+<a name='L536'></a><a href='#L536'>536</a>
+<a name='L537'></a><a href='#L537'>537</a>
+<a name='L538'></a><a href='#L538'>538</a>
+<a name='L539'></a><a href='#L539'>539</a>
+<a name='L540'></a><a href='#L540'>540</a>
+<a name='L541'></a><a href='#L541'>541</a>
+<a name='L542'></a><a href='#L542'>542</a>
+<a name='L543'></a><a href='#L543'>543</a>
+<a name='L544'></a><a href='#L544'>544</a>
+<a name='L545'></a><a href='#L545'>545</a>
+<a name='L546'></a><a href='#L546'>546</a>
+<a name='L547'></a><a href='#L547'>547</a>
+<a name='L548'></a><a href='#L548'>548</a>
+<a name='L549'></a><a href='#L549'>549</a>
+<a name='L550'></a><a href='#L550'>550</a>
+<a name='L551'></a><a href='#L551'>551</a>
+<a name='L552'></a><a href='#L552'>552</a>
+<a name='L553'></a><a href='#L553'>553</a>
+<a name='L554'></a><a href='#L554'>554</a>
+<a name='L555'></a><a href='#L555'>555</a>
+<a name='L556'></a><a href='#L556'>556</a>
+<a name='L557'></a><a href='#L557'>557</a>
+<a name='L558'></a><a href='#L558'>558</a>
+<a name='L559'></a><a href='#L559'>559</a>
+<a name='L560'></a><a href='#L560'>560</a>
+<a name='L561'></a><a href='#L561'>561</a>
+<a name='L562'></a><a href='#L562'>562</a>
+<a name='L563'></a><a href='#L563'>563</a>
+<a name='L564'></a><a href='#L564'>564</a>
+<a name='L565'></a><a href='#L565'>565</a>
+<a name='L566'></a><a href='#L566'>566</a>
+<a name='L567'></a><a href='#L567'>567</a>
+<a name='L568'></a><a href='#L568'>568</a>
+<a name='L569'></a><a href='#L569'>569</a>
+<a name='L570'></a><a href='#L570'>570</a>
+<a name='L571'></a><a href='#L571'>571</a>
+<a name='L572'></a><a href='#L572'>572</a>
+<a name='L573'></a><a href='#L573'>573</a>
+<a name='L574'></a><a href='#L574'>574</a>
+<a name='L575'></a><a href='#L575'>575</a>
+<a name='L576'></a><a href='#L576'>576</a>
+<a name='L577'></a><a href='#L577'>577</a>
+<a name='L578'></a><a href='#L578'>578</a>
+<a name='L579'></a><a href='#L579'>579</a>
+<a name='L580'></a><a href='#L580'>580</a>
+<a name='L581'></a><a href='#L581'>581</a>
+<a name='L582'></a><a href='#L582'>582</a>
+<a name='L583'></a><a href='#L583'>583</a>
+<a name='L584'></a><a href='#L584'>584</a>
+<a name='L585'></a><a href='#L585'>585</a>
+<a name='L586'></a><a href='#L586'>586</a>
+<a name='L587'></a><a href='#L587'>587</a>
+<a name='L588'></a><a href='#L588'>588</a>
+<a name='L589'></a><a href='#L589'>589</a>
+<a name='L590'></a><a href='#L590'>590</a>
+<a name='L591'></a><a href='#L591'>591</a>
+<a name='L592'></a><a href='#L592'>592</a>
+<a name='L593'></a><a href='#L593'>593</a>
+<a name='L594'></a><a href='#L594'>594</a>
+<a name='L595'></a><a href='#L595'>595</a>
+<a name='L596'></a><a href='#L596'>596</a>
+<a name='L597'></a><a href='#L597'>597</a>
+<a name='L598'></a><a href='#L598'>598</a>
+<a name='L599'></a><a href='#L599'>599</a>
+<a name='L600'></a><a href='#L600'>600</a>
+<a name='L601'></a><a href='#L601'>601</a>
+<a name='L602'></a><a href='#L602'>602</a>
+<a name='L603'></a><a href='#L603'>603</a>
+<a name='L604'></a><a href='#L604'>604</a>
+<a name='L605'></a><a href='#L605'>605</a>
+<a name='L606'></a><a href='#L606'>606</a>
+<a name='L607'></a><a href='#L607'>607</a>
+<a name='L608'></a><a href='#L608'>608</a>
+<a name='L609'></a><a href='#L609'>609</a>
+<a name='L610'></a><a href='#L610'>610</a>
+<a name='L611'></a><a href='#L611'>611</a>
+<a name='L612'></a><a href='#L612'>612</a>
+<a name='L613'></a><a href='#L613'>613</a>
+<a name='L614'></a><a href='#L614'>614</a>
+<a name='L615'></a><a href='#L615'>615</a>
+<a name='L616'></a><a href='#L616'>616</a>
+<a name='L617'></a><a href='#L617'>617</a>
+<a name='L618'></a><a href='#L618'>618</a>
+<a name='L619'></a><a href='#L619'>619</a>
+<a name='L620'></a><a href='#L620'>620</a>
+<a name='L621'></a><a href='#L621'>621</a>
+<a name='L622'></a><a href='#L622'>622</a>
+<a name='L623'></a><a href='#L623'>623</a>
+<a name='L624'></a><a href='#L624'>624</a>
+<a name='L625'></a><a href='#L625'>625</a>
+<a name='L626'></a><a href='#L626'>626</a>
+<a name='L627'></a><a href='#L627'>627</a>
+<a name='L628'></a><a href='#L628'>628</a>
+<a name='L629'></a><a href='#L629'>629</a>
+<a name='L630'></a><a href='#L630'>630</a>
+<a name='L631'></a><a href='#L631'>631</a>
+<a name='L632'></a><a href='#L632'>632</a>
+<a name='L633'></a><a href='#L633'>633</a>
+<a name='L634'></a><a href='#L634'>634</a>
+<a name='L635'></a><a href='#L635'>635</a>
+<a name='L636'></a><a href='#L636'>636</a>
+<a name='L637'></a><a href='#L637'>637</a>
+<a name='L638'></a><a href='#L638'>638</a>
+<a name='L639'></a><a href='#L639'>639</a>
+<a name='L640'></a><a href='#L640'>640</a>
+<a name='L641'></a><a href='#L641'>641</a>
+<a name='L642'></a><a href='#L642'>642</a>
+<a name='L643'></a><a href='#L643'>643</a>
+<a name='L644'></a><a href='#L644'>644</a>
+<a name='L645'></a><a href='#L645'>645</a>
+<a name='L646'></a><a href='#L646'>646</a>
+<a name='L647'></a><a href='#L647'>647</a>
+<a name='L648'></a><a href='#L648'>648</a>
+<a name='L649'></a><a href='#L649'>649</a>
+<a name='L650'></a><a href='#L650'>650</a>
+<a name='L651'></a><a href='#L651'>651</a>
+<a name='L652'></a><a href='#L652'>652</a>
+<a name='L653'></a><a href='#L653'>653</a>
+<a name='L654'></a><a href='#L654'>654</a>
+<a name='L655'></a><a href='#L655'>655</a>
+<a name='L656'></a><a href='#L656'>656</a>
+<a name='L657'></a><a href='#L657'>657</a>
+<a name='L658'></a><a href='#L658'>658</a>
+<a name='L659'></a><a href='#L659'>659</a>
+<a name='L660'></a><a href='#L660'>660</a>
+<a name='L661'></a><a href='#L661'>661</a>
+<a name='L662'></a><a href='#L662'>662</a>
+<a name='L663'></a><a href='#L663'>663</a>
+<a name='L664'></a><a href='#L664'>664</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">21x</span>
+<span class="cline-any cline-yes">21x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">24x</span>
+<span class="cline-any cline-yes">8x</span>
+<span class="cline-any cline-yes">8x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">20x</span>
+<span class="cline-any cline-yes">20x</span>
+<span class="cline-any cline-yes">20x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">8x</span>
+<span class="cline-any cline-yes">8x</span>
+<span class="cline-any cline-yes">8x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { decryptMetaToken } from '../utils/crypto.js';
+import {
+  parseConversionsFromActions,
+  parseRoasFromPurchaseRoas,
+  parseCpaFromCostPerAction,
+} from '../utils/meta-insights-parser.js';
+import { roundToDecimals } from '../utils/metrics-formatter.js';
+import { AppError } from '../middleware/errorHandler.js';
+import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
+import { getMetaLocationsCache, setMetaLocationsCache } from '../lib/locations-cache.js';
+import { getResolvedTenantAssetSelection } from './meta.service.js';
+import type { IMetaCampaignProvider } from '../lib/providers/meta-campaign.provider.js';
+import type { ICampaignRepository, CampaignRecord } from '../lib/providers/campaign.repository.js';
+import { DefaultMetaCampaignProvider } from '../lib/providers/default-meta-campaign.provider.js';
+import { DefaultCampaignRepository } from '../lib/providers/default-campaign.repository.js';
+&nbsp;
+// ── Shared types ────────────────────────────────────────────────────────────
+&nbsp;
+export interface CampaignPanelMetrics {
+  spend: number; roas: number; cpa: number; ctr: number; cpm: number;
+  conversions: number; impressions: number;
+}
+&nbsp;
+export interface TakedownItem {
+  id: string; campaignId: string; suggestionType: string;
+  suggestionData: Record&lt;string, unknown&gt;; appliedAt: string | null; createdAt: string;
+}
+&nbsp;
+export interface AutomationRuleItem {
+  id: string; tenantId: string; name: string; description: string | null;
+  trigger: string; enabled: boolean; createdAt: string; updatedAt: string;
+  ruleType: string; isActive: boolean; threshold: number; action: string;
+}
+&nbsp;
+export interface CampaignListItem {
+  id: string; name: string; status: string; objective: string | null;
+  budget: unknown; spend: number; impressions: number; clicks: number;
+  ctr: number; cpc: number; roas: number; cpa: number; conversions: number;
+}
+&nbsp;
+export type WizardObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';
+export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'messenger';
+&nbsp;
+export interface CreateWizardCampaignArgs {
+  tenantId: string; objective: WizardObjective; creativeAssetId?: string;
+  creativeUploadUrl?: string; creativeInstagramMediaId?: string;
+  creativeMediaUrl?: string; headline: string; primaryText: string;
+  destinationUrl?: string; locationCity: string; locationCityKey?: string;
+  locationRadiusKm: number; ageMin: number; ageMax: number;
+  gender: 'all' | 'male' | 'female'; dailyBudgetBrl: number; durationDays?: number;
+  whatsappPageId?: string; whatsappPageName?: string;
+  whatsappPhoneNumberId?: string; whatsappPhoneNumber?: string;
+  destinations?: WizardMessagingDestination[]; instagramUserId?: string;
+  instagramUsername?: string;
+}
+&nbsp;
+export interface CreateWizardCampaignResult {
+  success: true; campaign_id: string; meta_campaign_id: string; campaign_name: string;
+}
+&nbsp;
+// ── Wizard constants ────────────────────────────────────────────────────────
+&nbsp;
+const WIZARD_OBJECTIVE_MAP: Record&lt;WizardObjective, {
+  metaObjective: string; optimizationGoal: string; cta: string;
+  destinationType?: string; label: string;
+}&gt; = {
+  visits: { metaObjective: 'OUTCOME_TRAFFIC', optimizationGoal: 'LINK_CLICKS', cta: 'LEARN_MORE', label: 'Visitas' },
+  engagement: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'POST_ENGAGEMENT', cta: 'LIKE_PAGE', destinationType: 'ON_POST', label: 'Engajamento' },
+  messages: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'CONVERSATIONS', cta: 'MESSAGE_PAGE', destinationType: 'MESSENGER', label: 'Atração de Clientes' },
+  whatsapp: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'CONVERSATIONS', cta: 'WHATSAPP_MESSAGE', destinationType: 'WHATSAPP', label: 'Gerar Conversas' },
+};
+&nbsp;
+// ── Pure helper functions (exported for testing) ────────────────────────────
+&nbsp;
+export function normalizeCampaignPanelMetrics(raw: unknown): CampaignPanelMetrics {
+  const m = raw &amp;&amp; typeof raw === 'object' ? (raw as Record&lt;string, unknown&gt;) : {};
+  const num = (v: unknown) =&gt; {
+    const n = typeof v === 'number' ? v : parseFloat(String(v ?? '0'));
+    return Number.isFinite(n) ? n : <span class="branch-1 cbranch-no" title="branch not covered" >0;</span>
+  };
+  return {
+    spend: num(m.spend), roas: num(m.roas), cpa: num(m.cpa), ctr: num(m.ctr),
+    cpm: num(m.cpm), conversions: num(m.conversions), impressions: num(m.impressions),
+  };
+}
+&nbsp;
+export function formatCampaignListItem(campaign: CampaignRecord): CampaignListItem {
+  const budgetObj = campaign.budget as Record&lt;string, unknown&gt; | null | undefined;
+  const metricsObj = campaign.metrics as Record&lt;string, unknown&gt; | null | undefined;
+  const objective = budgetObj &amp;&amp; typeof budgetObj.objective === 'string' ? budgetObj.objective : null;
+  const getMetric = (key: string): number =&gt; {
+    if (!metricsObj) return 0;
+    const val = metricsObj[key];
+    <span class="missing-if-branch" title="else path not taken" >E</span>if (typeof val === 'number') return val;
+<span class="cstat-no" title="statement not covered" >    if (typeof val === 'string') { const n = <span class="cstat-no" title="statement not covered" >parseFloat(val); <span class="cstat-no" title="statement not covered" >r</span>eturn Number.isFinite(n) ? n : 0; }</span></span>
+<span class="cstat-no" title="statement not covered" >    return 0;</span>
+  };
+  return {
+    id: campaign.id, name: campaign.name, status: campaign.status, objective,
+    budget: campaign.budget ?? {}, spend: getMetric('spend'), impressions: getMetric('impressions'),
+    clicks: getMetric('clicks'), ctr: getMetric('ctr'), cpc: getMetric('cpc'),
+    roas: getMetric('roas'), cpa: getMetric('cpa'), conversions: getMetric('conversions'),
+  };
+}
+&nbsp;
+export function calculateDateRange(
+  dateRange: 'last_7d' | 'last_30d' | 'last_90d' | 'custom',
+  startDate?: string, endDate?: string
+): { startDate: string; endDate: string } {
+  if (dateRange === 'custom' &amp;&amp; startDate &amp;&amp; endDate) return { startDate, endDate };
+  const today = new Date();
+  const end = new Date(today);
+  const start = new Date(today);
+  const days = dateRange === 'last_7d' ? 7 : <span class="branch-1 cbranch-no" title="branch not covered" >dateRange === 'last_30d' ? 30 : 90;</span>
+  start.setDate(start.getDate() - days);
+  return {
+    startDate: start.toISOString().split('T')[0],
+    endDate: end.toISOString().split('T')[0],
+  };
+}
+&nbsp;
+export function mapWizardMetaError(err: unknown, step: string): never {
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (err instanceof AppError) <span class="cstat-no" title="statement not covered" >throw err;</span>
+  const metaCode = (err as any).metaCode;
+  const metaSubcode = (err as any).metaSubcode;
+  const metaType = (err as any).metaType;
+  const httpStatus = (err as any).httpStatus;
+  const metaUserMsg = (err as any).metaUserMsg as string | undefined;
+  const metaUserTitle = (err as any).metaUserTitle as string | undefined;
+  const metaBlameField = (err as any).metaBlameField as string | undefined;
+  const message = (err as Error).message || '';
+  const lowerMessage = message.toLowerCase();
+&nbsp;
+  console.error(`[CampaignWizard] Erro Meta API na etapa "${step}":`, {
+    metaCode, metaSubcode, metaType, httpStatus, message, metaUserTitle, metaUserMsg, metaBlameField,
+  });
+&nbsp;
+  if (metaCode === 190) {
+    throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão com Meta expirada. Reconecte em Configurações');
+  }
+  if (metaType === 'OAuthException' &amp;&amp; (metaCode === 200 || <span class="branch-2 cbranch-no" title="branch not covered" >metaCode === 10)) {</span>
+    throw new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para publicar campanhas. Verifique ads_management, pages_show_list e business_management em Configurações → Integrações.');
+  }
+  if (lowerMessage.includes('insufficient') || lowerMessage.includes('saldo') || lowerMessage.includes('fund')) {
+    throw new AppError(402, 'META_INSUFFICIENT_FUNDS', 'Conta de anúncios sem saldo suficiente');
+  }
+  <span class="missing-if-branch" title="else path not taken" >E</span>if (metaSubcode === 3858258) {
+    throw new AppError(400, 'META_IMAGE_DOWNLOAD_FAILED', 'O Meta nao conseguiu baixar a imagem do criativo. A URL pode estar bloqueada (robots.txt) ou o formato pode ser invalido. Use uma imagem JPEG ou PNG hospedada em um servidor acessivel.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+  }
+<span class="cstat-no" title="statement not covered" >  if (metaSubcode === 1487110) {</span>
+<span class="cstat-no" title="statement not covered" >    throw new AppError(400, 'META_LOCATION_RADIUS', metaUserMsg || 'O raio geografico selecionado nao esta dentro dos limites. Aumente o raio (ex: Sao Paulo precisa de 15km ou mais).', { step, meta_code: metaCode, meta_subcode: metaSubcode });</span>
+  }
+  const userMessage = <span class="cstat-no" title="statement not covered" >metaUserMsg || metaUserTitle ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}` : (message || 'Erro ao publicar no Meta. Tente novamente.');</span>
+  throw new AppError(400, 'META_API_ERROR', userMessage, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...(metaBlameField ? { blame_field: metaBlameField } : {}) });
+}
+&nbsp;
+// ── Service class ────────────────────────────────────────────────────────────
+&nbsp;
+export class CampaignsService {
+  constructor(
+    private meta: IMetaCampaignProvider,
+    private repo: ICampaignRepository,
+    private deps: {
+      decryptMetaToken: (token: string) =&gt; string;
+      invalidateCampaignsCache: (tenantId: string) =&gt; Promise&lt;void&gt;;
+      getMetaLocationsCache: (query: string) =&gt; Promise&lt;any&gt;;
+      setMetaLocationsCache: (query: string, data: any) =&gt; Promise&lt;void&gt;;
+      getResolvedTenantAssetSelection: (tenantId: string) =&gt; Promise&lt;{ pages: Array&lt;{ instagramUserId?: string; pageId?: string }&gt; }&gt;;
+    }
+  ) {}
+&nbsp;
+  private handleMetaError(err: unknown): never {
+    const metaCode = (err as any).metaCode;
+    if (metaCode === 190) {
+      throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações &gt; Integrações');
+    }
+    <span class="missing-if-branch" title="else path not taken" >E</span>if (metaCode === 100) {
+      throw new AppError(400, 'INVALID_PARAMETER', (err as Error).message);
+    }
+<span class="cstat-no" title="statement not covered" >    throw err;</span>
+  }
+&nbsp;
+  async createCampaign(args: {
+    tenantId: string; name: string;
+    objective: 'OUTCOME_SALES' | 'OUTCOME_LEADS' | 'OUTCOME_TRAFFIC' | 'OUTCOME_AWARENESS';
+    dailyBudget: number; adAccountId: string;
+  }) {
+    const metaConn = await this.repo.findMetaConnection(args.tenantId);
+    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
+&nbsp;
+    const adAccounts = (metaConn.adAccounts as { id: string }[]) || <span class="branch-1 cbranch-no" title="branch not covered" >[];</span>
+    if (!adAccounts.some((acc) =&gt; acc.id === args.adAccountId)) {
+      throw new AppError(403, 'AD_ACCOUNT_NOT_FOUND', 'Ad account does not belong to this tenant');
+    }
+&nbsp;
+    const accessToken = this.deps.decryptMetaToken(metaConn.accessToken);
+&nbsp;
+    try {
+      const response = await this.meta.createCampaign(args.adAccountId, accessToken, {
+        name: args.name, objective: args.objective, status: 'PAUSED',
+        special_ad_categories: [], is_adset_budget_sharing_enabled: false,
+      });
+&nbsp;
+      return this.repo.createCampaign({
+        tenantId: args.tenantId,
+        metaCampaignId: response.id,
+        name: args.name,
+        status: 'paused',
+        budget: { daily_budget: args.dailyBudget, objective: args.objective },
+      } as any);
+    } catch (err) { this.handleMetaError(err); }
+  }
+&nbsp;
+  private async verifyCampaignOwnership(campaign: CampaignRecord, tenantId: string): Promise&lt;void&gt; {
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (campaign.tenantId !== tenantId) {
+<span class="cstat-no" title="statement not covered" >      throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');</span>
+    }
+  }
+&nbsp;
+  private async getAccessToken(tenantId: string): Promise&lt;string&gt; {
+    const metaConn = await this.repo.findMetaConnection(tenantId);
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (!metaConn) <span class="cstat-no" title="statement not covered" >throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');</span>
+    return this.deps.decryptMetaToken(metaConn.accessToken);
+  }
+&nbsp;
+  private async findCampaignOrThrow(tenantId: string, campaignId: string): Promise&lt;CampaignRecord&gt; {
+    const campaign = await this.repo.findCampaignById(campaignId);
+    if (!campaign) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
+    await this.verifyCampaignOwnership(campaign, tenantId);
+    return campaign;
+  }
+&nbsp;
+  async pauseCampaign(args: { tenantId: string; campaignId: string }) {
+    const accessToken = await this.getAccessToken(args.tenantId);
+&nbsp;
+    const campaignMeta = await this.meta.getCampaign(args.campaignId, accessToken);
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (campaignMeta.account_id) {
+      const metaConn = <span class="cstat-no" title="statement not covered" >await this.repo.findMetaConnection(args.tenantId);</span>
+      const <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >normalize = (i</span>d: string) =&gt; <span class="cstat-no" title="statement not covered" >id.replace(/^act_/, '');</span></span>
+      const adAccounts = (<span class="cstat-no" title="statement not covered" >metaConn?.adAccounts as { id: string }[]) || [];</span>
+<span class="cstat-no" title="statement not covered" >      if (!adAccounts.<span class="fstat-no" title="function not covered" >some((a</span>cc) =&gt; <span class="cstat-no" title="statement not covered" >normalize(acc.id) === normalize(campaignMeta.account_id as string))</span>) {</span>
+<span class="cstat-no" title="statement not covered" >        throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');</span>
+      }
+    }
+&nbsp;
+    try { await this.meta.updateCampaign(args.campaignId, accessToken, { status: 'PAUSED' }); }
+    catch (err) { <span class="cstat-no" title="statement not covered" >this.handleMetaError(err); }</span>
+    return { campaignId: args.campaignId, status: 'PAUSED' as const };
+  }
+&nbsp;
+  async resumeCampaign(args: { tenantId: string; campaignId: string }) {
+    const accessToken = await this.getAccessToken(args.tenantId);
+&nbsp;
+    const campaignMeta = await this.meta.getCampaign(args.campaignId, accessToken);
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (campaignMeta.account_id) {
+      const metaConn = <span class="cstat-no" title="statement not covered" >await this.repo.findMetaConnection(args.tenantId);</span>
+      const <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >normalize = (i</span>d: string) =&gt; <span class="cstat-no" title="statement not covered" >id.replace(/^act_/, '');</span></span>
+      const adAccounts = (<span class="cstat-no" title="statement not covered" >metaConn?.adAccounts as { id: string }[]) || [];</span>
+<span class="cstat-no" title="statement not covered" >      if (!adAccounts.<span class="fstat-no" title="function not covered" >some((a</span>cc) =&gt; <span class="cstat-no" title="statement not covered" >normalize(acc.id) === normalize(campaignMeta.account_id as string))</span>) {</span>
+<span class="cstat-no" title="statement not covered" >        throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');</span>
+      }
+    }
+&nbsp;
+    try { await this.meta.updateCampaign(args.campaignId, accessToken, { status: 'ACTIVE' }); }
+    catch (err) { <span class="cstat-no" title="statement not covered" >this.handleMetaError(err); }</span>
+    return { campaignId: args.campaignId, status: 'ACTIVE' as const };
+  }
+&nbsp;
+  async updateCampaignBudget(args: { tenantId: string; campaignId: string; dailyBudget: number }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const accessToken = await this.getAccessToken(args.tenantId);
+&nbsp;
+    try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, { daily_budget: args.dailyBudget }); }
+    catch (err) { <span class="cstat-no" title="statement not covered" >this.handleMetaError(err); }</span>
+&nbsp;
+    return this.repo.updateCampaign(args.campaignId, {
+      budget: { ...(campaign.budget as Record&lt;string, unknown&gt;), daily_budget: args.dailyBudget },
+    } as any);
+  }
+&nbsp;
+  async getCampaign(args: { tenantId: string; campaignId: string }) {
+    return this.findCampaignOrThrow(args.tenantId, args.campaignId);
+  }
+&nbsp;
+  async getCampaignPanelDetail(args: { tenantId: string; campaignId: string }): Promise&lt;{
+    campaign: { id: string; name: string; status: string; objective: string | null;
+      budget: unknown; metaCampaignId: string; metrics: CampaignPanelMetrics;
+      lastSyncedAt: string | null; createdAt: string; };
+    recentTakedowns: TakedownItem[]; automationRules: AutomationRuleItem[];
+  } | null&gt; {
+    const campaign = await this.repo.findCampaignByTenantAndId(args.tenantId, args.campaignId);
+    if (!campaign) return null;
+&nbsp;
+    const [recentTakedownsRows, rulesRows] = await Promise.all([
+      this.repo.findRecentTakedowns(args.tenantId, args.campaignId),
+      this.repo.findActiveAutomationRules(args.tenantId),
+    ]);
+&nbsp;
+    const budgetObj = campaign.budget as Record&lt;string, unknown&gt; | null | undefined;
+    const objective = budgetObj &amp;&amp; typeof budgetObj.objective === 'string' ? budgetObj.objective : <span class="branch-1 cbranch-no" title="branch not covered" >null;</span>
+&nbsp;
+    return {
+      campaign: {
+        id: campaign.id, name: campaign.name, status: campaign.status, objective,
+        budget: campaign.budget ?? <span class="branch-1 cbranch-no" title="branch not covered" >{}, m</span>etaCampaignId: campaign.metaCampaignId,
+        metrics: normalizeCampaignPanelMetrics(campaign.metrics),
+        lastSyncedAt: campaign.lastSyncedAt?.toISOString() ?? null,
+        createdAt: campaign.createdAt.toISOString(),
+      },
+      recentTakedowns: recentTakedownsRows.map((t: any) =&gt; ({
+        id: t.id, campaignId: t.campaignId, suggestionType: t.suggestionType,
+        suggestionData: (t.suggestionData as Record&lt;string, unknown&gt;) ?? <span class="branch-1 cbranch-no" title="branch not covered" >{},</span>
+        appliedAt: t.appliedAt?.toISOString() ?? null, createdAt: t.createdAt.toISOString(),
+      })),
+      automationRules: rulesRows.<span class="fstat-no" title="function not covered" >map((r</span>: any) =&gt; (<span class="cstat-no" title="statement not covered" >{</span>
+        id: r.id, tenantId: r.tenantId, name: r.name, description: r.description,
+        trigger: r.trigger, enabled: r.isActive, createdAt: r.createdAt.toISOString(),
+        updatedAt: r.updatedAt.toISOString(), ruleType: r.ruleType, isActive: r.isActive,
+        threshold: parseFloat(String(r.threshold)) || 0, action: r.action,
+      })),
+    };
+  }
+&nbsp;
+  async getCampaigns(args: { tenantId: string; status?: string; limit: number; offset: number }): Promise&lt;{ items: CampaignListItem[]; total: number }&gt; {
+    const result = await this.repo.findCampaigns(args.tenantId, args.status, args.limit, args.offset);
+    return { items: result.items.map((c) =&gt; formatCampaignListItem(c)), total: result.total };
+  }
+&nbsp;
+  async updateCampaign(args: { tenantId: string; campaignId: string; name?: string; budget?: { amount: number; type: 'daily' | 'lifetime'; startDate?: string; endDate?: string } }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const accessToken = await this.getAccessToken(args.tenantId);
+    const updateBody: Record&lt;string, unknown&gt; = {};
+    <span class="missing-if-branch" title="else path not taken" >E</span>if (args.name) updateBody.name = args.name;
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (args.budget) {
+<span class="cstat-no" title="statement not covered" >      updateBody[args.budget.type === 'daily' ? 'daily_budget' : 'lifetime_budget'] = args.budget.amount;</span>
+<span class="cstat-no" title="statement not covered" >      if (args.budget.startDate) <span class="cstat-no" title="statement not covered" >updateBody.start_date = args.budget.startDate;</span></span>
+<span class="cstat-no" title="statement not covered" >      if (args.budget.endDate) <span class="cstat-no" title="statement not covered" >updateBody.end_date = args.budget.endDate;</span></span>
+    }
+&nbsp;
+    try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, updateBody); }
+    catch (err) { <span class="cstat-no" title="statement not covered" >this.handleMetaError(err); }</span>
+&nbsp;
+    <span class="missing-if-branch" title="else path not taken" >E</span>if (args.name) return this.repo.updateCampaign(args.campaignId, { name: args.name } as any);
+<span class="cstat-no" title="statement not covered" >    if (args.budget) {</span>
+      const updatedBudget = <span class="cstat-no" title="statement not covered" >{ ...(campaign.budget as Record&lt;string, unknown&gt;) };</span>
+<span class="cstat-no" title="statement not covered" >      if (args.budget.type === 'daily') <span class="cstat-no" title="statement not covered" >updatedBudget.daily_budget = args.budget.amount;</span></span>
+      else <span class="cstat-no" title="statement not covered" >updatedBudget.lifetime_budget = args.budget.amount;</span>
+<span class="cstat-no" title="statement not covered" >      if (args.budget.startDate) <span class="cstat-no" title="statement not covered" >updatedBudget.start_date = args.budget.startDate;</span></span>
+<span class="cstat-no" title="statement not covered" >      if (args.budget.endDate) <span class="cstat-no" title="statement not covered" >updatedBudget.end_date = args.budget.endDate;</span></span>
+<span class="cstat-no" title="statement not covered" >      return this.repo.updateCampaign(args.campaignId, { budget: updatedBudget } as any);</span>
+    }
+<span class="cstat-no" title="statement not covered" >    return campaign;</span>
+  }
+&nbsp;
+  async updateCampaignStatus(args: { tenantId: string; campaignId: string; status: 'ACTIVE' | 'PAUSED' | 'ARCHIVED'; userId: string }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const accessToken = await this.getAccessToken(args.tenantId);
+&nbsp;
+    try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, { status: args.status }); }
+    catch (err) { <span class="cstat-no" title="statement not covered" >this.handleMetaError(err); }</span>
+&nbsp;
+    const localStatus = args.status === 'ACTIVE' ? <span class="branch-0 cbranch-no" title="branch not covered" >'active' : a</span>rgs.status === 'PAUSED' ? 'paused' : <span class="branch-1 cbranch-no" title="branch not covered" >'archived';</span>
+    const updated = await this.repo.updateCampaign(args.campaignId, { status: localStatus } as any);
+&nbsp;
+    await this.repo.insertFuryInsight({
+      tenantId: args.tenantId, campaignId: args.campaignId,
+      suggestionType: `campaign_status_${args.status.toLowerCase()}`,
+      suggestionData: { userId: args.userId, timestamp: new Date().toISOString(), action: 'manual' },
+    } as any);
+&nbsp;
+    return updated;
+  }
+&nbsp;
+  async softDeleteCampaign(args: { tenantId: string; campaignId: string; userId: string }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const accessToken = await this.getAccessToken(args.tenantId);
+&nbsp;
+    try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, { status: 'ARCHIVED' }); }
+    catch (err) { <span class="cstat-no" title="statement not covered" >this.handleMetaError(err); }</span>
+&nbsp;
+    const deleted = await this.repo.updateCampaign(args.campaignId, { status: 'archived' } as any);
+&nbsp;
+    await this.repo.insertFuryInsight({
+      tenantId: args.tenantId, campaignId: args.campaignId,
+      suggestionType: 'campaign_archived',
+      suggestionData: { userId: args.userId, timestamp: new Date().toISOString(), action: 'manual' },
+    } as any);
+&nbsp;
+    return deleted;
+  }
+&nbsp;
+  async getCampaignInsights(args: {
+    tenantId: string; campaignId: string;
+    dateRange: 'last_7d' | 'last_30d' | 'last_90d' | 'custom';
+    startDate?: string; endDate?: string;
+  }) {
+    const accessToken = await this.getAccessToken(args.tenantId);
+&nbsp;
+    const dbCampaign = await this.repo.findCampaignByMetaId(args.tenantId, args.campaignId);
+&nbsp;
+    let campaignBlock: { id: string; name: string; status: string } = {
+      id: args.campaignId, name: `Campaign ${args.campaignId}`, status: 'ACTIVE',
+    };
+    let campaignObjective: string | null = null;
+&nbsp;
+    if (dbCampaign) {
+      const statusMap: Record&lt;string, string&gt; = { ativo: 'ACTIVE', pausado: 'PAUSED', arquivado: 'ARCHIVED' };
+      campaignBlock = { id: dbCampaign.metaCampaignId, name: dbCampaign.name, status: statusMap[dbCampaign.status] ?? dbCampaign.status.toUpperCase() };
+      const budgetObj = dbCampaign.budget as Record&lt;string, unknown&gt; | null | undefined;
+      const wizardObjective = budgetObj &amp;&amp; typeof budgetObj.objective === 'string' ? budgetObj.objective : <span class="branch-1 cbranch-no" title="branch not covered" >null;</span>
+      campaignObjective = wizardObjective ? (WIZARD_OBJECTIVE_MAP[wizardObjective as WizardObjective]?.metaObjective ?? wizardObjective) : <span class="branch-1 cbranch-no" title="branch not covered" >null;</span>
+    } else <span class="missing-if-branch" title="else path not taken" >E</span>{
+<span class="cstat-no" title="statement not covered" >      try {</span>
+        const meta = <span class="cstat-no" title="statement not covered" >await this.meta.getCampaign(args.campaignId, accessToken, 'name,status,objective');</span>
+<span class="cstat-no" title="statement not covered" >        campaignBlock = { id: args.campaignId, name: (meta.name as string) || `Campaign ${args.campaignId}`, status: ((meta.status as string) || 'ACTIVE').toUpperCase() };</span>
+<span class="cstat-no" title="statement not covered" >        campaignObjective = (meta.objective as string) ?? null;</span>
+      } catch { /* keep defaults */ }
+    }
+&nbsp;
+    const { startDate, endDate } = calculateDateRange(args.dateRange, args.startDate, args.endDate);
+&nbsp;
+    try {
+      const response = await this.meta.getInsights({ accessToken, entityId: args.campaignId, startDate, endDate, timeIncrement: 1 });
+&nbsp;
+      const timeseries = (response.data || <span class="branch-1 cbranch-no" title="branch not covered" >[])</span>.map((item: any) =&gt; {
+        const spend = parseFloat(item.spend || <span class="branch-1 cbranch-no" title="branch not covered" >'0')</span>;
+        const impressions = parseInt(item.impressions || <span class="branch-1 cbranch-no" title="branch not covered" >'0', 1</span>0);
+        const clicks = parseInt(item.clicks || <span class="branch-1 cbranch-no" title="branch not covered" >'0', 1</span>0);
+        const ctr = parseFloat(item.ctr || <span class="branch-1 cbranch-no" title="branch not covered" >'0')</span>;
+        const cpc = parseFloat(item.cpc || <span class="branch-1 cbranch-no" title="branch not covered" >'0')</span>;
+        const cpm = parseFloat(item.cpm || <span class="branch-1 cbranch-no" title="branch not covered" >'0')</span>;
+        const conversions = parseConversionsFromActions(item.actions, campaignObjective, item.unique_actions) ?? 0;
+        const roas = parseRoasFromPurchaseRoas(item.purchase_roas) ?? null;
+        const cpa = (conversions &gt; <span class="branch-0 cbranch-no" title="branch not covered" >0 ? roundToDecimals(spend / conversions, 2) : n</span>ull) ?? parseCpaFromCostPerAction(item.cost_per_action_type);
+        return { date: item.date_start || <span class="branch-1 cbranch-no" title="branch not covered" >item.date_stop || <span class="branch-2 cbranch-no" title="branch not covered" >'</span>', s</span>pend, impressions, clicks, ctr, cpc, cpm, roas, cpa, conversions };
+      });
+&nbsp;
+      return { campaign: campaignBlock, timeseries };
+    } catch (err) {
+<span class="cstat-no" title="statement not covered" >      console.error('[getCampaignInsights] Meta API error:', err);</span>
+      const metaCode = (<span class="cstat-no" title="statement not covered" >err as any).metaCode;</span>
+<span class="cstat-no" title="statement not covered" >      if (metaCode === 190) <span class="cstat-no" title="statement not covered" >throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações &gt; Integrações');</span></span>
+<span class="cstat-no" title="statement not covered" >      throw err;</span>
+    }
+  }
+&nbsp;
+  async createCampaignFromWizard(args: CreateWizardCampaignArgs): Promise&lt;CreateWizardCampaignResult&gt; {
+    const metaConn = await this.repo.findMetaConnection(args.tenantId);
+    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
+&nbsp;
+    const adAccountId = metaConn.selectedAdAccountId;
+    if (!adAccountId) throw new AppError(400, 'AD_ACCOUNT_NOT_SELECTED', 'Nenhuma conta de anúncios selecionada. Configure em Configurações → Integrações.');
+&nbsp;
+    const accessToken = this.deps.decryptMetaToken(metaConn.accessToken);
+    const objectiveConfig = WIZARD_OBJECTIVE_MAP[args.objective];
+&nbsp;
+    let messagingDestinations: WizardMessagingDestination[] = [];
+    if (args.objective === 'whatsapp') {
+      if (!args.whatsappPageId) throw new AppError(400, 'WHATSAPP_PAGE_REQUIRED', 'Selecione a Página do Facebook para receber as mensagens.');
+      messagingDestinations = args.destinations &amp;&amp; args.destinations.length &gt; 0 ? args.destinations : ['whatsapp'];
+      if (messagingDestinations.includes('whatsapp') &amp;&amp; !args.whatsappPhoneNumber) throw new AppError(400, 'WHATSAPP_NUMBER_REQUIRED', 'Selecione o número de WhatsApp que receberá as mensagens.');
+<span class="cstat-no" title="statement not covered" >      if (messagingDestinations.includes('instagram_direct') &amp;&amp; !args.instagramUserId) <span class="cstat-no" title="statement not covered" >throw new AppError(400, 'INSTAGRAM_USER_ID_REQUIRED', 'Conecte uma conta do Instagram à Página no Meta Business para usar Instagram Direct.');</span></span>
+    }
+&nbsp;
+    let imageUrl = args.creativeInstagramMediaId ? <span class="branch-0 cbranch-no" title="branch not covered" >args.creativeMediaUrl : a</span>rgs.creativeUploadUrl;
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (!imageUrl &amp;&amp; args.creativeAssetId) {
+      const asset = <span class="cstat-no" title="statement not covered" >await this.repo.findCreativeAsset(args.creativeAssetId, args.tenantId);</span>
+<span class="cstat-no" title="statement not covered" >      if (!asset) <span class="cstat-no" title="statement not covered" >throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo não encontrado.');</span></span>
+<span class="cstat-no" title="statement not covered" >      imageUrl = asset.url;</span>
+    }
+&nbsp;
+    if (!imageUrl &amp;&amp; !args.creativeInstagramMediaId) {
+      throw new AppError(400, 'CREATIVE_IMAGE_MISSING', 'Selecione uma imagem da galeria ou envie um arquivo.');
+    }
+&nbsp;
+    let instagramCreativeActorId: string | undefined;
+    let instagramCreativePageId: string | undefined;
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (args.creativeInstagramMediaId) {
+      const assetSelection = <span class="cstat-no" title="statement not covered" >await this.deps.getResolvedTenantAssetSelection(args.tenantId);</span>
+      const igPage = <span class="cstat-no" title="statement not covered" >assetSelection.pages.<span class="fstat-no" title="function not covered" >find((p</span>age) =&gt; <span class="cstat-no" title="statement not covered" >page.instagramUserId)</span>;</span>
+<span class="cstat-no" title="statement not covered" >      if (!igPage?.instagramUserId) <span class="cstat-no" title="statement not covered" >throw new AppError(400, 'INSTAGRAM_ACCOUNT_NOT_FOUND', 'Nenhuma conta do Instagram conectada para usar este post como criativo.');</span></span>
+<span class="cstat-no" title="statement not covered" >      instagramCreativeActorId = igPage.instagramUserId;</span>
+<span class="cstat-no" title="statement not covered" >      instagramCreativePageId = igPage.pageId;</span>
+    }
+&nbsp;
+    let cityKey = args.locationCityKey;
+    <span class="missing-if-branch" title="else path not taken" >E</span>if (!cityKey) {
+      let locations: any[];
+      try { locations = await this.meta.searchLocations(args.locationCity, accessToken); }
+      catch (err) { <span class="cstat-no" title="statement not covered" >mapWizardMetaError(err, 'location_search'); }</span>
+      const match = locations[0];
+      <span class="missing-if-branch" title="if path not taken" >I</span>if (!match) <span class="cstat-no" title="statement not covered" >throw new AppError(400, 'LOCATION_NOT_FOUND', 'Cidade não encontrada. Tente outro nome.');</span>
+      cityKey = match.key;
+    }
+&nbsp;
+    const today = new Date();
+    const dataLabel = today.toLocaleDateString('pt-BR');
+    const campaignName = `${objectiveConfig.label} — FURY — ${dataLabel}`;
+&nbsp;
+    const selectedPageIds = (metaConn.selectedPageIds as string[] | null) ?? <span class="branch-1 cbranch-no" title="branch not covered" >[];</span>
+    const pageId = args.objective === 'whatsapp' ? <span class="branch-0 cbranch-no" title="branch not covered" >args.whatsappPageId! : s</span>electedPageIds[0] || process.env.META_PAGE_ID || '';
+    if (!pageId) throw new AppError(400, 'PAGE_NOT_FOUND', 'Nenhuma Página do Facebook configurada. Selecione uma página em Configurações → Integrações.');
+&nbsp;
+    let messagingDestinationType: string | undefined;
+    let promotedObject: Record&lt;string, unknown&gt; | undefined;
+&nbsp;
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (args.objective === 'whatsapp') {
+<span class="cstat-no" title="statement not covered" >      promotedObject = { page_id: args.whatsappPageId };</span>
+<span class="cstat-no" title="statement not covered" >      if (messagingDestinations.includes('whatsapp')) <span class="cstat-no" title="statement not covered" >promotedObject.whatsapp_phone_number = args.whatsappPhoneNumber;</span></span>
+<span class="cstat-no" title="statement not covered" >      messagingDestinationType = messagingDestinations.length &gt; 1 ? 'MESSAGING_APPS'</span>
+        : messagingDestinations[0] === 'whatsapp' ? 'WHATSAPP'
+        : messagingDestinations[0] === 'instagram_direct' ? 'INSTAGRAM_DIRECT' : 'MESSENGER';
+    } else <span class="missing-if-branch" title="else path not taken" >E</span>if (args.objective === 'visits' || <span class="branch-1 cbranch-no" title="branch not covered" >args.objective === 'engagement' || <span class="branch-2 cbranch-no" title="branch not covered" >a</span>rgs.objective === 'messages') {</span>
+      promotedObject = { page_id: pageId };
+    }
+&nbsp;
+    const destinationType = messagingDestinationType || objectiveConfig.destinationType;
+&nbsp;
+    let metaCampaignId: string | undefined;
+    let adSetId: string | undefined;
+    let adCreativeId: string | undefined;
+    let metaAdId: string | undefined;
+&nbsp;
+    try {
+      const campaignBody = {
+        name: campaignName, objective: objectiveConfig.metaObjective, status: 'ACTIVE',
+        special_ad_categories: [], is_adset_budget_sharing_enabled: false,
+      };
+&nbsp;
+      let adImageHashPromise: Promise&lt;string | undefined&gt; = Promise.resolve(undefined);
+      if (!instagramCreativeActorId &amp;&amp; imageUrl) {
+        adImageHashPromise = (async () =&gt; {
+          try {
+            const result = await this.meta.downloadImage(imageUrl, AbortSignal.timeout(15_000));
+            <span class="missing-if-branch" title="if path not taken" >I</span>if (!result) <span class="cstat-no" title="statement not covered" >throw new Error(`Falha ao baixar imagem (HTTP). Verifique se a URL está acessível.`);</span>
+            <span class="missing-if-branch" title="if path not taken" >I</span>if (!result.contentType.includes('jpeg') &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >!result.contentType.includes('png') &amp;&amp; <span class="branch-2 cbranch-no" title="branch not covered" >!</span>result.contentType.includes('image/')) {</span>
+<span class="cstat-no" title="statement not covered" >              throw new Error(`Formato de imagem nao suportado: ${result.contentType || 'desconhecido'}. Use uma imagem JPEG ou PNG acessivel publicamente.`);</span>
+            }
+            const ext = result.contentType.includes('png') ? <span class="branch-0 cbranch-no" title="branch not covered" >'png' : '</span>jpg';
+            const hash = await this.meta.uploadAdImage({
+              adAccountId, base64: result.buffer.toString('base64'),
+              filename: `fury_creative_${Date.now()}.${ext}`, accessToken,
+            });
+            return hash;
+          } catch (uploadErr) {
+            console.error('[CampaignWizard] Falha ao enviar imagem para Meta, usando URL original:', uploadErr);
+            return undefined;
+          }
+        })();
+      }
+&nbsp;
+      const campaignResponse = await this.meta.createCampaign(adAccountId, accessToken, campaignBody);
+      metaCampaignId = campaignResponse.id;
+&nbsp;
+      const targeting: Record&lt;string, unknown&gt; = {
+        geo_locations: { cities: [{ key: parseInt(cityKey!, 10), radius: args.locationRadiusKm || <span class="branch-1 cbranch-no" title="branch not covered" >30, d</span>istance_unit: 'kilometer' }] },
+        age_min: args.ageMin, age_max: args.ageMax,
+        genders: args.gender === 'all' ? [1, 2] : <span class="branch-1 cbranch-no" title="branch not covered" >args.gender === 'male' ? [1] : [2],</span>
+        targeting_automation: { advantage_audience: 0 },
+      };
+&nbsp;
+      const adSetBody: Record&lt;string, unknown&gt; = {
+        name: `AdSet — ${args.locationCity} — FURY`, campaign_id: metaCampaignId,
+        daily_budget: Math.round(args.dailyBudgetBrl * 100),
+        billing_event: 'IMPRESSIONS', optimization_goal: objectiveConfig.optimizationGoal,
+        bid_strategy: 'LOWEST_COST_WITHOUT_CAP', targeting, status: 'ACTIVE',
+      };
+      <span class="missing-if-branch" title="if path not taken" >I</span>if (destinationType) <span class="cstat-no" title="statement not covered" >adSetBody.destination_type = destinationType;</span>
+      <span class="missing-if-branch" title="else path not taken" >E</span>if (promotedObject) adSetBody.promoted_object = promotedObject;
+      if (args.durationDays) {
+        const endTime = new Date(today.getTime() + args.durationDays * 24 * 60 * 60 * 1000);
+        adSetBody.end_time = endTime.toISOString();
+      }
+&nbsp;
+      const adSetResponse = await this.meta.createAdSet(adAccountId, accessToken, adSetBody);
+      adSetId = adSetResponse.id;
+&nbsp;
+      const adImageHash = await adImageHashPromise;
+&nbsp;
+      const creativeBody: Record&lt;string, unknown&gt; = instagramCreativeActorId
+        ? <span class="branch-0 cbranch-no" title="branch not covered" >{ object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: args.creativeInstagramMediaId, call_to_action: JSON.stringify({ type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: args.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }</span>
+        : { name: 'Creative — FURY', object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: args.primaryText, name: args.headline, call_to_action: messagingDestinationType ? <span class="branch-0 cbranch-no" title="branch not covered" >{ type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : {</span> type: objectiveConfig.cta }, ...(args.objective === 'visits' ? { link: args.destinationUrl } : <span class="branch-1 cbranch-no" title="branch not covered" >{}), .</span>..(args.objective !== 'visits' ? <span class="branch-0 cbranch-no" title="branch not covered" >{ link: `https://www.facebook.com/${pageId}` } : {</span>}) } } };
+&nbsp;
+      const adCreativeResponse = await this.meta.createAdCreative(adAccountId, accessToken, creativeBody);
+      adCreativeId = adCreativeResponse.id;
+&nbsp;
+      const adResponse = await this.meta.createAd(adAccountId, accessToken, {
+        name: `Ad — FURY — ${dataLabel}`, adset_id: adSetId,
+        creative: { creative_id: adCreativeId }, status: 'ACTIVE',
+      });
+      metaAdId = adResponse.id;
+    } catch (err) {
+      const step = !metaCampaignId ? 'campaign' : <span class="branch-1 cbranch-no" title="branch not covered" >!adSetId ? 'adset' : !adCreativeId ? 'creative' : 'ad';</span>
+      mapWizardMetaError(err, step);
+    }
+&nbsp;
+    const campaign = await this.repo.createCampaign({
+      tenantId: args.tenantId, metaCampaignId, name: campaignName, status: 'active',
+      budget: {
+        daily_budget: Math.round(args.dailyBudgetBrl * 100), objective: objectiveConfig.metaObjective,
+        created_via: 'wizard', ad_set_id: adSetId, ad_creative_id: adCreativeId, ad_id: metaAdId,
+        duration_days: args.durationDays ?? null,
+        ...(args.objective === 'whatsapp' ? <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
+          destinations: messagingDestinations, destination_type: messagingDestinationType,
+          whatsapp_page_id: args.whatsappPageId, whatsapp_page_name: args.whatsappPageName ?? null,
+          whatsapp_phone_number_id: messagingDestinations.includes('whatsapp') ? args.whatsappPhoneNumberId ?? null : null,
+          whatsapp_phone_number: messagingDestinations.includes('whatsapp') ? args.whatsappPhoneNumber ?? null : null,
+          instagram_user_id: messagingDestinations.includes('instagram_direct') ? args.instagramUserId ?? null : null,
+          instagram_username: messagingDestinations.includes('instagram_direct') ? args.instagramUsername ?? null : null,
+        } : {}),
+      },
+    } as any);
+&nbsp;
+    await this.deps.invalidateCampaignsCache(args.tenantId);
+&nbsp;
+    return { success: true, campaign_id: campaign.id, meta_campaign_id: metaCampaignId, campaign_name: campaignName };
+  }
+&nbsp;
+  async searchMetaLocations(args: { tenantId: string; query: string }): Promise&lt;any[]&gt; {
+    const cached = await this.deps.getMetaLocationsCache(args.query);
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (cached) <span class="cstat-no" title="statement not covered" >return cached;</span>
+&nbsp;
+    const accessToken = await this.getAccessToken(args.tenantId);
+&nbsp;
+    let results: any[];
+    try { results = await this.meta.searchLocations(args.query, accessToken); }
+    catch (err) { <span class="cstat-no" title="statement not covered" >mapWizardMetaError(err, 'location_search'); }</span>
+&nbsp;
+    await this.deps.setMetaLocationsCache(args.query, results);
+    return results;
+  }
+}
+&nbsp;
+// ── Default instance + backward-compatible wrappers ─────────────────────────
+&nbsp;
+const defaultService = new CampaignsService(
+  new DefaultMetaCampaignProvider(),
+  new DefaultCampaignRepository(),
+  {
+    decryptMetaToken,
+    invalidateCampaignsCache,
+    getMetaLocationsCache,
+    setMetaLocationsCache,
+<span class="fstat-no" title="function not covered" >    getResolvedTenantAssetSelection: ((<span class="cstat-no" title="statement not covered" >t</span>enantId: string) =&gt;</span>
+      getResolvedTenantAssetSelection(tenantId).<span class="fstat-no" title="function not covered" >then((r</span>) =&gt; (<span class="cstat-no" title="statement not covered" >{</span>
+        pages: r.pages.<span class="fstat-no" title="function not covered" >map((p</span>) =&gt; (<span class="cstat-no" title="statement not covered" >{ ...p, instagramUserId: p.instagramUserId ?? undefined }))</span>,
+      }))) as (tenantId: string) =&gt; Promise&lt;{ pages: Array&lt;{ instagramUserId?: string; pageId?: string }&gt; }&gt;,
+  }
+);
+&nbsp;
+export const createCampaign = (args: Parameters&lt;CampaignsService['createCampaign']&gt;[0]) =&gt; defaultService.createCampaign(args);
+export const <span class="fstat-no" title="function not covered" >pauseCampaign = (a</span>rgs: Parameters&lt;CampaignsService['pauseCampaign']&gt;[0]) =&gt; <span class="cstat-no" title="statement not covered" >defaultService.pauseCampaign(args);</span>
+export const <span class="fstat-no" title="function not covered" >resumeCampaign = (a</span>rgs: Parameters&lt;CampaignsService['resumeCampaign']&gt;[0]) =&gt; <span class="cstat-no" title="statement not covered" >defaultService.resumeCampaign(args);</span>
+export const <span class="fstat-no" title="function not covered" >updateCampaignBudget = (a</span>rgs: Parameters&lt;CampaignsService['updateCampaignBudget']&gt;[0]) =&gt; <span class="cstat-no" title="statement not covered" >defaultService.updateCampaignBudget(args);</span>
+export const <span class="fstat-no" title="function not covered" >getCampaign = (a</span>rgs: Parameters&lt;CampaignsService['getCampaign']&gt;[0]) =&gt; <span class="cstat-no" title="statement not covered" >defaultService.getCampaign(args);</span>
+export const <span class="fstat-no" title="function not covered" >getCampaignPanelDetail = (a</span>rgs: Parameters&lt;CampaignsService['getCampaignPanelDetail']&gt;[0]) =&gt; <span class="cstat-no" title="statement not covered" >defaultService.getCampaignPanelDetail(args);</span>
+export const <span class="fstat-no" title="function not covered" >getCampaigns = (a</span>rgs: Parameters&lt;CampaignsService['getCampaigns']&gt;[0]) =&gt; <span class="cstat-no" title="statement not covered" >defaultService.getCampaigns(args);</span>
+export const <span class="fstat-no" title="function not covered" >updateCampaign = (a</span>rgs: Parameters&lt;CampaignsService['updateCampaign']&gt;[0]) =&gt; <span class="cstat-no" title="statement not covered" >defaultService.updateCampaign(args);</span>
+export const <span class="fstat-no" title="function not covered" >updateCampaignStatus = (a</span>rgs: Parameters&lt;CampaignsService['updateCampaignStatus']&gt;[0]) =&gt; <span class="cstat-no" title="statement not covered" >defaultService.updateCampaignStatus(args);</span>
+export const <span class="fstat-no" title="function not covered" >softDeleteCampaign = (a</span>rgs: Parameters&lt;CampaignsService['softDeleteCampaign']&gt;[0]) =&gt; <span class="cstat-no" title="statement not covered" >defaultService.softDeleteCampaign(args);</span>
+export const <span class="fstat-no" title="function not covered" >getCampaignInsights = (a</span>rgs: Parameters&lt;CampaignsService['getCampaignInsights']&gt;[0]) =&gt; <span class="cstat-no" title="statement not covered" >defaultService.getCampaignInsights(args);</span>
+export const createCampaignFromWizard = (args: Parameters&lt;CampaignsService['createCampaignFromWizard']&gt;[0]) =&gt; defaultService.createCampaignFromWizard(args);
+export const <span class="fstat-no" title="function not covered" >searchMetaLocations = (a</span>rgs: Parameters&lt;CampaignsService['searchMetaLocations']&gt;[0]) =&gt; <span class="cstat-no" title="statement not covered" >defaultService.searchMetaLocations(args);</span>
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-07-03T14:37:12.352Z
+            </div>
+        <script src="../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../sorter.js"></script>
+        <script src="../block-navigation.js"></script>
+    </body>
+</html>
+    
