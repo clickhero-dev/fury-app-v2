@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Relatório Técnico — Análise Fury</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    color: #151d28;
+    background: #ffffff;
+    line-height: 1.45;
+    font-size: 11.5pt;
+  }
+  .sheet {
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: 18mm 16mm 18mm 16mm;
+  }
+  .brandbar {
+    height: 10px;
+    border-radius: 999px;
+    background: linear-gradient(90deg,#EA580C,#fb923c);
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 18px;
+    gap: 16px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 18pt;
+    letter-spacing: -0.3px;
+    color: #0b1220;
+  }
+  header .meta {
+    text-align: right;
+    color: #546070;
+    font-size: 9.5pt;
+  }
+  .summary {
+    margin-top: 14px;
+    border: 1px solid #e7ecf2;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .summary table { width: 100%; border-collapse: collapse; }
+  .summary th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 10pt;
+    color: #ffffff;
+    background: #0b1220;
+  }
+  .summary th:first-child { width: 76px; }
+  .summary td { padding: 10px 12px; border-top: 1px solid #eef1f5; font-size: 10pt; }
+  .summary tr:nth-child(even) td { background: #fbfbfc; }
+  .pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 9.5pt;
+    font-weight: 600;
+    color: #fff;
+  }
+  .pill.critical { background:#b75953; }
+  .pill.high { background:#ea580c; }
+  .pill.medium { background:#2563eb; }
+  .pill.low { background:#64748b; }
+  .section { margin-top: 20px; }
+  .section h2 {
+    margin: 0 0 10px;
+    font-size: 14pt;
+    color: #0b1220;
+    padding-left: 10px;
+    border-left: 4px solid #EA580C;
+  }
+  .card {
+    border: 1px solid #e7ecf2;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .card .title {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 11pt;
+    color: #0b1220;
+  }
+  .card .meta { color:#546070; font-size: 9.5pt; line-height: 1.4; }
+  .card ul { margin: 8px 0 0; padding-left: 16px; color:#1f2933; font-size: 10pt; }
+  .card li { margin: 5px 0; }
+  .note {
+    margin-top: 14px;
+    padding: 10px 12px;
+    border-left: 4px solid #fb923c;
+    background:#fff6f0;
+    border-radius: 10px;
+    color:#3a2a1a;
+    font-size: 10pt;
+  }
+  .page-break { break-before: page; }
+  footer {
+    margin-top: 22px;
+    padding-top: 8px;
+    border-top: 1px solid #e7ecf2;
+    font-size: 9pt;
+    color:#7b8490;
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="brandbar"></div>
+  <header>
+    <h1>Relatório Técnico — Análise de Feedback Fury</h1>
+    <div class="meta">
+      <div>Sprint: <strong>Em triagem</strong></div>
+      <div>Data: <strong>14/07/2026</strong></div>
+      <div>Versão: <strong>v25</strong></div>
+    </div>
+  </header>
+
+  <div class="summary">
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Módulo</th><th>Tipo</th><th>Severidade</th><th>Título</th></tr>
+      </thead>
+      <tbody>
+<tr><td><strong>FURY-001</strong></td><td>Estúdio</td><td>UX/Feature</td><td><span class="pill high">High</span></td><td>Confirmar prompt antes de gerar imagem</td></tr>
+<tr><td><strong>FURY-002</strong></td><td>Estúdio</td><td>Bug</td><td><span class="pill high">High</span></td><td>Correção de texto regenera criativo inteiro</td></tr>
+<tr><td><strong>FURY-003</strong></td><td>Estúdio→Campanhas</td><td>Bug</td><td><span class="pill critical">Critical</span></td><td>"Usar em campanha" não funciona</td></tr>
+<tr><td><strong>FURY-004</strong></td><td>Meta</td><td>Bug</td><td><span class="pill high">High</span></td><td>"Publicar no Meta" retorna erro</td></tr>
+<tr><td><strong>FURY-005</strong></td><td>Dashboard</td><td>Feature</td><td><span class="pill medium">Medium</span></td><td>Filtro de data personalizada</td></tr>
+<tr><td><strong>FURY-006</strong></td><td>Dashboard</td><td>UX</td><td><span class="pill medium">Medium</span></td><td>Rastreabilidade da projeção "819"</td></tr>
+<tr><td><strong>FURY-007</strong></td><td>Campanhas</td><td>Feature</td><td><span class="pill medium">Medium</span></td><td>Gerar título e texto via IA</td></tr>
+<tr><td><strong>FURY-008</strong></td><td>Auth</td><td>Bug</td><td><span class="pill critical">Critical</span></td><td>Logout espontâneo durante sessão</td></tr>
+<tr><td><strong>FURY-009</strong></td><td>Campanhas</td><td>UX</td><td><span class="pill low">Low</span></td><td>Exibir criativo associado na lista</td></tr>
+<tr><td><strong>FURY-010</strong></td><td>Campanhas</td><td>Bug</td><td><span class="pill high">High</span></td><td>Pausar campanha sem efeito</td></tr>
+<tr><td><strong>FURY-011</strong></td><td>Campanhas</td><td>UX</td><td><span class="pill medium">Medium</span></td><td>Editar público/alvo/idade/gênero inline</td></tr>
+<tr><td><strong>FURY-012</strong></td><td>Campanhas</td><td>Bug</td><td><span class="pill high">High</span></td><td>Publicada não aparece em ativas</td></tr>
+<tr><td><strong>FURY-013</strong></td><td>Superadmin</td><td>Bug</td><td><span class="pill high">High</span></td><td>Link do superadmin quebrado</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="page-break"></div>
+  <div class="section">
+    <h2>Itens bloqueantes de fluxo</h2>
+    <div class="card">
+      <div class="title">FURY-003 — "Usar em campanha" não funciona <span class="pill critical">Critical</span></div>
+      <div class="meta">Módulo: Estúdio → Campanhas</div>
+      <ul>
+        <li>Sintoma: ação não abre fluxo de reuso do criativo.</li>
+        <li>Impacto: interrompe jornada principal do produto.</li>
+        <li>Ação: verificar handler, route e integração entre Studio e Campanhas.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="title">FURY-008 — Logout espontâneo durante sessão <span class="pill critical">Critical</span></div>
+      <div class="meta">Módulo: Auth</div>
+      <ul>
+        <li>Sintoma: app retorna para tela inicial sem intervenção do usuário.</li>
+        <li>Impacto: perda de sessão e work-in-progress.</li>
+        <li>Ação: investigar refresh token / timeout / armazenamento de sessão.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+  <div class="section">
+    <h2>Geração e qualidade do criativo</h2>
+    <div class="card">
+      <div class="title">FURY-001 — Confirmar prompt antes de gerar imagem <span class="pill high">High</span></div>
+      <div class="meta">Estúdio · UX/Feature</div>
+      <p class="desc">Exibir o prompt final ao usuário antes do clique de gerar, para ele validar direção e texto. Isso corta retrabalho e desbloqueia correções pontuais sem regenerar tudo.</p>
+      <ul>
+        <li>Aceite: modal/screen com prompt pronto e ações "Confirmar e gerar" / "Editar prompt".</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="title">FURY-002 — Correção de texto regenera criativo inteiro <span class="pill high">High</span></div>
+      <div class="meta">Estúdio · Bug</div>
+      <p class="desc">Ao pedir correção de texto, o sistema regenera o criativo completo e reintroduz erros ortográficos. O ajuste é usar edição pontual (inpainting/diretriz textual) ao invés de full regenerate.</p>
+      <ul>
+        <li>Aceite: correção mantém layout/conceito; não adiciona novos erros em texto já correto.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+  <div class="section">
+    <h2>Publicação e desempenho no Meta</h2>
+    <div class="card">
+      <div class="title">FURY-004 — "Publicar no Meta" retorna erro <span class="pill high">High</span></div>
+      <div class="meta">Meta · Bug</div>
+      <ul>
+        <li>Aceite: payload válido, erro legível ou post confirmado com ID.</li>
+        <li>suspeitas: token permissão ou formato do Graph API.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="title">FURY-012 — Campanha publicada não aparece em ativas <span class="pill high">High</span></div>
+      <div class="meta">Campanhas · Bug</div>
+      <ul>
+        <li>Aceite: após publicação, status refletido sem reload manual.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+  <div class="section">
+    <h2>Dashboard e inteligência de dados</h2>
+    <div class="card">
+      <div class="title">FURY-005 — Filtro de data personalizada <span class="pill medium">Medium</span></div>
+      <div class="meta">Dashboard · Feature</div>
+      <ul>
+        <li>Aceite: intervalo ajustável pelo usuário.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="title">FURY-006 — Rastreabilidade da projeção "819" <span class="pill medium">Medium</span></div>
+      <div class="meta">Dashboard · UX</div>
+      <ul>
+        <li>Aceite: exibir fonte / fórmula / insumo usado no cálculo.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+  <div class="section">
+    <h2>Gerenciamento de campanhas</h2>
+    <div class="card">
+      <div class="title">FURY-007 — Gerar título e texto via IA <span class="pill medium">Medium</span></div>
+      <div class="meta">Campanhas · Feature</div>
+      <ul>
+        <li>Aceite: entrada de ideia bruta e sugestão editável.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="title">FURY-009 — Exibir criativo na lista de campanhas <span class="pill low">Low</span></div>
+      <div class="meta">Campanhas · UX</div>
+      <ul>
+        <li>Aceite: thumbnail por card/row.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="title">FURY-010 — Pausar campanha sem efeito <span class="pill high">High</span></div>
+      <div class="meta">Campanhas · Bug</div>
+      <ul>
+        <li>Aceite: status muda para pausado, com retorno explícito da API.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="title">FURY-011 — Editar público/alvo/idade/gênero inline <span class="pill medium">Medium</span></div>
+      <div class="meta">Campanhas · UX</div>
+      <ul>
+        <li>Aceite: edição com validação de limites do Meta.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+  <div class="section">
+    <h2>Infraestrutura e acessos</h2>
+    <div class="card">
+      <div class="title">FURY-013 — Link do superadmin quebrado <span class="pill high">High</span></div>
+      <div class="meta">Superadmin · Bug</div>
+      <ul>
+        <li>Aceite: rota e proteção por role funcionando.</li>
+      </ul>
+    </div>
+    <div class="note">
+      <strong>Nota metodológica:</strong> a coluna "requerente" foi removida porque não é um artefato rastreável para desenvolvimento; a referência é a sessão de usabilidade. Esses itens já estão estruturados para triagem, estimativa e rastreabilidade no ClickUp.
+    </div>
+    <div class="note" style="margin-top:10px;">
+      <strong>Próximos passos recomendados:</strong> classificar por tipo, estimar esforço eapear na sprint atual considerando bloqueio e cobertura de teste existente.
+    </div>
+  </div>
+
+  <footer>
+    <span>FURY · Relatório técnico</span>
+    <span>Gerado em 14/07/2026</span>
+  </footer>
+</div>
+</body>
+</html>
