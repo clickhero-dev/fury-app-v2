@@ -25,13 +25,11 @@ export function AdminShell() {
   // extrai tenantId do pathname real (/admin/tenants/:id/...)
   const tenantId = location.pathname.match(/\/admin\/tenants\/([^/]+)/)?.[1];
   const [tenantName, setTenantName] = useState<string | null>(null);
-  const [loadingTenant, setLoadingTenant] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Se está em uma rota de tenant (/admin/tenants/:id/*), carrega o nome do tenant
   useEffect(() => {
     if (tenantId) {
-      setLoadingTenant(true);
       api
         .get(`/admin/tenants/${tenantId}`)
         .then((res) => {
@@ -39,9 +37,6 @@ export function AdminShell() {
         })
         .catch(() => {
           setTenantName(null);
-        })
-        .finally(() => {
-          setLoadingTenant(false);
         });
     } else {
       setTenantName(null);
@@ -159,9 +154,7 @@ export function AdminShell() {
                   Voltar
                 </button>
                 <div className="hidden sm:block pl-4 border-l border-zinc-800">
-                  {loadingTenant ? (
-                    <p className="text-sm text-zinc-400">Carregando...</p>
-                  ) : tenantName ? (
+                  {tenantName ? (
                     <p className="text-sm font-medium text-zinc-300">{tenantName}</p>
                   ) : null}
                 </div>
