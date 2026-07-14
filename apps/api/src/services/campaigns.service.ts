@@ -702,10 +702,22 @@ export class CampaignsService {
 
       // ponytail: compute link once instead of re-deriving in the creative spread
       const appUrl = process.env.FURY_APP_URL || process.env.APP_URL || 'https://clickhero-fury-api.u7pe19.easypanel.host';
+
+      // Busca o slug do tenant para a LP (whatsapp_conv) — fallback pro tenantId
+      let lpSlug = args.tenantId;
+      if (args.objective === 'whatsapp_conv') {
+        try {
+          const { db, tenants } = await import('@fury/db');
+          const { eq } = await import('drizzle-orm');
+          const t = await db.query.tenants.findFirst({ where: eq(tenants.id, args.tenantId) });
+          if (t?.slug) lpSlug = t.slug;
+        } catch { /* fallback ao tenantId */ }
+      }
+
       const creativeLink = args.objective === 'visits'
         ? args.destinationUrl
         : args.objective === 'whatsapp_conv'
-          ? `${appUrl}/api/lp/${args.tenantId}`
+          ? `${appUrl}/api/lp/${lpSlug}`
           : `https://www.facebook.com/${pageId}`;
 
       const creativeBody: Record<string, unknown> = instagramCreativeActorId
