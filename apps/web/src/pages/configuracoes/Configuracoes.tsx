@@ -319,13 +319,6 @@ export function Configuracoes() {
                       </div>
                       <Button variant="outline" size="sm" onClick={() => setPasswordOpen(true)}>Alterar</Button>
                     </div>
-                    <div className="p-4 border border-border rounded-lg flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-text-primary">Autenticação de Dois Fatores</p>
-                        <p className="text-sm text-text-secondary">Ative para maior segurança</p>
-                      </div>
-                      <Button variant="outline" size="sm">Configurar</Button>
-                    </div>
                   </div>
                 </div>
 
