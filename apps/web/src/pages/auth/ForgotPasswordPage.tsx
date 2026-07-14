@@ -26,7 +26,7 @@ export function ForgotPasswordPage() {
     watch,
     formState: { errors, isValid },
   } = useForm<ForgotPasswordFormValues>({
-    resolver: zodResolver(forgotPasswordSchema),
+    resolver: zodResolver(forgotPasswordSchema as any),
     mode: 'onChange',
     defaultValues: { email: '' },
   });
