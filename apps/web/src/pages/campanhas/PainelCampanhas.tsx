@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { CampaignWizard } from '@/components/campaign-wizard/CampaignWizard';
-import { Search, Loader2, Pause, Play } from 'lucide-react';
+import { Search, Loader2, Pause, Play, Trash2 } from 'lucide-react';
 import { AppLayout, PageHeader, DataTable, StatusBadge, Button } from '@/components';
 import {
   Dialog,
@@ -13,10 +13,10 @@ import {
 } from '@/components/ui/dialog';
 import { useCampaigns } from '@/hooks/useCampaigns';
 import { usePauseCampaign, getFriendlyPauseError } from '@/hooks/usePauseCampaign';
+import { useDeleteCampaign, getDeleteCampaignError } from '@/hooks/useDeleteCampaign';
 import type { CampaignData } from '@/types/campaigns';
 import {
   formatConversions,
-  formatCpaBRL,
   formatInvestidoBRL,
   formatRoas,
 } from '@/lib/format-campaign-metrics';
@@ -47,6 +47,7 @@ export function PainelCampanhas() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [campaignToPause, setCampaignToPause] = useState<CampaignData | null>(null);
+  const [campaignToDelete, setCampaignToDelete] = useState<CampaignData | null>(null);
   const [actionError, setActionError] = useState<string>('');
   const [wizardOpen, setWizardOpen] = useState(false);
   const [period, setPeriod] = useState<Period>('this_month');
@@ -54,6 +55,7 @@ export function PainelCampanhas() {
   const { startDate, endDate } = getPeriodDates(period);
   const { data: campaigns = [], isLoading } = useCampaigns({ startDate, endDate });
   const pauseMutation = usePauseCampaign();
+  const deleteMutation = useDeleteCampaign();
 
   const pendingCampaignId =
     pauseMutation.isPending && pauseMutation.variables
@@ -80,6 +82,15 @@ export function PainelCampanhas() {
     );
   };
 
+  const handleConfirmDelete = () => {
+    if (!campaignToDelete) return;
+    setActionError('');
+    deleteMutation.mutate(campaignToDelete.id, {
+      onSettled: () => setCampaignToDelete(null),
+      onError: (err) => setActionError(getDeleteCampaignError(err)),
+    });
+  };
+
   const handleFilterChange = (value: FilterType) => {
     setFilter(value);
     setPage(1);
@@ -104,8 +115,7 @@ export function PainelCampanhas() {
     if (filteredCampaigns.length === 0) return null;
     const totalInvestido = filteredCampaigns.reduce((sum, c) => sum + c.investido, 0);
     const totalConversoes = filteredCampaigns.reduce((sum, c) => sum + (c.conversoes ?? 0), 0);
-    const cpaMedia = totalConversoes > 0 ? totalInvestido / totalConversoes : null;
-    return { totalInvestido, totalConversoes, cpaMedia };
+    return { totalInvestido, totalConversoes };
   }, [filteredCampaigns]);
 
   const columns = [
@@ -142,19 +152,6 @@ export function PainelCampanhas() {
       render: (value: unknown) => formatRoas(value as number | null),
     },
     {
-      key: 'cpa' as const,
-      label: 'Custo por Resultado',
-      align: 'right' as const,
-      render: (value: unknown) => {
-        const cpaValue = value as number | null;
-        return (
-          <span className={cpaValue != null && cpaValue > 60 ? 'text-red-600 font-semibold' : 'text-text-primary'}>
-            {formatCpaBRL(cpaValue)}
-          </span>
-        );
-      },
-    },
-    {
       key: 'conversoes' as const,
       label: 'Clientes',
       align: 'right' as const,
@@ -188,6 +185,17 @@ export function PainelCampanhas() {
               >
                 {isRowPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                 Ativar
+              </button>
+            )}
+            {row.status !== 'finalizado' && (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium text-text-tertiary hover:text-red-600 hover:bg-error-light rounded-lg transition-colors disabled:opacity-50"
+                disabled={deleteMutation.isPending}
+                onClick={() => setCampaignToDelete(row)}
+              >
+                <Trash2 className="w-4 h-4" />
+                Excluir
               </button>
             )}
           </div>
@@ -301,7 +309,7 @@ export function PainelCampanhas() {
 
           {summary && (
             <div className="bg-surface rounded-xl border border-border overflow-hidden">
-              <div className="grid grid-cols-3 divide-x divide-border">
+              <div className="grid grid-cols-2 divide-x divide-border">
                 <div className="px-6 py-4">
                   <p className="text-xs text-text-tertiary uppercase font-semibold tracking-wide">Total investido</p>
                   <p className="text-lg font-bold text-text-primary mt-1">{formatInvestidoBRL(summary.totalInvestido)}</p>
@@ -309,10 +317,6 @@ export function PainelCampanhas() {
                 <div className="px-6 py-4">
                   <p className="text-xs text-text-tertiary uppercase font-semibold tracking-wide">Clientes</p>
                   <p className="text-lg font-bold text-text-primary mt-1">{formatConversions(summary.totalConversoes)}</p>
-                </div>
-                <div className="px-6 py-4">
-                  <p className="text-xs text-text-tertiary uppercase font-semibold tracking-wide">CPA médio</p>
-                  <p className="text-lg font-bold text-text-primary mt-1">{formatCpaBRL(summary.cpaMedia)}</p>
                 </div>
               </div>
             </div>
@@ -363,6 +367,48 @@ export function PainelCampanhas() {
       </Dialog>
 
       <CampaignWizard open={wizardOpen} onOpenChange={setWizardOpen} />
+
+      <Dialog
+        open={campaignToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) setCampaignToDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir campanha</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir a campanha &quot;{campaignToDelete?.name}&quot;?
+              Esta ação não pode ser desfeita. A campanha será arquivada no Meta e removida da sua lista.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={deleteMutation.isPending}
+              onClick={() => setCampaignToDelete(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={deleteMutation.isPending}
+              onClick={handleConfirmDelete}
+            >
+              {deleteMutation.isPending ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Excluindo...
+                </span>
+              ) : (
+                'Confirmar exclusão'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

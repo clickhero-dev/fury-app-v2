@@ -24,6 +24,9 @@ import {
   setCampaignsCache,
   invalidateCampaignsCache,
 } from '../lib/campaigns-cache.js';
+import OpenAI from 'openai';
+import { db, brandKits, tenants } from '@fury/db';
+import { eq } from 'drizzle-orm';
 
 const createCampaignSchema = z.object({
   name: z.string().min(3, 'Campaign name must be at least 3 characters'),
@@ -733,4 +736,59 @@ export async function createWizardCampaignDiagHandler(req: any, res: any) {
   } catch (e: any) {
     return res.status(500).json({ success: false, error: { code: 'IMPORT_FAIL', message: e.message, stack: e.stack?.split('\n').slice(0, 5) } });
   }
-};
+}
+
+export async function suggestTextHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const tenantId = req.tenant?.tenantId || '';
+    if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+
+    const brandKit = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, tenantId) });
+    const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
+
+    const client = new OpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: 'https://openrouter.ai/api/v1',
+    });
+
+    const prompt = `Você é copywriter especialista em Meta Ads. Baseado nos dados da marca abaixo, gere UM título (headline, máximo 40 caracteres) e UM texto principal (primary_text, máximo 125 caracteres) para um anúncio no Facebook/Instagram.
+    
+Dados da marca:
+- Tom de voz: ${brandKit?.voiceTone || 'não definido'}
+- Ramo da empresa: ${tenant?.businessContext || 'não informado'}
+- Cores da marca: ${brandKit?.primaryColor || ''} ${brandKit?.secondaryColor || ''}
+
+Regras:
+- headline: máximo 40 caracteres, chamativa, ação
+- primary_text: máximo 125 caracteres, descritivo, com call to action
+- Responda APENAS JSON: {"headline":"...","primaryText":"..."}
+- Português brasileiro, sem erros ortográficos`;
+
+    const response = await client.chat.completions.create({
+      model: 'deepseek/deepseek-v4-flash',
+      max_tokens: 256,
+      messages: [
+        { role: 'system', content: 'Você é copywriter especialista em Meta Ads. Responda sempre em português brasileiro.' },
+        { role: 'user', content: prompt },
+      ],
+    });
+
+    const raw = response.choices[0]?.message?.content ?? '';
+    const cleaned = raw.replace(/```json|```/g, '').trim();
+
+    let headline = '';
+    let primaryText = '';
+    try {
+      const parsed = JSON.parse(cleaned);
+      headline = (parsed.headline || '').slice(0, 40);
+      primaryText = (parsed.primaryText || '').slice(0, 125);
+    } catch {
+      headline = 'Promoção imperdível';
+      primaryText = 'Aproveite esta oferta especial por tempo limitado.';
+    }
+
+    res.json({ success: true, data: { headline, primaryText }, timestamp: new Date().toISOString() });
+  } catch (err) {
+    next(err);
+  }
+}

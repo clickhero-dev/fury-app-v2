@@ -4,6 +4,7 @@ import { RegisterPage } from './pages/auth/RegisterPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
 import { ResetPasswordSuccessPage } from './pages/auth/ResetPasswordSuccessPage';
+import { LandingPage } from './pages/landing/LandingPage';
 import { ConectarMetaPage } from './pages/onboarding/ConectarMetaPage';
 import { MetaAuthorizePage } from './pages/onboarding/MetaAuthorizePage';
 import { MetasPage } from './pages/onboarding/MetasPage';
@@ -23,7 +24,6 @@ import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
 import { Configuracoes } from './pages/configuracoes/Configuracoes';
 import { Integracoes } from './pages/configuracoes/Integracoes';
-import { BrandKitPage } from './pages/configuracoes/BrandKitPage';
 import { MinhasRegras } from './pages/automacao/MinhasRegras';
 import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
@@ -31,6 +31,8 @@ import { Subscription } from './pages/billing/Subscription';
 import { AssinaturaVencida } from './pages/billing/AssinaturaVencida';
 import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
 import { AdminLogin } from './pages/superadmin/AdminLogin';
+import { NotFoundPage } from './pages/NotFoundPage';
+import { AdminLayout } from './pages/superadmin/AdminLayout';
 import { TenantsPage } from './pages/superadmin/TenantsPage';
 import { TenantDetailPage } from './pages/superadmin/TenantDetailPage';
 import { PlansPage } from './pages/superadmin/PlansPage';
@@ -136,6 +138,10 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: '/l/:codigo',
+    element: <LandingPage />,
+  },
+  {
     // Layout autenticado: todas as rotas filhas exigem login
     // AuthenticatedShell renderiza sidebar, header e o <Outlet /> das rotas filhas
     element: <AuthenticatedShell />,
@@ -153,7 +159,7 @@ export const router = createBrowserRouter([
       { path: '/estudio/imagem', element: <GeradorImagem /> },
       { path: '/configuracoes', element: <Configuracoes /> },
       { path: '/configuracoes/integracoes', element: <Integracoes /> },
-      { path: '/configuracoes/brand-kit', element: <BrandKitPage /> },
+      { path: '/configuracoes/brand-kit', element: <Navigate to="/configuracoes?tab=publico" replace /> },
       { path: '/planos', element: <Plans /> },
       { path: '/assinatura', element: <Subscription /> },
       { path: '/orcamento-smart', element: <OrcamentoSmart /> },
@@ -183,5 +189,10 @@ export const router = createBrowserRouter([
       { path: 'tenants/:id/campaigns', element: <TenantCampaignsPage /> },
       { path: 'planos', element: <PlansPage /> },
     ],
+  },
+  // Catch-all: qualquer rota não definida acima exibe a página 404
+  {
+    path: '*',
+    element: <NotFoundPage />,
   },
 ]);

@@ -1,5 +1,6 @@
 // Unified startup seed — idempotent, safe to run every deployment.
 // Ensures: superadmin user + demo user exist with valid bcrypt hashes.
+import crypto from 'node:crypto';
 import postgres from 'postgres';
 import bcrypt from 'bcrypt';
 
@@ -71,6 +72,18 @@ export async function seedStartup(): Promise<void> {
           await sql`UPDATE "users" SET password_hash = ${newHash} WHERE id = ${existing[0].id}`;
           console.log(`  🔧 fixed password hash for ${seed.email} (wrong/corrupted hash)`);
         }
+
+        // Ensure tenant has a codigo set (fixes existing tenants seeded without it)
+        const [tenantRow] = await sql`SELECT id, codigo FROM "tenants" WHERE slug = ${seed.tenantSlug}`;
+        if (tenantRow && !tenantRow.codigo) {
+          const slug = seed.tenantName.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
+          const prefix = slug.slice(0, 3).toUpperCase().padEnd(3, 'X');
+          const md5hash = crypto.createHash('md5').update(tenantRow.id).digest('hex');
+          const digits = String(parseInt(md5hash.slice(0, 8), 16) % 100000).padStart(5, '0');
+          await sql`UPDATE "tenants" SET codigo = ${`${prefix}${digits}`} WHERE id = ${tenantRow.id}`;
+          console.log(`  🔧 set codigo for existing tenant ${seed.tenantSlug}`);
+        }
+
         continue;
       }
 
@@ -82,11 +95,19 @@ export async function seedStartup(): Promise<void> {
         RETURNING id
       `;
 
+      // Set codigo (same pattern as auth registration)
+      const slug = seed.tenantName.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      const prefix = slug.slice(0, 3).toUpperCase().padEnd(3, 'X');
+      const md5hash = crypto.createHash('md5').update(tenant.id).digest('hex');
+      const digits = String(parseInt(md5hash.slice(0, 8), 16) % 100000).padStart(5, '0');
+      const codigo = `${prefix}${digits}`;
+      await sql`UPDATE "tenants" SET codigo = ${codigo} WHERE id = ${tenant.id}`;
+
       // Create user with bcrypt
-      const hash = await bcrypt.hash(seed.password, 10);
+      const bcryptHash = await bcrypt.hash(seed.password, 10);
       await sql`
         INSERT INTO "users" (tenant_id, email, password_hash, role, name)
-        VALUES (${tenant.id}, ${seed.email}, ${hash}, ${seed.role}, ${seed.name})
+        VALUES (${tenant.id}, ${seed.email}, ${bcryptHash}, ${seed.role}, ${seed.name})
       `;
 
       console.log(`  ✓ user ${seed.email} created (${seed.role})`);

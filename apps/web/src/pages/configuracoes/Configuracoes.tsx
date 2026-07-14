@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppLayout, Button, Card } from '@/components';
-import { FuryConfig } from './FuryConfig';
-import { IntegracoesContent } from './IntegracoesContent';
 import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
 import { useTheme } from '@/hooks/useTheme';
+import { Sun, Moon } from 'lucide-react';
 import api from '@/lib/api';
 import { MetasPage } from '../onboarding/MetasPage';
 import { MinhasRegrasContent } from '../automacao/MinhasRegras';
 import { PublicoContent } from './PublicoContent';
+import { BrandKitContent } from './BrandKitPage';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { ConfiguracoesTabsNav } from './ConfiguracoesTabsNav';
 import {
@@ -20,24 +20,19 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
-type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento' | 'integracoes' | 'fury' | 'metas' | 'automacao' | 'publico';
+type TabType = 'geral' | 'seguranca' | 'faturamento' | 'metas' | 'automacao' | 'publico';
 
-const VALID_TABS: TabType[] = ['geral', 'notificacoes', 'seguranca', 'equipe', 'faturamento', 'integracoes', 'fury', 'metas', 'automacao', 'publico'];
-
-interface NotificationPrefs {
-  campanhas: boolean;
-  performance: boolean;
-  equipe: boolean;
-}
+const VALID_TABS: TabType[] = ['geral', 'seguranca', 'faturamento', 'metas', 'automacao', 'publico'];
 
 interface MeResponse {
   id: string;
   name: string | null;
   email: string;
   tenantName: string;
+  tenantSlug: string;
+  tenantCodigo: string;
   role: string;
   tenantId: string;
-  notificationPrefs: NotificationPrefs;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -107,32 +102,6 @@ export function Configuracoes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       showToast('Alterações salvas com sucesso!', 'success');
-    },
-    onError: () => {
-      showToast('Erro ao salvar. Tente novamente.', 'error');
-    },
-  });
-
-  // ── Aba Notificações ─────────────────────────────────────────────────────────
-  const [notifPrefs, setNotifPrefs] = useState<NotificationPrefs>({
-    campanhas: true,
-    performance: true,
-    equipe: false,
-  });
-
-  useEffect(() => {
-    if (meData?.notificationPrefs) {
-      setNotifPrefs(meData.notificationPrefs);
-    }
-  }, [meData]);
-
-  const saveNotifMutation = useMutation({
-    mutationFn: async (prefs: NotificationPrefs) => {
-      await api.patch('/auth/me', { notificationPrefs: prefs });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
-      showToast('Preferências salvas com sucesso!', 'success');
     },
     onError: () => {
       showToast('Erro ao salvar. Tente novamente.', 'error');
@@ -225,21 +194,73 @@ export function Configuracoes() {
                 <div className="border-t border-border pt-6">
                   <h3 className="text-lg font-bold text-text-primary mb-4">Preferências</h3>
                   <div className="space-y-4">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isDark}
-                        onChange={(e) => setDark(e.target.checked)}
-                        className="w-4 h-4"
-                      />
-                      <span className="text-sm font-semibold text-text-primary">Modo Escuro</span>
-                    </label>
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input type="checkbox" defaultChecked className="w-4 h-4" />
-                      <span className="text-sm font-semibold text-text-primary">Modo Compacto</span>
-                    </label>
+                    <div className="flex gap-3">
+                      {[
+                        { value: false, icon: Sun, label: 'Claro' },
+                        { value: true, icon: Moon, label: 'Escuro' },
+                      ].map(({ value, icon: Icon, label }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => setDark(value)}
+                          className={[
+                            'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 text-sm font-semibold transition-all',
+                            isDark === value
+                              ? 'border-accent bg-accent/10 text-accent'
+                              : 'border-border text-text-secondary hover:border-accent/50',
+                          ].join(' ')}
+                        >
+                          <Icon size={18} />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
+
+                {/* Página de Destino (Landing Page) */}
+                {meData?.tenantId && (
+                  <div className="border-t border-border pt-6">
+                    <h3 className="text-lg font-bold text-text-primary mb-4">Página de Destino</h3>
+                    <p className="text-sm text-text-secondary mb-4">
+                      Compartilhe este link com seus clientes para eles entrarem em contato pelo WhatsApp.
+                    </p>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                      <input
+                        type="text"
+                        readOnly
+                        value={`${window.location.origin}/l/${meData.tenantCodigo || meData.tenantSlug}`}
+                        className="flex-1 px-4 py-3 border border-border rounded-lg text-sm text-text-primary bg-surface-secondary focus:outline-none select-all cursor-text"
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                      />
+                      <Button
+                        variant="primary"
+                        size="md"
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            `${window.location.origin}/l/${meData.tenantCodigo || meData.tenantSlug}`
+                          );
+                          showToast('Link copiado!', 'success');
+                        }}
+                      >
+                        Copiar Link
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="md"
+                        onClick={() =>
+                          window.open(
+                            `${window.location.origin}/l/${meData.tenantCodigo || meData.tenantSlug}`,
+                            '_blank',
+                            'noopener'
+                          )
+                        }
+                      >
+                        Visualizar
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-border">
                   <Button
@@ -259,61 +280,6 @@ export function Configuracoes() {
                     onClick={() => updateMeMutation.mutate({ name, tenantName })}
                   >
                     {updateMeMutation.isPending ? 'Salvando...' : 'Salvar Alterações'}
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* Notificações */}
-          <TabsContent value="notificacoes">
-            <Card>
-              <div className="p-6 space-y-6">
-                <div>
-                  <h3 className="text-lg font-bold text-text-primary mb-4">Preferências de Notificação</h3>
-                  {meLoading ? (
-                    <div className="flex justify-center py-8">
-                      <span className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {(
-                        [
-                          { key: 'campanhas', label: 'Campanhas', desc: 'Notificações sobre campanhas ativas' },
-                          { key: 'performance', label: 'Performance', desc: 'Alertas de performance e relatórios' },
-                          { key: 'equipe', label: 'Equipe', desc: 'Notificações da atividade da equipe' },
-                        ] as const
-                      ).map(({ key, label, desc }) => (
-                        <label
-                          key={key}
-                          className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-surface-secondary transition-colors cursor-pointer"
-                        >
-                          <div>
-                            <p className="font-semibold text-text-primary">{label}</p>
-                            <p className="text-sm text-text-secondary">{desc}</p>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={notifPrefs[key]}
-                            onChange={(e) =>
-                              setNotifPrefs((prev) => ({ ...prev, [key]: e.target.checked }))
-                            }
-                            className="w-5 h-5"
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-border">
-                  <Button
-                    variant="primary"
-                    size="md"
-                    disabled={saveNotifMutation.isPending}
-                    onClick={() => saveNotifMutation.mutate(notifPrefs)}
-                  >
-                    {saveNotifMutation.isPending ? 'Salvando...' : 'Salvar Preferências'}
                   </Button>
                 </div>
               </div>
@@ -353,34 +319,6 @@ export function Configuracoes() {
                     </div>
                     <span className="text-xs font-bold text-success">Ativa</span>
                   </div>
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* Equipe */}
-          <TabsContent value="equipe">
-            <Card>
-              <div className="p-6 space-y-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-text-primary">Membros da Equipe</h3>
-                  <Button variant="primary" size="sm">+ Convidar Membro</Button>
-                </div>
-
-                <div className="space-y-3">
-                  {[
-                    { name: 'Mallyssa Silva', email: 'mallyssa@example.com', role: 'Proprietário', color: 'text-accent' },
-                    { name: 'Ricardo Silva', email: 'ricardo@example.com', role: 'Admin', color: 'text-success' },
-                    { name: 'Gabrielle Silva', email: 'gabrielle@example.com', role: 'Membro', color: 'text-text-secondary' },
-                  ].map(({ name: n, email, role, color }) => (
-                    <div key={email} className="p-4 border border-border rounded-lg flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-text-primary">{n}</p>
-                        <p className="text-sm text-text-secondary">{email}</p>
-                      </div>
-                      <span className={`text-xs font-bold ${color}`}>{role}</span>
-                    </div>
-                  ))}
                 </div>
               </div>
             </Card>
@@ -507,18 +445,13 @@ export function Configuracoes() {
             </Dialog>
           </TabsContent>
 
-          {/* Integrações */}
-          <TabsContent value="integracoes">
-            <Card>
-              <div className="p-6">
-                <IntegracoesContent />
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* FURY Engine */}
-          <TabsContent value="fury">
-            <FuryConfig />
+          {/* Dados da Marca e Público — fundido */}
+          <TabsContent value="publico">
+            <div className="space-y-6">
+              <BrandKitContent />
+              <div className="h-6" />
+              <PublicoContent />
+            </div>
           </TabsContent>
 
           {/* Metas */}
@@ -526,18 +459,13 @@ export function Configuracoes() {
             <MetasPage />
           </TabsContent>
 
-          {/* Automação — movido da leftbar para cá */}
+          {/* Automação */}
           <TabsContent value="automacao">
             <Card>
               <div className="p-6">
                 <MinhasRegrasContent />
               </div>
             </Card>
-          </TabsContent>
-
-          {/* Público — público-alvo padrão para campanhas */}
-          <TabsContent value="publico">
-            <PublicoContent />
           </TabsContent>
         </Tabs>
     </AppLayout>

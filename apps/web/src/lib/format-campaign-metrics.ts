@@ -36,25 +36,6 @@ export function formatRoas(value: number | null | undefined): string {
 }
 
 /**
- * Formata um valor de CPA (Custo por Aquisição) em reais para exibição.
- * Retorna '-' para valores nulos, indefinidos ou não finitos.
- *
- * @param value - Valor numérico do CPA em reais
- * @returns String formatada (ex: 'R$ 38,50') ou '-'
- *
- * @example
- * formatCpaBRL(38.5)  // → 'R$ 38,50'
- * formatCpaBRL(null)  // → '-'
- */
-export function formatCpaBRL(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '-';
-  return `R$ ${value.toLocaleString('pt-BR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-/**
  * Formata um número de conversões para exibição com separador de milhar.
  * Retorna '-' para valores nulos, indefinidos ou não finitos.
  *

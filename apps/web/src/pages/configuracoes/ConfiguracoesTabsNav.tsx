@@ -3,29 +3,20 @@ import { cn } from '@/lib/utils';
 
 export type ConfiguracoesTab =
   | 'geral'
-  | 'notificacoes'
   | 'seguranca'
-  | 'equipe'
   | 'faturamento'
-  | 'integracoes'
-  | 'fury'
-  | 'brand-kit'
+  | 'publico'
   | 'metas'
   | 'automacao'
   | 'publico';
 
 const TAB_LABELS: { value: ConfiguracoesTab; label: string; to: string }[] = [
   { value: 'geral', label: 'Geral', to: '/configuracoes?tab=geral' },
-  { value: 'notificacoes', label: 'Notificações', to: '/configuracoes?tab=notificacoes' },
   { value: 'seguranca', label: 'Segurança', to: '/configuracoes?tab=seguranca' },
-  { value: 'equipe', label: 'Equipe', to: '/configuracoes?tab=equipe' },
   { value: 'faturamento', label: 'Faturamento', to: '/configuracoes?tab=faturamento' },
-  { value: 'integracoes', label: 'Integrações', to: '/configuracoes?tab=integracoes' },
-  { value: 'fury', label: 'FURY Engine', to: '/configuracoes?tab=fury' },
-  { value: 'brand-kit', label: 'Dados da Marca', to: '/configuracoes/brand-kit' },
+  { value: 'publico', label: 'Dados da Marca e Público', to: '/configuracoes?tab=publico' },
   { value: 'metas', label: 'Metas', to: '/configuracoes?tab=metas' },
   { value: 'automacao', label: 'Automação', to: '/configuracoes?tab=automacao' },
-  { value: 'publico', label: 'Público', to: '/configuracoes?tab=publico' },
 ];
 
 export function ConfiguracoesTabsNav({ activeTab }: { activeTab: ConfiguracoesTab }) {
