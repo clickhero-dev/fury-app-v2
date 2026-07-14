@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Shield, Users, Settings, Zap, ArrowLeft } from 'lucide-react';
-import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import api from '@/lib/api';
 
 interface NavItem {
@@ -20,7 +20,10 @@ const navItems: NavItem[] = [
 
 export function AdminShell() {
   const navigate = useNavigate();
-  const { id: tenantId } = useParams();
+  const location = useLocation();
+  // ponytail: useParams() no layout /admin sempre retorna vazio —
+  // extrai tenantId do pathname real (/admin/tenants/:id/...)
+  const tenantId = location.pathname.match(/\/admin\/tenants\/([^/]+)/)?.[1];
   const [tenantName, setTenantName] = useState<string | null>(null);
   const [loadingTenant, setLoadingTenant] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
