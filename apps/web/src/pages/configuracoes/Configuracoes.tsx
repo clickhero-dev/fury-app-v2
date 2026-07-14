@@ -62,6 +62,10 @@ export function Configuracoes() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const rawTab = searchParams.get('tab') as TabType | null;
   const activeTab: TabType = rawTab && VALID_TABS.includes(rawTab) ? rawTab : 'geral';
@@ -120,6 +124,22 @@ export function Configuracoes() {
       showToast('Erro ao cancelar. Tente novamente.', 'error');
     }
   }, [cancelMutation.isSuccess, cancelMutation.isError]);
+
+  const changePasswordMutation = useMutation({
+    mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
+      await api.post('/auth/change-password', data);
+    },
+    onSuccess: () => {
+      setPasswordOpen(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      showToast('Senha alterada com sucesso!', 'success');
+    },
+    onError: () => {
+      showToast('Erro ao alterar senha. Verifique a senha atual e tente novamente.', 'error');
+    },
+  });
 
   function showToast(message: string, type: 'success' | 'error') {
     setToast({ message, type });
@@ -297,7 +317,7 @@ export function Configuracoes() {
                         <p className="font-semibold text-text-primary">Alterar Senha</p>
                         <p className="text-sm text-text-secondary">Atualize sua senha regularmente</p>
                       </div>
-                      <Button variant="outline" size="sm">Alterar</Button>
+                      <Button variant="outline" size="sm" onClick={() => setPasswordOpen(true)}>Alterar</Button>
                     </div>
                     <div className="p-4 border border-border rounded-lg flex items-center justify-between">
                       <div>
@@ -321,9 +341,78 @@ export function Configuracoes() {
                 </div>
               </div>
             </Card>
-          </TabsContent>
 
-          {/* Faturamento */}
+            <Dialog open={passwordOpen} onOpenChange={setPasswordOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Alterar Senha</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-text-secondary mb-2">Senha Atual</label>
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className="w-full px-4 py-2 border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-text-secondary mb-2">Nova Senha</label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Mínimo 8 caracteres"
+                      className="w-full px-4 py-2 border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-text-secondary mb-2">Confirmar Nova Senha</label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Repita a nova senha"
+                      className="w-full px-4 py-2 border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
+                    />
+                  </div>
+                  {newPassword && confirmPassword && newPassword !== confirmPassword && (
+                    <p className="text-xs text-red-500">As senhas não conferem</p>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" size="md" onClick={() => {
+                    setPasswordOpen(false);
+                    setCurrentPassword('');
+                    setNewPassword('');
+                    setConfirmPassword('');
+                  }}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    disabled={
+                      changePasswordMutation.isPending ||
+                      !currentPassword ||
+                      !newPassword ||
+                      newPassword.length < 8 ||
+                      newPassword !== confirmPassword
+                    }
+                    onClick={() =>
+                      changePasswordMutation.mutate({
+                        currentPassword,
+                        newPassword,
+                      })
+                    }
+                  >
+                    {changePasswordMutation.isPending ? 'Alterando...' : 'Alterar Senha'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </TabsContent>
           <TabsContent value="faturamento">
             <Card>
               <div className="p-6 space-y-6">

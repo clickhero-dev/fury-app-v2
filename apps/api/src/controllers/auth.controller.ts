@@ -52,6 +52,11 @@ const resetPasswordSchema = z.object({
   newPassword: z.string().min(8).max(255),
 });
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8).max(255),
+});
+
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
     const body = registerSchema.parse(req.body);
@@ -161,6 +166,25 @@ export async function updateMe(req: Request, res: Response, next: NextFunction) 
     res.status(200).json({
       success: true,
       data: user,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function changePassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.user) {
+      throw new Error('User not found in request');
+    }
+
+    const body = changePasswordSchema.parse(req.body);
+    await authService.changePassword(req.user.userId, body.currentPassword, body.newPassword);
+
+    res.status(200).json({
+      success: true,
+      data: null,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
