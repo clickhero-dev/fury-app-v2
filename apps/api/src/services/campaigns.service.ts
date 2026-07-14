@@ -411,8 +411,17 @@ export class CampaignsService {
     const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
     if (!localId) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
 
-    // Check if already deleted on Meta before calling update
-    const campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'status');
+    // Check if already deleted on Meta before calling update.
+    // If this fails (e.g. already removed by Meta), fall through to local archive.
+    let campaignMeta: Record<string, unknown> | undefined;
+    try {
+      campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'status');
+    } catch (err) {
+      const code = (err as AppError)?.code;
+      if (code !== 'CAMPAIGN_DELETED' && code !== 'CAMPAIGN_NOT_FOUND') {
+        throw err;
+      }
+    }
     const metaStatus = campaignMeta?.status as string | undefined;
     if (metaStatus !== 'DELETED' && metaStatus !== 'ARCHIVED') {
       try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'ARCHIVED' }); }

@@ -298,7 +298,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
 
       for (const campaignId of campaignIds) {
         const meta = campaignMeta.get(campaignId);
-        const normalizedStatus = (meta?.status || 'ACTIVE').toUpperCase() as
+        const normalizedStatus = (meta?.status || 'ARCHIVED').toUpperCase() as
           | 'ACTIVE'
           | 'PAUSED'
           | 'ARCHIVED';

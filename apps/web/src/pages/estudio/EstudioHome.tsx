@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, Loader2, Sparkles, Trash2 } from 'lucide-react';
 import { AppLayout, Button, Card, CardContent, EmptyState, LoadingSpinner } from '@/components';
+import { CampaignWizard } from '@/components/campaign-wizard/CampaignWizard';
 import api from '@/lib/api';
 import type { StudioAsset, GenerateCreativeResponse } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
@@ -23,6 +24,10 @@ export function EstudioHome() {
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // ─── Wizard state ─────────────────────────────────────────────
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardAsset, setWizardAsset] = useState<{ id: string; url: string | null } | null>(null);
 
   // ─── OpenRouter state ──────────────────────────────────────────────
   const [orPrompt, setOrPrompt] = useState('');
@@ -119,6 +124,10 @@ export function EstudioHome() {
     } catch { /* use empty fallback */ }
     setGenerationResult({ assetId: asset.id, imageUrl: asset.url ?? '', creativeData });
     setView('result');
+  };
+  const handleUseInCampaign = (asset: StudioAsset) => {
+    setWizardAsset({ id: asset.id, url: asset.url });
+    setWizardOpen(true);
   };
 
   const typeOptions: Array<{ value: 'all' | 'image' | 'video'; label: string }> = [
@@ -272,6 +281,7 @@ export function EstudioHome() {
                       onDeleteConfirm={() => deleteMutation.mutate(asset.id)}
                       onDeleteCancel={() => setDeletingId(null)}
                       onViewDetails={() => handleViewDetails(asset)}
+                      onUseInCampaign={() => handleUseInCampaign(asset)}
                     />
                   ))}
                 </div>
@@ -375,6 +385,13 @@ export function EstudioHome() {
           </div>
         )}
       </div>
+
+      <CampaignWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        preSelectedAssetId={wizardAsset?.id}
+        preSelectedAssetUrl={wizardAsset?.url ?? undefined}
+      />
     </AppLayout>
   );
 }
@@ -387,6 +404,7 @@ interface AssetCardProps {
   onDeleteConfirm: () => void;
   onDeleteCancel: () => void;
   onViewDetails: () => void;
+  onUseInCampaign: () => void;
 }
 
 // ponytail: relative URLs resolved against API origin, fallback for local dev
@@ -397,7 +415,7 @@ function resolveAssetUrl(url: string | null | undefined): string | null {
   return url.startsWith('http') ? url : `${BACKEND_URL}${url}`;
 }
 
-function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDeleteConfirm, onDeleteCancel, onViewDetails }: AssetCardProps) {
+function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDeleteConfirm, onDeleteCancel, onViewDetails, onUseInCampaign }: AssetCardProps) {
   const imageUrl = resolveAssetUrl(asset.url);
   return (
     <div className="bg-surface rounded-lg border border-border overflow-hidden hover:shadow-lg transition-shadow">
@@ -457,7 +475,7 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
           </div>
         ) : (
           <div className="flex gap-2 pt-2">
-            <button className="flex-1 px-3 py-2 border border-[#EA580C] text-[#EA580C] rounded-lg text-xs font-semibold hover:bg-[#FEF0E7] transition-colors">
+            <button onClick={onUseInCampaign} className="flex-1 px-3 py-2 border border-[#EA580C] text-[#EA580C] rounded-lg text-xs font-semibold hover:bg-[#FEF0E7] transition-colors">
               Usar em campanha
             </button>
             <button
