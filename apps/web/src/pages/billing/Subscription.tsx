@@ -76,6 +76,12 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('pt-BR');
 }
 
+function daysRemaining(dateStr: string | null): number | null {
+  if (!dateStr) return null;
+  const diff = new Date(dateStr).getTime() - Date.now();
+  return diff > 0 ? Math.ceil(diff / 86_400_000) : 0;
+}
+
 export function Subscription() {
   const { data: subscription, isLoading } = useSubscription();
   const { data: invoices, isLoading: isInvoicesLoading } = useInvoices();
@@ -135,6 +141,30 @@ export function Subscription() {
       }
     >
       <div className="max-w-3xl mx-auto space-y-6">
+        {subscription.status === 'trial' && (
+          <div className="rounded-2xl border border-warning/20 bg-warning/5 p-5">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
+                <Clock className="w-5 h-5 text-warning" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-bold text-warning">Você está no período de teste</p>
+                {subscription.trialEndsAt && (() => {
+                  const days = daysRemaining(subscription.trialEndsAt);
+                  return (
+                    <p className="text-sm text-warning/80 mt-1">
+                      Seu trial encerra em <strong className="text-warning">{days === 0 ? 'hoje' : `${days} dia${days !== 1 ? 's' : ''}`}</strong> ({formatDate(subscription.trialEndsAt)})
+                    </p>
+                  );
+                })()}
+                <p className="text-xs text-warning/60 mt-1">
+                  Após o período, você precisará escolher um plano para continuar usando a plataforma.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="rounded-2xl border border-border bg-surface p-7">
           <div className="flex items-start justify-between flex-wrap gap-4 mb-6">
             <div>
