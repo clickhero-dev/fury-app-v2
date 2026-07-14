@@ -617,7 +617,14 @@ export class CampaignsService {
     const campaignName = `${objectiveConfig.label} — FURY — ${dataLabel}`;
 
     const selectedPageIds = (metaConn.selectedPageIds as string[] | null) ?? [];
-    const pageId = args.objective === 'whatsapp' ? args.whatsappPageId! : selectedPageIds[0] || process.env.META_PAGE_ID || '';
+    let pageId = args.objective === 'whatsapp' ? args.whatsappPageId! : selectedPageIds[0] || process.env.META_PAGE_ID || '';
+    // ponytail: fallback para primeira página disponível se selectedPageIds vazio
+    if (!pageId && args.objective !== 'whatsapp') {
+      try {
+        const fallbackPages = await this.deps.getResolvedTenantAssetSelection(args.tenantId);
+        if (fallbackPages.pages.length > 0) pageId = fallbackPages.pages[0].pageId;
+      } catch { /* mantém pageId vazio, erro abaixo */ }
+    }
     if (!pageId) throw new AppError(400, 'PAGE_NOT_FOUND', 'Nenhuma Página do Facebook configurada. Selecione uma página em Configurações → Integrações.');
 
     let messagingDestinationType: string | undefined;
