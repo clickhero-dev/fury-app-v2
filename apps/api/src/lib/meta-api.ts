@@ -1339,37 +1339,39 @@ export async function getMetaInsights(params: {
   return metaApiCall<MetaInsightsResponse>(fullPath, params.accessToken);
 }
 
+export interface CampaignAdCreative {
+  id: string;
+  thumbnail_url?: string;
+  object_story_spec?: {
+    link_data?: {
+      image_url?: string;
+      message?: string;
+      name?: string;
+    };
+    video_data?: {
+      image_url?: string;
+      video_id?: string;
+    };
+    photo_data?: {
+      url?: string;
+      caption?: string;
+    };
+  };
+  // ponytail: Dynamic Creative / Advantage+ usa asset_feed_spec em vez de object_story_spec
+  asset_feed_spec?: {
+    bodies?: Array<{ text?: string }>;
+    images?: Array<{ hash?: string }>;
+    titles?: Array<{ text?: string }>;
+    videos?: Array<{ video_id?: string; thumbnail_url?: string; thumbnail_hash?: string }>;
+    ad_formats?: string[];
+  };
+}
+
 export interface CampaignAdItem {
   id: string;
   name: string;
   status: string;
-  creative?: {
-    id: string;
-    thumbnail_url?: string;
-    object_story_spec?: {
-      link_data?: {
-        image_url?: string;
-        message?: string;
-        name?: string;
-      };
-      video_data?: {
-        image_url?: string;
-        video_id?: string;
-      };
-      photo_data?: {
-        url?: string;
-        caption?: string;
-      };
-    };
-    // ponytail: Dynamic Creative / Advantage+ usa asset_feed_spec em vez de object_story_spec
-    asset_feed_spec?: {
-      bodies?: Array<{ text?: string }>;
-      images?: Array<{ hash?: string }>;
-      titles?: Array<{ text?: string }>;
-      videos?: Array<{ video_id?: string; thumbnail_url?: string; thumbnail_hash?: string }>;
-      ad_formats?: string[];
-    };
-  };
+  creative?: CampaignAdCreative;
 }
 
 interface CampaignAdsResponse {
@@ -1382,8 +1384,8 @@ interface AdCreativeResponse {
     id: string;
     name?: string;
     thumbnail_url?: string;
-    object_story_spec?: CampaignAdItem['creative']['object_story_spec'];
-    asset_feed_spec?: CampaignAdItem['creative']['asset_feed_spec'];
+    object_story_spec?: CampaignAdCreative['object_story_spec'];
+    asset_feed_spec?: CampaignAdCreative['asset_feed_spec'];
   }>;
 }
 
@@ -1402,8 +1404,8 @@ export interface AdCreativeItem {
   id: string;
   name?: string;
   thumbnail_url?: string;
-  object_story_spec?: CampaignAdItem['creative']['object_story_spec'];
-  asset_feed_spec?: CampaignAdItem['creative']['asset_feed_spec'];
+  object_story_spec?: CampaignAdCreative['object_story_spec'];
+  asset_feed_spec?: CampaignAdCreative['asset_feed_spec'];
 }
 
 export async function getCampaignAdCreatives(
