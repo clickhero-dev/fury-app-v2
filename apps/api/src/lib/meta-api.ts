@@ -1376,11 +1376,45 @@ interface CampaignAdsResponse {
   data: CampaignAdItem[];
 }
 
+/** Resposta do endpoint /{ad_account_id}/adcreatives com filtro por campanha. */
+interface AdCreativeResponse {
+  data: Array<{
+    id: string;
+    name?: string;
+    thumbnail_url?: string;
+    object_story_spec?: CampaignAdItem['creative']['object_story_spec'];
+    asset_feed_spec?: CampaignAdItem['creative']['asset_feed_spec'];
+  }>;
+}
+
 /** Busca os anúncios (ads) de uma campanha com dados do criativo (thumbnail, texto, mídia). */
 export async function getCampaignAds(campaignId: string, accessToken: string): Promise<CampaignAdItem[]> {
   const fields = 'name,status,creative{thumbnail_url,object_story_spec{link_data{image_url,message,name},video_data{image_url,video_id},photo_data{url,caption}},asset_feed_spec{bodies,images,titles,videos,ad_formats}}';
   const response = await metaApiCall<CampaignAdsResponse>(
     `/${campaignId}/ads?fields=${fields}&limit=25`,
+    accessToken
+  );
+  return response.data || [];
+}
+
+// ponytail: fallback para campanhas sem ads (criadas pela UI do Meta) — busca adcreatives do ad account filtrados por campaign_id
+export interface AdCreativeItem {
+  id: string;
+  name?: string;
+  thumbnail_url?: string;
+  object_story_spec?: CampaignAdItem['creative']['object_story_spec'];
+  asset_feed_spec?: CampaignAdItem['creative']['asset_feed_spec'];
+}
+
+export async function getCampaignAdCreatives(
+  adAccountId: string,
+  campaignId: string,
+  accessToken: string
+): Promise<AdCreativeItem[]> {
+  const fields = 'name,thumbnail_url,object_story_spec{link_data{image_url,message,name},video_data{image_url,video_id},photo_data{url,caption}},asset_feed_spec{bodies,images,titles,videos,ad_formats}';
+  const filtering = encodeURIComponent(JSON.stringify([{ field: 'campaign_id', operator: 'EQUAL', value: campaignId }]));
+  const response = await metaApiCall<{ data: AdCreativeItem[] }>(
+    `/${adAccountId}/adcreatives?fields=${fields}&filtering=${filtering}&limit=25`,
     accessToken
   );
   return response.data || [];

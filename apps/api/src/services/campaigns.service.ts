@@ -9,7 +9,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../lib/locations-cache.js';
 import { getResolvedTenantAssetSelection } from './meta.service.js';
-import { getCampaignAds, searchMetaInterests as searchMetaInterestsLib } from '../lib/meta-api.js';
+import { getCampaignAds, getCampaignAdCreatives, searchMetaInterests as searchMetaInterestsLib } from '../lib/meta-api.js';
 import type { IMetaCampaignProvider } from '../lib/providers/meta-campaign.provider.js';
 import type {
   ICampaignRepository,
@@ -548,6 +548,32 @@ export class CampaignsService {
             primaryText: budget?.creative_primary_text as string | undefined,
             isVideo: false,
           });
+        }
+      }
+
+      // ponytail: fallback para campanhas criadas pela UI do Meta — busca adcreatives do ad account
+      if (creatives.length === 0) {
+        try {
+          const metaConn = await this.repo.findMetaConnection(args.tenantId);
+          const adAccountId = metaConn?.selectedAdAccountId;
+          if (adAccountId) {
+            const adCreatives = await getCampaignAdCreatives(adAccountId, args.campaignId, accessToken);
+            for (const ac of adCreatives) {
+              const assetFeed = ac.asset_feed_spec;
+              creatives.push({
+                id: ac.id,
+                name: ac.name || `Creative ${ac.id}`,
+                status: 'ACTIVE',
+                thumbnailUrl: ac.thumbnail_url,
+                imageUrl: ac.thumbnail_url,
+                headline: assetFeed?.titles?.[0]?.text ?? ac.object_story_spec?.link_data?.name,
+                primaryText: assetFeed?.bodies?.[0]?.text ?? ac.object_story_spec?.link_data?.message,
+                isVideo: (assetFeed?.ad_formats?.some((f) => f.includes('VIDEO')) ?? false) || (assetFeed?.videos?.length ?? 0) > 0,
+              });
+            }
+          }
+        } catch {
+          console.warn('[getCampaignInsights] Failed to fetch adcreatives for campaign', args.campaignId);
         }
       }
 
