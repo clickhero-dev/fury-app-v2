@@ -392,41 +392,65 @@ export async function updateSubscription(
       where: eq(subscriptions.tenantId, req.params.tenantId),
       orderBy: [desc(subscriptions.createdAt)],
     });
-    if (!sub)
-      throw new AppError(
-        404,
-        "SUBSCRIPTION_NOT_FOUND",
-        "Assinatura não encontrada",
-      );
 
     const now = new Date();
-    const updates: Record<string, unknown> = {};
-    if (body.planId !== undefined) updates.planId = body.planId;
-    if (body.status !== undefined) updates.status = body.status;
-    if (body.trialEndsAt !== undefined)
-      updates.trialEndsAt = new Date(body.trialEndsAt);
 
-    if (body.currentPeriodEnd !== undefined) {
-      updates.currentPeriodEnd = new Date(body.currentPeriodEnd);
-    }
+    if (!sub) {
+      // Create subscription if none exists
+      const planId =
+        body.planId ??
+        (await db.query.plans.findFirst({
+          columns: { id: true },
+        }))?.id;
+      if (!planId)
+        throw new AppError(400, "PLAN_REQUIRED", "Informe um plano ou crie um antes");
 
-    if (body.status === "active" && !body.currentPeriodEnd) {
-      const future = new Date(now);
-      future.setDate(future.getDate() + 30);
-      updates.currentPeriodEnd = future;
-    }
+      const trialEndsAt =
+        body.trialEndsAt !== undefined
+          ? new Date(body.trialEndsAt)
+          : undefined;
+      const currentPeriodEnd =
+        body.currentPeriodEnd !== undefined
+          ? new Date(body.currentPeriodEnd)
+          : undefined;
 
-    if (body.billingType !== undefined) {
-      updates.asaasSubscriptionId = body.billingType;
-    }
+      await db.insert(subscriptions).values({
+        tenantId: req.params.tenantId,
+        planId,
+        status: body.status ?? "trial",
+        trialEndsAt,
+        currentPeriodEnd,
+        asaasSubscriptionId: body.billingType,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } else {
+      const updates: Record<string, unknown> = {};
+      if (body.planId !== undefined) updates.planId = body.planId;
+      if (body.status !== undefined) updates.status = body.status;
+      if (body.trialEndsAt !== undefined)
+        updates.trialEndsAt = new Date(body.trialEndsAt);
+      if (body.currentPeriodEnd !== undefined)
+        updates.currentPeriodEnd = new Date(body.currentPeriodEnd);
 
-    updates.updatedAt = now;
+      if (body.status === "active" && !body.currentPeriodEnd) {
+        const future = new Date(now);
+        future.setDate(future.getDate() + 30);
+        updates.currentPeriodEnd = future;
+      }
 
-    if (Object.keys(updates).length >= 1) {
-      await db
-        .update(subscriptions)
-        .set(updates)
-        .where(eq(subscriptions.id, sub.id));
+      if (body.billingType !== undefined) {
+        updates.asaasSubscriptionId = body.billingType;
+      }
+
+      updates.updatedAt = now;
+
+      if (Object.keys(updates).length >= 1) {
+        await db
+          .update(subscriptions)
+          .set(updates)
+          .where(eq(subscriptions.id, sub.id));
+      }
     }
 
     res.json({
