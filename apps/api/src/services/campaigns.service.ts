@@ -506,15 +506,18 @@ export class CampaignsService {
           const linkData = c?.object_story_spec?.link_data;
           const videoData = c?.object_story_spec?.video_data;
           const photoData = c?.object_story_spec?.photo_data;
+          // ponytail: Dynamic Creative (asset_feed_spec) não tem object_story_spec — fallback para bodies/titles
+          const assetFeed = c?.asset_feed_spec;
+          const isVideoFromAssetFeed = assetFeed?.ad_formats?.some((f) => f.includes('VIDEO')) || (assetFeed?.videos?.length ?? 0) > 0;
           return {
             id: ad.id,
             name: ad.name,
             status: ad.status,
             thumbnailUrl: c?.thumbnail_url,
-            imageUrl: linkData?.image_url ?? videoData?.image_url ?? photoData?.url,
-            headline: linkData?.name,
-            primaryText: linkData?.message ?? photoData?.caption,
-            isVideo: !!videoData?.video_id,
+            imageUrl: linkData?.image_url ?? videoData?.image_url ?? photoData?.url ?? c?.thumbnail_url,
+            headline: linkData?.name ?? assetFeed?.titles?.[0]?.text,
+            primaryText: linkData?.message ?? photoData?.caption ?? assetFeed?.bodies?.[0]?.text,
+            isVideo: !!videoData?.video_id || isVideoFromAssetFeed,
           };
         });
       } catch {

@@ -1361,6 +1361,14 @@ export interface CampaignAdItem {
         caption?: string;
       };
     };
+    // ponytail: Dynamic Creative / Advantage+ usa asset_feed_spec em vez de object_story_spec
+    asset_feed_spec?: {
+      bodies?: Array<{ text?: string }>;
+      images?: Array<{ hash?: string }>;
+      titles?: Array<{ text?: string }>;
+      videos?: Array<{ video_id?: string; thumbnail_url?: string; thumbnail_hash?: string }>;
+      ad_formats?: string[];
+    };
   };
 }
 
@@ -1370,7 +1378,7 @@ interface CampaignAdsResponse {
 
 /** Busca os anúncios (ads) de uma campanha com dados do criativo (thumbnail, texto, mídia). */
 export async function getCampaignAds(campaignId: string, accessToken: string): Promise<CampaignAdItem[]> {
-  const fields = 'name,status,creative{thumbnail_url,object_story_spec{link_data{image_url,message,name},video_data{image_url,video_id},photo_data{url,caption}}}';
+  const fields = 'name,status,creative{thumbnail_url,object_story_spec{link_data{image_url,message,name},video_data{image_url,video_id},photo_data{url,caption}},asset_feed_spec{bodies,images,titles,videos,ad_formats}}';
   const response = await metaApiCall<CampaignAdsResponse>(
     `/${campaignId}/ads?fields=${fields}&limit=25`,
     accessToken
