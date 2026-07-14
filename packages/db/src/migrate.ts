@@ -57,9 +57,9 @@ const STEPS: MigrationStep[] = [
   { tag: '0014_add_asset_selection' },
   { tag: '0015_add_request_logs' },
   { tag: '0016_fix_request_logs_user_id' },
-  { tag: '0017_add_request_logs_default_partition' },
   { tag: '0018_add_audience_defaults' },
   { tag: '0020_add_referer_to_request_logs' },
+  { tag: '0021_add_auth_fields_to_users' },
   {
     tag: '0019_add_superadmin_role',
     afterHook: async (client) => {
@@ -158,5 +158,7 @@ async function runMigrate() {
 
 runMigrate().catch((err) => {
   console.error('Migration failed:', err);
+  console.error('Stack:', err?.stack);
+  console.error('Error details:', JSON.stringify(err, null, 2));
   process.exit(1);
 });

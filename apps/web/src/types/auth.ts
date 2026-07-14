@@ -34,3 +34,38 @@ export interface RegisterRequest {
 export interface RegisterResponse {
   user: User;
 }
+
+/** Payload enviado para verificação de email via OTP. */
+export interface VerifyEmailRequest {
+  userId: string;
+  code: string;
+}
+
+/** Resposta da API após verificação de email bem-sucedida. */
+export interface VerifyEmailResponse {
+  token: string;
+  refreshToken: string;
+  user: User;
+}
+
+/** Payload enviado para solicitação de recuperação de senha. */
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+/** Resposta da API após solicitação de recuperação de senha. */
+export interface ForgotPasswordResponse {
+  success: boolean;
+}
+
+/** Payload enviado para redefinição de senha via OTP. */
+export interface ResetPasswordRequest {
+  email: string;
+  code: string;
+  newPassword: string;
+}
+
+/** Resposta da API após redefinição de senha bem-sucedida. */
+export interface ResetPasswordResponse {
+  success: boolean;
+}

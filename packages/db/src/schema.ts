@@ -13,6 +13,7 @@ import {
   unique,
   inet,
   bigint,
+  bigserial,
   smallint,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
@@ -80,6 +81,11 @@ export const users = pgTable(
     role: userRoleEnum('role').notNull().default('member'),
     notificationPrefs: jsonb('notification_prefs').default(sql`'{"campanhas":true,"performance":true,"equipe":false}'::jsonb`),
     audienceDefaults: jsonb('audience_defaults').default(sql`'{"city":"","ageMin":18,"ageMax":65,"gender":"all"}'::jsonb`),
+    otpCode: varchar('otp_code', { length: 6 }),
+    otpExpiresAt: timestamp('otp_expires_at', { withTimezone: true }),
+    emailVerified: boolean('email_verified').notNull().default(false),
+    resetToken: varchar('reset_token', { length: 255 }),
+    resetTokenExpiresAt: timestamp('reset_token_expires_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
@@ -451,7 +457,7 @@ export const brandKits = pgTable(
 export const requestLogs = pgTable(
   'request_logs',
   {
-    id: bigint('id', { mode: 'number' }).notNull().default(sql`nextval('request_logs_id_seq'::regclass)`),
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     requestId: uuid('request_id'),
     tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),

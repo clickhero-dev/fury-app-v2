@@ -1,14 +1,19 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
+import { ResetPasswordSuccessPage } from './pages/auth/ResetPasswordSuccessPage';
 import { LandingPage } from './pages/landing/LandingPage';
 import { ConectarMetaPage } from './pages/onboarding/ConectarMetaPage';
 import { MetaAuthorizePage } from './pages/onboarding/MetaAuthorizePage';
 import { MetasPage } from './pages/onboarding/MetasPage';
 import { SelecionarAtivosPage } from './pages/onboarding/SelecionarAtivosPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { RequireSuperadmin } from './components/auth/RequireSuperadmin';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AuthenticatedShell } from './components/layout/AuthenticatedShell';
+import { AdminShell } from './components/layout/AdminShell';
 import { Dashboard } from './pages/dashboard/Dashboard';
 import { Metas } from './pages/dashboard/Metas';
 import { PainelCampanhas } from './pages/campanhas/PainelCampanhas';
@@ -31,6 +36,8 @@ import { AdminLayout } from './pages/superadmin/AdminLayout';
 import { TenantsPage } from './pages/superadmin/TenantsPage';
 import { TenantDetailPage } from './pages/superadmin/TenantDetailPage';
 import { PlansPage } from './pages/superadmin/PlansPage';
+import { UsersPage } from './pages/superadmin/UsersPage';
+import { TenantCampaignsPage } from './pages/superadmin/TenantCampaignsPage';
 
 /**
  * Roteador principal da aplicação FURY.
@@ -100,6 +107,18 @@ export const router = createBrowserRouter([
     element: <RegisterPage />,
   },
   {
+    path: '/forgot-password',
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
+  },
+  {
+    path: '/reset-password/success',
+    element: <ResetPasswordSuccessPage />,
+  },
+  {
     // Início do fluxo OAuth Meta — não requer autenticação prévia
     path: '/onboarding/conectar-meta',
     element: <ConectarMetaPage />,
@@ -158,10 +177,16 @@ export const router = createBrowserRouter([
   },
   {
     path: '/admin',
-    element: <AdminLayout />,
+    element: (
+      <RequireSuperadmin>
+        <AdminShell />
+      </RequireSuperadmin>
+    ),
     children: [
       { index: true, element: <TenantsPage /> },
+      { path: 'users', element: <UsersPage /> },
       { path: 'tenants/:id', element: <TenantDetailPage /> },
+      { path: 'tenants/:id/campaigns', element: <TenantCampaignsPage /> },
       { path: 'planos', element: <PlansPage /> },
     ],
   },

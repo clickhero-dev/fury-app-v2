@@ -6,6 +6,7 @@ import { eq, and } from 'drizzle-orm';
 import { getRedis } from '../lib/redis.js';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../lib/jwt.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { sendWelcomeEmail, sendOtpEmail, sendPasswordResetConfirmation } from './email.service.js';
 import type { UserDTO } from '../lib/shared.js';
 
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
@@ -294,4 +295,128 @@ export async function updateMe(
   }
 
   return getMe(userId);
+}
+
+export async function verifyEmail(email: string, otp: string): Promise<UserDTO> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, email),
+  });
+
+  if (!user) {
+    throw new AppError(400, 'INVALID_OR_EXPIRED_OTP', 'Código inválido ou expirado');
+  }
+
+  const now = new Date();
+  const isOtpValid =
+    user.otpCode === otp &&
+    user.otpExpiresAt !== null &&
+    user.otpExpiresAt > now;
+
+  if (!isOtpValid) {
+    throw new AppError(400, 'INVALID_OR_EXPIRED_OTP', 'Código inválido ou expirado');
+  }
+
+  await db
+    .update(users)
+    .set({
+      emailVerified: true,
+      otpCode: null,
+      otpExpiresAt: null,
+    })
+    .where(eq(users.id, user.id));
+
+  try {
+    await sendWelcomeEmail(user.email, user.name || 'Usuário');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[verifyEmail] Failed to send welcome email to ${user.email}:`, errorMessage);
+  }
+
+  const updatedUser = await db.query.users.findFirst({
+    where: eq(users.id, user.id),
+  });
+
+  if (!updatedUser) {
+    throw new AppError(500, 'USER_NOT_FOUND', 'Usuário não encontrado');
+  }
+
+  return userToDTO(updatedUser);
+}
+
+function generateSecureOtp(): string {
+  return crypto.randomInt(0, 1000000).toString().padStart(6, '0');
+}
+
+export async function forgotPassword(email: string): Promise<void> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, email),
+  });
+
+  if (user) {
+    const otp = generateSecureOtp();
+    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await db
+      .update(users)
+      .set({
+        otpCode: otp,
+        otpExpiresAt,
+      })
+      .where(eq(users.id, user.id));
+
+    sendOtpEmail(user.email, otp).catch((error) => {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[forgotPassword] Failed to send OTP email to ${user.email}:`, errorMessage);
+    });
+  }
+}
+
+export async function resetPassword(email: string, otp: string, newPassword: string): Promise<UserDTO> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, email),
+  });
+
+  if (!user) {
+    throw new AppError(400, 'INVALID_OR_EXPIRED_OTP', 'Código inválido ou expirado');
+  }
+
+  const now = new Date();
+  const isOtpValid =
+    user.otpCode === otp &&
+    user.otpExpiresAt !== null &&
+    user.otpExpiresAt > now;
+
+  if (!isOtpValid) {
+    throw new AppError(400, 'INVALID_OR_EXPIRED_OTP', 'Código inválido ou expirado');
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+
+  await db
+    .update(users)
+    .set({
+      passwordHash,
+      otpCode: null,
+      otpExpiresAt: null,
+      resetToken: null,
+      resetTokenExpiresAt: null,
+    })
+    .where(eq(users.id, user.id));
+
+  await revokeRefreshToken(user.id);
+
+  sendPasswordResetConfirmation(user.email).catch((error) => {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[resetPassword] Failed to send password reset confirmation to ${user.email}:`, errorMessage);
+  });
+
+  const updatedUser = await db.query.users.findFirst({
+    where: eq(users.id, user.id),
+  });
+
+  if (!updatedUser) {
+    throw new AppError(500, 'USER_NOT_FOUND', 'Usuário não encontrado');
+  }
+
+  return userToDTO(updatedUser);
 }
