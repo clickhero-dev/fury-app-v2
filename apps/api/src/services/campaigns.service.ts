@@ -241,7 +241,9 @@ export class CampaignsService {
   }
 
   private async resolveCampaignIds(campaignId: string, tenantId: string): Promise<{ localId: string | null; metaCampaignId: string }> {
-    const byId = await this.repo.findCampaignById(campaignId);
+    let byId: CampaignRecord | null = null;
+    try { byId = await this.repo.findCampaignById(campaignId); }
+    catch { /* not a UUID — skip local lookup */ }
     if (byId) return { localId: byId.id, metaCampaignId: byId.metaCampaignId };
     const byMeta = await this.repo.findCampaignByMetaId(tenantId, campaignId);
     if (byMeta) return { localId: byMeta.id, metaCampaignId: byMeta.metaCampaignId };
