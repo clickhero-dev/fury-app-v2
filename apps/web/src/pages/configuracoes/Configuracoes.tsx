@@ -7,7 +7,6 @@ import { useTheme } from '@/hooks/useTheme';
 import { Sun, Moon } from 'lucide-react';
 import api from '@/lib/api';
 import { MetasPage } from '../onboarding/MetasPage';
-import { MinhasRegrasContent } from '../automacao/MinhasRegras';
 import { PublicoContent } from './PublicoContent';
 import { BrandKitContent } from './BrandKitPage';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
@@ -20,9 +19,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
-type TabType = 'geral' | 'seguranca' | 'faturamento' | 'metas' | 'automacao' | 'publico';
+type TabType = 'geral' | 'seguranca' | 'faturamento' | 'metas' | 'publico';
 
-const VALID_TABS: TabType[] = ['geral', 'seguranca', 'faturamento', 'metas', 'automacao', 'publico'];
+const VALID_TABS: TabType[] = ['geral', 'seguranca', 'faturamento', 'metas', 'publico'];
 
 interface MeResponse {
   id: string;
@@ -459,14 +458,6 @@ export function Configuracoes() {
             <MetasPage />
           </TabsContent>
 
-          {/* Automação */}
-          <TabsContent value="automacao">
-            <Card>
-              <div className="p-6">
-                <MinhasRegrasContent />
-              </div>
-            </Card>
-          </TabsContent>
         </Tabs>
     </AppLayout>
   );
