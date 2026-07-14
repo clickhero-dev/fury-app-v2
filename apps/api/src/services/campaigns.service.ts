@@ -276,6 +276,11 @@ export class CampaignsService {
 
     try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'PAUSED' }); }
     catch (err) { this.handleMetaError(err); }
+
+    if (localId) {
+      await this.repo.updateCampaign(localId, { status: 'paused' } as any);
+    }
+
     return { campaignId: args.campaignId, status: 'PAUSED' as const };
   }
 
@@ -298,6 +303,11 @@ export class CampaignsService {
 
     try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'ACTIVE' }); }
     catch (err) { this.handleMetaError(err); }
+
+    if (localId) {
+      await this.repo.updateCampaign(localId, { status: 'active' } as any);
+    }
+
     return { campaignId: args.campaignId, status: 'ACTIVE' as const };
   }
 
