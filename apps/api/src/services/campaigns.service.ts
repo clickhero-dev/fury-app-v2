@@ -561,7 +561,13 @@ export class CampaignsService {
     const metaConn = await this.repo.findMetaConnection(args.tenantId);
     if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
 
-    const adAccountId = metaConn.selectedAdAccountId;
+    let adAccountId = metaConn.selectedAdAccountId;
+    // ponytail: fallback para primeira conta disponível se ainda não foi
+    // selecionada explicitamente — evita bloqueio após reconexão Meta.
+    if (!adAccountId) {
+      const accounts = (metaConn.adAccounts as Array<{ id: string }> | null) ?? [];
+      if (accounts.length > 0) adAccountId = accounts[0].id;
+    }
     if (!adAccountId) throw new AppError(400, 'AD_ACCOUNT_NOT_SELECTED', 'Nenhuma conta de anúncios selecionada. Configure em Configurações → Integrações.');
 
     const accessToken = this.deps.decryptMetaToken(metaConn.accessToken);

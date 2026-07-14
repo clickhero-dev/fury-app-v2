@@ -223,7 +223,7 @@ describe('createCampaignFromWizard', () => {
 
   it('AD_ACCOUNT_NOT_SELECTED', async () => {
     dbMock.query.metaConnections.findFirst.mockResolvedValue(
-      makeMetaConnection({ selectedAdAccountId: null })
+      makeMetaConnection({ selectedAdAccountId: null, adAccounts: [] })
     );
     await expect(createCampaignFromWizard(w)).rejects.toMatchObject({
       statusCode: 400, code: 'AD_ACCOUNT_NOT_SELECTED',

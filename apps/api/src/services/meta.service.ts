@@ -200,7 +200,12 @@ export async function handleMetaOAuthCallback(
 
   let connectionId: string;
 
+  // Preserva a conta de anúncios selecionada ANTES de limpar adAccounts,
+  // para que após o refresh possamos restaurá-la caso ainda exista.
+  let oldSelectedAdAccountId: string | null = null;
+
   if (existing) {
+    oldSelectedAdAccountId = existing.selectedAdAccountId;
     await db
       .update(metaConnections)
       .set({
@@ -208,7 +213,10 @@ export async function handleMetaOAuthCallback(
         accessToken: encryptedToken,
         tokenExpiresAt,
         adAccounts: [],
-        selectedAdAccountId: null,
+        // ponytail: não limpamos selectedAdAccountId aqui — deixamos a lógica
+        // após o refresh decidir: mantém a anterior se ainda existir, ou pega a
+        // primeira disponível. Assim o usuário não precisa re-selecionar a conta
+        // toda vez que reconecta o Meta.
         updatedAt: new Date(),
       })
       .where(eq(metaConnections.id, existing.id));
@@ -241,9 +249,15 @@ export async function handleMetaOAuthCallback(
     }
 
     if (adAccounts.length > 0) {
+      // Restaura a conta anterior se ainda existir no refresh, senão pega a primeira
+      const selectedAdAccountId =
+        oldSelectedAdAccountId && adAccounts.some((a) => a.id === oldSelectedAdAccountId)
+          ? oldSelectedAdAccountId
+          : adAccounts[0].id;
+
       await db
         .update(metaConnections)
-        .set({ adAccounts, updatedAt: new Date() })
+        .set({ adAccounts, selectedAdAccountId, updatedAt: new Date() })
         .where(eq(metaConnections.id, connectionId));
       await addSyncJob({ tenantId, metaUserId, adAccounts });
     }
