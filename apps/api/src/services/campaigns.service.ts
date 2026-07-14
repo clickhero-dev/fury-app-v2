@@ -622,7 +622,7 @@ export class CampaignsService {
     if (!pageId && args.objective !== 'whatsapp') {
       try {
         const fallbackPages = await this.deps.getResolvedTenantAssetSelection(args.tenantId);
-        if (fallbackPages.pages.length > 0) pageId = fallbackPages.pages[0].pageId;
+        if (fallbackPages.pages.length > 0) pageId = fallbackPages.pages[0]!.pageId ?? '';
       } catch { /* mantém pageId vazio, erro abaixo */ }
     }
     if (!pageId) throw new AppError(400, 'PAGE_NOT_FOUND', 'Nenhuma Página do Facebook configurada. Selecione uma página em Configurações → Integrações.');
