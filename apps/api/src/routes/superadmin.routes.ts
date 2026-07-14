@@ -14,6 +14,7 @@ router.get("/tenants/:id", superadminController.getTenant);
 router.delete("/tenants/:id", superadminController.deleteTenant);
 
 // Users
+router.get("/users", superadminController.listUsers);
 router.post("/users", superadminController.createUser);
 router.patch("/users/:id", superadminController.updateUser);
 
@@ -37,6 +38,12 @@ router.get("/tenants/:tenantId/brand-kit", superadminController.getBrandKit);
 router.patch(
   "/tenants/:tenantId/brand-kit",
   superadminController.upsertBrandKit,
+);
+
+// Campaigns
+router.get(
+  "/tenants/:tenantId/campaigns",
+  superadminController.listTenantCampaigns,
 );
 
 // Goals

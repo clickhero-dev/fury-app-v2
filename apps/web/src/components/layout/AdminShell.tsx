@@ -12,8 +12,8 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/admin/users', label: 'Usuários', icon: Users },
-  // "Configurações" aponta para /admin/planos (gerencia planos e configurações globais do sistema)
-  { path: '/admin/planos', label: 'Configurações', icon: Settings },
+  // "Planos" gerencia planos e configurações globais do sistema
+  { path: '/admin/planos', label: 'Planos', icon: Settings },
   // "Campanhas" recebe tratamento especial via handleCampanhasClick — ver comentário abaixo
   { path: '/admin', label: 'Campanhas', icon: Zap, end: true },
 ];

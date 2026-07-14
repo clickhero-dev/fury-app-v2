@@ -718,3 +718,61 @@ export async function updatePlan(
     next(err);
   }
 }
+
+// ─── Users ─────────────────────────────────────────────
+
+export async function listUsers(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const rows = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        tenantId: users.tenantId,
+        createdAt: users.createdAt,
+        tenantName: tenants.name,
+      })
+      .from(users)
+      .leftJoin(tenants, eq(users.tenantId, tenants.id))
+      .orderBy(desc(users.createdAt));
+
+    res.json({ success: true, data: rows, timestamp: new Date().toISOString() });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── Campaigns ──────────────────────────────────────────
+
+export async function listTenantCampaigns(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const { tenantId } = req.params;
+
+    const campaigns = await db.query.campaigns.findMany({
+      where: eq(sql`tenant_id`, tenantId),
+      orderBy: [desc(sql`created_at`)],
+    });
+
+    const creativeAssetsList = await db.query.creativeAssets.findMany({
+      where: eq(sql`tenant_id`, tenantId),
+      orderBy: [desc(sql`created_at`)],
+    });
+
+    res.json({
+      success: true,
+      data: { campaigns, creativeAssets: creativeAssetsList },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
