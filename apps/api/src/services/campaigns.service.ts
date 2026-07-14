@@ -524,8 +524,11 @@ export class CampaignsService {
         console.warn('[getCampaignInsights] Failed to fetch creatives for campaign', args.campaignId);
       }
 
-      // fallback: se Meta não retornou criativos, busca do banco local
-      if (creatives.length === 0 && dbCampaign) {
+      // ponytail: verifica se algum criativo da camada 1 tem imagem real
+      let hasUsableCreative = creatives.some((c) => c.imageUrl || c.thumbnailUrl);
+
+      // fallback: se Meta não retornou criativos utilizáveis, busca do banco local
+      if (!hasUsableCreative && dbCampaign) {
         const budget = dbCampaign.budget as Record<string, unknown> | null | undefined;
         const localImageUrl = budget?.creative_image_url as string | undefined;
         const localAssetId = budget?.creative_asset_id as string | undefined;
@@ -548,29 +551,35 @@ export class CampaignsService {
             primaryText: budget?.creative_primary_text as string | undefined,
             isVideo: false,
           });
+          hasUsableCreative = true;
         }
       }
 
-      // ponytail: fallback para campanhas criadas pela UI do Meta — busca adcreatives do ad account
-      if (creatives.length === 0) {
+      // ponytail: fallback para campanhas sem criativos utilizáveis (criadas pela UI do Meta)
+      // — busca adcreatives do ad account, que retorna thumbnail_url mesmo quando /ads não retorna
+      if (!hasUsableCreative) {
         try {
           const metaConn = await this.repo.findMetaConnection(args.tenantId);
           const adAccountId = metaConn?.selectedAdAccountId;
           if (adAccountId) {
             const adCreatives = await getCampaignAdCreatives(adAccountId, args.campaignId, accessToken);
-            for (const ac of adCreatives) {
-              const assetFeed = ac.asset_feed_spec;
-              creatives.push({
-                id: ac.id,
-                name: ac.name || `Creative ${ac.id}`,
-                status: 'ACTIVE',
-                thumbnailUrl: ac.thumbnail_url,
-                imageUrl: ac.thumbnail_url,
-                headline: assetFeed?.titles?.[0]?.text ?? ac.object_story_spec?.link_data?.name,
-                primaryText: assetFeed?.bodies?.[0]?.text ?? ac.object_story_spec?.link_data?.message,
-                isVideo: (assetFeed?.ad_formats?.some((f) => f.includes('VIDEO')) ?? false) || (assetFeed?.videos?.length ?? 0) > 0,
-              });
-            }
+            // ponytail: se adcreatives retornou dados com imagem, substitui os criativos vazios da camada 1
+            const fallbackCreatives = adCreatives
+              .map((ac) => {
+                const assetFeed = ac.asset_feed_spec;
+                return {
+                  id: ac.id,
+                  name: ac.name || `Creative ${ac.id}`,
+                  status: 'ACTIVE',
+                  thumbnailUrl: ac.thumbnail_url,
+                  imageUrl: ac.thumbnail_url ?? ac.object_story_spec?.link_data?.image_url ?? ac.object_story_spec?.video_data?.image_url,
+                  headline: assetFeed?.titles?.[0]?.text ?? ac.object_story_spec?.link_data?.name,
+                  primaryText: assetFeed?.bodies?.[0]?.text ?? ac.object_story_spec?.link_data?.message,
+                  isVideo: (assetFeed?.ad_formats?.some((f: string) => f.includes('VIDEO')) ?? false) || (assetFeed?.videos?.length ?? 0) > 0,
+                };
+              })
+              .filter((c) => c.imageUrl || c.thumbnailUrl);
+            if (fallbackCreatives.length > 0) creatives = fallbackCreatives;
           }
         } catch {
           console.warn('[getCampaignInsights] Failed to fetch adcreatives for campaign', args.campaignId);
