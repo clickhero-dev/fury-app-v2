@@ -53,10 +53,6 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiEditor, setShowAiEditor] = useState(false);
-  // ponytail: sessionStorage pra imagem persistir entre abrir/fechar painel
-  const [localImageUrl, setLocalImageUrl] = useState(
-    sessionStorage.getItem(`fury_img_${post.id}`) || post.imageUrl || ''
-  );
 
   const Icon = postIcons[post.postType] ?? Image;
 
@@ -74,23 +70,6 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
       {copiedField === field ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
     </button>
   );
-
-  // ponytail: gera imagem via OpenRouter igual ao Estúdio
-  const imageMutation = useMutation({
-    mutationFn: async (prompt: string) => {
-      const { data } = await api.post('/openrouter/generate-image', {
-        model: 'black-forest-labs/flux.2-max',
-        prompt,
-        aspect_ratio: '1:1',
-      });
-      return data as { imageUrl: string; creativeAssetId: string };
-    },
-    onSuccess: (data) => {
-      sessionStorage.setItem(`fury_img_${post.id}`, data.imageUrl);
-      setLocalImageUrl(data.imageUrl);
-      onUpdate({ ...post, imageUrl: data.imageUrl });
-    },
-  });
 
   const aiEditMutation = useMutation({
     mutationFn: async (prompt: string) => {
@@ -177,33 +156,15 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
             </div>
           </div>
 
-          {/* Image — gerada via OpenRouter (mesmo fluxo do Estúdio) */}
+          {/* Image Prompt */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-medium text-text-primary">Imagem</h4>
-              {post.imageUrl && copyBtn(post.imageUrl, 'image')}
+              <h4 className="text-sm font-medium text-text-primary">Prompt da imagem</h4>
+              {copyBtn(post.imagePrompt, 'prompt')}
             </div>
-            {localImageUrl ? (
-              <img src={localImageUrl} alt={post.title} className="w-full rounded-xl border border-border" />
-            ) : imageMutation.isPending ? (
-              <div className="rounded-xl border border-border bg-surface-secondary p-8 text-center">
-                <div className="w-8 h-8 border-2 border-accent/30 border-t-accent rounded-full animate-spin mx-auto mb-3" />
-                <p className="text-sm text-text-tertiary">Gerando imagem...</p>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-border bg-gradient-to-br from-accent/5 via-surface-secondary to-accent/10 p-6 text-center">
-                <Image className="w-8 h-8 text-text-tertiary mx-auto mb-3" />
-                <p className="text-sm text-text-secondary italic leading-relaxed mb-4">
-                  {post.imagePrompt || 'Sem descrição visual'}
-                </p>
-                <button
-                  onClick={() => imageMutation.mutate(post.imagePrompt)}
-                  className="px-4 py-2 bg-accent hover:bg-accent-light text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Gerar imagem
-                </button>
-              </div>
-            )}
+            <p className="text-sm text-text-secondary bg-surface-secondary rounded-lg p-3 italic">
+              {post.imagePrompt || '—'}
+            </p>
           </div>
 
           {/* Actions */}

@@ -22,8 +22,7 @@ import { InsightsCampanha } from './pages/campanhas/InsightsCampanha';
 import { CreativeStudio } from './pages/estudio/CreativeStudio';
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
-import { PlanejadorPage } from './pages/planejador/PlanejadorPage';
-import { CalendarioPage } from './pages/planejador/CalendarioPage';
+import { PlanejadorPage } from './pages/planejador/PlanejadorPage'; // NOVO
 import { Configuracoes } from './pages/configuracoes/Configuracoes';
 import { Integracoes } from './pages/configuracoes/Integracoes';
 import { MinhasRegras } from './pages/automacao/MinhasRegras';
@@ -159,8 +158,7 @@ export const router = createBrowserRouter([
       { path: '/estudio-criativo', element: <CreativeStudio /> },
       { path: '/estudio', element: <EstudioHome /> },
       { path: '/estudio/imagem', element: <GeradorImagem /> },
-      { path: '/planejador', element: <PlanejadorPage /> },
-      { path: '/calendario', element: <CalendarioPage /> },
+      { path: '/planejador', element: <PlanejadorPage /> }, // NOVO
       { path: '/configuracoes', element: <Configuracoes /> },
       { path: '/configuracoes/integracoes', element: <Integracoes /> },
       { path: '/configuracoes/brand-kit', element: <Navigate to="/configuracoes?tab=publico" replace /> },

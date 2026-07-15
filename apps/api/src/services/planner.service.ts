@@ -156,7 +156,7 @@ async function runGeneration(jobId: string, tenantId: string): Promise<void> {
     .returning();
 
   if (planData.posts?.length) {
-    const inserted = await db.insert(socialPosts).values(
+    await db.insert(socialPosts).values(
       planData.posts.map((p: any) => ({
         tenantId,
         planId: plan.id,
@@ -170,24 +170,6 @@ async function runGeneration(jobId: string, tenantId: string): Promise<void> {
         dayIndex: p.dayIndex ?? 1,
         status: 'draft',
       })),
-    ).returning();
-
-    // ponytail: gera imagens em paralelo via OpenRouter, armazena base64 direto (sem R2)
-    update('🎨 Gerando imagens com IA', 92);
-    await Promise.allSettled(
-      inserted.map(async (post) => {
-        if (!post.imagePrompt) return;
-        try {
-          const base64 = await openrouterService.generateImage({
-            model: 'black-forest-labs/flux.2-klein-4b',
-            prompt: post.imagePrompt!,
-            aspect_ratio: '1:1',
-          });
-          await db.update(socialPosts)
-            .set({ imageUrl: base64, updatedAt: new Date() })
-            .where(eq(socialPosts.id, post.id));
-        } catch { /* imagem opcional — não quebra o plano */ }
-      }),
     );
   }
 

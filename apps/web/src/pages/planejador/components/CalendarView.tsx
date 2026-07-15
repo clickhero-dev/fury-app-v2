@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
-import { LayoutGrid, Image, Sparkles } from 'lucide-react';
+import { Film, LayoutGrid, Image, Sparkles, CheckCircle } from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
 import type { Post } from '../types';
 
@@ -12,7 +12,6 @@ interface CalendarViewProps {
     totalPosts: number;
     posts: Post[];
   };
-  onScheduleAll?: () => void;
 }
 
 const postIcons: Record<string, typeof LayoutGrid> = {
@@ -35,11 +34,10 @@ const statusColors: Record<string, string> = {
 };
 
 const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
-// ponytail: FIRST_DOW dinâmico, não hardcoded — não quebra em outro mês
-const FIRST_DOW = new Date(2026, 6, 1).getDay();
+const FIRST_DOW = 2;
 const DOW_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-export function CalendarView({ plan, onScheduleAll }: CalendarViewProps) {
+export function CalendarView({ plan }: CalendarViewProps) {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
   const postsByDay = useMemo(() => {
@@ -70,8 +68,10 @@ export function CalendarView({ plan, onScheduleAll }: CalendarViewProps) {
               {plan.totalPosts} conteúdos
             </span>
             <button
-              onClick={onScheduleAll}
-              className="px-6 py-2.5 bg-accent hover:bg-accent-light text-white font-medium rounded-xl transition-all duration-200 shadow-lg shadow-accent/20"
+              disabled={totalApproved < plan.totalPosts}
+              className="px-6 py-2.5 bg-accent hover:bg-accent-light disabled:opacity-40 
+                         disabled:cursor-not-allowed text-white font-medium rounded-xl 
+                         transition-all duration-200 shadow-lg shadow-accent/20"
             >
               Agendar tudo
             </button>
@@ -79,8 +79,8 @@ export function CalendarView({ plan, onScheduleAll }: CalendarViewProps) {
         </div>
       </div>
 
-      {/* Grid — min-h fixo pra flex dentro do AppLayout */}
-      <div className="min-h-[500px] p-6">
+      {/* Grid */}
+      <div className="flex-1 p-6">
         <div className="max-w-7xl mx-auto">
           {/* Day headers */}
           <div className="grid grid-cols-7 gap-px mb-px">
