@@ -482,6 +482,66 @@ export const requestLogs = pgTable(
   })
 );
 
+// ===== Planejador IA tables =====
+
+export const postTypeEnum = pgEnum('post_type', ['reel', 'carousel', 'image', 'stories']);
+export const postStatusEnum = pgEnum('post_status', ['draft', 'approved', 'rejected', 'published']);
+export const planStatusEnum = pgEnum('plan_status', ['draft', 'active', 'completed', 'cancelled']);
+
+export const campaignPlans = pgTable(
+  'campaign_plans',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }),
+    type: varchar('type', { length: 20 }).notNull().default('monthly'),
+    periodStart: timestamp('period_start', { withTimezone: true }),
+    periodEnd: timestamp('period_end', { withTimezone: true }),
+    objective: text('objective'),
+    status: planStatusEnum('status').notNull().default('draft'),
+    totalPosts: integer('total_posts').default(0),
+    metadata: jsonb('metadata').default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('campaign_plans_tenant_id_idx').on(table.tenantId),
+  })
+);
+
+export const socialPosts = pgTable(
+  'social_posts',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    planId: uuid('plan_id').references(() => campaignPlans.id, { onDelete: 'set null' }),
+    platform: varchar('platform', { length: 50 }).notNull().default('instagram'),
+    postType: postTypeEnum('post_type').notNull().default('image'),
+    title: varchar('title', { length: 255 }),
+    caption: text('caption'),
+    cta: varchar('cta', { length: 255 }),
+    hashtags: jsonb('hashtags').default(sql`'[]'::jsonb`),
+    imagePrompt: text('image_prompt'),
+    imageUrl: text('image_url'),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    status: postStatusEnum('status').notNull().default('draft'),
+    platformPostId: varchar('platform_post_id', { length: 255 }),
+    metrics: jsonb('metrics').default(sql`'{}'::jsonb`),
+    dayIndex: integer('day_index'), // dia do mês (1-31) para ordenação no calendário
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('social_posts_tenant_id_idx').on(table.tenantId),
+    planIdIdx: index('social_posts_plan_id_idx').on(table.planId),
+  })
+);
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -503,4 +563,6 @@ export const allTables = {
   invoices,
   brandKits,
   requestLogs,
+  campaignPlans,
+  socialPosts,
 };

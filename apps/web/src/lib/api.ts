@@ -3,7 +3,7 @@ import { queryClient } from './query-client';
 import { store } from '../store';
 import { setTokens } from '../store/slices/authSlice';
 
-const BASE_URL = 'https://clickhero-fury-api.u7pe19.easypanel.host/api';
+const BASE_URL = import.meta.env.VITE_API_URL;
 
 console.log(BASE_URL);
 

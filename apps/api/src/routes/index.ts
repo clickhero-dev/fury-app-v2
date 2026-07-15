@@ -18,6 +18,7 @@ import goalsRoutes from "./goals.routes.js";
 import billingRoutes from "./billing.routes.js";
 import brandKitRoutes from "./brand-kit.routes.js";
 import superadminRoutes from "./superadmin.routes.js";
+import plannerRoutes from "./planner.routes.js"; // NOVO
 
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { tenantMiddleware } from "../middleware/tenant.middleware.js";
@@ -51,5 +52,6 @@ router.use(
   observabilityRoutes,
 );
 router.use("/admin", superadminRoutes);
+router.use("/planner", ...AUTH_TENANT_SUB, plannerRoutes); // NOVO
 
 export default router;
