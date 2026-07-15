@@ -58,8 +58,8 @@ export function PlanejadorPage() {
 
   const generateMutation = useMutation({
     mutationFn: async () => {
-      const { data } = await api.post('/planner/generate');
-      return data as { jobId: string };
+      const { data: res } = await api.post('/planner/generate');
+      return { jobId: res.data.jobId };
     },
     onSuccess: (data) => {
       setView('generating');
@@ -75,13 +75,14 @@ export function PlanejadorPage() {
   const startPolling = (jobId: string) => {
     const interval = setInterval(async () => {
       try {
-        const { data } = await api.get(`/planner/jobs/${jobId}`);
-        if (data.status === 'done') {
+        const { data: res } = await api.get(`/planner/jobs/${jobId}`);
+        const job = res.data;
+        if (job.status === 'done') {
           clearInterval(interval);
-          const planRes = await api.get(`/planner/plans/${data.planId}`);
+          const { data: planRes } = await api.get(`/planner/plans/${job.planId}`);
           setPlan(planRes.data as Plan);
           setView('summary');
-        } else if (data.status === 'error') {
+        } else if (job.status === 'error') {
           clearInterval(interval);
           setView('idle');
         }
