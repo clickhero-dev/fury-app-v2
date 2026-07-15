@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { ArrowLeft, Loader2, ImageIcon, FilmIcon } from 'lucide-react';
+import { ArrowLeft, Loader2, ImageIcon, FilmIcon, X } from 'lucide-react';
 import { AppLayout } from '@/components';
 import { useCampaignInsights, type InsightsDateRange, type DailyInsight, type CampaignCreative } from '@/hooks/useCampaignInsights';
 
@@ -97,12 +97,54 @@ function ChartTooltip({ active, payload, label }: any) {
   );
 }
 
-// ── Creative card (Instagram-like preview) ────────────────────────────────────
+// ── Image/Video modal ─────────────────────────────────────────────────────────
 
-function CreativeCard({ creative }: { creative: CampaignCreative }) {
+function MediaModal({ creative, onClose }: { creative: CampaignCreative; onClose: () => void }) {
   const imgSrc = creative.imageUrl || creative.thumbnailUrl;
   return (
-    <div className="bg-white rounded-xl border border-border overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+    <div
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute -top-3 -right-3 z-10 bg-white rounded-full p-1.5 shadow-lg hover:bg-gray-100 transition-colors"
+        >
+          <X className="w-5 h-5 text-gray-700" />
+        </button>
+        {creative.isVideo ? (
+          <video
+            src={imgSrc}
+            controls
+            autoPlay
+            className="max-w-full max-h-[85vh] rounded-xl shadow-2xl"
+          >
+            <source src={imgSrc} />
+          </video>
+        ) : imgSrc ? (
+          <img
+            src={imgSrc}
+            alt={creative.name}
+            className="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain"
+          />
+        ) : (
+          <div className="bg-white rounded-xl p-12">
+            <ImageIcon className="w-16 h-16 text-gray-300" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Creative card (Instagram-like preview) ────────────────────────────────────
+
+function CreativeCard({ creative, onSelect }: { creative: CampaignCreative; onSelect: () => void }) {
+  const imgSrc = creative.imageUrl || creative.thumbnailUrl;
+  return (
+    <div className="bg-white rounded-xl border border-border overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={onSelect}>
       {/* Image area — Instagram square ratio */}
       <div className="relative aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
         {imgSrc ? (
@@ -154,6 +196,7 @@ export function InsightsCampanha() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [dateRange, setDateRange] = useState<InsightsDateRange>('last_7d');
+  const [selectedCreative, setSelectedCreative] = useState<CampaignCreative | null>(null);
 
   const { data, isLoading, isError } = useCampaignInsights(id, dateRange);
 
@@ -312,7 +355,7 @@ export function InsightsCampanha() {
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                   {data.creatives.map((c) => (
-                    <CreativeCard key={c.id} creative={c} />
+                    <CreativeCard key={c.id} creative={c} onSelect={() => setSelectedCreative(c)} />
                   ))}
                 </div>
               </div>
@@ -320,6 +363,10 @@ export function InsightsCampanha() {
           </>
         )}
       </div>
+
+      {selectedCreative && (
+        <MediaModal creative={selectedCreative} onClose={() => setSelectedCreative(null)} />
+      )}
     </AppLayout>
   );
 }

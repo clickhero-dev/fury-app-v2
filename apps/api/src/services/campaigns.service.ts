@@ -9,7 +9,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../lib/locations-cache.js';
 import { getResolvedTenantAssetSelection } from './meta.service.js';
-import { getCampaignAds, searchMetaInterests as searchMetaInterestsLib } from '../lib/meta-api.js';
+import { getCampaignAds, getCampaignAdCreatives, searchMetaInterests as searchMetaInterestsLib } from '../lib/meta-api.js';
 import type { IMetaCampaignProvider } from '../lib/providers/meta-campaign.provider.js';
 import type {
   ICampaignRepository,
@@ -241,7 +241,9 @@ export class CampaignsService {
   }
 
   private async resolveCampaignIds(campaignId: string, tenantId: string): Promise<{ localId: string | null; metaCampaignId: string }> {
-    const byId = await this.repo.findCampaignById(campaignId);
+    let byId: CampaignRecord | null = null;
+    try { byId = await this.repo.findCampaignById(campaignId); }
+    catch { /* not a UUID — skip local lookup */ }
     if (byId) return { localId: byId.id, metaCampaignId: byId.metaCampaignId };
     const byMeta = await this.repo.findCampaignByMetaId(tenantId, campaignId);
     if (byMeta) return { localId: byMeta.id, metaCampaignId: byMeta.metaCampaignId };
@@ -276,6 +278,11 @@ export class CampaignsService {
 
     try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'PAUSED' }); }
     catch (err) { this.handleMetaError(err); }
+
+    if (localId) {
+      await this.repo.updateCampaign(localId, { status: 'paused' } as any);
+    }
+
     return { campaignId: args.campaignId, status: 'PAUSED' as const };
   }
 
@@ -298,6 +305,11 @@ export class CampaignsService {
 
     try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'ACTIVE' }); }
     catch (err) { this.handleMetaError(err); }
+
+    if (localId) {
+      await this.repo.updateCampaign(localId, { status: 'active' } as any);
+    }
+
     return { campaignId: args.campaignId, status: 'ACTIVE' as const };
   }
 
@@ -494,23 +506,29 @@ export class CampaignsService {
           const linkData = c?.object_story_spec?.link_data;
           const videoData = c?.object_story_spec?.video_data;
           const photoData = c?.object_story_spec?.photo_data;
+          // ponytail: Dynamic Creative (asset_feed_spec) não tem object_story_spec — fallback para bodies/titles
+          const assetFeed = c?.asset_feed_spec;
+          const isVideoFromAssetFeed = assetFeed?.ad_formats?.some((f) => f.includes('VIDEO')) || (assetFeed?.videos?.length ?? 0) > 0;
           return {
             id: ad.id,
             name: ad.name,
             status: ad.status,
             thumbnailUrl: c?.thumbnail_url,
-            imageUrl: linkData?.image_url ?? videoData?.image_url ?? photoData?.url,
-            headline: linkData?.name,
-            primaryText: linkData?.message ?? photoData?.caption,
-            isVideo: !!videoData?.video_id,
+            imageUrl: linkData?.picture ?? videoData?.image_url ?? photoData?.url ?? c?.image_url ?? c?.thumbnail_url,
+            headline: linkData?.name ?? assetFeed?.titles?.[0]?.text,
+            primaryText: linkData?.message ?? photoData?.caption ?? assetFeed?.bodies?.[0]?.text,
+            isVideo: !!videoData?.video_id || isVideoFromAssetFeed,
           };
         });
       } catch {
         console.warn('[getCampaignInsights] Failed to fetch creatives for campaign', args.campaignId);
       }
 
-      // fallback: se Meta não retornou criativos, busca do banco local
-      if (creatives.length === 0 && dbCampaign) {
+      // ponytail: verifica se algum criativo da camada 1 tem imagem real
+      let hasUsableCreative = creatives.some((c) => c.imageUrl || c.thumbnailUrl);
+
+      // fallback: se Meta não retornou criativos utilizáveis, busca do banco local
+      if (!hasUsableCreative && dbCampaign) {
         const budget = dbCampaign.budget as Record<string, unknown> | null | undefined;
         const localImageUrl = budget?.creative_image_url as string | undefined;
         const localAssetId = budget?.creative_asset_id as string | undefined;
@@ -533,6 +551,38 @@ export class CampaignsService {
             primaryText: budget?.creative_primary_text as string | undefined,
             isVideo: false,
           });
+          hasUsableCreative = true;
+        }
+      }
+
+      // ponytail: fallback para campanhas sem criativos utilizáveis (criadas pela UI do Meta)
+      // — busca adcreatives do ad account, que retorna thumbnail_url mesmo quando /ads não retorna
+      if (!hasUsableCreative) {
+        try {
+          const metaConn = await this.repo.findMetaConnection(args.tenantId);
+          const adAccountId = metaConn?.selectedAdAccountId;
+          if (adAccountId) {
+            const adCreatives = await getCampaignAdCreatives(adAccountId, args.campaignId, accessToken);
+            // ponytail: se adcreatives retornou dados com imagem, substitui os criativos vazios da camada 1
+            const fallbackCreatives = adCreatives
+              .map((ac) => {
+                const assetFeed = ac.asset_feed_spec;
+                return {
+                  id: ac.id,
+                  name: ac.name || `Creative ${ac.id}`,
+                  status: 'ACTIVE',
+                  thumbnailUrl: ac.thumbnail_url,
+                  imageUrl: ac.image_url ?? ac.thumbnail_url ?? ac.object_story_spec?.link_data?.picture ?? ac.object_story_spec?.video_data?.image_url,
+                  headline: assetFeed?.titles?.[0]?.text ?? ac.object_story_spec?.link_data?.name,
+                  primaryText: assetFeed?.bodies?.[0]?.text ?? ac.object_story_spec?.link_data?.message,
+                  isVideo: (assetFeed?.ad_formats?.some((f: string) => f.includes('VIDEO')) ?? false) || (assetFeed?.videos?.length ?? 0) > 0,
+                };
+              })
+              .filter((c) => c.imageUrl || c.thumbnailUrl);
+            if (fallbackCreatives.length > 0) creatives = fallbackCreatives;
+          }
+        } catch {
+          console.warn('[getCampaignInsights] Failed to fetch adcreatives for campaign', args.campaignId);
         }
       }
 
@@ -549,7 +599,13 @@ export class CampaignsService {
     const metaConn = await this.repo.findMetaConnection(args.tenantId);
     if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
 
-    const adAccountId = metaConn.selectedAdAccountId;
+    let adAccountId = metaConn.selectedAdAccountId;
+    // ponytail: fallback para primeira conta disponível se ainda não foi
+    // selecionada explicitamente — evita bloqueio após reconexão Meta.
+    if (!adAccountId) {
+      const accounts = (metaConn.adAccounts as Array<{ id: string }> | null) ?? [];
+      if (accounts.length > 0) adAccountId = accounts[0].id;
+    }
     if (!adAccountId) throw new AppError(400, 'AD_ACCOUNT_NOT_SELECTED', 'Nenhuma conta de anúncios selecionada. Configure em Configurações → Integrações.');
 
     const accessToken = this.deps.decryptMetaToken(metaConn.accessToken);
@@ -599,7 +655,14 @@ export class CampaignsService {
     const campaignName = `${objectiveConfig.label} — FURY — ${dataLabel}`;
 
     const selectedPageIds = (metaConn.selectedPageIds as string[] | null) ?? [];
-    const pageId = args.objective === 'whatsapp' ? args.whatsappPageId! : selectedPageIds[0] || process.env.META_PAGE_ID || '';
+    let pageId = args.objective === 'whatsapp' ? args.whatsappPageId! : selectedPageIds[0] || process.env.META_PAGE_ID || '';
+    // ponytail: fallback para primeira página disponível se selectedPageIds vazio
+    if (!pageId && args.objective !== 'whatsapp') {
+      try {
+        const fallbackPages = await this.deps.getResolvedTenantAssetSelection(args.tenantId);
+        if (fallbackPages.pages.length > 0) pageId = fallbackPages.pages[0]!.pageId ?? '';
+      } catch { /* mantém pageId vazio, erro abaixo */ }
+    }
     if (!pageId) throw new AppError(400, 'PAGE_NOT_FOUND', 'Nenhuma Página do Facebook configurada. Selecione uma página em Configurações → Integrações.');
 
     let messagingDestinationType: string | undefined;
@@ -684,10 +747,22 @@ export class CampaignsService {
 
       // ponytail: compute link once instead of re-deriving in the creative spread
       const appUrl = process.env.FURY_APP_URL || process.env.APP_URL || 'https://clickhero-fury-api.u7pe19.easypanel.host';
+
+      // Busca o slug do tenant para a LP (whatsapp_conv) — fallback pro tenantId
+      let lpSlug = args.tenantId;
+      if (args.objective === 'whatsapp_conv') {
+        try {
+          const { db, tenants } = await import('@fury/db');
+          const { eq } = await import('drizzle-orm');
+          const t = await db.query.tenants.findFirst({ where: eq(tenants.id, args.tenantId) });
+          if (t?.slug) lpSlug = t.slug;
+        } catch { /* fallback ao tenantId */ }
+      }
+
       const creativeLink = args.objective === 'visits'
         ? args.destinationUrl
         : args.objective === 'whatsapp_conv'
-          ? `${appUrl}/api/lp/${args.tenantId}`
+          ? `${appUrl}/api/lp/${lpSlug}`
           : `https://www.facebook.com/${pageId}`;
 
       const creativeBody: Record<string, unknown> = instagramCreativeActorId

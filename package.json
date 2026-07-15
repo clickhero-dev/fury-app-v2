@@ -26,6 +26,7 @@
     "security:audit:json": "bash scripts/security-audit.sh --json"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.1",
     "@vitest/coverage-v8": "^4.1.9",
     "tsx": "^4.21.0",
     "typescript": "^5.3.3",
@@ -34,7 +35,8 @@
   "dependencies": {
     "@types/bcrypt": "^6.0.0",
     "bcrypt": "^6.0.0",
-    "esbuild": "0.28.0"
+    "esbuild": "0.28.0",
+    "nodemailer": "^9.0.3"
   },
   "optionalDependencies": {
     "@rolldown/binding-win32-x64-msvc": "^1.0.2",

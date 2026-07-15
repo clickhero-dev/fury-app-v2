@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Shield, Users, Settings, Zap, ArrowLeft } from 'lucide-react';
-import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import api from '@/lib/api';
 
 interface NavItem {
@@ -12,23 +12,24 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/admin/users', label: 'Usuários', icon: Users },
-  // "Configurações" aponta para /admin/planos (gerencia planos e configurações globais do sistema)
-  { path: '/admin/planos', label: 'Configurações', icon: Settings },
+  // "Planos" gerencia planos e configurações globais do sistema
+  { path: '/admin/planos', label: 'Planos', icon: Settings },
   // "Campanhas" recebe tratamento especial via handleCampanhasClick — ver comentário abaixo
   { path: '/admin', label: 'Campanhas', icon: Zap, end: true },
 ];
 
 export function AdminShell() {
   const navigate = useNavigate();
-  const { id: tenantId } = useParams();
+  const location = useLocation();
+  // ponytail: useParams() no layout /admin sempre retorna vazio —
+  // extrai tenantId do pathname real (/admin/tenants/:id/...)
+  const tenantId = location.pathname.match(/\/admin\/tenants\/([^/]+)/)?.[1];
   const [tenantName, setTenantName] = useState<string | null>(null);
-  const [loadingTenant, setLoadingTenant] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Se está em uma rota de tenant (/admin/tenants/:id/*), carrega o nome do tenant
   useEffect(() => {
     if (tenantId) {
-      setLoadingTenant(true);
       api
         .get(`/admin/tenants/${tenantId}`)
         .then((res) => {
@@ -36,9 +37,6 @@ export function AdminShell() {
         })
         .catch(() => {
           setTenantName(null);
-        })
-        .finally(() => {
-          setLoadingTenant(false);
         });
     } else {
       setTenantName(null);
@@ -156,9 +154,7 @@ export function AdminShell() {
                   Voltar
                 </button>
                 <div className="hidden sm:block pl-4 border-l border-zinc-800">
-                  {loadingTenant ? (
-                    <p className="text-sm text-zinc-400">Carregando...</p>
-                  ) : tenantName ? (
+                  {tenantName ? (
                     <p className="text-sm font-medium text-zinc-300">{tenantName}</p>
                   ) : null}
                 </div>

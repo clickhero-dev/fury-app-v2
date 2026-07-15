@@ -420,3 +420,25 @@ export async function resetPassword(email: string, otp: string, newPassword: str
 
   return userToDTO(updatedUser);
 }
+
+export async function changePassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+  });
+
+  if (!user) {
+    throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
+  }
+
+  const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!isPasswordValid) {
+    throw new AppError(400, 'WRONG_PASSWORD', 'Senha atual incorreta');
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+}

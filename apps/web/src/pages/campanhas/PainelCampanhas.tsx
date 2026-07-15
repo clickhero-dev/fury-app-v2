@@ -146,12 +146,6 @@ export function PainelCampanhas() {
       render: (value: unknown) => formatInvestidoBRL(value as number | null),
     },
     {
-      key: 'roas' as const,
-      label: 'Retorno sobre Investimento',
-      align: 'right' as const,
-      render: (value: unknown) => formatRoas(value as number | null),
-    },
-    {
       key: 'conversoes' as const,
       label: 'Clientes',
       align: 'right' as const,

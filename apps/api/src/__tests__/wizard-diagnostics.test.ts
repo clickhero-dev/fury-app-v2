@@ -216,6 +216,7 @@ describe('Wizard Diagnostics (dados de produção)', () => {
   it('DIAG 9: AD_ACCOUNT_NOT_SELECTED', async () => {
     const conn = prodConnection();
     conn.selectedAdAccountId = null;
+    conn.adAccounts = []; // sem contas, fallback não se aplica
     dbMock.query.metaConnections.findFirst.mockResolvedValue(conn);
     mockDecryptMetaToken.mockReturnValue('EAAC...');
 

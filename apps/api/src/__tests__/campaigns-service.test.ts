@@ -1,8 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CampaignsService, normalizeCampaignPanelMetrics, formatCampaignListItem, calculateDateRange, mapWizardMetaError } from '../services/campaigns.service.js';
 import { MockMetaCampaignProvider } from '../lib/providers/mock-campaign.provider.js';
 import { MockCampaignRepository } from '../lib/providers/mock-campaign.repository.js';
 import { AppError } from '../middleware/errorHandler.js';
+
+// ponytail: mock mínimo para o dynamic import de @fury/db no slug da LP
+vi.mock('@fury/db', () => ({
+  db: { query: { tenants: { findFirst: vi.fn() } } },
+  tenants: {},
+  eq: vi.fn(),
+}));
 
 function makeService() {
   const meta = new MockMetaCampaignProvider();
@@ -313,6 +320,34 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     expect(link).toContain(TENANT_ID);
     expect(meta.createdAdCreatives[0].object_story_spec.link_data.call_to_action.type).toBe('LEARN_MORE');
     expect(repo.campaigns).toHaveLength(1);
+  });
+
+  it('whatsapp_conv usa slug do tenant na LP quando disponível', async () => {
+    const mockDb = await import('@fury/db');
+    (mockDb.db.query.tenants.findFirst as any).mockResolvedValue({ slug: 'meu-negocio-test' });
+
+    const { service, repo, meta } = makeService();
+    repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+      createdAt: new Date(),
+    } as any);
+    meta.locationsResult = [{ key: 'city_key_1' }];
+    meta.uploadAdImageResult = 'img_hash';
+    meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+
+    const result = await service.createCampaignFromWizard({
+      tenantId: TENANT_ID, objective: 'whatsapp_conv',
+      headline: 'Fale conosco', primaryText: 'Clique e converse',
+      locationCity: 'Sao Paulo', locationRadiusKm: 30,
+      ageMin: 18, ageMax: 65, gender: 'all', dailyBudgetBrl: 100,
+      creativeUploadUrl: 'https://example.com/img.jpg',
+    });
+
+    const link = meta.createdAdCreatives[0].object_story_spec.link_data.link;
+    expect(link).toContain('/api/lp/meu-negocio-test');
+    expect(link).not.toContain(TENANT_ID);
+    expect(result.success).toBe(true);
   });
 });
 

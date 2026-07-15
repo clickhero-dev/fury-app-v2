@@ -2,6 +2,10 @@
 # ponytail: pre-commit — type-check + unit tests
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
+echo "✅  Pulling repository..."
+git pull 2>&1
+
+
 echo "🔍 Type-checking web..."
 cd "$REPO_ROOT/apps/web" || exit 1
 ./node_modules/.bin/tsc --noEmit 2>&1 || {

@@ -1339,40 +1339,86 @@ export async function getMetaInsights(params: {
   return metaApiCall<MetaInsightsResponse>(fullPath, params.accessToken);
 }
 
+export interface CampaignAdCreative {
+  id: string;
+  image_url?: string;
+  thumbnail_url?: string;
+  object_story_spec?: {
+    link_data?: {
+      picture?: string;
+      message?: string;
+      name?: string;
+    };
+    video_data?: {
+      image_url?: string;
+      video_id?: string;
+    };
+    photo_data?: {
+      url?: string;
+      caption?: string;
+    };
+  };
+  // ponytail: Dynamic Creative / Advantage+ usa asset_feed_spec em vez de object_story_spec
+  asset_feed_spec?: {
+    bodies?: Array<{ text?: string }>;
+    images?: Array<{ hash?: string }>;
+    titles?: Array<{ text?: string }>;
+    videos?: Array<{ video_id?: string; thumbnail_url?: string; thumbnail_hash?: string }>;
+    ad_formats?: string[];
+  };
+}
+
 export interface CampaignAdItem {
   id: string;
   name: string;
   status: string;
-  creative?: {
-    id: string;
-    thumbnail_url?: string;
-    object_story_spec?: {
-      link_data?: {
-        image_url?: string;
-        message?: string;
-        name?: string;
-      };
-      video_data?: {
-        image_url?: string;
-        video_id?: string;
-      };
-      photo_data?: {
-        url?: string;
-        caption?: string;
-      };
-    };
-  };
+  creative?: CampaignAdCreative;
 }
 
 interface CampaignAdsResponse {
   data: CampaignAdItem[];
 }
 
+/** Resposta do endpoint /{ad_account_id}/adcreatives com filtro por campanha. */
+interface AdCreativeResponse {
+  data: Array<{
+    id: string;
+    name?: string;
+    thumbnail_url?: string;
+    object_story_spec?: CampaignAdCreative['object_story_spec'];
+    asset_feed_spec?: CampaignAdCreative['asset_feed_spec'];
+  }>;
+}
+
 /** Busca os anúncios (ads) de uma campanha com dados do criativo (thumbnail, texto, mídia). */
 export async function getCampaignAds(campaignId: string, accessToken: string): Promise<CampaignAdItem[]> {
-  const fields = 'name,status,creative{thumbnail_url,object_story_spec{link_data{image_url,message,name},video_data{image_url,video_id},photo_data{url,caption}}}';
+  const fields = 'name,status,creative{image_url,thumbnail_url,object_story_spec{link_data{picture,message,name},video_data{image_url,video_id},photo_data{url,caption}},asset_feed_spec{bodies,images,titles,videos,ad_formats}}';
   const response = await metaApiCall<CampaignAdsResponse>(
     `/${campaignId}/ads?fields=${fields}&limit=25`,
+    accessToken
+  );
+  return response.data || [];
+}
+
+// ponytail: fallback para campanhas sem ads (criadas pela UI do Meta) — busca adcreatives do ad account filtrados por campaign_id
+export interface AdCreativeItem {
+  id: string;
+  name?: string;
+  image_url?: string;
+  thumbnail_url?: string;
+  object_story_spec?: CampaignAdCreative['object_story_spec'];
+  asset_feed_spec?: CampaignAdCreative['asset_feed_spec'];
+}
+
+export async function getCampaignAdCreatives(
+  adAccountId: string,
+  campaignId: string,
+  accessToken: string
+): Promise<AdCreativeItem[]> {
+  const fields = 'name,thumbnail_url,image_url,object_story_spec{link_data{picture,message,name},video_data{image_url,video_id},photo_data{url,caption}},asset_feed_spec{bodies,images,titles,videos,ad_formats}';
+  const filtering = encodeURIComponent(JSON.stringify([{ field: 'campaign_id', operator: 'EQUAL', value: campaignId }]));
+  const response = await metaApiCall<{ data: AdCreativeItem[] }>(
+    `/${adAccountId}/adcreatives?fields=${fields}&filtering=${filtering}&limit=25`,
     accessToken
   );
   return response.data || [];

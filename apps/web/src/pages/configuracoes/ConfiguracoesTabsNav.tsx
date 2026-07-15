@@ -6,9 +6,7 @@ export type ConfiguracoesTab =
   | 'seguranca'
   | 'faturamento'
   | 'publico'
-  | 'metas'
-  | 'automacao'
-  | 'publico';
+  | 'metas';
 
 const TAB_LABELS: { value: ConfiguracoesTab; label: string; to: string }[] = [
   { value: 'geral', label: 'Geral', to: '/configuracoes?tab=geral' },
@@ -16,7 +14,6 @@ const TAB_LABELS: { value: ConfiguracoesTab; label: string; to: string }[] = [
   { value: 'faturamento', label: 'Faturamento', to: '/configuracoes?tab=faturamento' },
   { value: 'publico', label: 'Dados da Marca e Público', to: '/configuracoes?tab=publico' },
   { value: 'metas', label: 'Metas', to: '/configuracoes?tab=metas' },
-  { value: 'automacao', label: 'Automação', to: '/configuracoes?tab=automacao' },
 ];
 
 export function ConfiguracoesTabsNav({ activeTab }: { activeTab: ConfiguracoesTab }) {
