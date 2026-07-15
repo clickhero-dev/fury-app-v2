@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
-import { Film, LayoutGrid, Image, Sparkles, CheckCircle, Clock } from 'lucide-react';
+import { Film, LayoutGrid, Image, Sparkles, CheckCircle } from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
-import type { Post } from '../PlanejadorPage';
+import type { Post } from '../types';
 
 interface CalendarViewProps {
   plan: {
@@ -14,31 +14,27 @@ interface CalendarViewProps {
   };
 }
 
-const postIcons: Record<string, typeof Film> = {
-  reel: Film,
+const postIcons: Record<string, typeof LayoutGrid> = {
   carousel: LayoutGrid,
   image: Image,
   stories: Sparkles,
 };
 
 const postColors: Record<string, string> = {
-  reel: 'border-l-purple-500',
   carousel: 'border-l-blue-500',
-  image: 'border-l-green-500',
+  image: 'border-l-success',
   stories: 'border-l-pink-500',
 };
 
 const statusColors: Record<string, string> = {
-  draft: 'bg-gray-500/20 text-gray-400',
-  approved: 'bg-green-500/20 text-green-400',
-  rejected: 'bg-red-500/20 text-red-400',
-  published: 'bg-blue-500/20 text-blue-400',
+  draft: 'bg-surface-secondary text-text-tertiary',
+  approved: 'bg-success/10 text-success',
+  rejected: 'bg-red-50 text-red-600',
+  published: 'bg-blue-50 text-blue-600',
 };
 
-// Dias do mês (julho = 31 dias)
 const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
-const FIRST_DOW = 2; // 1/jul/2026 = quarta-feira → index 2 (0=domingo)
-
+const FIRST_DOW = 2;
 const DOW_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 export function CalendarView({ plan }: CalendarViewProps) {
@@ -57,25 +53,25 @@ export function CalendarView({ plan }: CalendarViewProps) {
   const totalApproved = plan.posts.filter((p) => p.status === 'approved').length;
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-0">
       {/* ApprovalBar */}
-      <div className="sticky top-0 z-30 bg-[#111827]/95 backdrop-blur-sm border-b border-gray-800">
+      <div className="sticky top-0 z-30 bg-background border-b border-border">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-white">{plan.title}</h2>
-            <p className="text-sm text-gray-400">
-              {totalApproved} de {plan.totalPosts} aprovados
+            <h2 className="text-lg font-semibold text-text-primary">{plan.title}</h2>
+            <p className="text-sm text-text-tertiary">
+              <span className="text-success font-medium">{totalApproved}</span> de {plan.totalPosts} aprovados
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-400">
+            <span className="text-sm text-text-tertiary">
               {plan.totalPosts} conteúdos
             </span>
             <button
               disabled={totalApproved < plan.totalPosts}
-              className="px-6 py-2.5 bg-orange-500 hover:bg-orange-400 disabled:opacity-40 
+              className="px-6 py-2.5 bg-accent hover:bg-accent-light disabled:opacity-40 
                          disabled:cursor-not-allowed text-white font-medium rounded-xl 
-                         transition-all duration-200 shadow-lg shadow-orange-500/20"
+                         transition-all duration-200 shadow-lg shadow-accent/20"
             >
               Agendar tudo
             </button>
@@ -89,17 +85,16 @@ export function CalendarView({ plan }: CalendarViewProps) {
           {/* Day headers */}
           <div className="grid grid-cols-7 gap-px mb-px">
             {DOW_LABELS.map((d) => (
-              <div key={d} className="text-xs font-medium text-gray-500 py-2 text-center">
+              <div key={d} className="text-xs font-medium text-text-tertiary py-2 text-center">
                 {d}
               </div>
             ))}
           </div>
 
           {/* Day cells */}
-          <div className="grid grid-cols-7 gap-px bg-gray-800/50 rounded-lg overflow-hidden">
-            {/* Empty cells before first day */}
+          <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
             {Array.from({ length: FIRST_DOW }).map((_, i) => (
-              <div key={`empty-${i}`} className="bg-[#1F2937] min-h-[120px]" />
+              <div key={`empty-${i}`} className="bg-surface min-h-[120px]" />
             ))}
 
             {DAYS.map((day) => {
@@ -107,31 +102,31 @@ export function CalendarView({ plan }: CalendarViewProps) {
               return (
                 <div
                   key={day}
-                  className="bg-[#1F2937] min-h-[120px] p-2 hover:bg-[#243044] transition-colors"
+                  className="bg-surface min-h-[120px] p-2 hover:bg-surface-secondary transition-colors"
                 >
-                  <span className="text-xs text-gray-500 font-medium">{day}</span>
+                  <span className="text-xs text-text-tertiary font-medium">{day}</span>
                   <div className="mt-1 space-y-1">
                     {dayPosts.slice(0, 3).map((post) => {
                       const Icon = postIcons[post.postType] ?? Image;
                       const color = postColors[post.postType] ?? 'border-l-gray-500';
-                      const statusColor = statusColors[post.status] ?? 'bg-gray-500/20 text-gray-400';
+                      const statusColor = statusColors[post.status] ?? 'bg-surface-secondary text-text-tertiary';
                       return (
                         <button
                           key={post.id}
                           onClick={() => setSelectedPost(post)}
                           className={clsx(
                             'w-full text-left flex items-center gap-1.5 px-2 py-1.5 rounded-md',
-                            'border-l-2 text-xs transition-colors hover:bg-gray-700/30',
+                            'border-l-2 text-xs transition-colors hover:bg-surface-secondary',
                             color,
                           )}
                         >
-                          <Icon className="w-3 h-3 shrink-0 text-gray-400" />
-                          <span className="truncate text-gray-300">{post.title}</span>
+                          <Icon className="w-3 h-3 shrink-0 text-text-tertiary" />
+                          <span className="truncate text-text-secondary">{post.title}</span>
                         </button>
                       );
                     })}
                     {dayPosts.length > 3 && (
-                      <p className="text-xs text-gray-500 px-1">+{dayPosts.length - 3} mais</p>
+                      <p className="text-xs text-text-tertiary px-1">+{dayPosts.length - 3} mais</p>
                     )}
                   </div>
                 </div>
@@ -146,10 +141,7 @@ export function CalendarView({ plan }: CalendarViewProps) {
         <PostSidePanel
           post={selectedPost}
           onClose={() => setSelectedPost(null)}
-          onUpdate={(updated) => {
-            // Atualiza localmente — refresh virá no próximo GET
-            setSelectedPost(updated);
-          }}
+          onUpdate={(updated) => setSelectedPost(updated)}
         />
       )}
     </div>

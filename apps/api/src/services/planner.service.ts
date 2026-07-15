@@ -52,13 +52,12 @@ Sua resposta DEVE ser um JSON válido com esta estrutura:
 }
 
 Regras:
-- Gere posts variados (reels, carrosséis, imagens, stories)
+- Gere posts variados (carrosséis, imagens, stories)
 - Distribua os posts uniformemente pelo mês (dayIndex de 1 a 31)
 - Legendas devem ser persuasivas e adequadas ao tom de voz da empresa
 - CTA deve ser claro e direcionado ao objetivo
 - Hashtags relevantes ao nicho
-- ImagePrompt deve descrever a cena, estilo, cores e sensação da imagem
-- Para reels, o caption deve ser roteiro curto para vídeo`;
+- ImagePrompt deve descrever a cena, estilo, cores e sensação da imagem`;
 
 // ─── Serviço principal ───
 
