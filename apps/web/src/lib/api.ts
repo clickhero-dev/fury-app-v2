@@ -3,9 +3,8 @@ import { queryClient } from './query-client';
 import { store } from '../store';
 import { setTokens } from '../store/slices/authSlice';
 
-const BASE_URL = import.meta.env.VITE_API_URL;
-
-console.log(BASE_URL);
+// ponytail: runtime fallback deriva api do hostname trocando web→api (EasyPanel pattern)
+const BASE_URL = import.meta.env.VITE_API_URL ?? window.location.origin.replace('web', 'api') + '/api';
 
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
