@@ -1,61 +1,58 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
-import { startPlanGeneration, getJobProgress, getPlanById, patchPost } from '../services/planner.service.js';
+import {
+  startPlanGeneration,
+  getJobProgress,
+  getPlanById,
+  confirmPlan,
+  revalidatePlan,
+} from '../services/planner.service.js';
 
-const updatePostSchema = z.object({
-  title: z.string().max(255).optional(),
-  caption: z.string().optional(),
-  cta: z.string().max(255).optional(),
-  hashtags: z.array(z.string()).optional(),
+const generateSchema = z.object({
+  tenantId: z.string().uuid(),
 });
 
 export async function generatePlan(req: Request, res: Response, next: NextFunction) {
   try {
-    const tenantId = req.tenant?.tenantId;
-    if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Tenant não encontrado.');
-
-    const job = await startPlanGeneration(tenantId);
-    res.status(202).json({ jobId: job.id });
-  } catch (err) {
-    next(err);
-  }
+    const { tenantId } = generateSchema.parse(req.body);
+    const jobStatus = startPlanGeneration(tenantId);
+    res.json({ success: true, data: jobStatus });
+  } catch (err) { next(err); }
 }
 
-export async function getJobStatus(req: Request, res: Response, next: NextFunction) {
+export async function getJob(req: Request, res: Response, next: NextFunction) {
   try {
     const { jobId } = req.params;
-    const status = await getJobProgress(jobId);
-    if (!status) throw new AppError(404, 'NOT_FOUND', 'Job não encontrado.');
-    res.json(status);
-  } catch (err) {
-    next(err);
-  }
+    const job = getJobProgress(jobId);
+    if (!job) throw new AppError(404, 'NOT_FOUND', 'Job não encontrado');
+    res.json({ success: true, data: job });
+  } catch (err) { next(err); }
 }
 
 export async function getPlan(req: Request, res: Response, next: NextFunction) {
   try {
-    const tenantId = req.tenant?.tenantId;
-    if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Tenant não encontrado.');
-
+    const tenantId = req.tenant!.tenantId;
     const plan = await getPlanById(req.params.planId, tenantId);
-    if (!plan) throw new AppError(404, 'NOT_FOUND', 'Plano não encontrado.');
-    res.json(plan);
-  } catch (err) {
-    next(err);
-  }
+    if (!plan) throw new AppError(404, 'NOT_FOUND', 'Plano não encontrado');
+    res.json({ success: true, data: plan });
+  } catch (err) { next(err); }
 }
 
-export async function updatePost(req: Request, res: Response, next: NextFunction) {
+export async function handleConfirm(req: Request, res: Response, next: NextFunction) {
   try {
-    const tenantId = req.tenant?.tenantId;
-    if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Tenant não encontrado.');
+    const tenantId = req.tenant!.tenantId;
+    const { planId } = z.object({ planId: z.string().uuid() }).parse(req.body);
+    const plan = await confirmPlan(planId, tenantId);
+    res.json({ success: true, data: plan });
+  } catch (err) { next(err); }
+}
 
-    const body = updatePostSchema.parse(req.body);
-    const updated = await patchPost(req.params.postId, tenantId, body);
-    if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado.');
-    res.json(updated);
-  } catch (err) {
-    next(err);
-  }
+export async function handleRevalidate(req: Request, res: Response, next: NextFunction) {
+  try {
+    const tenantId = req.tenant!.tenantId;
+    const { planId, ...updates } = req.body;
+    const plan = await revalidatePlan(planId, tenantId, updates);
+    res.json({ success: true, data: plan });
+  } catch (err) { next(err); }
 }

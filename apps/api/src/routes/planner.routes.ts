@@ -1,15 +1,16 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
-import { generatePlan, getJobStatus, getPlan, updatePost } from '../controllers/planner.controller.js';
+import { generatePlan, getJob, getPlan, handleConfirm, handleRevalidate } from '../controllers/planner.controller.js';
 
 const router = Router();
 
-const AUTH = [authMiddleware, tenantMiddleware];
+router.use(authMiddleware);
 
-router.post('/generate', ...AUTH, generatePlan);
-router.get('/jobs/:jobId', ...AUTH, getJobStatus);
-router.get('/plans/:planId', ...AUTH, getPlan);
-router.patch('/posts/:postId', ...AUTH, updatePost);
+router.post('/generate', tenantMiddleware, generatePlan);
+router.get('/jobs/:jobId', getJob);
+router.get('/plans/:planId', tenantMiddleware, getPlan);
+router.post('/plans/confirm', tenantMiddleware, handleConfirm);
+router.post('/plans/revalidate', tenantMiddleware, handleRevalidate);
 
 export default router;

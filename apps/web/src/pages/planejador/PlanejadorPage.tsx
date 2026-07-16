@@ -1,110 +1,132 @@
-import { useState, useCallback } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useState, useCallback, useEffect } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components';
 import api from '@/lib/api';
-import { IdleStatus } from './components/IdleStatus';
 import { GeneratingState } from './components/GeneratingState';
-import { PlanSummary } from './components/PlanSummary';
 import { CalendarView } from './components/CalendarView';
-import type { Plan, Post } from './types';
-
-// ponytail: demo data embutido pra testar sem API
-const MOCK_TYPES: Post['postType'][] = ['carousel', 'image', 'stories'];
-const MOCK_TITLES = [
-  'Antes e depois: resultados reais',
-  '3 dicas que ninguém te conta',
-  'Promoção imperdível essa semana',
-  'O que nossos clientes dizem',
-  'Tutorial passo a passo',
-  'Conheça nossa equipe',
-  'Dica rápida do dia',
-  'Case de sucesso: cliente X',
-];
-const MOCK_STATUS: Post['status'][] = ['draft', 'approved'];
-
-const DAYS_31 = Array.from({ length: 31 }, (_, i) => i + 1);
-
-function buildMockPlan(): Plan {
-  const posts: Post[] = [];
-  for (let d = 0; d < 16; d++) {
-    posts.push({
-      id: `mock-${d}`,
-      dayIndex: DAYS_31[d % 31],
-      postType: MOCK_TYPES[d % 4],
-      platform: 'instagram',
-      title: MOCK_TITLES[d % MOCK_TITLES.length],
-      caption: `Legenda para o post "${MOCK_TITLES[d % MOCK_TITLES.length]}". Conteúdo gerado pela IA para engajar seu público.`,
-      cta: d % 2 === 0 ? 'Saiba mais' : 'Garanta já',
-      hashtags: ['#marketing', '#resultados', '#dicas'],
-      imagePrompt: `Cena mostrando ${MOCK_TITLES[d % MOCK_TITLES.length].toLowerCase()}`,
-      status: MOCK_STATUS[d % 2],
-    });
-  }
-  return {
-    id: 'mock-plan',
-    title: 'Plano de Julho 2026',
-    objective: 'Aumentar o engajamento no Instagram em 40%',
-    totalPosts: 16,
-    metadata: {
-      summary: { carouselCount: 6, imageCount: 5, storiesCount: 31 },
-    },
-    posts,
-  };
-}
+import { PlanSummary } from './components/PlanSummary';
+import type { Plan, JobStatus, ViewState } from './types';
 
 export function PlanejadorPage() {
-  const [view, setView] = useState<'idle' | 'generating' | 'summary' | 'calendar'>('idle');
-  const [plan, setPlan] = useState<Plan | null>(null);
+  const [view, setView] = useState<ViewState>('idle');
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
 
   const generateMutation = useMutation({
     mutationFn: async () => {
-      const { data: res } = await api.post('/planner/generate');
-      return { jobId: res.data.jobId };
+      const { data } = await api.post('/planner/generate', { tenantId: 'current' });
+      return data.data as JobStatus;
     },
-    onSuccess: (data) => {
+    onSuccess: (job) => {
+      setJobId(job.id);
       setView('generating');
-      startPolling(data.jobId);
-    },
-    // ponytail: API caiu → demo mode
-    onError: () => {
-      setView('generating');
-      setTimeout(() => { setPlan(buildMockPlan()); setView('summary'); }, 3000);
     },
   });
 
-  const startPolling = (jobId: string) => {
-    const interval = setInterval(async () => {
-      try {
-        const { data: res } = await api.get(`/planner/jobs/${jobId}`);
-        const job = res.data;
-        if (job.status === 'done') {
-          clearInterval(interval);
-          const { data: planRes } = await api.get(`/planner/plans/${job.planId}`);
-          setPlan(planRes.data as Plan);
-          setView('summary');
-        } else if (job.status === 'error') {
-          clearInterval(interval);
-          setView('idle');
-        }
-      } catch {
-        clearInterval(interval);
-        setView('idle');
-      }
-    }, 1500);
-  };
+  const { data: jobStatus } = useQuery({
+    queryKey: ['planner-job', jobId],
+    queryFn: async () => {
+      if (!jobId) return null;
+      const { data } = await api.get(`/planner/jobs/${jobId}`);
+      return data.data as JobStatus;
+    },
+    enabled: !!jobId && view === 'generating',
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === 'done' || status === 'error') return false;
+      return 1500;
+    },
+  });
 
-  const handleGenerate = useCallback(() => generateMutation.mutate(), [generateMutation]);
+  useEffect(() => {
+    if (jobStatus?.status === 'done' && jobStatus?.planId) {
+      setPlanId(jobStatus.planId);
+      setView('review');
+    }
+    if (jobStatus?.status === 'error') {
+      setJobId(null);
+    }
+  }, [jobStatus]);
+
+  const { data: plan, isLoading: planLoading, error: planError } = useQuery({
+    queryKey: ['planner-plan', planId],
+    queryFn: async () => {
+      if (!planId) return null;
+      const { data } = await api.get(`/planner/plans/${planId}`);
+      return data.data as Plan;
+    },
+    enabled: !!planId,
+  });
+
+  const confirmMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post('/planner/plans/confirm', { planId });
+      return data.data;
+    },
+    onSuccess: () => setConfirmed(true),
+  });
+
+  const handleGenerate = useCallback(() => {
+    generateMutation.mutate();
+  }, [generateMutation]);
+
+  const handleConfirm = useCallback(() => {
+    confirmMutation.mutate();
+  }, [confirmMutation]);
 
   return (
-    <AppLayout className={view === 'calendar' ? '!p-0' : undefined}>
-      {view === 'idle' && (
-        <IdleStatus onGenerate={handleGenerate} isLoading={generateMutation.isPending} />
-      )}
-      {view === 'generating' && <GeneratingState />}
-      {view === 'summary' && plan && (
-        <PlanSummary plan={plan} onViewCalendar={() => setView('calendar')} />
-      )}
-      {view === 'calendar' && plan && <CalendarView plan={plan} />}
+    <AppLayout>
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Planejador de Conteúdo</h1>
+            <p className="text-sm text-gray-400 mt-1">
+              Gere 1 mês de conteúdo orgânico com IA
+            </p>
+          </div>
+          {view === 'idle' && (
+            <button
+              onClick={handleGenerate}
+              disabled={generateMutation.isPending}
+              className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-medium hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 transition-all"
+            >
+              {generateMutation.isPending ? 'Iniciando...' : 'Gerar Plano'}
+            </button>
+          )}
+        </div>
+
+        {view === 'generating' && (
+          <div className="rounded-xl bg-gray-800/40 border border-gray-700/50 p-6">
+            <GeneratingState jobStatus={jobStatus} />
+          </div>
+        )}
+
+        {view === 'idle' && !generateMutation.isPending && (
+          <div className="rounded-xl bg-gray-800/40 border border-gray-700/50 p-12 text-center">
+            <p className="text-gray-500">Clique em "Gerar Plano" para iniciar o pipeline de 10 agentes</p>
+          </div>
+        )}
+
+        {view === 'review' && plan && (
+          <>
+            <PlanSummary plan={plan} />
+            <CalendarView
+              plan={plan}
+              onConfirm={handleConfirm}
+              confirmed={confirmed}
+            />
+          </>
+        )}
+
+        {view === 'review' && planLoading && (
+          <div className="text-center py-8 text-gray-500">Carregando plano...</div>
+        )}
+
+        {view === 'review' && planError && (
+          <div className="text-center py-8 text-red-400">Erro ao carregar plano</div>
+        )}
+      </div>
     </AppLayout>
   );
 }

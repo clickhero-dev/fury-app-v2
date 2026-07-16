@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AppLayout, LoadingSpinner } from '@/components';
 import api from '@/lib/api';
@@ -6,41 +6,40 @@ import { CalendarView } from './components/CalendarView';
 import type { Plan } from './types';
 
 export function CalendarioPage() {
-  const [plan, setPlan] = useState<Plan | null>(null);
-  const planId = sessionStorage.getItem('fury_last_plan_id');
+  const [confirmed, setConfirmed] = useState(false);
 
-  const { isLoading } = useQuery({
-    queryKey: ['planner/plan', planId],
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['calendario-latest-plan'],
     queryFn: async () => {
-      if (!planId) throw new Error('no plan');
-      const { data: res } = await api.get(`/planner/plans/${planId}`);
-      setPlan(res.data as Plan);
-      return res.data;
+      const { data } = await api.get('/planner/plans/latest');
+      return data.data as Plan | null;
     },
-    enabled: !!planId,
-    retry: 1,
   });
 
-  if (!planId) return (
-    <AppLayout>
-      <div className="flex flex-col items-center justify-center py-20 text-text-tertiary">
-        <p className="text-lg">Nenhum plano encontrado.</p>
-        <p className="text-sm mt-2">Vá em Planejador e gere um plano primeiro.</p>
-      </div>
-    </AppLayout>
-  );
+  const handleConfirm = useCallback(async () => {
+    if (!data?.id) return;
+    await api.post('/planner/plans/confirm', { planId: data.id });
+    setConfirmed(true);
+  }, [data?.id]);
 
-  if (isLoading || !plan) return (
-    <AppLayout>
-      <div className="flex items-center justify-center py-20">
-        <LoadingSpinner />
-      </div>
-    </AppLayout>
-  );
+  if (isLoading) return <AppLayout><LoadingSpinner /></AppLayout>;
+
+  if (error || !data) {
+    return (
+      <AppLayout>
+        <div className="max-w-6xl mx-auto px-4 py-12 text-center">
+          <p className="text-gray-500">Nenhum plano encontrado. Crie um no Planejador.</p>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
-    <AppLayout className="!p-0">
-      <CalendarView plan={plan} />
+    <AppLayout>
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        <h1 className="text-2xl font-bold text-white">Calendário Editorial</h1>
+        <CalendarView plan={data} onConfirm={handleConfirm} confirmed={confirmed || data.status === 'active'} />
+      </div>
     </AppLayout>
   );
 }

@@ -1,81 +1,68 @@
-import { CheckCircle, Loader2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import type { JobStatus } from '../types';
 
-const steps = [
-  'Entendendo sua empresa',
-  'Analisando campanhas anteriores',
-  'Pesquisando concorrentes',
-  'Encontrando oportunidades',
-  'Identificando tendências',
-  'Buscando datas comemorativas',
-  'Criando estratégia',
-  'Distribuindo conteúdos',
-  'Escrevendo legendas',
-  'Criando imagens',
-  'Organizando calendário',
-  'Finalizando',
-];
+interface GeneratingStateProps {
+  jobStatus: JobStatus | null;
+}
 
-export function GeneratingState() {
-  const [currentStep, setCurrentStep] = useState(0);
+export function GeneratingState({ jobStatus }: GeneratingStateProps) {
+  const agents = [
+    'Context Agent', 'Research Agent', 'Analytics Agent',
+    'Strategy Agent', 'Planner Agent', 'Copywriter Agent',
+    'Creative Agent', 'Quality Agent', 'Scheduler Agent', 'Branding Agent',
+  ];
 
-  useEffect(() => {
-    if (currentStep < steps.length - 1) {
-      const t = setTimeout(() => setCurrentStep((s) => s + 1), 1500 + Math.random() * 1000);
-      return () => clearTimeout(t);
-    }
-  }, [currentStep]);
+  if (!jobStatus) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+        <span className="ml-3 text-gray-400">Iniciando pipeline...</span>
+      </div>
+    );
+  }
 
-  const progress = ((currentStep + 1) / steps.length) * 100;
+  if (jobStatus.status === 'error') {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-red-400">
+        <AlertCircle className="h-12 w-12 mb-4" />
+        <p className="text-lg font-semibold">Erro na geração</p>
+        <p className="text-sm text-gray-500 mt-1">{jobStatus.error || 'Erro desconhecido'}</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-6">
-      <div className="w-full max-w-md">
-        {/* Title */}
-        <h2 className="text-2xl font-semibold text-text-primary text-center mb-2">
-          Criando seu planejamento
-        </h2>
-        <p className="text-text-tertiary text-center text-sm mb-12">
-          A IA está analisando sua empresa e montando a estratégia ideal
-        </p>
-
-        {/* Progress bar */}
-        <div className="mb-10">
-          <div className="h-2 bg-surface-secondary rounded-full overflow-hidden">
-            <div
-              className="h-full bg-accent rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <p className="text-right text-text-tertiary text-xs mt-2">{Math.round(progress)}%</p>
-        </div>
-
-        {/* Steps */}
-        <div className="space-y-1">
-          {steps.map((step, i) => (
-            <div
-              key={step}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-300 ${
-                i <= currentStep ? 'opacity-100' : 'opacity-20'
-              } ${i === currentStep ? 'bg-surface border border-border' : ''}`}
-            >
-              {i < currentStep ? (
-                <CheckCircle className="w-5 h-5 text-success shrink-0" />
-              ) : i === currentStep ? (
-                <Loader2 className="w-5 h-5 text-accent animate-spin shrink-0" />
-              ) : (
-                <div className="w-5 h-5 rounded-full border-2 border-text-tertiary shrink-0" />
-              )}
-              <span
-                className={`text-sm ${
-                  i <= currentStep ? 'text-text-primary' : 'text-text-tertiary'
-                }`}
-              >
-                {step}
+    <div className="space-y-3 py-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+        <span className="text-sm text-gray-300">
+          {jobStatus.status === 'done' ? 'Pipeline concluído' : `Processando: ${jobStatus.currentAgent}`}
+        </span>
+      </div>
+      <div className="grid gap-2">
+        {agents.map(name => {
+          const step = jobStatus.agentProgress.find(s => s.name === name);
+          const status = step?.status ?? 'pending';
+          return (
+            <div key={name} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-800/50">
+              {status === 'completed' && <CheckCircle className="h-5 w-5 text-green-400 shrink-0" />}
+              {status === 'running' && <Loader2 className="h-5 w-5 animate-spin text-blue-400 shrink-0" />}
+              {status === 'failed' && <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />}
+              {status === 'pending' && <div className="h-5 w-5 rounded-full border-2 border-gray-600 shrink-0" />}
+              <span className={`text-sm ${status === 'completed' ? 'text-gray-300' : status === 'running' ? 'text-blue-300' : 'text-gray-500'}`}>
+                {name}
               </span>
+              {step?.pct !== undefined && (
+                <div className="ml-auto w-24 h-1.5 rounded-full bg-gray-700 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
+                    style={{ width: `${step.pct}%` }}
+                  />
+                </div>
+              )}
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
     </div>
   );

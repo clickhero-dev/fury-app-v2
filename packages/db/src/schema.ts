@@ -485,7 +485,7 @@ export const requestLogs = pgTable(
 // ===== Planejador IA tables =====
 
 export const postTypeEnum = pgEnum('post_type', ['carousel', 'image', 'stories']);
-export const postStatusEnum = pgEnum('post_status', ['draft', 'approved', 'rejected', 'published']);
+export const postStatusEnum = pgEnum('post_status', ['draft', 'approved', 'rejected', 'published', 'confirmed']);
 export const planStatusEnum = pgEnum('plan_status', ['draft', 'active', 'completed', 'cancelled']);
 
 export const campaignPlans = pgTable(
@@ -503,6 +503,11 @@ export const campaignPlans = pgTable(
     status: planStatusEnum('status').notNull().default('draft'),
     totalPosts: integer('total_posts').default(0),
     metadata: jsonb('metadata').default(sql`'{}'::jsonb`),
+    strategy: jsonb('strategy').default(sql`'{}'::jsonb`),
+    researchData: jsonb('research_data').default(sql`'{}'::jsonb`),
+    analyticsData: jsonb('analytics_data').default(sql`'{}'::jsonb`),
+    brandingChecked: boolean('branding_checked').default(false),
+    brandingNotes: text('branding_notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

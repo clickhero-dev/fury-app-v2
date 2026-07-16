@@ -1,148 +1,131 @@
 import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
-import { Film, LayoutGrid, Image, Sparkles, CheckCircle } from 'lucide-react';
+import { LayoutGrid, Image, Sparkles, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
-import type { Post } from '../types';
+import type { Post, Plan } from '../types';
 
 interface CalendarViewProps {
-  plan: {
-    id: string;
-    title: string;
-    objective: string;
-    totalPosts: number;
-    posts: Post[];
-  };
+  plan: Plan;
+  onConfirm?: () => void;
+  confirmed?: boolean;
 }
 
-const postIcons: Record<string, typeof LayoutGrid> = {
+const DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const TYPE_ICONS: Record<string, typeof Image> = {
   carousel: LayoutGrid,
   image: Image,
   stories: Sparkles,
 };
 
-const postColors: Record<string, string> = {
-  carousel: 'border-l-blue-500',
-  image: 'border-l-success',
-  stories: 'border-l-pink-500',
-};
+function getDayOfWeek(dayIndex: number): number {
+  const date = new Date(new Date().getFullYear(), new Date().getMonth(), dayIndex);
+  return date.getDay();
+}
 
-const statusColors: Record<string, string> = {
-  draft: 'bg-surface-secondary text-text-tertiary',
-  approved: 'bg-success/10 text-success',
-  rejected: 'bg-red-50 text-red-600',
-  published: 'bg-blue-50 text-blue-600',
-};
+function getDaysInMonth(): number {
+  return new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+}
 
-const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
-const FIRST_DOW = 2;
-const DOW_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-
-export function CalendarView({ plan }: CalendarViewProps) {
+export function CalendarView({ plan, onConfirm, confirmed }: CalendarViewProps) {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const daysInMonth = getDaysInMonth();
+  const firstDay = getDayOfWeek(1);
 
   const postsByDay = useMemo(() => {
-    const map: Record<number, Post[]> = {};
-    for (const post of plan.posts) {
-      const day = post.dayIndex;
-      if (!map[day]) map[day] = [];
-      map[day].push(post);
-    }
+    const map = new Map<number, Post[]>();
+    plan.posts.forEach(p => {
+      const arr = map.get(p.dayIndex) || [];
+      arr.push(p);
+      map.set(p.dayIndex, arr);
+    });
     return map;
   }, [plan.posts]);
 
-  const totalApproved = plan.posts.filter((p) => p.status === 'approved').length;
+  const brandingApproved = plan.metadata?.branding?.approved;
+  const qualityPassed = plan.metadata?.quality?.passed;
+  const brandingNotes = plan.metadata?.branding?.notes;
+
+  const grid = [];
+  for (let i = 0; i < firstDay; i++) grid.push(<div key={`empty-${i}`} />);
+  for (let day = 1; day <= daysInMonth; day++) {
+    const posts = postsByDay.get(day) || [];
+    grid.push(
+      <button
+        key={day}
+        onClick={() => posts.length > 0 && setSelectedPost(posts[0])}
+        className={clsx(
+          'relative min-h-[80px] rounded-lg border border-gray-700/50 p-1.5 text-left transition-colors',
+          posts.length > 0 ? 'bg-gray-800/60 hover:bg-gray-700/60 cursor-pointer' : 'bg-transparent',
+        )}
+      >
+        <span className="text-xs text-gray-500">{day}</span>
+        {posts.slice(0, 3).map(post => {
+          const Icon = TYPE_ICONS[post.postType] || Image;
+          return (
+            <div key={post.id} className="flex items-center gap-1 mt-1">
+              <Icon className="h-3 w-3 text-gray-400 shrink-0" />
+              <span className="text-[10px] text-gray-400 truncate">{post.title}</span>
+            </div>
+          );
+        })}
+        {posts.length > 3 && <span className="text-[10px] text-gray-500">+{posts.length - 3}</span>}
+      </button>,
+    );
+  }
 
   return (
-    <div className="flex flex-col min-h-0">
-      {/* ApprovalBar */}
-      <div className="sticky top-0 z-30 bg-background border-b border-border">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-text-primary">{plan.title}</h2>
-            <p className="text-sm text-text-tertiary">
-              <span className="text-success font-medium">{totalApproved}</span> de {plan.totalPosts} aprovados
-            </p>
+    <div className="space-y-6">
+      {/* Approval Bar */}
+      {plan.status === 'draft' && (
+        <div className="flex items-center justify-between p-4 rounded-xl bg-gray-800/60 border border-gray-700/50">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className={clsx('h-5 w-5', brandingApproved ? 'text-green-400' : 'text-yellow-400')} />
+              <span className="text-sm text-gray-300">
+                {brandingApproved ? 'Aprovado por compliance' : 'Aguardando aprovação'}
+              </span>
+            </div>
+            {qualityPassed === false && (
+              <span className="text-xs text-red-400">Qualidade: revisão necessária</span>
+            )}
+            {brandingNotes && (
+              <span className="text-xs text-gray-500 truncate max-w-[200px]">{brandingNotes}</span>
+            )}
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-text-tertiary">
-              {plan.totalPosts} conteúdos
-            </span>
+          {!confirmed && brandingApproved && (
             <button
-              disabled={totalApproved < plan.totalPosts}
-              className="px-6 py-2.5 bg-accent hover:bg-accent-light disabled:opacity-40 
-                         disabled:cursor-not-allowed text-white font-medium rounded-xl 
-                         transition-all duration-200 shadow-lg shadow-accent/20"
+              onClick={onConfirm}
+              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white text-sm font-medium hover:from-green-500 hover:to-emerald-500 transition-all"
             >
-              Agendar tudo
+              <CheckCircle2 className="h-4 w-4" />
+              Confirmar e Agendar
             </button>
+          )}
+        </div>
+      )}
+
+      {/* Confirmed badge */}
+      {confirmed && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-green-900/20 border border-green-700/30">
+          <CheckCircle2 className="h-6 w-6 text-green-400" />
+          <div>
+            <p className="text-sm font-medium text-green-300">Plano confirmado</p>
+            <p className="text-xs text-gray-400">O conteúdo será publicado conforme o calendário</p>
           </div>
         </div>
+      )}
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-1.5">
+        {DAY_LABELS.map(d => (
+          <div key={d} className="text-center text-xs font-medium text-gray-500 py-2">{d}</div>
+        ))}
+        {grid}
       </div>
 
-      {/* Grid */}
-      <div className="flex-1 p-6">
-        <div className="max-w-7xl mx-auto">
-          {/* Day headers */}
-          <div className="grid grid-cols-7 gap-px mb-px">
-            {DOW_LABELS.map((d) => (
-              <div key={d} className="text-xs font-medium text-text-tertiary py-2 text-center">
-                {d}
-              </div>
-            ))}
-          </div>
-
-          {/* Day cells */}
-          <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
-            {Array.from({ length: FIRST_DOW }).map((_, i) => (
-              <div key={`empty-${i}`} className="bg-surface min-h-[120px]" />
-            ))}
-
-            {DAYS.map((day) => {
-              const dayPosts = postsByDay[day] ?? [];
-              return (
-                <div
-                  key={day}
-                  className="bg-surface min-h-[120px] p-2 hover:bg-surface-secondary transition-colors"
-                >
-                  <span className="text-xs text-text-tertiary font-medium">{day}</span>
-                  <div className="mt-1 space-y-1">
-                    {dayPosts.slice(0, 3).map((post) => {
-                      const Icon = postIcons[post.postType] ?? Image;
-                      const color = postColors[post.postType] ?? 'border-l-gray-500';
-                      const statusColor = statusColors[post.status] ?? 'bg-surface-secondary text-text-tertiary';
-                      return (
-                        <button
-                          key={post.id}
-                          onClick={() => setSelectedPost(post)}
-                          className={clsx(
-                            'w-full text-left flex items-center gap-1.5 px-2 py-1.5 rounded-md',
-                            'border-l-2 text-xs transition-colors hover:bg-surface-secondary',
-                            color,
-                          )}
-                        >
-                          <Icon className="w-3 h-3 shrink-0 text-text-tertiary" />
-                          <span className="truncate text-text-secondary">{post.title}</span>
-                        </button>
-                      );
-                    })}
-                    {dayPosts.length > 3 && (
-                      <p className="text-xs text-text-tertiary px-1">+{dayPosts.length - 3} mais</p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Side Panel */}
+      {/* Post side panel */}
       {selectedPost && (
-        <PostSidePanel
-          post={selectedPost}
-          onClose={() => setSelectedPost(null)}
-          onUpdate={(updated) => setSelectedPost(updated)}
-        />
+        <PostSidePanel post={selectedPost} onClose={() => setSelectedPost(null)} onUpdate={() => {}} />
       )}
     </div>
   );
