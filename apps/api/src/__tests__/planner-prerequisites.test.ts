@@ -15,7 +15,8 @@ const { dbMock, testConnections } = vi.hoisted(() => {
             const hasSqlFilter = args.some((a: any) => a?.type === 'sql');
             const match = connections.find((c) => {
               if (!c?.tenantId) return false;
-              if (new Date(c.tokenExpiresAt) <= new Date()) return false;
+              // token expirado só bloqueia se não for NULL (NULL = válido)
+              if (c.tokenExpiresAt !== null && new Date(c.tokenExpiresAt) <= new Date()) return false;
               if (hasSqlFilter && (!c.selectedPageIds || c.selectedPageIds.length === 0)) return false;
               return true;
             });
@@ -42,8 +43,10 @@ vi.mock('@fury/db', () => ({
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((a: unknown, b: unknown) => ({ type: 'eq', a, b })),
   and: vi.fn((...args: unknown[]) => ({ type: 'and', args })),
+  or: vi.fn((...args: unknown[]) => ({ type: 'or', args })),
   desc: vi.fn(() => ({ type: 'desc' })),
   gt: vi.fn(() => ({ type: 'gt' })),
+  isNull: vi.fn(() => ({ type: 'isNull' })),
   sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({ type: 'sql', strings, values })),
 }));
 
@@ -113,6 +116,16 @@ describe('getPrerequisites — metaConnected', () => {
     });
     const result = await getPrerequisites('t1');
     expect(result.metaConnected).toBe(false);
+  });
+
+  it('retorna true — token NULL + selectedPageIds não-vazio (fix produção)', async () => {
+    testConnections.push({
+      tenantId: 't1',
+      tokenExpiresAt: null,
+      selectedPageIds: ['page_1'],
+    });
+    const result = await getPrerequisites('t1');
+    expect(result.metaConnected).toBe(true);
   });
 
   it('retorna true — conta demo produção (dados realistas)', async () => {
