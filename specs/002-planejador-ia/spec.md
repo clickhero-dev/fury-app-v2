@@ -102,6 +102,11 @@ Na tela de aprovação, o usuário vê um resumo (ex: "16 conteúdos, 8 Reels, 4
 - **BUG-001** (P1): `POST /planner/generate` recebe `tenantId: 'current'` do frontend mas valida UUID → 400 sempre. Geração 100% quebrada. Fix: controller usa `req.tenant.tenantId`.
 - **BUG-002** (P1): rota `/calendario` não registrada — `CalendarioPage.tsx` órfã. Fix: registrar em router + Sidebar.
 - **BUG-003** (P1): `GET /planner/jobs/:jobId` sem tenant isolation. Fix: escopar job por tenant.
+- **BUG-004** (P1): `GET /planner/plans/latest` não existia — CalendarioPage usava `/plans/latest` que caía em `/plans/:planId`. Fix: adicionar endpoint dedicado.
+- **BUG-005** (P1): Sem lock de concorrência — dois cliques em "Gerar" criavam 2 jobs paralelos. Fix: `startPlanGeneration` rejeita (409) se tenant já tem job rodando.
+- **BUG-006** (P1): Erros silenciosos — job falhava e UI voltava pro idle sem mensagem. Fix: erro aparece em banner vermelho e permite retentar.
+- **BUG-007** (P1): Sem redirect pós-geração — `PlanejadorPage` ficava em `view='review'` com PlanSummary. Fix: ao completar, `navigate('/calendario')`.
+- **BUG-008** (P2): Plano sem posts mostrava texto genérico em vez da grade do calendário. Fix: estado vazio tem link "Criar planejamento" + grade só aparece quando plano existe.
 
 ## Success Criteria *(mandatory)*
 

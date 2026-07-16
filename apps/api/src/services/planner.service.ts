@@ -1,5 +1,5 @@
 import { db, campaignPlans, socialPosts } from '@fury/db';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { jobs, generateId, runPipeline } from '../agents/orchestrator.js';
 import { openrouterService } from './openrouter.service.js';
 import type { JobStatus } from '../agents/types.js';
@@ -8,6 +8,12 @@ import { AppError } from '../middleware/errorHandler.js';
 export { jobs } from '../agents/orchestrator.js';
 
 export function startPlanGeneration(tenantId: string): JobStatus {
+  // Lock: rejeita se tenant já tiver um job rodando
+  const existing = Array.from(jobs.values()).find(
+    j => j.tenantId === tenantId && (j.status === 'running' || j.status === 'generating' || j.status === 'pending'),
+  );
+  if (existing) throw new AppError(409, 'CONFLICT', 'Já existe um planejamento em andamento');
+
   const id = generateId();
   const status: JobStatus = {
     id,
@@ -38,6 +44,14 @@ export function getJobProgress(jobId: string): JobStatus | null {
 export async function getPlanById(planId: string, tenantId: string) {
   return db.query.campaignPlans.findFirst({
     where: and(eq(campaignPlans.id, planId), eq(campaignPlans.tenantId, tenantId)),
+    with: { posts: true },
+  });
+}
+
+export async function getLatestPlanByTenant(tenantId: string) {
+  return db.query.campaignPlans.findFirst({
+    where: eq(campaignPlans.tenantId, tenantId),
+    orderBy: [desc(campaignPlans.createdAt)],
     with: { posts: true },
   });
 }

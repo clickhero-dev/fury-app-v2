@@ -5,6 +5,7 @@ import {
   startPlanGeneration,
   getJobProgress,
   getPlanById,
+  getLatestPlanByTenant,
   confirmPlan,
   revalidatePlan,
   editPostWithAI,
@@ -35,6 +36,14 @@ export async function getPlan(req: Request, res: Response, next: NextFunction) {
     const plan = await getPlanById(req.params.planId, tenantId);
     if (!plan) throw new AppError(404, 'NOT_FOUND', 'Plano não encontrado');
     res.json({ success: true, data: plan });
+  } catch (err) { next(err); }
+}
+
+export async function getLatestPlan(req: Request, res: Response, next: NextFunction) {
+  try {
+    const tenantId = req.tenant!.tenantId;
+    const plan = await getLatestPlanByTenant(tenantId);
+    res.json({ success: true, data: plan ?? null });
   } catch (err) { next(err); }
 }
 

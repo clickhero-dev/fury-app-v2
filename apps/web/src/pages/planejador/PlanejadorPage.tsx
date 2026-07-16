@@ -1,19 +1,17 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components';
 import api from '@/lib/api';
 import { GeneratingState } from './components/GeneratingState';
 import { IdleStatus } from './components/IdleStatus';
-import { CalendarView } from './components/CalendarView';
-import { PlanSummary } from './components/PlanSummary';
-import type { Plan, JobStatus, ViewState } from './types';
+import type { JobStatus, ViewState } from './types';
 
 export function PlanejadorPage() {
+  const navigate = useNavigate();
   const [view, setView] = useState<ViewState>('idle');
   const [jobId, setJobId] = useState<string | null>(null);
-  const [planId, setPlanId] = useState<string | null>(null);
-  const [confirmed, setConfirmed] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -23,6 +21,11 @@ export function PlanejadorPage() {
     onSuccess: (job) => {
       setJobId(job.id);
       setView('generating');
+      setErrorMsg(null);
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message || err?.message || 'Erro ao iniciar geração';
+      setErrorMsg(msg);
     },
   });
 
@@ -42,92 +45,40 @@ export function PlanejadorPage() {
   });
 
   useEffect(() => {
-    if (jobStatus?.status === 'done' && jobStatus?.planId) {
-      setPlanId(jobStatus.planId);
-      setView('review');
+    if (jobStatus?.status === 'done') {
+      navigate('/calendario');
     }
     if (jobStatus?.status === 'error') {
+      setErrorMsg(jobStatus.error || 'Erro na geração do plano');
       setJobId(null);
+      setView('idle');
     }
-  }, [jobStatus]);
-
-  const { data: plan, isLoading: planLoading, error: planError } = useQuery({
-    queryKey: ['planner-plan', planId],
-    queryFn: async () => {
-      if (!planId) return null;
-      const { data } = await api.get(`/planner/plans/${planId}`);
-      return data.data as Plan;
-    },
-    enabled: !!planId,
-  });
-
-  const confirmMutation = useMutation({
-    mutationFn: async () => {
-      const { data } = await api.post('/planner/plans/confirm', { planId });
-      return data.data;
-    },
-    onSuccess: () => setConfirmed(true),
-  });
+  }, [jobStatus, navigate]);
 
   const handleGenerate = useCallback(() => {
     generateMutation.mutate();
   }, [generateMutation]);
 
-  const handleConfirm = useCallback(() => {
-    confirmMutation.mutate();
-  }, [confirmMutation]);
-
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Planejador de Conteúdo</h1>
-            <p className="text-sm text-gray-400 mt-1">
-              Gere 1 mês de conteúdo orgânico com IA
-            </p>
-          </div>
-          {view === 'idle' && (
-            <button
-              onClick={handleGenerate}
-              disabled={generateMutation.isPending}
-              className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-medium hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 transition-all"
-            >
-              {generateMutation.isPending ? 'Iniciando...' : 'Gerar Plano'}
-            </button>
-          )}
-        </div>
-
         {view === 'generating' && (
           <div className="rounded-xl bg-gray-800/40 border border-gray-700/50 p-6">
             <GeneratingState jobStatus={jobStatus} />
           </div>
         )}
 
-        {view === 'idle' && !generateMutation.isPending && (
+        {view === 'idle' && !generateMutation.isPending && !errorMsg && (
           <IdleStatus onGenerate={handleGenerate} isLoading={generateMutation.isPending} />
         )}
 
-        {view === 'review' && plan && (
-          <>
-            {!showCalendar ? (
-              <PlanSummary plan={plan} onViewCalendar={() => setShowCalendar(true)} />
-            ) : (
-              <CalendarView
-                plan={plan}
-                onConfirm={handleConfirm}
-                confirmed={confirmed}
-              />
-            )}
-          </>
-        )}
-
-        {view === 'review' && planLoading && (
-          <div className="text-center py-8 text-gray-500">Carregando plano...</div>
-        )}
-
-        {view === 'review' && planError && (
-          <div className="text-center py-8 text-red-400">Erro ao carregar plano</div>
+        {view === 'idle' && errorMsg && (
+          <div className="space-y-4">
+            <div className="rounded-xl bg-red-900/20 border border-red-700/30 p-4 text-center">
+              <p className="text-red-400 text-sm">{errorMsg}</p>
+            </div>
+            <IdleStatus onGenerate={handleGenerate} isLoading={generateMutation.isPending} />
+          </div>
         )}
       </div>
     </AppLayout>
