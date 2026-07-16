@@ -1,16 +1,15 @@
 <!--
   Sync Impact Report:
-  - Version change: (none) → 1.0.0 (initial adoption)
-  - Modified principles: N/A (first version)
-  - Added sections: 5 Core Principles, Security Standards, Development Workflow, Governance
+  - Version change: 1.0.0 → 1.1.0 (MINOR: new principle + expanded guidance)
+  - Modified principles:
+    - III. Test-First Quality Gates — expanded: bug recorrente exige teste de regressão (TDD, comportamento esperado).
+  - Added sections:
+    - VI. Build-Before-Deploy Gate (NON-NEGOTIABLE) — nenhum commit que não compila/passa nos testes chega ao deploy.
   - Removed sections: N/A
+  - Rationale: bug de 2026-07-16 — erro de TypeScript (TS2741) só detectado no Docker build do EasyPanel, derrubando o deploy. CI existia mas não era gate de merge.
   - Templates requiring updates:
-    - .specify/templates/plan-template.md — Constitution Check section is generic; no change needed.
-    - .specify/templates/spec-template.md — Mandatory sections (testing, success criteria) align with principles; no change needed.
-    - .specify/templates/tasks-template.md — Task phases align with development workflow; no change needed.
-    - .specify/templates/commands/ — Directory not yet created; no command files to audit.
-    - CLAUDE.md — Already references QA, security, RTK workflows consistent with these principles.
-  - Follow-up TODOs: None.
+    - .specify/templates/plan-template.md — Constitution Check genérico; sem mudança necessária.
+  - Follow-up TODOs: ativar branch protection em `dev` exigindo o job `check` do ci.yml.
 -->
 
 # FURY Platform Constitution
@@ -47,9 +46,17 @@ Tests MUST be written and confirmed failing before implementation code
 cover API flows end-to-end. Coverage audits (`npm run qa:audit`) run
 before every release. No PR merges without passing tests.
 
+Toda feature nova E todo bug recorrente MUST ter um teste unitário que
+valida o **comportamento esperado**, escrito no fluxo TDD (o teste falha
+antes do fix, passa depois). Um bug corrigido sem teste de regressão é
+considerado incompleto — o teste é a garantia de que ele não volta.
+Erros de tipo/contrato são cobertos pelo gate de compilação (Princípio VI);
+lógica de comportamento é coberta por teste unitário.
+
 **Rationale**: Ad campaign automation involves real money. Regressions
 in targeting, budgeting, or creative delivery have direct financial
-impact on clients.
+impact on clients. Um bug que já aconteceu uma vez, sem teste, é um bug
+que vai acontecer de novo.
 
 ### IV. AI Integration Discipline
 
@@ -73,6 +80,25 @@ Complexity MUST be explicitly justified in PR descriptions.
 
 **Rationale**: Every line of unused code is a liability. In a startup
 context, speed and clarity beat speculative generality.
+
+### VI. Build-Before-Deploy Gate (NON-NEGOTIABLE)
+
+Nenhum commit que não compila ou não passa nos testes pode chegar ao
+deploy. O CI (`tsc -b && npm run build && npm run test:unit`) MUST ser um
+**required status check** na branch `dev`: o merge fica bloqueado enquanto
+o CI não estiver verde. O deploy do EasyPanel só ocorre a partir de um
+merge que passou no gate — CI e deploy nunca correm em paralelo sobre
+código não verificado.
+
+O build de produção (Docker) NUNCA é o primeiro lugar onde um erro de
+compilação aparece. Se o `npm run build` falha, ele MUST falhar no CI,
+antes do merge — não no EasyPanel.
+
+**Rationale**: Em 2026-07-16 um erro de TypeScript (`TS2741`) só foi
+detectado no Docker build do EasyPanel e derrubou o deploy. O CI já
+rodava os comandos certos, mas não era gate de merge — um commit quebrado
+passou. Deploy quebrado por erro de compilação é 100% evitável e
+inaceitável.
 
 ## Security Standards
 
@@ -118,4 +144,4 @@ principles before contributing.
 Use `CLAUDE.md` for runtime development guidance (RTK, security
 agent, QA agent commands).
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-02 | **Last Amended**: 2026-07-02
+**Version**: 1.1.0 | **Ratified**: 2026-07-02 | **Last Amended**: 2026-07-16

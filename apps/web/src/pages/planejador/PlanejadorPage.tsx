@@ -12,6 +12,7 @@ export function PlanejadorPage() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [planId, setPlanId] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -110,12 +111,15 @@ export function PlanejadorPage() {
 
         {view === 'review' && plan && (
           <>
-            <PlanSummary plan={plan} />
-            <CalendarView
-              plan={plan}
-              onConfirm={handleConfirm}
-              confirmed={confirmed}
-            />
+            {!showCalendar ? (
+              <PlanSummary plan={plan} onViewCalendar={() => setShowCalendar(true)} />
+            ) : (
+              <CalendarView
+                plan={plan}
+                onConfirm={handleConfirm}
+                confirmed={confirmed}
+              />
+            )}
           </>
         )}
 
