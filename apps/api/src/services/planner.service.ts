@@ -1,5 +1,5 @@
 import { db, campaignPlans, socialPosts, metaConnections, clientGoals, brandKits } from '@fury/db';
-import { eq, and, desc, gt } from 'drizzle-orm';
+import { eq, and, desc, gt, sql } from 'drizzle-orm';
 import { jobs, generateId, runPipeline } from '../agents/orchestrator.js';
 import { openrouterService } from './openrouter.service.js';
 import type { JobStatus } from '../agents/types.js';
@@ -62,6 +62,7 @@ export async function getPrerequisites(tenantId: string) {
     where: and(
       eq(metaConnections.tenantId, tenantId),
       gt(metaConnections.tokenExpiresAt, new Date()),
+      sql`coalesce(${metaConnections.selectedPageIds}, '[]'::jsonb) != '[]'::jsonb`,
     ),
   });
   const goals = await db.query.clientGoals.findFirst({

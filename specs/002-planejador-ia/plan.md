@@ -105,3 +105,26 @@ apps/web/
 | US4 — recomendações IA | "IA detecta oportunidade" | FR-010 🚫 NÃO IMPLEMENTADO. Nenhum monitoramento pós-agendamento. |
 | Sessão expira | "retoma do último checkpoint" | localStorage salva jobId apenas. Se servidor reiniciar, job é perdido. |
 | PlanSummary | faz parte do fluxo de 7 telas | Componente existe mas nunca é renderizado. Órfão desde a troca para redirect. |
+
+## Bug Fix: critério de "Meta conectada" no Planejador (2026-07-16)
+
+**Sintoma (ticket)**: conta conectada na Meta não aparece como conectada no Planejador IA, embora campanhas publiquem normalmente (outros dados do cliente OK).
+
+**Raiz** (`apps/api/src/services/planner.service.ts:60-79`): `getPrerequisites` define
+`metaConnected = !!meta` onde `meta` = linha em `meta_connections` com `tokenExpiresAt > now`.
+Não exige página selecionada. O critério real de "capaz de enviar postagens IG/FB via API"
+(usado em `campaigns.service.ts:657-659`) é **token válido + `selectedPageIds` não-vazio**.
+Ad account é só pra ads → fora do critério.
+
+**Fix (raiz, uma linha de lógica)**: `getPrerequisites` retorna
+`metaConnected = tokenExpiresAt > now AND selectedPageIds != '[]'::jsonb`.
+Frontend (`PlanejadorPage.tsx:53-60`) e `IdleStatus` já consomem `pre.metaConnected` corretamente —
+não precisam mudar. `tenantMiddleware` resolve tenantId certo.
+
+**Teste de regressão (Constituição III)**: `apps/api/src/__tests__/planner-prerequisites.test.ts`
+— tenant com token válido + `selectedPageIds: ['page_1']` → `metaConnected: true`;
+tenant com token válido + `selectedPageIds: []` → `metaConnected: false`. Teste falha antes do fix, passa depois.
+
+**Constitution Check adicional**:
+- III. Test-First ✅ — teste de regressão obrigatório (bug recorrente de critério).
+- V. Simplicity ✅ — one-line no service existente, zero novos arquivos além do teste.

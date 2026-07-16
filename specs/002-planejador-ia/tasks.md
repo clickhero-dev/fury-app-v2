@@ -39,3 +39,21 @@
 ## Ordem
 
 T001 (backend independente) → T002 (frontend depende de T001) → T003 (docs, pode fazer junto)
+
+## T004 — Critério de "Meta conectada" (bug fix, 2026-07-16)
+
+- **Raiz**: `apps/api/src/services/planner.service.ts:60-79` — `getPrerequisites` define
+  `metaConnected = !!meta` (só `tokenExpiresAt > now`). Não exige página selecionada.
+- **Fix (raiz)**: `metaConnected` = `tokenExpiresAt > now AND selectedPageIds != '[]'::jsonb`.
+  - SQL: `findFirst` where `and(eq(tenantId), gt(tokenExpiresAt, now), sql\`${metaConnections.selectedPageIds} != '[]'::jsonb\`)`.
+  - Frontend (`PlanejadorPage.tsx`, `IdleStatus.tsx`) e `tenantMiddleware` NÃO mudam — já consomem `pre.metaConnected` certo.
+- **Teste de regressão** (Constituição III, TDD): `apps/api/src/__tests__/planner-prerequisites.test.ts`
+  - tenant token válido + `selectedPageIds: ['page_1']` → `metaConnected: true`
+  - tenant token válido + `selectedPageIds: []` → `metaConnected: false`
+  - tenant token expirado + page → `metaConnected: false`
+  - Teste falha antes do fix, passa depois.
+- **Arquivos**: só `planner.service.ts` (lógica) + novo `planner-prerequisites.test.ts`.
+
+## Ordem (bug fix)
+
+T004 (backend + teste, independente do frontend) — pode rodar em paralelo com T001/T002/T003.
