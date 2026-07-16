@@ -71,7 +71,7 @@ export function CalendarView({ plan, onScheduleAll }: CalendarViewProps) {
             </span>
             <button
               onClick={onScheduleAll}
-              className="px-6 py-2.5 bg-accent hover:bg-accent-light text-white font-medium rounded-xl transition-all duration-200 shadow-lg shadow-accent/20">
+              className="px-6 py-2.5 bg-accent hover:bg-accent-light text-white font-medium rounded-xl transition-all duration-200 shadow-lg shadow-accent/20"
             >
               Agendar tudo
             </button>
