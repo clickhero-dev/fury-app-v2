@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle2, Copy, Loader2, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { AppLayout, Button, Card, CardContent, PageHeader, StatusBadge } from '@/components';
+import { CampaignWizard } from '@/components/campaign-wizard/CampaignWizard';
 import api from '@/lib/api';
 import type {
   StudioComplianceStatusResponse,
-  StudioPublishResponse,
   StudioTemplate,
 } from '@/types/studio';
 
@@ -69,7 +69,7 @@ export function CreativeStudio() {
   const [currentAssetId, setCurrentAssetId] = useState<string | null>(null);
   const [pollStartedAt, setPollStartedAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
-  const [publishFeedback, setPublishFeedback] = useState<{ hash: string; imageUrl: string; adsManagerUrl: string } | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   // ─── OpenRouter state ──────────────────────────────────────
   const [creativeType, setCreativeType] = useState<'image' | 'video'>('image');
@@ -109,7 +109,6 @@ export function CreativeStudio() {
     onSuccess: (data: any) => {
       setCurrentAssetId(data.creativeAssetId);
       setPollStartedAt(Date.now());
-      setPublishFeedback(null);
       setGeneratedUrl(data.imageUrl);
       queryClient.setQueryData(['studio', 'asset', data.creativeAssetId], data);
     },
@@ -122,7 +121,6 @@ export function CreativeStudio() {
     },
     onSuccess: (data: any) => {
       setCurrentAssetId(data.creativeAssetId);
-      setPublishFeedback(null);
       setGeneratedUrl(data.videoUrl);
     },
   });
@@ -146,23 +144,6 @@ export function CreativeStudio() {
     staleTime: 0,
   });
 
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      if (!currentAssetId) {
-        throw new Error('Asset nao encontrado.');
-      }
-
-      const response = await api.post<StudioPublishResponse>(`/studio/publish/${currentAssetId}`, {});
-      return response.data;
-    },
-    onSuccess: (data) => {
-      setPublishFeedback({ hash: data.hash, imageUrl: data.imageUrl, adsManagerUrl: data.adsManagerUrl });
-      if (currentAssetId) {
-        void queryClient.invalidateQueries({ queryKey: ['studio', 'compliance', currentAssetId] });
-      }
-    },
-  });
-
   const currentCompliance = complianceQuery.data;
   const complianceStatus = getComplianceTone(currentCompliance?.complianceStatus);
   const isPollingActive = Boolean(currentAssetId && pollStartedAt && !currentCompliance);
@@ -183,7 +164,6 @@ export function CreativeStudio() {
   };
 
   const handleRegenerate = () => {
-    setPublishFeedback(null);
     const basePrompt = prompt.trim();
     const hasIssues = currentCompliance?.complianceStatus === 'rejected' && currentCompliance.issues.length > 0;
 
@@ -202,13 +182,9 @@ export function CreativeStudio() {
     }
   };
 
-  const handlePublish = async () => {
+  const handlePublish = () => {
     if (!canPublish) return;
-
-    const confirmed = window.confirm('Publicar este asset no Meta?');
-    if (!confirmed) return;
-
-    publishMutation.mutate();
+    setWizardOpen(true);
   };
 
   const currentModels = creativeType === 'image'
@@ -524,24 +500,6 @@ export function CreativeStudio() {
                     </div>
                   )}
 
-                  {publishFeedback && (
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
-                        <CheckCircle2 className="h-4 w-4" />
-                        Publicado no Meta
-                      </div>
-                      <p className="mt-2 text-sm text-emerald-700">Hash: {publishFeedback.hash}</p>
-                      <a
-                        href={publishFeedback.adsManagerUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 underline"
-                      >
-                        Abrir no Meta Ads Manager
-                      </a>
-                    </div>
-                  )}
-
                   <div className="flex flex-wrap gap-3">
                     <Button onClick={handleRegenerate} variant="outline" className="min-w-36">
                       <Wand2 className="mr-2 h-4 w-4" />
@@ -549,10 +507,10 @@ export function CreativeStudio() {
                     </Button>
                     <Button
                       onClick={handlePublish}
-                      disabled={!canPublish || publishMutation.isPending}
+                      disabled={!canPublish}
                       className="min-w-44 bg-[#E8631A] hover:bg-[#D45714]"
                     >
-                      {publishMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                      <Upload className="mr-2 h-4 w-4" />
                       Publicar no Meta
                     </Button>
                   </div>
@@ -562,6 +520,7 @@ export function CreativeStudio() {
           </Card>
         </div>
       </div>
+      <CampaignWizard open={wizardOpen} onOpenChange={setWizardOpen} preSelectedAssetId={currentAssetId ?? undefined} preSelectedAssetUrl={generatedUrl ?? undefined} />
     </AppLayout>
   );
 }
