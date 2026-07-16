@@ -22,7 +22,7 @@ const navItems = [
   // { icon: Zap, label: 'Automação', path: '/automacao/minhas-regras' },
   // ponytail: oculto até feature de orçamento smart estar pronta
   // { icon: Wallet, label: 'Orçamento Smart', path: '/orcamento-smart' },
-  { icon: BrainCircuit, label: 'Planejador IA', path: '/planejador' },
+  { icon: BrainCircuit, label: 'Calendário', path: '/calendario' },
   { icon: Palette, label: 'Estúdio', path: '/estudio' },
   { icon: Plug, label: 'Integrações', path: '/configuracoes/integracoes' },
   { icon: Settings, label: 'Configurações', path: '/configuracoes' },
