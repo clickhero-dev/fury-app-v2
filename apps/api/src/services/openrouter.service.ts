@@ -13,14 +13,14 @@ function getClient() {
 export const openrouterService = {
   async chat(
     messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
-    options: { temperature?: number; max_tokens?: number; response_format?: { type: 'json_object' } } = {},
+    options: { model?: string; temperature?: number; max_tokens?: number; response_format?: { type: 'json_object' } } = {},
   ): Promise<string> {
     const apiKey = getClient();
     const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: 'deepseek/deepseek-chat',
+        model: options.model ?? 'deepseek/deepseek-chat',
         messages,
         temperature: options.temperature ?? 0.7,
         max_tokens: options.max_tokens ?? 1500,
