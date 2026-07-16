@@ -114,4 +114,28 @@ describe('getPrerequisites — metaConnected', () => {
     const result = await getPrerequisites('t1');
     expect(result.metaConnected).toBe(false);
   });
+
+  it('retorna true — conta demo produção (dados realistas)', async () => {
+    testConnections.push({
+      tenantId: '01964523-b6bb-7caf-8bd8-5b3284e2a163',
+      tokenExpiresAt: new Date('2126-07-16T19:00:00.000Z'),
+      selectedPageIds: ['107800133415415', '108765432109876'],
+      selectedAdAccountId: 'act_123456789',
+      adAccounts: [{ id: 'act_123456789', name: 'Conta Demo' }],
+      metaUserId: '12345678901234567',
+      metaUserName: 'Demo User',
+    });
+    const result = await getPrerequisites('01964523-b6bb-7caf-8bd8-5b3284e2a163');
+    expect(result.metaConnected).toBe(true);
+  });
+
+  it('retorna false — selectedPageIds = [] null (coalesce edge case)', async () => {
+    testConnections.push({
+      tenantId: 't1',
+      tokenExpiresAt: new Date('2099-01-01'),
+      selectedPageIds: null as unknown as string[],
+    });
+    const result = await getPrerequisites('t1');
+    expect(result.metaConnected).toBe(false);
+  });
 });
