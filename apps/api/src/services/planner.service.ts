@@ -1,5 +1,5 @@
-import { db, campaignPlans, socialPosts } from '@fury/db';
-import { eq, and, desc } from 'drizzle-orm';
+import { db, campaignPlans, socialPosts, metaConnections, clientGoals, brandKits } from '@fury/db';
+import { eq, and, desc, gt } from 'drizzle-orm';
 import { jobs, generateId, runPipeline } from '../agents/orchestrator.js';
 import { openrouterService } from './openrouter.service.js';
 import type { JobStatus } from '../agents/types.js';
@@ -55,6 +55,28 @@ export async function getLatestPlanByTenant(tenantId: string) {
     orderBy: [desc(campaignPlans.createdAt)],
     with: { posts: true },
   });
+}
+
+export async function getPrerequisites(tenantId: string) {
+  const meta = await db.query.metaConnections.findFirst({
+    where: and(
+      eq(metaConnections.tenantId, tenantId),
+      gt(metaConnections.tokenExpiresAt, new Date()),
+    ),
+  });
+  const goals = await db.query.clientGoals.findFirst({
+    where: eq(clientGoals.tenantId, tenantId),
+  });
+  const brand = await db.query.brandKits.findFirst({
+    where: eq(brandKits.tenantId, tenantId),
+  });
+
+  return {
+    metaConnected: !!meta,
+    hasProduct: !!(goals?.mainProduct),
+    hasObjective: !!(goals?.objective),
+    hasVoiceTone: !!(brand?.voiceTone),
+  };
 }
 
 export async function confirmPlan(planId: string, tenantId: string) {

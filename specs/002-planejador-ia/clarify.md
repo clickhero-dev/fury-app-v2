@@ -1,52 +1,45 @@
-# Clarify: Planejador IA — Reconciliação com implementação real
+# Clarify: Planejador IA — Resiliência, inputs inesperados e debuggabilidade
 
-**Feature**: [spec.md](./spec.md) | **Date**: 2026-07-16
+**Feature**: Resiliência do fluxo de geração + checklist dinâmico
+**Date**: 2026-07-16
 
-Perguntas de validação respondidas por inspeção do código (não hipóteses).
+Perguntas de validação respondidas por inspeção de código:
 
-## Q1 — Essa tela está realmente funcional para o usuário?
+## Q1 — Esse fluxo/função reage bem a inputs inesperados?
 
-**Não.** A geração está quebrada na raiz.
+**Não.** Três pontos críticos:
 
-- `PlanejadorPage.tsx:19` → `api.post('/planner/generate', { tenantId: 'current' })`
-- `planner.controller.ts:13` → `generateSchema = z.object({ tenantId: z.string().uuid() })`
-- `'current'` não é UUID → Zod rejeita → HTTP 400 em toda geração.
+1. **Checklist sempre verde** (`IdleStatus.tsx`): os 5 checks exibidos (`Instagram conectado ✓`, `Facebook conectado ✓`, etc.) são **hardcoded** — não consultam API nem banco. Um usuário sem Instagram conectado vê o check como OK, clica "Gerar", e o pipeline dos 10 agentes tenta processar contexto vazio. O erro só aparece minutos depois no Quality Agent, sem relação clara com a causa raiz.
 
-**Root cause**: o controller lê `tenantId` do body em vez do contexto de tenant
-autenticado (`req.tenant.tenantId`), como fazem os outros 3 endpoints do mesmo
-controller (`getPlan`, `handleConfirm`, `handleRevalidate`).
+2. **`tenantId: 'current'`** (BUG-001, já corrigido): frontend enviava string literal em vez do UUID do tenant → 400. Input inesperado derrubava o fluxo inteiro sem mensagem clara.
 
-## Q2 — Os dados estão sendo processados da maneira como deveriam?
+3. **Erro 409 (lock)**: se o usuário clica "Gerar" duas vezes, o servidor rejeita com 409. O frontend trata isso — exibe o erro no banner vermelho. ✅ Este ponto está OK.
 
-**Parcial.** O pipeline dos 10 agentes roda e persiste corretamente, mas o
-tracking de job é frágil.
+## Q2 — Essa funcionalidade é resiliente?
 
-- `orchestrator.ts:14` → `export const jobs = new Map<string, ...>()` em memória
-  do processo.
-- No EasyPanel, restart do container durante a geração perde o job → o polling
-  do frontend fica órfão (job some, `GET /jobs/:id` retorna 404).
-- Não escala horizontalmente: com 2+ instâncias, o polling pode bater numa
-  instância que não tem o job.
+**Parcialmente.** O que funciona:
 
-## Q3 — Há algum bug ou má usabilidade nessa tela?
+- ✅ Lock de concorrência (não permite 2 jobs simultâneos)
+- ✅ Redirect pós-geração (se o job completa, vai pro calendário)
+- ✅ localStorage recupera jobId após refresh
+- ✅ `parseAgentJSON` tolera markdown nas respostas da IA
 
-**Sim, 3 bugs:**
+O que NÃO funciona:
 
-1. **tenantId** (Q1) — geração 100% quebrada.
-2. **Rota `/calendario` órfã** — `CalendarioPage.tsx` existe e é completa, mas
-   não está registrada em `router.tsx` (só `/planejador`) nem na `Sidebar.tsx`.
-   O item "Calendário" da UI de referência não tem destino. Tela morta.
-3. **`GET /planner/jobs/:jobId` sem isolamento de tenant** — em
-   `planner.routes.ts:11` esse endpoint não tem `tenantMiddleware` nem valida
-   ownership do job. Qualquer usuário autenticado lê o progresso de qualquer
-   job. Viola Princípio I da Constitution (Multi-Tenant Isolation).
+- ❌ **Checklist mentiroso**: usuário pode estar sem Meta conectado, sem produto, sem objetivo — o IdleStatus mostra tudo verde. O pipeline roda e falha em silêncio (ou produz conteúdo genérico sem contexto). O erro final não aponta a causa real.
+- ❌ **Nenhuma validação prévia**: o botão "Gerar" nunca está desabilitado. Não há guardrails antes de disparar 10 chamadas de LLM (30-60s de execução + custo de tokens).
+- ❌ **Job tracking em memória**: se o container reiniciar, todo o progresso é perdido. O frontend mostra "A geração anterior foi interrompida" — quebra a expectativa de resiliência.
 
-## Q4 — Isso está one-shot no frontend?
+## Q3 — Se ocorrer um bug, isso será claro para o usuário e desenvolvedor para ser corrigido?
 
-**Não literalmente.** É **one-click + polling assíncrono**, não resposta única.
+**Não é claro.** Problemas:
 
-- `POST /generate` retorna um `jobId`; o frontend faz polling em
-  `GET /jobs/:jobId` a cada 1500ms (`PlanejadorPage.tsx:36-40`) até `done`.
-- Correto para uma geração de 30-60s (uma request HTTP síncrona estouraria
-  timeout). "One-shot" descreve a experiência do usuário (um clique), não o
-  protocolo. Manter polling; ajustar a linguagem da spec.
+1. **Erro silencioso no checklist**: se o pipeline falha por falta de dados do tenant, o `GeneratingState` mostra "Erro: ..." mas a mensagem é genérica ("Pipeline error"). Não aponta "Instagram não configurado" ou "Produto não cadastrado". O usuário não sabe o que corrigir.
+
+2. **Sem logs de validação prévia**: não há endpoint de diagnóstico. Um desenvolvedor não consegue responder "este tenant tem tudo configurado pra gerar?" sem consultar 3 tabelas diferentes (meta_connections, clientGoals, brandKits).
+
+3. **Erro de IA (JSON parse)** já tratado: `parseAgentJSON` com fallback + `try/catch` com `AppError(502, 'AI_PARSE_ERROR')` → mensagem clara no banner. ✅
+
+4. **404 de job perdido**: mensagem "A geração anterior foi interrompida" + link pra reiniciar. ✅ Claro pro usuário.
+
+**Conclusão**: o maior gap de resiliência é a **ausência de validação prévia** (checklist dinâmico). Sem ela, bugs são detectados tarde, com mensagens genéricas, e o usuário não sabe o que fazer.

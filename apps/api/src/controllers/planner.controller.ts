@@ -6,6 +6,7 @@ import {
   getJobProgress,
   getPlanById,
   getLatestPlanByTenant,
+  getPrerequisites,
   confirmPlan,
   revalidatePlan,
   editPostWithAI,
@@ -44,6 +45,14 @@ export async function getLatestPlan(req: Request, res: Response, next: NextFunct
     const tenantId = req.tenant!.tenantId;
     const plan = await getLatestPlanByTenant(tenantId);
     res.json({ success: true, data: plan ?? null });
+  } catch (err) { next(err); }
+}
+
+export async function handleGetPrerequisites(req: Request, res: Response, next: NextFunction) {
+  try {
+    const tenantId = req.tenant!.tenantId;
+    const checks = await getPrerequisites(tenantId);
+    res.json({ success: true, data: checks });
   } catch (err) { next(err); }
 }
 

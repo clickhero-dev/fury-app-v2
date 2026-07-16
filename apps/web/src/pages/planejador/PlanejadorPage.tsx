@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { AppLayout } from '@/components';
+import { AppLayout, LoadingSpinner } from '@/components';
 import api from '@/lib/api';
 import { GeneratingState } from './components/GeneratingState';
 import { IdleStatus } from './components/IdleStatus';
+import type { PrerequisiteCheck } from './components/IdleStatus';
 import type { JobStatus, ViewState } from './types';
 
 const STORAGE_KEY = 'fury_planner_job_id';
@@ -33,6 +34,30 @@ export function PlanejadorPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [recovered, setRecovered] = useState(false);
   const recoveryChecked = useRef(false);
+
+  // Busca prerequisites do tenant
+  const { data: pre, isLoading: preLoading } = useQuery({
+    queryKey: ['planner-prerequisites'],
+    queryFn: async () => {
+      const { data } = await api.get('/planner/prerequisites');
+      return data.data as {
+        metaConnected: boolean;
+        hasProduct: boolean;
+        hasObjective: boolean;
+        hasVoiceTone: boolean;
+      };
+    },
+    staleTime: 30_000, // 30s — não precisa refetch a cada clique
+  });
+
+  const checks: PrerequisiteCheck[] | undefined = pre
+    ? [
+        { label: 'Meta conectada (Instagram + Facebook)', ok: pre.metaConnected },
+        { label: 'Produto principal cadastrado', ok: pre.hasProduct },
+        { label: 'Objetivo de negócio definido', ok: pre.hasObjective },
+        { label: 'Tom de voz definido', ok: pre.hasVoiceTone },
+      ]
+    : undefined;
 
   // No mount: se tinha jobId salvo, tenta recuperar
   useEffect(() => {
@@ -135,8 +160,14 @@ export function PlanejadorPage() {
           </div>
         )}
 
-        {view === 'idle' && !generateMutation.isPending && !errorMsg && (
-          <IdleStatus onGenerate={handleGenerate} isLoading={generateMutation.isPending} />
+        {view === 'idle' && preLoading && (
+          <div className="flex items-center justify-center py-16">
+            <LoadingSpinner />
+          </div>
+        )}
+
+        {view === 'idle' && !preLoading && !generateMutation.isPending && !errorMsg && (
+          <IdleStatus onGenerate={handleGenerate} isLoading={generateMutation.isPending} checks={checks} />
         )}
 
         {view === 'idle' && errorMsg && (
@@ -144,7 +175,9 @@ export function PlanejadorPage() {
             <div className="rounded-xl bg-red-900/20 border border-red-700/30 p-4 text-center">
               <p className="text-red-400 text-sm">{errorMsg}</p>
             </div>
-            <IdleStatus onGenerate={handleGenerate} isLoading={generateMutation.isPending} />
+            {!preLoading && (
+              <IdleStatus onGenerate={handleGenerate} isLoading={generateMutation.isPending} checks={checks} />
+            )}
           </div>
         )}
       </div>

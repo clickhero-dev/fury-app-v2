@@ -48,12 +48,11 @@ Gerar calendário de conteúdo mensal com um clique para pequenos negócios loca
 
 ```text
 specs/002-planejador-ia/
-├── spec.md              # Feature specification (this file)
+├── spec.md              # Feature specification
 ├── plan.md              # Implementation plan (/speckit-plan output)
-├── research.md          # Phase 0 output
-├── data-model.md        # Phase 1 output
-├── quickstart.md        # Phase 1 output
-└── contracts/           # Phase 1 output
+├── clarify.md           # Validação de resiliência e inputs (2026-07-16)
+├── tasks.md             # Tasks de implementação
+└── research.md          # Phase 0 output (pesquisa inicial)
 ```
 
 ### Source Code (repository root)
@@ -72,7 +71,7 @@ apps/api/
 
 apps/web/
 ├── src/pages/planejador/
-│   ├── PlanejadorPage.tsx             # State machine (4 views: idle/generating/review/confirmed)
+│   ├── PlanejadorPage.tsx             # State machine (2 views: idle/generating)
 │   ├── CalendarioPage.tsx             # Página dedicada do calendário
 │   └── components/
 │       ├── IdleStatus.tsx             # Tela 1: checklist + botão gerar
@@ -84,7 +83,7 @@ apps/web/
 └── src/components/Sidebar.tsx         # + nav items: Planejador IA, Calendário
 ```
 
-**Structure Decision**: Monorepo com 3 pacotes. Nova feature adiciona 8 arquivos de source + 1 migration. Sem modificação em pacotes existentes além de registro de rota, sidebar e barrel export.
+**Structure Decision**: Monorepo com 3 pacotes. Nova feature adiciona ~15 source files + 2 migrations (0023, 0024) + testes (planner-controller, parse-json).
 
 ## Complexity Tracking
 
@@ -92,3 +91,17 @@ apps/web/
 |-----------|------------|-------------------------------------|
 | III. Test-First | MVP velocity — feedback de usuário > cobertura de testes | Testes unitários do service podem ser adicionados depois sem quebrar contrato |
 | Job tracking em Map de memória | Simplicidade — evita BullMQ/Redis pra um job por tenant | **ponytail: teto conhecido** — perde job em restart do container e não escala p/ múltiplas instâncias. Upgrade path: mover para tabela `planner_jobs` no Postgres quando escala exigir. Aceitável enquanto EasyPanel roda 1 instância. |
+| Checklist decorativo (FR-001) | Velocidade de MVP — checklist exibia tudo verde sem consultar DB | **corrigido**: agora `GET /planner/prerequisites` consulta meta_connections, clientGoals, brandKits em tempo real (2026-07-16) |
+
+## Known Gaps
+
+### Spec vs Code (reconciliação 2026-07-16)
+
+| Gap | O que o spec diz | Realidade |
+|-----|-----------------|-----------|
+| US1 — após geração | "exibe resumo do plano" | `PlanejadorPage` redireciona para `/calendario`. PlanSummary não é mais exibido. |
+| US2 — drag-and-drop | "arrasta card, data é atualizada" | FR-006 🚫 NÃO IMPLEMENTADO. Calendário é somente visual. |
+| US4 — "Agendar tudo" | "posts agendados na plataforma" | FR-009 🚫 NÃO IMPLEMENTADO. `confirmPlan` só muda status no DB. |
+| US4 — recomendações IA | "IA detecta oportunidade" | FR-010 🚫 NÃO IMPLEMENTADO. Nenhum monitoramento pós-agendamento. |
+| Sessão expira | "retoma do último checkpoint" | localStorage salva jobId apenas. Se servidor reiniciar, job é perdido. |
+| PlanSummary | faz parte do fluxo de 7 telas | Componente existe mas nunca é renderizado. Órfão desde a troca para redirect. |
