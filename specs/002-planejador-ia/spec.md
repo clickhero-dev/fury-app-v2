@@ -94,7 +94,7 @@ Na tela de aprovação do calendário, o usuário vê um resumo (ex: "16 conteú
 - **CampaignPlan**: Plano mensal gerado pela IA. Contém tenant_id, mês/ano, objetivo, status (draft, active, completed, cancelled), metadata (summary com reelsCount, carouselCount, imageCount, storiesCount + outputs dos agentes).
 - **SocialPost**: Post individual dentro de um plano. Contém tipo (reel/carousel/image/stories), título, legenda, CTA, hashtags, prompt_imagem, data_agendada, status (draft/approved/rejected/confirmed/published), dayIndex (1-31).
 - **PlannerJob**: Job de geração (in-memory Map no processo). Contém id, status (pending/running/generating/done/error), currentAgent, agentProgress[], planId.
-- **Pipeline de 10 Agentes** (`apps/api/src/agents/`): sequência que produz o plano — Context → Research → Analytics → Strategy → Planner → Copywriter → Creative → Quality (com até 2 retries) → Scheduler → Branding (gate de compliance). Cada agente consome o output do anterior; falha de qualidade ou compliance aborta o job com mensagem amigável.
+- **Pipeline de 10 Agentes** (`apps/api/src/agents/`): sequência que produz o plano — Context → Research → Analytics → Strategy → Planner → Copywriter (DeepSeek V4 Flash, 2 retries internos) → Creative → Quality (com até 2 retries) → Scheduler → Branding (gate de compliance). Cada agente consome o output do anterior; falha de qualidade ou compliance aborta o job com mensagem amigável.
 
 ### Bugs conhecidos (reconciliação 2026-07-16)
 

@@ -61,3 +61,23 @@ O que NÃO funciona:
 **Decisão de spec**: `metaConnected` no `/planner/prerequisites` DEVE ser `tokenExpiresAt > now AND selectedPageIds.length > 0`. Isso alinha "conectado" com "capaz de enviar postagens IG/FB via API" (critério do ticket).
 
 **Critério de aceite (do ticket)**: integração correta — se o tenant tem token válido + page selecionada (condição sob a qual campanhas publicam), o Planejador deve mostrar "Meta conectada ✓".
+
+---
+
+## Session 2026-07-16 (Bug: Copywriter Agent quebra inesperadamente)
+
+### Q1 — Por que o Copywriter Agent quebra de maneira inesperada e precisa de retry?
+
+**Resposta (aceita, B + Short)**: "JSON parse + rate limit. Usar DeepSeek V4 Flash com retry."
+
+**Fundamentamento (código)**:
+- `copywriter.agent.ts:15` chamava `openrouterService.chat()` sem try/catch
+- Se OpenRouter retorna 502 (rate limit, timeout) ou JSON inválido, `parseAgentJSON()` lançava exceção → pipeline morria sem retry
+- O retry loop do `orchestrator.ts:84-103` só rodava se Quality Agent falhasse, **não** se copywriter lançasse exceção
+
+**Decisão de spec**:
+- Modelo alterado de `deepseek/deepseek-chat` → `deepseek/deepseek-v4-flash` (mais rápido e confiável)
+- `copywriter.agent.ts` agora tem retry loop interno (2 tentativas) antes de propagar erro
+- `openrouter.service.ts` aceita `model` opcional no `chat()` sem quebrar callers existentes
+
+**Impacto**: transient failures (rate limit, 5xx, JSON parse) viram retry silencioso em vez de pipeline abortado.
