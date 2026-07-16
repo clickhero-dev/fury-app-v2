@@ -53,6 +53,10 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiEditor, setShowAiEditor] = useState(false);
+  // ponytail: sessionStorage pra imagem persistir entre abrir/fechar painel
+  const [localImageUrl, setLocalImageUrl] = useState(
+    sessionStorage.getItem(`fury_img_${post.id}`) || post.imageUrl || ''
+  );
 
   const Icon = postIcons[post.postType] ?? Image;
 
@@ -82,6 +86,8 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
       return data as { imageUrl: string; creativeAssetId: string };
     },
     onSuccess: (data) => {
+      sessionStorage.setItem(`fury_img_${post.id}`, data.imageUrl);
+      setLocalImageUrl(data.imageUrl);
       onUpdate({ ...post, imageUrl: data.imageUrl });
     },
   });
@@ -177,8 +183,8 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
               <h4 className="text-sm font-medium text-text-primary">Imagem</h4>
               {post.imageUrl && copyBtn(post.imageUrl, 'image')}
             </div>
-            {post.imageUrl ? (
-              <img src={post.imageUrl} alt={post.title} className="w-full rounded-xl border border-border" />
+            {localImageUrl ? (
+              <img src={localImageUrl} alt={post.title} className="w-full rounded-xl border border-border" />
             ) : imageMutation.isPending ? (
               <div className="rounded-xl border border-border bg-surface-secondary p-8 text-center">
                 <div className="w-8 h-8 border-2 border-accent/30 border-t-accent rounded-full animate-spin mx-auto mb-3" />

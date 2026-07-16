@@ -12,6 +12,7 @@ interface CalendarViewProps {
     totalPosts: number;
     posts: Post[];
   };
+  onScheduleAll?: () => void;
 }
 
 const postIcons: Record<string, typeof LayoutGrid> = {
@@ -38,7 +39,7 @@ const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
 const FIRST_DOW = new Date(2026, 6, 1).getDay();
 const DOW_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-export function CalendarView({ plan }: CalendarViewProps) {
+export function CalendarView({ plan, onScheduleAll }: CalendarViewProps) {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
   const postsByDay = useMemo(() => {
@@ -69,10 +70,8 @@ export function CalendarView({ plan }: CalendarViewProps) {
               {plan.totalPosts} conteúdos
             </span>
             <button
-              disabled={totalApproved < plan.totalPosts}
-              className="px-6 py-2.5 bg-accent hover:bg-accent-light disabled:opacity-40 
-                         disabled:cursor-not-allowed text-white font-medium rounded-xl 
-                         transition-all duration-200 shadow-lg shadow-accent/20"
+              onClick={onScheduleAll}
+              className="px-6 py-2.5 bg-accent hover:bg-accent-light text-white font-medium rounded-xl transition-all duration-200 shadow-lg shadow-accent/20">
             >
               Agendar tudo
             </button>

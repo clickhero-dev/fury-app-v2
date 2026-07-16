@@ -67,8 +67,14 @@ export function PlanejadorPage() {
     enabled: !!savedPlanId,
     retry: 1,
   });
+  // ponytail: ?view=calendar pula direto pro calendário se tem plano salvo
   useEffect(() => {
-    if (savedPlan) { setPlan(savedPlan); setView('calendar'); }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') === 'calendar' && savedPlan) {
+      setPlan(savedPlan); setView('calendar');
+    } else if (savedPlan) {
+      setPlan(savedPlan); setView('calendar');
+    }
   }, [savedPlan]);
 
   const generateMutation = useMutation({
@@ -120,7 +126,12 @@ export function PlanejadorPage() {
       {view === 'summary' && plan && (
         <PlanSummary plan={plan} onViewCalendar={() => setView('calendar')} />
       )}
-      {view === 'calendar' && plan && <CalendarView plan={plan} />}
+      {view === 'calendar' && plan && (
+        <CalendarView plan={plan} onScheduleAll={() => setPlan(prev => prev ? {
+          ...prev,
+          posts: prev.posts.map(p => ({ ...p, status: 'scheduled' as const })),
+        } : null)} />
+      )}
     </AppLayout>
   );
 }
