@@ -360,6 +360,10 @@ export function EstudioHome() {
               result={generationResult}
               onBack={handleBackToLibrary}
               onNewCreative={handleStartQuickCreate}
+              onPublish={() => {
+                setWizardAsset({ id: generationResult.assetId, url: generationResult.imageUrl });
+                setWizardOpen(true);
+              }}
             />
           </>
         )}

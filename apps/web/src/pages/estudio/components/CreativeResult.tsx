@@ -10,6 +10,9 @@ interface Props {
   result: GenerateCreativeResponse;
   onBack: () => void;
   onNewCreative: () => void;
+  // ponytail: quando presente, "Publicar no Meta" abre o wizard (imagem presetada)
+  // em vez de publicar direto — alinha com o botão "Usar em campanha".
+  onPublish?: () => void;
 }
 
 // ponytail: gera máscara de inpainting a partir do canvas de pintura
@@ -32,7 +35,7 @@ function generateMaskBlob(source: HTMLCanvasElement): Blob | null {
   return new Promise((resolve) => mask.toBlob((b) => resolve(b), 'image/png')) as unknown as Blob | null;
 }
 
-export function CreativeResult({ result, onBack, onNewCreative }: Props) {
+export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Props) {
   const queryClient = useQueryClient();
   const [currentResult, setCurrentResult] = useState(result);
   const [feedback, setFeedback] = useState('');
@@ -301,7 +304,7 @@ export function CreativeResult({ result, onBack, onNewCreative }: Props) {
             {!isQuickCreate && (
               <Button
                 size="sm"
-                onClick={() => publishMutation.mutate(currentResult.assetId)}
+                onClick={() => (onPublish ? onPublish() : publishMutation.mutate(currentResult.assetId))}
                 disabled={publishMutation.isPending || !!publishFeedback}
                 className="w-full flex items-center justify-center gap-2 bg-[#E8631A] hover:bg-[#D45714] text-white"
               >
