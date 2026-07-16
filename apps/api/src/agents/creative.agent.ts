@@ -1,5 +1,6 @@
 import { openrouterService } from '../services/openrouter.service.js';
 import type { AgentContext, PlannerOutput, CreativeOutput } from './types.js';
+import { parseAgentJSON } from './utils.js';
 
 export async function creativeAgent(ctx: AgentContext, planner: PlannerOutput): Promise<CreativeOutput> {
   const postsDesc = planner.posts.map(p => `Dia ${p.dayIndex} — ${p.postType} — "${p.title}"`).join('\n');
@@ -14,5 +15,5 @@ JSON: {"posts":[{"dayIndex":1,"imagePrompt":"Cena detalhada..."}]}`;
     [{ role: 'system', content: 'Diretor de arte. JSON.' }, { role: 'user', content: prompt }],
     { temperature: 0.9, max_tokens: 3000, response_format: { type: 'json_object' } },
   );
-  return JSON.parse(raw) as CreativeOutput;
+  return parseAgentJSON<CreativeOutput>(raw);
 }

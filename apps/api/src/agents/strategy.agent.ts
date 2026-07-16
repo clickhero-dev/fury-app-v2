@@ -1,5 +1,6 @@
 import { openrouterService } from '../services/openrouter.service.js';
 import type { AgentContext, ResearchOutput, AnalyticsOutput, StrategyOutput } from './types.js';
+import { parseAgentJSON } from './utils.js';
 
 export async function strategyAgent(ctx: AgentContext, research: ResearchOutput, analytics: AnalyticsOutput): Promise<StrategyOutput> {
   const prompt = `Crie estrategia mensal para:
@@ -16,5 +17,5 @@ JSON: {"objective":"...","contentPillars":[{"name":"Produto","ratio":40},{"name"
     [{ role: 'system', content: 'Estrategista senior. JSON.' }, { role: 'user', content: prompt }],
     { temperature: 0.8, max_tokens: 1200, response_format: { type: 'json_object' } },
   );
-  return JSON.parse(raw) as StrategyOutput;
+  return parseAgentJSON<StrategyOutput>(raw);
 }

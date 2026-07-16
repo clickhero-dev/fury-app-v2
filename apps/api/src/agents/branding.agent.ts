@@ -1,5 +1,6 @@
 import { openrouterService } from '../services/openrouter.service.js';
 import type { AgentContext, PlannerOutput, CopywriterOutput, CreativeOutput, BrandingOutput } from './types.js';
+import { parseAgentJSON } from './utils.js';
 
 export async function brandingAgent(
   ctx: AgentContext,
@@ -27,5 +28,5 @@ JSON: {"approved":true,"notes":"...","violations":["..."]}`;
     [{ role: 'system', content: 'Analista de branding. JSON. Seja criterioso mas justo.' }, { role: 'user', content: prompt }],
     { temperature: 0.3, max_tokens: 1000, response_format: { type: 'json_object' } },
   );
-  return JSON.parse(raw) as BrandingOutput;
+  return parseAgentJSON<BrandingOutput>(raw);
 }

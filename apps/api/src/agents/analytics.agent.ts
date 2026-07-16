@@ -1,5 +1,6 @@
 import { openrouterService } from '../services/openrouter.service.js';
 import type { AgentContext, AnalyticsOutput } from './types.js';
+import { parseAgentJSON } from './utils.js';
 
 export async function analyticsAgent(ctx: AgentContext): Promise<AnalyticsOutput> {
   const prompt = `Com base na empresa, recomende: melhores formatos, dias da semana, 2 dicas de engajamento.
@@ -12,5 +13,5 @@ JSON: {"bestFormats":["reel","carousel"],"bestDays":["terca","quinta"],"engageme
     [{ role: 'system', content: 'Analista de metricas. JSON.' }, { role: 'user', content: prompt }],
     { temperature: 0.7, max_tokens: 800, response_format: { type: 'json_object' } },
   );
-  return JSON.parse(raw) as AnalyticsOutput;
+  return parseAgentJSON<AnalyticsOutput>(raw);
 }

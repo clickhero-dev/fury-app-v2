@@ -3,6 +3,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { jobs, generateId, runPipeline } from '../agents/orchestrator.js';
 import { openrouterService } from './openrouter.service.js';
 import type { JobStatus } from '../agents/types.js';
+import { parseAgentJSON } from '../agents/utils.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export { jobs } from '../agents/orchestrator.js';
@@ -108,7 +109,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
 
   let updates: Record<string, any>;
   try {
-    updates = JSON.parse(raw);
+    updates = parseAgentJSON(raw);
   } catch {
     throw new AppError(502, 'AI_PARSE_ERROR', 'Resposta da IA inválida ao editar post');
   }

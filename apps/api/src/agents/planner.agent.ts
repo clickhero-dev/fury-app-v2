@@ -1,5 +1,6 @@
 import { openrouterService } from '../services/openrouter.service.js';
 import type { AgentContext, ResearchOutput, StrategyOutput, PlannerOutput } from './types.js';
+import { parseAgentJSON } from './utils.js';
 
 export async function plannerAgent(ctx: AgentContext, research: ResearchOutput, strategy: StrategyOutput): Promise<PlannerOutput> {
   const pillars = strategy.contentPillars.map(p => `${p.name} (${p.ratio}%)`).join(', ');
@@ -16,5 +17,5 @@ JSON: {"totalPosts":16,"summary":{"reelsCount":8,"carouselCount":4,"imageCount":
     [{ role: 'system', content: 'Planejador editorial. JSON.' }, { role: 'user', content: prompt }],
     { temperature: 0.8, max_tokens: 3000, response_format: { type: 'json_object' } },
   );
-  return JSON.parse(raw) as PlannerOutput;
+  return parseAgentJSON<PlannerOutput>(raw);
 }
