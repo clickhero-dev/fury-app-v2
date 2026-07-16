@@ -156,15 +156,18 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
             </div>
           </div>
 
-          {/* Image Prompt */}
+          {/* Image Prompt — placeholder visual */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-medium text-text-primary">Prompt da imagem</h4>
+              <h4 className="text-sm font-medium text-text-primary">Imagem</h4>
               {copyBtn(post.imagePrompt, 'prompt')}
             </div>
-            <p className="text-sm text-text-secondary bg-surface-secondary rounded-lg p-3 italic">
-              {post.imagePrompt || '—'}
-            </p>
+            <div className="rounded-xl overflow-hidden border border-border bg-gradient-to-br from-accent/5 via-surface-secondary to-accent/10 p-6 text-center">
+              <p className="text-sm text-text-secondary italic leading-relaxed">
+                {post.imagePrompt || '—'}
+              </p>
+              <p className="text-xs text-text-tertiary mt-3">Imagem gerada por IA baseada no prompt acima</p>
+            </div>
           </div>
 
           {/* Actions */}

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
-import { Film, LayoutGrid, Image, Sparkles, CheckCircle } from 'lucide-react';
+import { LayoutGrid, Image, Sparkles } from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
 import type { Post } from '../types';
 
@@ -34,7 +34,8 @@ const statusColors: Record<string, string> = {
 };
 
 const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
-const FIRST_DOW = 2;
+// ponytail: FIRST_DOW dinâmico, não hardcoded — não quebra em outro mês
+const FIRST_DOW = new Date(2026, 6, 1).getDay();
 const DOW_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 export function CalendarView({ plan }: CalendarViewProps) {
@@ -79,8 +80,8 @@ export function CalendarView({ plan }: CalendarViewProps) {
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="flex-1 p-6">
+      {/* Grid — min-h fixo pra flex dentro do AppLayout */}
+      <div className="min-h-[500px] p-6">
         <div className="max-w-7xl mx-auto">
           {/* Day headers */}
           <div className="grid grid-cols-7 gap-px mb-px">

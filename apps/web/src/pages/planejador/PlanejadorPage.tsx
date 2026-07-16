@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useState, useCallback, useEffect } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components';
 import api from '@/lib/api';
 import { IdleStatus } from './components/IdleStatus';
@@ -56,6 +56,21 @@ export function PlanejadorPage() {
   const [view, setView] = useState<'idle' | 'generating' | 'summary' | 'calendar'>('idle');
   const [plan, setPlan] = useState<Plan | null>(null);
 
+  // ponytail: carrega plano existente ao montar (se salvou sessionStorage)
+  const savedPlanId = sessionStorage.getItem('fury_last_plan_id');
+  const { data: savedPlan } = useQuery({
+    queryKey: ['planner/plan', savedPlanId],
+    queryFn: async () => {
+      const { data: res } = await api.get(`/planner/plans/${savedPlanId}`);
+      return res.data as Plan;
+    },
+    enabled: !!savedPlanId,
+    retry: 1,
+  });
+  useEffect(() => {
+    if (savedPlan) { setPlan(savedPlan); setView('calendar'); }
+  }, [savedPlan]);
+
   const generateMutation = useMutation({
     mutationFn: async () => {
       const { data: res } = await api.post('/planner/generate');
@@ -81,6 +96,7 @@ export function PlanejadorPage() {
           clearInterval(interval);
           const { data: planRes } = await api.get(`/planner/plans/${job.planId}`);
           setPlan(planRes.data as Plan);
+          sessionStorage.setItem('fury_last_plan_id', job.planId);
           setView('summary');
         } else if (job.status === 'error') {
           clearInterval(interval);
