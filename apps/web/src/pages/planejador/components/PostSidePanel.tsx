@@ -71,6 +71,21 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
     </button>
   );
 
+  // ponytail: gera imagem via OpenRouter igual ao Estúdio
+  const imageMutation = useMutation({
+    mutationFn: async (prompt: string) => {
+      const { data } = await api.post('/openrouter/generate-image', {
+        model: 'black-forest-labs/flux.2-max',
+        prompt,
+        aspect_ratio: '1:1',
+      });
+      return data as { imageUrl: string; creativeAssetId: string };
+    },
+    onSuccess: (data) => {
+      onUpdate({ ...post, imageUrl: data.imageUrl });
+    },
+  });
+
   const aiEditMutation = useMutation({
     mutationFn: async (prompt: string) => {
       const { data } = await api.patch(`/planner/posts/${post.id}`, {
@@ -156,18 +171,33 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
             </div>
           </div>
 
-          {/* Image Prompt — placeholder visual */}
+          {/* Image — gerada via OpenRouter (mesmo fluxo do Estúdio) */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium text-text-primary">Imagem</h4>
-              {copyBtn(post.imagePrompt, 'prompt')}
+              {post.imageUrl && copyBtn(post.imageUrl, 'image')}
             </div>
-            <div className="rounded-xl overflow-hidden border border-border bg-gradient-to-br from-accent/5 via-surface-secondary to-accent/10 p-6 text-center">
-              <p className="text-sm text-text-secondary italic leading-relaxed">
-                {post.imagePrompt || '—'}
-              </p>
-              <p className="text-xs text-text-tertiary mt-3">Imagem gerada por IA baseada no prompt acima</p>
-            </div>
+            {post.imageUrl ? (
+              <img src={post.imageUrl} alt={post.title} className="w-full rounded-xl border border-border" />
+            ) : imageMutation.isPending ? (
+              <div className="rounded-xl border border-border bg-surface-secondary p-8 text-center">
+                <div className="w-8 h-8 border-2 border-accent/30 border-t-accent rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-sm text-text-tertiary">Gerando imagem...</p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-border bg-gradient-to-br from-accent/5 via-surface-secondary to-accent/10 p-6 text-center">
+                <Image className="w-8 h-8 text-text-tertiary mx-auto mb-3" />
+                <p className="text-sm text-text-secondary italic leading-relaxed mb-4">
+                  {post.imagePrompt || 'Sem descrição visual'}
+                </p>
+                <button
+                  onClick={() => imageMutation.mutate(post.imagePrompt)}
+                  className="px-4 py-2 bg-accent hover:bg-accent-light text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Gerar imagem
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Actions */}
