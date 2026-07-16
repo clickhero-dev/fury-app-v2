@@ -9,13 +9,9 @@ import {
   revalidatePlan,
 } from '../services/planner.service.js';
 
-const generateSchema = z.object({
-  tenantId: z.string().uuid(),
-});
-
 export async function generatePlan(req: Request, res: Response, next: NextFunction) {
   try {
-    const { tenantId } = generateSchema.parse(req.body);
+    const tenantId = req.tenant!.tenantId;
     const jobStatus = startPlanGeneration(tenantId);
     res.json({ success: true, data: jobStatus });
   } catch (err) { next(err); }
@@ -25,7 +21,9 @@ export async function getJob(req: Request, res: Response, next: NextFunction) {
   try {
     const { jobId } = req.params;
     const job = getJobProgress(jobId);
-    if (!job) throw new AppError(404, 'NOT_FOUND', 'Job não encontrado');
+    if (!job || job.tenantId !== req.tenant!.tenantId) {
+      throw new AppError(404, 'NOT_FOUND', 'Job não encontrado');
+    }
     res.json({ success: true, data: job });
   } catch (err) { next(err); }
 }

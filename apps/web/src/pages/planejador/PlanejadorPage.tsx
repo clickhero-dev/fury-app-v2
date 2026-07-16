@@ -16,7 +16,7 @@ export function PlanejadorPage() {
 
   const generateMutation = useMutation({
     mutationFn: async () => {
-      const { data } = await api.post('/planner/generate', { tenantId: 'current' });
+      const { data } = await api.post('/planner/generate');
       return data.data as JobStatus;
     },
     onSuccess: (job) => {

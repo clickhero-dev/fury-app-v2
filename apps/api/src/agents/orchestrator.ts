@@ -13,6 +13,7 @@ import type { AgentStep } from './types.js';
 
 export const jobs = new Map<string, {
   id: string;
+  tenantId: string;
   status: 'pending' | 'running' | 'generating' | 'done' | 'error';
   currentAgent: string;
   agentProgress: AgentStep[];

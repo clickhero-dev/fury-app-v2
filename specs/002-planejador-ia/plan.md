@@ -8,7 +8,7 @@
 
 Gerar calendário de conteúdo mensal com um clique para pequenos negócios locais. A IA executa todo o planejamento (entender empresa, pesquisar tendências, criar estratégia, distribuir formatos, escrever legendas, gerar prompts de imagem) sem intervenção do usuário. Interface com 7 telas: status → progresso → resumo → calendário → painel lateral → editor IA → aprovação.
 
-**Abordagem**: Reutilizar infraestrutura existente (OpenRouter/DeepSeek para LLM, BullMQ para jobs, Postgres + Drizzle para persistência, React + Vite + Tailwind para frontend). Sem LangGraph no MVP — o grafo é linear demais pra justificar a dependência. Sem stories no MVP.
+**Abordagem**: Reutilizar infraestrutura existente (OpenRouter/DeepSeek para LLM, Postgres + Drizzle para persistência, React + Vite + Tailwind para frontend). O planejamento roda como **pipeline sequencial de 10 agentes** (`apps/api/src/agents/`), orquestrado em `orchestrator.ts` — sem LangGraph (o grafo é linear, orquestração à mão em TS basta). Job tracking via Map em memória do processo (ver Complexity Tracking para o teto). Stories entram como sugestão no resumo de aprovação (não geram posts individuais no MVP).
 
 ## Technical Context
 
@@ -89,3 +89,4 @@ apps/web/
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
 | III. Test-First | MVP velocity — feedback de usuário > cobertura de testes | Testes unitários do service podem ser adicionados depois sem quebrar contrato |
+| Job tracking em Map de memória | Simplicidade — evita BullMQ/Redis pra um job por tenant | **ponytail: teto conhecido** — perde job em restart do container e não escala p/ múltiplas instâncias. Upgrade path: mover para tabela `planner_jobs` no Postgres quando escala exigir. Aceitável enquanto EasyPanel roda 1 instância. |

@@ -20,7 +20,7 @@ export interface BrandingOutput { approved: boolean; notes?: string; violations?
 
 export type AgentStepStatus = 'pending' | 'running' | 'completed' | 'failed';
 export interface AgentStep { name: string; status: AgentStepStatus; pct: number; }
-export interface JobStatus { id: string; status: 'pending' | 'running' | 'generating' | 'done' | 'error'; currentAgent: string; agentProgress: AgentStep[]; planId?: string; error?: string; }
+export interface JobStatus { id: string; tenantId: string; status: 'pending' | 'running' | 'generating' | 'done' | 'error'; currentAgent: string; agentProgress: AgentStep[]; planId?: string; error?: string; }
 
 export interface PipelineState {
   tenantId: string; context: AgentContext; research: ResearchOutput | null; analytics: AnalyticsOutput | null;

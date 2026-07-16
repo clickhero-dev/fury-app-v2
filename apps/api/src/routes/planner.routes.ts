@@ -8,7 +8,7 @@ const router = Router();
 router.use(authMiddleware);
 
 router.post('/generate', tenantMiddleware, generatePlan);
-router.get('/jobs/:jobId', getJob);
+router.get('/jobs/:jobId', tenantMiddleware, getJob);
 router.get('/plans/:planId', tenantMiddleware, getPlan);
 router.post('/plans/confirm', tenantMiddleware, handleConfirm);
 router.post('/plans/revalidate', tenantMiddleware, handleRevalidate);

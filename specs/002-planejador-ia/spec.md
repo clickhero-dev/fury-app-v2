@@ -4,7 +4,7 @@
 
 **Created**: 2026-07-15
 
-**Status**: Draft
+**Status**: Reconciliada com implementação (2026-07-16) — ver [clarify.md](./clarify.md)
 
 **Input**: Geração de calendário de conteúdo mensal com um clique para pequenos negócios locais, onde a IA executa todo o planejamento internamente.
 
@@ -92,9 +92,16 @@ Na tela de aprovação, o usuário vê um resumo (ex: "16 conteúdos, 8 Reels, 4
 
 ### Key Entities
 
-- **CampaignPlan**: Plano mensal gerado pela IA. Contém tenant_id, mês/ano, objetivo, status (draft, generating, completed, failed).
+- **CampaignPlan**: Plano mensal gerado pela IA. Contém tenant_id, mês/ano, objetivo, status (draft, active, completed, cancelled), metadata (summary por tipo de conteúdo).
 - **SocialPost**: Post individual dentro de um plano. Contém tipo (reel/carousel/image/stories), título, legenda, CTA, hashtags, prompt_imagem, data_agendada, status (draft/approved/scheduled/published).
-- **PlannerJob**: Job de geração. Contém tenant_id, status (pending/processing/completed/failed), progresso (0-100), passo_atual.
+- **PlannerJob**: Job de geração (in-memory Map no processo). Contém id, status (pending/running/generating/done/error), currentAgent, agentProgress[], planId.
+- **Pipeline de 10 Agentes** (`apps/api/src/agents/`): sequência que produz o plano — Context → Research → Analytics → Strategy → Planner → Copywriter → Creative → Quality (com até 2 retries) → Scheduler → Branding (gate de compliance). Cada agente consome o output do anterior; falha de qualidade ou compliance aborta o job com mensagem amigável.
+
+### Bugs conhecidos (reconciliação 2026-07-16)
+
+- **BUG-001** (P1): `POST /planner/generate` recebe `tenantId: 'current'` do frontend mas valida UUID → 400 sempre. Geração 100% quebrada. Fix: controller usa `req.tenant.tenantId`.
+- **BUG-002** (P1): rota `/calendario` não registrada — `CalendarioPage.tsx` órfã. Fix: registrar em router + Sidebar.
+- **BUG-003** (P1): `GET /planner/jobs/:jobId` sem tenant isolation. Fix: escopar job por tenant.
 
 ## Success Criteria *(mandatory)*
 

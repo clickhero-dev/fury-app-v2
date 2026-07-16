@@ -1,4 +1,4 @@
-import { LayoutDashboard, Megaphone, Palette, Settings, ChevronLeft, CreditCard, X, LogOut, Plug, BrainCircuit } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Palette, Settings, ChevronLeft, CreditCard, X, LogOut, Plug, BrainCircuit, CalendarDays } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -23,6 +23,7 @@ const navItems = [
   // ponytail: oculto até feature de orçamento smart estar pronta
   // { icon: Wallet, label: 'Orçamento Smart', path: '/orcamento-smart' },
   { icon: BrainCircuit, label: 'Planejador IA', path: '/planejador' },
+  { icon: CalendarDays, label: 'Calendário', path: '/calendario' },
   { icon: Palette, label: 'Estúdio', path: '/estudio' },
   { icon: Plug, label: 'Integrações', path: '/configuracoes/integracoes' },
   { icon: Settings, label: 'Configurações', path: '/configuracoes' },

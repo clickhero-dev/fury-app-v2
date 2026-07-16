@@ -9,6 +9,7 @@ export function startPlanGeneration(tenantId: string): JobStatus {
   const id = generateId();
   const status: JobStatus = {
     id,
+    tenantId,
     status: 'running',
     currentAgent: 'Context Agent',
     agentProgress: [{ name: 'Context Agent', status: 'running', pct: 5 }],
