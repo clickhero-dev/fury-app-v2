@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
-import { LayoutGrid, Image, Sparkles, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { LayoutGrid, Image, Sparkles, Film, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
 import type { Post, Plan } from '../types';
 
@@ -13,6 +13,7 @@ interface CalendarViewProps {
 const DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const TYPE_ICONS: Record<string, typeof Image> = {
   carousel: LayoutGrid,
+  reel: Film,
   image: Image,
   stories: Sparkles,
 };
@@ -125,7 +126,7 @@ export function CalendarView({ plan, onConfirm, confirmed }: CalendarViewProps) 
 
       {/* Post side panel */}
       {selectedPost && (
-        <PostSidePanel post={selectedPost} onClose={() => setSelectedPost(null)} onUpdate={() => {}} />
+        <PostSidePanel post={selectedPost} onClose={() => setSelectedPost(null)} onUpdate={(updated) => setSelectedPost(updated)} />
       )}
     </div>
   );

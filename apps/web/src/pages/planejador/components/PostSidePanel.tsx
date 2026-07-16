@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Copy, Check, LayoutGrid, Image, Sparkles } from 'lucide-react';
+import { X, Copy, Check, LayoutGrid, Image, Sparkles, Film } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useMutation } from '@tanstack/react-query';
 import api from '@/lib/api';
@@ -13,12 +13,14 @@ interface PostSidePanelProps {
 
 const postIcons: Record<string, typeof LayoutGrid> = {
   carousel: LayoutGrid,
+  reel: Film,
   image: Image,
   stories: Sparkles,
 };
 
 const postLabels: Record<string, string> = {
   carousel: 'Carrossel',
+  reel: 'Reels',
   image: 'Post',
   stories: 'Stories',
 };
@@ -27,6 +29,7 @@ const statusLabels: Record<string, string> = {
   draft: 'Rascunho',
   approved: 'Aprovado',
   rejected: 'Rejeitado',
+  confirmed: 'Confirmado',
   published: 'Publicado',
 };
 
@@ -34,17 +37,20 @@ const statusColors: Record<string, string> = {
   draft: 'text-text-tertiary bg-surface-secondary',
   approved: 'text-success bg-success/10',
   rejected: 'text-red-600 bg-red-50',
+  confirmed: 'text-green-600 bg-green-100',
   published: 'text-blue-600 bg-blue-50',
 };
 
 const typeBg: Record<string, string> = {
   carousel: 'bg-blue-100',
+  reel: 'bg-purple-100',
   stories: 'bg-pink-100',
   image: 'bg-success/10',
 };
 
 const typeText: Record<string, string> = {
   carousel: 'text-blue-600',
+  reel: 'text-purple-600',
   stories: 'text-pink-600',
   image: 'text-success',
 };
@@ -73,10 +79,8 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
 
   const aiEditMutation = useMutation({
     mutationFn: async (prompt: string) => {
-      const { data } = await api.patch(`/planner/posts/${post.id}`, {
-        caption: `${post.caption}\n\n[Editado via IA: ${prompt}]`,
-      });
-      return data as Post;
+      const { data } = await api.patch(`/planner/posts/${post.id}`, { prompt });
+      return data.data as Post;
     },
     onSuccess: (data) => {
       onUpdate(data);

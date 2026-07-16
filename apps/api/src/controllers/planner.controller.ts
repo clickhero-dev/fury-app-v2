@@ -7,6 +7,7 @@ import {
   getPlanById,
   confirmPlan,
   revalidatePlan,
+  editPostWithAI,
 } from '../services/planner.service.js';
 
 export async function generatePlan(req: Request, res: Response, next: NextFunction) {
@@ -52,5 +53,19 @@ export async function handleRevalidate(req: Request, res: Response, next: NextFu
     const { planId, ...updates } = req.body;
     const plan = await revalidatePlan(planId, tenantId, updates);
     res.json({ success: true, data: plan });
+  } catch (err) { next(err); }
+}
+
+const editPostSchema = z.object({
+  prompt: z.string().min(1).max(500),
+});
+
+export async function handleEditPost(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { prompt } = editPostSchema.parse(req.body);
+    const tenantId = req.tenant!.tenantId;
+    const postId = req.params.postId;
+    const updated = await editPostWithAI(postId, tenantId, prompt);
+    res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 }

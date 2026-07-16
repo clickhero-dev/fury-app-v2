@@ -14,9 +14,9 @@ Gerar calendário de conteúdo mensal com um clique para pequenos negócios loca
 
 **Language/Version**: TypeScript 5.x (backend + frontend)
 
-**Primary Dependencies**: Express.js (backend), React 18 + Vite (frontend), Drizzle ORM + pgvector (DB), BullMQ (job queue), OpenRouter/DeepSeek (LLM), @dnd-kit (drag-and-drop calendário), zod (validação)
+**Primary Dependencies**: Express.js (backend), React 18 + Vite (frontend), Drizzle ORM (DB), OpenRouter/DeepSeek (LLM), zod (validação)
 
-**Storage**: PostgreSQL 16 via Neon (prod) / Docker (dev) com extensão pgvector para embeddings (planejado, não implementado no MVP)
+**Storage**: PostgreSQL 16 via Neon (prod) / Docker (dev)
 
 **Testing**: Vitest (backend — 22 suites existentes), sem testes de frontend no MVP
 
@@ -26,7 +26,7 @@ Gerar calendário de conteúdo mensal com um clique para pequenos negócios loca
 
 **Performance Goals**: Geração do plano em < 60 segundos. Polling de progresso a cada 1.5s. Primeira exibição do calendário em < 200ms após geração.
 
-**Constraints**: Tema claro (light mode) da plataforma existente — o especificado "tema escuro" deve ser ignorado em favor da consistência com o brand kit existente (laranja #e8631a como cor de ação). Sem WebSocket/SSE — usar polling. Sem dependências novas além de @dnd-kit.
+**Constraints**: Tema escuro da plataforma (consistente com o design system existente). Sem WebSocket/SSE — usar polling.
 
 **Scale/Scope**: Dezenas de tenants (empresas locais), cada um com 1 plano mensal de 15-30 posts. Jobs de geração serializados por tenant.
 
@@ -40,7 +40,7 @@ Gerar calendário de conteúdo mensal com um clique para pequenos negócios loca
 | II. API Contracts & Validation | ✅ PASS | Zod schemas nos endpoints POST /api/planner/generate, GET /api/planner/jobs/:id, GET /api/planner/plans/:id, PATCH /api/planner/posts/:id. Responses seguem ApiResponse<T>. |
 | III. Test-First Quality Gates | ⚠️ VIOLATION (justified) | Testes adiados para pós-MVP. Feature é experimental e o ciclo de feedback do usuário é mais urgente. Cobertura será adicionada em PR separado. |
 | IV. AI Integration Discipline | ✅ PASS | Prompts estruturados com formato de saída explícito (response_format: json_object). Validação do output da IA antes de persistir. Fallback com mensagem de erro amigável. |
-| V. Simplicity & YAGNI | ✅ PASS | Zero dependências novas além de @dnd-kit. LangGraph removido do escopo. Sem stories no MVP. Sem WebSocket. Sem Redis adicional. |
+| V. Simplicity & YAGNI | ✅ PASS | Zero dependências novas além das já existentes. Pipeline linear (sem LangGraph). Sem WebSocket. Sem Redis adicional. |
 
 ## Project Structure
 
@@ -61,25 +61,27 @@ specs/002-planejador-ia/
 ```text
 packages/db/
 ├── src/schema.ts             # + campaignPlans, socialPosts tables
-└── migrations/               # + 0023_planner_tables.sql
+└── migrations/               # + 0023_planner_tables.sql, 0024_add_reel_post_type.sql
 
 apps/api/
-├── src/routes/planner.routes.ts       # 4 endpoints
+├── src/routes/planner.routes.ts       # 6 endpoints (POST generate, GET jobs, GET plans, POST confirm, POST revalidate, PATCH posts)
 ├── src/controllers/planner.controller.ts
-└── src/services/planner.service.ts    # LLM orchestration + job tracking
+├── src/services/planner.service.ts    # Pipeline orchestrator + AI edit
+├── src/agents/                       # 10 agentes (orchestrator.ts + 9 agent .ts + save.service.ts)
+└── src/__tests__/planner-controller.test.ts  # Regressão: tenantId + job isolation
 
 apps/web/
 ├── src/pages/planejador/
-│   ├── PlanejadorPage.tsx             # State machine (4 views)
+│   ├── PlanejadorPage.tsx             # State machine (4 views: idle/generating/review/confirmed)
+│   ├── CalendarioPage.tsx             # Página dedicada do calendário
 │   └── components/
-│       ├── IdleStatus.tsx             # Tela 1
-│       ├── GeneratingState.tsx        # Tela 2
-│       ├── PlanSummary.tsx            # Tela 3
-│       ├── CalendarView.tsx           # Tela 4
-│       └── PostSidePanel.tsx          # Tela 5+6
-├── src/lib/api.ts                     # VITE_API_URL fix
-├── src/router.tsx                     # + /planejador route
-└── src/components/Sidebar.tsx         # + nav item
+│       ├── IdleStatus.tsx             # Tela 1: checklist + botão gerar
+│       ├── GeneratingState.tsx        # Tela 2: progresso 10 agentes
+│       ├── PlanSummary.tsx            # Tela 3: resumo do plano
+│       ├── CalendarView.tsx           # Tela 4: calendário grid
+│       └── PostSidePanel.tsx          # Tela 5+6: painel lateral + editor IA
+├── src/router.tsx                     # + /planejador, /calendario
+└── src/components/Sidebar.tsx         # + nav items: Planejador IA, Calendário
 ```
 
 **Structure Decision**: Monorepo com 3 pacotes. Nova feature adiciona 8 arquivos de source + 1 migration. Sem modificação em pacotes existentes além de registro de rota, sidebar e barrel export.

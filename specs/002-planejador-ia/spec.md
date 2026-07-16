@@ -20,7 +20,7 @@ O dono de uma clínica/restaurante/academia acessa o Planejador, vê um resumo d
 
 **Acceptance Scenarios**:
 1. **Given** o usuário acessa o Planejador, **When** a página carrega, **Then** exibe resumo das configurações (empresa, Instagram, Facebook, produtos, objetivo, tom de voz) com checks verdes.
-2. **Given** tudo configurado, **When** o usuário clica em "Gerar planejamento", **Then** a tela de progresso da IA é exibida com 12 passos animados.
+2. **Given** tudo configurado, **When** o usuário clica em "Gerar planejamento", **Then** a tela de progresso da IA é exibida com 10 passos dos agentes.
 3. **Given** a IA concluiu o planejamento, **When** o progresso atinge 100%, **Then** exibe o resumo do plano (N conteúdos, Reels, Carrosséis, Posts, Stories).
 
 ---
@@ -81,19 +81,19 @@ Na tela de aprovação, o usuário vê um resumo (ex: "16 conteúdos, 8 Reels, 4
 
 - **FR-001**: Sistema DEVE exibir checklist de pré-requisitos (Instagram, Facebook, produtos, objetivo, tom de voz).
 - **FR-002**: Sistema DEVE gerar calendário mensal com um clique, sem formulários intermediários.
-- **FR-003**: Sistema DEVE exibir progresso da IA com 12 passos animados durante a geração.
-- **FR-004**: Sistema DEVE exibir resumo do plano (contagem por tipo de conteúdo + objetivo + período).
+- **FR-003**: Sistema DEVE exibir progresso da IA com 10 passos dos agentes durante a geração.
+- **FR-004**: Sistema DEVE exibir resumo do plano (contagem por tipo de conteúdo — Reels, Carrosséis, Posts, Stories — + objetivo + período).
 - **FR-005**: Sistema DEVE exibir calendário em grid com cards de conteúdo (ícone, tipo, título, status).
-- **FR-006**: Sistema DEVE permitir drag-and-drop para reorganizar conteúdos no calendário.
+- **FR-006**: 🚫 NÃO IMPLEMENTADO (MVP) — Sistema DEVE permitir drag-and-drop para reorganizar conteúdos no calendário.
 - **FR-007**: Sistema DEVE abrir painel lateral ao clicar em um conteúdo, sem trocar de página.
-- **FR-008**: Sistema DEVE permitir edição de conteúdo via chat IA com linguagem natural.
-- **FR-009**: Sistema DEVE permitir aprovação e agendamento em massa com um clique.
-- **FR-010**: Sistema DEVE exibir recomendações automáticas pós-agendamento.
+- **FR-008**: Sistema DEVE permitir edição de conteúdo via chat IA com linguagem natural (backend chama LLM via OpenRouter).
+- **FR-009**: Sistema DEVE permitir aprovação e agendamento em massa com um clique (agendamento real em plataforma Meta 🚫 NÃO IMPLEMENTADO).
+- **FR-010**: 🚫 NÃO IMPLEMENTADO (futuro) — Sistema DEVE exibir recomendações automáticas pós-agendamento.
 
 ### Key Entities
 
-- **CampaignPlan**: Plano mensal gerado pela IA. Contém tenant_id, mês/ano, objetivo, status (draft, active, completed, cancelled), metadata (summary por tipo de conteúdo).
-- **SocialPost**: Post individual dentro de um plano. Contém tipo (reel/carousel/image/stories), título, legenda, CTA, hashtags, prompt_imagem, data_agendada, status (draft/approved/scheduled/published).
+- **CampaignPlan**: Plano mensal gerado pela IA. Contém tenant_id, mês/ano, objetivo, status (draft, active, completed, cancelled), metadata (summary com reelsCount, carouselCount, imageCount, storiesCount + outputs dos agentes).
+- **SocialPost**: Post individual dentro de um plano. Contém tipo (reel/carousel/image/stories), título, legenda, CTA, hashtags, prompt_imagem, data_agendada, status (draft/approved/rejected/confirmed/published), dayIndex (1-31).
 - **PlannerJob**: Job de geração (in-memory Map no processo). Contém id, status (pending/running/generating/done/error), currentAgent, agentProgress[], planId.
 - **Pipeline de 10 Agentes** (`apps/api/src/agents/`): sequência que produz o plano — Context → Research → Analytics → Strategy → Planner → Copywriter → Creative → Quality (com até 2 retries) → Scheduler → Branding (gate de compliance). Cada agente consome o output do anterior; falha de qualidade ou compliance aborta o job com mensagem amigável.
 

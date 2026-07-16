@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components';
 import api from '@/lib/api';
 import { GeneratingState } from './components/GeneratingState';
+import { IdleStatus } from './components/IdleStatus';
 import { CalendarView } from './components/CalendarView';
 import { PlanSummary } from './components/PlanSummary';
 import type { Plan, JobStatus, ViewState } from './types';
@@ -104,9 +105,7 @@ export function PlanejadorPage() {
         )}
 
         {view === 'idle' && !generateMutation.isPending && (
-          <div className="rounded-xl bg-gray-800/40 border border-gray-700/50 p-12 text-center">
-            <p className="text-gray-500">Clique em "Gerar Plano" para iniciar o pipeline de 10 agentes</p>
-          </div>
+          <IdleStatus onGenerate={handleGenerate} isLoading={generateMutation.isPending} />
         )}
 
         {view === 'review' && plan && (

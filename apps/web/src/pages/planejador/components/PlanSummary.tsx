@@ -1,7 +1,8 @@
-import { Calendar, Image, LayoutGrid, Sparkles } from 'lucide-react';
+import { Calendar, Image, LayoutGrid, Sparkles, Film } from 'lucide-react';
 import type { Post } from '../types';
 
 interface SummaryData {
+  reelsCount?: number;
   carouselCount?: number;
   imageCount?: number;
   storiesCount?: number;
@@ -15,17 +16,32 @@ interface PlanSummaryProps {
     totalPosts: number;
     metadata: { summary?: SummaryData };
     posts: Post[];
+    periodStart?: string;
+    periodEnd?: string;
   };
   onViewCalendar: () => void;
 }
 
+function formatPeriod(start?: string, end?: string): string {
+  if (!start || !end) return '1 a 31 de julho de 2026';
+  const s = new Date(start);
+  const e = new Date(end);
+  const months = [
+    'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+    'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+  ];
+  return `${s.getDate()} a ${e.getDate()} de ${months[s.getMonth()]} de ${s.getFullYear()}`;
+}
+
 export function PlanSummary({ plan, onViewCalendar }: PlanSummaryProps) {
   const summary = plan.metadata?.summary ?? {};
+  const reels = summary.reelsCount ?? plan.posts.filter((p) => p.postType === 'reel').length;
   const carousels = summary.carouselCount ?? plan.posts.filter((p) => p.postType === 'carousel').length;
   const images = summary.imageCount ?? plan.posts.filter((p) => p.postType === 'image').length;
   const stories = summary.storiesCount ?? plan.posts.filter((p) => p.postType === 'stories').length;
 
   const items = [
+    { icon: Film, label: 'Reels', value: reels, color: 'text-purple-600 bg-purple-100' },
     { icon: LayoutGrid, label: 'Carrosséis', value: carousels, color: 'text-blue-600 bg-blue-100' },
     { icon: Image, label: 'Posts', value: images, color: 'text-success bg-success/10' },
     { icon: Sparkles, label: 'Stories', value: stories, color: 'text-pink-600 bg-pink-100' },
@@ -64,7 +80,7 @@ export function PlanSummary({ plan, onViewCalendar }: PlanSummaryProps) {
               {plan.totalPosts} conteúdos
             </p>
             <p className="text-sm text-text-tertiary">
-              Período: 1 a 31 de julho de 2026
+              Período: {formatPeriod(plan.periodStart, plan.periodEnd)}
             </p>
           </div>
         </div>

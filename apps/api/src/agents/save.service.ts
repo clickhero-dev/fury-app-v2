@@ -42,7 +42,7 @@ export async function savePlanToDb(input: savePlanToDbInput): Promise<string> {
         tenantId,
         planId: plan.id,
         platform: p.platform === 'both' ? 'instagram' : p.platform,
-        postType: p.postType === 'reel' ? 'image' as any : p.postType as any,
+        postType: p.postType as any,
         title: p.title,
         caption: copy?.caption ?? '',
         cta: copy?.cta ?? '',
