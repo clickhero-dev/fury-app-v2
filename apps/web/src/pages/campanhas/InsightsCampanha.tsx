@@ -253,7 +253,7 @@ export function InsightsCampanha() {
             {/* Metric cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <Card label="Investimento" value={fmtBRL(totals.spend)} />
-              <Card label="Resultados" value={fmtInt(totals.conversions)} />
+              <Card label="Pessoas" value={fmtInt(totals.conversions)} />
               <Card label="Cliques" value={fmtInt(totals.clicks)} />
             </div>
 
