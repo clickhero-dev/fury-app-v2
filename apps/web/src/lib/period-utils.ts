@@ -16,8 +16,8 @@ export const PERIOD_LABELS: Record<Period, string> = {
  * sempre no horário de Brasília.
  *
  * Regras:
- * - `today`: início e fim são ontem (dado de hoje é parcial na Meta).
- * - `last_7d`: D-7 até D-1 (exclui o dia atual, cujos dados ainda são parciais).
+ * - `today`: início e fim são ontem (dado de hoje ainda é parcial na Meta).
+ * - `last_7d`: últimos 7 dias até ontem (exclui o dia atual).
  * - `last_month`: do primeiro ao último dia do mês anterior.
  * - `this_month`: do dia 1 até ontem (dados de hoje ainda parciais).
  *
