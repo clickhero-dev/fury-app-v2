@@ -87,10 +87,12 @@ export function getConversionActionTypesForObjective(objective?: string | null):
 
   // OUTCOME_LEADS cobre tanto formularios de cadastro quanto campanhas de
   // mensagens/conversas (optimization_goal CONVERSATIONS, destination_type
-  // MESSENGER/WHATSAPP/INSTAGRAM_DIRECT). Quando a campanha tem actions de
-  // mensageria, esse e o resultado configurado e tem prioridade sobre 'lead'.
+  // MESSENGER/WHATSAPP/INSTAGRAM_DIRECT). Lead primeiro porque uma campanha
+  // de leads no site pode ter acoes de mensageria acidentais (ex.: alguem
+  // que clicou em "Enviar mensagem" na pagina) — se messageria viesse antes,
+  // essas acoes esconderiam o resultado real de leads.
   if (obj.includes('MESSAGE') || obj.includes('LEAD')) {
-    return [...MESSAGING_CONVERSION_ACTION_TYPES, ...LEAD_CONVERSION_ACTION_TYPES];
+    return [...LEAD_CONVERSION_ACTION_TYPES, ...MESSAGING_CONVERSION_ACTION_TYPES];
   }
   if (obj.includes('SALES')) {
     return PURCHASE_CONVERSION_ACTION_TYPES;
