@@ -5,7 +5,7 @@ export type Period = 'today' | 'last_7d' | 'this_month' | 'last_month';
 
 /** Labels em português para exibição no `PeriodSelector`. */
 export const PERIOD_LABELS: Record<Period, string> = {
-  today:      'Hoje',
+  today:      'Ontem',
   last_7d:    '7 dias',
   this_month: 'Este mês',
   last_month: 'Mês anterior',
