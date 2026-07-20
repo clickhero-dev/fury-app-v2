@@ -99,9 +99,14 @@ export function getConversionActionTypesForObjective(objective?: string | null):
     return TRAFFIC_CONVERSION_ACTION_TYPES;
   }
 
-  // Objetivo desconhecido: tenta as familias mais comuns, na ordem mais
-  // especifica -> mais generica.
+  // Objetivo desconhecido: tenta as familias mais comuns.
+  // ponytail: traffic primeiro (landing_page_view, link_click) porque o
+  // ecossistema FURY é focado em tráfego externo — visitas/cliques devem
+  // ser a métrica padrão de conversão. Se houver campanhas de mensagens
+  // no futuro e o fallback for insuficiente, passar objective
+  // explicitamente nos callers da função.
   return [
+    ...TRAFFIC_CONVERSION_ACTION_TYPES,
     ...MESSAGING_CONVERSION_ACTION_TYPES,
     ...LEAD_CONVERSION_ACTION_TYPES,
     ...PURCHASE_CONVERSION_ACTION_TYPES,
