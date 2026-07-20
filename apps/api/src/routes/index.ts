@@ -24,8 +24,7 @@ import { authMiddleware } from "../middleware/auth.middleware.js";
 import { tenantMiddleware } from "../middleware/tenant.middleware.js";
 import { checkSubscriptionActive } from "../middleware/checkSubscriptionActive.js";
 
-const AUTH_TENANT = [authMiddleware, tenantMiddleware];
-const AUTH_TENANT_SUB = [authMiddleware, tenantMiddleware];
+const AUTH_TENANT_SUB = [authMiddleware, tenantMiddleware, checkSubscriptionActive];
 
 const router = Router();
 

@@ -111,7 +111,8 @@ export function AuthenticatedShell() {
   } = useSubscription();
 
   const isExpired = useMemo(() => {
-    if (!subscription) return false;
+    // ponytail: no subscription = blocked (backoffice creates accounts with trial, so null is an error)
+    if (!subscription) return true;
 
     const now = new Date();
 

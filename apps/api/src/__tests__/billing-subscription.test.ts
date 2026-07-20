@@ -37,7 +37,9 @@ describe('checkSubscriptionActive middleware', () => {
     await checkSubscriptionActive(req, {} as Response, next);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(next).toHaveBeenCalledWith();
+    const err = (next as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(err.statusCode).toBe(403);
+    expect(err.code).toBe('NO_SUBSCRIPTION');
   });
 
   it('retorna 401 quando não há tenantId', async () => {

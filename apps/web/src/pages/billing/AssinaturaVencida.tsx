@@ -37,6 +37,12 @@ export function AssinaturaVencida() {
             </div>
           </div>
         </div>
+        <a
+          href="/planos"
+          className="mt-6 inline-block rounded-lg bg-brand px-6 py-3 text-sm font-semibold text-white hover:bg-brand-hover transition-colors"
+        >
+          Ver planos disponíveis
+        </a>
       </div>
     </div>
   );
