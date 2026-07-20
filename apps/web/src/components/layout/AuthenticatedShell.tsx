@@ -3,7 +3,6 @@ import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from '../Sidebar';
 import api from '../../lib/api';
-import { DEMO_CREDENTIALS } from '../../lib/constants';
 import { useSubscription } from '../../hooks/useBilling';
 import { useAppDispatch } from '../../store/hooks';
 import { setMetaId, setPlan } from '../../store/slices/authSlice';
@@ -20,7 +19,6 @@ export type ShellContext = {
  * Rotas que não devem disparar o redirecionamento de onboarding.
  * Billing é isento para que usuários sem conta Meta possam acessar planos e assinar.
  */
-const DEMO_USER_EMAILS = [DEMO_CREDENTIALS.email];
 const ONBOARDING_EXEMPT = ['/assinatura', '/planos'];
 
 /**
@@ -58,13 +56,7 @@ export function AuthenticatedShell() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
-  let currentUserEmail: string | null = null;
-  try {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    currentUserEmail = user?.email ?? null;
-  } catch { /* ignore */ }
-
-  const isDemoUser = currentUserEmail ? DEMO_USER_EMAILS.includes(currentUserEmail) : false;
+  const isDemoUser = false;
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const isSubscriptionExempt =

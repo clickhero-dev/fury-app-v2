@@ -250,3 +250,14 @@ html.dark .hover\:bg-blue-700:hover {
   background-color: #1d4ed8 !important;
 }
 
+/* === Amber colors in dark mode (Configurações faturamento trial card + wizard warnings) === */
+html.dark .bg-amber-50 {
+  background-color: color-mix(in srgb, #f59e0b 12%, var(--color-surface)) !important;
+}
+html.dark .border-amber-200 {
+  border-color: color-mix(in srgb, #f59e0b 25%, var(--color-border)) !important;
+}
+html.dark .text-amber-700 {
+  color: #fbbf24 !important;
+}
+

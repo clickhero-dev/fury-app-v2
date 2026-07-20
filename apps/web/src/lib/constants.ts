@@ -7,14 +7,3 @@ export const FURY_COLORS = {
   primary: '#E8631A',
   primaryDark: '#d45316',
 };
-
-/**
- * Credenciais de demonstração para acesso rápido em desenvolvimento.
- * Exibidas na tela de login para facilitar testes.
- *
- * ⚠️ Nunca usar em produção.
- */
-export const DEMO_CREDENTIALS = {
-  email: 'dev.fashion@fury.test',
-  password: 'Dev@12345',
-};

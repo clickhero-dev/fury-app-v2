@@ -6,7 +6,6 @@ import { z } from 'zod';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { useLogin } from '@/hooks/useLogin';
-import { DEMO_CREDENTIALS } from '@/lib/constants';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -36,7 +35,6 @@ export function LoginPage() {
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema as any),
@@ -51,12 +49,6 @@ export function LoginPage() {
     } catch (err) {
       setError(getFriendlyError(err));
     }
-  };
-
-  const fillDemo = () => {
-    setValue('email', DEMO_CREDENTIALS.email, { shouldValidate: false });
-    setValue('password', DEMO_CREDENTIALS.password, { shouldValidate: false });
-    setError('');
   };
 
   return (
@@ -164,39 +156,7 @@ export function LoginPage() {
             </Link>
           </p>
         </div>
-
-        {/* Demo credentials */}
-        <div className="mt-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-              Credenciais Demo
-            </span>
-            <span className="bg-[#EA580C] text-white text-xs px-2 py-0.5 rounded-full font-semibold">
-              DEMO
-            </span>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-gray-500 shrink-0">Email:</span>
-              <code className="font-mono text-xs bg-white border border-gray-200 rounded px-2 py-1 text-gray-700 truncate">
-                {DEMO_CREDENTIALS.email}
-              </code>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-gray-500 shrink-0">Senha:</span>
-              <code className="font-mono text-xs bg-white border border-gray-200 rounded px-2 py-1 text-gray-700">
-                {DEMO_CREDENTIALS.password}
-              </code>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={fillDemo}
-            className="mt-3 text-xs text-[#EA580C] underline cursor-pointer hover:text-[#D4520B] transition-colors"
-          >
-            Preencher automaticamente
-          </button>
-        </div>
+{/* Fim do card */}
 
       </div>
     </div>
