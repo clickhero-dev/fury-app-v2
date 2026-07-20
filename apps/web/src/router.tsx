@@ -168,7 +168,6 @@ export const router = createBrowserRouter([
       { path: '/assinatura', element: <Subscription /> },
       { path: '/orcamento-smart', element: <OrcamentoSmart /> },
       { path: '/components-demo', element: <ComponentsDemo /> },
-      { path: '/assinatura-vencida', element: <AssinaturaVencida /> },
     ],
   },
   {
