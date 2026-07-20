@@ -10,6 +10,9 @@ export function checkSubscriptionActive(
 ) {
   (async () => {
     try {
+      // ponytail: superadmin is exempt from plan checks
+      if (req.user?.role === 'superadmin') return next();
+
       const tenantId = req.tenant?.tenantId ?? req.user?.tenantId;
       if (!tenantId) return next(new AppError(401, 'UNAUTHORIZED', 'Tenant não encontrado'));
 
@@ -17,7 +20,7 @@ export function checkSubscriptionActive(
         where: eq(subscriptions.tenantId, tenantId),
       });
 
-      if (!sub) return next();
+      if (!sub) return next(new AppError(403, 'NO_SUBSCRIPTION', 'Nenhuma assinatura encontrada. Contate o suporte.'));
 
       const now = new Date();
 
