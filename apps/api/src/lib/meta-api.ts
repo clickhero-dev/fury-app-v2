@@ -85,6 +85,10 @@ export interface MetaBusiness {
 
 interface MetaBusinessesResponse {
   data: MetaBusiness[];
+  paging?: {
+    cursors: { before: string; after: string };
+    next?: string;
+  };
 }
 
 interface MetaUserProfileResponse {
@@ -157,17 +161,27 @@ export async function exchangeForLongLivedToken(params: {
 }
 
 export async function getUserBusinesses(accessToken: string): Promise<MetaBusiness[]> {
-  const url = new URL(`${META_GRAPH_BASE_URL}/me/businesses`);
-  url.searchParams.set('fields', 'id,name');
-  url.searchParams.set('access_token', accessToken);
+  const all: MetaBusiness[] = [];
+  let after: string | undefined;
 
-  const response = await fetch(url, { method: 'GET' });
-  const payload = await parseMetaResponse<MetaBusinessesResponse>(
-    response,
-    'Falha ao buscar Business Managers no Meta.'
-  );
+  do {
+    const url = new URL(`${META_GRAPH_BASE_URL}/me/businesses`);
+    url.searchParams.set('fields', 'id,name');
+    url.searchParams.set('limit', '100');
+    url.searchParams.set('access_token', accessToken);
+    if (after) url.searchParams.set('after', after);
 
-  return payload.data || [];
+    const response = await fetch(url, { method: 'GET' });
+    const payload = await parseMetaResponse<MetaBusinessesResponse>(
+      response,
+      'Falha ao buscar Business Managers no Meta.'
+    );
+
+    all.push(...(payload.data || []));
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return all;
 }
 
 export async function getBusinessAdAccounts(businessId: string, accessToken: string): Promise<MetaAdAccount[]> {

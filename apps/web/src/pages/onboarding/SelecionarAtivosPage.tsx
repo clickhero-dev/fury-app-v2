@@ -206,6 +206,7 @@ export function SelecionarAtivosPage() {
   const [businessIds, setBusinessIds] = useState<string[]>([]);
   const [pageIds, setPageIds] = useState<string[]>([]);
   const [adAccountIds, setAdAccountIds] = useState<string[]>([]);
+  const [businessPage, setBusinessPage] = useState(0);
 
   function toggle(list: string[], id: string, setter: (value: string[]) => void) {
     setter(list.includes(id) ? list.filter((item) => item !== id) : [...list, id]);
@@ -284,6 +285,7 @@ export function SelecionarAtivosPage() {
 
   function handleBack() {
     setSubStep((current) => Math.max(current - 1, 1));
+    setBusinessPage(0);
   }
 
   return (
@@ -326,8 +328,9 @@ export function SelecionarAtivosPage() {
                   description="Sua conta Meta conectada não tem acesso a nenhuma Business Manager."
                 />
               ) : (
+                <>
                 <div className="space-y-3">
-                  {businesses.map((business) => (
+                  {businesses.slice(businessPage * 10, businessPage * 10 + 10).map((business) => (
                     <CheckboxCard
                       key={business.id}
                       checked={businessIds.includes(business.id)}
@@ -337,6 +340,30 @@ export function SelecionarAtivosPage() {
                     />
                   ))}
                 </div>
+                {businesses.length > 10 && (
+                  <div className="flex items-center justify-center gap-3 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => setBusinessPage((p) => Math.max(0, p - 1))}
+                      disabled={businessPage === 0}
+                      className="text-[#EA580C] font-medium disabled:text-[#D1D5DB] disabled:cursor-not-allowed hover:underline"
+                    >
+                      ← Anterior
+                    </button>
+                    <span className="text-[#6E7681]">
+                      {businessPage * 10 + 1}–{Math.min(businessPage * 10 + 10, businesses.length)} de {businesses.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setBusinessPage((p) => p + 1)}
+                      disabled={businessPage * 10 + 10 >= businesses.length}
+                      className="text-[#EA580C] font-medium disabled:text-[#D1D5DB] disabled:cursor-not-allowed hover:underline"
+                    >
+                      Próxima →
+                    </button>
+                  </div>
+                )}
+                </>
               )}
 
               <Button
