@@ -114,7 +114,7 @@ export function RegisterPage() {
   // Step 2: OTP Verification
   if (step === 2) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center px-4">
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="w-full max-w-[400px]">
 
           {/* Logo + tagline */}
@@ -213,7 +213,7 @@ export function RegisterPage() {
 
   // Step 1: Registration Form
   return (
-    <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-[400px]">
 
         {/* Logo + tagline */}

@@ -57,3 +57,12 @@ T001 (backend independente) → T002 (frontend depende de T001) → T003 (docs, 
 ## Ordem (bug fix)
 
 T004 (backend + teste, independente do frontend) — pode rodar em paralelo com T001/T002/T003.
+
+## Phase 1: Convergence
+
+- [ ] T005 CRITICAL — Adicionar testes unitários (TDD) para `confirmPlan`, `editPostWithAI`, `revalidatePlan`, `startPlanGeneration` em `planner.service.ts` per Constitution III (missing)
+- [ ] T006 — Descomentar itens "Planejador IA" e "Calendário" na Sidebar.tsx ou documentar decisão de ocultação no plan.md (contradicts)
+- [ ] T007 — FR-004: exibir resumo do plano no CalendarView (reaproveitar PlanSummary.tsx ou integrar contagem no approval bar) (partial)
+- [ ] T008 — Adicionar try/catch com feedback de erro em `handleConfirm` no CalendarioPage.tsx (partial)
+- [ ] T009 — US2/AC2: adicionar indicador de status (ponto/ícone) nos cards do CalendarView (partial)
+- [ ] T010 — Remover `'review' | 'confirmed'` do tipo ViewState em types.ts se não forem usar no futuro (unrequested)

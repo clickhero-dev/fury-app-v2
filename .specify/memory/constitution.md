@@ -1,4 +1,20 @@
 <!--
+Sync Impact Report:
+- Version change: 1.1.0 → 1.2.0 (MINOR: new principle + expanded guidance)
+- Modified principles:
+  - III. Test-First Quality Gates — expanded: added Testable Design subsection (DI, no hardcoded singletons).
+- Added sections:
+  - VII. Layer Separation & Code Quality — hierarchy (routes → controllers → services → data access), function size/naming rules, single-responsibility files.
+- Removed sections: N/A
+- Rationale: Request to prioritize testability (design-level), layer separation, and code readability/maintainability across the project.
+- Templates requiring updates:
+  - .specify/templates/plan-template.md — Constitution Check table auto-includes new principles; no change needed.
+  - .specify/templates/spec-template.md — No constitutional references; no change needed.
+  - .specify/templates/tasks-template.md — No constitutional references; no change needed.
+- Follow-up TODOs: none.
+-->
+
+<!--
   Sync Impact Report:
   - Version change: 1.0.0 → 1.1.0 (MINOR: new principle + expanded guidance)
   - Modified principles:
@@ -53,6 +69,24 @@ considerado incompleto — o teste é a garantia de que ele não volta.
 Erros de tipo/contrato são cobertos pelo gate de compilação (Princípio VI);
 lógica de comportamento é coberta por teste unitário.
 
+#### Testable Design
+
+Todo service, controller e middleware DEVE aceitar suas dependências via
+parâmetros (injeção de dependência), evitando imports diretos de singletons
+no módulo. `vi.mock` no nível do módulo é aceitável para fronteiras de
+integração (DB, HTTP externo), não para dependências intra-aplicação. Nada de
+`new Service()` hardcoded ou `import { db }` dentro de lógica de negócio —
+dependências são injetadas por parâmetro ou construtor. O design para
+testabilidade é tão obrigatório quanto o teste em si: código que SÓ pode ser
+testado com hacks de mocking (`vi.mock` para tudo, módulo reescrito inteiro)
+é código mal estruturado e DEVE ser refatorado.
+
+**Rationale**: Código que não foi projetado para ser testado produz testes
+frágeis que quebram por razões erradas (mudança de import, mudança de
+assinatura). Testes frágeis são abandonados — e código sem teste volta a ser
+código quebradiço. O custo de injetar dependências é zero comparado ao custo
+de debuggar em produção.
+
 **Rationale**: Ad campaign automation involves real money. Regressions
 in targeting, budgeting, or creative delivery have direct financial
 impact on clients. Um bug que já aconteceu uma vez, sem teste, é um bug
@@ -100,6 +134,37 @@ rodava os comandos certos, mas não era gate de merge — um commit quebrado
 passou. Deploy quebrado por erro de compilação é 100% evitável e
 inaceitável.
 
+### VII. Layer Separation & Code Quality
+
+A base de código segue uma hierarquia de camadas estrita — **rotas →
+controllers → serviços → acesso a dados** — onde cada camada tem uma
+responsabilidade única e nomeada:
+
+- **Rotas**: Mapeamento de URL e middleware wiring apenas. Zero lógica de
+  negócio.
+- **Controllers**: Parse de request, formatação de response, tratamento de
+  erro. Zero acesso a dados direto.
+- **Serviços**: Lógica de negócio e orquestração. Zero HTTP ou roteamento.
+- **Acesso a Dados** (queries Drizzle, chamadas de API externa): Isolado em
+  serviços ou funções dedicadas. Zero decisão de negócio.
+
+Funções DEVEM ser pequenas o suficiente para ter um nome claro (preferência
+< 40 linhas, limite rígido de 80). Nomes DEVEM revelar intenção — evite
+nomes genéricos como `process`, `handle`, `doStuff`. Comentários explicam
+**POR QUÊ**, não **O QUÊ** — o código já diz O QUÊ.
+
+Cada arquivo DEVE ter exatamente uma responsabilidade clara. Arquivos com
+camadas misturadas (um controller que também faz query no DB, um serviço que
+também formata resposta HTTP) são falha de code review e DEVEM ser
+recusados.
+
+**Rationale**: Camadas misturadas produzem código impossível de testar em
+isolamento, difícil de navegar e que exige reescrita completa quando um
+requisito muda. Um controller que também faz SQL trava o teste de controller
+num setup de DB — viola o princípio de testabilidade. A hierarquia de
+camadas é o que permite trocar ORM, framework ou protocolo HTTP sem tocar na
+lógica de negócio, e vice-versa.
+
 ## Security Standards
 
 - **RLS**: Enabled on all PostgreSQL tables with `tenant_id` policy.
@@ -144,4 +209,4 @@ principles before contributing.
 Use `CLAUDE.md` for runtime development guidance (RTK, security
 agent, QA agent commands).
 
-**Version**: 1.1.0 | **Ratified**: 2026-07-02 | **Last Amended**: 2026-07-16
+**Version**: 1.2.0 | **Ratified**: 2026-07-02 | **Last Amended**: 2026-07-20
