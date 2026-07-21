@@ -4,6 +4,7 @@ import {
   getInstagramAccountInsights,
   getInstagramMedia,
   getInstagramMediaInsights,
+  getUserFacebookPages,
   type InstagramMediaInsights,
 } from '../lib/meta-api.js';
 import { decryptMetaToken } from '../utils/crypto.js';
@@ -73,7 +74,20 @@ export async function getInstagramDashboardInsights(
 
   try {
     const assetSelection = await getResolvedTenantAssetSelection(tenantId);
-    const selectedPage = assetSelection.pages.find((page) => page.instagramUserId);
+    let selectedPage = assetSelection.pages.find((page) => page.instagramUserId);
+
+    // ponytail: se a página selecionada não tem Instagram, busca em TODAS as
+    // páginas do usuário. O usuário pode ter selecionado uma página sem
+    // Instagram Business, mas ter o Instagram conectado em outra página.
+    if (!selectedPage?.instagramUserId) {
+      const allPages = await getUserFacebookPages(accessToken, { includeWhatsApp: false });
+      const fallback = allPages.find((page) => page.instagramUserId);
+      console.log(
+        `[Instagram] tenant=${tenantId} selectedPage sem Instagram (IDs: ${assetSelection.pages.map(p => p.pageId).join(',')}), ` +
+        `fallback: ${fallback ? `page=${fallback.pageId} igUserId=${fallback.instagramUserId}` : 'nenhuma página com Instagram'}`
+      );
+      selectedPage = fallback;
+    }
 
     if (!selectedPage?.instagramUserId) {
       return null;
