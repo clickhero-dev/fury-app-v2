@@ -1,13 +1,20 @@
+
 /**
  * Email templates for FURY application.
  * All templates use table-based layouts with inline styles for maximum email client compatibility.
  */
 
-const BRAND_COLOR = '#1e40af'; // Professional blue
-const TEXT_PRIMARY = '#1f2937'; // Dark gray
-const TEXT_SECONDARY = '#6b7280'; // Medium gray
-const BG_LIGHT = '#f9fafb'; // Very light gray
-const BORDER_COLOR = '#e5e7eb'; // Light border
+const BRAND_COLOR = '#E8601C'; // FURY app orange — matched from the live login screen
+const FONT = "'Segoe UI', Arial, Helvetica, sans-serif";
+const TEXT_PRIMARY = '#3c3c3c';
+const TEXT_SECONDARY = '#888888';
+const FOOTER_TITLE_COLOR = '#222222';
+const FOOTER_TEXT_COLOR = '#aaaaaa';
+const SHELL_BG = '#eceff3';
+const BODY_BORDER = '#d6dae1';
+const FOOTER_BG = '#f7f8fa';
+const FOOTER_BORDER = '#e0e3e8';
+const OTP_BG = '#fdf8f4';
 
 function getBaseTemplate(content: string): string {
   return `
@@ -18,32 +25,32 @@ function getBaseTemplate(content: string): string {
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Click Hero</title>
     </head>
-    <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; background-color: ${BG_LIGHT};">
-      <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: ${BG_LIGHT};">
+    <body style="margin: 0; padding: 0; font-family: ${FONT}; background-color: ${SHELL_BG};">
+      <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: ${SHELL_BG};">
         <tr>
-          <td style="padding: 20px 0;">
-            <table role="presentation" style="width: 100%; max-width: 600px; margin: 0 auto; border-collapse: collapse; background-color: white; border: 1px solid ${BORDER_COLOR};">
+          <td style="padding: 48px 20px;">
+            <table role="presentation" style="width: 100%; max-width: 600px; margin: 0 auto; border-collapse: collapse; background-color: white; border: 1px solid ${BODY_BORDER};">
               <!-- Header -->
               <tr style="background-color: ${BRAND_COLOR};">
-                <td style="padding: 30px 20px; text-align: center;">
-                  <span style="color: white; font-size: 24px; font-weight: bold; letter-spacing: 1px;">Click Hero</span>
+                <td style="padding: 26px 40px; text-align: center;">
+                  <span style="color: #ffffff; font-size: 21px; font-weight: 700; font-family: ${FONT}; letter-spacing: 0.05em;">Click Hero</span>
                 </td>
               </tr>
 
               <!-- Content -->
               <tr>
-                <td style="padding: 30px 20px; color: ${TEXT_PRIMARY}; font-size: 16px; line-height: 1.6;">
+                <td style="padding: 38px 40px 40px 40px;">
                   ${content}
                 </td>
               </tr>
 
               <!-- Footer -->
-              <tr style="border-top: 1px solid ${BORDER_COLOR}; background-color: ${BG_LIGHT};">
-                <td style="padding: 20px; text-align: center; color: ${TEXT_SECONDARY}; font-size: 13px; line-height: 1.5;">
-                  <p style="margin: 0 0 10px 0;">
-                    <strong style="color: ${TEXT_PRIMARY};">Equipe Click Hero</strong>
+              <tr style="border-top: 1px solid ${FOOTER_BORDER}; background-color: ${FOOTER_BG};">
+                <td style="padding: 22px 40px; text-align: center;">
+                  <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: 700; color: ${FOOTER_TITLE_COLOR}; font-family: ${FONT};">
+                    Equipe Click Hero
                   </p>
-                  <p style="margin: 0; font-style: italic;">
+                  <p style="margin: 0; font-size: 12px; color: ${FOOTER_TEXT_COLOR}; font-family: ${FONT};">
                     Este é um email automático. Não responda diretamente a este email.
                   </p>
                 </td>
@@ -57,31 +64,57 @@ function getBaseTemplate(content: string): string {
   `;
 }
 
-export function otpEmailTemplate(otp: string): string {
-  const content = `
-    <h2 style="margin: 0 0 20px 0; color: ${BRAND_COLOR}; font-size: 24px; font-weight: bold;">
-      Código de Verificação
-    </h2>
+function ctaButton(url: string, label: string): string {
+  return `
+    <table role="presentation" style="border-collapse: collapse; margin: 32px auto 30px auto;">
+      <tr>
+        <td style="background-color: ${BRAND_COLOR}; padding: 3px; border-radius: 8px;">
+          <table role="presentation" style="border-collapse: collapse;">
+            <tr>
+              <td style="background-color: ${BRAND_COLOR}; border: 2px solid rgba(255,255,255,0.3); border-radius: 6px;">
+                <a href="${url}" style="display: inline-block; color: #ffffff; font-size: 13px; font-weight: 700; font-family: ${FONT}; text-transform: uppercase; letter-spacing: 0.12em; padding: 14px 48px; text-decoration: none;">
+                  ${label}
+                </a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
+}
 
-    <p style="margin: 0 0 10px 0; color: ${TEXT_PRIMARY};">
+export function otpEmailTemplate(otp: string): string {
+  const digitsHtml = otp
+    .split('')
+    .map(
+      (d) =>
+        `<span style="display: inline-block; font-size: 38px; font-weight: 700; color: ${BRAND_COLOR}; font-family: ${FONT}; margin: 0 10px;">${d}</span>`
+    )
+    .join('');
+
+  const content = `
+    <p style="margin: 0 0 22px 0; font-size: 13px; font-weight: 500; font-family: ${FONT}; color: ${BRAND_COLOR}; text-transform: uppercase; letter-spacing: 0.2em; line-height: 1.4; text-align: center;">
+      Código de Verificação
+    </p>
+
+    <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.75; color: ${TEXT_PRIMARY}; font-family: ${FONT}; text-align: left;">
       Seu código OTP para verificação de conta é:
     </p>
 
-    <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 25px 0;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 0 0 28px 0;">
       <tr>
-        <td style="padding: 20px; background-color: ${BG_LIGHT}; border: 2px solid ${BRAND_COLOR}; text-align: center;">
-          <div style="font-size: 48px; font-weight: bold; color: ${BRAND_COLOR}; letter-spacing: 8px; word-spacing: 8px; font-family: 'Courier New', monospace;">
-            ${otp.split('').join(' ')}
-          </div>
+        <td style="border: 2px solid ${BRAND_COLOR}; border-radius: 4px; background-color: ${OTP_BG}; padding: 28px 16px; text-align: center;">
+          ${digitsHtml}
         </td>
       </tr>
     </table>
 
-    <p style="margin: 0 0 15px 0; color: ${TEXT_PRIMARY};">
-      <strong>Importante:</strong> Este código expira em 10 minutos.
+    <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.75; color: ${TEXT_PRIMARY}; font-family: ${FONT}; text-align: left;">
+      <strong style="font-weight: 700; color: #1a1a1a;">Importante:</strong> Este código expira em 10 minutos.
     </p>
 
-    <p style="margin: 0; color: ${TEXT_SECONDARY}; font-size: 14px;">
+    <p style="margin: 0; font-size: 13px; line-height: 1.75; color: ${TEXT_SECONDARY}; font-family: ${FONT}; text-align: left;">
       Nunca compartilhe este código com ninguém. A equipe Click Hero nunca pedirá seu código OTP por email ou telefone.
     </p>
   `;
@@ -93,25 +126,17 @@ export function welcomeEmailTemplate(name: string): string {
   const appUrl = process.env.APP_URL || 'https://app.clickhero.com';
 
   const content = `
-    <h2 style="margin: 0 0 20px 0; color: ${BRAND_COLOR}; font-size: 24px; font-weight: bold;">
+    <p style="margin: 0 0 22px 0; font-size: 13px; font-weight: 500; font-family: ${FONT}; color: ${BRAND_COLOR}; text-transform: uppercase; letter-spacing: 0.2em; line-height: 1.4; text-align: center;">
       Bem-vindo ao FURY, ${name}!
-    </h2>
+    </p>
 
-    <p style="margin: 0 0 15px 0; color: ${TEXT_PRIMARY};">
+    <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.75; color: ${TEXT_PRIMARY}; font-family: ${FONT}; text-align: left;">
       Sua conta foi criada com sucesso. Você está pronto para começar a gerenciar suas campanhas de publicidade e potencializar seus resultados com FURY.
     </p>
 
-    <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
-      <tr>
-        <td style="padding: 0; text-align: center;">
-          <a href="${appUrl}" style="display: inline-block; background-color: ${BRAND_COLOR}; color: white; padding: 14px 32px; text-decoration: none; font-weight: bold; font-size: 16px;">
-            Acessar Dashboard
-          </a>
-        </td>
-      </tr>
-    </table>
+    ${ctaButton(appUrl, 'Acessar Dashboard')}
 
-    <p style="margin: 0; color: ${TEXT_SECONDARY}; font-size: 14px;">
+    <p style="margin: 0; font-size: 13px; line-height: 1.75; color: ${TEXT_SECONDARY}; font-family: ${FONT}; text-align: center;">
       Se tiver dúvidas ou precisar de suporte, nossa equipe está aqui para ajudar.
     </p>
   `;
@@ -123,25 +148,17 @@ export function passwordResetConfirmationTemplate(): string {
   const loginUrl = process.env.APP_URL ? `${process.env.APP_URL}/login` : 'https://app.clickhero.com/login';
 
   const content = `
-    <h2 style="margin: 0 0 20px 0; color: ${BRAND_COLOR}; font-size: 24px; font-weight: bold;">
+    <p style="margin: 0 0 22px 0; font-size: 13px; font-weight: 500; font-family: ${FONT}; color: ${BRAND_COLOR}; text-transform: uppercase; letter-spacing: 0.2em; line-height: 1.4; text-align: center;">
       Sua Senha Foi Redefinida
-    </h2>
-
-    <p style="margin: 0 0 15px 0; color: ${TEXT_PRIMARY};">
-      Sua senha foi alterada com sucesso. Se você não realizou esta mudança, altere sua senha imediatamente fazendo login em sua conta.
     </p>
 
-    <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 30px 0;">
-      <tr>
-        <td style="padding: 0; text-align: center;">
-          <a href="${loginUrl}" style="display: inline-block; background-color: ${BRAND_COLOR}; color: white; padding: 14px 32px; text-decoration: none; font-weight: bold; font-size: 16px;">
-            Fazer Login
-          </a>
-        </td>
-      </tr>
-    </table>
+    <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.75; color: ${TEXT_PRIMARY}; font-family: ${FONT}; text-align: center;">
+      Sua senha foi alterada com sucesso.
+    </p>
 
-    <p style="margin: 0; color: ${TEXT_SECONDARY}; font-size: 14px;">
+    ${ctaButton(loginUrl, 'Fazer Login')}
+
+    <p style="margin: 0; font-size: 13px; line-height: 1.75; color: ${TEXT_SECONDARY}; font-family: ${FONT}; text-align: center;">
       Se você não realizou esta alteração de senha e sente que sua conta pode ter sido comprometida, entre em contato conosco imediatamente.
     </p>
   `;
