@@ -1,17 +1,17 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import api from '@/lib/api';
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import api from "@/lib/api";
 
 // ─── Progress steps (etapa do onboarding) ──────────────────────────────────────
 
 const onboardingSteps = [
-  { label: 'Conectar Meta' },
-  { label: 'Selecionar Conta' },
-  { label: 'Definir Meta' },
-  { label: 'Pronto' },
+  { label: "Conectar Meta" },
+  { label: "Selecionar Conta" },
+  { label: "Definir Meta" },
+  { label: "Pronto" },
 ];
 
 function ProgressSteps({ current }: { current: number }) {
@@ -25,12 +25,18 @@ function ProgressSteps({ current }: { current: number }) {
             <div className="flex flex-col items-center gap-1.5">
               <div
                 className={[
-                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors',
-                  done || active ? 'bg-[#EA580C] text-white' : 'bg-[#E5E7EB] text-[#9CA3AF]',
-                ].join(' ')}
+                  "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors",
+                  done || active
+                    ? "bg-[#EA580C] text-white"
+                    : "bg-[#E5E7EB] text-[#9CA3AF]",
+                ].join(" ")}
               >
                 {done ? (
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <svg
+                    className="w-4 h-4"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
                     <path
                       fillRule="evenodd"
                       d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
@@ -43,9 +49,9 @@ function ProgressSteps({ current }: { current: number }) {
               </div>
               <span
                 className={[
-                  'text-xs font-semibold whitespace-nowrap',
-                  active || done ? 'text-[#EA580C]' : 'text-[#9CA3AF]',
-                ].join(' ')}
+                  "text-xs font-semibold whitespace-nowrap",
+                  active || done ? "text-[#EA580C]" : "text-[#9CA3AF]",
+                ].join(" ")}
               >
                 {step.label}
               </span>
@@ -53,9 +59,9 @@ function ProgressSteps({ current }: { current: number }) {
             {i < onboardingSteps.length - 1 && (
               <div
                 className={[
-                  'w-12 h-0.5 mb-5 mx-2',
-                  i < current ? 'bg-[#EA580C]' : 'bg-[#E5E7EB]',
-                ].join(' ')}
+                  "w-12 h-0.5 mb-5 mx-2",
+                  i < current ? "bg-[#EA580C]" : "bg-[#E5E7EB]",
+                ].join(" ")}
               />
             )}
           </div>
@@ -68,10 +74,10 @@ function ProgressSteps({ current }: { current: number }) {
 // ─── Sub-steps do fluxo cascateado ─────────────────────────────────────────────
 
 const SUB_STEPS = [
-  { label: 'Business Managers' },
-  { label: 'Contas de Anúncio' },
-  { label: 'Páginas' },
-  { label: 'Resumo' },
+  { label: "Business Managers" },
+  { label: "Contas de Anúncio" },
+  { label: "Páginas" },
+  { label: "Resumo" },
 ];
 
 function SubStepIndicator({ current }: { current: number }) {
@@ -85,12 +91,12 @@ function SubStepIndicator({ current }: { current: number }) {
           <span
             key={step.label}
             className={cn(
-              'text-xs font-semibold px-2.5 py-1 rounded-full transition-colors',
+              "text-xs font-semibold px-2.5 py-1 rounded-full transition-colors",
               isActive
-                ? 'bg-[#EA580C] text-white'
+                ? "bg-[#EA580C] text-white"
                 : isDone
-                  ? 'bg-orange-50 text-[#EA580C]'
-                  : 'bg-[#F3F4F6] text-[#9CA3AF]'
+                  ? "bg-orange-50 text-[#EA580C]"
+                  : "bg-[#F3F4F6] text-[#9CA3AF]",
             )}
           >
             {stepNumber}. {step.label}
@@ -138,7 +144,7 @@ function CheckboxCard({
   checked: boolean;
   title: string;
   subtitle?: string;
-  badge?: { label: string; tone: 'green' | 'gray' };
+  badge?: { label: string; tone: "green" | "gray" };
   onClick: () => void;
 }) {
   return (
@@ -146,16 +152,16 @@ function CheckboxCard({
       type="button"
       onClick={onClick}
       className={cn(
-        'w-full text-left p-4 rounded-2xl border-2 transition-all duration-150 flex items-center gap-4',
+        "w-full text-left p-4 rounded-2xl border-2 transition-all duration-150 flex items-center gap-4",
         checked
-          ? 'border-[#EA580C] bg-[#FFF7F4]'
-          : 'border-[#E5E7EB] bg-white hover:border-[#EA580C]/40 hover:bg-[#FFF7F4]/50'
+          ? "border-[#EA580C] bg-[#FFF7F4]"
+          : "border-[#E5E7EB] bg-white hover:border-[#EA580C]/40 hover:bg-[#FFF7F4]/50",
       )}
     >
       <div
         className={cn(
-          'w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-colors',
-          checked ? 'border-[#EA580C] bg-[#EA580C]' : 'border-[#D1D5DB]'
+          "w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-colors",
+          checked ? "border-[#EA580C] bg-[#EA580C]" : "border-[#D1D5DB]",
         )}
       >
         {checked && <Check className="w-3.5 h-3.5 text-white" />}
@@ -163,14 +169,18 @@ function CheckboxCard({
 
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-[#1C1C1E] truncate">{title}</p>
-        {subtitle && <p className="text-xs text-[#6E7681] mt-0.5">{subtitle}</p>}
+        {subtitle && (
+          <p className="text-xs text-[#6E7681] mt-0.5">{subtitle}</p>
+        )}
       </div>
 
       {badge && (
         <span
           className={cn(
-            'flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full',
-            badge.tone === 'green' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
+            "flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full",
+            badge.tone === "green"
+              ? "bg-green-50 text-green-700"
+              : "bg-gray-100 text-gray-500",
           )}
         >
           {badge.label}
@@ -180,7 +190,13 @@ function CheckboxCard({
   );
 }
 
-function EmptyState({ title, description }: { title: string; description: string }) {
+function EmptyState({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
   return (
     <div className="bg-[#FFF7F4] border border-[#FDDCCC] rounded-2xl p-6 text-center">
       <p className="text-[#1C1C1E] font-semibold">{title}</p>
@@ -208,15 +224,22 @@ export function SelecionarAtivosPage() {
   const [adAccountIds, setAdAccountIds] = useState<string[]>([]);
   const [businessPage, setBusinessPage] = useState(0);
 
-  function toggle(list: string[], id: string, setter: (value: string[]) => void) {
-    setter(list.includes(id) ? list.filter((item) => item !== id) : [...list, id]);
+  function toggle(
+    list: string[],
+    id: string,
+    setter: (value: string[]) => void,
+  ) {
+    setter(
+      list.includes(id) ? list.filter((item) => item !== id) : [...list, id],
+    );
   }
 
   // ── Step 1: Business Managers ─────────────────────────────────────────────────
   const businessesQuery = useQuery({
-    queryKey: ['meta-businesses'],
+    queryKey: ["meta-businesses"],
     queryFn: async () => {
-      const res = await api.get<ApiListResponse<MetaBusinessOption>>('/meta/businesses');
+      const res =
+        await api.get<ApiListResponse<MetaBusinessOption>>("/meta/businesses");
       return res.data.data;
     },
     staleTime: 0,
@@ -226,11 +249,14 @@ export function SelecionarAtivosPage() {
 
   // ── Step 2: Contas de Anúncio (filtradas pelas BMs selecionadas) ─────────────────
   const adAccountsQuery = useQuery({
-    queryKey: ['meta-adaccounts-by-business', businessIds],
+    queryKey: ["meta-adaccounts-by-business", businessIds],
     queryFn: async () => {
-      const res = await api.post<ApiListResponse<MetaAdAccountOption>>('/meta/adaccounts-by-business', {
-        businessIds,
-      });
+      const res = await api.post<ApiListResponse<MetaAdAccountOption>>(
+        "/meta/adaccounts-by-business",
+        {
+          businessIds,
+        },
+      );
       return res.data.data;
     },
     enabled: subStep >= 2 && businessIds.length > 0,
@@ -241,9 +267,12 @@ export function SelecionarAtivosPage() {
 
   // ── Step 3: Páginas (filtradas pelas BMs selecionadas) ──────────────────────────
   const pagesQuery = useQuery({
-    queryKey: ['meta-pages-by-business', businessIds],
+    queryKey: ["meta-pages-by-business", businessIds],
     queryFn: async () => {
-      const res = await api.post<ApiListResponse<MetaPageOption>>('/meta/pages-by-business', { businessIds });
+      const res = await api.post<ApiListResponse<MetaPageOption>>(
+        "/meta/pages-by-business",
+        { businessIds },
+      );
       return res.data.data;
     },
     enabled: subStep >= 3 && businessIds.length > 0,
@@ -255,27 +284,33 @@ export function SelecionarAtivosPage() {
   // ── Salvar seleção ───────────────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: async () => {
-      await api.post('/meta/save-selection', {
+      await api.post("/meta/save-selection", {
         businessIds,
         pageIds,
         adAccountIds,
       });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
+      await queryClient.invalidateQueries({ queryKey: ["meta-connections"] });
       // A query 'meta-connections' fica `enabled: false` enquanto estamos em /onboarding,
       // entao invalidateQueries (refetchType padrao 'active') nao a refaz. Forca o refetch
       // com type 'all' para garantir que o cache ja tenha selectedAdAccountId antes do
       // AuthenticatedShell decidir se redireciona de volta para o onboarding.
-      await queryClient.refetchQueries({ queryKey: ['meta-connections'], type: 'all' });
-      window.location.href = '/dashboard';
+      await queryClient.refetchQueries({
+        queryKey: ["meta-connections"],
+        type: "all",
+      });
+      window.location.href = "/dashboard";
     },
-    onError: async () => {
-    },
+    onError: async () => {},
   });
 
-  const selectedBusinessNames = businesses.filter((b) => businessIds.includes(b.id)).map((b) => b.name);
-  const selectedPageNames = pages.filter((p) => pageIds.includes(p.pageId)).map((p) => p.name);
+  const selectedBusinessNames = businesses
+    .filter((b) => businessIds.includes(b.id))
+    .map((b) => b.name);
+  const selectedPageNames = pages
+    .filter((p) => pageIds.includes(p.pageId))
+    .map((p) => p.name);
   const selectedAdAccountNames = adAccounts
     .filter((a) => adAccountIds.includes(a.adAccountId))
     .map((a) => a.name);
@@ -292,7 +327,9 @@ export function SelecionarAtivosPage() {
     <div className="min-h-screen bg-white flex flex-col">
       {/* Header */}
       <header className="border-b border-[#F3F4F6] px-6 py-4 flex items-center justify-center">
-        <span className="text-xl font-black text-[#1C1C1E] tracking-tight">FURY</span>
+        <span className="text-xl font-black text-[#1C1C1E] tracking-tight">
+          FURY
+        </span>
       </header>
 
       {/* Progress */}
@@ -315,8 +352,8 @@ export function SelecionarAtivosPage() {
                   Quais Business Managers você quer gerenciar?
                 </h1>
                 <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Selecione uma ou mais. As Páginas e contas de anúncio das próximas etapas
-                  serão filtrados por essas Business Managers.
+                  Selecione uma ou mais. As Páginas e contas de anúncio das
+                  próximas etapas serão filtrados por essas Business Managers.
                 </p>
               </div>
 
@@ -329,40 +366,48 @@ export function SelecionarAtivosPage() {
                 />
               ) : (
                 <>
-                <div className="space-y-3">
-                  {businesses.slice(businessPage * 10, businessPage * 10 + 10).map((business) => (
-                    <CheckboxCard
-                      key={business.id}
-                      checked={businessIds.includes(business.id)}
-                      title={business.name}
-                      subtitle={business.id}
-                      onClick={() => toggle(businessIds, business.id, setBusinessIds)}
-                    />
-                  ))}
-                </div>
-                {businesses.length > 10 && (
-                  <div className="flex items-center justify-center gap-3 text-sm">
-                    <button
-                      type="button"
-                      onClick={() => setBusinessPage((p) => Math.max(0, p - 1))}
-                      disabled={businessPage === 0}
-                      className="text-[#EA580C] font-medium disabled:text-[#D1D5DB] disabled:cursor-not-allowed hover:underline"
-                    >
-                      ← Anterior
-                    </button>
-                    <span className="text-[#6E7681]">
-                      {businessPage * 10 + 1}–{Math.min(businessPage * 10 + 10, businesses.length)} de {businesses.length}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setBusinessPage((p) => p + 1)}
-                      disabled={businessPage * 10 + 10 >= businesses.length}
-                      className="text-[#EA580C] font-medium disabled:text-[#D1D5DB] disabled:cursor-not-allowed hover:underline"
-                    >
-                      Próxima →
-                    </button>
+                  <div className="space-y-3">
+                    {businesses
+                      .slice(businessPage * 10, businessPage * 10 + 10)
+                      .map((business) => (
+                        <CheckboxCard
+                          key={business.id}
+                          checked={businessIds.includes(business.id)}
+                          title={business.name}
+                          subtitle={business.id}
+                          onClick={() =>
+                            toggle(businessIds, business.id, setBusinessIds)
+                          }
+                        />
+                      ))}
                   </div>
-                )}
+                  {businesses.length > 10 && (
+                    <div className="flex items-center justify-center gap-3 text-sm">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setBusinessPage((p) => Math.max(0, p - 1))
+                        }
+                        disabled={businessPage === 0}
+                        className="text-[#EA580C] font-medium disabled:text-[#D1D5DB] disabled:cursor-not-allowed hover:underline"
+                      >
+                        ← Anterior
+                      </button>
+                      <span className="text-[#6E7681]">
+                        {businessPage * 10 + 1}–
+                        {Math.min(businessPage * 10 + 10, businesses.length)} de{" "}
+                        {businesses.length}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setBusinessPage((p) => p + 1)}
+                        disabled={businessPage * 10 + 10 >= businesses.length}
+                        className="text-[#EA580C] font-medium disabled:text-[#D1D5DB] disabled:cursor-not-allowed hover:underline"
+                      >
+                        Próxima →
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -386,7 +431,8 @@ export function SelecionarAtivosPage() {
                   Quais contas de anúncio você quer gerenciar?
                 </h1>
                 <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Apenas contas das Business Managers selecionadas aparecem aqui.
+                  Apenas contas das Business Managers selecionadas aparecem
+                  aqui.
                 </p>
               </div>
 
@@ -407,8 +453,17 @@ export function SelecionarAtivosPage() {
                         checked={adAccountIds.includes(account.adAccountId)}
                         title={account.name}
                         subtitle={account.adAccountId}
-                        badge={{ label: isActive ? 'Ativa' : 'Inativa', tone: isActive ? 'green' : 'gray' }}
-                        onClick={() => toggle(adAccountIds, account.adAccountId, setAdAccountIds)}
+                        badge={{
+                          label: isActive ? "Ativa" : "Inativa",
+                          tone: isActive ? "green" : "gray",
+                        }}
+                        onClick={() =>
+                          setAdAccountIds(
+                            adAccountIds.includes(account.adAccountId)
+                              ? []
+                              : [account.adAccountId],
+                          )
+                        }
                       />
                     );
                   })}
@@ -416,7 +471,12 @@ export function SelecionarAtivosPage() {
               )}
 
               <div className="flex gap-3">
-                <Button onClick={handleBack} variant="outline" size="md" className="flex-1">
+                <Button
+                  onClick={handleBack}
+                  variant="outline"
+                  size="md"
+                  className="flex-1"
+                >
                   Voltar
                 </Button>
                 <Button
@@ -440,8 +500,9 @@ export function SelecionarAtivosPage() {
                   Quais Páginas você vai usar?
                 </h1>
                 <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Apenas Páginas das Business Managers selecionadas aparecem aqui. Se você não usa Páginas,
-                  pode continuar sem marcar nenhuma.
+                  Apenas Páginas das Business Managers selecionadas aparecem
+                  aqui. Se você não usa Páginas, pode continuar sem marcar
+                  nenhuma.
                 </p>
               </div>
 
@@ -460,18 +521,36 @@ export function SelecionarAtivosPage() {
                       checked={pageIds.includes(page.pageId)}
                       title={page.name}
                       subtitle={page.pageId}
-                      badge={page.hasInstagram ? { label: 'Instagram vinculado', tone: 'green' } : undefined}
-                      onClick={() => toggle(pageIds, page.pageId, setPageIds)}
+                      badge={
+                        page.hasInstagram
+                          ? { label: "Instagram vinculado", tone: "green" }
+                          : undefined
+                      }
+                      onClick={() =>
+                        setPageIds(
+                          pageIds.includes(page.pageId) ? [] : [page.pageId],
+                        )
+                      }
                     />
                   ))}
                 </div>
               )}
 
               <div className="flex gap-3">
-                <Button onClick={handleBack} variant="outline" size="md" className="flex-1">
+                <Button
+                  onClick={handleBack}
+                  variant="outline"
+                  size="md"
+                  className="flex-1"
+                >
                   Voltar
                 </Button>
-                <Button onClick={handleContinue} variant="primary" size="md" className="flex-1">
+                <Button
+                  onClick={handleContinue}
+                  variant="primary"
+                  size="md"
+                  className="flex-1"
+                >
                   Continuar
                 </Button>
               </div>
@@ -482,7 +561,9 @@ export function SelecionarAtivosPage() {
           {subStep === 4 && (
             <>
               <div className="text-center space-y-3">
-                <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">Confira sua seleção</h1>
+                <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
+                  Confira sua seleção
+                </h1>
                 <p className="text-[#6E7681] text-lg leading-relaxed">
                   A partir de agora, apenas estes ativos aparecerão no FURY.
                 </p>
@@ -494,7 +575,7 @@ export function SelecionarAtivosPage() {
                     Business Managers ({selectedBusinessNames.length})
                   </div>
                   <div className="text-sm font-medium text-[#1C1C1E]">
-                    {selectedBusinessNames.join(', ')}
+                    {selectedBusinessNames.join(", ")}
                   </div>
                 </div>
 
@@ -503,7 +584,7 @@ export function SelecionarAtivosPage() {
                     Contas de Anúncio ({selectedAdAccountNames.length})
                   </div>
                   <div className="text-sm font-medium text-[#1C1C1E]">
-                    {selectedAdAccountNames.join(', ')}
+                    {selectedAdAccountNames.join(", ")}
                   </div>
                 </div>
 
@@ -512,7 +593,9 @@ export function SelecionarAtivosPage() {
                     Páginas ({selectedPageNames.length})
                   </div>
                   <div className="text-sm font-medium text-[#1C1C1E]">
-                    {selectedPageNames.length > 0 ? selectedPageNames.join(', ') : 'Nenhuma'}
+                    {selectedPageNames.length > 0
+                      ? selectedPageNames.join(", ")
+                      : "Nenhuma"}
                   </div>
                 </div>
               </div>
@@ -524,7 +607,13 @@ export function SelecionarAtivosPage() {
               )}
 
               <div className="flex gap-3">
-                <Button onClick={handleBack} variant="outline" size="md" className="flex-1" disabled={saveMutation.isPending}>
+                <Button
+                  onClick={handleBack}
+                  variant="outline"
+                  size="md"
+                  className="flex-1"
+                  disabled={saveMutation.isPending}
+                >
                   Voltar
                 </Button>
                 <Button
@@ -540,7 +629,7 @@ export function SelecionarAtivosPage() {
                       Salvando...
                     </span>
                   ) : (
-                    'Concluir'
+                    "Concluir"
                   )}
                 </Button>
               </div>
