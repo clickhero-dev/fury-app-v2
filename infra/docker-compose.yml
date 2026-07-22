@@ -43,3 +43,4 @@ volumes:
 networks:
   fury-network:
     driver: bridge
+    
