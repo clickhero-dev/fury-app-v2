@@ -22,6 +22,8 @@ export interface CampaignCreative {
   status: string;
   thumbnailUrl?: string;
   imageUrl?: string;
+  videoUrl?: string;
+  videoId?: string;
   headline?: string;
   primaryText?: string;
   isVideo: boolean;

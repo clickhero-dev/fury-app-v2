@@ -114,15 +114,14 @@ function MediaModal({ creative, onClose }: { creative: CampaignCreative; onClose
         >
           <X className="w-5 h-5 text-gray-700" />
         </button>
-        {creative.isVideo ? (
+        {creative.isVideo && creative.videoUrl ? (
           <video
-            src={imgSrc}
+            src={creative.videoUrl}
+            poster={imgSrc}
             controls
             autoPlay
             className="max-w-full max-h-[85vh] rounded-xl shadow-2xl"
-          >
-            <source src={imgSrc} />
-          </video>
+          />
         ) : imgSrc ? (
           <img
             src={imgSrc}

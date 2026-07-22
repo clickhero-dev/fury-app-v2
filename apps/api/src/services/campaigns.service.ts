@@ -9,7 +9,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../lib/locations-cache.js';
 import { getResolvedTenantAssetSelection } from './meta.service.js';
-import { getCampaignAds, getCampaignAdCreatives, searchMetaInterests as searchMetaInterestsLib } from '../lib/meta-api.js';
+import { getCampaignAds, getCampaignAdCreatives, getVideoSourceUrl, searchMetaInterests as searchMetaInterestsLib } from '../lib/meta-api.js';
 import type { IMetaCampaignProvider } from '../lib/providers/meta-campaign.provider.js';
 import type {
   ICampaignRepository,
@@ -498,7 +498,7 @@ export class CampaignsService {
       });
 
       // ponytail: busca criativos da campanha; falha silenciosa se API não retornar dados
-      let creatives: { id: string; name: string; status: string; thumbnailUrl?: string; imageUrl?: string; headline?: string; primaryText?: string; isVideo: boolean }[] = [];
+      let creatives: { id: string; name: string; status: string; thumbnailUrl?: string; imageUrl?: string; videoUrl?: string; videoId?: string; headline?: string; primaryText?: string; isVideo: boolean }[] = [];
       try {
         const ads = await getCampaignAds(args.campaignId, accessToken);
         creatives = ads.map((ad) => {
@@ -515,6 +515,7 @@ export class CampaignsService {
             status: ad.status,
             thumbnailUrl: c?.thumbnail_url,
             imageUrl: linkData?.picture ?? videoData?.image_url ?? photoData?.url ?? c?.image_url ?? c?.thumbnail_url,
+            videoId: videoData?.video_id ?? assetFeed?.videos?.[0]?.video_id,
             headline: linkData?.name ?? assetFeed?.titles?.[0]?.text,
             primaryText: linkData?.message ?? photoData?.caption ?? assetFeed?.bodies?.[0]?.text,
             isVideo: !!videoData?.video_id || isVideoFromAssetFeed,
@@ -573,6 +574,7 @@ export class CampaignsService {
                   status: 'ACTIVE',
                   thumbnailUrl: ac.thumbnail_url,
                   imageUrl: ac.image_url ?? ac.thumbnail_url ?? ac.object_story_spec?.link_data?.picture ?? ac.object_story_spec?.video_data?.image_url,
+                  videoId: ac.object_story_spec?.video_data?.video_id ?? assetFeed?.videos?.[0]?.video_id,
                   headline: assetFeed?.titles?.[0]?.text ?? ac.object_story_spec?.link_data?.name,
                   primaryText: assetFeed?.bodies?.[0]?.text ?? ac.object_story_spec?.link_data?.message,
                   isVideo: (assetFeed?.ad_formats?.some((f: string) => f.includes('VIDEO')) ?? false) || (assetFeed?.videos?.length ?? 0) > 0,
@@ -584,6 +586,18 @@ export class CampaignsService {
         } catch {
           console.warn('[getCampaignInsights] Failed to fetch adcreatives for campaign', args.campaignId);
         }
+      }
+
+      // ponytail: busca URL real do vídeo via Graph API para criativos que têm videoId
+      const videoCreatives = creatives.filter((c) => c.videoId && !c.videoUrl);
+      if (videoCreatives.length > 0) {
+        await Promise.all(videoCreatives.map(async (c) => {
+          try {
+            c.videoUrl = await getVideoSourceUrl(c.videoId!, accessToken);
+          } catch {
+            console.warn('[getCampaignInsights] Failed to fetch video source for', c.videoId);
+          }
+        }));
       }
 
       return { campaign: campaignBlock, timeseries, creatives };

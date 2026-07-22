@@ -1438,6 +1438,12 @@ export async function getCampaignAdCreatives(
   return response.data || [];
 }
 
+/** Busca a URL fonte de um vídeo do Meta via Graph API. */
+export async function getVideoSourceUrl(videoId: string, accessToken: string): Promise<string> {
+  const res = await metaApiCall<{ source?: string }>(`/${videoId}?fields=source`, accessToken);
+  return res.source || '';
+}
+
 export interface MetaAdImageUploadResponse {
   images: Record<string, { hash: string; url?: string }>;
 }
