@@ -224,16 +224,6 @@ export function SelecionarAtivosPage() {
   const [adAccountIds, setAdAccountIds] = useState<string[]>([]);
   const [businessPage, setBusinessPage] = useState(0);
 
-  function toggle(
-    list: string[],
-    id: string,
-    setter: (value: string[]) => void,
-  ) {
-    setter(
-      list.includes(id) ? list.filter((item) => item !== id) : [...list, id],
-    );
-  }
-
   // ── Step 1: Business Managers ─────────────────────────────────────────────────
   const businessesQuery = useQuery({
     queryKey: ["meta-businesses"],
@@ -349,11 +339,11 @@ export function SelecionarAtivosPage() {
             <>
               <div className="text-center space-y-3">
                 <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
-                  Quais Business Managers você quer gerenciar?
+                  Qual Business Manager você quer gerenciar?
                 </h1>
                 <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Selecione uma ou mais. As Páginas e contas de anúncio das
-                  próximas etapas serão filtrados por essas Business Managers.
+                  Selecione uma. As Páginas e contas de anúncio das próximas
+                  etapas serão filtrados por essa Business Manager.
                 </p>
               </div>
 
@@ -376,7 +366,11 @@ export function SelecionarAtivosPage() {
                           title={business.name}
                           subtitle={business.id}
                           onClick={() =>
-                            toggle(businessIds, business.id, setBusinessIds)
+                            setBusinessIds(
+                              businessIds.includes(business.id)
+                                ? []
+                                : [business.id],
+                            )
                           }
                         />
                       ))}
@@ -428,11 +422,10 @@ export function SelecionarAtivosPage() {
             <>
               <div className="text-center space-y-3">
                 <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
-                  Quais contas de anúncio você quer gerenciar?
+                  Qual conta de anúncio você quer gerenciar?
                 </h1>
                 <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Apenas contas das Business Managers selecionadas aparecem
-                  aqui.
+                  Apenas contas da Business Manager selecionada aparecem aqui.
                 </p>
               </div>
 
@@ -441,7 +434,7 @@ export function SelecionarAtivosPage() {
               ) : adAccounts.length === 0 ? (
                 <EmptyState
                   title="Nenhuma conta de anúncio encontrada"
-                  description="As Business Managers selecionadas não têm contas de anúncio vinculadas."
+                  description="A Business Manager selecionada não tem contas de anúncio vinculadas."
                 />
               ) : (
                 <div className="space-y-3">
@@ -497,12 +490,11 @@ export function SelecionarAtivosPage() {
             <>
               <div className="text-center space-y-3">
                 <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
-                  Quais Páginas você vai usar?
+                  Qual Página você vai usar?
                 </h1>
                 <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Apenas Páginas das Business Managers selecionadas aparecem
-                  aqui. Se você não usa Páginas, pode continuar sem marcar
-                  nenhuma.
+                  Apenas Páginas da Business Manager selecionada aparecem aqui.
+                  Se você não usa Páginas, pode continuar sem marcar nenhuma.
                 </p>
               </div>
 
@@ -510,8 +502,8 @@ export function SelecionarAtivosPage() {
                 <LoadingSpinner />
               ) : pages.length === 0 ? (
                 <EmptyState
-                  title="Nenhuma Página nestas Business Managers"
-                  description="As Business Managers selecionadas não têm Páginas vinculadas. Você pode continuar sem selecionar nenhuma."
+                  title="Nenhuma Página nesta Business Manager"
+                  description="A Business Manager selecionada não tem Páginas vinculadas. Você pode continuar sem selecionar nenhuma."
                 />
               ) : (
                 <div className="space-y-3">
@@ -572,7 +564,7 @@ export function SelecionarAtivosPage() {
               <div className="rounded-2xl border border-[#E5E7EB] divide-y divide-[#F3F4F6]">
                 <div className="p-4">
                   <div className="text-xs font-bold text-[#9CA3AF] uppercase tracking-wide mb-1">
-                    Business Managers ({selectedBusinessNames.length})
+                    Business Manager ({selectedBusinessNames.length})
                   </div>
                   <div className="text-sm font-medium text-[#1C1C1E]">
                     {selectedBusinessNames.join(", ")}
@@ -581,7 +573,7 @@ export function SelecionarAtivosPage() {
 
                 <div className="p-4">
                   <div className="text-xs font-bold text-[#9CA3AF] uppercase tracking-wide mb-1">
-                    Contas de Anúncio ({selectedAdAccountNames.length})
+                    Conta de Anúncio ({selectedAdAccountNames.length})
                   </div>
                   <div className="text-sm font-medium text-[#1C1C1E]">
                     {selectedAdAccountNames.join(", ")}
@@ -590,7 +582,7 @@ export function SelecionarAtivosPage() {
 
                 <div className="p-4">
                   <div className="text-xs font-bold text-[#9CA3AF] uppercase tracking-wide mb-1">
-                    Páginas ({selectedPageNames.length})
+                    Página ({selectedPageNames.length})
                   </div>
                   <div className="text-sm font-medium text-[#1C1C1E]">
                     {selectedPageNames.length > 0
