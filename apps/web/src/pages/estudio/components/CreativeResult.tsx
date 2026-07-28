@@ -301,17 +301,15 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
               <BookmarkCheck className="h-4 w-4 shrink-0" />
               Salvar na Biblioteca
             </Button>
-            {!isQuickCreate && (
-              <Button
-                size="sm"
-                onClick={() => (onPublish ? onPublish() : publishMutation.mutate(currentResult.assetId))}
-                disabled={publishMutation.isPending || !!publishFeedback}
-                className="w-full flex items-center justify-center gap-2 bg-[#E8631A] hover:bg-[#D45714] text-white"
-              >
-                {publishMutation.isPending ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Upload className="h-4 w-4 shrink-0" />}
-                Publicar no Meta
-              </Button>
-            )}
+            <Button
+              size="sm"
+              onClick={() => (onPublish ? onPublish() : publishMutation.mutate(currentResult.assetId))}
+              disabled={publishMutation.isPending || !!publishFeedback}
+              className="w-full flex items-center justify-center gap-2 bg-[#E8631A] hover:bg-[#D45714] text-white"
+            >
+              {publishMutation.isPending ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Upload className="h-4 w-4 shrink-0" />}
+              Publicar no Meta
+            </Button>
             {publishMutation.isError && (
               <div className="flex items-center gap-2 text-xs text-red-600">
                 <AlertCircle className="h-3.5 w-3.5" />
