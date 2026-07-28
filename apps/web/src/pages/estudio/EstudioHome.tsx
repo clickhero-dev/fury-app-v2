@@ -9,6 +9,11 @@ import { CreativeResult } from './components/CreativeResult';
 
 type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create';
 
+// Vídeos ainda não são suportados no backend, reativar quando estiver pronto
+const FEATURES = {
+  videoAnuncios: false,
+};
+
 // ponytail: só imagem, só flux.2 max — sem seletor de tipo nem modelo
 const CREATIVE_TYPE = 'image' as const;
 const IMAGE_MODEL = 'black-forest-labs/flux.2-max';
@@ -131,9 +136,9 @@ export function EstudioHome() {
   };
 
   const typeOptions: Array<{ value: 'all' | 'image' | 'video'; label: string }> = [
-    { value: 'all', label: 'Todos' },
-    { value: 'image', label: 'Imagens' },
-    { value: 'video', label: 'Vídeos' },
+    { value: 'all' as const, label: 'Todos' },
+    { value: 'image' as const, label: 'Imagens' },
+    ...(FEATURES.videoAnuncios ? [{ value: 'video' as const, label: 'Vídeos' }] : []),
   ];
 
   const statusOptions: Array<{ value: 'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'; label: string }> = [
