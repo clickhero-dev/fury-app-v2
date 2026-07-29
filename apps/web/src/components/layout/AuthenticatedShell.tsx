@@ -114,6 +114,14 @@ export function AuthenticatedShell() {
     // ponytail: no subscription = blocked (backoffice creates accounts with trial, so null is an error)
     if (!subscription) return true;
 
+    // Non-expirable subscriptions skip all date-based checks
+    if (subscription.isNonExpirable) {
+      if (['cancelled', 'inactive'].includes(subscription.status)) {
+        return true;
+      }
+      return false;
+    }
+
     const now = new Date();
 
     if (['cancelled', 'inactive', 'past_due'].includes(subscription.status)) {

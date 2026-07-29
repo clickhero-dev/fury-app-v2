@@ -44,6 +44,7 @@ export interface Subscription {
   tenantId: string;
   planId: string;
   status: SubscriptionStatus;
+  isNonExpirable: boolean;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
   createdAt: string;
