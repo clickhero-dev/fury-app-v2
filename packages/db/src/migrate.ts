@@ -93,6 +93,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0021_add_tenant_codigo' },
   { tag: '0022_add_tenant_business_context' },
   { tag: '0023_planner_tables' },
+  { tag: '0025_add_is_non_expirable_to_subscriptions' },
 ];
 
 async function runMigrate() {

@@ -395,6 +395,7 @@ export const subscriptions = pgTable(
     status: subscriptionStatusEnum('status').notNull().default('trial'),
     trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
     currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+    isNonExpirable: boolean('is_non_expirable').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

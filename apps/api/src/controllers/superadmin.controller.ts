@@ -53,6 +53,7 @@ const updateSubscriptionSchema = z.object({
     .optional(),
   trialEndsAt: z.string().datetime().optional(),
   currentPeriodEnd: z.string().datetime().optional(),
+  isNonExpirable: z.boolean().optional(),
   billingType: z.enum(["BOLETO", "PIX", "CREDIT_CARD"]).optional(),
 });
 
@@ -459,6 +460,7 @@ export async function updateSubscription(
         status: body.status ?? "trial",
         trialEndsAt,
         currentPeriodEnd,
+        isNonExpirable: body.isNonExpirable ?? false,
         asaasSubscriptionId: body.billingType,
         createdAt: now,
         updatedAt: now,
@@ -471,6 +473,8 @@ export async function updateSubscription(
         updates.trialEndsAt = new Date(body.trialEndsAt);
       if (body.currentPeriodEnd !== undefined)
         updates.currentPeriodEnd = new Date(body.currentPeriodEnd);
+      if (body.isNonExpirable !== undefined)
+        updates.isNonExpirable = body.isNonExpirable;
 
       if (body.status === "active" && !body.currentPeriodEnd) {
         const future = new Date(now);

@@ -35,6 +35,7 @@ interface TenantData {
     id: string;
     planId: string;
     status: string;
+    isNonExpirable: boolean;
     trialEndsAt: string;
     currentPeriodEnd: string;
     asaasSubscriptionId: string;
@@ -154,6 +155,7 @@ export function TenantDetailPage() {
   const [subForm, setSubForm] = useState({
     planId: "",
     status: "",
+    isNonExpirable: false,
     trialEndsAt: "",
     currentPeriodEnd: "",
   });
@@ -211,6 +213,7 @@ export function TenantDetailPage() {
         setSubForm({
           planId: t.subscription?.planId ?? "",
           status: t.subscription?.status ?? "inactive",
+          isNonExpirable: t.subscription?.isNonExpirable ?? false,
           trialEndsAt: t.subscription?.trialEndsAt
             ? new Date(t.subscription.trialEndsAt).toISOString().slice(0, 16)
             : "",
@@ -280,6 +283,7 @@ export function TenantDetailPage() {
     const payload: Record<string, unknown> = {};
     if (subForm.planId) payload.planId = subForm.planId;
     if (subForm.status) payload.status = subForm.status;
+    payload.isNonExpirable = subForm.isNonExpirable;
     if (subForm.trialEndsAt)
       payload.trialEndsAt = new Date(subForm.trialEndsAt).toISOString();
     if (subForm.currentPeriodEnd)
@@ -782,6 +786,7 @@ export function TenantDetailPage() {
                 className={inputCls}
               >
                 <option value="trial">trial</option>
+                <option value="active">active</option>
                 <option value="inactive">inactive</option>
               </select>
             </div>
@@ -808,6 +813,17 @@ export function TenantDetailPage() {
               />
             </div>
           </div>
+          <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={subForm.isNonExpirable}
+              onChange={(e) =>
+                setSubForm({ ...subForm, isNonExpirable: e.target.checked })
+              }
+              className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500/30"
+            />
+            Plano não expirável (ignora vencimento)
+          </label>
           <div className="flex items-center gap-3">
             <button onClick={saveSub} disabled={saving} className={btnCls}>
               <Save className="w-4 h-4" /> Salvar

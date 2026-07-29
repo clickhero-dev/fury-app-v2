@@ -22,6 +22,14 @@ export function checkSubscriptionActive(
 
       if (!sub) return next(new AppError(403, 'NO_SUBSCRIPTION', 'Nenhuma assinatura encontrada. Contate o suporte.'));
 
+      // Non-expirable subscriptions skip all date-based checks
+      if (sub.isNonExpirable) {
+        if (sub.status === 'cancelled' || sub.status === 'inactive') {
+          return next(new AppError(403, 'SUBSCRIPTION_EXPIRED', 'Sua assinatura está vencida. Entre em contato com o suporte.'));
+        }
+        return next();
+      }
+
       const now = new Date();
 
       if (sub.status === 'cancelled' || sub.status === 'inactive') {
