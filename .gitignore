@@ -180,5 +180,7 @@ apps/api/scripts/_samples/
 apps/api/_samples/
 
 prompt.md
+fury-api-log.txt   
+gen-token.mjs   
 fury-api-log.txt
 gen-token.mjs
