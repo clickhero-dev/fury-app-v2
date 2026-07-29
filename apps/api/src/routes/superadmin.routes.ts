@@ -17,6 +17,7 @@ router.delete("/tenants/:id", superadminController.deleteTenant);
 router.get("/users", superadminController.listUsers);
 router.post("/users", superadminController.createUser);
 router.patch("/users/:id", superadminController.updateUser);
+router.delete("/users/:id", superadminController.deleteUser);
 
 // Setup tenant + user
 router.post("/setup-tenant", superadminController.setupTenant);

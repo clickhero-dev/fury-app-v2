@@ -9,6 +9,8 @@ import {
   Image as ImageIcon,
   MapPin,
   Loader2,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import api from "@/lib/api";
 import { useMetaLocations } from "@/components/campaign-wizard/hooks/useMetaLocations";
@@ -132,6 +134,21 @@ export function TenantDetailPage() {
     password: "",
     role: "member" as string,
   });
+
+  // Edit user
+  const [editUser, setEditUser] = useState<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  } | null>(null);
+
+  // Delete user
+  const [deleteUserTarget, setDeleteUserTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [deletingUser, setDeletingUser] = useState(false);
 
   // Subscription
   const [subForm, setSubForm] = useState({
@@ -372,6 +389,42 @@ export function TenantDetailPage() {
     }
   };
 
+  // ─── Edit user ───────────────────────────────────────
+  const handleEditUser = async () => {
+    if (!editUser) return;
+    setSaving(true);
+    try {
+      await api.patch(`/admin/users/${editUser.id}`, {
+        name: editUser.name,
+        email: editUser.email,
+        role: editUser.role,
+      });
+      setMsg("Usuário atualizado");
+      setEditUser(null);
+      await reload();
+    } catch {
+      setMsg("Erro ao atualizar usuário");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ─── Delete user ─────────────────────────────────────
+  const handleDeleteUser = async () => {
+    if (!deleteUserTarget) return;
+    setDeletingUser(true);
+    try {
+      await api.delete(`/admin/users/${deleteUserTarget.id}`);
+      setMsg("Usuário removido");
+      setDeleteUserTarget(null);
+      await reload();
+    } catch {
+      setMsg("Erro ao remover usuário");
+    } finally {
+      setDeletingUser(false);
+    }
+  };
+
   // ─── Render ──────────────────────────────────────────
   if (loading)
     return (
@@ -508,6 +561,7 @@ export function TenantDetailPage() {
                   <th className="text-left px-5 py-3 font-medium">Email</th>
                   <th className="text-left px-5 py-3 font-medium">Role</th>
                   <th className="text-left px-5 py-3 font-medium">Criado em</th>
+                  <th className="text-right px-5 py-3 font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -526,10 +580,173 @@ export function TenantDetailPage() {
                     <td className="px-5 py-3 text-zinc-500">
                       {new Date(u.createdAt).toLocaleDateString()}
                     </td>
+                    <td className="px-5 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() =>
+                            setEditUser({
+                              id: u.id,
+                              name: u.name ?? "",
+                              email: u.email,
+                              role: u.role,
+                            })
+                          }
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-amber-400 hover:bg-zinc-800 transition-all"
+                          title="Editar usuário"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() =>
+                            setDeleteUserTarget({
+                              id: u.id,
+                              name: u.name ?? "sem nome",
+                            })
+                          }
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-all"
+                          title="Remover usuário"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit User Modal ────────────────────────────── */}
+      {editUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={() => setEditUser(null)}
+        >
+          <div
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold text-zinc-100">
+                Editar Usuário
+              </h2>
+              <button
+                onClick={() => setEditUser(null)}
+                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className={labelCls}>Nome</label>
+                <input
+                  value={editUser.name}
+                  onChange={(e) =>
+                    setEditUser({ ...editUser, name: e.target.value })
+                  }
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Email</label>
+                <input
+                  value={editUser.email}
+                  onChange={(e) =>
+                    setEditUser({ ...editUser, email: e.target.value })
+                  }
+                  type="email"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Perfil</label>
+                <select
+                  value={editUser.role}
+                  onChange={(e) =>
+                    setEditUser({ ...editUser, role: e.target.value })
+                  }
+                  className={inputCls}
+                >
+                  <option value="member">Membro</option>
+                  <option value="admin">Admin</option>
+                  <option value="owner">Owner</option>
+                </select>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setEditUser(null)}
+                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleEditUser}
+                  disabled={saving}
+                  className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Save className="w-4 h-4" /> Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete User Confirmation ───────────────────── */}
+      {deleteUserTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={() => setDeleteUserTarget(null)}
+        >
+          <div
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-sm mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold text-zinc-100">
+                Remover Usuário
+              </h2>
+              <button
+                onClick={() => setDeleteUserTarget(null)}
+                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-zinc-400 mb-2">
+              Tem certeza que deseja remover{" "}
+              <strong className="text-zinc-200">
+                {deleteUserTarget.name}
+              </strong>
+              ?
+            </p>
+            <p className="text-xs text-zinc-500 mb-6">
+              O usuário perderá acesso ao sistema. Não é reversível.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteUserTarget(null)}
+                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                disabled={deletingUser}
+                className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+              >
+                {deletingUser ? (
+                  "Removendo..."
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" /> Sim, remover
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

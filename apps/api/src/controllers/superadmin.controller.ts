@@ -378,6 +378,30 @@ export async function updateUser(
   }
 }
 
+export async function deleteUser(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const existing = await db.query.users.findFirst({
+      where: eq(users.id, req.params.id),
+    });
+    if (!existing)
+      throw new AppError(404, "USER_NOT_FOUND", "Usuário não encontrado");
+
+    await db.delete(users).where(eq(users.id, req.params.id));
+
+    res.json({
+      success: true,
+      data: null,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ─── Subscription ──────────────────────────────────────
 
 export async function updateSubscription(
