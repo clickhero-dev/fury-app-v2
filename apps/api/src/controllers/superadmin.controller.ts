@@ -343,6 +343,21 @@ export async function setupTenant(
   }
 }
 
+export async function checkEmail(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const user = await db.query.users.findFirst({
+      where: eq(users.email, req.params.email),
+    });
+    res.json({ success: true, data: { exists: !!user } });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function updateUser(
   req: Request,
   res: Response,

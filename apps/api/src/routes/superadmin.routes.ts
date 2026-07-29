@@ -16,6 +16,7 @@ router.delete("/tenants/:id", superadminController.deleteTenant);
 // Users
 router.get("/users", superadminController.listUsers);
 router.post("/users", superadminController.createUser);
+router.get("/users/check-email/:email", superadminController.checkEmail);
 router.patch("/users/:id", superadminController.updateUser);
 router.delete("/users/:id", superadminController.deleteUser);
 
