@@ -61,5 +61,6 @@ router.patch(
 router.get("/plans", superadminController.listPlans);
 router.post("/plans", superadminController.createPlan);
 router.patch("/plans/:id", superadminController.updatePlan);
+router.delete("/plans/:id", superadminController.deletePlan);
 
 export default router;

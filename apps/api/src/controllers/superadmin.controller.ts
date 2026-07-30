@@ -712,9 +712,26 @@ export async function listPlans(
     const allPlans = await db.query.plans.findMany({
       orderBy: [plans.priceCents],
     });
+
+    // ponytail: 2 queries (plans + group-by counts) instead of N+1
+    const counts = await db
+      .select({
+        planId: subscriptions.planId,
+        count: sql<number>`count(*)::int`.mapWith(Number),
+      })
+      .from(subscriptions)
+      .groupBy(subscriptions.planId);
+
+    const countMap = new Map(counts.map((c) => [c.planId, c.count]));
+
+    const data = allPlans.map((p) => ({
+      ...p,
+      subscriberCount: countMap.get(p.id) ?? 0,
+    }));
+
     res.json({
       success: true,
-      data: allPlans,
+      data,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -752,6 +769,64 @@ export async function updatePlan(
       throw new AppError(404, "PLAN_NOT_FOUND", "Plano não encontrado");
 
     await db.update(plans).set(body).where(eq(plans.id, req.params.id));
+    res.json({
+      success: true,
+      data: null,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deletePlan(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const { id } = req.params;
+    const migrateTo = typeof req.query.migrateTo === "string" ? req.query.migrateTo : undefined;
+
+    const plan = await db.query.plans.findFirst({
+      where: eq(plans.id, id),
+    });
+    if (!plan)
+      throw new AppError(404, "PLAN_NOT_FOUND", "Plano não encontrado");
+
+    // Count subscribers
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int`.mapWith(Number) })
+      .from(subscriptions)
+      .where(eq(subscriptions.planId, id));
+
+    const subscriberCount = result?.count ?? 0;
+
+    if (subscriberCount > 0) {
+      if (!migrateTo) {
+        throw new AppError(
+          409,
+          "PLAN_HAS_SUBSCRIBERS",
+          `Este plano possui ${subscriberCount} assinante(s). Migre-os antes de deletar.`,
+          { subscriberCount },
+        );
+      }
+
+      // ponytail: verify target exists before migrating
+      const targetPlan = await db.query.plans.findFirst({
+        where: eq(plans.id, migrateTo),
+      });
+      if (!targetPlan)
+        throw new AppError(404, "TARGET_PLAN_NOT_FOUND", "Plano de destino não encontrado");
+
+      await db
+        .update(subscriptions)
+        .set({ planId: migrateTo, updatedAt: new Date() })
+        .where(eq(subscriptions.planId, id));
+    }
+
+    await db.delete(plans).where(eq(plans.id, id));
+
     res.json({
       success: true,
       data: null,

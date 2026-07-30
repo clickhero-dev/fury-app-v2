@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Save } from 'lucide-react';
+import { Plus, Save, Trash2 } from 'lucide-react';
 import api from '@/lib/api';
 
 interface Plan {
@@ -9,6 +9,7 @@ interface Plan {
   interval: string;
   features: Record<string, boolean>;
   isActive: boolean;
+  subscriberCount: number;
 }
 
 export function PlansPage() {
@@ -19,6 +20,10 @@ export function PlansPage() {
   const [showNew, setShowNew] = useState(false);
   const [newPlan, setNewPlan] = useState({ name: '', priceCents: 0, interval: 'monthly', isActive: true });
   const [editing, setEditing] = useState<Record<string, Partial<Plan>>>({});
+
+  // Delete / migration state
+  const [deleteTarget, setDeleteTarget] = useState<Plan | null>(null);
+  const [migrateTo, setMigrateTo] = useState('');
 
   useEffect(() => {
     api.get('/admin/plans').then((r) => {
@@ -67,7 +72,38 @@ export function PlansPage() {
     }));
   };
 
+  const handleDeleteClick = (plan: Plan) => {
+    setDeleteTarget(plan);
+    setMigrateTo('');
+  };
+
+  const executeDelete = async (withMigration: boolean) => {
+    if (!deleteTarget) return;
+    setSaving(true);
+    try {
+      const params = withMigration && migrateTo
+        ? `?migrateTo=${migrateTo}`
+        : '';
+      await api.delete(`/admin/plans/${deleteTarget.id}${params}`);
+      setMsg(withMigration ? 'Assinantes migrados e plano deletado' : 'Plano deletado');
+      setDeleteTarget(null);
+      const r = await api.get('/admin/plans');
+      setPlans(r.data.data);
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: { error?: { message?: string; details?: { subscriberCount?: number } } } } })?.response?.data;
+      if (data?.error?.code === 'PLAN_HAS_SUBSCRIBERS') {
+        setMsg(`Não é possível deletar: ${data.error.message}`);
+      } else {
+        setMsg('Erro ao deletar plano');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) return <div className="text-zinc-500 text-sm py-12 text-center">Carregando...</div>;
+
+  const otherPlans = deleteTarget ? plans.filter((p) => p.id !== deleteTarget.id) : [];
 
   return (
     <div>
@@ -144,18 +180,95 @@ export function PlansPage() {
                     <option value="false">Não</option>
                   </select>
                 </div>
-                <button onClick={() => savePlan(plan.id)} disabled={!hasChanges || saving}
-                  className="bg-amber-600 hover:bg-amber-500 disabled:opacity-30 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors">
-                  <Save className="w-4 h-4" /> Salvar
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => savePlan(plan.id)} disabled={!hasChanges || saving}
+                    className="bg-amber-600 hover:bg-amber-500 disabled:opacity-30 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors">
+                    <Save className="w-4 h-4" /> Salvar
+                  </button>
+                  <button onClick={() => handleDeleteClick(plan)} disabled={saving}
+                    className="bg-red-600/20 hover:bg-red-600/40 disabled:opacity-30 text-red-400 px-3 py-2.5 rounded-xl text-sm transition-colors"
+                    title="Deletar plano">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
               <div className="mt-3 text-xs text-zinc-500">
                 ID: {plan.id} · Features: {Object.keys(plan.features).length}
+                {' · '}
+                <span className={plan.subscriberCount > 0 ? 'text-amber-400' : 'text-zinc-500'}>
+                  {plan.subscriberCount} assinante{plan.subscriberCount !== 1 ? 's' : ''}
+                </span>
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* Delete/Migration Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h2 className="text-lg font-bold text-zinc-100 mb-2">Deletar plano</h2>
+            <p className="text-sm text-zinc-400 mb-4">
+              Plano <span className="text-zinc-200 font-medium">{deleteTarget.name}</span>
+              {deleteTarget.subscriberCount > 0 ? (
+                <> possui <span className="text-amber-400 font-bold">{deleteTarget.subscriberCount} assinante{deleteTarget.subscriberCount !== 1 ? 's' : ''}</span>.</>
+              ) : (
+                <> não possui assinantes.</>
+              )}
+            </p>
+
+            {deleteTarget.subscriberCount > 0 ? (
+              <>
+                <p className="text-sm text-zinc-400 mb-3">
+                  Para deletar, migre os assinantes para outro plano:
+                </p>
+                <select
+                  value={migrateTo}
+                  onChange={(e) => setMigrateTo(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 mb-4"
+                >
+                  <option value="">Selecione um plano...</option>
+                  {otherPlans.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} (R$ {(p.priceCents / 100).toFixed(2)})</option>
+                  ))}
+                </select>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => executeDelete(true)}
+                    disabled={!migrateTo || saving}
+                    className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                  >
+                    Migrar e deletar
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(null)}
+                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-xl text-sm transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => executeDelete(false)}
+                  disabled={saving}
+                  className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                >
+                  Deletar
+                </button>
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-xl text-sm transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
