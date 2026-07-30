@@ -90,7 +90,7 @@ export function PlansPage() {
       const r = await api.get('/admin/plans');
       setPlans(r.data.data);
     } catch (err: unknown) {
-      const data = (err as { response?: { data?: { error?: { message?: string; details?: { subscriberCount?: number } } } } })?.response?.data;
+      const data = (err as { response?: { data?: { error?: { code?: string; message?: string; details?: { subscriberCount?: number } } } } })?.response?.data;
       if (data?.error?.code === 'PLAN_HAS_SUBSCRIBERS') {
         setMsg(`Não é possível deletar: ${data.error.message}`);
       } else {
