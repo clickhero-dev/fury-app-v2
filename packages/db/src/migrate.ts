@@ -94,6 +94,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0022_add_tenant_business_context' },
   { tag: '0023_planner_tables' },
   { tag: '0025_add_is_non_expirable_to_subscriptions' },
+  { tag: '0026_add_creative_quota_limits' },
 ];
 
 async function runMigrate() {

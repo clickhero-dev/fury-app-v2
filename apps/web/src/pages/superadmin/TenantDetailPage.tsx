@@ -832,10 +832,14 @@ export function TenantDetailPage() {
               onClick={() => {
                 const future = new Date();
                 future.setDate(future.getDate() + 30);
+                const cheapestPlanId = [...plans]
+                  .filter((p) => p.isActive)
+                  .sort((a, b) => a.priceCents - b.priceCents)[0]?.id;
                 setSubForm((prev) => ({
                   ...prev,
                   status: "active",
                   currentPeriodEnd: future.toISOString().slice(0, 16),
+                  planId: prev.planId || cheapestPlanId || prev.planId,
                 }));
               }}
               className="bg-green-700 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"

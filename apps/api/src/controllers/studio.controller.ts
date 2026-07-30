@@ -11,6 +11,7 @@ import {
   publishStudioAssetToMeta,
 } from '../services/studio-image.service.js';
 import { renderCreative as renderCreativeService } from '../services/studio-render.service.js';
+import { getCreativeQuotaSnapshot } from '../services/creative-quota.service.js';
 import { db, brandKits } from '@fury/db';
 import { eq } from 'drizzle-orm';
 
@@ -66,15 +67,18 @@ export async function listAssets(req: Request, res: Response, next: NextFunction
     }
 
     const query = listAssetsQuerySchema.parse(req.query);
-    const result = await listStudioAssetsForTenant({
-      tenantId: req.tenant.tenantId,
-      type: query.type,
-      status: query.status,
-      page: query.page,
-      limit: query.limit,
-    });
+    const [result, quota] = await Promise.all([
+      listStudioAssetsForTenant({
+        tenantId: req.tenant.tenantId,
+        type: query.type,
+        status: query.status,
+        page: query.page,
+        limit: query.limit,
+      }),
+      getCreativeQuotaSnapshot(req.tenant.tenantId),
+    ]);
 
-    return res.status(200).json(result);
+    return res.status(200).json({ ...result, ...quota });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation error', details: error.errors });

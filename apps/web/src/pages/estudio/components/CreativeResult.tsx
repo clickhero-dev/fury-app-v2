@@ -151,6 +151,11 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
 
   const cd = currentResult.creativeData;
   const isLegacy = !!cd.layout && !isKnownLayout(cd.layout);
+  const modificationsRemaining = currentResult.modificationsRemaining ?? null;
+  const modificationsExhausted = modificationsRemaining !== null && modificationsRemaining <= 0;
+  const regenerateErrorMessage = (regenerateMutation.error as any)?.response?.data?.error?.message as
+    | string
+    | undefined;
 
   return (
     <div className="space-y-6">
@@ -226,6 +231,13 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
             <p className="text-sm text-[#667085]">
               {isLegacy ? 'Este modelo foi descontinuado. Crie um novo anúncio para usar os formatos atuais.' : isQuickCreate ? 'Criado via Criação Rápida. Regenere com ajustes ou salve na biblioteca.' : 'Pronto. Regenere com ajustes, salve ou publique no Meta.'}
             </p>
+            {modificationsRemaining !== null && (
+              <p className={`text-xs font-semibold ${modificationsExhausted ? 'text-red-600' : 'text-[#98A2B3]'}`}>
+                {modificationsExhausted
+                  ? 'Limite de modificações deste criativo atingido'
+                  : `${modificationsRemaining} modificaç${modificationsRemaining !== 1 ? 'ões' : 'ão'} restante${modificationsRemaining !== 1 ? 's' : ''} neste criativo`}
+              </p>
+            )}
           </div>
 
           {(cd.headline || cd.offer_text || cd.qualifier) && (
@@ -261,7 +273,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
               <div className="flex gap-2">
                 <Button
                   onClick={() => regenerateMutation.mutate({ assetId: currentResult.assetId, feedbackText: feedback })}
-                  disabled={feedback.trim().length < 3 || regenerateMutation.isPending}
+                  disabled={feedback.trim().length < 3 || regenerateMutation.isPending || modificationsExhausted}
                   className="flex-1 flex items-center justify-center gap-2 bg-[#E8631A] hover:bg-[#D45714] text-white text-sm"
                 >
                   {regenerateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -274,7 +286,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
               {regenerateMutation.isError && (
                 <div className="flex items-center gap-2 text-xs text-red-600">
                   <AlertCircle className="h-3.5 w-3.5" />
-                  Erro ao regenerar. Tente novamente.
+                  {regenerateErrorMessage ?? 'Erro ao regenerar. Tente novamente.'}
                 </div>
               )}
             </div>
@@ -292,7 +304,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
 
           <div className="flex flex-col gap-2 pt-1">
             {!isLegacy && !showRegenerateForm && (
-              <Button variant="outline" size="sm" onClick={() => setShowRegenerateForm(true)} disabled={regenerateMutation.isPending} className="w-full flex items-center justify-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowRegenerateForm(true)} disabled={regenerateMutation.isPending || modificationsExhausted} className="w-full flex items-center justify-center gap-2">
                 <RefreshCw className="h-4 w-4 shrink-0" />
                 Regenerar com ajuste
               </Button>

@@ -20,6 +20,8 @@ const IMAGE_MODEL = 'black-forest-labs/flux.2-max';
 
 interface StudioAssetResponse {
   assets: StudioAsset[];
+  creativesRemaining: number | null;
+  creativesLimit: number | null;
 }
 
 export function EstudioHome() {
@@ -37,6 +39,7 @@ export function EstudioHome() {
   // ─── OpenRouter state ──────────────────────────────────────────────
   const [orPrompt, setOrPrompt] = useState('');
   const [progressMessage, setProgressMessage] = useState('');
+  const [quotaErrorMessage, setQuotaErrorMessage] = useState<string | null>(null);
 
   const deleteMutation = useMutation({
     mutationFn: async (assetId: string) => {
@@ -64,12 +67,17 @@ export function EstudioHome() {
         assetId: data.creativeAssetId,
         imageUrl: data.imageUrl,
         creativeData: { headline: '', primary_text: '', cta: '' },
+        modificationsRemaining: data.modificationsRemaining ?? null,
       });
       setView('result');
       setProgressMessage('');
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
-    onError: () => { setView('error'); setProgressMessage(''); },
+    onError: (error: any) => {
+      setView('error');
+      setProgressMessage('');
+      setQuotaErrorMessage(error?.response?.data?.error?.message ?? null);
+    },
   });
 
   const { data, isLoading } = useQuery<StudioAssetResponse>({
@@ -82,6 +90,9 @@ export function EstudioHome() {
   });
 
   const assetList = data?.assets ?? [];
+  const creativesRemaining = data?.creativesRemaining ?? null;
+  const creativesLimit = data?.creativesLimit ?? null;
+  const quotaReached = creativesRemaining !== null && creativesRemaining <= 0;
 
   const filteredAssets = useMemo(() => {
     return assetList.filter((asset) => {
@@ -95,6 +106,7 @@ export function EstudioHome() {
 
   const handleStartQuickCreate = () => {
     setOrPrompt('');
+    setQuotaErrorMessage(null);
     setView('quick-create');
   };
   const handleQuickCreate = async () => {
@@ -127,7 +139,13 @@ export function EstudioHome() {
       const meta = JSON.parse(asset.complianceNotes ?? '{}');
       if (meta.headline) creativeData = { headline: meta.headline, primary_text: meta.primary_text ?? '', cta: meta.cta ?? '', subheadline: meta.subheadline ?? '', layout: meta.layout ?? '', color_scheme: meta.color_scheme ?? '' };
     } catch { /* use empty fallback */ }
-    setGenerationResult({ type: CREATIVE_TYPE, assetId: asset.id, imageUrl: asset.url ?? '', creativeData });
+    setGenerationResult({
+      type: CREATIVE_TYPE,
+      assetId: asset.id,
+      imageUrl: asset.url ?? '',
+      creativeData,
+      modificationsRemaining: asset.modificationsRemaining ?? null,
+    });
     setView('result');
   };
   const handleUseInCampaign = (asset: StudioAsset) => {
@@ -204,11 +222,20 @@ export function EstudioHome() {
 
               <Button
                 onClick={handleStartQuickCreate}
-                className="inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white px-8 py-3 text-base font-semibold rounded-2xl h-auto"
+                disabled={quotaReached}
+                className="inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white px-8 py-3 text-base font-semibold rounded-2xl h-auto disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Sparkles size={18} />
                 Criação Rápida
               </Button>
+
+              {creativesRemaining !== null && (
+                <p className={`text-xs font-semibold ${quotaReached ? 'text-red-600' : 'text-text-tertiary'}`}>
+                  {quotaReached
+                    ? 'Limite de criativos do mês atingido — faça upgrade do plano para continuar'
+                    : `${creativesRemaining}${creativesLimit !== null ? ` de ${creativesLimit}` : ''} criativo${creativesRemaining !== 1 ? 's' : ''} restante${creativesRemaining !== 1 ? 's' : ''} este mês`}
+                </p>
+              )}
             </div>
 
             {/* Library */}
@@ -302,6 +329,13 @@ export function EstudioHome() {
               <p className="text-sm text-text-tertiary">Descreva o anúncio que deseja gerar para criar a imagem ideal</p>
             </div>
 
+            {quotaReached && (
+              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                Limite de criativos do mês atingido — faça upgrade do plano para continuar.
+              </div>
+            )}
+
             {/* Prompt */}
             <Card>
               <CardContent className="space-y-4">
@@ -318,7 +352,7 @@ export function EstudioHome() {
                 </div>
                 <Button
                   onClick={handleQuickCreate}
-                  disabled={orPrompt.trim().length < 10 || orImageMutation.isPending}
+                  disabled={orPrompt.trim().length < 10 || orImageMutation.isPending || quotaReached}
                   className="w-full bg-[#E8631A] hover:bg-[#D45714]"
                 >
                   {orImageMutation.isPending ? (
@@ -381,7 +415,9 @@ export function EstudioHome() {
             </div>
             <div>
               <h2 className="text-2xl font-bold text-text-primary">Não foi possível gerar o anúncio</h2>
-              <p className="mt-2 text-sm text-text-tertiary">Verifique sua conexão e tente novamente</p>
+              <p className="mt-2 text-sm text-text-tertiary">
+                {quotaErrorMessage ?? 'Verifique sua conexão e tente novamente'}
+              </p>
             </div>
             <div className="flex gap-3">
               <Button onClick={handleStartQuickCreate} className="bg-[#EA580C] hover:bg-[#C2410C] text-white">

@@ -82,11 +82,17 @@ const upsertGoalsSchema = z.object({
   targetCpa: z.number().positive(),
 });
 
+const planLimitsSchema = z.object({
+  creativesPerMonth: z.number().int().positive().nullable().optional(),
+  modificationsPerCreative: z.number().int().positive().nullable().optional(),
+});
+
 const createPlanSchema = z.object({
   name: z.string().min(1).max(100),
   priceCents: z.number().int().positive(),
   interval: z.enum(["monthly", "yearly"]).default("monthly"),
   features: z.record(z.boolean()).default({}),
+  limits: planLimitsSchema.default({}),
   isActive: z.boolean().default(true),
 });
 
@@ -95,6 +101,7 @@ const updatePlanSchema = z.object({
   priceCents: z.number().int().positive().optional(),
   interval: z.enum(["monthly", "yearly"]).optional(),
   features: z.record(z.boolean()).optional(),
+  limits: planLimitsSchema.optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -454,6 +461,10 @@ export async function updateSubscription(
           ? new Date(body.currentPeriodEnd)
           : undefined;
 
+      const chosenPlan = await db.query.plans.findFirst({ where: eq(plans.id, planId) });
+      const creativesRemaining =
+        (chosenPlan?.limits as { creativesPerMonth?: number | null } | null)?.creativesPerMonth ?? null;
+
       await db.insert(subscriptions).values({
         tenantId: req.params.tenantId,
         planId,
@@ -461,6 +472,7 @@ export async function updateSubscription(
         trialEndsAt,
         currentPeriodEnd,
         isNonExpirable: body.isNonExpirable ?? false,
+        creativesRemaining,
         asaasSubscriptionId: body.billingType,
         createdAt: now,
         updatedAt: now,
@@ -485,6 +497,11 @@ export async function updateSubscription(
       if (body.billingType !== undefined) {
         updates.asaasSubscriptionId = body.billingType;
       }
+
+      const effectivePlanId = (updates.planId as string | undefined) ?? sub.planId;
+      const effectivePlan = await db.query.plans.findFirst({ where: eq(plans.id, effectivePlanId) });
+      updates.creativesRemaining =
+        (effectivePlan?.limits as { creativesPerMonth?: number | null } | null)?.creativesPerMonth ?? null;
 
       updates.updatedAt = now;
 

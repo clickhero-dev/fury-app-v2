@@ -2,12 +2,18 @@ import { useEffect, useState } from 'react';
 import { Plus, Save, Trash2 } from 'lucide-react';
 import api from '@/lib/api';
 
+interface PlanLimits {
+  creativesPerMonth: number | null;
+  modificationsPerCreative: number | null;
+}
+
 interface Plan {
   id: string;
   name: string;
   priceCents: number;
   interval: string;
   features: Record<string, boolean>;
+  limits: PlanLimits;
   isActive: boolean;
   subscriberCount: number;
 }
@@ -18,7 +24,13 @@ export function PlansPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [showNew, setShowNew] = useState(false);
-  const [newPlan, setNewPlan] = useState({ name: '', priceCents: 0, interval: 'monthly', isActive: true });
+  const [newPlan, setNewPlan] = useState({
+    name: '',
+    priceCents: 0,
+    interval: 'monthly',
+    isActive: true,
+    limits: { creativesPerMonth: null, modificationsPerCreative: null } as PlanLimits,
+  });
   const [editing, setEditing] = useState<Record<string, Partial<Plan>>>({});
 
   // Delete / migration state
@@ -43,7 +55,7 @@ export function PlansPage() {
       await api.post('/admin/plans', { ...newPlan, priceCents: Math.round(newPlan.priceCents * 100) });
       setMsg('Plano criado');
       setShowNew(false);
-      setNewPlan({ name: '', priceCents: 0, interval: 'monthly', isActive: true });
+      setNewPlan({ name: '', priceCents: 0, interval: 'monthly', isActive: true, limits: { creativesPerMonth: null, modificationsPerCreative: null } });
       const r = await api.get('/admin/plans');
       setPlans(r.data.data);
     } catch { setMsg('Erro ao criar'); }
@@ -70,6 +82,12 @@ export function PlansPage() {
       ...prev,
       [planId]: { ...(prev[planId] || {}), [field]: value },
     }));
+  };
+
+  const setLimitEdit = (plan: Plan, field: keyof PlanLimits, raw: string) => {
+    const value = raw === '' ? null : Math.max(0, parseInt(raw, 10) || 0);
+    const base = editing[plan.id]?.limits ?? plan.limits ?? { creativesPerMonth: null, modificationsPerCreative: null };
+    setEdit(plan.id, 'limits', { ...base, [field]: value });
   };
 
   const handleDeleteClick = (plan: Plan) => {
@@ -125,24 +143,40 @@ export function PlansPage() {
       )}
 
       {showNew && (
-        <div className="mb-4 bg-zinc-900 border border-zinc-800 rounded-2xl p-5 grid grid-cols-5 gap-3">
-          <input value={newPlan.name} onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })}
-            placeholder="Nome do plano" className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
-          <input type="number" step="0.01" value={newPlan.priceCents || ''} onChange={(e) => setNewPlan({ ...newPlan, priceCents: parseFloat(e.target.value) || 0 })}
-            placeholder="Preço (R$)" className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
-          <select value={newPlan.interval} onChange={(e) => setNewPlan({ ...newPlan, interval: e.target.value })}
-            className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100">
-            <option value="monthly">Mensal</option>
-            <option value="yearly">Anual</option>
-          </select>
-          <button onClick={createPlan} disabled={saving}
-            className="bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors">
-            Criar
-          </button>
-          <button onClick={() => setShowNew(false)}
-            className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-xl text-sm transition-colors">
-            Cancelar
-          </button>
+        <div className="mb-4 bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
+          <div className="grid grid-cols-5 gap-3">
+            <input value={newPlan.name} onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })}
+              placeholder="Nome do plano" className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+            <input type="number" step="0.01" value={newPlan.priceCents || ''} onChange={(e) => setNewPlan({ ...newPlan, priceCents: parseFloat(e.target.value) || 0 })}
+              placeholder="Preço (R$)" className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+            <select value={newPlan.interval} onChange={(e) => setNewPlan({ ...newPlan, interval: e.target.value })}
+              className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100">
+              <option value="monthly">Mensal</option>
+              <option value="yearly">Anual</option>
+            </select>
+            <button onClick={createPlan} disabled={saving}
+              className="bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors">
+              Criar
+            </button>
+            <button onClick={() => setShowNew(false)}
+              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-xl text-sm transition-colors">
+              Cancelar
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-zinc-500 mb-1 block">Criativos por mês (vazio = sem limite)</label>
+              <input type="number" min={0} value={newPlan.limits.creativesPerMonth ?? ''}
+                onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, creativesPerMonth: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) } })}
+                placeholder="Sem limite" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+            </div>
+            <div>
+              <label className="text-xs text-zinc-500 mb-1 block">Modificações por criativo (vazio = sem limite)</label>
+              <input type="number" min={0} value={newPlan.limits.modificationsPerCreative ?? ''}
+                onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, modificationsPerCreative: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) } })}
+                placeholder="Sem limite" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+            </div>
+          </div>
         </div>
       )}
 
@@ -150,8 +184,9 @@ export function PlansPage() {
         {plans.map((plan) => {
           const edit = editing[plan.id] || {};
           const hasChanges = Object.keys(edit).length > 0;
+          const effectiveLimits = edit.limits ?? plan.limits ?? { creativesPerMonth: null, modificationsPerCreative: null };
           return (
-            <div key={plan.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+            <div key={plan.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
               <div className="grid grid-cols-5 gap-3 items-end">
                 <div>
                   <label className="text-xs text-zinc-500 mb-1 block">Nome</label>
@@ -192,7 +227,21 @@ export function PlansPage() {
                   </button>
                 </div>
               </div>
-              <div className="mt-3 text-xs text-zinc-500">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-zinc-500 mb-1 block">Criativos por mês (vazio = sem limite)</label>
+                  <input type="number" min={0} value={effectiveLimits.creativesPerMonth ?? ''}
+                    onChange={(e) => setLimitEdit(plan, 'creativesPerMonth', e.target.value)}
+                    placeholder="Sem limite" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-500 mb-1 block">Modificações por criativo (vazio = sem limite)</label>
+                  <input type="number" min={0} value={effectiveLimits.modificationsPerCreative ?? ''}
+                    onChange={(e) => setLimitEdit(plan, 'modificationsPerCreative', e.target.value)}
+                    placeholder="Sem limite" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+                </div>
+              </div>
+              <div className="text-xs text-zinc-500">
                 ID: {plan.id} · Features: {Object.keys(plan.features).length}
                 {' · '}
                 <span className={plan.subscriberCount > 0 ? 'text-amber-400' : 'text-zinc-500'}>

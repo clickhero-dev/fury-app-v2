@@ -1,4 +1,4 @@
-import { and, count, desc, eq, or, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, or, type SQL } from 'drizzle-orm';
 import OpenAI from 'openai';
 import { db, creativeAssets, metaConnections } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
@@ -303,6 +303,7 @@ export type StudioAssetListItem = {
   createdAt: string;
   headline?: string;
   primaryText?: string;
+  modificationsRemaining: number | null;
 };
 
 /**
@@ -380,6 +381,18 @@ export async function listStudioAssetsForTenant(params: {
   const total = Number((countRow as any)?.total ?? 0);
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
 
+  // modificationsRemaining só é significativo na linha raiz da linhagem —
+  // resolve em lote pra não fazer N+1 (uma query pros ids raiz distintos
+  // desta página).
+  const rootIds = Array.from(new Set(rows.map((r: any) => r.rootAssetId ?? r.id)));
+  const rootRows = rootIds.length
+    ? await db.query.creativeAssets.findMany({
+        where: inArray(creativeAssets.id, rootIds),
+        columns: { id: true, modificationsRemaining: true },
+      })
+    : [];
+  const modificationsRemainingByRootId = new Map(rootRows.map((r) => [r.id, r.modificationsRemaining]));
+
   return {
     assets: rows.map((r: any) => ({
       id: r.id,
@@ -389,6 +402,7 @@ export async function listStudioAssetsForTenant(params: {
       complianceNotes: r.complianceNotes ?? null,
       metaAssetId: r.metaAssetId ?? null,
       createdAt: r.createdAt.toISOString(),
+      modificationsRemaining: modificationsRemainingByRootId.get(r.rootAssetId ?? r.id) ?? null,
       ...extractCreativeCopyFromComplianceNotes(r.complianceNotes ?? null),
     })),
     total,

@@ -81,7 +81,9 @@ describe("updateSubscription (superadmin)", () => {
     await updateSubscription(req, res, next);
 
     expect(mockSubFindFirst).toHaveBeenCalledTimes(1);
-    expect(mockPlanFindFirst).toHaveBeenCalledTimes(1);
+    // 2 chamadas: 1 para escolher um plano fallback (nenhum veio no body),
+    // 1 para ler os limits do plano escolhido e definir creativesRemaining.
+    expect(mockPlanFindFirst).toHaveBeenCalledTimes(2);
     expect(mockInsert).toHaveBeenCalledTimes(1);
     const inserted = mockInsert.mock.calls[0][0];
     expect(inserted).toMatchObject({
@@ -121,6 +123,7 @@ describe("updateSubscription (superadmin)", () => {
 
   it("usa planId do body quando fornecido (sem subscription)", async () => {
     mockSubFindFirst.mockResolvedValue(null);
+    mockPlanFindFirst.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000001" });
     mockInsert.mockResolvedValue(undefined);
 
     const req = mockReq({
@@ -131,8 +134,9 @@ describe("updateSubscription (superadmin)", () => {
 
     await updateSubscription(req, res, next);
 
-    // Não deve consultar plans quando planId vem no body
-    expect(mockPlanFindFirst).not.toHaveBeenCalled();
+    // Não busca plano fallback (planId já veio no body), mas ainda busca
+    // o plano escolhido 1x para ler os limits e definir creativesRemaining.
+    expect(mockPlanFindFirst).toHaveBeenCalledTimes(1);
     const inserted = mockInsert.mock.calls[0][0];
     expect(inserted.planId).toBe("00000000-0000-4000-8000-000000000001");
   });

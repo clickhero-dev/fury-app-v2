@@ -15,6 +15,7 @@ import {
   bigint,
   bigserial,
   smallint,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -156,11 +157,14 @@ export const creativeAssets = pgTable(
     metaAssetId: varchar('meta_asset_id', { length: 255 }),
     complianceStatus: complianceStatusEnum('compliance_status').notNull().default('pending_compliance'),
     complianceNotes: text('compliance_notes'),
+    rootAssetId: uuid('root_asset_id').references((): AnyPgColumn => creativeAssets.id),
+    modificationsRemaining: integer('modifications_remaining'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
     tenantIdIdx: index('creative_assets_tenant_id_idx').on(table.tenantId),
     metaAssetIdIdx: index('creative_assets_meta_asset_id_idx').on(table.metaAssetId),
+    rootAssetIdIdx: index('creative_assets_root_asset_id_idx').on(table.rootAssetId),
   })
 );
 
@@ -375,6 +379,7 @@ export const plans = pgTable('plans', {
   priceCents: integer('price_cents').notNull(),
   interval: planIntervalEnum('interval').notNull().default('monthly'),
   features: jsonb('features').notNull().default(sql`'{}'::jsonb`),
+  limits: jsonb('limits').notNull().default(sql`'{}'::jsonb`),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
@@ -395,6 +400,7 @@ export const subscriptions = pgTable(
     status: subscriptionStatusEnum('status').notNull().default('trial'),
     trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
     currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+    creativesRemaining: integer('creatives_remaining'),
     isNonExpirable: boolean('is_non_expirable').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
