@@ -25,7 +25,7 @@ export function AdminLogin() {
       localStorage.setItem('token', token);
       localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('user', JSON.stringify(user));
-      navigate('/admin');
+      navigate('/admin/users');
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 401) {
         setError('Email ou senha incorretos');

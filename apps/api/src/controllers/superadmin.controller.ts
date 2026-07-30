@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and, or, ilike } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import {
   db,
@@ -845,6 +845,28 @@ export async function listUsers(
   next: NextFunction,
 ) {
   try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
+    const offset = (page - 1) * limit;
+    const search = (req.query.search as string)?.trim() || null;
+
+    const where = search
+      ? or(
+          ilike(users.name, `%${search}%`),
+          ilike(users.email, `%${search}%`),
+          ilike(tenants.name, `%${search}%`),
+        )
+      : undefined;
+
+    const [countResult] = await db
+      .select({ total: sql<number>`count(*)` })
+      .from(users)
+      .leftJoin(tenants, eq(users.tenantId, tenants.id))
+      .where(where);
+
+    const total = Number(countResult?.total ?? 0);
+    const pages = Math.ceil(total / limit);
+
     const rows = await db
       .select({
         id: users.id,
@@ -857,9 +879,16 @@ export async function listUsers(
       })
       .from(users)
       .leftJoin(tenants, eq(users.tenantId, tenants.id))
-      .orderBy(desc(users.createdAt));
+      .where(where)
+      .orderBy(desc(users.createdAt))
+      .limit(limit)
+      .offset(offset);
 
-    res.json({ success: true, data: rows, timestamp: new Date().toISOString() });
+    res.json({
+      success: true,
+      data: { users: rows, total, page, pages, limit },
+      timestamp: new Date().toISOString(),
+    });
   } catch (err) {
     next(err);
   }
