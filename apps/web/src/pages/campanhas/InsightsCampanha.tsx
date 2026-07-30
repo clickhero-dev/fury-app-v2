@@ -222,7 +222,7 @@ export function InsightsCampanha() {
           {data && (
             <>
               <span className="text-border">·</span>
-              <h2 className="text-lg font-bold text-text-primary truncate max-w-[320px]">
+              <h2 className="text-lg font-bold text-text-primary whitespace-normal">
                 {data.campaign.name}
               </h2>
               <StatusBadge status={data.campaign.status} />
