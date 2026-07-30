@@ -18,6 +18,8 @@ export interface StudioAsset {
   complianceNotes?: string | null;
   /** ID do asset registrado no Meta Ads após publicação. */
   metaAssetId?: string | null;
+  /** Modificações restantes deste criativo (raiz da linhagem). null = sem limite. */
+  modificationsRemaining?: number | null;
 }
 
 /** Payload para geração de imagem via DALL-E 3. */
@@ -251,4 +253,6 @@ export interface GenerateCreativeResponse {
     primary_text?: string;
     color_scheme?: string;
   };
+  /** Modificações restantes deste criativo (raiz da linhagem). null = sem limite. */
+  modificationsRemaining?: number | null;
 }

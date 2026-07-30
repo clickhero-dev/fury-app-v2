@@ -10,6 +10,13 @@ import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import { openrouterService } from '../services/openrouter.service.js';
 import { saveTemporaryStudioImage, studioAssetsDir } from '../lib/temp-storage.js';
 import { uploadAsset } from '../services/storage.service.js';
+import {
+  consumeCreativeQuota,
+  refundCreativeQuota,
+  consumeModificationQuota,
+  refundModificationQuota,
+  getModificationsPerCreativeLimit,
+} from '../services/creative-quota.service.js';
 
 const router = Router();
 
@@ -197,43 +204,53 @@ router.post('/generate-image', authMiddleware, tenantMiddleware, async (req: Req
     const tenantId = (req as any).tenant?.tenantId as string;
     const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.APP_URL || `https://${req.get('host')}`;
 
-    const brand = await getBrandContext(tenantId);
+    await consumeCreativeQuota(tenantId);
 
-    const base64Image = await openrouterService.generateImage({
-      model: body.model,
-      prompt: body.prompt,
-      aspect_ratio: body.aspect_ratio,
-      resolution: body.resolution,
-      logoUrl: brand.logoUrl,
-    });
+    try {
+      const brand = await getBrandContext(tenantId);
 
-    const imageUrl = await uploadImageToStorage(base64Image);
-    const [asset] = await db
-      .insert(creativeAssets)
-      .values({
-        tenantId,
-        type: 'image',
-        url: imageUrl,
-        complianceStatus: 'pending_compliance',
-        complianceNotes: JSON.stringify({
-          prompt: body.prompt,
-          model: body.model,
-          generatedAt: new Date().toISOString(),
-          source: 'openrouter-quick-create',
-          brand: { businessName: brand.businessName, primaryColor: brand.primaryColor },
-        }),
-      })
-      .returning();
+      const base64Image = await openrouterService.generateImage({
+        model: body.model,
+        prompt: body.prompt,
+        aspect_ratio: body.aspect_ratio,
+        resolution: body.resolution,
+        logoUrl: brand.logoUrl,
+      });
 
-    res.json({
-      type: 'image' as const,
-      creativeAssetId: asset.id,
-      imageUrl,
-      model: body.model,
-      prompt: body.prompt,
-      generatedAt: new Date().toISOString(),
-      status: 'pending_compliance' as const,
-    });
+      const imageUrl = await uploadImageToStorage(base64Image);
+      const modificationsRemaining = await getModificationsPerCreativeLimit(tenantId);
+      const [asset] = await db
+        .insert(creativeAssets)
+        .values({
+          tenantId,
+          type: 'image',
+          url: imageUrl,
+          complianceStatus: 'pending_compliance',
+          modificationsRemaining,
+          complianceNotes: JSON.stringify({
+            prompt: body.prompt,
+            model: body.model,
+            generatedAt: new Date().toISOString(),
+            source: 'openrouter-quick-create',
+            brand: { businessName: brand.businessName, primaryColor: brand.primaryColor },
+          }),
+        })
+        .returning();
+
+      res.json({
+        type: 'image' as const,
+        creativeAssetId: asset.id,
+        imageUrl,
+        model: body.model,
+        prompt: body.prompt,
+        generatedAt: new Date().toISOString(),
+        status: 'pending_compliance' as const,
+        modificationsRemaining,
+      });
+    } catch (error) {
+      await refundCreativeQuota(tenantId);
+      throw error;
+    }
   } catch (error) {
     next(error);
   }
@@ -448,36 +465,46 @@ router.post('/regenerate-ad', authMiddleware, tenantMiddleware, maskUpload.singl
       return res.status(404).json({ error: 'Asset não encontrado' });
     }
 
+    const rootAssetId = asset.rootAssetId ?? asset.id;
+    await consumeModificationQuota(rootAssetId);
+
     let imageUrl: string;
     let source = 'openrouter-edit-image';
-    if (maskFile?.path) {
-      try {
-        imageUrl = await openrouterService.inpaintImage({
-          imageUrl: asset.url,
-          maskPath: maskFile.path,
-          prompt: feedback,
-        });
-        source = 'openrouter-inpaint';
-      } catch (e) {
-        console.error('[regenerate-ad] inpaint failed, falling back to editImage:', (e as Error).message);
+    try {
+      if (maskFile?.path) {
+        try {
+          imageUrl = await openrouterService.inpaintImage({
+            imageUrl: asset.url,
+            maskPath: maskFile.path,
+            prompt: feedback,
+          });
+          source = 'openrouter-inpaint';
+        } catch (e) {
+          console.error('[regenerate-ad] inpaint failed, falling back to editImage:', (e as Error).message);
+          imageUrl = await openrouterService.editImage({
+            imageUrl: asset.url,
+            instructions: feedback,
+          });
+          source = 'openrouter-edit-image-fallback';
+        }
+      } else {
         imageUrl = await openrouterService.editImage({
           imageUrl: asset.url,
           instructions: feedback,
         });
-        source = 'openrouter-edit-image-fallback';
       }
-    } else {
-      imageUrl = await openrouterService.editImage({
-        imageUrl: asset.url,
-        instructions: feedback,
-      });
+    } catch (error) {
+      await refundModificationQuota(rootAssetId);
+      throw error;
     }
 
+    const root = await db.query.creativeAssets.findFirst({ where: eq(creativeAssets.id, rootAssetId) });
     const [newAsset] = await db.insert(creativeAssets).values({
       tenantId,
       type: 'image',
       url: imageUrl,
       complianceStatus: 'pending_compliance',
+      rootAssetId,
       complianceNotes: JSON.stringify({
         generatedAt: new Date().toISOString(),
         source,
@@ -491,6 +518,7 @@ router.post('/regenerate-ad', authMiddleware, tenantMiddleware, maskUpload.singl
       assetId: newAsset.id,
       imageUrl,
       creativeData: { headline: '', primary_text: '', cta: '' },
+      modificationsRemaining: root?.modificationsRemaining ?? null,
     });
   } catch (error) {
     next(error);
