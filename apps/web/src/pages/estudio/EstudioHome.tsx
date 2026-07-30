@@ -127,7 +127,7 @@ export function EstudioHome() {
       const meta = JSON.parse(asset.complianceNotes ?? '{}');
       if (meta.headline) creativeData = { headline: meta.headline, primary_text: meta.primary_text ?? '', cta: meta.cta ?? '', subheadline: meta.subheadline ?? '', layout: meta.layout ?? '', color_scheme: meta.color_scheme ?? '' };
     } catch { /* use empty fallback */ }
-    setGenerationResult({ assetId: asset.id, imageUrl: asset.url ?? '', creativeData });
+    setGenerationResult({ type: CREATIVE_TYPE, assetId: asset.id, imageUrl: asset.url ?? '', creativeData });
     setView('result');
   };
   const handleUseInCampaign = (asset: StudioAsset) => {
