@@ -3,8 +3,11 @@ import { queryClient } from './query-client';
 import { store } from '../store';
 import { setTokens } from '../store/slices/authSlice';
 
-// ponytail: runtime fallback deriva api do hostname trocando web→api (EasyPanel pattern)
-const BASE_URL = import.meta.env.VITE_API_URL ?? window.location.origin.replace('web', 'api') + '/api';
+// ponytail: deriva API do hostname. Prod: fury-web→fury-api. HMG: fury-web-hmg→hmg-fury-api.
+const BASE_URL = import.meta.env.VITE_API_URL ?? window.location.origin
+  .replace('-fury-web', '-fury-api')
+  .replace('-fury-api-hmg', '-hmg-fury-api') + '/api';
+// ponytail: adicionar .replace() pra cada novo ambiente com nome inconsistente
 
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
