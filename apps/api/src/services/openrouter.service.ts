@@ -10,9 +10,18 @@ function getClient() {
   return apiKey;
 }
 
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
+export type ChatMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string | ChatContentPart[];
+};
+
 export const openrouterService = {
   async chat(
-    messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
+    messages: ChatMessage[],
     options: { model?: string; temperature?: number; max_tokens?: number; response_format?: { type: 'json_object' } } = {},
   ): Promise<string> {
     const apiKey = getClient();

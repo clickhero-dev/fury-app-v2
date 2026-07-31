@@ -29,6 +29,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
   const uploadMutation = useUploadCreative();
 
   const canUseInstagramPost = objective === 'engagement' || objective === 'messages' || objective === 'whatsapp';
+  const selectedImageUrl = value.assetUrl || value.uploadUrl || value.mediaUrl || null;
 
   useEffect(() => {
     if (!canUseInstagramPost && tab === 'instagram') {
@@ -41,7 +42,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
 
   const suggestMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post('/campaigns/suggest-text');
+      const res = await api.post('/campaigns/suggest-text', { imageUrl: selectedImageUrl });
       return res.data.data as { headline: string; primaryText: string };
     },
     onSuccess: (data) => {
@@ -211,9 +212,9 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
               <button
                 type="button"
                 onClick={() => suggestMutation.mutate()}
-                disabled={suggestMutation.isPending}
-                className="inline-flex items-center gap-1 text-xs font-medium text-[#E8631A] hover:text-[#D4550F] disabled:opacity-50 transition-colors"
-                title="Sugerir com IA"
+                disabled={suggestMutation.isPending || !selectedImageUrl}
+                className="inline-flex items-center gap-1 text-xs font-medium text-[#E8631A] hover:text-[#D4550F] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title={!selectedImageUrl ? 'Selecione uma imagem primeiro' : 'Sugerir com IA'}
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 {suggestMutation.isPending ? 'Gerando...' : 'Sugestão IA'}
@@ -229,6 +230,12 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
             placeholder="Ex: Promoção imperdível este mês!"
             className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20"
           />
+          {suggestMutation.isError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 p-2 mt-1 text-xs text-red-700">
+              {(suggestMutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data
+                ?.error?.message || 'Não foi possível gerar sugestões agora. Tente novamente em instantes.'}
+            </div>
+          )}
         </div>
 
         <div>
