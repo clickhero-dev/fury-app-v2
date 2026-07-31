@@ -53,7 +53,9 @@ export function PainelCampanhas() {
   const [period, setPeriod] = useState<Period>('this_month');
 
   const { startDate, endDate } = getPeriodDates(period);
-  const { data: campaigns = [], isLoading } = useCampaigns({ startDate, endDate });
+  const { data: result = { data: [] }, isLoading } = useCampaigns({ startDate, endDate });
+  const campaigns = result.data ?? [];
+  const subscriptionError = result.subscriptionError;
   const pauseMutation = usePauseCampaign();
   const deleteMutation = useDeleteCampaign();
 
@@ -235,6 +237,17 @@ export function PainelCampanhas() {
           </div>
         )}
 
+        {/* Subscription error banner */}
+        {subscriptionError && (
+          <div className="flex items-start gap-3 bg-error-light border border-error/20 rounded-xl px-4 py-3 text-sm text-error">
+            <span className="shrink-0 mt-0.5">⚠️</span>
+            <div className="flex-1">
+              <p className="font-medium">Assinatura vencida</p>
+              <p className="text-xs mt-1">{subscriptionError.message}</p>
+            </div>
+          </div>
+        )}
+
         {/* Toolbar: search + status filter */}
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Search */}
@@ -270,7 +283,7 @@ export function PainelCampanhas() {
             data={pagedCampaigns}
             keyField="id"
             isLoading={isLoading}
-            isEmpty={filteredCampaigns.length === 0 && !isLoading}
+            isEmpty={filteredCampaigns.length === 0 && !isLoading && !subscriptionError}
             emptyMessage="Nenhuma campanha encontrada"
             theadRowClassName="bg-gray-50"
             thClassName="uppercase text-xs text-gray-500 tracking-wider font-semibold py-3"
