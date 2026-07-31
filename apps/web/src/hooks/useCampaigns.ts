@@ -8,6 +8,11 @@ import {
   type CampaignsApiResponse,
 } from '../types/campaigns';
 
+interface CampaignsResult {
+  data: CampaignData[];
+  subscriptionError?: { code: string; message: string };
+}
+
 function normalizeCampaignItems(data: unknown): CampaignApiItem[] {
   if (Array.isArray(data)) {
     return data as CampaignApiItem[];
@@ -33,13 +38,27 @@ export function useCampaigns(period?: CampaignsPeriod) {
 
   return useQuery({
     queryKey: ['campaigns', startDate, endDate],
-    queryFn: async (): Promise<CampaignData[]> => {
-      const response = await api.get<CampaignsApiResponse>('/metrics/campaigns', {
-        params: { limit: 100, startDate, endDate },
-      });
-      const items = normalizeCampaignItems(response.data?.data);
-      if (items.length === 0) return [];
-      return items.map(mapCampaignApiToRow);
+    queryFn: async (): Promise<CampaignsResult> => {
+      try {
+        const response = await api.get<CampaignsApiResponse>('/metrics/campaigns', {
+          params: { limit: 100, startDate, endDate },
+        });
+        const items = normalizeCampaignItems(response.data?.data);
+        return {
+          data: items.length === 0 ? [] : items.map(mapCampaignApiToRow),
+        };
+      } catch (error: any) {
+        if (error?.response?.status === 403 && error?.response?.data?.error?.code === 'SUBSCRIPTION_EXPIRED') {
+          return {
+            data: [],
+            subscriptionError: {
+              code: error?.response?.data?.error?.code,
+              message: error?.response?.data?.error?.message,
+            },
+          };
+        }
+        throw error;
+      }
     },
     placeholderData: keepPreviousData,
     staleTime: 30 * 1000,
