@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useLogout } from '@/hooks/useLogout';
+import { SidebarUserCard } from '@/components/SidebarUserCard';
 
 interface SidebarProps {
   /** Controla se a sidebar está aberta no mobile (overlay lateral). */
@@ -40,6 +41,7 @@ const navItems = [
  *   Um overlay escuro é renderizado pelo `AuthenticatedShell` ao abrir.
  * - **Item ativo:** Destaca o item correspondente à rota atual via `useLocation`.
  *   Suporta correspondência exata e por prefixo de rota (exceto `/configuracoes`).
+ * - **Perfil:** Exibe o `SidebarUserCard` com avatar, nome e plano do usuário (oculto quando colapsada).
  * - **Logout:** Exibe o primeiro nome do usuário autenticado e executa logout ao clicar.
  * - **Colapso:** Botão visível apenas no desktop para alternar entre modo expandido e colapsado.
  *   No modo colapsado, os labels são ocultados e os ícones ficam centralizados.
@@ -68,22 +70,31 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       `}
     >
       {/* Cabeçalho com logo e botão de fechar (mobile) */}
-      <div className="p-6 flex items-center justify-between flex-shrink-0">
-        {!collapsed && (
-          <h1 className="text-xl font-bold tracking-wider !text-white">FURY</h1>
-        )}
-        <button
-          onClick={onMobileClose}
-          className="md:hidden ml-auto p-1 rounded text-sidebar-icon/70 hover:text-sidebar-text transition-colors"
-          aria-label="Fechar menu"
+      <div
+        className={`h-[72px] flex items-center flex-shrink-0 overflow-hidden whitespace-nowrap ${
+          collapsed ? 'justify-center px-0' : 'justify-between px-6'
+        }`}
+      >
+        <h1
+          className="text-xl font-black tracking-[-0.03em] !text-sidebar-text leading-none"
+          style={{ letterSpacing: '-0.03em' }}
         >
-          <X className="w-5 h-5" />
-        </button>
+          {collapsed ? 'F' : 'FURY'}
+        </h1>
+        {!collapsed && (
+          <button
+            onClick={onMobileClose}
+            className="md:hidden ml-auto p-1 rounded text-sidebar-icon/70 hover:text-sidebar-text transition-colors"
+            aria-label="Fechar menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {/* Navegação principal */}
-      <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
-        <ul className="space-y-1">
+      <nav className="flex-1 px-3 flex flex-col gap-0.5 overflow-y-auto">
+        <ul className="flex flex-col gap-0.5">
           {navItems.map((item) => {
             // Item ativo por correspondência exata ou prefixo de rota
             const isActive =
@@ -96,36 +107,46 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                 <Link
                   to={item.path}
                   onClick={onMobileClose}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-sidebar-active text-sidebar-text'
-                      : 'text-sidebar-icon/85 hover:bg-sidebar-hover hover:text-sidebar-text'
-                  }`}
                   title={collapsed ? item.label : undefined}
+                  className={`relative w-full flex items-center gap-3 h-10 px-3 rounded-full text-sm font-medium overflow-hidden transition-colors ${
+                    collapsed ? 'justify-center' : ''
+                  } ${
+                    isActive
+                      ? 'bg-white/15 text-sidebar-text'
+                      : 'text-sidebar-icon/85 hover:bg-white/10 hover:text-sidebar-text'
+                  }`}
                 >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
-                  {!collapsed && <span>{item.label}</span>}
+                  {/* Indicador de item ativo */}
+                  {isActive && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-sidebar-text" />
+                  )}
+                  <Icon size={18} strokeWidth={isActive ? 2 : 1.5} className="flex-shrink-0" />
+                  {!collapsed && <span className="truncate">{item.label}</span>}
                 </Link>
               </li>
             );
           })}
         </ul>
       </nav>
+{/* Rodapé: card de perfil, logout e botão de colapso */}
+<div className="px-3 pb-5">
+        {!collapsed && (
+          <div className="mb-2">
+            <SidebarUserCard />
+          </div>
+        )}
 
-      {/* Rodapé: logout e botão de colapso */}
-      <div className="pb-3 space-y-2 flex-shrink-0">
-        <div className="px-3 border-t border-sidebar-hover pt-3">
+        <div className="border-t border-sidebar-hover pt-3 flex justify-center">
           <button
             onClick={() => { onMobileClose?.(); logout(); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-icon/70 hover:bg-sidebar-hover hover:text-sidebar-text transition-colors${
-              collapsed ? 'justify-center' : ''
-            }`}
             title={collapsed ? 'Sair' : undefined}
+            className={`group inline-flex items-center justify-center gap-2 rounded-full text-[13px] font-medium transition-colors ${
+              collapsed ? 'w-10 h-10 mx-auto px-0' : 'px-3 h-9'
+            }`}
           >
-            <LogOut className="w-5 h-5 flex-shrink-0" />
+            <LogOut size={16} strokeWidth={2} className="flex-shrink-0 text-sidebar-text/70 group-hover:text-sidebar-text transition-colors" />
             {!collapsed && (
-              <span className="flex-1 text-left truncate">
-                {/* Exibe apenas o primeiro nome do usuário autenticado */}
+              <span className="flex-shrink-0 truncate text-sidebar-text/70 group-hover:text-sidebar-text transition-colors">
                 {user?.name ? `Sair (${user.name.split(' ')[0]})` : 'Sair'}
               </span>
             )}
@@ -133,16 +154,16 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         </div>
 
         {/* Botão de colapso — visível apenas no desktop */}
-        <div className="px-3 border-t border-sidebar-hover pt-3">
+        <div className="mt-3 pt-3 border-t border-sidebar-hover hidden md:flex justify-center">
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden md:flex w-full items-center justify-center px-3 py-2.5rounded-lg text-sidebar-icon/85 hover:bg-sidebar-hover hover:text-sidebar-text transition-colors"
-            title={collapsed ? 'Expandir' : 'Colapsar'}
+            title={collapsed ? 'Expandir sidebar' : 'Recolher sidebar'}
+            className="w-8 h-8 flex items-center justify-center rounded-lg cursor-pointer"
           >
             <ChevronLeft
-              className={`w-5 h-5 transition-transform duration-300 ${
-                collapsed ? 'rotate-180' : ''
-              }`}
+              size={16}
+              strokeWidth={2}
+              className={`text-sidebar-icon/70 hover:text-sidebar-text transition-all duration-300 ${collapsed ? 'rotate-180' : ''}`}
             />
           </button>
         </div>
