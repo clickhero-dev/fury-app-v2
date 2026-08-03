@@ -14,7 +14,7 @@ interface MetaLocationsResponse {
   data: MetaLocationOption[];
 }
 
-export function useMetaLocations(query: string) {
+export function useMetaLocations(query: string, tenantId?: string) {
   const [debouncedQuery, setDebouncedQuery] = useState(query);
 
   useEffect(() => {
@@ -25,10 +25,14 @@ export function useMetaLocations(query: string) {
   const enabled = debouncedQuery.trim().length >= 2;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['campaigns/meta-locations', debouncedQuery],
+    queryKey: ['campaigns/meta-locations', debouncedQuery, tenantId],
     queryFn: async () => {
+      const params: { q: string; tenantId?: string } = { q: debouncedQuery };
+      if (tenantId) {
+        params.tenantId = tenantId;
+      }
       const response = await api.get<MetaLocationsResponse>('/campaigns/meta-locations', {
-        params: { q: debouncedQuery },
+        params,
       });
       return response.data.data;
     },

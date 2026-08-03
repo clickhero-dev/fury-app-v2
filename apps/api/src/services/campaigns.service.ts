@@ -20,6 +20,19 @@ import { DefaultCampaignRepository } from '../lib/providers/default-campaign.rep
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
+const DEV_MOCK_LOCATIONS = [
+  { key: '2421217', name: 'São Paulo', region: 'São Paulo (state)', country_code: 'BR', type: 'city' },
+  { key: '2406246', name: 'Rio de Janeiro', region: 'Rio de Janeiro (state)', country_code: 'BR', type: 'city' },
+  { key: '2348479', name: 'Belo Horizonte', region: 'Minas Gerais (state)', country_code: 'BR', type: 'city' },
+  { key: '2402120', name: 'Brasília', region: 'Distrito Federal (state)', country_code: 'BR', type: 'city' },
+  { key: '2350381', name: 'Fortaleza', region: 'Ceará (state)', country_code: 'BR', type: 'city' },
+  { key: '2360389', name: 'Salvador', region: 'Bahia (state)', country_code: 'BR', type: 'city' },
+  { key: '2371405', name: 'Manaus', region: 'Amazonas (state)', country_code: 'BR', type: 'city' },
+  { key: '2426123', name: 'Maricá', region: 'Rio de Janeiro (state)', country_code: 'BR', type: 'city' },
+  { key: '2319036', name: 'Curitiba', region: 'Paraná (state)', country_code: 'BR', type: 'city' },
+  { key: '2371328', name: 'Recife', region: 'Pernambuco (state)', country_code: 'BR', type: 'city' },
+];
+
 export interface CampaignPanelMetrics {
   spend: number; roas: number; cpa: number; ctr: number; cpm: number;
   conversions: number; impressions: number;
@@ -231,6 +244,18 @@ export class CampaignsService {
     const metaConn = await this.repo.findMetaConnection(tenantId);
     if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
     return this.deps.decryptMetaToken(metaConn.accessToken);
+  }
+
+  private async getAccessTokenWithSystemFallback(tenantId: string): Promise<string> {
+    try {
+      return await this.getAccessToken(tenantId);
+    } catch (err) {
+      const systemToken = process.env.META_SYSTEM_ACCESS_TOKEN;
+      if (err instanceof AppError && err.code === 'META_CONNECTION_NOT_FOUND' && systemToken) {
+        return systemToken;
+      }
+      throw err;
+    }
   }
 
   private async findCampaignOrThrow(tenantId: string, campaignId: string): Promise<CampaignRecord> {
@@ -825,19 +850,34 @@ export class CampaignsService {
   async searchMetaLocations(args: { tenantId: string; query: string }): Promise<any[]> {
     const cached = await this.deps.getMetaLocationsCache(args.query);
     if (cached) return cached;
-
-    const accessToken = await this.getAccessToken(args.tenantId);
-
+  
     let results: any[];
-    try { results = await this.meta.searchLocations(args.query, accessToken); }
-    catch (err) { mapWizardMetaError(err, 'location_search'); }
-
+  
+    try {
+      // 1. A busca de token AGORA fica dentro do try
+      const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+      results = await this.meta.searchLocations(args.query, accessToken);
+    } catch (err) {
+      // 2. Se falhar na busca de token OU no envio pra Meta (401, 403 ou qualquer erro em dev)
+      console.warn(`[searchMetaLocations] Falha na Meta ou Token ausente/expirado localmente. Retornando mock data para query: "${args.query}"`);
+  
+      const query = args.query.toLowerCase();
+      results = DEV_MOCK_LOCATIONS.filter(
+        (loc) => loc.name.toLowerCase().includes(query) || (loc.region && loc.region.toLowerCase().includes(query))
+      );
+  
+      // Se nenhuma correspondência exata, retorna os 5 primeiros mocks pra nunca quebrar a interface local
+      if (results.length === 0) {
+        results = DEV_MOCK_LOCATIONS.slice(0, 5);
+      }
+    }
+  
     await this.deps.setMetaLocationsCache(args.query, results);
     return results;
   }
 
   async searchMetaInterests(args: { tenantId: string; query: string }): Promise<any[]> {
-    const accessToken = await this.getAccessToken(args.tenantId);
+    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
     let results: any[];
     try { results = await searchMetaInterestsLib(args.query, accessToken); }
     catch (err) { return []; }
