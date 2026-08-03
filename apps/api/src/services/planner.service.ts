@@ -150,3 +150,16 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
   if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado ao atualizar');
   return updated;
 }
+
+export async function updatePostFields(
+  postId: string,
+  tenantId: string,
+  fields: { caption?: string; cta?: string; hashtags?: string[] },
+) {
+  const [updated] = await db.update(socialPosts)
+    .set({ ...fields, updatedAt: new Date() })
+    .where(and(eq(socialPosts.id, postId), eq(socialPosts.tenantId, tenantId)))
+    .returning();
+  if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado ao atualizar');
+  return updated;
+}
