@@ -31,7 +31,7 @@ const GENDER_OPTIONS: { value: WizardGender; label: string }[] = [
 export function PublicoContent() {
   const [cityQuery, setCityQuery] = useState('');
   const [city, setCity] = useState('');
-  const [cityKey, setCityKey] = useState<string | undefined>();
+  const [cityKey, setCityKey] = useState('');
   const [ageMin, setAgeMin] = useState(18);
   const [ageMax, setAgeMax] = useState(65);
   const [gender, setGender] = useState<WizardGender>('all');
@@ -141,7 +141,7 @@ export function PublicoContent() {
                   onChange={(e) => {
                     setCityQuery(e.target.value);
                     setCity(e.target.value);
-                    setCityKey(undefined);
+                    setCityKey('');
                     setShowDropdown(true);
                   }}
                   onFocus={() => setShowDropdown(true)}

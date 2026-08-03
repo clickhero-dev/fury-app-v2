@@ -228,6 +228,11 @@ export async function getTenant(
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
+    console.error('❌ ERROR in getTenant:', {
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : 'no stack',
+      tenantId: req.params.id,
+    });
     next(err);
   }
 }

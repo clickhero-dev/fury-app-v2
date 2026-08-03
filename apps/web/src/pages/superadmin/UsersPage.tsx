@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Users, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Users, Search, ChevronLeft, ChevronRight, UserPlus, X } from "lucide-react";
 import api from "@/lib/api";
 
 interface User {
@@ -32,6 +32,21 @@ export function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState(currentSearch);
 
+  // Create modal
+  const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({
+    tenantName: "",
+    userName: "",
+    userEmail: "",
+    userPassword: "",
+    userRole: "owner",
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [checkingEmail, setCheckingEmail] = useState(false);
+
   const fetchUsers = useCallback(async (page: number, search: string) => {
     setLoading(true);
     try {
@@ -62,6 +77,141 @@ export function UsersPage() {
     setSearchParams({ search: currentSearch, page: String(p) });
   };
 
+  // Validators
+  function validateTenantName(v: string) {
+    if (!v.trim()) return "Nome do tenant é obrigatório";
+    return "";
+  }
+
+  function validateUserName(v: string) {
+    if (!v.trim()) return "Nome do usuário é obrigatório";
+    return "";
+  }
+
+  function validateEmail(v: string) {
+    if (!v.trim()) return "Email é obrigatório";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return "Email inválido";
+    return "";
+  }
+
+  function validatePassword(v: string) {
+    if (!v) return "Senha é obrigatória";
+    if (v.length < 8) return "Mínimo 8 caracteres";
+    if (!/[A-Z]/.test(v)) return "Precisa de letra maiúscula";
+    if (!/[a-z]/.test(v)) return "Precisa de letra minúscula";
+    if (!/[0-9]/.test(v)) return "Precisa de número";
+    if (!/[^A-Za-z0-9]/.test(v)) return "Precisa de caractere especial";
+    return "";
+  }
+
+  const fieldValidators: Record<string, (v: string) => string> = {
+    tenantName: validateTenantName,
+    userName: validateUserName,
+    userEmail: validateEmail,
+    userPassword: validatePassword,
+  };
+
+  function validateAll() {
+    const next: Record<string, string> = {};
+    for (const [field, fn] of Object.entries(fieldValidators)) {
+      const err = fn(form[field as keyof typeof form]);
+      if (err) next[field] = err;
+    }
+    setErrors(next);
+    setTouched({
+      tenantName: true,
+      userName: true,
+      userEmail: true,
+      userPassword: true,
+    });
+    return Object.keys(next).length === 0;
+  }
+
+  function handleBlur(field: string) {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    const fn = fieldValidators[field];
+    if (fn) {
+      setErrors((prev) => ({ ...prev, [field]: fn(form[field as keyof typeof form]) }));
+    }
+  }
+
+  async function handleEmailBlur() {
+    setTouched((prev) => ({ ...prev, userEmail: true }));
+    const formatErr = validateEmail(form.userEmail);
+    if (formatErr) {
+      setErrors((prev) => ({ ...prev, userEmail: formatErr }));
+      return;
+    }
+    setCheckingEmail(true);
+    try {
+      const res = await api.get(
+        `/admin/users/check-email/${encodeURIComponent(form.userEmail)}`,
+      );
+      if (res.data?.data?.exists) {
+        setErrors((prev) => ({ ...prev, userEmail: "Este email já está em uso" }));
+      } else {
+        setErrors((prev) => ({ ...prev, userEmail: "" }));
+      }
+    } catch {
+      // fallback silencioso
+    } finally {
+      setCheckingEmail(false);
+    }
+  }
+
+  const isFormValid =
+    form.tenantName.trim() !== "" &&
+    form.userName.trim() !== "" &&
+    form.userEmail.trim() !== "" &&
+    form.userPassword !== "" &&
+    !errors.tenantName &&
+    !errors.userName &&
+    !errors.userEmail &&
+    !errors.userPassword;
+
+  const passwordChecks = form.userPassword
+    ? [
+        form.userPassword.length >= 8,
+        /[A-Z]/.test(form.userPassword),
+        /[a-z]/.test(form.userPassword),
+        /[0-9]/.test(form.userPassword),
+        /[^A-Za-z0-9]/.test(form.userPassword),
+      ]
+    : null;
+
+  async function handleCreateTenant() {
+    if (!validateAll()) return;
+    setSaving(true);
+    setError("");
+    try {
+      const res = await api.post("/admin/setup-tenant", {
+        name: form.tenantName,
+        userName: form.userName,
+        userEmail: form.userEmail,
+        userPassword: form.userPassword,
+        userRole: form.userRole,
+      });
+      setShowModal(false);
+      setForm({
+        tenantName: "",
+        userName: "",
+        userEmail: "",
+        userPassword: "",
+        userRole: "owner",
+      });
+      setErrors({});
+      setTouched({});
+      navigate(`/admin/tenants/${res.data.data.tenant.id}`);
+    } catch (err) {
+      setError(
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Erro ao criar cliente",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading)
     return <div className="text-zinc-500 text-sm py-12 text-center">Carregando...</div>;
 
@@ -82,17 +232,37 @@ export function UsersPage() {
           </div>
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <form onSubmit={handleSearch}>
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Buscar por nome, email ou tenant..."
-              className="w-80 bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
-            />
-          </form>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setForm({
+                tenantName: "",
+                userName: "",
+                userEmail: "",
+                userPassword: "",
+                userRole: "owner",
+              });
+              setErrors({});
+              setTouched({});
+              setError("");
+              setShowModal(true);
+            }}
+            className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors"
+          >
+            <UserPlus className="w-4 h-4" /> Novo Cliente
+          </button>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <form onSubmit={handleSearch}>
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Buscar por nome, email ou tenant..."
+                className="w-80 bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+              />
+            </form>
+          </div>
         </div>
       </div>
 
@@ -166,6 +336,188 @@ export function UsersPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Novo Cliente Modal ───────────────────────── */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold text-zinc-100">
+                Novo Cliente
+              </h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Tenant Name */}
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                  Nome do Tenant
+                </label>
+                <input
+                  value={form.tenantName}
+                  onChange={(e) => {
+                    setForm({ ...form, tenantName: e.target.value });
+                    if (errors.tenantName) setErrors((p) => ({ ...p, tenantName: "" }));
+                  }}
+                  onBlur={() => handleBlur("tenantName")}
+                  placeholder="Ex: João Silva Empreendimentos"
+                  className={
+                    touched.tenantName && errors.tenantName
+                      ? "w-full bg-zinc-800 border border-red-500/50 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/30"
+                      : "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                  }
+                />
+                {touched.tenantName && errors.tenantName && (
+                  <p className="mt-1 text-xs text-red-400">{errors.tenantName}</p>
+                )}
+              </div>
+
+              {/* User Name */}
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                  Nome do Usuário
+                </label>
+                <input
+                  value={form.userName}
+                  onChange={(e) => {
+                    setForm({ ...form, userName: e.target.value });
+                    if (errors.userName) setErrors((p) => ({ ...p, userName: "" }));
+                  }}
+                  onBlur={() => handleBlur("userName")}
+                  placeholder="Nome do usuário"
+                  className={
+                    touched.userName && errors.userName
+                      ? "w-full bg-zinc-800 border border-red-500/50 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/30"
+                      : "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                  }
+                />
+                {touched.userName && errors.userName && (
+                  <p className="mt-1 text-xs text-red-400">{errors.userName}</p>
+                )}
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                  Email
+                </label>
+                <div className="relative">
+                  <input
+                    value={form.userEmail}
+                    onChange={(e) => {
+                      setForm({ ...form, userEmail: e.target.value });
+                      if (errors.userEmail) setErrors((p) => ({ ...p, userEmail: "" }));
+                    }}
+                    onBlur={handleEmailBlur}
+                    placeholder="email@exemplo.com"
+                    type="email"
+                    className={
+                      touched.userEmail && errors.userEmail
+                        ? "w-full bg-zinc-800 border border-red-500/50 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/30"
+                        : "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                    }
+                  />
+                  {checkingEmail && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <div className="w-4 h-4 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
+                {touched.userEmail && errors.userEmail && (
+                  <p className="mt-1 text-xs text-red-400">{errors.userEmail}</p>
+                )}
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                  Senha
+                </label>
+                <input
+                  value={form.userPassword}
+                  onChange={(e) => {
+                    setForm({ ...form, userPassword: e.target.value });
+                    if (errors.userPassword) setErrors((p) => ({ ...p, userPassword: "" }));
+                  }}
+                  onBlur={() => handleBlur("userPassword")}
+                  placeholder="Mínimo 8 caracteres"
+                  type="password"
+                  className={
+                    touched.userPassword && errors.userPassword
+                      ? "w-full bg-zinc-800 border border-red-500/50 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/30"
+                      : "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                  }
+                />
+                {touched.userPassword && errors.userPassword && (
+                  <p className="mt-1 text-xs text-red-400">{errors.userPassword}</p>
+                )}
+                {passwordChecks && (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    {passwordChecks.map((ok, i) => (
+                      <div
+                        key={i}
+                        className={`h-1 flex-1 rounded-full transition-colors ${
+                          ok ? "bg-amber-500" : "bg-zinc-700"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                  Perfil
+                </label>
+                <select
+                  value={form.userRole}
+                  onChange={(e) => setForm({ ...form, userRole: e.target.value })}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                >
+                  <option value="owner">Owner</option>
+                  <option value="admin">Admin</option>
+                  <option value="member">Membro</option>
+                </select>
+              </div>
+
+              {error && (
+                <p className="text-sm text-red-400 bg-red-900/20 px-3 py-2 rounded-xl">
+                  {error}
+                </p>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreateTenant}
+                  disabled={saving || !isFormValid}
+                  className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                >
+                  {saving ? (
+                    "Criando..."
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4" /> Criar
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
