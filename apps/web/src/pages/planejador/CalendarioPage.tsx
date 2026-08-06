@@ -1,10 +1,28 @@
 import { useCallback, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { AppLayout, LoadingSpinner } from '@/components';
+import { AppLayout } from '@/components';
 import api from '@/lib/api';
 import { CalendarView } from './components/CalendarView';
 import type { Plan } from './types';
+
+const DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+function CalendarSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      <div className="h-16 rounded-xl bg-gray-800/40 border border-gray-700/50" />
+      <div className="grid grid-cols-7 gap-1.5">
+        {DAY_LABELS.map((d) => (
+          <div key={d} className="text-center text-xs font-medium text-gray-500 py-2">{d}</div>
+        ))}
+        {Array.from({ length: 35 }).map((_, i) => (
+          <div key={i} className="min-h-[80px] rounded-lg border border-gray-700/50 bg-gray-800/30" />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function CalendarioPage() {
   const [confirmed, setConfirmed] = useState(false);
@@ -24,7 +42,16 @@ export function CalendarioPage() {
     setConfirmed(true);
   }, [data?.id]);
 
-  if (isLoading) return <AppLayout><LoadingSpinner /></AppLayout>;
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+          <h1 className="text-2xl font-bold text-white">Calendário Editorial</h1>
+          <CalendarSkeleton />
+        </div>
+      </AppLayout>
+    );
+  }
 
   if (error && !data) {
     return (

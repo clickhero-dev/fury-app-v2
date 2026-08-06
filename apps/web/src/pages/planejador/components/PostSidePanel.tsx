@@ -55,10 +55,34 @@ const typeText: Record<string, string> = {
   image: 'text-success',
 };
 
+function DiffField({ label, before, after }: { label: string; before?: string; after?: string }) {
+  const changed = (before ?? '') !== (after ?? '');
+  return (
+    <div>
+      <p className="text-xs font-medium text-text-tertiary mb-1">{label}</p>
+      <div className="space-y-1.5">
+        <p className={clsx(
+          'text-sm rounded-lg p-2',
+          changed ? 'bg-red-50 text-red-700 line-through' : 'bg-surface-secondary text-text-secondary',
+        )}>
+          {before || '—'}
+        </p>
+        <p className={clsx(
+          'text-sm rounded-lg p-2',
+          changed ? 'bg-success/10 text-success' : 'bg-surface-secondary text-text-secondary',
+        )}>
+          {after || '—'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiEditor, setShowAiEditor] = useState(false);
+  const [pendingEdit, setPendingEdit] = useState<Post | null>(null);
 
   const Icon = postIcons[post.postType] ?? Image;
 
@@ -77,22 +101,52 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
     </button>
   );
 
+  // A edição por IA já grava no banco — o post fica em revisão local até o
+  // usuário aplicar (confirma o que já está salvo) ou reverter (regrava os
+  // valores anteriores, já que o servidor não guarda um histórico).
   const aiEditMutation = useMutation({
     mutationFn: async (prompt: string) => {
       const { data } = await api.patch(`/planner/posts/${post.id}`, { prompt });
       return data.data as Post;
     },
     onSuccess: (data) => {
-      onUpdate(data);
+      setPendingEdit(data);
       setShowAiEditor(false);
       setAiPrompt('');
     },
   });
 
+  const revertMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.patch(`/planner/posts/${post.id}`, {
+        caption: post.caption,
+        cta: post.cta,
+        hashtags: post.hashtags,
+      });
+      return data.data as Post;
+    },
+    onSuccess: (data) => {
+      onUpdate(data);
+      setPendingEdit(null);
+    },
+  });
+
+  const handleApply = () => {
+    if (!pendingEdit) return;
+    onUpdate(pendingEdit);
+    setPendingEdit(null);
+  };
+
+  const handleClose = () => {
+    // Fechar sem decidir mantém o que a IA já salvou no banco.
+    if (pendingEdit) onUpdate(pendingEdit);
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
 
       {/* Panel */}
       <div className="relative w-full max-w-lg bg-surface border-l border-border h-full overflow-y-auto">
@@ -109,7 +163,7 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-secondary text-text-tertiary">
+          <button onClick={handleClose} className="p-2 rounded-lg hover:bg-surface-secondary text-text-tertiary">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -171,24 +225,57 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
             </p>
           </div>
 
+          {/* Diff da edição por IA — revisar antes de aplicar ou reverter */}
+          {pendingEdit && (
+            <div className="bg-accent/5 border border-accent/20 rounded-xl p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-text-primary">Sugestão da IA</h4>
+                <span className="text-xs text-text-tertiary">Antes / Depois</span>
+              </div>
+
+              <DiffField label="Legenda" before={post.caption} after={pendingEdit.caption} />
+              <DiffField label="CTA" before={post.cta} after={pendingEdit.cta} />
+              <DiffField label="Hashtags" before={post.hashtags?.join(' ')} after={pendingEdit.hashtags?.join(' ')} />
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => revertMutation.mutate()}
+                  disabled={revertMutation.isPending}
+                  className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border disabled:opacity-50 text-text-primary font-medium rounded-xl text-sm transition-colors"
+                >
+                  {revertMutation.isPending ? 'Revertendo...' : 'Voltar ao original'}
+                </button>
+                <button
+                  onClick={handleApply}
+                  disabled={revertMutation.isPending}
+                  className="flex-1 px-4 py-2.5 bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
+                >
+                  Aplicar alteração
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t border-border">
-            <button className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors">
-              Editar
-            </button>
-            <button className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors">
-              Regenerar
-            </button>
-            <button
-              onClick={() => setShowAiEditor(!showAiEditor)}
-              className="flex-1 px-4 py-2.5 bg-accent/5 hover:bg-accent/10 text-accent font-medium rounded-xl text-sm transition-colors"
-            >
-              Melhorar com IA
-            </button>
-          </div>
+          {!pendingEdit && (
+            <div className="flex gap-3 pt-4 border-t border-border">
+              <button className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors">
+                Editar
+              </button>
+              <button className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors">
+                Regenerar
+              </button>
+              <button
+                onClick={() => setShowAiEditor(!showAiEditor)}
+                className="flex-1 px-4 py-2.5 bg-accent/5 hover:bg-accent/10 text-accent font-medium rounded-xl text-sm transition-colors"
+              >
+                Melhorar com IA
+              </button>
+            </div>
+          )}
 
           {/* AI Chat Editor */}
-          {showAiEditor && (
+          {!pendingEdit && showAiEditor && (
             <div className="bg-surface-secondary rounded-xl p-4 border border-border">
               <h4 className="text-sm font-medium text-text-primary mb-3">O que você quer mudar?</h4>
               <div className="flex gap-2">

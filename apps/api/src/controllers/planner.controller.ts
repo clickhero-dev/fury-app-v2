@@ -10,6 +10,7 @@ import {
   confirmPlan,
   revalidatePlan,
   editPostWithAI,
+  updatePostFields,
 } from '../services/planner.service.js';
 
 export async function generatePlan(req: Request, res: Response, next: NextFunction) {
@@ -74,16 +75,23 @@ export async function handleRevalidate(req: Request, res: Response, next: NextFu
   } catch (err) { next(err); }
 }
 
-const editPostSchema = z.object({
-  prompt: z.string().min(1).max(500),
-});
+const editPostSchema = z.union([
+  z.object({ prompt: z.string().min(1).max(500) }),
+  z.object({
+    caption: z.string().optional(),
+    cta: z.string().optional(),
+    hashtags: z.array(z.string()).optional(),
+  }),
+]);
 
 export async function handleEditPost(req: Request, res: Response, next: NextFunction) {
   try {
-    const { prompt } = editPostSchema.parse(req.body);
+    const body = editPostSchema.parse(req.body);
     const tenantId = req.tenant!.tenantId;
     const postId = req.params.postId;
-    const updated = await editPostWithAI(postId, tenantId, prompt);
+    const updated = 'prompt' in body
+      ? await editPostWithAI(postId, tenantId, body.prompt)
+      : await updatePostFields(postId, tenantId, body);
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 }

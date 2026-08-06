@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { clsx } from 'clsx';
 import { LayoutGrid, Image, Sparkles, Film, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import type { Post, Plan } from '../types';
 
 interface CalendarViewProps {
@@ -16,6 +17,12 @@ const TYPE_ICONS: Record<string, typeof Image> = {
   reel: Film,
   image: Image,
   stories: Sparkles,
+};
+const TYPE_LABELS: Record<string, string> = {
+  carousel: 'Carrossel',
+  reel: 'Reels',
+  image: 'Post',
+  stories: 'Stories',
 };
 
 function getDayOfWeek(dayIndex: number): number {
@@ -50,7 +57,7 @@ export function CalendarView({ plan, onConfirm, confirmed }: CalendarViewProps) 
   for (let i = 0; i < firstDay; i++) grid.push(<div key={`empty-${i}`} />);
   for (let day = 1; day <= daysInMonth; day++) {
     const posts = postsByDay.get(day) || [];
-    grid.push(
+    const dayButton = (
       <button
         key={day}
         onClick={() => posts.length > 0 && setSelectedPost(posts[0])}
@@ -70,7 +77,28 @@ export function CalendarView({ plan, onConfirm, confirmed }: CalendarViewProps) 
           );
         })}
         {posts.length > 3 && <span className="text-[10px] text-gray-500">+{posts.length - 3}</span>}
-      </button>,
+      </button>
+    );
+
+    if (posts.length === 0) {
+      grid.push(dayButton);
+      continue;
+    }
+
+    grid.push(
+      <Tooltip key={day}>
+        <TooltipTrigger asChild>{dayButton}</TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs">
+          <div className="space-y-1">
+            {posts.map(post => (
+              <p key={post.id} className="text-xs">
+                <span className="text-text-tertiary">{TYPE_LABELS[post.postType] ?? post.postType}:</span>{' '}
+                {post.title || 'Sem título'}
+              </p>
+            ))}
+          </div>
+        </TooltipContent>
+      </Tooltip>,
     );
   }
 
@@ -117,12 +145,14 @@ export function CalendarView({ plan, onConfirm, confirmed }: CalendarViewProps) 
       )}
 
       {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-1.5">
-        {DAY_LABELS.map(d => (
-          <div key={d} className="text-center text-xs font-medium text-gray-500 py-2">{d}</div>
-        ))}
-        {grid}
-      </div>
+      <TooltipProvider>
+        <div className="grid grid-cols-7 gap-1.5">
+          {DAY_LABELS.map(d => (
+            <div key={d} className="text-center text-xs font-medium text-gray-500 py-2">{d}</div>
+          ))}
+          {grid}
+        </div>
+      </TooltipProvider>
 
       {/* Post side panel */}
       {selectedPost && (

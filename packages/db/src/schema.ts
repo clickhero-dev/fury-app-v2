@@ -17,7 +17,7 @@ import {
   smallint,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member', 'superadmin']);
@@ -553,6 +553,17 @@ export const socialPosts = pgTable(
     planIdIdx: index('social_posts_plan_id_idx').on(table.planId),
   })
 );
+
+export const campaignPlansRelations = relations(campaignPlans, ({ many }) => ({
+  posts: many(socialPosts),
+}));
+
+export const socialPostsRelations = relations(socialPosts, ({ one }) => ({
+  plan: one(campaignPlans, {
+    fields: [socialPosts.planId],
+    references: [campaignPlans.id],
+  }),
+}));
 
 // Export all tables
 export const allTables = {

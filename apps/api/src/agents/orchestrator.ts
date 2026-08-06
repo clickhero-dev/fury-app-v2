@@ -83,13 +83,13 @@ export async function runPipeline(tenantId: string, jobId: string): Promise<void
 
     if (!quality.passed) {
       for (let attempt = 1; attempt <= 2; attempt++) {
-        update('Copywriter Agent (retry)', 'running', 60);
+        update('Copywriter Agent', 'running', 60);
         copywriter = await copywriterAgent(ctx, planner);
-        update('Copywriter Agent (retry)', 'completed', 65);
+        update('Copywriter Agent', 'completed', 65);
 
-        update('Quality Agent (retry)', 'running', 80);
+        update('Quality Agent', 'running', 80);
         quality = await qualityAgent(planner, copywriter);
-        update('Quality Agent (retry)', 'completed', 85);
+        update('Quality Agent', 'completed', 85);
 
         if (quality.passed) break;
         if (attempt === 2) {
@@ -120,12 +120,12 @@ export async function runPipeline(tenantId: string, jobId: string): Promise<void
       planner, copywriter, creative, quality, scheduler, branding,
     } satisfies savePlanToDbInput);
 
+    update('Pipeline concluído', 'completed', 100);
     const job = jobs.get(jobId);
     if (job) {
       job.planId = planId;
       job.status = 'done';
     }
-    update('Pipeline concluído', 'completed', 100);
   } catch (err: unknown) {
     fail(err);
   }
