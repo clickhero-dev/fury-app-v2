@@ -24,9 +24,9 @@ import {
   setCampaignsCache,
   invalidateCampaignsCache,
 } from '../lib/campaigns-cache.js';
-import OpenAI from 'openai';
 import { db, brandKits, tenants } from '@fury/db';
 import { eq } from 'drizzle-orm';
+import { openrouterService, type ChatMessage } from '../services/openrouter.service.js';
 
 const createCampaignSchema = z.object({
   name: z.string().min(3, 'Campaign name must be at least 3 characters'),
@@ -738,54 +738,181 @@ export async function createWizardCampaignDiagHandler(req: any, res: any) {
   }
 }
 
+const suggestTextSchema = z.object({
+  imageUrl: z.string().url(),
+});
+
+const HEADLINE_MAX_LENGTH = 40;
+const PRIMARY_TEXT_MAX_LENGTH = 125;
+
+// Nemotron (free) primeiro; se falhar, cai pro Gemini 2.5 Flash Lite (pago).
+const SUGGESTION_MODELS: { id: string; maxAttempts: number }[] = [
+  { id: 'nvidia/nemotron-nano-12b-v2-vl:free', maxAttempts: 3 },
+  { id: 'google/gemini-2.5-flash-lite', maxAttempts: 2 },
+];
+
+interface AdCopySuggestion {
+  headline: string;
+  primaryText: string;
+}
+
+function parseAdCopy(raw: string): AdCopySuggestion | null {
+  const cleaned = raw.replace(/```json|```/g, '').trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    const headline = String(parsed.headline || '').trim();
+    const primaryText = String(parsed.primaryText || '').trim();
+    if (!headline || !primaryText) return null;
+    return { headline, primaryText };
+  } catch {
+    return null;
+  }
+}
+
+// Retorna null (por esgotar tentativas ou erro de API) quando o chamador deve tentar o próximo modelo.
+async function tryGenerateAdCopy(
+  systemPrompt: string,
+  promptText: string,
+  imageUrl: string,
+  model: string,
+  maxAttempts: number,
+): Promise<AdCopySuggestion | null> {
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt },
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: promptText },
+        { type: 'image_url', image_url: { url: imageUrl } },
+      ],
+    },
+  ];
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let raw: string;
+    try {
+      raw = await openrouterService.chat(messages, { model, max_tokens: 256 });
+    } catch (err) {
+      console.warn(`[suggestText] modelo ${model} falhou:`, (err as Error).message);
+      return null;
+    }
+
+    const parsed = parseAdCopy(raw);
+
+    if (
+      parsed &&
+      parsed.headline.length <= HEADLINE_MAX_LENGTH &&
+      parsed.primaryText.length <= PRIMARY_TEXT_MAX_LENGTH
+    ) {
+      return parsed;
+    }
+
+    const issues: string[] = [];
+    if (!parsed) {
+      issues.push('a resposta anterior não veio em JSON válido');
+    } else {
+      if (parsed.headline.length > HEADLINE_MAX_LENGTH) {
+        issues.push(`headline ficou com ${parsed.headline.length} caracteres (máximo ${HEADLINE_MAX_LENGTH})`);
+      }
+      if (parsed.primaryText.length > PRIMARY_TEXT_MAX_LENGTH) {
+        issues.push(`primary_text ficou com ${parsed.primaryText.length} caracteres (máximo ${PRIMARY_TEXT_MAX_LENGTH})`);
+      }
+    }
+
+    messages.push(
+      { role: 'assistant', content: raw },
+      {
+        role: 'user',
+        content: `Isso não serve: ${issues.join('; ')}. Reescreva mais curto SEM cortar frases no meio — construa headline e primary_text que já nasçam dentro do limite. Responda APENAS com o JSON {"headline":"...","primaryText":"..."}, sem markdown.`,
+      },
+    );
+  }
+
+  return null;
+}
+
+async function generateAdCopyWithinLimits(
+  systemPrompt: string,
+  promptText: string,
+  imageUrl: string,
+): Promise<AdCopySuggestion | null> {
+  for (const { id: model, maxAttempts } of SUGGESTION_MODELS) {
+    const result = await tryGenerateAdCopy(systemPrompt, promptText, imageUrl, model, maxAttempts);
+    if (result) return result;
+  }
+  return null;
+}
+
+// mirrors ALLOWED_MEDIA_HOSTS em instagram.controller.ts — evita SSRF via imageUrl do cliente.
+const IMAGE_URL_ALLOWED_HOSTS = [/(^|\.)cdninstagram\.com$/, /(^|\.)fbcdn\.net$/];
+
+function isAllowedImageUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  if (parsed.protocol !== 'https:') return false;
+
+  if (process.env.R2_PUBLIC_URL) {
+    try {
+      if (parsed.origin === new URL(process.env.R2_PUBLIC_URL).origin) return true;
+    } catch {
+      /* R2_PUBLIC_URL mal configurada, ignora */
+    }
+  }
+
+  // Nunca derivar de req.protocol/req.get('host') aqui — o requisitante os controla.
+  if (process.env.PUBLIC_BASE_URL) {
+    try {
+      if (parsed.origin === new URL(process.env.PUBLIC_BASE_URL).origin && parsed.pathname.startsWith('/studio-assets/')) {
+        return true;
+      }
+    } catch {
+      /* PUBLIC_BASE_URL mal configurada, ignora */
+    }
+  }
+
+  return IMAGE_URL_ALLOWED_HOSTS.some((pattern) => pattern.test(parsed.hostname));
+}
+
 export async function suggestTextHandler(req: Request, res: Response, next: NextFunction) {
   try {
+    const { imageUrl } = suggestTextSchema.parse(req.body);
+
     const tenantId = req.tenant?.tenantId || '';
     if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+
+    if (!isAllowedImageUrl(imageUrl)) {
+      throw new AppError(400, 'INVALID_IMAGE_URL', 'URL de imagem não permitida.');
+    }
 
     const brandKit = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, tenantId) });
     const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
 
-    const client = new OpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: 'https://openrouter.ai/api/v1',
-    });
+    const promptText = `Você é copywriter especialista em Meta Ads. Observe a imagem do anúncio anexada e, com base no que ela mostra (produto, oferta, estilo visual) e nos dados da marca abaixo, gere UM título (headline) e UM texto principal (primary_text) para um anúncio no Facebook/Instagram.
 
-    const prompt = `Você é copywriter especialista em Meta Ads. Baseado nos dados da marca abaixo, gere UM título (headline, máximo 40 caracteres) e UM texto principal (primary_text, máximo 125 caracteres) para um anúncio no Facebook/Instagram.
-    
 Dados da marca:
 - Tom de voz: ${brandKit?.voiceTone || 'não definido'}
 - Ramo da empresa: ${tenant?.businessContext || 'não informado'}
 - Cores da marca: ${brandKit?.primaryColor || ''} ${brandKit?.secondaryColor || ''}
 
-Regras:
-- headline: máximo 40 caracteres, chamativa, ação
-- primary_text: máximo 125 caracteres, descritivo, com call to action
+Regras (OBRIGATÓRIO respeitar, a resposta será rejeitada se não respeitar):
+- headline: no MÁXIMO ${HEADLINE_MAX_LENGTH} caracteres (conte antes de responder), chamativa, ação, referenciando o que aparece na imagem quando fizer sentido
+- primary_text: no MÁXIMO ${PRIMARY_TEXT_MAX_LENGTH} caracteres (conte antes de responder), descritivo, com call to action, frase completa (não pode terminar cortada no meio)
 - Responda APENAS JSON: {"headline":"...","primaryText":"..."}
 - Português brasileiro, sem erros ortográficos`;
 
-    const response = await client.chat.completions.create({
-      model: 'deepseek/deepseek-v4-flash',
-      max_tokens: 256,
-      messages: [
-        { role: 'system', content: 'Você é copywriter especialista em Meta Ads. Responda sempre em português brasileiro.' },
-        { role: 'user', content: prompt },
-      ],
-    });
+    const suggestion = await generateAdCopyWithinLimits(
+      'Você é copywriter especialista em Meta Ads. Responda sempre em português brasileiro.',
+      promptText,
+      imageUrl,
+    );
 
-    const raw = response.choices[0]?.message?.content ?? '';
-    const cleaned = raw.replace(/```json|```/g, '').trim();
-
-    let headline = '';
-    let primaryText = '';
-    try {
-      const parsed = JSON.parse(cleaned);
-      headline = (parsed.headline || '').slice(0, 40);
-      primaryText = (parsed.primaryText || '').slice(0, 125);
-    } catch {
-      headline = 'Promoção imperdível';
-      primaryText = 'Aproveite esta oferta especial por tempo limitado.';
-    }
+    const headline = suggestion?.headline ?? 'Promoção imperdível';
+    const primaryText = suggestion?.primaryText ?? 'Aproveite esta oferta especial por tempo limitado.';
 
     res.json({ success: true, data: { headline, primaryText }, timestamp: new Date().toISOString() });
   } catch (err) {
