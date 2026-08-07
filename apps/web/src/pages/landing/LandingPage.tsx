@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { FURY_COLORS } from '@/lib/constants';
 
-const API_BASE = 'https://clickhero-fury-api.u7pe19.easypanel.host/api';
+const API_BASE = import.meta.env.VITE_API_URL;
 
 interface PublicBrandKitData {
   tenantName: string;

@@ -23,6 +23,9 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.2.9
         version: 1.2.9(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@reduxjs/toolkit':
+        specifier: ^2.12.0
+        version: 2.12.0(react-redux@9.3.0(@types/react@19.2.17)(react@19.2.7)(redux@5.0.1))(react@19.2.7)
       '@tailwindcss/vite':
         specifier: ^4.2.4
         version: 4.3.0(vite@8.0.16(@types/node@24.13.1)(esbuild@0.28.0)(jiti@2.7.0))
@@ -50,6 +53,9 @@ importers:
       react-hook-form:
         specifier: ^7.77.0
         version: 7.77.0(react@19.2.7)
+      react-redux:
+        specifier: ^9.3.0
+        version: 9.3.0(@types/react@19.2.17)(react@19.2.7)(redux@5.0.1)
       react-router-dom:
         specifier: ^7.14.2
         version: 7.17.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
