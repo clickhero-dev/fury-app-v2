@@ -1,0 +1,5 @@
+[staticAssets]
+"dist/index.html" = "/index.html"
+"dist/favicon.svg" = "/favicon.svg"
+"dist/icons.svg" = "/icons.svg"
+"dist/assets" = "/assets"
