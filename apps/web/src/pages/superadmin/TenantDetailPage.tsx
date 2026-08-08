@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft,
   Save,
   UserPlus,
   Upload,
@@ -332,11 +331,6 @@ export function TenantDetailPage() {
       return;
     }
 
-    // Upload via the tenant's own brand-kit endpoint (uses storage service)
-    // We'll use the existing client API endpoint — but that requires tenant context.
-    // For admin, we upload to the existing endpoint by switching headers.
-    // Simpliest: just set the URL directly if it's already hosted.
-    // For now we use a FormData POST to /api/brand-kit/logo with tenant override
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -346,7 +340,6 @@ export function TenantDetailPage() {
       setBrandForm((prev) => ({ ...prev, logoUrl: res.data.data.url }));
       setMsg("Logo enviada!");
     } catch {
-      // Fallback: just set as URL if user pastes
       setMsg("Erro ao enviar logo. Use uma URL.");
     }
   }
@@ -432,13 +425,13 @@ export function TenantDetailPage() {
   // ─── Render ──────────────────────────────────────────
   if (loading)
     return (
-      <div className="text-zinc-500 text-sm py-12 text-center">
+      <div className="text-admin-text-faint text-sm py-12 text-center">
         Carregando...
       </div>
     );
   if (!data)
     return (
-      <div className="text-zinc-500 text-sm py-12 text-center">
+      <div className="text-admin-text-faint text-sm py-12 text-center">
         Tenant não encontrado
       </div>
     );
@@ -446,54 +439,51 @@ export function TenantDetailPage() {
   const tabs: { key: Tab; label: string }[] = [
     { key: "users", label: "Usuários" },
     { key: "subscription", label: "Assinatura" },
-    { key: "config", label: "FURY Engine" },
+    { key: "config", label: "Motor ADY" },
     { key: "metas", label: "Metas" },
     { key: "publico", label: "Público" },
     { key: "brandkit", label: "Dados da Marca" },
   ];
 
   const inputCls =
-    "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30";
-  const labelCls = "block text-xs font-medium text-zinc-400 mb-1.5";
+    "w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol";
+  const labelCls = "block text-xs font-medium text-admin-text-muted mb-1.5";
   const btnCls =
-    "bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors";
+    "bg-admin-petrol hover:bg-admin-petrol-hover disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors";
 
   return (
     <div>
-      <button
-        onClick={() => navigate("/admin")}
-        className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 mb-6 transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" /> Voltar
-      </button>
-
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-zinc-100">{data.name}</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            {data.slug} · {data.users.length} usuários
+          <h1 className="text-xl font-bold text-admin-text">{data.name}</h1>
+          <p className="text-sm text-admin-text-faint mt-1">
+            {data.users.length} usuários
           </p>
         </div>
       </div>
 
       {msg && (
-        <div className="mb-4 px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-300 flex items-center justify-between">
+        <div className="mb-4 px-4 py-3 bg-admin-surface border border-admin-border rounded-xl text-sm text-admin-text flex items-center justify-between">
           {msg}
           <button
             onClick={() => setMsg("")}
-            className="text-zinc-500 hover:text-zinc-300"
+            className="text-admin-text-faint hover:text-admin-text"
           >
             ✕
           </button>
         </div>
       )}
 
-      <div className="flex gap-1 mb-6 bg-zinc-900 rounded-xl p-1 w-fit flex-wrap">
+      <div className="flex gap-1 mb-6 bg-admin-surface rounded-xl p-1 w-full">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t.key ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+            className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium text-center transition-colors ${
+              tab === t.key
+                ? "bg-admin-petrol/15 text-admin-petrol"
+                : "text-admin-text-muted hover:text-admin-petrol hover:bg-admin-petrol/10"
+            }`}
           >
             {t.label}
           </button>
@@ -503,8 +493,8 @@ export function TenantDetailPage() {
       {/* ── Users ───────────────────────────────────── */}
       {tab === "users" && (
         <div className="space-y-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-zinc-100 mb-4">
+          <div className="bg-admin-surface border border-admin-border rounded-2xl p-5">
+            <h3 className="text-sm font-semibold text-admin-text mb-4">
               Criar Usuário
             </h3>
             <div className="grid grid-cols-4 gap-3">
@@ -557,10 +547,10 @@ export function TenantDetailPage() {
             </div>
           </div>
 
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+          <div className="bg-admin-surface border border-admin-border rounded-2xl overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-xs text-zinc-500 uppercase">
+                <tr className="border-b border-admin-border text-xs text-admin-text-faint uppercase">
                   <th className="text-left px-5 py-3 font-medium">Nome</th>
                   <th className="text-left px-5 py-3 font-medium">Email</th>
                   <th className="text-left px-5 py-3 font-medium">Role</th>
@@ -572,16 +562,16 @@ export function TenantDetailPage() {
                 {data.users.map((u) => (
                   <tr
                     key={u.id}
-                    className="border-b border-zinc-800/50 text-zinc-300"
+                    className="border-b border-admin-border/50 text-admin-text-muted"
                   >
                     <td className="px-5 py-3">{u.name}</td>
-                    <td className="px-5 py-3 text-zinc-500">{u.email}</td>
+                    <td className="px-5 py-3 text-admin-text-faint">{u.email}</td>
                     <td className="px-5 py-3">
-                      <span className="text-xs px-2 py-1 rounded-full bg-zinc-800 text-zinc-400">
+                      <span className="text-xs px-2 py-1 rounded-full bg-admin-spark/15 text-admin-spark">
                         {u.role}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-zinc-500">
+                    <td className="px-5 py-3 text-admin-text-faint">
                       {new Date(u.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-5 py-3 text-right">
@@ -595,7 +585,7 @@ export function TenantDetailPage() {
                               role: u.role,
                             })
                           }
-                          className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-amber-400 hover:bg-zinc-800 transition-all"
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-admin-text-faint hover:text-admin-petrol hover:bg-admin-surface-2 transition-all"
                           title="Editar usuário"
                         >
                           <Pencil className="w-4 h-4" />
@@ -607,7 +597,7 @@ export function TenantDetailPage() {
                               name: u.name ?? "sem nome",
                             })
                           }
-                          className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-all"
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-admin-text-faint hover:text-admin-danger hover:bg-admin-surface-2 transition-all"
                           title="Remover usuário"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -629,16 +619,16 @@ export function TenantDetailPage() {
           onClick={() => setEditUser(null)}
         >
           <div
-            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md mx-4"
+            className="bg-admin-surface border border-admin-border rounded-2xl p-6 w-full max-w-md mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-zinc-100">
+              <h2 className="text-lg font-semibold text-admin-text">
                 Editar Usuário
               </h2>
               <button
                 onClick={() => setEditUser(null)}
-                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                className="text-admin-text-faint hover:text-admin-text transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -682,14 +672,14 @@ export function TenantDetailPage() {
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setEditUser(null)}
-                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                  className="flex-1 bg-admin-surface-2 hover:bg-admin-border text-admin-text-muted py-2.5 rounded-xl text-sm font-medium transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleEditUser}
                   disabled={saving}
-                  className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                  className="flex-1 bg-admin-petrol hover:bg-admin-petrol-hover disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
                 >
                   <Save className="w-4 h-4" /> Salvar
                 </button>
@@ -706,41 +696,41 @@ export function TenantDetailPage() {
           onClick={() => setDeleteUserTarget(null)}
         >
           <div
-            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-sm mx-4"
+            className="bg-admin-surface border border-admin-border rounded-2xl p-6 w-full max-w-sm mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-zinc-100">
+              <h2 className="text-lg font-semibold text-admin-text">
                 Remover Usuário
               </h2>
               <button
                 onClick={() => setDeleteUserTarget(null)}
-                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                className="text-admin-text-faint hover:text-admin-text transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-sm text-zinc-400 mb-2">
+            <p className="text-sm text-admin-text-muted mb-2">
               Tem certeza que deseja remover{" "}
-              <strong className="text-zinc-200">
+              <strong className="text-admin-text">
                 {deleteUserTarget.name}
               </strong>
               ?
             </p>
-            <p className="text-xs text-zinc-500 mb-6">
+            <p className="text-xs text-admin-text-faint mb-6">
               O usuário perderá acesso ao sistema. Não é reversível.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteUserTarget(null)}
-                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                className="flex-1 bg-admin-surface-2 hover:bg-admin-border text-admin-text-muted py-2.5 rounded-xl text-sm font-medium transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleDeleteUser}
                 disabled={deletingUser}
-                className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                className="flex-1 bg-admin-danger hover:bg-admin-danger/80 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
               >
                 {deletingUser ? (
                   "Removendo..."
@@ -757,7 +747,7 @@ export function TenantDetailPage() {
 
       {/* ── Subscription ────────────────────────────── */}
       {tab === "subscription" && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+        <div className="bg-admin-surface border border-admin-border rounded-2xl p-5 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Plano</label>
@@ -813,14 +803,14 @@ export function TenantDetailPage() {
               />
             </div>
           </div>
-          <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-admin-text-muted cursor-pointer">
             <input
               type="checkbox"
               checked={subForm.isNonExpirable}
               onChange={(e) =>
                 setSubForm({ ...subForm, isNonExpirable: e.target.checked })
               }
-              className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500/30"
+              className="w-4 h-4 rounded border-admin-border bg-admin-bg text-admin-petrol focus:ring-admin-petrol/30"
             />
             Plano não expirável (ignora vencimento)
           </label>
@@ -842,7 +832,7 @@ export function TenantDetailPage() {
                   planId: prev.planId || cheapestPlanId || prev.planId,
                 }));
               }}
-              className="bg-green-700 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              className="bg-admin-success/80 hover:bg-admin-success text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
             >
               Ativar (30 dias)
             </button>
@@ -850,14 +840,14 @@ export function TenantDetailPage() {
         </div>
       )}
 
-      {/* ── FURY Engine (Benchmarks) ─────────────────── */}
+      {/* ── Motor ADY (Benchmarks) ─────────────────── */}
       {tab === "config" && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+        <div className="bg-admin-surface border border-admin-border rounded-2xl p-5 space-y-4">
           <div>
-            <h3 className="text-sm font-semibold text-zinc-100 mb-1">
+            <h3 className="text-sm font-semibold text-admin-text mb-1">
               Benchmarks de Performance
             </h3>
-            <p className="text-xs text-zinc-500 mb-4">
+            <p className="text-xs text-admin-text-faint mb-4">
               Defina as metas que o FURY usa para calcular o score de cada
               campanha.
             </p>
@@ -922,12 +912,12 @@ export function TenantDetailPage() {
 
       {/* ── Metas ───────────────────────────────────── */}
       {tab === "metas" && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+        <div className="bg-admin-surface border border-admin-border rounded-2xl p-5 space-y-4">
           <div>
-            <h3 className="text-sm font-semibold text-zinc-100 mb-1">
+            <h3 className="text-sm font-semibold text-admin-text mb-1">
               Metas do Cliente
             </h3>
-            <p className="text-xs text-zinc-500 mb-4">
+            <p className="text-xs text-admin-text-faint mb-4">
               Objetivos e orçamento que a IA usa para otimizar campanhas.
             </p>
           </div>
@@ -1011,12 +1001,12 @@ export function TenantDetailPage() {
 
       {/* ── Público ──────────────────────────────────── */}
       {tab === "publico" && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+        <div className="bg-admin-surface border border-admin-border rounded-2xl p-5 space-y-4">
           <div>
-            <h3 className="text-sm font-semibold text-zinc-100 mb-1">
+            <h3 className="text-sm font-semibold text-admin-text mb-1">
               Público Padrão
             </h3>
-            <p className="text-xs text-zinc-500 mb-4">
+            <p className="text-xs text-admin-text-faint mb-4">
               Dados usados como padrão ao criar novas campanhas.
             </p>
           </div>
@@ -1030,7 +1020,7 @@ export function TenantDetailPage() {
                 rows={4}
                 className={`${inputCls} resize-y min-h-[100px]`}
               />
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-xs text-admin-text-faint mt-1">
                 Ex: nicho, porte, região, ticket médio, diferencial competitivo,
                 público-alvo.
               </p>
@@ -1038,7 +1028,7 @@ export function TenantDetailPage() {
             <div className="relative">
               <label className={labelCls}>Cidade</label>
               <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-text-faint" />
                 <input
                   type="text"
                   value={cityQuery}
@@ -1056,14 +1046,14 @@ export function TenantDetailPage() {
                     setTimeout(() => setShowCityDropdown(false), 150)
                   }
                   placeholder="Digite o nome da cidade"
-                  className="w-full pl-10 pr-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                  className="w-full pl-10 pr-4 py-2.5 bg-admin-bg border border-admin-border rounded-xl text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol"
                 />
                 {loadingLocations && (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 animate-spin" />
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-text-muted animate-spin" />
                 )}
               </div>
               {showCityDropdown && locations.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-zinc-800 border border-zinc-700 rounded-xl shadow-lg max-h-56 overflow-y-auto">
+                <div className="absolute z-10 mt-1 w-full bg-admin-surface-2 border border-admin-border rounded-xl shadow-lg max-h-56 overflow-y-auto">
                   {locations.map((location) => (
                     <button
                       key={location.key}
@@ -1080,7 +1070,7 @@ export function TenantDetailPage() {
                         });
                         setShowCityDropdown(false);
                       }}
-                      className="w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm text-zinc-200"
+                      className="w-full text-left px-4 py-2 hover:bg-admin-border text-sm text-admin-text"
                     >
                       {location.region
                         ? `${location.name}, ${location.region}`
@@ -1111,7 +1101,7 @@ export function TenantDetailPage() {
                     </option>
                   ))}
                 </select>
-                <span className="text-zinc-500 text-sm">até</span>
+                <span className="text-admin-text-faint text-sm">até</span>
                 <select
                   value={audienceForm.ageMax}
                   onChange={(e) =>
@@ -1142,7 +1132,11 @@ export function TenantDetailPage() {
                     onClick={() =>
                       setAudienceForm({ ...audienceForm, gender: g.value })
                     }
-                    className={`py-2.5 rounded-lg border-2 text-sm font-bold transition-all ${audienceForm.gender === g.value ? "border-amber-500 bg-amber-500/10 text-amber-400" : "border-zinc-700 text-zinc-400 hover:border-zinc-600"}`}
+                    className={`py-2.5 rounded-lg border-2 text-sm font-bold transition-all ${
+                      audienceForm.gender === g.value
+                        ? "border-admin-petrol bg-admin-petrol/10 text-admin-petrol"
+                        : "border-admin-border text-admin-text-muted hover:border-admin-text-faint"
+                    }`}
                   >
                     {g.label}
                   </button>
@@ -1160,8 +1154,8 @@ export function TenantDetailPage() {
       {tab === "brandkit" && (
         <div className="space-y-6">
           {/* Logo */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-zinc-100 mb-4">
+          <div className="bg-admin-surface border border-admin-border rounded-2xl p-5">
+            <h3 className="text-sm font-semibold text-admin-text mb-4">
               Logo da Marca
             </h3>
             <input
@@ -1176,13 +1170,13 @@ export function TenantDetailPage() {
                 <img
                   src={brandForm.logoUrl}
                   alt="Logo"
-                  className="w-20 h-20 object-contain rounded-lg border border-zinc-700 bg-zinc-800 p-2"
+                  className="w-20 h-20 object-contain rounded-lg border border-admin-border bg-admin-bg p-2"
                 />
                 <div className="flex flex-col gap-2">
                   <button
                     onClick={() => logoInputRef.current?.click()}
                     disabled={saving}
-                    className="text-sm text-amber-400 hover:text-amber-300"
+                    className="text-sm text-admin-petrol hover:text-admin-petrol-hover"
                   >
                     Substituir
                   </button>
@@ -1190,7 +1184,7 @@ export function TenantDetailPage() {
                     onClick={() =>
                       setBrandForm((prev) => ({ ...prev, logoUrl: "" }))
                     }
-                    className="text-sm text-red-400 hover:text-red-300"
+                    className="text-sm text-admin-danger hover:text-admin-danger/80"
                   >
                     Remover
                   </button>
@@ -1199,10 +1193,10 @@ export function TenantDetailPage() {
             ) : (
               <div
                 onClick={() => logoInputRef.current?.click()}
-                className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-zinc-700 rounded-xl py-10 cursor-pointer hover:border-amber-500/50 transition-colors"
+                className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-admin-border rounded-xl py-10 cursor-pointer hover:border-admin-petrol/50 transition-colors"
               >
-                <Upload className="w-6 h-6 text-zinc-500" />
-                <p className="text-sm text-zinc-500">
+                <Upload className="w-6 h-6 text-admin-text-faint" />
+                <p className="text-sm text-admin-text-faint">
                   Arraste sua logo ou clique (PNG/SVG, máx 2MB)
                 </p>
               </div>
@@ -1210,8 +1204,8 @@ export function TenantDetailPage() {
           </div>
 
           {/* Cores */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-zinc-100 mb-4">
+          <div className="bg-admin-surface border border-admin-border rounded-2xl p-5">
+            <h3 className="text-sm font-semibold text-admin-text mb-4">
               Paleta de Cores
             </h3>
             <div className="grid grid-cols-2 gap-6">
@@ -1227,9 +1221,9 @@ export function TenantDetailPage() {
                         primaryColor: e.target.value,
                       })
                     }
-                    className="w-12 h-12 rounded-lg border border-zinc-700 cursor-pointer p-1 bg-zinc-800"
+                    className="w-12 h-12 rounded-lg border border-admin-border cursor-pointer p-1 bg-admin-bg"
                   />
-                  <span className="text-sm font-mono text-zinc-400 uppercase">
+                  <span className="text-sm font-mono text-admin-text-muted uppercase">
                     {brandForm.primaryColor}
                   </span>
                 </div>
@@ -1246,9 +1240,9 @@ export function TenantDetailPage() {
                         secondaryColor: e.target.value,
                       })
                     }
-                    className="w-12 h-12 rounded-lg border border-zinc-700 cursor-pointer p-1 bg-zinc-800"
+                    className="w-12 h-12 rounded-lg border border-admin-border cursor-pointer p-1 bg-admin-bg"
                   />
-                  <span className="text-sm font-mono text-zinc-400 uppercase">
+                  <span className="text-sm font-mono text-admin-text-muted uppercase">
                     {brandForm.secondaryColor}
                   </span>
                 </div>
@@ -1257,8 +1251,8 @@ export function TenantDetailPage() {
           </div>
 
           {/* Tom de Voz */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-zinc-100 mb-4">
+          <div className="bg-admin-surface border border-admin-border rounded-2xl p-5">
+            <h3 className="text-sm font-semibold text-admin-text mb-4">
               Tom de Voz
             </h3>
             <select
@@ -1278,12 +1272,12 @@ export function TenantDetailPage() {
           </div>
 
           {/* Fotos */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <div className="bg-admin-surface border border-admin-border rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-zinc-100">
+              <h3 className="text-sm font-semibold text-admin-text">
                 Biblioteca de Fotos
               </h3>
-              <span className="text-xs text-zinc-500">
+              <span className="text-xs text-admin-text-faint">
                 {photoUrls.length}/20 fotos
               </span>
             </div>
@@ -1299,7 +1293,7 @@ export function TenantDetailPage() {
               {photoUrls.map((url) => (
                 <div
                   key={url}
-                  className="relative group aspect-square rounded-lg overflow-hidden border border-zinc-700"
+                  className="relative group aspect-square rounded-lg overflow-hidden border border-admin-border"
                 >
                   <img
                     src={url}
@@ -1317,10 +1311,10 @@ export function TenantDetailPage() {
               {photoUrls.length < 20 && (
                 <div
                   onClick={() => photosInputRef.current?.click()}
-                  className="aspect-square flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-zinc-700 rounded-lg cursor-pointer hover:border-amber-500/50 transition-colors"
+                  className="aspect-square flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-admin-border rounded-lg cursor-pointer hover:border-admin-petrol/50 transition-colors"
                 >
-                  <ImageIcon className="w-5 h-5 text-zinc-500" />
-                  <p className="text-xs text-zinc-500">Adicionar fotos</p>
+                  <ImageIcon className="w-5 h-5 text-admin-text-faint" />
+                  <p className="text-xs text-admin-text-faint">Adicionar fotos</p>
                 </div>
               )}
             </div>

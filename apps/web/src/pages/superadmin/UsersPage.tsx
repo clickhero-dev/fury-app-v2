@@ -213,20 +213,21 @@ export function UsersPage() {
   }
 
   if (loading)
-    return <div className="text-zinc-500 text-sm py-12 text-center">Carregando...</div>;
+    return <div className="text-[#5A605C] text-sm py-12 text-center">Carregando...</div>;
 
   const users = data?.users ?? [];
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center">
-            <Users className="w-5 h-5 text-zinc-400" />
+          <div className="w-10 h-10 rounded-xl bg-[#161714] border border-[#2A2D27] flex items-center justify-center">
+            <Users className="w-5 h-5 text-[#1E88A8]" strokeWidth={1.8} />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-zinc-100">Usuários</h1>
-            <p className="text-sm text-zinc-500 mt-0.5">
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-2xl font-bold text-[#ECEDEF]">Usuários</h1>
+            <p className="text-sm text-[#5A605C]">
               {data ? `${data.total} usuários` : "—"}
             </p>
           </div>
@@ -247,19 +248,19 @@ export function UsersPage() {
               setError("");
               setShowModal(true);
             }}
-            className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors"
+            className="bg-[#1E88A8] hover:bg-[#2299BC] text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
           >
-            <UserPlus className="w-4 h-4" /> Novo Cliente
+            <UserPlus className="w-4 h-4" strokeWidth={2.5} /> Novo Cliente
           </button>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5A605C]" strokeWidth={2} />
             <form onSubmit={handleSearch}>
               <input
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Buscar por nome, email ou tenant..."
-                className="w-80 bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                className="w-80 bg-[#161714] border border-[#2A2D27] rounded-lg pl-10 pr-4 py-2.5 text-sm text-[#ECEDEF] placeholder:text-[#5A605C] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors"
               />
             </form>
           </div>
@@ -267,42 +268,43 @@ export function UsersPage() {
       </div>
 
       {users.length === 0 ? (
-        <div className="text-center py-12 text-zinc-500 text-sm">
+        <div className="text-center py-12 text-[#5A605C] text-sm">
           Nenhum usuário encontrado
         </div>
       ) : (
         <>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+          <div className="bg-[#161714] border border-[#2A2D27] rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-left text-zinc-500 text-xs uppercase tracking-wider">
-                  <th className="px-5 py-4 font-medium">Tenant</th>
-                  <th className="px-5 py-4 font-medium">Nome</th>
-                  <th className="px-5 py-4 font-medium">Email</th>
-                  <th className="px-5 py-4 font-medium">Perfil</th>
-                  <th className="px-5 py-4 font-medium">Criado em</th>
+                <tr className="border-b border-[#1E201C] text-left text-[#3E4440] text-xs uppercase tracking-wider font-medium">
+                  <th className="px-5 py-4">Tenant</th>
+                  <th className="px-5 py-4">Nome</th>
+                  <th className="px-5 py-4">Email</th>
+                  <th className="px-5 py-4">Perfil</th>
+                  <th className="px-5 py-4">Criado em</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800">
+              <tbody className="divide-y divide-[#1A1C18]">
                 {users.map((u) => (
                   <tr
                     key={u.id}
                     onClick={() => navigate(`/admin/tenants/${u.tenantId}`)}
-                    className="text-zinc-300 hover:bg-zinc-800/50 cursor-pointer"
+                    className="hover:bg-[#1A1C18] cursor-pointer transition-colors"
                   >
-                    <td className="px-5 py-4 text-zinc-100 font-medium">
+                    <td className="px-5 py-4 text-[#ECEDEF] font-semibold">
                       {u.tenantName ?? u.tenantId.slice(0, 8)}
                     </td>
-                    <td className="px-5 py-4">{u.name ?? "—"}</td>
-                    <td className="px-5 py-4 text-zinc-400">{u.email}</td>
+                    <td className="px-5 py-4 text-[#B0B6B2]">{u.name ?? "—"}</td>
+                    <td className="px-5 py-4 text-[#7E8480]">{u.email}</td>
                     <td className="px-5 py-4">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        u.role === "owner" ? "bg-amber-900/30 text-amber-400"
-                          : u.role === "admin" ? "bg-blue-900/30 text-blue-400"
-                            : "bg-zinc-800 text-zinc-400"
+                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                        u.role === "owner" ? "bg-[#CF6F03]/20 text-[#CF6F03]"
+                          : u.role === "admin" ? "bg-[#CF6F03]/15 text-[#CF6F03]"
+                          : u.role === "superadmin" ? "bg-[#1E88A8]/20 text-[#1E88A8]"
+                            : "bg-[#126832]/15 text-[#7E8480]"
                       }`}>{u.role}</span>
                     </td>
-                    <td className="px-5 py-4 whitespace-nowrap text-xs text-zinc-500">
+                    <td className="px-5 py-4 whitespace-nowrap text-xs text-[#5A605C]">
                       {new Date(u.createdAt).toLocaleDateString("pt-BR")}
                     </td>
                   </tr>
@@ -313,22 +315,22 @@ export function UsersPage() {
 
           {/* Pagination */}
           {data && data.pages > 1 && (
-            <div className="flex items-center justify-between mt-4 text-sm text-zinc-400">
+            <div className="flex items-center justify-between mt-4 text-sm text-[#5A605C]">
               <span>
-                Página {data.page} de {data.pages}
+                Página <strong className="text-[#ECEDEF]">{data.page}</strong> de {data.pages}
               </span>
               <div className="flex gap-2">
                 <button
                   onClick={() => goToPage(data.page - 1)}
                   disabled={data.page <= 1}
-                  className="px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="p-1.5 rounded-lg bg-[#161714] border border-[#2A2D27] hover:bg-[#1A1C18] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => goToPage(data.page + 1)}
                   disabled={data.page >= data.pages}
-                  className="px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="p-1.5 rounded-lg bg-[#161714] border border-[#2A2D27] hover:bg-[#1A1C18] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -338,17 +340,17 @@ export function UsersPage() {
         </>
       )}
 
-      {/* ── Novo Cliente Modal ───────────────────────── */}
+      {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-[#161714] border border-[#2A2D27] rounded-lg p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-zinc-100">
+              <h2 className="text-lg font-semibold text-[#ECEDEF]">
                 Novo Cliente
               </h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                className="text-[#5A605C] hover:text-[#ECEDEF] transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>

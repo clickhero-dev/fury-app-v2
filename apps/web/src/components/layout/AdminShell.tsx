@@ -1,55 +1,30 @@
-import { useEffect, useState } from 'react';
-import { Shield, Users, Settings, Zap, ArrowLeft } from 'lucide-react';
+import { useState } from 'react';
+import { Users, Clock, Zap, LogOut, LayoutGrid, ArrowLeft } from 'lucide-react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import api from '@/lib/api';
+import { useFavicon } from '@/hooks/useFavicon';
 
 interface NavItem {
   path: string;
   label: string;
-  icon: React.ComponentType<{ className: string }>;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   end?: boolean;
 }
 
 const navItems: NavItem[] = [
+  { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { path: '/admin/users', label: 'Usuários', icon: Users },
-  // "Planos" gerencia planos e configurações globais do sistema
-  { path: '/admin/planos', label: 'Planos', icon: Settings },
-  // "Campanhas" recebe tratamento especial via handleCampanhasClick — ver comentário abaixo
+  { path: '/admin/planos', label: 'Planos', icon: Clock },
   { path: '/admin', label: 'Campanhas', icon: Zap, end: true },
 ];
 
 export function AdminShell() {
+  // 🟢 Define o Favicon e o Título da aba para a área Admin
+  useFavicon('/faviconadmin.svg', 'ADY ADMIN');
+
   const navigate = useNavigate();
   const location = useLocation();
-  // ponytail: useParams() no layout /admin sempre retorna vazio —
-  // extrai tenantId do pathname real (/admin/tenants/:id/...)
   const tenantId = location.pathname.match(/\/admin\/tenants\/([^/]+)/)?.[1];
-  const [tenantName, setTenantName] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Se está em uma rota de tenant (/admin/tenants/:id/*), carrega o nome do tenant
-  useEffect(() => {
-    if (tenantId) {
-      api
-        .get(`/admin/tenants/${tenantId}`)
-        .then((res) => {
-          setTenantName(res.data.data?.name || null);
-        })
-        .catch(() => {
-          setTenantName(null);
-        });
-    } else {
-      setTenantName(null);
-    }
-  }, [tenantId]);
-
-  // Limpa toast após 3 segundos
-  useEffect(() => {
-    if (toastMessage) {
-      const timer = setTimeout(() => setToastMessage(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toastMessage]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -58,52 +33,78 @@ export function AdminShell() {
     navigate('/admin/login');
   };
 
-  // Decisão arquitetural: campanhas são um resource aninhado a um tenant
-  // (/admin/tenants/:id/campaigns). O botão "Campanhas" na sidebar global
-  // se comporta de forma contextual:
-  // - Se já estamos dentro de um tenant (tenantId presente via useParams),
-  //   navega direto para as campanhas DAQUELE tenant.
-  // - Se não há tenant selecionado (estamos na lista global /admin, por
-  //   exemplo), mostra um toast avisando e manda para a lista de tenants,
-  //   já que não há campanhas "globais" para mostrar.
   const handleCampanhasClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (tenantId) {
       navigate(`/admin/tenants/${tenantId}/campaigns`);
     } else {
       setToastMessage('Selecione um cliente primeiro para ver suas campanhas');
+      setTimeout(() => setToastMessage(null), 3000);
       navigate('/admin');
     }
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex">
-      {/* Toast notification */}
+    <div
+      className="min-h-screen bg-[#0C0D0A] text-[#ECEDEF] flex font-sans"
+      style={
+        {
+          '--admin-bg': '#0C0D0A',
+          '--admin-sidebar': '#11120E',
+          '--admin-border': '#252721',
+          '--admin-text': '#ECEDEF',
+          '--admin-text-muted': '#8A8F8B',
+          '--admin-text-faint': '#4A4F4B',
+          '--admin-petrol': '#1E88A8',
+        } as React.CSSProperties
+      }
+    >
+      {/* Toast */}
       {toastMessage && (
-        <div className="fixed top-4 right-4 z-50 bg-amber-600 text-white px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-in fade-in slide-in-from-top-2">
+        <div className="fixed top-4 right-4 z-50 bg-[#1E88A8] text-white px-4 py-3 rounded-lg shadow-lg text-sm font-medium">
           {toastMessage}
         </div>
       )}
 
       {/* Sidebar */}
-      <aside className="w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0">
-        <div className="flex items-center gap-3 px-6 h-16 border-b border-zinc-800">
-          <Shield className="w-5 h-5 text-amber-500" />
-          <span className="font-bold text-zinc-100 text-sm tracking-wider">FURY ADMIN</span>
+      <aside className="w-56 bg-[#11120E] border-r border-[#252721] flex flex-col shrink-0 select-none">
+        {/* Header */}
+        <div className="px-5 py-5 border-b border-[#252721]">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+              <path
+                d="M12 2L3 6.5V12c0 4.97 3.76 9.62 9 10.93C17.24 21.62 21 16.97 21 12V6.5L12 2z"
+                fill="rgba(30,136,168,0.2)"
+                stroke="#1E88A8"
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+              />
+              <path d="M9 12l2 2 4-4" stroke="#1E88A8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="text-lg font-bold text-[#ECEDEF] tracking-tight">Ady</span>
+          </div>
+          <div className="text-[9px] font-semibold uppercase tracking-wider text-[#8A8F8B] pl-0.5 mt-1">
+            Superadmin
+          </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
+        {/* Nav */}
+        <nav className="px-2.5 py-3 space-y-0.5">
           {navItems.map((item) => {
-            // Campanhas recebe tratamento especial
             if (item.label === 'Campanhas') {
+              const isCampanhasActive = location.pathname.includes('/campaigns');
               return (
                 <button
                   key={item.label}
                   onClick={handleCampanhasClick}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer ${
+                    isCampanhasActive
+                      ? 'bg-[#1E88A8]/15 text-[#1E88A8] font-medium'
+                      : 'text-[#8A8F8B] hover:text-[#ECEDEF]'
+                  }`}
                 >
-                  <item.icon className="w-4 h-4" />
-                  {item.label}
+                  <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+                  <span>{item.label}</span>
                 </button>
               );
             }
@@ -114,59 +115,51 @@ export function AdminShell() {
                 to={item.path}
                 end={item.end}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  `w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
                     isActive
-                      ? 'bg-amber-600/10 text-amber-400 border border-amber-600/20'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                      ? 'bg-[#1E88A8]/15 text-[#1E88A8] font-medium'
+                      : 'text-[#8A8F8B] hover:text-[#ECEDEF]'
                   }`
                 }
               >
-                <item.icon className="w-4 h-4" />
-                {item.label}
+                <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+                <span>{item.label}</span>
               </NavLink>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-zinc-800">
+        {/* Footer */}
+        <div className="px-2.5 py-3 border-t border-[#252721] mt-auto">
           <button
             onClick={handleLogout}
-            className="w-full text-left px-4 py-2.5 rounded-xl text-sm text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#4A4F4B] hover:text-[#ECEDEF] transition-colors cursor-pointer"
           >
-            Sair
+            <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+            <span>Sair</span>
           </button>
         </div>
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-auto flex flex-col">
-        {/* Header com título de tenant e botão voltar (quando em rotas aninhadas) */}
+      <main className="flex-1 flex flex-col bg-[#0C0D0A] overflow-hidden">
         {tenantId && (
-          <header className="border-b border-zinc-800 bg-zinc-900/50 px-6 py-4 lg:py-5">
-            <div className="max-w-6xl mx-auto flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => navigate('/admin')}
-                  className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-                  title="Voltar para lista de tenants"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  Voltar
-                </button>
-                <div className="hidden sm:block pl-4 border-l border-zinc-800">
-                  {tenantName ? (
-                    <p className="text-sm font-medium text-zinc-300">{tenantName}</p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </header>
+          <div className="px-6 pt-4 shrink-0">
+            <button
+              onClick={() => navigate('/admin')}
+              className="flex items-center gap-2 text-sm text-[#4A4F4B] hover:text-[#ECEDEF] transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Voltar
+            </button>
+          </div>
         )}
 
-        {/* Conteúdo da rota */}
-        <div className="flex-1 p-6 lg:p-8">
-          <div className="max-w-6xl mx-auto">
-            <Outlet />
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="p-6 lg:p-8">
+            <div className="max-w-6xl mx-auto">
+              <Outlet />
+            </div>
           </div>
         </div>
       </main>
