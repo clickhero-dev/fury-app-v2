@@ -64,19 +64,16 @@ export function TenantsPage() {
   }
 
   if (loading)
-    return <div className="text-zinc-500 text-sm">Carregando...</div>;
-
-  const btnCancelCls =
-    "flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2.5 rounded-xl text-sm font-medium transition-colors";
+    return <div className="text-[#5A605C] text-sm">Carregando...</div>;
 
   return (
     <div>
       {msg && (
-        <div className="mb-4 px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-300 flex items-center justify-between">
+        <div className="mb-4 px-4 py-3 bg-[#161714] border border-[#2A2D27] rounded-lg text-sm text-[#ECEDEF] flex items-center justify-between">
           {msg}
           <button
             onClick={() => setMsg("")}
-            className="text-zinc-500 hover:text-zinc-300"
+            className="text-[#5A605C] hover:text-[#ECEDEF]"
           >
             ✕
           </button>
@@ -85,81 +82,80 @@ export function TenantsPage() {
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-zinc-100">Tenants</h1>
-          <p className="text-sm text-zinc-500 mt-1">{tenants.length} tenants</p>
+          <h1 className="text-xl font-bold text-[#ECEDEF]">Tenants</h1>
+          <p className="text-sm text-[#5A605C] mt-1">{tenants.length} tenants</p>
         </div>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5A605C]" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar tenant..."
-            className="w-64 bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+            className="w-64 bg-[#161714] border border-[#2A2D27] rounded-lg pl-10 pr-4 py-2.5 text-sm text-[#ECEDEF] placeholder:text-[#5A605C] transition-colors hover:border-[#3A3D37] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30"
           />
         </div>
       </div>
 
       <div className="grid gap-3">
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-zinc-500 text-sm">
+          <div className="text-center py-12 text-[#5A605C] text-sm">
             Nenhum tenant encontrado
           </div>
         )}
         {filtered.map((tenant) => (
-          <div key={tenant.id} className="relative group">
-            <button
-              onClick={() => navigate(`/admin/tenants/${tenant.id}`)}
-              className="w-full text-left bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-zinc-700 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center">
-                    <Building2 className="w-5 h-5 text-zinc-400" />
-                  </div>
-                  <div>
-                    <div className="font-semibold text-zinc-100">
-                      {tenant.name}
-                    </div>
-                    <div className="text-xs text-zinc-500 mt-0.5">
-                      {tenant.slug}
-                    </div>
-                  </div>
+          <div
+            key={tenant.id}
+            onClick={() => navigate(`/admin/tenants/${tenant.id}`)}
+            className="flex items-center justify-between bg-[#161714] border border-[#2A2D27] rounded-lg p-5 hover:border-[#1E88A8]/30 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-[#1A1C18] border border-[#1E88A8]/20 flex items-center justify-center">
+                <Building2 className="w-5 h-5 text-[#1E88A8]" />
+              </div>
+              <div>
+                <div className="font-semibold text-[#ECEDEF]">
+                  {tenant.name}
                 </div>
-
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-2 text-xs text-zinc-400">
-                    <Users className="w-3.5 h-3.5" />
-                    {tenant.userCount}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-zinc-400">
-                    <CreditCard className="w-3.5 h-3.5" />
-                    {tenant.subscription?.plan?.name ?? "Sem plano"}
-                  </div>
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                      tenant.subscription?.status === "active"
-                        ? "bg-green-900/30 text-green-400"
-                        : tenant.subscription?.status === "trial"
-                          ? "bg-blue-900/30 text-blue-400"
-                          : "bg-zinc-800 text-zinc-500"
-                    }`}
-                  >
-                    {tenant.subscription?.status ?? "inactive"}
-                  </span>
+                <div className="text-xs text-[#5A605C] mt-0.5">
+                  {tenant.slug}
                 </div>
               </div>
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setDeleteTarget(tenant);
-              }}
-              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-lg bg-red-900/30 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-900/50 transition-all"
-              title="Deletar tenant"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            </div>
+
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2 text-xs text-[#7E8480]">
+                <Users className="w-3.5 h-3.5" />
+                {tenant.userCount}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-[#7E8480]">
+                <CreditCard className="w-3.5 h-3.5" />
+                {tenant.subscription?.plan?.name ?? "Sem plano"}
+              </div>
+              <span
+                className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                  tenant.subscription?.status === "active"
+                    ? "bg-[#1E88A8]/20 text-[#1E88A8]"
+                    : tenant.subscription?.status === "trial"
+                      ? "bg-[#CF6F03]/20 text-[#CF6F03]"
+                      : tenant.subscription?.status === "inactive"
+                        ? "bg-[#CF6F03]/20 text-[#CF6F03]"
+                        : "bg-[#1A1C18] text-[#5A605C]"
+                }`}
+              >
+                {tenant.subscription?.status ?? "inactive"}
+              </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteTarget(tenant);
+                }}
+                className="w-8 h-8 flex items-center justify-center leading-none rounded-lg bg-[#C0392B]/20 text-[#C0392B] hover:bg-[#C0392B]/30 transition-all shrink-0"
+                title="Deletar tenant"
+              >
+                <Trash2 className="w-4 h-4 shrink-0" />
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -171,26 +167,26 @@ export function TenantsPage() {
           onClick={() => setDeleteTarget(null)}
         >
           <div
-            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-sm mx-4"
+            className="bg-[#161714] border border-[#2A2D27] rounded-lg p-6 w-full max-w-sm mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-zinc-100">
+              <h2 className="text-lg font-semibold text-[#ECEDEF]">
                 Deletar Tenant
               </h2>
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                className="text-[#5A605C] hover:text-[#ECEDEF] transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-sm text-zinc-400 mb-2">
+            <p className="text-sm text-[#5A605C] mb-2">
               Tem certeza que deseja deletar{" "}
-              <strong className="text-zinc-200">{deleteTarget.name}</strong>?
+              <strong className="text-[#ECEDEF]">{deleteTarget.name}</strong>?
             </p>
-            <p className="text-xs text-zinc-500 mb-6">
+            <p className="text-xs text-[#3E4440] mb-6">
               Esta ação remove todos os dados do tenant, incluindo usuários,
               campanhas e assinaturas. Não é reversível.
             </p>
@@ -198,14 +194,14 @@ export function TenantsPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className={btnCancelCls}
+                className="flex-1 bg-[#161714] hover:bg-[#1A1C18] border border-[#2A2D27] text-[#7E8480] py-2.5 rounded-lg text-sm font-medium transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleDeleteTenant}
                 disabled={deleting}
-                className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                className="flex-1 bg-[#C0392B] hover:bg-[#A93225] disabled:opacity-50 text-white py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors"
               >
                 {deleting ? (
                   "Deletando..."

@@ -119,109 +119,121 @@ export function PlansPage() {
     }
   };
 
-  if (loading) return <div className="text-zinc-500 text-sm py-12 text-center">Carregando...</div>;
+  if (loading) return <div className="text-[#5A605C] text-sm py-12 text-center">Carregando...</div>;
 
   const otherPlans = deleteTarget ? plans.filter((p) => p.id !== deleteTarget.id) : [];
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-zinc-100">Planos</h1>
-          <p className="text-sm text-zinc-500 mt-1">{plans.length} planos cadastrados</p>
+          <h1 className="text-2xl font-bold text-[#ECEDEF]">Planos</h1>
+          <p className="text-sm text-[#5A605C] mt-1">{plans.length} planos cadastrados</p>
         </div>
         <button onClick={() => setShowNew(!showNew)}
-          className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors">
-          <Plus className="w-4 h-4" /> Novo Plano
+          className="bg-[#1E88A8] hover:bg-[#2299BC] text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+          <Plus className="w-4 h-4" strokeWidth={2.5} /> Novo Plano
         </button>
       </div>
 
       {msg && (
-        <div className="mb-4 px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-zinc-300 flex items-center justify-between">
-          {msg} <button onClick={() => setMsg('')} className="text-zinc-500 hover:text-zinc-300">✕</button>
+        <div className="mb-4 px-4 py-3 bg-[#161714] border border-[#2A2D27] rounded-lg text-sm text-[#ECEDEF] flex items-center justify-between">
+          {msg} <button onClick={() => setMsg('')} className="text-[#5A605C] hover:text-[#ECEDEF]">✕</button>
         </div>
       )}
 
       {showNew && (
-        <div className="mb-4 bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
+        <div className="mb-4 bg-[#161714] border border-[#2A2D27] rounded-lg p-5 space-y-3">
           <div className="grid grid-cols-5 gap-3">
             <input value={newPlan.name} onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })}
-              placeholder="Nome do plano" className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+              placeholder="Nome do plano" className="bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
             <input type="number" step="0.01" value={newPlan.priceCents || ''} onChange={(e) => setNewPlan({ ...newPlan, priceCents: parseFloat(e.target.value) || 0 })}
-              placeholder="Preço (R$)" className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+              placeholder="Preço (R$)" className="bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
             <select value={newPlan.interval} onChange={(e) => setNewPlan({ ...newPlan, interval: e.target.value })}
-              className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100">
+              className="bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors">
               <option value="monthly">Mensal</option>
               <option value="yearly">Anual</option>
             </select>
             <button onClick={createPlan} disabled={saving}
-              className="bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors">
+              className="bg-[#1E88A8] hover:bg-[#2299BC] disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors">
               Criar
             </button>
             <button onClick={() => setShowNew(false)}
-              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-xl text-sm transition-colors">
+              className="bg-transparent border border-[#2A2D27] text-[#7E8480] hover:text-[#ECEDEF] hover:border-[#3A3D37] rounded-lg text-sm transition-colors">
               Cancelar
             </button>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-zinc-500 mb-1 block">Criativos por mês (vazio = sem limite)</label>
+              <label className="text-xs text-[#7E8480] mb-1 block">Criativos por mês (vazio = sem limite)</label>
               <input type="number" min={0} value={newPlan.limits.creativesPerMonth ?? ''}
                 onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, creativesPerMonth: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) } })}
-                placeholder="Sem limite" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+                placeholder="Sem limite" className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
             </div>
             <div>
-              <label className="text-xs text-zinc-500 mb-1 block">Modificações por criativo (vazio = sem limite)</label>
+              <label className="text-xs text-[#7E8480] mb-1 block">Modificações por criativo (vazio = sem limite)</label>
               <input type="number" min={0} value={newPlan.limits.modificationsPerCreative ?? ''}
                 onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, modificationsPerCreative: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) } })}
-                placeholder="Sem limite" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+                placeholder="Sem limite" className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
             </div>
           </div>
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {plans.map((plan) => {
           const edit = editing[plan.id] || {};
           const hasChanges = Object.keys(edit).length > 0;
           const effectiveLimits = edit.limits ?? plan.limits ?? { creativesPerMonth: null, modificationsPerCreative: null };
           return (
-            <div key={plan.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
+            <div key={plan.id} className="bg-[#161714] border border-[#2A2D27] rounded-lg p-5 space-y-3 hover:border-[#1E88A8]/30 transition-colors">
+              <div className={`inline-block px-3 py-1 rounded-lg text-xs font-semibold mb-3 ${
+                plan.name.toUpperCase() === 'STARTER'
+                  ? 'bg-[#7E8480]/20 text-[#7E8480]'
+                  : plan.name.toUpperCase() === 'PRO'
+                    ? 'bg-[#1E88A8]/20 text-[#1E88A8]'
+                    : plan.name.toUpperCase() === 'ENTERPRISE'
+                      ? 'bg-[#CF6F03]/20 text-[#CF6F03]'
+                      : 'bg-[#7E8480]/20 text-[#7E8480]'
+              }`}>
+                {plan.name.toUpperCase() === 'STARTER' ? 'BÁSICO' : plan.name.toUpperCase() === 'PRO' ? 'INTERMEDIÁRIO' : plan.name.toUpperCase() === 'ENTERPRISE' ? 'EMPRESARIAL' : plan.name}
+              </div>
               <div className="grid grid-cols-5 gap-3 items-end">
                 <div>
-                  <label className="text-xs text-zinc-500 mb-1 block">Nome</label>
+                  <label className="text-xs text-[#7E8480] mb-1 block">Nome</label>
                   <input value={edit.name ?? plan.name} onChange={(e) => setEdit(plan.id, 'name', e.target.value)}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+                    className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors" />
                 </div>
                 <div>
-                  <label className="text-xs text-zinc-500 mb-1 block">Preço</label>
+                  <label className="text-xs text-[#7E8480] mb-1 block">Preço</label>
                   <input type="number" step="0.01" value={edit.priceCents !== undefined ? edit.priceCents / 100 : (plan.priceCents / 100)}
                     onChange={(e) => setEdit(plan.id, 'priceCents', Math.round(parseFloat(e.target.value || '0') * 100))}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+                    className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors" />
                 </div>
                 <div>
-                  <label className="text-xs text-zinc-500 mb-1 block">Intervalo</label>
+                  <label className="text-xs text-[#7E8480] mb-1 block">Intervalo</label>
                   <select value={edit.interval ?? plan.interval} onChange={(e) => setEdit(plan.id, 'interval', e.target.value)}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100">
+                    className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors">
                     <option value="monthly">Mensal</option>
                     <option value="yearly">Anual</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-zinc-500 mb-1 block">Ativo</label>
+                  <label className="text-xs text-[#7E8480] mb-1 block">Ativo</label>
                   <select value={String(edit.isActive ?? plan.isActive)} onChange={(e) => setEdit(plan.id, 'isActive', e.target.value === 'true')}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100">
+                    className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors">
                     <option value="true">Sim</option>
                     <option value="false">Não</option>
                   </select>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => savePlan(plan.id)} disabled={!hasChanges || saving}
-                    className="bg-amber-600 hover:bg-amber-500 disabled:opacity-30 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors">
+                    className="bg-[#1E88A8]/20 hover:bg-[#1E88A8]/35 border border-[#1E88A8]/50 text-[#1E88A8] disabled:opacity-30 disabled:cursor-not-allowed px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors">
                     <Save className="w-4 h-4" /> Salvar
                   </button>
                   <button onClick={() => handleDeleteClick(plan)} disabled={saving}
-                    className="bg-red-600/20 hover:bg-red-600/40 disabled:opacity-30 text-red-400 px-3 py-2.5 rounded-xl text-sm transition-colors"
+                    className="bg-[#C0392B]/15 hover:bg-[#C0392B]/25 disabled:opacity-30 text-[#C0392B] px-3 py-2.5 rounded-lg text-sm transition-colors"
                     title="Deletar plano">
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -229,22 +241,22 @@ export function PlansPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-zinc-500 mb-1 block">Criativos por mês (vazio = sem limite)</label>
+                  <label className="text-xs text-[#7E8480] mb-1 block">Criativos por mês (vazio = sem limite)</label>
                   <input type="number" min={0} value={effectiveLimits.creativesPerMonth ?? ''}
                     onChange={(e) => setLimitEdit(plan, 'creativesPerMonth', e.target.value)}
-                    placeholder="Sem limite" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+                    placeholder="Sem limite" className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
                 </div>
                 <div>
-                  <label className="text-xs text-zinc-500 mb-1 block">Modificações por criativo (vazio = sem limite)</label>
+                  <label className="text-xs text-[#7E8480] mb-1 block">Modificações por criativo (vazio = sem limite)</label>
                   <input type="number" min={0} value={effectiveLimits.modificationsPerCreative ?? ''}
                     onChange={(e) => setLimitEdit(plan, 'modificationsPerCreative', e.target.value)}
-                    placeholder="Sem limite" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100" />
+                    placeholder="Sem limite" className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
                 </div>
               </div>
-              <div className="text-xs text-zinc-500">
+              <div className="text-xs text-[#3E4440]">
                 ID: {plan.id} · Features: {Object.keys(plan.features).length}
                 {' · '}
-                <span className={plan.subscriberCount > 0 ? 'text-amber-400' : 'text-zinc-500'}>
+                <span className={plan.subscriberCount > 0 ? 'text-[#CF6F03]' : 'text-[#3E4440]'}>
                   {plan.subscriberCount} assinante{plan.subscriberCount !== 1 ? 's' : ''}
                 </span>
               </div>
@@ -256,12 +268,12 @@ export function PlansPage() {
       {/* Delete/Migration Modal */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-xl">
-            <h2 className="text-lg font-bold text-zinc-100 mb-2">Deletar plano</h2>
-            <p className="text-sm text-zinc-400 mb-4">
-              Plano <span className="text-zinc-200 font-medium">{deleteTarget.name}</span>
+          <div className="bg-[#161714] border border-[#2A2D27] rounded-lg p-6 w-full max-w-md shadow-xl">
+            <h2 className="text-lg font-bold text-[#ECEDEF] mb-2">Deletar plano</h2>
+            <p className="text-sm text-[#5A605C] mb-4">
+              Plano <span className="text-[#ECEDEF] font-medium">{deleteTarget.name}</span>
               {deleteTarget.subscriberCount > 0 ? (
-                <> possui <span className="text-amber-400 font-bold">{deleteTarget.subscriberCount} assinante{deleteTarget.subscriberCount !== 1 ? 's' : ''}</span>.</>
+                <> possui <span className="text-[#CF6F03] font-bold">{deleteTarget.subscriberCount} assinante{deleteTarget.subscriberCount !== 1 ? 's' : ''}</span>.</>
               ) : (
                 <> não possui assinantes.</>
               )}
@@ -269,13 +281,13 @@ export function PlansPage() {
 
             {deleteTarget.subscriberCount > 0 ? (
               <>
-                <p className="text-sm text-zinc-400 mb-3">
+                <p className="text-sm text-[#5A605C] mb-3">
                   Para deletar, migre os assinantes para outro plano:
                 </p>
                 <select
                   value={migrateTo}
                   onChange={(e) => setMigrateTo(e.target.value)}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 mb-4"
+                  className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors mb-4 placeholder:text-[#5A605C]"
                 >
                   <option value="">Selecione um plano...</option>
                   {otherPlans.map((p) => (
@@ -286,13 +298,13 @@ export function PlansPage() {
                   <button
                     onClick={() => executeDelete(true)}
                     disabled={!migrateTo || saving}
-                    className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                    className="flex-1 bg-[#1E88A8]/20 hover:bg-[#1E88A8]/35 border border-[#1E88A8]/50 text-[#1E88A8] disabled:opacity-30 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
                   >
                     Migrar e deletar
                   </button>
                   <button
                     onClick={() => setDeleteTarget(null)}
-                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-xl text-sm transition-colors"
+                    className="flex-1 bg-[#161714] hover:bg-[#1A1C18] border border-[#2A2D27] text-[#7E8480] rounded-lg text-sm transition-colors"
                   >
                     Cancelar
                   </button>
@@ -303,13 +315,13 @@ export function PlansPage() {
                 <button
                   onClick={() => executeDelete(false)}
                   disabled={saving}
-                  className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                  className="flex-1 bg-[#C0392B] hover:bg-[#A93225] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
                 >
                   Deletar
                 </button>
                 <button
                   onClick={() => setDeleteTarget(null)}
-                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-xl text-sm transition-colors"
+                  className="flex-1 bg-[#161714] hover:bg-[#1A1C18] border border-[#2A2D27] text-[#7E8480] rounded-lg text-sm transition-colors"
                 >
                   Cancelar
                 </button>
