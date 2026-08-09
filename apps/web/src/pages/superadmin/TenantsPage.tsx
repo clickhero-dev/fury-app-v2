@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Search,
-  Building2,
-  Users,
-  CreditCard,
-  X,
-  Trash2,
-} from "lucide-react";
+import { Search, Building2, Users, CreditCard, X, Trash2 } from "lucide-react";
 import api from "@/lib/api";
 
 interface Tenant {
@@ -35,9 +28,7 @@ export function TenantsPage() {
   useEffect(() => {
     api
       .get("/admin/tenants")
-      .then((res) => {
-        setTenants(res.data.data);
-      })
+      .then((res) => { setTenants(res.data.data); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -71,19 +62,28 @@ export function TenantsPage() {
       {msg && (
         <div className="mb-4 px-4 py-3 bg-[#161714] border border-[#2A2D27] rounded-lg text-sm text-[#ECEDEF] flex items-center justify-between">
           {msg}
-          <button
-            onClick={() => setMsg("")}
-            className="text-[#5A605C] hover:text-[#ECEDEF]"
-          >
-            ✕
-          </button>
+          <button onClick={() => setMsg("")} className="text-[#5A605C] hover:text-[#ECEDEF]">✕</button>
         </div>
       )}
 
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-[#ECEDEF]">Tenants</h1>
-          <p className="text-sm text-[#5A605C] mt-1">{tenants.length} tenants</p>
+        <div className="flex items-center gap-3">
+          <div style={{
+            width: 38, height: 38, borderRadius: 10,
+            background: 'rgba(30,136,168,0.1)',
+            border: '1px solid rgba(30,136,168,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#1E88A8', flexShrink: 0,
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+          </div>
+          <div className="flex items-baseline gap-2">
+          <h1 className="text-2xl font-bold !text-[#ECEDEF]">Tenants</h1>
+            <span className="text-sm text-[#5A605C]">{tenants.length} tenants</span>
+          </div>
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5A605C]" />
@@ -114,12 +114,8 @@ export function TenantsPage() {
                 <Building2 className="w-5 h-5 text-[#1E88A8]" />
               </div>
               <div>
-                <div className="font-semibold text-[#ECEDEF]">
-                  {tenant.name}
-                </div>
-                <div className="text-xs text-[#5A605C] mt-0.5">
-                  {tenant.slug}
-                </div>
+                <div className="font-semibold text-[#ECEDEF]">{tenant.name}</div>
+                <div className="text-xs text-[#5A605C] mt-0.5">{tenant.slug}</div>
               </div>
             </div>
 
@@ -132,24 +128,19 @@ export function TenantsPage() {
                 <CreditCard className="w-3.5 h-3.5" />
                 {tenant.subscription?.plan?.name ?? "Sem plano"}
               </div>
-              <span
-                className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                  tenant.subscription?.status === "active"
-                    ? "bg-[#1E88A8]/20 text-[#1E88A8]"
-                    : tenant.subscription?.status === "trial"
+              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                tenant.subscription?.status === "active"
+                  ? "bg-[#1E88A8]/20 text-[#1E88A8]"
+                  : tenant.subscription?.status === "trial"
+                    ? "bg-[#CF6F03]/20 text-[#CF6F03]"
+                    : tenant.subscription?.status === "inactive"
                       ? "bg-[#CF6F03]/20 text-[#CF6F03]"
-                      : tenant.subscription?.status === "inactive"
-                        ? "bg-[#CF6F03]/20 text-[#CF6F03]"
-                        : "bg-[#1A1C18] text-[#5A605C]"
-                }`}
-              >
+                      : "bg-[#1A1C18] text-[#5A605C]"
+              }`}>
                 {tenant.subscription?.status ?? "inactive"}
               </span>
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDeleteTarget(tenant);
-                }}
+                onClick={(e) => { e.stopPropagation(); setDeleteTarget(tenant); }}
                 className="w-8 h-8 flex items-center justify-center leading-none rounded-lg bg-[#C0392B]/20 text-[#C0392B] hover:bg-[#C0392B]/30 transition-all shrink-0"
                 title="Deletar tenant"
               >
@@ -160,7 +151,7 @@ export function TenantsPage() {
         ))}
       </div>
 
-      {/* ── Deletar Tenant Confirmação ────────────────── */}
+      {/* Deletar Tenant Confirmação */}
       {deleteTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
@@ -171,13 +162,8 @@ export function TenantsPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-[#ECEDEF]">
-                Deletar Tenant
-              </h2>
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="text-[#5A605C] hover:text-[#ECEDEF] transition-colors"
-              >
+              <h2 className="text-lg font-semibold text-[#ECEDEF]">Deletar Tenant</h2>
+              <button onClick={() => setDeleteTarget(null)} className="text-[#5A605C] hover:text-[#ECEDEF] transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -187,8 +173,7 @@ export function TenantsPage() {
               <strong className="text-[#ECEDEF]">{deleteTarget.name}</strong>?
             </p>
             <p className="text-xs text-[#3E4440] mb-6">
-              Esta ação remove todos os dados do tenant, incluindo usuários,
-              campanhas e assinaturas. Não é reversível.
+              Esta ação remove todos os dados do tenant, incluindo usuários, campanhas e assinaturas. Não é reversível.
             </p>
 
             <div className="flex gap-3">
@@ -203,13 +188,7 @@ export function TenantsPage() {
                 disabled={deleting}
                 className="flex-1 bg-[#C0392B] hover:bg-[#A93225] disabled:opacity-50 text-white py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors"
               >
-                {deleting ? (
-                  "Deletando..."
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4" /> Sim, deletar
-                  </>
-                )}
+                {deleting ? "Deletando..." : <><Trash2 className="w-4 h-4" /> Sim, deletar</>}
               </button>
             </div>
           </div>

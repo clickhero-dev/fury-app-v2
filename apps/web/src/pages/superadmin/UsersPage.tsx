@@ -226,7 +226,7 @@ export function UsersPage() {
             <Users className="w-5 h-5 text-[#1E88A8]" strokeWidth={1.8} />
           </div>
           <div className="flex items-baseline gap-2">
-            <h1 className="text-2xl font-bold text-[#ECEDEF]">Usuários</h1>
+          <h1 className="text-2xl font-bold !text-[#ECEDEF]">Usuários</h1>
             <p className="text-sm text-[#5A605C]">
               {data ? `${data.total} usuários` : "—"}
             </p>
