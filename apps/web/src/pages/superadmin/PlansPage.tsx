@@ -33,7 +33,6 @@ export function PlansPage() {
   });
   const [editing, setEditing] = useState<Record<string, Partial<Plan>>>({});
 
-  // Delete / migration state
   const [deleteTarget, setDeleteTarget] = useState<Plan | null>(null);
   const [migrateTo, setMigrateTo] = useState('');
 
@@ -99,9 +98,7 @@ export function PlansPage() {
     if (!deleteTarget) return;
     setSaving(true);
     try {
-      const params = withMigration && migrateTo
-        ? `?migrateTo=${migrateTo}`
-        : '';
+      const params = withMigration && migrateTo ? `?migrateTo=${migrateTo}` : '';
       await api.delete(`/admin/plans/${deleteTarget.id}${params}`);
       setMsg(withMigration ? 'Assinantes migrados e plano deletado' : 'Plano deletado');
       setDeleteTarget(null);
@@ -127,9 +124,22 @@ export function PlansPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[#ECEDEF]">Planos</h1>
-          <p className="text-sm text-[#5A605C] mt-1">{plans.length} planos cadastrados</p>
+        <div className="flex items-center gap-3">
+          <div style={{
+            width: 38, height: 38, borderRadius: 10,
+            background: 'rgba(30,136,168,0.1)',
+            border: '1px solid rgba(30,136,168,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#1E88A8', flexShrink: 0,
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+            </svg>
+          </div>
+          <div className="flex items-baseline gap-2">
+          <h1 className="text-2xl font-bold !text-[#ECEDEF]">Planos</h1>
+            <span className="text-sm text-[#5A605C]">{plans.length} planos cadastrados</span>
+          </div>
         </div>
         <button onClick={() => setShowNew(!showNew)}
           className="bg-[#1E88A8] hover:bg-[#2299BC] text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">

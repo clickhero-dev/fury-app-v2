@@ -18,7 +18,6 @@ const navItems: NavItem[] = [
 ];
 
 export function AdminShell() {
-  // 🟢 Define o Favicon e o Título da aba para a área Admin
   useFavicon('/faviconadmin.svg', 'ADY ADMIN');
 
   const navigate = useNavigate();
@@ -45,19 +44,9 @@ export function AdminShell() {
   };
 
   return (
+    // 🟡 Definimos o fundo e uma cor de texto clara PADRÃO para tudo aqui
     <div
       className="min-h-screen bg-[#0C0D0A] text-[#ECEDEF] flex font-sans"
-      style={
-        {
-          '--admin-bg': '#0C0D0A',
-          '--admin-sidebar': '#11120E',
-          '--admin-border': '#252721',
-          '--admin-text': '#ECEDEF',
-          '--admin-text-muted': '#8A8F8B',
-          '--admin-text-faint': '#4A4F4B',
-          '--admin-petrol': '#1E88A8',
-        } as React.CSSProperties
-      }
     >
       {/* Toast */}
       {toastMessage && (
@@ -81,7 +70,7 @@ export function AdminShell() {
               />
               <path d="M9 12l2 2 4-4" stroke="#1E88A8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <span className="text-lg font-bold text-[#ECEDEF] tracking-tight">Ady</span>
+            <span className="text-lg font-bold tracking-tight">Ady</span>
           </div>
           <div className="text-[9px] font-semibold uppercase tracking-wider text-[#8A8F8B] pl-0.5 mt-1">
             Superadmin
@@ -142,7 +131,8 @@ export function AdminShell() {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 flex flex-col bg-[#0C0D0A] overflow-hidden">
+      {/* 🟡 Forçamos o texto claro PADRÃO para todas as páginas filhas (UsersPage, TenantsPage...) aqui */}
+      <main className="flex-1 flex flex-col bg-[#0C0D0A] overflow-hidden text-[#ECEDEF]">
         {tenantId && (
           <div className="px-6 pt-4 shrink-0">
             <button
@@ -156,7 +146,9 @@ export function AdminShell() {
         )}
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="p-6 lg:p-8">
+          {/* 🟢 Adicionamos a classe 'dark' do Tailwind aqui para que componentes (tabelas, cards) 
+               sabem que estão em um ambiente escuro e se ajustem automaticamente. */}
+          <div className="dark p-6 lg:p-8">
             <div className="max-w-6xl mx-auto">
               <Outlet />
             </div>
