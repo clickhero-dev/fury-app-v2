@@ -117,18 +117,12 @@ export function DashboardAdminPage() {
     <div className="space-y-6">
 
       {/* Badge dados de exemplo */}
-      <div className="flex justify-end">
-        <span style={{
-          fontSize: 11, fontWeight: 500,
-          color: '#5A605C',
-          background: '#161714',
-          border: '1px solid #2A2D27',
-          borderRadius: 6,
-          padding: '3px 10px',
-          letterSpacing: '0.04em',
-        }}>
-          Dados de exemplo
-        </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#CF6F03" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <span style={{ fontSize: 11.5, color: '#CF6F03', fontWeight: 500 }}>Dados de exemplo</span>
+            
       </div>
 
      {/* Header */}
@@ -148,12 +142,7 @@ export function DashboardAdminPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold !text-[#ECEDEF]" style={{ margin: 0, letterSpacing: '-0.5px' }}>Dashboard</h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#CF6F03" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-              </svg>
-              <span style={{ fontSize: 11.5, color: '#CF6F03', fontWeight: 500 }}>Dados de exemplo</span>
-            </div>
+            
           </div>
         </div>
 

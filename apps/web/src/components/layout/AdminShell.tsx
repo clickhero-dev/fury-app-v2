@@ -14,7 +14,7 @@ const navItems: NavItem[] = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { path: '/admin/users', label: 'Usuários', icon: Users },
   { path: '/admin/planos', label: 'Planos', icon: Clock },
-  { path: '/admin', label: 'Campanhas', icon: Zap, end: true },
+  { path: '/admin/tenants', label: 'Campanhas', icon: Zap },
 ];
 
 export function AdminShell() {
@@ -39,15 +39,12 @@ export function AdminShell() {
     } else {
       setToastMessage('Selecione um cliente primeiro para ver suas campanhas');
       setTimeout(() => setToastMessage(null), 3000);
-      navigate('/admin');
+      navigate('/admin/tenants');
     }
   };
 
   return (
-    // 🟡 Definimos o fundo e uma cor de texto clara PADRÃO para tudo aqui
-    <div
-      className="min-h-screen bg-[#0C0D0A] text-[#ECEDEF] flex font-sans"
-    >
+    <div className="min-h-screen bg-[#0C0D0A] text-[#ECEDEF] flex font-sans">
       {/* Toast */}
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 bg-[#1E88A8] text-white px-4 py-3 rounded-lg shadow-lg text-sm font-medium">
@@ -78,45 +75,57 @@ export function AdminShell() {
         </div>
 
         {/* Nav */}
-        <nav className="px-2.5 py-3 space-y-0.5">
-          {navItems.map((item) => {
-            if (item.label === 'Campanhas') {
-              const isCampanhasActive = location.pathname.includes('/campaigns');
-              return (
-                <button
-                  key={item.label}
-                  onClick={handleCampanhasClick}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer ${
-                    isCampanhasActive
-                      ? 'bg-[#1E88A8]/15 text-[#1E88A8] font-medium'
-                      : 'text-[#8A8F8B] hover:text-[#ECEDEF]'
-                  }`}
-                >
-                  <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.8} />
-                  <span>{item.label}</span>
-                </button>
-              );
-            }
 
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                end={item.end}
-                className={({ isActive }) =>
-                  `w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
-                    isActive
-                      ? 'bg-[#1E88A8]/15 text-[#1E88A8] font-medium'
-                      : 'text-[#8A8F8B] hover:text-[#ECEDEF]'
-                  }`
-                }
-              >
-                <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.8} />
-                <span>{item.label}</span>
-              </NavLink>
-            );
-          })}
-        </nav>
+        <nav className="px-2.5 py-3 space-y-0.5">
+  {navItems.map((item) => {
+    // Identifica se estamos exatamente na listagem /admin/tenants (sem ID na URL)
+    const isExactTenantsList = location.pathname === '/admin/tenants' || location.pathname === '/admin/tenants/';
+
+    // 1. Lógica do botão Campanhas
+    if (item.label === 'Campanhas') {
+      const isCampanhasActive = location.pathname.includes('/campaigns') || isExactTenantsList;
+
+      return (
+        <button
+          key={item.label}
+          onClick={handleCampanhasClick}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer ${
+            isCampanhasActive
+              ? 'bg-[#1E88A8]/15 text-[#1E88A8] font-medium'
+              : 'text-[#8A8F8B] hover:text-[#ECEDEF]'
+          }`}
+        >
+          <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+          <span>{item.label}</span>
+        </button>
+      );
+    }
+
+    // 2. Lógica do botão Usuários
+    const isUserActive =
+      item.path === '/admin/users' &&
+      (location.pathname.startsWith('/admin/users') ||
+        (location.pathname.startsWith('/admin/tenants') && !isExactTenantsList && !location.pathname.includes('/campaigns')));
+
+    return (
+      <NavLink
+        key={item.path}
+        to={item.path}
+        end={item.end}
+        className={({ isActive }) =>
+          `w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
+            isActive || isUserActive
+              ? 'bg-[#1E88A8]/15 text-[#1E88A8] font-medium'
+              : 'text-[#8A8F8B] hover:text-[#ECEDEF]'
+          }`
+        }
+      >
+        <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+        <span>{item.label}</span>
+      </NavLink>
+    );
+  })}
+</nav>
 
         {/* Footer */}
         <div className="px-2.5 py-3 border-t border-[#252721] mt-auto">
@@ -131,23 +140,23 @@ export function AdminShell() {
       </aside>
 
       {/* Main */}
-      {/* 🟡 Forçamos o texto claro PADRÃO para todas as páginas filhas (UsersPage, TenantsPage...) aqui */}
       <main className="flex-1 flex flex-col bg-[#0C0D0A] overflow-hidden text-[#ECEDEF]">
-        {tenantId && (
-          <div className="px-6 pt-4 shrink-0">
-            <button
-              onClick={() => navigate('/admin')}
-              className="flex items-center gap-2 text-sm text-[#4A4F4B] hover:text-[#ECEDEF] transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Voltar
-            </button>
-          </div>
-        )}
-
+      {tenantId && (
+    <div className="px-6 pt-4 shrink-0">
+      <button
+        onClick={() => {
+          // Se a intenção for voltar na navegação anterior (ex: tela de usuários):
+          navigate(-1); 
+          // Caso queira forçar a ida direta para a lista principal, use: navigate('/admin/tenants');
+        }}
+        className="flex items-center gap-2 text-sm text-[#4A4F4B] hover:text-[#ECEDEF] transition-colors cursor-pointer"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Voltar para Clientes
+      </button>
+    </div>
+     )}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          {/* 🟢 Adicionamos a classe 'dark' do Tailwind aqui para que componentes (tabelas, cards) 
-               sabem que estão em um ambiente escuro e se ajustem automaticamente. */}
           <div className="dark p-6 lg:p-8">
             <div className="max-w-6xl mx-auto">
               <Outlet />
