@@ -6,7 +6,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm i --frozen-lockfile
+RUN pnpm i --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
 
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
