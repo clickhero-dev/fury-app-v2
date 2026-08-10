@@ -240,6 +240,7 @@ export async function createManualPost(tenantId: string, data: {
   platform?: string;
   scheduledAt?: string;
   title?: string;
+  imageUrl?: string;
 }) {
   const [post] = await db.insert(socialPosts)
     .values({
@@ -251,7 +252,8 @@ export async function createManualPost(tenantId: string, data: {
       platform: data.platform || 'instagram',
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
       title: data.title || null,
-      status: 'draft',
+      imageUrl: data.imageUrl || null,
+      status: 'approved',
     })
     .returning();
   return post;

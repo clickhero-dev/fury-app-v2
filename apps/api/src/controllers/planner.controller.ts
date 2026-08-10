@@ -1,6 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import { randomUUID } from 'crypto';
 import { AppError } from '../middleware/errorHandler.js';
+import { uploadAsset } from '../services/storage.service.js';
 import {
   startPlanGeneration,
   getJobProgress,
@@ -149,6 +151,7 @@ export async function handleCreatePost(req: Request, res: Response, next: NextFu
       platform: z.string().max(50).optional(),
       scheduledAt: z.string().datetime().optional(),
       title: z.string().max(255).optional(),
+      imageUrl: z.string().url().optional(),
     }).parse(req.body);
     const post = await createManualPost(tenantId, body);
     res.json({ success: true, data: post });
@@ -183,5 +186,22 @@ export async function handlePublishDue(req: Request, res: Response, next: NextFu
     // User (com auth): publica só do tenant logado
     const result = await publishDuePosts(req.tenant.tenantId);
     res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+export async function handleUploadMedia(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { tenantId } = req.tenant!;
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado' });
+    }
+    const ext = req.file.mimetype === 'image/png' ? 'png'
+      : req.file.mimetype === 'image/jpeg' ? 'jpg'
+      : req.file.mimetype === 'video/mp4' ? 'mp4'
+      : req.file.mimetype === 'video/quicktime' ? 'mov'
+      : 'png';
+    const fileName = `posts/${tenantId}/${randomUUID()}.${ext}`;
+    const url = await uploadAsset(req.file.buffer, fileName, req.file.mimetype);
+    res.json({ success: true, data: { url } });
   } catch (err) { next(err); }
 }
