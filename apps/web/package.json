@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && cp dist/index.html . && cp dist/favicon.svg . 2>/dev/null; cp dist/icons.svg . 2>/dev/null; mkdir -p assets && cp -r dist/assets/* assets/ 2>/dev/null; echo 'build + copy to root done'",
+    "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "vite preview --host 0.0.0.0 --port 80 --strictPort"
