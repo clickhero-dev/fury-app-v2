@@ -397,15 +397,16 @@ function CreatePostDialog({ year, month, onClose, onCreated }: {
 }) {
   const [caption, setCaption] = useState('');
   const [postType, setPostType] = useState('image');
-  const [dayIndex, setDayIndex] = useState(1);
   const [scheduledAt, setScheduledAt] = useState('');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const daysInMonth = getDaysInMonth(year, month);
+  const today = new Date().getDate();
+  // ponytail: post sempre vai pro dia de hoje, usuário arrasta depois no grid
 
   const handleFile = (file: File) => {
     if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
@@ -434,12 +435,18 @@ function CreatePostDialog({ year, month, onClose, onCreated }: {
         setUploading(false);
       }
       await api.post('/planner/posts', {
-        caption, postType, dayIndex,
+        caption, postType, dayIndex: today,
         scheduledAt: scheduledAt || undefined,
         imageUrl,
       });
     },
-    onSuccess: onCreated,
+    onSuccess: () => {
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        onCreated();
+      }, 1200);
+    },
   });
 
   const TYPE_OPTIONS = [
@@ -454,9 +461,19 @@ function CreatePostDialog({ year, month, onClose, onCreated }: {
   return (
     <DialogOverlay onClose={onClose}>
       <div
-        className="bg-gray-900 border border-gray-700/80 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
+        className="bg-gray-900 border border-gray-700/80 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl relative"
         onClick={e => e.stopPropagation()}
       >
+        {/* Success toast */}
+        {showSuccess && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 transition-all duration-300">
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-900/90 border border-green-700/50 text-green-300 text-sm font-medium shadow-lg backdrop-blur">
+              <CheckCircle className="h-4 w-4" />
+              Post criado com sucesso!
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-0">
           <h3 className="text-lg font-bold text-white">Novo post</h3>
@@ -543,29 +560,18 @@ function CreatePostDialog({ year, month, onClose, onCreated }: {
               </div>
             </div>
 
-            {/* Day + Schedule */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Dia</label>
-                <select
-                  value={dayIndex}
-                  onChange={e => setDayIndex(Number(e.target.value))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-accent focus:outline-none transition-colors"
-                >
-                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
-                    <option key={d} value={d}>Dia {d}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Agendar</label>
-                <input
-                  type="datetime-local"
-                  value={scheduledAt}
-                  onChange={e => setScheduledAt(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-accent focus:outline-none transition-colors"
-                />
-              </div>
+            {/* Schedule */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">
+                Agendar publicação
+              </label>
+              <input
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={e => setScheduledAt(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-accent focus:outline-none transition-colors"
+              />
+              <p className="text-[10px] text-gray-600 mt-1">Deixe em branco para publicar manualmente</p>
             </div>
 
             {/* Caption */}
