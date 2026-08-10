@@ -163,3 +163,130 @@ export async function updatePostFields(
   if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado ao atualizar');
   return updated;
 }
+
+// ===== Calendário Editorial =====
+
+export async function getCalendarPosts(tenantId: string, year: number, month: number) {
+  // ponytail: traz todos os posts do tenant, frontend filtra por mês
+  // Posts de plano: month vem do campaignPlans.periodStart
+  // Posts manuais: month vem do scheduledAt
+  const plans = await db.query.campaignPlans.findMany({
+    where: eq(campaignPlans.tenantId, tenantId),
+    with: { posts: true },
+  });
+
+  const manualPosts = await db.query.socialPosts.findMany({
+    where: and(
+      eq(socialPosts.tenantId, tenantId),
+      isNull(socialPosts.planId),
+    ),
+  });
+
+  // Computa month pra cada post
+  const allPosts: Array<Record<string, any>> = [];
+
+  for (const plan of plans) {
+    if (!plan.periodStart) continue;
+    const planMonth = plan.periodStart.getMonth() + 1;
+    const planYear = plan.periodStart.getFullYear();
+    if (planYear !== year || planMonth !== month) continue;
+
+    for (const post of plan.posts) {
+      allPosts.push({ ...post, _source: 'plan', _planTitle: plan.title });
+    }
+  }
+
+  for (const post of manualPosts) {
+    if (!post.scheduledAt) continue;
+    const postMonth = post.scheduledAt.getMonth() + 1;
+    const postYear = post.scheduledAt.getFullYear();
+    if (postYear !== year || postMonth !== month) continue;
+    allPosts.push({ ...post, _source: 'manual' });
+  }
+
+  return allPosts;
+}
+
+export async function bulkSchedulePosts(tenantId: string, postIds: string[], scheduledAt: string | null) {
+  const result = await db.update(socialPosts)
+    .set({
+      scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      status: scheduledAt ? 'approved' : 'draft',
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(socialPosts.tenantId, tenantId),
+      sql`${socialPosts.id} = ANY(${postIds}::uuid[])`,
+    ))
+    .returning();
+  return result;
+}
+
+export async function bulkDeletePosts(tenantId: string, postIds: string[]) {
+  const result = await db.update(socialPosts)
+    .set({ status: 'rejected', updatedAt: new Date() })
+    .where(and(
+      eq(socialPosts.tenantId, tenantId),
+      sql`${socialPosts.id} = ANY(${postIds}::uuid[])`,
+    ))
+    .returning();
+  return result;
+}
+
+export async function createManualPost(tenantId: string, data: {
+  caption?: string;
+  postType: string;
+  dayIndex: number;
+  platform?: string;
+  scheduledAt?: string;
+  title?: string;
+}) {
+  const [post] = await db.insert(socialPosts)
+    .values({
+      tenantId,
+      planId: null,
+      caption: data.caption || '',
+      postType: data.postType as any,
+      dayIndex: data.dayIndex,
+      platform: data.platform || 'instagram',
+      scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
+      title: data.title || null,
+      status: 'draft',
+    })
+    .returning();
+  return post;
+}
+
+export async function movePostDay(tenantId: string, postId: string, dayIndex: number) {
+  const [updated] = await db.update(socialPosts)
+    .set({ dayIndex, updatedAt: new Date() })
+    .where(and(eq(socialPosts.id, postId), eq(socialPosts.tenantId, tenantId)))
+    .returning();
+  if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+  return updated;
+}
+
+export async function publishDuePosts(tenantId: string) {
+  const now = new Date();
+  const due = await db.query.socialPosts.findMany({
+    where: and(
+      eq(socialPosts.tenantId, tenantId),
+      sql`${socialPosts.scheduledAt} IS NOT NULL`,
+      sql`${socialPosts.scheduledAt} <= ${now.toISOString()}::timestamptz`,
+      eq(socialPosts.status, 'approved'),
+    ),
+  });
+
+  if (due.length === 0) return { published: 0, posts: [] };
+
+  const ids = due.map(p => p.id);
+  await db.update(socialPosts)
+    .set({ status: 'published', publishedAt: now, updatedAt: now })
+    .where(and(
+      eq(socialPosts.tenantId, tenantId),
+      sql`${socialPosts.id} = ANY(${ids}::uuid[])`,
+    ));
+
+  // ponytail: só atualiza status. Integração com Meta API via Instagram service fica pra v2.
+  return { published: due.length, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })) };
+}
