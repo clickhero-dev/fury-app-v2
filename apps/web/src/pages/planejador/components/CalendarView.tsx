@@ -58,6 +58,7 @@ export function CalendarView() {
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [preselectedDay, setPreselectedDay] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
@@ -171,10 +172,16 @@ export function CalendarView() {
         key={day}
         onDragOver={handleDragOver}
         onDrop={(e) => handleDrop(e, day)}
+        onClick={() => {
+          if (dayPosts.length === 0) {
+            setPreselectedDay(day);
+            setShowCreateDialog(true);
+          }
+        }}
         className={clsx(
           'relative min-h-[80px] rounded-lg border p-1.5 transition-colors',
           isToday ? 'border-accent/50 bg-accent/5' : 'border-gray-700/50',
-          dayPosts.length > 0 ? 'bg-gray-800/60' : 'bg-transparent',
+          dayPosts.length > 0 ? 'bg-gray-800/60' : 'bg-transparent hover:bg-gray-800/30 cursor-pointer',
           dragPostId && 'border-dashed border-accent/30',
         )}
       >
@@ -331,9 +338,11 @@ export function CalendarView() {
       {showCreateDialog && (
         <CreatePostDialog
           year={year} month={month}
-          onClose={() => setShowCreateDialog(false)}
+          preselectedDay={preselectedDay}
+          onClose={() => { setShowCreateDialog(false); setPreselectedDay(null); }}
           onCreated={() => {
             setShowCreateDialog(false);
+            setPreselectedDay(null);
             setToast('Post criado com sucesso!');
             setTimeout(() => setToast(null), 2500);
             queryClient.invalidateQueries({ queryKey: ['calendar'] });
@@ -364,21 +373,37 @@ export function CalendarView() {
 function ScheduleDialog({ count, onConfirm, onClose }: {
   count: number; onConfirm: (s: string) => void; onClose: () => void;
 }) {
-  const [dateTime, setDateTime] = useState('');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const dateTime = date && time ? new Date(`${date}T${time}`).toISOString() : '';
   return (
     <DialogOverlay onClose={onClose}>
       <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-white mb-2">Agendar {count} post{count > 1 ? 's' : ''}</h3>
-        <input
-          type="datetime-local"
-          value={dateTime}
-          onChange={e => setDateTime(e.target.value)}
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm mb-4"
-        />
+        <h3 className="text-lg font-bold text-white mb-4">Agendar {count} post{count > 1 ? 's' : ''}</h3>
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Data</label>
+            <input
+              type="date"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Hora</label>
+            <input
+              type="time"
+              value={time}
+              onChange={e => setTime(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm"
+            />
+          </div>
+        </div>
         <div className="flex gap-3 justify-end">
           <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-700 text-gray-300 text-sm">Cancelar</button>
           <button
-            onClick={() => dateTime && onConfirm(new Date(dateTime).toISOString())}
+            onClick={() => dateTime && onConfirm(dateTime)}
             disabled={!dateTime}
             className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-light disabled:opacity-50 text-white text-sm"
           >
@@ -413,25 +438,26 @@ function DeleteConfirmDialog({ count, onConfirm, onClose, loading }: {
   );
 }
 
-function CreatePostDialog({ year, month, onClose, onCreated }: {
-  year: number; month: number; onClose: () => void; onCreated: () => void;
+function CreatePostDialog({ year, month, onClose, onCreated, preselectedDay }: {
+  year: number; month: number; onClose: () => void; onCreated: () => void; preselectedDay?: number | null;
 }) {
   const [caption, setCaption] = useState('');
   const [postType, setPostType] = useState('image');
   const [scheduledAt, setScheduledAt] = useState('');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const today = new Date().getDate();
-  // ponytail: post sempre vai pro dia de hoje, usuário arrasta depois no grid
+  const today = preselectedDay ?? new Date().getDate();
+  // ponytail: dia clicado no grid > dia de hoje
 
   const handleFile = (file: File) => {
     if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
     setMediaFile(file);
     setMediaPreview(URL.createObjectURL(file));
+    setError(null);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -445,14 +471,12 @@ function CreatePostDialog({ year, month, onClose, onCreated }: {
     mutationFn: async () => {
       let imageUrl: string | undefined;
       if (mediaFile) {
-        setUploading(true);
         const formData = new FormData();
         formData.append('file', mediaFile);
         const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
         imageUrl = uploadRes.data.url;
-        setUploading(false);
       }
       await api.post('/planner/posts', {
         caption, postType, dayIndex: today,
@@ -460,7 +484,14 @@ function CreatePostDialog({ year, month, onClose, onCreated }: {
         imageUrl,
       });
     },
-    onSuccess: onCreated,
+    onSuccess: () => {
+      setError(null);
+      onCreated();
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message || err?.message || 'Erro ao criar post';
+      setError(msg);
+    },
   });
 
   const TYPE_OPTIONS = [
@@ -610,9 +641,12 @@ function CreatePostDialog({ year, month, onClose, onCreated }: {
                     : 'bg-gray-700 text-gray-500 cursor-not-allowed',
                 )}
               >
-                {uploading ? 'Enviando mídia...' : mutation.isPending ? 'Criando...' : 'Criar post'}
+                {mutation.isPending ? 'Criando...' : 'Criar post'}
               </button>
             </div>
+            {error && (
+              <p className="text-red-400 text-xs mt-2 text-center bg-red-900/30 rounded-lg py-1.5">{error}</p>
+            )}
           </div>
         </div>
       </div>

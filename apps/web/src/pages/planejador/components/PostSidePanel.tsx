@@ -196,6 +196,17 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
             </span>
           </div>
 
+          {/* Media preview */}
+          {post.imageUrl && (
+            <div className="rounded-xl overflow-hidden border border-border bg-surface-secondary">
+              {post.postType === 'reel' ? (
+                <video src={post.imageUrl} controls className="w-full max-h-64 object-cover" />
+              ) : (
+                <img src={post.imageUrl} alt={post.title || 'Preview'} className="w-full max-h-64 object-cover" />
+              )}
+            </div>
+          )}
+
           {/* Caption */}
           <div>
             <div className="flex items-center justify-between mb-2">
