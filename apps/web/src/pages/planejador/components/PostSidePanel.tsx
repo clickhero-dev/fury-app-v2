@@ -83,6 +83,10 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiEditor, setShowAiEditor] = useState(false);
   const [pendingEdit, setPendingEdit] = useState<Post | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editCaption, setEditCaption] = useState(post.caption || '');
+  const [editCta, setEditCta] = useState(post.cta || '');
+  const [editHashtags, setEditHashtags] = useState(post.hashtags?.join(' ') || '');
 
   const Icon = postIcons[post.postType] ?? Image;
 
@@ -100,6 +104,21 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
       {copiedField === field ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
     </button>
   );
+
+  const saveEditMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.patch(`/planner/posts/${post.id}`, {
+        caption: editCaption,
+        cta: editCta || undefined,
+        hashtags: editHashtags ? editHashtags.split(/\s+/).filter(Boolean) : undefined,
+      });
+      return data.data as Post;
+    },
+    onSuccess: (data) => {
+      onUpdate(data);
+      setEditMode(false);
+    },
+  });
 
   // A edição por IA já grava no banco — o post fica em revisão local até o
   // usuário aplicar (confirma o que já está salvo) ou reverter (regrava os
@@ -181,37 +200,64 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium text-text-primary">Legenda</h4>
-              {copyBtn(post.caption, 'caption')}
+              {!editMode && copyBtn(post.caption, 'caption')}
             </div>
-            <p className="text-sm text-text-secondary whitespace-pre-wrap bg-surface-secondary rounded-lg p-3">
-              {post.caption || '—'}
-            </p>
+            {editMode ? (
+              <textarea
+                value={editCaption}
+                onChange={e => setEditCaption(e.target.value)}
+                rows={4}
+                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary resize-none focus:outline-none focus:border-accent/50"
+              />
+            ) : (
+              <p className="text-sm text-text-secondary whitespace-pre-wrap bg-surface-secondary rounded-lg p-3">
+                {post.caption || '—'}
+              </p>
+            )}
           </div>
 
           {/* CTA */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium text-text-primary">CTA</h4>
-              {copyBtn(post.cta, 'cta')}
+              {!editMode && copyBtn(post.cta, 'cta')}
             </div>
-            <p className="text-sm text-accent bg-accent/5 rounded-lg p-3 font-medium">
-              {post.cta || '—'}
-            </p>
+            {editMode ? (
+              <input
+                value={editCta}
+                onChange={e => setEditCta(e.target.value)}
+                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-accent focus:outline-none focus:border-accent/50"
+                placeholder="Ex: Saiba mais →"
+              />
+            ) : (
+              <p className="text-sm text-accent bg-accent/5 rounded-lg p-3 font-medium">
+                {post.cta || '—'}
+              </p>
+            )}
           </div>
 
           {/* Hashtags */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium text-text-primary">Hashtags</h4>
-              {copyBtn(post.hashtags?.join(' '), 'hashtags')}
+              {!editMode && copyBtn(post.hashtags?.join(' '), 'hashtags')}
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {post.hashtags?.map((tag) => (
-                <span key={tag} className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-                  {tag}
-                </span>
-              )) ?? '—'}
-            </div>
+            {editMode ? (
+              <input
+                value={editHashtags}
+                onChange={e => setEditHashtags(e.target.value)}
+                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-blue-600 focus:outline-none focus:border-accent/50"
+                placeholder="#hashtag1 #hashtag2"
+              />
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {post.hashtags?.map((tag) => (
+                  <span key={tag} className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                    {tag}
+                  </span>
+                )) ?? '—'}
+              </div>
+            )}
           </div>
 
           {/* Image Prompt */}
@@ -259,18 +305,41 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
           {/* Actions */}
           {!pendingEdit && (
             <div className="flex gap-3 pt-4 border-t border-border">
-              <button className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors">
-                Editar
-              </button>
-              <button className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors">
-                Regenerar
-              </button>
-              <button
-                onClick={() => setShowAiEditor(!showAiEditor)}
-                className="flex-1 px-4 py-2.5 bg-accent/5 hover:bg-accent/10 text-accent font-medium rounded-xl text-sm transition-colors"
-              >
-                Melhorar com IA
-              </button>
+              {editMode ? (
+                <>
+                  <button
+                    onClick={() => setEditMode(false)}
+                    className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => saveEditMutation.mutate()}
+                    disabled={saveEditMutation.isPending}
+                    className="flex-1 px-4 py-2.5 bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
+                  >
+                    {saveEditMutation.isPending ? 'Salvando...' : 'Salvar'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setEditMode(true)}
+                    className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors"
+                  >
+                    Editar
+                  </button>
+                  <button className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors">
+                    Regenerar
+                  </button>
+                  <button
+                    onClick={() => setShowAiEditor(!showAiEditor)}
+                    className="flex-1 px-4 py-2.5 bg-accent/5 hover:bg-accent/10 text-accent font-medium rounded-xl text-sm transition-colors"
+                  >
+                    Melhorar com IA
+                  </button>
+                </>
+              )}
             </div>
           )}
 

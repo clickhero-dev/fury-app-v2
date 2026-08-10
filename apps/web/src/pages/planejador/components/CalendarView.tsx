@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import {
-  LayoutGrid, Image, Sparkles, Film,
+  LayoutGrid, Image, Sparkles, Film, CheckCircle,
   ChevronLeft, ChevronRight, Plus, Trash2, CalendarClock, X, Upload,
 } from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
@@ -97,17 +97,6 @@ export function CalendarView() {
 
   // ===== Selection =====
 
-  const toggleDay = (day: number) => {
-    const dayPosts = postsByDay.get(day) || [];
-    if (dayPosts.length === 0) return;
-    const dayIds = new Set(dayPosts.map(p => p.id));
-    const allSelected = dayPosts.every(p => selectedIds.has(p.id));
-    const next = new Set(selectedIds);
-    if (allSelected) dayIds.forEach(id => next.delete(id));
-    else dayIds.forEach(id => next.add(id));
-    setSelectedIds(next);
-  };
-
   const selectAll = () => {
     if (selectedIds.size === posts.length) setSelectedIds(new Set());
     else setSelectedIds(new Set(posts.map(p => p.id)));
@@ -174,7 +163,6 @@ export function CalendarView() {
 
   for (let day = 1; day <= daysInMonth; day++) {
     const dayPosts = postsByDay.get(day) || [];
-    const allDaySelected = dayPosts.length > 0 && dayPosts.every(p => selectedIds.has(p.id));
     const isToday = year === now.getFullYear() && month === now.getMonth() + 1 && day === now.getDate();
 
     grid.push(
@@ -189,40 +177,48 @@ export function CalendarView() {
           dragPostId && 'border-dashed border-accent/30',
         )}
       >
-        {/* Day number + checkbox */}
+        {/* Day number */}
         <div className="flex items-center justify-between mb-0.5">
           <span className={clsx('text-xs', isToday ? 'text-accent font-bold' : 'text-gray-500')}>
             {day}
           </span>
-          {dayPosts.length > 0 && (
-            <input
-              type="checkbox"
-              checked={allDaySelected}
-              onChange={() => toggleDay(day)}
-              className="h-3.5 w-3.5 rounded border-gray-600 bg-gray-700 accent-accent cursor-pointer"
-            />
-          )}
         </div>
 
         {/* Posts */}
         {dayPosts.slice(0, 3).map(post => {
           const Icon = TYPE_ICONS[post.postType] || Image;
+          const isSelected = selectedIds.has(post.id);
           return (
             <div
               key={post.id}
               draggable
               onDragStart={(e) => handleDragStart(e, post.id)}
               onDragEnd={handleDragEnd}
-              onClick={(e) => { e.stopPropagation(); setSelectedPost(post); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                // ponytail: toggle selection on click; click selected post again to view
+                if (isSelected) {
+                  setSelectedPost(post);
+                } else {
+                  const next = new Set(selectedIds);
+                  next.add(post.id);
+                  setSelectedIds(next);
+                }
+              }}
               className={clsx(
-                'flex items-center gap-1 mt-1 px-1 py-0.5 rounded cursor-pointer text-[10px] transition-colors',
-                selectedIds.has(post.id) ? 'bg-accent/20 ring-1 ring-accent/50' : 'hover:bg-gray-700/50',
+                'flex items-center gap-1 mt-1 px-1.5 py-1 rounded cursor-pointer text-[10px] transition-all',
+                isSelected
+                  ? 'bg-accent/30 ring-1 ring-accent shadow-[0_0_8px_rgba(234,88,12,0.2)]'
+                  : 'hover:bg-gray-700/50',
                 dragPostId === post.id && 'opacity-50',
               )}
             >
-              <Icon className="h-3 w-3 text-gray-400 shrink-0" />
-              <span className="text-gray-400 truncate">{post.title || post.caption?.slice(0, 20) || 'Sem título'}</span>
-              {post._source === 'manual' && <span className="text-[8px] text-accent ml-auto">+</span>}
+              <Icon className={clsx('h-3 w-3 shrink-0', isSelected ? 'text-accent' : 'text-gray-400')} />
+              <span className={clsx('truncate', isSelected ? 'text-accent font-medium' : 'text-gray-400')}>
+                {post.title || post.caption?.slice(0, 20) || 'Sem título'}
+              </span>
+              {isSelected && <CheckCircle className="h-3 w-3 text-accent ml-auto shrink-0" />}
+              {!isSelected && post._source === 'manual' && <span className="text-[8px] text-accent ml-auto">+</span>}
             </div>
           );
         })}
