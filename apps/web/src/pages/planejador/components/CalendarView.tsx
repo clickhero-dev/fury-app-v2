@@ -57,6 +57,7 @@ export function CalendarView() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
@@ -231,6 +232,16 @@ export function CalendarView() {
 
   return (
     <div className="space-y-4">
+      {/* Page-level toast */}
+      {toast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300">
+          <div className="flex items-center gap-2 px-5 py-3 rounded-xl bg-green-900/95 border border-green-600/50 text-green-200 text-sm font-medium shadow-2xl backdrop-blur-md">
+            <CheckCircle className="h-4 w-4" />
+            {toast}
+          </div>
+        </div>
+      )}
+
       {/* Header: month nav + add post */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -307,7 +318,12 @@ export function CalendarView() {
         <PostSidePanel
           post={selectedPost}
           onClose={() => setSelectedPost(null)}
-          onUpdate={(updated) => setSelectedPost(updated as CalendarPost)}
+          onUpdate={(updated) => {
+            setSelectedPost(updated as CalendarPost);
+            setToast('Post atualizado!');
+            setTimeout(() => setToast(null), 2000);
+            queryClient.invalidateQueries({ queryKey: ['calendar'] });
+          }}
         />
       )}
 
@@ -316,7 +332,12 @@ export function CalendarView() {
         <CreatePostDialog
           year={year} month={month}
           onClose={() => setShowCreateDialog(false)}
-          onCreated={() => { setShowCreateDialog(false); queryClient.invalidateQueries({ queryKey: ['calendar'] }); }}
+          onCreated={() => {
+            setShowCreateDialog(false);
+            setToast('Post criado com sucesso!');
+            setTimeout(() => setToast(null), 2500);
+            queryClient.invalidateQueries({ queryKey: ['calendar'] });
+          }}
         />
       )}
       {showScheduleDialog && (
@@ -402,7 +423,6 @@ function CreatePostDialog({ year, month, onClose, onCreated }: {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const today = new Date().getDate();
@@ -440,13 +460,7 @@ function CreatePostDialog({ year, month, onClose, onCreated }: {
         imageUrl,
       });
     },
-    onSuccess: () => {
-      setShowSuccess(true);
-      setTimeout(() => {
-        setShowSuccess(false);
-        onCreated();
-      }, 1200);
-    },
+    onSuccess: onCreated,
   });
 
   const TYPE_OPTIONS = [
@@ -464,16 +478,6 @@ function CreatePostDialog({ year, month, onClose, onCreated }: {
         className="bg-gray-900 border border-gray-700/80 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl relative"
         onClick={e => e.stopPropagation()}
       >
-        {/* Success toast */}
-        {showSuccess && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 transition-all duration-300">
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-900/90 border border-green-700/50 text-green-300 text-sm font-medium shadow-lg backdrop-blur">
-              <CheckCircle className="h-4 w-4" />
-              Post criado com sucesso!
-            </div>
-          </div>
-        )}
-
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-0">
           <h3 className="text-lg font-bold text-white">Novo post</h3>

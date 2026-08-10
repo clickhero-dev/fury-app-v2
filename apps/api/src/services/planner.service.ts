@@ -197,9 +197,11 @@ export async function getCalendarPosts(tenantId: string, year: number, month: nu
   }
 
   for (const post of manualPosts) {
-    if (!post.scheduledAt) continue;
-    const postMonth = post.scheduledAt.getMonth() + 1;
-    const postYear = post.scheduledAt.getFullYear();
+    // ponytail: usa scheduledAt se definido, senão createdAt (post manual sem agendamento)
+    const refDate = post.scheduledAt || post.createdAt;
+    if (!refDate) continue;
+    const postMonth = refDate.getMonth() + 1;
+    const postYear = refDate.getFullYear();
     if (postYear !== year || postMonth !== month) continue;
     allPosts.push({ ...post, _source: 'manual' });
   }
