@@ -5,11 +5,10 @@ import { LayoutGrid, Image, Sparkles, Film, Upload, Trash2, X } from 'lucide-rea
 import api from '@/lib/api';
 
 interface Props {
-  year: number;
-  month: number;
+  mode: 'schedule' | 'now';
   preselectedDay?: number | null;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (message: string) => void;
   onError?: (msg: string) => void;
 }
 
@@ -20,7 +19,7 @@ const TYPE_OPTIONS = [
   { value: 'stories', label: 'Stories', icon: Sparkles, desc: 'Efêmero 24h' },
 ] as const;
 
-export function CreatePostDialog({ onClose, onCreated, preselectedDay, onError }: Props) {
+export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, onError }: Props) {
   const [caption, setCaption] = useState('');
   const [postType, setPostType] = useState('image');
   const [scheduledDate, setScheduledDate] = useState('');
@@ -28,6 +27,7 @@ export function CreatePostDialog({ onClose, onCreated, preselectedDay, onError }
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(mode === 'schedule');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const today = preselectedDay ?? new Date().getDate();
@@ -49,6 +49,10 @@ export function CreatePostDialog({ onClose, onCreated, preselectedDay, onError }
     if (file) handleFile(file);
   };
 
+  const isNow = mode === 'now';
+  const submitLabel = isNow ? 'Postar agora' : 'Criar post';
+  const loadingLabel = isNow ? 'Publicando...' : 'Criando...';
+
   const mutation = useMutation({
     mutationFn: async () => {
       let imageUrl: string | undefined;
@@ -62,12 +66,25 @@ export function CreatePostDialog({ onClose, onCreated, preselectedDay, onError }
       }
       await api.post('/planner/posts', {
         caption, postType, dayIndex: today,
-        scheduledAt: scheduledAt || undefined,
+        scheduledAt: scheduledAt || (isNow ? new Date().toISOString() : undefined),
         imageUrl,
       });
     },
-    onSuccess: () => {
-      onCreated();
+    onSuccess: async () => {
+      if (isNow) {
+        try {
+          const { data: pubRes } = await api.post('/planner/posts/publish-due');
+          if (pubRes.data?.published > 0) {
+            onCreated('Post publicado com sucesso!');
+          } else {
+            onCreated('Post criado com sucesso! Verifique a conexão com o Instagram.');
+          }
+        } catch {
+          onCreated('Post criado com sucesso! Não foi possível publicar agora.');
+        }
+      } else {
+        onCreated('Post criado com sucesso!');
+      }
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.message || err?.response?.data?.error?.message || err?.message || 'Erro ao criar post';
@@ -84,7 +101,7 @@ export function CreatePostDialog({ onClose, onCreated, preselectedDay, onError }
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 pt-6 pb-0">
-          <h3 className="text-lg font-bold text-text-primary">Novo post</h3>
+          <h3 className="text-lg font-bold text-text-primary">{isNow ? 'Postar agora' : 'Novo post'}</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary hover:text-text-primary transition-colors">
             <X className="h-5 w-5" />
           </button>
@@ -169,32 +186,51 @@ export function CreatePostDialog({ onClose, onCreated, preselectedDay, onError }
             </div>
 
             {/* Schedule */}
-            <div>
-              <label className="block text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1">
-                Agendar publicação
+            {isNow && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showSchedule}
+                  onChange={e => setShowSchedule(e.target.checked)}
+                  className="w-4 h-4 rounded border-border bg-surface-secondary text-accent focus:ring-accent/20"
+                />
+                <span className="text-sm text-text-secondary">Agendar para depois</span>
               </label>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-medium text-text-tertiary mb-1">Data</label>
-                  <input
-                    type="date"
-                    value={scheduledDate}
-                    onChange={e => setScheduledDate(e.target.value)}
-                    className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2.5 text-text-primary text-sm focus:border-accent focus:outline-none transition-colors"
-                  />
+            )}
+
+            {showSchedule && (
+              <div>
+                <label className="block text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1">
+                  Agendar publicação
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-medium text-text-tertiary mb-1">Data</label>
+                    <input
+                      type="date"
+                      value={scheduledDate}
+                      onChange={e => setScheduledDate(e.target.value)}
+                      className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2.5 text-text-primary text-sm focus:border-accent focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-text-tertiary mb-1">Hora</label>
+                    <input
+                      type="time"
+                      value={scheduledTime}
+                      onChange={e => setScheduledTime(e.target.value)}
+                      className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2.5 text-text-primary text-sm focus:border-accent focus:outline-none transition-colors"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-text-tertiary mb-1">Hora</label>
-                  <input
-                    type="time"
-                    value={scheduledTime}
-                    onChange={e => setScheduledTime(e.target.value)}
-                    className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2.5 text-text-primary text-sm focus:border-accent focus:outline-none transition-colors"
-                  />
-                </div>
+                {isNow && (
+                  <p className="text-[10px] text-text-tertiary mt-1">O post será agendado em vez de publicado agora</p>
+                )}
+                {!isNow && (
+                  <p className="text-[10px] text-text-tertiary mt-1">Deixe em branco para publicar manualmente</p>
+                )}
               </div>
-              <p className="text-[10px] text-text-tertiary mt-1">Deixe em branco para publicar manualmente</p>
-            </div>
+            )}
 
             {/* Caption */}
             <div>
@@ -224,11 +260,11 @@ export function CreatePostDialog({ onClose, onCreated, preselectedDay, onError }
                 className={clsx(
                   'flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-medium transition-all',
                   canCreate
-                    ? 'bg-accent hover:bg-accent-light active:scale-[0.98]'
+                    ? isNow ? 'bg-green-600 hover:bg-green-500 active:scale-[0.98]' : 'bg-accent hover:bg-accent-light active:scale-[0.98]'
                     : 'bg-surface-secondary text-text-tertiary cursor-not-allowed',
                 )}
               >
-                {mutation.isPending ? 'Criando...' : 'Criar post'}
+                {mutation.isPending ? loadingLabel : submitLabel}
               </button>
             </div>
           </div>

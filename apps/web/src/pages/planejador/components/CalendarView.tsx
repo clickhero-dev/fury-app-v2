@@ -9,6 +9,7 @@ import { PostSidePanel } from './PostSidePanel';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { ScheduleDialog } from './ScheduleDialog';
 import { CreatePostDialog } from './CreatePostDialog';
+import { PostTypeDialog } from './PostTypeDialog';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import api from '@/lib/api';
 import type { Post } from '../types';
@@ -58,6 +59,8 @@ export function CalendarView() {
   const [selectedPost, setSelectedPost] = useState<CalendarPost | null>(null);
   const [dragPostId, setDragPostId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showPostTypeDialog, setShowPostTypeDialog] = useState(false);
+  const [createMode, setCreateMode] = useState<'schedule' | 'now'>('schedule');
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -191,7 +194,7 @@ export function CalendarView() {
         onClick={() => {
           if (dayPosts.length === 0) {
             setPreselectedDay(day);
-            setShowCreateDialog(true);
+            setShowPostTypeDialog(true);
           }
         }}
         className={clsx(
@@ -291,7 +294,7 @@ export function CalendarView() {
             </button>
           )}
           <button
-            onClick={() => setShowCreateDialog(true)}
+            onClick={() => setShowPostTypeDialog(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-light text-white text-sm font-medium transition-colors"
           >
             <Plus className="h-4 w-4" /> Novo post
@@ -355,16 +358,26 @@ export function CalendarView() {
       {/* Dialogs */}
       {showCreateDialog && (
         <CreatePostDialog
-          year={year} month={month}
+          mode={createMode}
           preselectedDay={preselectedDay}
           onClose={() => { setShowCreateDialog(false); setPreselectedDay(null); }}
-          onCreated={() => {
+          onCreated={(message) => {
             setShowCreateDialog(false);
             setPreselectedDay(null);
-            showToast('Post criado com sucesso!');
+            showToast(message);
             queryClient.invalidateQueries({ queryKey: ['calendar'] });
           }}
           onError={(msg) => showToast(msg, 'error')}
+        />
+      )}
+      {showPostTypeDialog && (
+        <PostTypeDialog
+          onSelect={(mode) => {
+            setShowPostTypeDialog(false);
+            setCreateMode(mode);
+            setShowCreateDialog(true);
+          }}
+          onClose={() => { setShowPostTypeDialog(false); setPreselectedDay(null); }}
         />
       )}
       {showScheduleDialog && (
