@@ -87,7 +87,6 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
   const [editCaption, setEditCaption] = useState(post.caption || '');
   const [editCta, setEditCta] = useState(post.cta || '');
   const [editHashtags, setEditHashtags] = useState(post.hashtags?.join(' ') || '');
-  const [editImageUrl, setEditImageUrl] = useState(post.imageUrl || '');
   const [editFile, setEditFile] = useState<File | null>(null);
   const [editDragOver, setEditDragOver] = useState(false);
   // ponytail: date+time separados (padrão FURY UX)
@@ -119,7 +118,7 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
 
   const saveEditMutation = useMutation({
     mutationFn: async () => {
-      let imageUrl = editImageUrl;
+      let imageUrl = post.imageUrl;
       // Upload new image if selected
       if (editFile) {
         const formData = new FormData();
