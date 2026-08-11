@@ -96,6 +96,8 @@ export function AuthenticatedShell() {
         dispatch(setMetaId(connections[0].id ?? null));
       }
       if (connections.length === 0) {
+        // ponytail: limpa flag stale que impede o redirect de onboarding
+        localStorage.removeItem('fury-meta-connected');
         navigate('/onboarding/conectar-meta', { replace: true });
       } else if (!connections.some((conn) => conn.selectedAdAccountId)) {
         navigate('/onboarding/selecionar-conta', { replace: true });

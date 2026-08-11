@@ -1067,6 +1067,7 @@ export async function metaApiCall<T>(
             { permission: 'pages_read_engagement', status: 'granted' },
             { permission: 'instagram_basic', status: 'granted' },
             { permission: 'instagram_manage_insights', status: 'granted' },
+            { permission: 'instagram_content_publish', status: 'granted' },
           ],
         } as T;
       }
