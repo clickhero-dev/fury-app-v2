@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { X, Copy, Check, LayoutGrid, Image, Sparkles, Film } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { X, Copy, Check, LayoutGrid, Image, Sparkles, Film, Upload, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useMutation } from '@tanstack/react-query';
 import api from '@/lib/api';
@@ -87,6 +87,18 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
   const [editCaption, setEditCaption] = useState(post.caption || '');
   const [editCta, setEditCta] = useState(post.cta || '');
   const [editHashtags, setEditHashtags] = useState(post.hashtags?.join(' ') || '');
+  const [editImageUrl, setEditImageUrl] = useState(post.imageUrl || '');
+  const [editFile, setEditFile] = useState<File | null>(null);
+  const [editDragOver, setEditDragOver] = useState(false);
+  // ponytail: date+time separados (padrão FURY UX)
+  const scheduledIso = post.scheduledAt ? new Date(post.scheduledAt) : null;
+  const [editScheduledDate, setEditScheduledDate] = useState(
+    scheduledIso ? scheduledIso.toISOString().slice(0, 10) : '',
+  );
+  const [editScheduledTime, setEditScheduledTime] = useState(
+    scheduledIso ? scheduledIso.toTimeString().slice(0, 5) : '',
+  );
+  const editFileRef = useRef<HTMLInputElement>(null);
 
   const Icon = postIcons[post.postType] ?? Image;
 
@@ -107,10 +119,27 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
 
   const saveEditMutation = useMutation({
     mutationFn: async () => {
+      let imageUrl = editImageUrl;
+      // Upload new image if selected
+      if (editFile) {
+        const formData = new FormData();
+        formData.append('file', editFile);
+        const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        imageUrl = uploadRes.data.url;
+      }
+
+      const scheduledAt = editScheduledDate && editScheduledTime
+        ? new Date(`${editScheduledDate}T${editScheduledTime}`).toISOString()
+        : null;
+
       const { data } = await api.patch(`/planner/posts/${post.id}`, {
         caption: editCaption,
         cta: editCta || undefined,
-        hashtags: editHashtags ? editHashtags.split(/\s+/).filter(Boolean) : undefined,
+        hashtags: editHashtags ? editHashtags.split(/\\s+/).filter(Boolean) : undefined,
+        imageUrl: imageUrl || undefined,
+        scheduledAt,
       });
       return data.data as Post;
     },
@@ -176,7 +205,7 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
               <Icon className={clsx('w-5 h-5', typeText[post.postType] || 'text-text-tertiary')} />
             </div>
             <div>
-              <h3 className="text-text-primary font-medium">{post.title || 'Sem título'}</h3>
+              <h3 className="text-text-primary font-medium">{post.title || post.caption?.slice(0, 40) || 'Sem título'}</h3>
               <p className="text-xs text-text-tertiary">
                 {postLabels[post.postType]} · Dia {post.dayIndex}
               </p>
@@ -195,17 +224,6 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
               {statusLabels[post.status] ?? 'Rascunho'}
             </span>
           </div>
-
-          {/* Media preview */}
-          {post.imageUrl && (
-            <div className="rounded-xl overflow-hidden border border-border bg-surface-secondary">
-              {post.postType === 'reel' ? (
-                <video src={post.imageUrl} controls className="w-full max-h-64 object-cover" />
-              ) : (
-                <img src={post.imageUrl} alt={post.title || 'Preview'} className="w-full max-h-64 object-cover" />
-              )}
-            </div>
-          )}
 
           {/* Caption */}
           <div>
@@ -268,6 +286,94 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
                   </span>
                 )) ?? '—'}
               </div>
+            )}
+          </div>
+
+          {/* Media — editável */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium text-text-primary">Mídia</h4>
+            </div>
+            {editMode ? (
+              editFile ? (
+                <div className="relative group rounded-xl overflow-hidden border border-border bg-surface-secondary">
+                  {editFile.type.startsWith('video/') ? (
+                    <video src={URL.createObjectURL(editFile)} controls className="w-full max-h-48 object-cover" />
+                  ) : (
+                    <img src={URL.createObjectURL(editFile)} alt="Preview" className="w-full max-h-48 object-cover" />
+                  )}
+                  <button
+                    onClick={() => setEditFile(null)}
+                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setEditDragOver(true); }}
+                  onDragLeave={() => setEditDragOver(false)}
+                  onDrop={(e) => { e.preventDefault(); setEditDragOver(false); const f = e.dataTransfer.files[0]; if (f) setEditFile(f); }}
+                  onClick={() => editFileRef.current?.click()}
+                  className={clsx(
+                    'flex flex-col items-center justify-center h-32 rounded-xl border-2 border-dashed cursor-pointer transition-all',
+                    editDragOver ? 'border-accent bg-accent/10' : 'border-gray-600 hover:border-gray-500',
+                  )}
+                >
+                  <Upload className="h-6 w-6 text-gray-500 mb-1" />
+                  <p className="text-xs text-gray-400">Arraste ou clique para trocar</p>
+                </div>
+              )
+            ) : (
+              post.imageUrl && (
+                <div className="rounded-xl overflow-hidden border border-border bg-surface-secondary">
+                  {post.postType === 'reel' ? (
+                    <video src={post.imageUrl} controls className="w-full max-h-48 object-cover" />
+                  ) : (
+                    <img src={post.imageUrl} alt="Preview" className="w-full max-h-48 object-cover" />
+                  )}
+                </div>
+              )
+            )}
+            <input
+              ref={editFileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
+              onChange={e => e.target.files?.[0] && setEditFile(e.target.files[0])}
+              className="hidden"
+            />
+          </div>
+
+          {/* Agendamento — editável */}
+          <div>
+            <h4 className="text-sm font-medium text-text-primary mb-2">Agendamento</h4>
+            {editMode ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Data</label>
+                  <input
+                    type="date"
+                    value={editScheduledDate}
+                    onChange={e => setEditScheduledDate(e.target.value)}
+                    className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Hora</label>
+                  <input
+                    type="time"
+                    value={editScheduledTime}
+                    onChange={e => setEditScheduledTime(e.target.value)}
+                    className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent/50"
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-text-secondary bg-surface-secondary rounded-lg p-3">
+                {post.scheduledAt
+                  ? new Date(post.scheduledAt).toLocaleString('pt-BR')
+                  : 'Não agendado'}
+              </p>
             )}
           </div>
 

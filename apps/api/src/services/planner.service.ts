@@ -156,10 +156,17 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
 export async function updatePostFields(
   postId: string,
   tenantId: string,
-  fields: { caption?: string; cta?: string; hashtags?: string[] },
+  fields: { caption?: string; cta?: string; hashtags?: string[]; imageUrl?: string; scheduledAt?: string | null },
 ) {
+  const setData: Record<string, any> = { updatedAt: new Date() };
+  if (fields.caption !== undefined) setData.caption = fields.caption;
+  if (fields.cta !== undefined) setData.cta = fields.cta;
+  if (fields.hashtags !== undefined) setData.hashtags = fields.hashtags;
+  if (fields.imageUrl !== undefined) setData.imageUrl = fields.imageUrl;
+  if (fields.scheduledAt !== undefined) setData.scheduledAt = fields.scheduledAt ? new Date(fields.scheduledAt) : null;
+
   const [updated] = await db.update(socialPosts)
-    .set({ ...fields, updatedAt: new Date() })
+    .set(setData)
     .where(and(eq(socialPosts.id, postId), eq(socialPosts.tenantId, tenantId)))
     .returning();
   if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado ao atualizar');

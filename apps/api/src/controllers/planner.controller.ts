@@ -89,6 +89,8 @@ const editPostSchema = z.union([
     caption: z.string().optional(),
     cta: z.string().optional(),
     hashtags: z.array(z.string()).optional(),
+    imageUrl: z.string().url().optional(),
+    scheduledAt: z.string().datetime().nullable().optional(),
   }),
 ]);
 
