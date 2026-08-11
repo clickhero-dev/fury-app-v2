@@ -235,14 +235,28 @@ export async function bulkSchedulePosts(tenantId: string, postIds: string[], sch
 }
 
 export async function bulkDeletePosts(tenantId: string, postIds: string[]) {
-  const result = await db.update(socialPosts)
-    .set({ status: 'rejected', updatedAt: new Date() })
-    .where(and(
-      eq(socialPosts.tenantId, tenantId),
-      inArray(socialPosts.id, postIds),
-    ))
-    .returning();
-  return result;
+  console.log(`[bulkDelete] tenant ${tenantId}: ${postIds.length} posts`, postIds);
+  
+  const uuidValues = postIds.map((id) => sql`${id}::uuid`);
+  
+  try {
+    const result = await db.update(socialPosts)
+      .set({ status: 'rejected', updatedAt: new Date() })
+      .where(and(
+        eq(socialPosts.tenantId, tenantId),
+        sql`${socialPosts.id} IN (${sql.join(uuidValues, sql`, `)})`,
+      ))
+      .returning();
+    console.log(`[bulkDelete] tenant ${tenantId}: ${result.length} deletados`);
+    return result;
+  } catch (err) {
+    console.error(`[bulkDelete] tenant ${tenantId} ERROR:`, err);
+    if (err instanceof Error) {
+      console.error(`[bulkDelete] message:`, err.message);
+      console.error(`[bulkDelete] stack:`, err.stack?.split('\n').slice(0, 5).join('\n'));
+    }
+    throw err;
+  }
 }
 
 export async function createManualPost(tenantId: string, data: {

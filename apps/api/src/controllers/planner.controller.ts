@@ -138,9 +138,17 @@ export async function handleBulkDelete(req: Request, res: Response, next: NextFu
     const { postIds } = z.object({
       postIds: z.array(z.string().uuid()).min(1).max(100),
     }).parse(req.body);
+    console.log(`[handleBulkDelete] tenant ${tenantId}: ${postIds.length} postIds`, postIds);
     const deleted = await bulkDeletePosts(tenantId, postIds);
     res.json({ success: true, data: { count: deleted.length } });
-  } catch (err) { next(err); }
+  } catch (err) {
+    console.error('[handleBulkDelete] ERROR:', err);
+    if (err instanceof Error) {
+      console.error('[handleBulkDelete] message:', err.message);
+      console.error('[handleBulkDelete] stack:', err.stack?.split('\n').slice(0, 3).join('\n'));
+    }
+    next(err);
+  }
 }
 
 export async function handleCreatePost(req: Request, res: Response, next: NextFunction) {
