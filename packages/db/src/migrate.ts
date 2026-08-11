@@ -97,6 +97,13 @@ const STEPS: MigrationStep[] = [
   { tag: '0025_add_is_non_expirable_to_subscriptions' },
   { tag: '0026_add_creative_quota_limits' },
   { tag: '0027_add_missing_planner_columns' },
+  {
+    tag: '0011_fr8_publish_retry',
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "post_status" ADD VALUE IF NOT EXISTS 'failed'`);
+      console.log('    + added failed to post_status');
+    },
+  },
 ];
 
 async function runMigrate() {

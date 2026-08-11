@@ -7,7 +7,6 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "prestart": "npx drizzle-kit push",
     "lint": "eslint src --ext .ts",
     "test": "vitest run",
     "test:watch": "vitest"
