@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import {
-  LayoutGrid, Image, Sparkles, Film, CheckCircle,
+  LayoutGrid, Image, Sparkles, Film, CheckCircle, XCircle,
   ChevronLeft, ChevronRight, Plus, Trash2, CalendarClock, X, Upload,
 } from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
@@ -57,7 +57,11 @@ export function CalendarView() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
   const [preselectedDay, setPreselectedDay] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
@@ -242,9 +246,12 @@ export function CalendarView() {
       {/* Page-level toast */}
       {toast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300">
-          <div className="flex items-center gap-2 px-5 py-3 rounded-xl bg-green-900/95 border border-green-600/50 text-green-200 text-sm font-medium shadow-2xl backdrop-blur-md">
-            <CheckCircle className="h-4 w-4" />
-            {toast}
+          <div className={clsx(
+            'flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium shadow-2xl backdrop-blur-md',
+            toast.type === 'success' ? 'bg-green-900/95 border border-green-600/50 text-green-200' : 'bg-red-900/95 border border-red-600/50 text-red-200',
+          )}>
+            {toast.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+            {toast.message}
           </div>
         </div>
       )}
@@ -327,8 +334,7 @@ export function CalendarView() {
           onClose={() => setSelectedPost(null)}
           onUpdate={(updated) => {
             setSelectedPost(updated as CalendarPost);
-            setToast('Post atualizado!');
-            setTimeout(() => setToast(null), 2000);
+            showToast('Post atualizado!');
             queryClient.invalidateQueries({ queryKey: ['calendar'] });
           }}
         />
@@ -343,10 +349,10 @@ export function CalendarView() {
           onCreated={() => {
             setShowCreateDialog(false);
             setPreselectedDay(null);
-            setToast('Post criado com sucesso!');
-            setTimeout(() => setToast(null), 2500);
+            showToast('Post criado com sucesso!');
             queryClient.invalidateQueries({ queryKey: ['calendar'] });
           }}
+          onError={(msg) => showToast(msg, 'error')}
         />
       )}
       {showScheduleDialog && (
@@ -438,8 +444,8 @@ function DeleteConfirmDialog({ count, onConfirm, onClose, loading }: {
   );
 }
 
-function CreatePostDialog({ year, month, onClose, onCreated, preselectedDay }: {
-  year: number; month: number; onClose: () => void; onCreated: () => void; preselectedDay?: number | null;
+function CreatePostDialog({ year, month, onClose, onCreated, preselectedDay, onError }: {
+  year: number; month: number; onClose: () => void; onCreated: () => void; preselectedDay?: number | null; onError?: (msg: string) => void;
 }) {
   const [caption, setCaption] = useState('');
   const [postType, setPostType] = useState('image');
@@ -447,7 +453,6 @@ function CreatePostDialog({ year, month, onClose, onCreated, preselectedDay }: {
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const today = preselectedDay ?? new Date().getDate();
@@ -457,7 +462,6 @@ function CreatePostDialog({ year, month, onClose, onCreated, preselectedDay }: {
     if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
     setMediaFile(file);
     setMediaPreview(URL.createObjectURL(file));
-    setError(null);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -485,12 +489,11 @@ function CreatePostDialog({ year, month, onClose, onCreated, preselectedDay }: {
       });
     },
     onSuccess: () => {
-      setError(null);
       onCreated();
     },
     onError: (err: any) => {
-      const msg = err?.response?.data?.message || err?.message || 'Erro ao criar post';
-      setError(msg);
+      const msg = err?.response?.data?.message || err?.response?.data?.error?.message || err?.message || 'Erro ao criar post';
+      onError?.(msg);
     },
   });
 
@@ -644,9 +647,6 @@ function CreatePostDialog({ year, month, onClose, onCreated, preselectedDay }: {
                 {mutation.isPending ? 'Criando...' : 'Criar post'}
               </button>
             </div>
-            {error && (
-              <p className="text-red-400 text-xs mt-2 text-center bg-red-900/30 rounded-lg py-1.5">{error}</p>
-            )}
           </div>
         </div>
       </div>
