@@ -8,7 +8,7 @@ import { rateLimitMiddleware } from './middleware/rate-limit.middleware.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
 import { closeRedis, waitForRedisReady } from './lib/redis.js';
-import { closeComplianceQueue, closeStudioQueue, closeRedisConnection, closeFuryEngineQueue } from './lib/queue.js';
+import { closeComplianceQueue, closeStudioQueue, closeRedisConnection, closeFuryEngineQueue, closePublishDueQueue } from './lib/queue.js';
 import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
 import { startRuleEngine, stopRuleEngine } from './lib/rule-engine-manager.js';
 import { startFuryEngine, stopFuryEngine } from './lib/fury-engine-manager.js';
@@ -16,6 +16,7 @@ import { ensureStudioAssetsDir, studioAssetsDir } from './lib/temp-storage.js';
 import { startStudioGenerationWorker, stopStudioGenerationWorker } from './workers/studio-generation.worker.js';
 import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
+import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 
 const app = express();
@@ -171,8 +172,6 @@ app.use((req, res) => {
     await waitForRedisReady();
 
     // ponytail: setInterval, não BullMQ. Migrate quando precisar de retry ou isolamento.
-    let publishDueInterval: ReturnType<typeof setInterval> | null = null;
-
     const server = app.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
       console.log(`📝 Environment: ${NODE_ENV}`);
@@ -220,30 +219,16 @@ app.use((req, res) => {
       void startFuryEngine().catch((error) => {
         console.error('Failed to start Fury engine:', error);
       });
-
-      // ponytail: setInterval. Migrate to BullMQ when per-tenant isolation or retries matter.
-      publishDueInterval = setInterval(async () => {
-        try {
-          const { publishDuePosts } = await import('./services/planner.service.js');
-          const { db, tenants } = await import('@fury/db');
-          const allTenants = await db.query.tenants.findMany();
-          let total = 0;
-          for (const tenant of allTenants) {
-            const result = await publishDuePosts(tenant.id);
-            total += result.published;
-          }
-          if (total > 0) console.log(`[publish-due] Published ${total} posts`);
-        } catch (e) {
-          // silencioso — falha de rede ou DB não deve derrubar o servidor
-        }
-      }, 5 * 60 * 1000);
+      void startPublishDueManager().catch((error) => {
+        console.error('Failed to start publish-due manager:', error);
+      });
     });
 
     // Tratamento de encerramento (único handler)
     process.on('SIGTERM', () => {
       console.log('SIGTERM received, shutting down gracefully...');
       server.close(async () => {
-        if (publishDueInterval) clearInterval(publishDueInterval);
+        await stopPublishDueManager();
         await flushRequestLogs();
         await stopSyncJobsWorker();
         await stopRuleEngine();
@@ -254,6 +239,7 @@ app.use((req, res) => {
         await closeStudioQueue();
         await closeComplianceQueue();
         await closeFuryEngineQueue();
+        await closePublishDueQueue();
         await closeRedisConnection();
         await closeRedis();
         console.log('Server closed');

@@ -1,0 +1,48 @@
+import { Worker } from 'bullmq';
+import { PUBLISH_DUE_QUEUE_NAME } from '../lib/queue.js';
+import { publishDuePosts } from '../services/planner.service.js';
+import { db, tenants } from '@fury/db';
+
+interface PublishDueJobData {
+  timestamp: string;
+}
+
+let publishDueWorkerInstance: Worker<PublishDueJobData> | null = null;
+
+export async function startPublishDueWorker(): Promise<Worker<PublishDueJobData>> {
+  const worker = new Worker<PublishDueJobData>(
+    PUBLISH_DUE_QUEUE_NAME,
+    async (_job) => {
+      const allTenants = await db.query.tenants.findMany();
+      let total = 0;
+      for (const tenant of allTenants) {
+        try {
+          const result = await publishDuePosts(tenant.id);
+          total += result.published;
+        } catch (e) {
+          console.error(`[publish-due] Tenant ${tenant.id} failed:`, (e as Error).message);
+        }
+      }
+      if (total > 0) console.log(`[publish-due] Published ${total} posts across ${allTenants.length} tenants`);
+    },
+    {
+      connection: (await import('../lib/redis.js')).getRedis().duplicate(),
+      concurrency: 1,
+    },
+  );
+
+  worker.on('error', (err) => {
+    console.error('[publish-due] Worker error:', err.message);
+  });
+
+  publishDueWorkerInstance = worker;
+  return worker;
+}
+
+export async function stopPublishDueWorker(): Promise<void> {
+  if (publishDueWorkerInstance) {
+    await publishDueWorkerInstance.close();
+    publishDueWorkerInstance = null;
+    console.log('🛑 Publish-due worker stopped');
+  }
+}
