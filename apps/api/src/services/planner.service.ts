@@ -201,12 +201,13 @@ export async function getCalendarPosts(tenantId: string, year: number, month: nu
     if (planYear !== year || planMonth !== month) continue;
 
     for (const post of plan.posts) {
+      if (post.status === 'rejected' || post.status === 'failed') continue;
       allPosts.push({ ...post, _source: 'plan', _planTitle: plan.title });
     }
   }
 
   for (const post of manualPosts) {
-    // ponytail: usa scheduledAt se definido, senão createdAt (post manual sem agendamento)
+    if (post.status === 'rejected' || post.status === 'failed') continue;
     const refDate = post.scheduledAt || post.createdAt;
     if (!refDate) continue;
     const postMonth = refDate.getMonth() + 1;

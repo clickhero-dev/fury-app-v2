@@ -117,6 +117,7 @@ export function CalendarView() {
       await api.patch(`/planner/posts/${postId}/move`, { dayIndex });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
+    onError: () => showToast('Erro ao mover post. Tente novamente.', 'error'),
   });
 
   const scheduleMutation = useMutation({
@@ -126,6 +127,7 @@ export function CalendarView() {
       });
     },
     onSuccess: () => { clearSelection(); queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
+    onError: () => showToast('Erro ao agendar posts. Tente novamente.', 'error'),
   });
 
   const deleteMutation = useMutation({
@@ -133,6 +135,7 @@ export function CalendarView() {
       await api.delete('/planner/posts/bulk', { data: { postIds: [...selectedIds] } });
     },
     onSuccess: () => { clearSelection(); queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
+    onError: () => showToast('Erro ao excluir post(s). Tente novamente.', 'error'),
   });
 
   // ===== DnD =====
