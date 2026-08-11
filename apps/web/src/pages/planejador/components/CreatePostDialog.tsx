@@ -77,7 +77,14 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, onE
           if (pubRes.data?.published > 0) {
             onCreated('Post publicado com sucesso!');
           } else {
-            onCreated('Post criado com sucesso! Verifique a conexão com o Instagram.');
+            const reason = pubRes.data?.reason;
+            if (reason === 'no_instagram_account') {
+              onCreated('Post criado! Conecte o Instagram em Configurações → Integrações.');
+            } else if (reason === 'no_due_posts') {
+              onCreated('Post criado! Aguardando processamento.');
+            } else {
+              onCreated('Post criado com sucesso! Verifique a conexão com o Instagram.');
+            }
           }
         } catch {
           onCreated('Post criado com sucesso! Não foi possível publicar agora.');

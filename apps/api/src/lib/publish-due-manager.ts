@@ -9,10 +9,10 @@ export async function startPublishDueManager(): Promise<void> {
   worker = await startPublishDueWorker();
 
   await queue.add('publish-due:tick', { timestamp: new Date().toISOString() }, {
-    repeat: { pattern: '*/5 * * * *' },
+    repeat: { pattern: '* * * * *' },
   });
 
-  console.log('✅ Publish-due scheduler started (runs every 5 minutes)');
+  console.log('✅ Publish-due scheduler started (runs every minute)');
 }
 
 export async function stopPublishDueManager(): Promise<void> {

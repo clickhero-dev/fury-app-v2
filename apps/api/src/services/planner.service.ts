@@ -296,20 +296,34 @@ export async function resolveInstagramAccount(tenantId: string): Promise<Instagr
     orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
 
-  if (!conn || !conn.accessToken) return null;
+  if (!conn) {
+    console.log(`[resolveInstagram] tenant ${tenantId}: sem conexão Meta`);
+    return null;
+  }
+  if (!conn.accessToken) {
+    console.log(`[resolveInstagram] tenant ${tenantId}: conexão Meta sem token`);
+    return null;
+  }
 
   const accessToken = decryptMetaToken(conn.accessToken);
   const selectedPageIds: string[] = (conn.selectedPageIds as any[]) || [];
 
-  if (selectedPageIds.length === 0) return null;
+  if (selectedPageIds.length === 0) {
+    console.log(`[resolveInstagram] tenant ${tenantId}: nenhuma página selecionada`);
+    return null;
+  }
 
   const pages = await getUserFacebookPages(accessToken);
   const selectedPage = pages.find(
     (p) => selectedPageIds.includes(p.pageId) && p.instagramUserId,
   );
 
-  if (!selectedPage?.instagramUserId) return null;
+  if (!selectedPage?.instagramUserId) {
+    console.log(`[resolveInstagram] tenant ${tenantId}: ${selectedPageIds.length} páginas selecionadas mas nenhuma tem Instagram (${pages.length} páginas do Facebook encontradas)`);
+    return null;
+  }
 
+  console.log(`[resolveInstagram] tenant ${tenantId}: conta IG ${selectedPage.instagramUserId} resolvida`);
   return { igUserId: selectedPage.instagramUserId, accessToken };
 }
 
@@ -357,7 +371,10 @@ export async function publishDuePosts(tenantId: string) {
   const account = await resolveInstagramAccount(tenantId);
 
   // Tenant sem Instagram: sai silenciosamente
-  if (!account) return { published: 0, posts: [] };
+  if (!account) {
+    console.log(`[publishDuePosts] tenant ${tenantId}: sem conta Instagram — retornando published: 0`);
+    return { published: 0, posts: [], reason: 'no_instagram_account' as const };
+  }
 
   const now = new Date();
 
@@ -375,8 +392,12 @@ export async function publishDuePosts(tenantId: string) {
     ),
   });
 
-  if (due.length === 0) return { published: 0, posts: [] };
+  if (due.length === 0) {
+    console.log(`[publishDuePosts] tenant ${tenantId}: 0 posts elegíveis encontrados`);
+    return { published: 0, posts: [], reason: 'no_due_posts' as const };
+  }
 
+  console.log(`[publishDuePosts] tenant ${tenantId}: ${due.length} posts elegíveis, iniciando publicação...`);
   let published = 0;
 
   for (const post of due) {
