@@ -1,5 +1,5 @@
 import { db, campaignPlans, socialPosts, metaConnections, clientGoals, brandKits } from '@fury/db';
-import { eq, and, desc, gt, isNull, or, lte, sql } from 'drizzle-orm';
+import { eq, and, desc, gt, inArray, isNull, or, lte, sql } from 'drizzle-orm';
 import { jobs, generateId, runPipeline } from '../agents/orchestrator.js';
 import { openrouterService } from './openrouter.service.js';
 import type { JobStatus } from '../agents/types.js';
@@ -227,7 +227,7 @@ export async function bulkSchedulePosts(tenantId: string, postIds: string[], sch
     })
     .where(and(
       eq(socialPosts.tenantId, tenantId),
-      sql`${socialPosts.id} = ANY(${postIds}::uuid[])`,
+      inArray(socialPosts.id, postIds),
     ))
     .returning();
   return result;
@@ -238,7 +238,7 @@ export async function bulkDeletePosts(tenantId: string, postIds: string[]) {
     .set({ status: 'rejected', updatedAt: new Date() })
     .where(and(
       eq(socialPosts.tenantId, tenantId),
-      sql`${socialPosts.id} = ANY(${postIds}::uuid[])`,
+      inArray(socialPosts.id, postIds),
     ))
     .returning();
   return result;
