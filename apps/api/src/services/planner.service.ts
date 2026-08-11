@@ -287,9 +287,11 @@ const RETRY_BACKOFF_MINUTES = [1, 5, 15];
 interface InstagramAccount {
   igUserId: string;
   accessToken: string;
+  pageName: string;
+  instagramUsername: string | null;
 }
 
-/** Resolve a conta Instagram do tenant pela primeira página com IG no selectedPageIds */
+/** Resolve a conta Instagram do tenant. Prioriza páginas selecionadas com IG; se nenhuma, faz fallback para qualquer página com IG. */
 export async function resolveInstagramAccount(tenantId: string): Promise<InstagramAccount | null> {
   const conn = await db.query.metaConnections.findFirst({
     where: eq(metaConnections.tenantId, tenantId),
@@ -307,24 +309,30 @@ export async function resolveInstagramAccount(tenantId: string): Promise<Instagr
 
   const accessToken = decryptMetaToken(conn.accessToken);
   const selectedPageIds: string[] = (conn.selectedPageIds as any[]) || [];
-
-  if (selectedPageIds.length === 0) {
-    console.log(`[resolveInstagram] tenant ${tenantId}: nenhuma página selecionada`);
-    return null;
-  }
-
   const pages = await getUserFacebookPages(accessToken);
-  const selectedPage = pages.find(
-    (p) => selectedPageIds.includes(p.pageId) && p.instagramUserId,
-  );
 
-  if (!selectedPage?.instagramUserId) {
-    console.log(`[resolveInstagram] tenant ${tenantId}: ${selectedPageIds.length} páginas selecionadas mas nenhuma tem Instagram (${pages.length} páginas do Facebook encontradas)`);
+  console.log(`[resolveInstagram] tenant ${tenantId}: Facebook retornou ${pages.length} páginas:`,
+    JSON.stringify(pages.map(p => ({ pageId: p.pageId, name: p.name, hasInstagram: p.hasInstagram, instagramUserId: p.instagramUserId }))));
+
+  const pagesWithIg = pages.filter((p) => p.instagramUserId);
+  if (pagesWithIg.length === 0) {
+    console.log(`[resolveInstagram] tenant ${tenantId}: nenhuma das ${pages.length} páginas tem Instagram vinculado`);
     return null;
   }
 
-  console.log(`[resolveInstagram] tenant ${tenantId}: conta IG ${selectedPage.instagramUserId} resolvida`);
-  return { igUserId: selectedPage.instagramUserId, accessToken };
+  const buildAccount = (p: typeof pagesWithIg[number], source: string) => {
+    console.log(`[resolveInstagram] tenant ${tenantId}: ${source} — "${p.name}" IG=${p.instagramUserId} (@${p.instagramUsername || 'sem @'})`);
+    return { igUserId: p.instagramUserId!, accessToken, pageName: p.name, instagramUsername: p.instagramUsername };
+  };
+
+  if (selectedPageIds.length > 0) {
+    const selected = pagesWithIg.find((p) => selectedPageIds.includes(p.pageId));
+    if (selected) return buildAccount(selected, 'selecionada');
+  }
+
+  const fallback = pagesWithIg[0];
+  console.log(`[resolveInstagram] tenant ${tenantId}: fallback — usando "${fallback.name}"`);
+  return buildAccount(fallback, 'fallback');
 }
 
 /**
@@ -394,7 +402,7 @@ export async function publishDuePosts(tenantId: string) {
 
   if (due.length === 0) {
     console.log(`[publishDuePosts] tenant ${tenantId}: 0 posts elegíveis encontrados`);
-    return { published: 0, posts: [], reason: 'no_due_posts' as const };
+    return { published: 0, posts: [], reason: 'no_due_posts' as const, pageName: account.pageName, instagramUsername: account.instagramUsername };
   }
 
   console.log(`[publishDuePosts] tenant ${tenantId}: ${due.length} posts elegíveis, iniciando publicação...`);
@@ -456,5 +464,5 @@ export async function publishDuePosts(tenantId: string) {
     }
   }
 
-  return { published, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })) };
+  return { published, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })), pageName: account.pageName, instagramUsername: account.instagramUsername };
 }

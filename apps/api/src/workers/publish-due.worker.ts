@@ -19,6 +19,10 @@ export async function startPublishDueWorker(): Promise<Worker<PublishDueJobData>
         try {
           const result = await publishDuePosts(tenant.id);
           total += result.published;
+          if (result.published > 0) {
+            const handle = result.instagramUsername ? `@${result.instagramUsername}` : result.pageName || 'desconhecida';
+            console.log(`[publish-due] tenant ${tenant.id}: ${result.published} posts → ${handle}`);
+          }
         } catch (e) {
           console.error(`[publish-due] Tenant ${tenant.id} failed:`, (e as Error).message);
         }

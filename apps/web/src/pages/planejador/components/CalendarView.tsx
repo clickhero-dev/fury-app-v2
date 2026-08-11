@@ -123,7 +123,10 @@ export function CalendarView() {
       await api.patch(`/planner/posts/${postId}/move`, { dayIndex });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
-    onError: () => showToast('Erro ao mover post. Tente novamente.', 'error'),
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message || err?.message || 'Erro ao mover post. Tente novamente.';
+      showToast(msg, 'error');
+    },
   });
 
   const scheduleMutation = useMutation({
@@ -133,7 +136,10 @@ export function CalendarView() {
       });
     },
     onSuccess: () => { clearSelection(); queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
-    onError: () => showToast('Erro ao agendar posts. Tente novamente.', 'error'),
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message || err?.message || 'Erro ao agendar posts. Tente novamente.';
+      showToast(msg, 'error');
+    },
   });
 
   const deleteMutation = useMutation({
@@ -147,7 +153,10 @@ export function CalendarView() {
       showToast(count > 1 ? `${count} posts excluídos com sucesso!` : 'Post excluído com sucesso!');
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
     },
-    onError: () => showToast('Erro ao excluir post(s). Tente novamente.', 'error'),
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message || err?.message || 'Erro ao excluir post(s). Tente novamente.';
+      showToast(msg, 'error');
+    },
   });
 
   // ===== DnD =====
