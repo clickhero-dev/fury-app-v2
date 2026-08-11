@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq';
 import { PUBLISH_DUE_QUEUE_NAME } from '../lib/queue.js';
 import { publishDuePosts } from '../services/planner.service.js';
-import { db, tenants } from '@fury/db';
+import { db } from '@fury/db';
 
 interface PublishDueJobData {
   timestamp: string;

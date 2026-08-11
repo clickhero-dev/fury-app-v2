@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { getPublishDueQueue, PUBLISH_DUE_QUEUE_NAME } from './queue.js';
+import { getPublishDueQueue } from './queue.js';
 import { startPublishDueWorker } from '../workers/publish-due.worker.js';
 
 let worker: Worker | null = null;
