@@ -6,7 +6,7 @@ const getJobProgress = vi.fn();
 const bulkDeletePosts = vi.fn();
 const bulkSchedulePosts = vi.fn();
 vi.mock('../services/planner.service.js', () => ({
-  startPlanGeneration: (tid: string) => startPlanGeneration(tid),
+  startPlanGeneration: (...args: any[]) => startPlanGeneration(...args),
   getJobProgress: (jid: string) => getJobProgress(jid),
   getPlanById: vi.fn(),
   confirmPlan: vi.fn(),
@@ -38,9 +38,43 @@ describe('planner.controller — BUG-001 tenantId', () => {
     await generatePlan(req, res, next);
 
     // não lançou 400: chamou o service com o tenant real, não com 'current'
-    expect(startPlanGeneration).toHaveBeenCalledWith('t-1');
+    expect(startPlanGeneration).toHaveBeenCalledWith('t-1', undefined);
     expect(next).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({ success: true, data: expect.objectContaining({ id: 'job-1' }) });
+  });
+
+  it('generatePlan passa postCount do body para o service', async () => {
+    startPlanGeneration.mockReturnValue({ id: 'job-2', tenantId: 't-1', status: 'running' });
+    const req = { tenant: { tenantId: 't-1' }, body: { postCount: 8 } } as any;
+    const res = mockRes();
+    const next = vi.fn();
+
+    await generatePlan(req, res, next);
+
+    expect(startPlanGeneration).toHaveBeenCalledWith('t-1', 8);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('generatePlan rejeita postCount > 30 (ZodError)', async () => {
+    const req = { tenant: { tenantId: 't-1' }, body: { postCount: 50 } } as any;
+    const res = mockRes();
+    const next = vi.fn();
+
+    await generatePlan(req, res, next);
+
+    expect(startPlanGeneration).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+  });
+
+  it('generatePlan rejeita postCount < 4 (ZodError)', async () => {
+    const req = { tenant: { tenantId: 't-1' }, body: { postCount: 2 } } as any;
+    const res = mockRes();
+    const next = vi.fn();
+
+    await generatePlan(req, res, next);
+
+    expect(startPlanGeneration).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
   });
 });
 

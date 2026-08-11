@@ -69,8 +69,8 @@ export function PlanejadorPage() {
   }, [jobId]);
 
   const generateMutation = useMutation({
-    mutationFn: async () => {
-      const { data } = await api.post('/planner/generate');
+    mutationFn: async (postCount: number) => {
+      const { data } = await api.post('/planner/generate', { postCount });
       return data.data as JobStatus;
     },
     onSuccess: (job) => {
@@ -136,8 +136,8 @@ export function PlanejadorPage() {
     }
   }, [recovered, isFetched, jobStatus, jobQueryError]);
 
-  const handleGenerate = useCallback(() => {
-    generateMutation.mutate();
+  const handleGenerate = useCallback((postCount: number) => {
+    generateMutation.mutate(postCount);
   }, [generateMutation]);
 
   // Estado de loading inicial (recuperando job salvo)

@@ -10,7 +10,7 @@ import { decryptMetaToken } from '../utils/crypto.js';
 
 export { jobs } from '../agents/orchestrator.js';
 
-export function startPlanGeneration(tenantId: string): JobStatus {
+export function startPlanGeneration(tenantId: string, postCount = 16): JobStatus {
   // Lock: rejeita se tenant já tiver um job rodando
   const existing = Array.from(jobs.values()).find(
     j => j.tenantId === tenantId && (j.status === 'running' || j.status === 'generating' || j.status === 'pending'),
@@ -27,7 +27,7 @@ export function startPlanGeneration(tenantId: string): JobStatus {
   };
   jobs.set(id, status as any);
 
-  runPipeline(tenantId, id).catch(() => {
+  runPipeline(tenantId, id, postCount).catch(() => {
     const j = jobs.get(id);
     if (j) {
       j.status = 'error';
