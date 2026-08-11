@@ -1,10 +1,12 @@
 import { db, campaignPlans, socialPosts, metaConnections, clientGoals, brandKits } from '@fury/db';
-import { eq, and, desc, gt, isNull, or, sql } from 'drizzle-orm';
+import { eq, and, desc, gt, isNull, or, lte, sql } from 'drizzle-orm';
 import { jobs, generateId, runPipeline } from '../agents/orchestrator.js';
 import { openrouterService } from './openrouter.service.js';
 import type { JobStatus } from '../agents/types.js';
 import { parseAgentJSON } from '../agents/utils.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { createInstagramMedia, getMediaContainerStatus, publishInstagramMedia, getUserFacebookPages } from '../lib/meta-api.js';
+import { decryptMetaToken } from '../utils/crypto.js';
 
 export { jobs } from '../agents/orchestrator.js';
 
@@ -270,27 +272,160 @@ export async function movePostDay(tenantId: string, postId: string, dayIndex: nu
   return updated;
 }
 
+// ===== Calendário Editorial: Publicação Automática =====
+
+const RETRY_BACKOFF_MINUTES = [1, 5, 15];
+
+interface InstagramAccount {
+  igUserId: string;
+  accessToken: string;
+}
+
+/** Resolve a conta Instagram do tenant pela primeira página com IG no selectedPageIds */
+export async function resolveInstagramAccount(tenantId: string): Promise<InstagramAccount | null> {
+  const conn = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, tenantId),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+
+  if (!conn || !conn.accessToken) return null;
+
+  const accessToken = decryptMetaToken(conn.accessToken);
+  const selectedPageIds: string[] = (conn.selectedPageIds as any[]) || [];
+
+  if (selectedPageIds.length === 0) return null;
+
+  const pages = await getUserFacebookPages(accessToken);
+  const selectedPage = pages.find(
+    (p) => selectedPageIds.includes(p.pageId) && p.instagramUserId,
+  );
+
+  if (!selectedPage?.instagramUserId) return null;
+
+  return { igUserId: selectedPage.instagramUserId, accessToken };
+}
+
+/**
+ * Publica um post no Instagram. Função pura — recebe tudo por parâmetro.
+ * Testável isoladamente com mock de metaApiCall.
+ */
+export async function publishSinglePost(
+  post: { id: string; postType: string; caption?: string | null; imageUrl?: string | null },
+  igUserId: string,
+  accessToken: string,
+): Promise<{ mediaId: string }> {
+  const isReel = post.postType === 'reel';
+  const mediaUrl = post.imageUrl;
+  if (!mediaUrl) {
+    throw new Error(`Post ${post.id} não tem imageUrl para publicar`);
+  }
+
+  // 1. Criar media container
+  const containerId = await createInstagramMedia(igUserId, accessToken, {
+    [isReel ? 'videoUrl' : 'imageUrl']: mediaUrl,
+    caption: post.caption || undefined,
+    mediaType: isReel ? 'REELS' : undefined,
+  });
+
+  // 2. Se vídeo: polling até FINISHED (3 tentativas, backoff 3s/6s/12s)
+  if (isReel) {
+    const pollDelays = [3_000, 6_000, 12_000];
+    for (let i = 0; i < pollDelays.length; i++) {
+      await new Promise((r) => setTimeout(r, pollDelays[i]));
+      const status = await getMediaContainerStatus(containerId, accessToken);
+      if (status === 'FINISHED') break;
+      if (i === pollDelays.length - 1) {
+        throw new Error(`Video container ${containerId} still IN_PROGRESS after ${pollDelays.length} polls`);
+      }
+    }
+  }
+
+  // 3. Publicar
+  const mediaId = await publishInstagramMedia(igUserId, accessToken, containerId);
+  return { mediaId };
+}
+
 export async function publishDuePosts(tenantId: string) {
+  const account = await resolveInstagramAccount(tenantId);
+
+  // Tenant sem Instagram: sai silenciosamente
+  if (!account) return { published: 0, posts: [] };
+
   const now = new Date();
+
   const due = await db.query.socialPosts.findMany({
     where: and(
       eq(socialPosts.tenantId, tenantId),
       sql`${socialPosts.scheduledAt} IS NOT NULL`,
       sql`${socialPosts.scheduledAt} <= ${now.toISOString()}::timestamptz`,
       eq(socialPosts.status, 'approved'),
+      // Respeita backoff: nextRetryAt nulo OU já passou
+      or(
+        isNull(socialPosts.nextRetryAt),
+        lte(socialPosts.nextRetryAt, now),
+      ),
     ),
   });
 
   if (due.length === 0) return { published: 0, posts: [] };
 
-  const ids = due.map(p => p.id);
-  await db.update(socialPosts)
-    .set({ status: 'published', publishedAt: now, updatedAt: now })
-    .where(and(
-      eq(socialPosts.tenantId, tenantId),
-      sql`${socialPosts.id} = ANY(${ids}::uuid[])`,
-    ));
+  let published = 0;
 
-  // ponytail: só atualiza status. Integração com Meta API via Instagram service fica pra v2.
-  return { published: due.length, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })) };
+  for (const post of due) {
+    // ponytail: só image e reel são suportados no Instagram v1
+    if (post.postType !== 'image' && post.postType !== 'reel') continue;
+
+    const attempts = (post.publishAttempts ?? 0) + 1;
+
+    try {
+      const { mediaId } = await publishSinglePost(
+        { id: post.id, postType: post.postType, caption: post.caption, imageUrl: post.imageUrl },
+        account.igUserId,
+        account.accessToken,
+      );
+
+      await db.update(socialPosts)
+        .set({
+          status: 'published',
+          publishedAt: now,
+          platformPostId: mediaId,
+          publishAttempts: attempts,
+          lastPublishError: null,
+          nextRetryAt: null,
+          updatedAt: now,
+        })
+        .where(eq(socialPosts.id, post.id));
+
+      published++;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[publishDuePosts] Post ${post.id} falhou (tentativa ${attempts}):`, errorMsg);
+
+      if (attempts >= 3) {
+        await db.update(socialPosts)
+          .set({
+            status: 'failed',
+            publishAttempts: attempts,
+            lastPublishError: errorMsg,
+            nextRetryAt: null,
+            updatedAt: now,
+          })
+          .where(eq(socialPosts.id, post.id));
+      } else {
+        const backoffMin = RETRY_BACKOFF_MINUTES[attempts - 1] ?? 15;
+        const nextRetryAt = new Date(now.getTime() + backoffMin * 60_000);
+
+        await db.update(socialPosts)
+          .set({
+            publishAttempts: attempts,
+            lastPublishError: errorMsg,
+            nextRetryAt,
+            updatedAt: now,
+          })
+          .where(eq(socialPosts.id, post.id));
+      }
+    }
+  }
+
+  return { published, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })) };
 }

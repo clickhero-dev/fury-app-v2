@@ -492,7 +492,7 @@ export const requestLogs = pgTable(
 // ===== Planejador IA tables =====
 
 export const postTypeEnum = pgEnum('post_type', ['reel', 'carousel', 'image', 'stories']);
-export const postStatusEnum = pgEnum('post_status', ['draft', 'approved', 'rejected', 'published', 'confirmed']);
+export const postStatusEnum = pgEnum('post_status', ['draft', 'approved', 'rejected', 'published', 'confirmed', 'failed']);
 export const planStatusEnum = pgEnum('plan_status', ['draft', 'active', 'completed', 'cancelled']);
 
 export const campaignPlans = pgTable(
@@ -545,6 +545,9 @@ export const socialPosts = pgTable(
     platformPostId: varchar('platform_post_id', { length: 255 }),
     metrics: jsonb('metrics').default(sql`'{}'::jsonb`),
     dayIndex: integer('day_index'), // dia do mês (1-31) para ordenação no calendário
+    publishAttempts: integer('publish_attempts').default(0).notNull(),
+    lastPublishError: text('last_publish_error'),
+    nextRetryAt: timestamp('next_retry_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

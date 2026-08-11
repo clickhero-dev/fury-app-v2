@@ -449,7 +449,8 @@ function CreatePostDialog({ year, month, onClose, onCreated, preselectedDay, onE
 }) {
   const [caption, setCaption] = useState('');
   const [postType, setPostType] = useState('image');
-  const [scheduledAt, setScheduledAt] = useState('');
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledTime, setScheduledTime] = useState('');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -457,6 +458,10 @@ function CreatePostDialog({ year, month, onClose, onCreated, preselectedDay, onE
 
   const today = preselectedDay ?? new Date().getDate();
   // ponytail: dia clicado no grid > dia de hoje
+
+  const scheduledAt = scheduledDate && scheduledTime
+    ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
+    : '';
 
   const handleFile = (file: File) => {
     if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
@@ -603,12 +608,26 @@ function CreatePostDialog({ year, month, onClose, onCreated, preselectedDay, onE
               <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">
                 Agendar publicação
               </label>
-              <input
-                type="datetime-local"
-                value={scheduledAt}
-                onChange={e => setScheduledAt(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-accent focus:outline-none transition-colors"
-              />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Data</label>
+                  <input
+                    type="date"
+                    value={scheduledDate}
+                    onChange={e => setScheduledDate(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-accent focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Hora</label>
+                  <input
+                    type="time"
+                    value={scheduledTime}
+                    onChange={e => setScheduledTime(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-accent focus:outline-none transition-colors"
+                  />
+                </div>
+              </div>
               <p className="text-[10px] text-gray-600 mt-1">Deixe em branco para publicar manualmente</p>
             </div>
 
