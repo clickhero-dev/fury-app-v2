@@ -223,42 +223,58 @@ export async function getCalendarPosts(tenantId: string, year: number, month: nu
 }
 
 export async function bulkSchedulePosts(tenantId: string, postIds: string[], scheduledAt: string | null) {
-  const result = await db.update(socialPosts)
-    .set({
-      scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
-      status: scheduledAt ? 'approved' : 'draft',
-      updatedAt: new Date(),
-    })
-    .where(and(
-      eq(socialPosts.tenantId, tenantId),
-      inArray(socialPosts.id, postIds),
-    ))
-    .returning();
-  return result;
+  if (postIds.length === 0) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Nenhum post selecionado para agendamento');
+  }
+
+  try {
+    const result = await db.update(socialPosts)
+      .set({
+        scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+        status: scheduledAt ? 'approved' : 'draft',
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(socialPosts.tenantId, tenantId),
+        inArray(socialPosts.id, postIds),
+      ))
+      .returning();
+
+    if (result.length === 0) {
+      throw new AppError(404, 'NOT_FOUND', 'Nenhum dos posts selecionados foi encontrado');
+    }
+
+    return result;
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    console.error('[bulkSchedulePosts] Erro ao agendar posts:', err);
+    throw new AppError(500, 'SCHEDULE_ERROR', 'Erro ao agendar posts. Tente novamente.');
+  }
 }
 
 export async function bulkDeletePosts(tenantId: string, postIds: string[]) {
-  console.log(`[bulkDelete] tenant ${tenantId}: ${postIds.length} posts`, postIds);
-  
-  const uuidValues = postIds.map((id) => sql`${id}::uuid`);
-  
+  if (postIds.length === 0) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Nenhum post selecionado para exclusão');
+  }
+
   try {
     const result = await db.update(socialPosts)
       .set({ status: 'rejected', updatedAt: new Date() })
       .where(and(
         eq(socialPosts.tenantId, tenantId),
-        sql`${socialPosts.id} IN (${sql.join(uuidValues, sql`, `)})`,
+        inArray(socialPosts.id, postIds),
       ))
       .returning();
-    console.log(`[bulkDelete] tenant ${tenantId}: ${result.length} deletados`);
+
+    if (result.length === 0) {
+      throw new AppError(404, 'NOT_FOUND', 'Nenhum dos posts selecionados foi encontrado');
+    }
+
     return result;
   } catch (err) {
-    console.error(`[bulkDelete] tenant ${tenantId} ERROR:`, err);
-    if (err instanceof Error) {
-      console.error(`[bulkDelete] message:`, err.message);
-      console.error(`[bulkDelete] stack:`, err.stack?.split('\n').slice(0, 5).join('\n'));
-    }
-    throw err;
+    if (err instanceof AppError) throw err;
+    console.error('[bulkDeletePosts] Erro ao deletar posts:', err);
+    throw new AppError(500, 'DELETE_ERROR', 'Erro ao excluir posts. Tente novamente.');
   }
 }
 
