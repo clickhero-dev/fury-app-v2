@@ -208,14 +208,14 @@ export function CalendarView() {
         }}
         className={clsx(
           'relative min-h-[80px] rounded-lg border p-1.5 transition-colors',
-          isToday ? 'border-accent/50 bg-accent/5' : 'border-gray-700/50',
-          dayPosts.length > 0 ? 'bg-gray-800/60' : 'bg-transparent hover:bg-gray-800/30 cursor-pointer',
+          isToday ? 'border-accent/50 bg-accent/5' : 'border-border',
+          dayPosts.length > 0 ? 'bg-surface-secondary/60' : 'bg-transparent hover:bg-surface-secondary/30 cursor-pointer',
           dragPostId && 'border-dashed border-accent/30',
         )}
       >
         {/* Day number */}
         <div className="flex items-center justify-between mb-0.5">
-          <span className={clsx('text-xs', isToday ? 'text-accent font-bold' : 'text-gray-500')}>
+          <span className={clsx('text-xs', isToday ? 'text-accent font-bold' : 'text-text-tertiary')}>
             {day}
           </span>
         </div>
@@ -245,12 +245,12 @@ export function CalendarView() {
                 'flex items-center gap-1 mt-1 px-1.5 py-1 rounded cursor-pointer text-[10px] transition-all',
                 isSelected
                   ? 'bg-accent/30 ring-1 ring-accent shadow-[0_0_8px_rgba(234,88,12,0.2)]'
-                  : 'hover:bg-gray-700/50',
+                  : 'hover:bg-surface-secondary',
                 dragPostId === post.id && 'opacity-50',
               )}
             >
-              <Icon className={clsx('h-3 w-3 shrink-0', isSelected ? 'text-accent' : 'text-gray-400')} />
-              <span className={clsx('truncate', isSelected ? 'text-accent font-medium' : 'text-gray-400')}>
+              <Icon className={clsx('h-3 w-3 shrink-0', isSelected ? 'text-accent' : 'text-text-tertiary')} />
+              <span className={clsx('truncate', isSelected ? 'text-accent font-medium' : 'text-text-secondary')}>
                 {post.title || post.caption?.slice(0, 20) || 'Sem título'}
               </span>
               {isSelected && <CheckCircle className="h-3 w-3 text-accent ml-auto shrink-0" />}
@@ -259,7 +259,7 @@ export function CalendarView() {
           );
         })}
         {dayPosts.length > 3 && (
-          <span className="text-[10px] text-gray-500 px-1">+{dayPosts.length - 3}</span>
+          <span className="text-[10px] text-text-tertiary px-1">+{dayPosts.length - 3}</span>
         )}
       </div>,
     );
@@ -283,13 +283,13 @@ export function CalendarView() {
       {/* Header: month nav + add post */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={goPrevMonth} className="p-1.5 rounded-lg hover:bg-gray-700/50 text-gray-400">
+          <button onClick={goPrevMonth} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary transition-colors">
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-xl font-bold text-white min-w-[180px] text-center">
+          <h1 className="text-xl font-bold text-text-primary min-w-[180px] text-center">
             {MONTH_NAMES[month - 1]} {year}
           </h1>
-          <button onClick={goNextMonth} className="p-1.5 rounded-lg hover:bg-gray-700/50 text-gray-400">
+          <button onClick={goNextMonth} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary transition-colors">
             <ChevronRight className="h-5 w-5" />
           </button>
         </div>
@@ -297,7 +297,7 @@ export function CalendarView() {
           {posts.length > 0 && (
             <button
               onClick={selectAll}
-              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
             >
               {selectedIds.size === posts.length ? 'Desmarcar todos' : 'Selecionar todos'}
             </button>
@@ -325,7 +325,7 @@ export function CalendarView() {
           <button
             onClick={() => scheduleMutation.mutate(null)}
             disabled={scheduleMutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-300 text-sm transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-secondary hover:bg-surface-secondary text-text-secondary text-sm transition-colors"
           >
             Desprogramar
           </button>
@@ -335,7 +335,7 @@ export function CalendarView() {
           >
             <Trash2 className="h-4 w-4" /> Excluir
           </button>
-          <button onClick={clearSelection} className="p-1.5 rounded-lg hover:bg-gray-700/50 text-gray-500">
+          <button onClick={clearSelection} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -345,7 +345,7 @@ export function CalendarView() {
       <TooltipProvider>
         <div className="grid grid-cols-7 gap-1.5">
           {DAY_LABELS.map(d => (
-            <div key={d} className="text-center text-xs font-medium text-gray-500 py-2">{d}</div>
+            <div key={d} className="text-center text-xs font-medium text-text-tertiary py-2">{d}</div>
           ))}
           {grid}
         </div>
