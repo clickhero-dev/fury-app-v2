@@ -167,3 +167,28 @@ export async function closeFuryEngineQueue() {
 
 // Alias para compatibilidade com código antigo
 export const createBullConnection = getRedisConnection;
+
+// Publish-due queue
+export const PUBLISH_DUE_QUEUE_NAME = 'publish-due' as const;
+
+let publishDueQueueInstance: Queue | null = null;
+export async function getPublishDueQueue() {
+  if (!publishDueQueueInstance) {
+    const connection = await getRedisConnection();
+    publishDueQueueInstance = new Queue(PUBLISH_DUE_QUEUE_NAME, {
+      connection,
+      defaultJobOptions: {
+        removeOnComplete: 100,
+        removeOnFail: 500,
+      },
+    });
+  }
+  return publishDueQueueInstance;
+}
+
+export async function closePublishDueQueue() {
+  if (publishDueQueueInstance) {
+    await publishDueQueueInstance.close();
+    publishDueQueueInstance = null;
+  }
+}

@@ -28,6 +28,7 @@ export interface Post {
   cta?: string;
   hashtags?: string[];
   imagePrompt?: string;
+  imageUrl?: string;
   dayIndex: number;
   status: string;
   scheduledAt?: string;

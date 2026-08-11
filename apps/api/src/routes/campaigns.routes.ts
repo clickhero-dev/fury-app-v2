@@ -41,8 +41,7 @@ router.post('/create-wizard', createWizardCampaignHandler);
 router.post('/mcp-log', mcpLogWizardHandler);
 router.get('/create-wizard-diag', createWizardCampaignDiagHandler);
 router.post('/upload-creative', creativeUpload.single('file'), uploadWizardCreativeHandler);
-router.get('/meta-locations', searchMetaLocationsHandler);
-router.get('/meta-interests', searchMetaInterestsHandler);
+// Note: /meta-locations and /meta-interests are defined in index.ts with custom middleware
 router.post('/suggest-text', suggestTextHandler);
 
 // Specific sub-resource routes before generic /:id to avoid Express matching /:id first

@@ -1,133 +1,425 @@
 import { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import { LayoutGrid, Image, Sparkles, Film, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import {
+  LayoutGrid, Image, Sparkles, Film, CheckCircle, XCircle,
+  ChevronLeft, ChevronRight, Plus, Trash2, CalendarClock, X,
+} from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
-import type { Post, Plan } from '../types';
+import { DeleteConfirmDialog } from './DeleteConfirmDialog';
+import { ScheduleDialog } from './ScheduleDialog';
+import { CreatePostDialog } from './CreatePostDialog';
+import { PostTypeDialog } from './PostTypeDialog';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import api from '@/lib/api';
+import type { Post } from '../types';
 
-interface CalendarViewProps {
-  plan: Plan;
-  onConfirm?: () => void;
-  confirmed?: boolean;
+// ===== Types =====
+
+interface CalendarPost extends Post {
+  _source?: 'plan' | 'manual';
+  _planTitle?: string;
 }
+
+interface CalendarData {
+  posts: CalendarPost[];
+  year: number;
+  month: number;
+}
+
+// ===== Constants =====
 
 const DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const TYPE_ICONS: Record<string, typeof Image> = {
-  carousel: LayoutGrid,
-  reel: Film,
-  image: Image,
-  stories: Sparkles,
+  carousel: LayoutGrid, reel: Film, image: Image, stories: Sparkles,
 };
+const TYPE_LABELS: Record<string, string> = {
+  carousel: 'Carrossel', reel: 'Reels', image: 'Post', stories: 'Stories',
+};
+const MONTH_NAMES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
 
-function getDayOfWeek(dayIndex: number): number {
-  const date = new Date(new Date().getFullYear(), new Date().getMonth(), dayIndex);
-  return date.getDay();
+function getDayOfWeek(year: number, month: number, day: number): number {
+  return new Date(year, month - 1, day).getDay();
 }
 
-function getDaysInMonth(): number {
-  return new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+function getDaysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
 }
 
-export function CalendarView({ plan, onConfirm, confirmed }: CalendarViewProps) {
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const daysInMonth = getDaysInMonth();
-  const firstDay = getDayOfWeek(1);
+// ===== CalendarView =====
 
+export function CalendarView() {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedPost, setSelectedPost] = useState<CalendarPost | null>(null);
+  const [dragPostId, setDragPostId] = useState<string | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showPostTypeDialog, setShowPostTypeDialog] = useState(false);
+  const [createMode, setCreateMode] = useState<'schedule' | 'now'>('schedule');
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+  const [preselectedDay, setPreselectedDay] = useState<number | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['calendar', year, month],
+    queryFn: async () => {
+      const { data: res } = await api.get('/planner/calendar', { params: { year, month } });
+      return res.data as CalendarData;
+    },
+  });
+
+  const posts = data?.posts ?? [];
+  const daysInMonth = getDaysInMonth(year, month);
+  const firstDay = getDayOfWeek(year, month, 1);
+
+  // Group posts by day
   const postsByDay = useMemo(() => {
-    const map = new Map<number, Post[]>();
-    plan.posts.forEach(p => {
+    const map = new Map<number, CalendarPost[]>();
+    posts.forEach(p => {
       const arr = map.get(p.dayIndex) || [];
       arr.push(p);
       map.set(p.dayIndex, arr);
     });
     return map;
-  }, [plan.posts]);
+  }, [posts]);
 
-  const brandingApproved = plan.metadata?.branding?.approved;
-  const qualityPassed = plan.metadata?.quality?.passed;
-  const brandingNotes = plan.metadata?.branding?.notes;
+  // ===== Navigation =====
 
-  const grid = [];
+  const goPrevMonth = () => {
+    if (month === 1) { setMonth(12); setYear(y => y - 1); }
+    else setMonth(m => m - 1);
+    setSelectedIds(new Set());
+  };
+  const goNextMonth = () => {
+    if (month === 12) { setMonth(1); setYear(y => y + 1); }
+    else setMonth(m => m + 1);
+    setSelectedIds(new Set());
+  };
+
+  // ===== Selection =====
+
+  const selectAll = () => {
+    if (selectedIds.size === posts.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(posts.map(p => p.id)));
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  // ===== Mutations =====
+
+  const moveMutation = useMutation({
+    mutationFn: async ({ postId, dayIndex }: { postId: string; dayIndex: number }) => {
+      await api.patch(`/planner/posts/${postId}/move`, { dayIndex });
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
+    onError: () => showToast('Erro ao mover post. Tente novamente.', 'error'),
+  });
+
+  const scheduleMutation = useMutation({
+    mutationFn: async (scheduledAt: string | null) => {
+      await api.patch('/planner/posts/bulk-schedule', {
+        postIds: [...selectedIds], scheduledAt,
+      });
+    },
+    onSuccess: () => { clearSelection(); queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
+    onError: () => showToast('Erro ao agendar posts. Tente novamente.', 'error'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete('/planner/posts/bulk', { data: { postIds: [...selectedIds] } });
+    },
+    onSuccess: () => {
+      const count = selectedIds.size;
+      clearSelection();
+      setShowDeleteConfirm(false);
+      showToast(count > 1 ? `${count} posts excluídos com sucesso!` : 'Post excluído com sucesso!');
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+    },
+    onError: () => showToast('Erro ao excluir post(s). Tente novamente.', 'error'),
+  });
+
+  // ===== DnD =====
+
+  const handleDragStart = (e: React.DragEvent, postId: string) => {
+    e.dataTransfer.setData('text/plain', postId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDragPostId(postId);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, dayIndex: number) => {
+    e.preventDefault();
+    const postId = e.dataTransfer.getData('text/plain');
+    if (postId) moveMutation.mutate({ postId, dayIndex });
+    setDragPostId(null);
+  };
+
+  const handleDragEnd = () => setDragPostId(null);
+
+  // ===== Loading / Error / Empty =====
+
+  if (isLoading) return <CalendarSkeleton />;
+  if (error && !data) return <CalendarError />;
+
+  // ===== Grid =====
+
+  const grid: React.ReactNode[] = [];
   for (let i = 0; i < firstDay; i++) grid.push(<div key={`empty-${i}`} />);
+
   for (let day = 1; day <= daysInMonth; day++) {
-    const posts = postsByDay.get(day) || [];
+    const dayPosts = postsByDay.get(day) || [];
+    const isToday = year === now.getFullYear() && month === now.getMonth() + 1 && day === now.getDate();
+
     grid.push(
-      <button
+      <div
         key={day}
-        onClick={() => posts.length > 0 && setSelectedPost(posts[0])}
+        onDragOver={handleDragOver}
+        onDrop={(e) => handleDrop(e, day)}
+        onClick={() => {
+          if (dayPosts.length === 0) {
+            setPreselectedDay(day);
+            setShowPostTypeDialog(true);
+          }
+        }}
         className={clsx(
-          'relative min-h-[80px] rounded-lg border border-gray-700/50 p-1.5 text-left transition-colors',
-          posts.length > 0 ? 'bg-gray-800/60 hover:bg-gray-700/60 cursor-pointer' : 'bg-transparent',
+          'relative min-h-[80px] rounded-lg border p-1.5 transition-colors',
+          isToday ? 'border-accent/50 bg-accent/5' : 'border-gray-700/50',
+          dayPosts.length > 0 ? 'bg-gray-800/60' : 'bg-transparent hover:bg-gray-800/30 cursor-pointer',
+          dragPostId && 'border-dashed border-accent/30',
         )}
       >
-        <span className="text-xs text-gray-500">{day}</span>
-        {posts.slice(0, 3).map(post => {
+        {/* Day number */}
+        <div className="flex items-center justify-between mb-0.5">
+          <span className={clsx('text-xs', isToday ? 'text-accent font-bold' : 'text-gray-500')}>
+            {day}
+          </span>
+        </div>
+
+        {/* Posts */}
+        {dayPosts.slice(0, 3).map(post => {
           const Icon = TYPE_ICONS[post.postType] || Image;
+          const isSelected = selectedIds.has(post.id);
           return (
-            <div key={post.id} className="flex items-center gap-1 mt-1">
-              <Icon className="h-3 w-3 text-gray-400 shrink-0" />
-              <span className="text-[10px] text-gray-400 truncate">{post.title}</span>
+            <div
+              key={post.id}
+              draggable
+              onDragStart={(e) => handleDragStart(e, post.id)}
+              onDragEnd={handleDragEnd}
+              onClick={(e) => {
+                e.stopPropagation();
+                // ponytail: toggle selection on click; click selected post again to view
+                if (isSelected) {
+                  setSelectedPost(post);
+                } else {
+                  const next = new Set(selectedIds);
+                  next.add(post.id);
+                  setSelectedIds(next);
+                }
+              }}
+              className={clsx(
+                'flex items-center gap-1 mt-1 px-1.5 py-1 rounded cursor-pointer text-[10px] transition-all',
+                isSelected
+                  ? 'bg-accent/30 ring-1 ring-accent shadow-[0_0_8px_rgba(234,88,12,0.2)]'
+                  : 'hover:bg-gray-700/50',
+                dragPostId === post.id && 'opacity-50',
+              )}
+            >
+              <Icon className={clsx('h-3 w-3 shrink-0', isSelected ? 'text-accent' : 'text-gray-400')} />
+              <span className={clsx('truncate', isSelected ? 'text-accent font-medium' : 'text-gray-400')}>
+                {post.title || post.caption?.slice(0, 20) || 'Sem título'}
+              </span>
+              {isSelected && <CheckCircle className="h-3 w-3 text-accent ml-auto shrink-0" />}
+              {!isSelected && post._source === 'manual' && <span className="text-[8px] text-accent ml-auto">+</span>}
             </div>
           );
         })}
-        {posts.length > 3 && <span className="text-[10px] text-gray-500">+{posts.length - 3}</span>}
-      </button>,
+        {dayPosts.length > 3 && (
+          <span className="text-[10px] text-gray-500 px-1">+{dayPosts.length - 3}</span>
+        )}
+      </div>,
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Approval Bar */}
-      {plan.status === 'draft' && (
-        <div className="flex items-center justify-between p-4 rounded-xl bg-gray-800/60 border border-gray-700/50">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className={clsx('h-5 w-5', brandingApproved ? 'text-green-400' : 'text-yellow-400')} />
-              <span className="text-sm text-gray-300">
-                {brandingApproved ? 'Aprovado por compliance' : 'Aguardando aprovação'}
-              </span>
-            </div>
-            {qualityPassed === false && (
-              <span className="text-xs text-red-400">Qualidade: revisão necessária</span>
-            )}
-            {brandingNotes && (
-              <span className="text-xs text-gray-500 truncate max-w-[200px]">{brandingNotes}</span>
-            )}
+    <div className="space-y-4">
+      {/* Page-level toast */}
+      {toast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300">
+          <div className={clsx(
+            'flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium shadow-2xl backdrop-blur-md',
+            toast.type === 'success' ? 'bg-green-900/95 border border-green-600/50 text-green-200' : 'bg-red-900/95 border border-red-600/50 text-red-200',
+          )}>
+            {toast.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+            {toast.message}
           </div>
-          {!confirmed && brandingApproved && (
-            <button
-              onClick={onConfirm}
-              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white text-sm font-medium hover:from-green-500 hover:to-emerald-500 transition-all"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              Confirmar e Agendar
-            </button>
-          )}
         </div>
       )}
 
-      {/* Confirmed badge */}
-      {confirmed && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-green-900/20 border border-green-700/30">
-          <CheckCircle2 className="h-6 w-6 text-green-400" />
-          <div>
-            <p className="text-sm font-medium text-green-300">Plano confirmado</p>
-            <p className="text-xs text-gray-400">O conteúdo será publicado conforme o calendário</p>
-          </div>
+      {/* Header: month nav + add post */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={goPrevMonth} className="p-1.5 rounded-lg hover:bg-gray-700/50 text-gray-400">
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <h1 className="text-xl font-bold text-white min-w-[180px] text-center">
+            {MONTH_NAMES[month - 1]} {year}
+          </h1>
+          <button onClick={goNextMonth} className="p-1.5 rounded-lg hover:bg-gray-700/50 text-gray-400">
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          {posts.length > 0 && (
+            <button
+              onClick={selectAll}
+              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              {selectedIds.size === posts.length ? 'Desmarcar todos' : 'Selecionar todos'}
+            </button>
+          )}
+          <button
+            onClick={() => setShowPostTypeDialog(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-light text-white text-sm font-medium transition-colors"
+          >
+            <Plus className="h-4 w-4" /> Novo post
+          </button>
+        </div>
+      </div>
+
+      {/* Selection toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-accent/10 border border-accent/30">
+          <span className="text-sm text-accent font-medium">{selectedIds.size} posts selecionados</span>
+          <div className="flex-1" />
+          <button
+            onClick={() => setShowScheduleDialog(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/20 hover:bg-accent/30 text-accent text-sm transition-colors"
+          >
+            <CalendarClock className="h-4 w-4" /> Agendar
+          </button>
+          <button
+            onClick={() => scheduleMutation.mutate(null)}
+            disabled={scheduleMutation.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-300 text-sm transition-colors"
+          >
+            Desprogramar
+          </button>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-900/20 hover:bg-red-900/40 text-red-400 text-sm transition-colors"
+          >
+            <Trash2 className="h-4 w-4" /> Excluir
+          </button>
+          <button onClick={clearSelection} className="p-1.5 rounded-lg hover:bg-gray-700/50 text-gray-500">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
       {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-1.5">
-        {DAY_LABELS.map(d => (
-          <div key={d} className="text-center text-xs font-medium text-gray-500 py-2">{d}</div>
-        ))}
-        {grid}
-      </div>
+      <TooltipProvider>
+        <div className="grid grid-cols-7 gap-1.5">
+          {DAY_LABELS.map(d => (
+            <div key={d} className="text-center text-xs font-medium text-gray-500 py-2">{d}</div>
+          ))}
+          {grid}
+        </div>
+      </TooltipProvider>
 
       {/* Post side panel */}
       {selectedPost && (
-        <PostSidePanel post={selectedPost} onClose={() => setSelectedPost(null)} onUpdate={(updated) => setSelectedPost(updated)} />
+        <PostSidePanel
+          post={selectedPost}
+          onClose={() => setSelectedPost(null)}
+          onUpdate={(updated) => {
+            setSelectedPost(updated as CalendarPost);
+            showToast('Post atualizado!');
+            queryClient.invalidateQueries({ queryKey: ['calendar'] });
+          }}
+        />
       )}
+
+      {/* Dialogs */}
+      {showCreateDialog && (
+        <CreatePostDialog
+          mode={createMode}
+          preselectedDay={preselectedDay}
+          onClose={() => { setShowCreateDialog(false); setPreselectedDay(null); }}
+          onCreated={(message) => {
+            setShowCreateDialog(false);
+            setPreselectedDay(null);
+            showToast(message);
+            queryClient.invalidateQueries({ queryKey: ['calendar'] });
+          }}
+          onError={(msg) => showToast(msg, 'error')}
+        />
+      )}
+      {showPostTypeDialog && (
+        <PostTypeDialog
+          onSelect={(mode) => {
+            setShowPostTypeDialog(false);
+            setCreateMode(mode);
+            setShowCreateDialog(true);
+          }}
+          onClose={() => { setShowPostTypeDialog(false); setPreselectedDay(null); }}
+        />
+      )}
+      {showScheduleDialog && (
+        <ScheduleDialog
+          count={selectedIds.size}
+          onConfirm={(scheduledAt) => scheduleMutation.mutate(scheduledAt)}
+          onClose={() => setShowScheduleDialog(false)}
+        />
+      )}
+      {showDeleteConfirm && (
+        <DeleteConfirmDialog
+          count={selectedIds.size}
+          onConfirm={() => deleteMutation.mutate()}
+          onClose={() => setShowDeleteConfirm(false)}
+          loading={deleteMutation.isPending}
+        />
+      )}
+    </div>
+  );
+}
+
+// ===== Skeleton / Error =====
+
+function CalendarSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div className="h-10 w-64 rounded-lg bg-surface-secondary" />
+      <div className="grid grid-cols-7 gap-1.5">
+        {DAY_LABELS.map(d => <div key={d} className="text-center text-xs text-text-tertiary py-2">{d}</div>)}
+        {Array.from({ length: 35 }).map((_, i) => (
+          <div key={i} className="min-h-[80px] rounded-lg border border-border bg-surface-secondary/60" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CalendarError() {
+  return (
+    <div className="text-center py-12">
+      <p className="text-error text-sm mb-2">Erro ao carregar calendário</p>
+      <p className="text-text-tertiary text-xs">Verifique sua conexão</p>
     </div>
   );
 }

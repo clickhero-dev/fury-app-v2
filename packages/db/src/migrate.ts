@@ -93,8 +93,17 @@ const STEPS: MigrationStep[] = [
   { tag: '0021_add_tenant_codigo' },
   { tag: '0022_add_tenant_business_context' },
   { tag: '0023_planner_tables' },
+  { tag: '0024_add_reel_post_type' },
   { tag: '0025_add_is_non_expirable_to_subscriptions' },
   { tag: '0026_add_creative_quota_limits' },
+  { tag: '0027_add_missing_planner_columns' },
+  {
+    tag: '0011_fr8_publish_retry',
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "post_status" ADD VALUE IF NOT EXISTS 'failed'`);
+      console.log('    + added failed to post_status');
+    },
+  },
 ];
 
 async function runMigrate() {

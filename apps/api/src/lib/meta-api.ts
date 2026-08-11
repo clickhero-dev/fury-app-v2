@@ -1583,3 +1583,78 @@ export async function searchMetaInterests(query: string, accessToken: string): P
   const response = await metaApiCall<MetaInterestSearchResponse>(path, accessToken);
   return (response.data || []).filter((item) => item.id && item.name);
 }
+
+// ===== Instagram Content Publishing =====
+
+interface InstagramMediaContainerResponse {
+  id: string;
+}
+
+interface InstagramMediaStatusResponse {
+  status_code: 'FINISHED' | 'IN_PROGRESS' | 'ERROR' | 'EXPIRED';
+  error_message?: string;
+}
+
+interface InstagramPublishResponse {
+  id: string;
+}
+
+/** Cria container de mídia no Instagram (imagem ou vídeo). POST /{ig-user-id}/media */
+export async function createInstagramMedia(
+  igUserId: string,
+  accessToken: string,
+  params: { imageUrl?: string; videoUrl?: string; caption?: string; mediaType?: 'REELS' },
+): Promise<string> {
+  const body: Record<string, unknown> = {};
+
+  if (params.imageUrl) {
+    body.image_url = params.imageUrl;
+  } else if (params.videoUrl) {
+    body.video_url = params.videoUrl;
+    body.media_type = params.mediaType || 'REELS';
+  }
+
+  if (params.caption) {
+    body.caption = params.caption;
+  }
+
+  const response = await metaApiCall<InstagramMediaContainerResponse>(
+    `/${igUserId}/media`,
+    accessToken,
+    { method: 'POST', body },
+  );
+
+  return response.id;
+}
+
+/** Verifica status do container de mídia. GET /{containerId}?fields=status_code */
+export async function getMediaContainerStatus(
+  containerId: string,
+  accessToken: string,
+): Promise<'FINISHED' | 'IN_PROGRESS' | 'ERROR'> {
+  const response = await metaApiCall<InstagramMediaStatusResponse>(
+    `/${containerId}?fields=status_code`,
+    accessToken,
+  );
+
+  if (response.status_code === 'ERROR') {
+    throw new Error(`Instagram media container error: ${response.error_message || 'unknown'}`);
+  }
+
+  return response.status_code === 'FINISHED' ? 'FINISHED' : 'IN_PROGRESS';
+}
+
+/** Publica container de mídia no Instagram. POST /{ig-user-id}/media_publish */
+export async function publishInstagramMedia(
+  igUserId: string,
+  accessToken: string,
+  creationId: string,
+): Promise<string> {
+  const response = await metaApiCall<InstagramPublishResponse>(
+    `/${igUserId}/media_publish`,
+    accessToken,
+    { method: 'POST', body: { creation_id: creationId } },
+  );
+
+  return response.id;
+}

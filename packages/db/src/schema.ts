@@ -17,7 +17,7 @@ import {
   smallint,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member', 'superadmin']);
@@ -492,7 +492,7 @@ export const requestLogs = pgTable(
 // ===== Planejador IA tables =====
 
 export const postTypeEnum = pgEnum('post_type', ['reel', 'carousel', 'image', 'stories']);
-export const postStatusEnum = pgEnum('post_status', ['draft', 'approved', 'rejected', 'published', 'confirmed']);
+export const postStatusEnum = pgEnum('post_status', ['draft', 'approved', 'rejected', 'published', 'confirmed', 'failed']);
 export const planStatusEnum = pgEnum('plan_status', ['draft', 'active', 'completed', 'cancelled']);
 
 export const campaignPlans = pgTable(
@@ -545,6 +545,9 @@ export const socialPosts = pgTable(
     platformPostId: varchar('platform_post_id', { length: 255 }),
     metrics: jsonb('metrics').default(sql`'{}'::jsonb`),
     dayIndex: integer('day_index'), // dia do mês (1-31) para ordenação no calendário
+    publishAttempts: integer('publish_attempts').default(0).notNull(),
+    lastPublishError: text('last_publish_error'),
+    nextRetryAt: timestamp('next_retry_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -553,6 +556,17 @@ export const socialPosts = pgTable(
     planIdIdx: index('social_posts_plan_id_idx').on(table.planId),
   })
 );
+
+export const campaignPlansRelations = relations(campaignPlans, ({ many }) => ({
+  posts: many(socialPosts),
+}));
+
+export const socialPostsRelations = relations(socialPosts, ({ one }) => ({
+  plan: one(campaignPlans, {
+    fields: [socialPosts.planId],
+    references: [campaignPlans.id],
+  }),
+}));
 
 // Export all tables
 export const allTables = {

@@ -8,7 +8,7 @@ import { rateLimitMiddleware } from './middleware/rate-limit.middleware.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
 import { closeRedis, waitForRedisReady } from './lib/redis.js';
-import { closeComplianceQueue, closeStudioQueue, closeRedisConnection, closeFuryEngineQueue } from './lib/queue.js';
+import { closeComplianceQueue, closeStudioQueue, closeRedisConnection, closeFuryEngineQueue, closePublishDueQueue } from './lib/queue.js';
 import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
 import { startRuleEngine, stopRuleEngine } from './lib/rule-engine-manager.js';
 import { startFuryEngine, stopFuryEngine } from './lib/fury-engine-manager.js';
@@ -16,6 +16,7 @@ import { ensureStudioAssetsDir, studioAssetsDir } from './lib/temp-storage.js';
 import { startStudioGenerationWorker, stopStudioGenerationWorker } from './workers/studio-generation.worker.js';
 import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
+import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 
 const app = express();
@@ -170,6 +171,7 @@ app.use((req, res) => {
     // Aguarda o Redis estar pronto antes de iniciar qualquer worker
     await waitForRedisReady();
 
+    // ponytail: setInterval, não BullMQ. Migrate quando precisar de retry ou isolamento.
     const server = app.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
       console.log(`📝 Environment: ${NODE_ENV}`);
@@ -217,12 +219,16 @@ app.use((req, res) => {
       void startFuryEngine().catch((error) => {
         console.error('Failed to start Fury engine:', error);
       });
+      void startPublishDueManager().catch((error) => {
+        console.error('Failed to start publish-due manager:', error);
+      });
     });
 
     // Tratamento de encerramento (único handler)
     process.on('SIGTERM', () => {
       console.log('SIGTERM received, shutting down gracefully...');
       server.close(async () => {
+        await stopPublishDueManager();
         await flushRequestLogs();
         await stopSyncJobsWorker();
         await stopRuleEngine();
@@ -233,6 +239,7 @@ app.use((req, res) => {
         await closeStudioQueue();
         await closeComplianceQueue();
         await closeFuryEngineQueue();
+        await closePublishDueQueue();
         await closeRedisConnection();
         await closeRedis();
         console.log('Server closed');
