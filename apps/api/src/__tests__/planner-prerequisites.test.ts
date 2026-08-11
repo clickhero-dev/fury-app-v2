@@ -98,14 +98,14 @@ describe('getPrerequisites — metaConnected', () => {
     expect(result.metaConnected).toBe(true);
   });
 
-  it('retorna false — token futuro + selectedPageIds vazio [] (bug fix)', async () => {
+  it('retorna true — token futuro + selectedPageIds vazio [] (fix: página não é pré-requisito)', async () => {
     testConnections.push({
       tenantId: 't1',
       tokenExpiresAt: new Date('2099-01-01'),
       selectedPageIds: [],
     });
     const result = await getPrerequisites('t1');
-    expect(result.metaConnected).toBe(false);
+    expect(result.metaConnected).toBe(true);
   });
 
   it('retorna false — token expirado mesmo com page selecionada', async () => {
@@ -142,13 +142,13 @@ describe('getPrerequisites — metaConnected', () => {
     expect(result.metaConnected).toBe(true);
   });
 
-  it('retorna false — selectedPageIds = [] null (coalesce edge case)', async () => {
+  it('retorna true — selectedPageIds = null (coalesce edge case — página não é mais pré-requisito)', async () => {
     testConnections.push({
       tenantId: 't1',
       tokenExpiresAt: new Date('2099-01-01'),
       selectedPageIds: null as unknown as string[],
     });
     const result = await getPrerequisites('t1');
-    expect(result.metaConnected).toBe(false);
+    expect(result.metaConnected).toBe(true);
   });
 });

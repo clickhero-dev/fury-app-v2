@@ -60,11 +60,14 @@ export async function getLatestPlanByTenant(tenantId: string) {
 }
 
 export async function getPrerequisites(tenantId: string) {
+  // ponytail: basta ter uma conexão com token válido — selectedPageIds não é
+  // necessário aqui, pois resolveInstagramAccount faz fallback para qualquer
+  // página com Instagram. Exigir selectedPageIds criava um estado onde
+  // metaConnected=false mesmo com conexão válida e token válido.
   const meta = await db.query.metaConnections.findFirst({
     where: and(
       eq(metaConnections.tenantId, tenantId),
       or(gt(metaConnections.tokenExpiresAt, new Date()), isNull(metaConnections.tokenExpiresAt)),
-      sql`coalesce(${metaConnections.selectedPageIds}, '[]'::jsonb) != '[]'::jsonb`,
     ),
   });
   const goals = await db.query.clientGoals.findFirst({
@@ -478,5 +481,10 @@ export async function publishDuePosts(tenantId: string) {
     }
   }
 
-  return { published, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })), pageName: account.pageName, instagramUsername: account.instagramUsername };
+  // ponytail: incluir reason quando published=0 e havia posts elegíveis —
+  // publish_failed indica que posts existiam mas todos falharam na API do Meta.
+  const failedCount = due.filter(p => p.postType === 'image' || p.postType === 'reel').length;
+  const reason = published === 0 && failedCount > 0 ? 'publish_failed' as const : undefined;
+
+  return { published, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })), pageName: account.pageName, instagramUsername: account.instagramUsername, reason };
 }
