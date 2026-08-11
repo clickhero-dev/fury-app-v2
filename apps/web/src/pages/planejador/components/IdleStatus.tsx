@@ -1,4 +1,5 @@
-import { Sparkles, CheckCircle, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import { Sparkles, CheckCircle, AlertCircle, Minus, Plus } from 'lucide-react';
 
 export interface PrerequisiteCheck {
   label: string;
@@ -6,13 +7,21 @@ export interface PrerequisiteCheck {
 }
 
 interface IdleStatusProps {
-  onGenerate: () => void;
+  onGenerate: (postCount: number) => void;
   isLoading: boolean;
   checks?: PrerequisiteCheck[];
 }
 
+const MIN_POSTS = 4;
+const MAX_POSTS = 30;
+const DEFAULT_POSTS = 16;
+
 export function IdleStatus({ onGenerate, isLoading, checks }: IdleStatusProps) {
+  const [postCount, setPostCount] = useState(DEFAULT_POSTS);
   const allOk = !checks || checks.every(c => c.ok);
+
+  const decrement = () => setPostCount(p => Math.max(MIN_POSTS, p - 1));
+  const increment = () => setPostCount(p => Math.min(MAX_POSTS, p + 1));
 
   return (
     <div className="flex flex-col items-center justify-center py-16 px-6">
@@ -50,9 +59,43 @@ export function IdleStatus({ onGenerate, isLoading, checks }: IdleStatusProps) {
         </div>
       )}
 
+      {/* Post count selector */}
+      <div className="w-full max-w-sm mb-8">
+        <p className="text-text-tertiary text-sm text-center mb-3">
+          Quantas postagens você quer gerar?
+        </p>
+        <div className="flex items-center justify-center gap-4">
+          <button
+            onClick={decrement}
+            disabled={postCount <= MIN_POSTS || isLoading}
+            className="p-2 rounded-lg bg-surface border border-border hover:bg-surface-secondary
+                       text-text-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            aria-label="Menos postagens"
+          >
+            <Minus className="w-5 h-5" />
+          </button>
+          <div className="flex items-baseline gap-1">
+            <span className="text-4xl font-bold text-accent tabular-nums">{postCount}</span>
+            <span className="text-text-tertiary text-lg">posts</span>
+          </div>
+          <button
+            onClick={increment}
+            disabled={postCount >= MAX_POSTS || isLoading}
+            className="p-2 rounded-lg bg-surface border border-border hover:bg-surface-secondary
+                       text-text-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            aria-label="Mais postagens"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+        </div>
+        <p className="text-text-tertiary text-xs text-center mt-2">
+          Mínimo {MIN_POSTS} · Máximo {MAX_POSTS}
+        </p>
+      </div>
+
       {/* CTA */}
       <button
-        onClick={onGenerate}
+        onClick={() => onGenerate(postCount)}
         disabled={isLoading || !allOk}
         className="relative px-10 py-4 bg-accent hover:bg-accent-light disabled:opacity-50 
                    text-white font-semibold rounded-2xl text-lg transition-all duration-200

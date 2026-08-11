@@ -10,7 +10,7 @@ import { decryptMetaToken } from '../utils/crypto.js';
 
 export { jobs } from '../agents/orchestrator.js';
 
-export function startPlanGeneration(tenantId: string): JobStatus {
+export function startPlanGeneration(tenantId: string, postCount = 16): JobStatus {
   // Lock: rejeita se tenant já tiver um job rodando
   const existing = Array.from(jobs.values()).find(
     j => j.tenantId === tenantId && (j.status === 'running' || j.status === 'generating' || j.status === 'pending'),
@@ -27,7 +27,7 @@ export function startPlanGeneration(tenantId: string): JobStatus {
   };
   jobs.set(id, status as any);
 
-  runPipeline(tenantId, id).catch(() => {
+  runPipeline(tenantId, id, postCount).catch(() => {
     const j = jobs.get(id);
     if (j) {
       j.status = 'error';
@@ -340,9 +340,21 @@ export async function resolveInstagramAccount(tenantId: string): Promise<Instagr
     return null;
   }
 
-  const accessToken = decryptMetaToken(conn.accessToken);
+  let accessToken: string;
+  try {
+    accessToken = decryptMetaToken(conn.accessToken);
+  } catch (err) {
+    console.error(`[resolveInstagram] tenant ${tenantId}: erro ao descriptografar token — reconecte o Meta em Configurações → Integrações`);
+    throw new AppError(400, 'TOKEN_DECRYPT_ERROR', 'Token do Meta inválido ou corrompido. Reconecte sua conta em Configurações → Integrações.');
+  }
   const selectedPageIds: string[] = (conn.selectedPageIds as any[]) || [];
-  const pages = await getUserFacebookPages(accessToken);
+  let pages;
+  try {
+    pages = await getUserFacebookPages(accessToken);
+  } catch (err) {
+    console.error(`[resolveInstagram] tenant ${tenantId}: erro ao buscar páginas do Facebook:`, err);
+    throw new AppError(400, 'META_TOKEN_ERROR', 'Token do Meta inválido ou expirado. Reconecte sua conta em Configurações → Integrações.');
+  }
 
   console.log(`[resolveInstagram] tenant ${tenantId}: Facebook retornou ${pages.length} páginas:`,
     JSON.stringify(pages.map(p => ({ pageId: p.pageId, name: p.name, hasInstagram: p.hasInstagram, instagramUserId: p.instagramUserId }))));
@@ -355,7 +367,7 @@ export async function resolveInstagramAccount(tenantId: string): Promise<Instagr
 
   const buildAccount = (p: typeof pagesWithIg[number], source: string) => {
     console.log(`[resolveInstagram] tenant ${tenantId}: ${source} — "${p.name}" IG=${p.instagramUserId} (@${p.instagramUsername || 'sem @'})`);
-    return { igUserId: p.instagramUserId!, accessToken, pageName: p.name, instagramUsername: p.instagramUsername };
+    return { igUserId: p.instagramUserId!, accessToken: p.accessToken || accessToken, pageName: p.name, instagramUsername: p.instagramUsername };
   };
 
   if (selectedPageIds.length > 0) {

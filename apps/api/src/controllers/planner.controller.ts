@@ -24,7 +24,10 @@ import {
 export async function generatePlan(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenant!.tenantId;
-    const jobStatus = startPlanGeneration(tenantId);
+    const { postCount } = z.object({
+      postCount: z.number().int().min(4).max(30).optional(),
+    }).parse(req.body ?? {});
+    const jobStatus = startPlanGeneration(tenantId, postCount);
     res.json({ success: true, data: jobStatus });
   } catch (err) { next(err); }
 }
@@ -138,15 +141,9 @@ export async function handleBulkDelete(req: Request, res: Response, next: NextFu
     const { postIds } = z.object({
       postIds: z.array(z.string().uuid()).min(1).max(100),
     }).parse(req.body);
-    console.log(`[handleBulkDelete] tenant ${tenantId}: ${postIds.length} postIds`, postIds);
     const deleted = await bulkDeletePosts(tenantId, postIds);
     res.json({ success: true, data: { count: deleted.length } });
   } catch (err) {
-    console.error('[handleBulkDelete] ERROR:', err);
-    if (err instanceof Error) {
-      console.error('[handleBulkDelete] message:', err.message);
-      console.error('[handleBulkDelete] stack:', err.stack?.split('\n').slice(0, 3).join('\n'));
-    }
     next(err);
   }
 }

@@ -25,7 +25,7 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
-export async function runPipeline(tenantId: string, jobId: string): Promise<void> {
+export async function runPipeline(tenantId: string, jobId: string, postCount = 16): Promise<void> {
   const update = (name: string, status: AgentStep['status'], pct: number) => {
     const job = jobs.get(jobId);
     if (!job) return;
@@ -66,7 +66,7 @@ export async function runPipeline(tenantId: string, jobId: string): Promise<void
     update('Strategy Agent', 'completed', 45);
 
     update('Planner Agent', 'running', 50);
-    const planner = await plannerAgent(ctx, research, strategy);
+    const planner = await plannerAgent(ctx, research, strategy, postCount);
     update('Planner Agent', 'completed', 55);
 
     update('Copywriter Agent', 'running', 60);
