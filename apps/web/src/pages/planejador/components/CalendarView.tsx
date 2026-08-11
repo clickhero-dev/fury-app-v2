@@ -1,11 +1,14 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import {
   LayoutGrid, Image, Sparkles, Film, CheckCircle, XCircle,
-  ChevronLeft, ChevronRight, Plus, Trash2, CalendarClock, X, Upload,
+  ChevronLeft, ChevronRight, Plus, Trash2, CalendarClock, X,
 } from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
+import { DeleteConfirmDialog } from './DeleteConfirmDialog';
+import { ScheduleDialog } from './ScheduleDialog';
+import { CreatePostDialog } from './CreatePostDialog';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import api from '@/lib/api';
 import type { Post } from '../types';
@@ -134,7 +137,13 @@ export function CalendarView() {
     mutationFn: async () => {
       await api.delete('/planner/posts/bulk', { data: { postIds: [...selectedIds] } });
     },
-    onSuccess: () => { clearSelection(); queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
+    onSuccess: () => {
+      const count = selectedIds.size;
+      clearSelection();
+      setShowDeleteConfirm(false);
+      showToast(count > 1 ? `${count} posts excluídos com sucesso!` : 'Post excluído com sucesso!');
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+    },
     onError: () => showToast('Erro ao excluir post(s). Tente novamente.', 'error'),
   });
 
@@ -377,325 +386,16 @@ export function CalendarView() {
   );
 }
 
-// ===== Dialogs =====
-
-function ScheduleDialog({ count, onConfirm, onClose }: {
-  count: number; onConfirm: (s: string) => void; onClose: () => void;
-}) {
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
-  const dateTime = date && time ? new Date(`${date}T${time}`).toISOString() : '';
-  return (
-    <DialogOverlay onClose={onClose}>
-      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-white mb-4">Agendar {count} post{count > 1 ? 's' : ''}</h3>
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Data</label>
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Hora</label>
-            <input
-              type="time"
-              value={time}
-              onChange={e => setTime(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm"
-            />
-          </div>
-        </div>
-        <div className="flex gap-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-700 text-gray-300 text-sm">Cancelar</button>
-          <button
-            onClick={() => dateTime && onConfirm(dateTime)}
-            disabled={!dateTime}
-            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-light disabled:opacity-50 text-white text-sm"
-          >
-            Confirmar
-          </button>
-        </div>
-      </div>
-    </DialogOverlay>
-  );
-}
-
-function DeleteConfirmDialog({ count, onConfirm, onClose, loading }: {
-  count: number; onConfirm: () => void; onClose: () => void; loading: boolean;
-}) {
-  return (
-    <DialogOverlay onClose={onClose}>
-      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-white mb-2">Excluir {count} post{count > 1 ? 's' : ''}?</h3>
-        <p className="text-sm text-gray-400 mb-4">Esta ação não pode ser desfeita.</p>
-        <div className="flex gap-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-700 text-gray-300 text-sm">Cancelar</button>
-          <button
-            onClick={onConfirm}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm"
-          >
-            {loading ? 'Excluindo...' : 'Excluir'}
-          </button>
-        </div>
-      </div>
-    </DialogOverlay>
-  );
-}
-
-function CreatePostDialog({ year, month, onClose, onCreated, preselectedDay, onError }: {
-  year: number; month: number; onClose: () => void; onCreated: () => void; preselectedDay?: number | null; onError?: (msg: string) => void;
-}) {
-  const [caption, setCaption] = useState('');
-  const [postType, setPostType] = useState('image');
-  const [scheduledDate, setScheduledDate] = useState('');
-  const [scheduledTime, setScheduledTime] = useState('');
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
-  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const today = preselectedDay ?? new Date().getDate();
-  // ponytail: dia clicado no grid > dia de hoje
-
-  const scheduledAt = scheduledDate && scheduledTime
-    ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
-    : '';
-
-  const handleFile = (file: File) => {
-    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
-    setMediaFile(file);
-    setMediaPreview(URL.createObjectURL(file));
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  };
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      let imageUrl: string | undefined;
-      if (mediaFile) {
-        const formData = new FormData();
-        formData.append('file', mediaFile);
-        const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        imageUrl = uploadRes.data.url;
-      }
-      await api.post('/planner/posts', {
-        caption, postType, dayIndex: today,
-        scheduledAt: scheduledAt || undefined,
-        imageUrl,
-      });
-    },
-    onSuccess: () => {
-      onCreated();
-    },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.message || err?.response?.data?.error?.message || err?.message || 'Erro ao criar post';
-      onError?.(msg);
-    },
-  });
-
-  const TYPE_OPTIONS = [
-    { value: 'image', label: 'Post', icon: Image, desc: 'Imagem única' },
-    { value: 'carousel', label: 'Carrossel', icon: LayoutGrid, desc: 'Múltiplas imagens' },
-    { value: 'reel', label: 'Reels', icon: Film, desc: 'Vídeo curto' },
-    { value: 'stories', label: 'Stories', icon: Sparkles, desc: 'Efêmero 24h' },
-  ] as const;
-
-  const canCreate = caption.trim() && mediaFile && !mutation.isPending;
-
-  return (
-    <DialogOverlay onClose={onClose}>
-      <div
-        className="bg-gray-900 border border-gray-700/80 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl relative"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-0">
-          <h3 className="text-lg font-bold text-white">Novo post</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-500 hover:text-gray-300 transition-colors">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
-          {/* Left: media upload */}
-          <div>
-            <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
-              Mídia <span className="text-red-400">*</span>
-            </label>
-            {mediaPreview ? (
-              <div className="relative group rounded-xl overflow-hidden border border-gray-700/50 bg-gray-800">
-                {mediaFile?.type.startsWith('video/') ? (
-                  <video src={mediaPreview} controls className="w-full aspect-square object-cover" />
-                ) : (
-                  <img src={mediaPreview} alt="Preview" className="w-full aspect-square object-cover" />
-                )}
-                <button
-                  onClick={() => { setMediaFile(null); setMediaPreview(null); }}
-                  className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
-                  <p className="text-xs text-white font-medium truncate">{mediaFile?.name}</p>
-                  <p className="text-[10px] text-gray-300">{(mediaFile!.size / 1024 / 1024).toFixed(1)} MB</p>
-                </div>
-              </div>
-            ) : (
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={clsx(
-                  'flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-all',
-                  dragOver
-                    ? 'border-accent bg-accent/10 scale-[1.02]'
-                    : 'border-gray-600 hover:border-gray-500 bg-gray-800/40',
-                )}
-              >
-                <Upload className="h-8 w-8 text-gray-500 mb-2" />
-                <p className="text-sm text-gray-400 font-medium">Arraste ou clique</p>
-                <p className="text-xs text-gray-600 mt-1">PNG, JPG, WebP, MP4</p>
-              </div>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
-              onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
-              className="hidden"
-            />
-          </div>
-
-          {/* Right: post details */}
-          <div className="space-y-4">
-            {/* Type selector */}
-            <div>
-              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Tipo</label>
-              <div className="grid grid-cols-2 gap-2">
-                {TYPE_OPTIONS.map(opt => {
-                  const Icon = opt.icon;
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => setPostType(opt.value)}
-                      className={clsx(
-                        'flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all text-left',
-                        postType === opt.value
-                          ? 'border-accent bg-accent/10 text-accent shadow-[0_0_12px_rgba(234,88,12,0.15)]'
-                          : 'border-gray-700/50 hover:border-gray-600 text-gray-400 hover:text-gray-300',
-                      )}
-                    >
-                      <Icon className="h-5 w-5" />
-                      <span className="text-xs font-medium">{opt.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Schedule */}
-            <div>
-              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">
-                Agendar publicação
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Data</label>
-                  <input
-                    type="date"
-                    value={scheduledDate}
-                    onChange={e => setScheduledDate(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-accent focus:outline-none transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Hora</label>
-                  <input
-                    type="time"
-                    value={scheduledTime}
-                    onChange={e => setScheduledTime(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-accent focus:outline-none transition-colors"
-                  />
-                </div>
-              </div>
-              <p className="text-[10px] text-gray-600 mt-1">Deixe em branco para publicar manualmente</p>
-            </div>
-
-            {/* Caption */}
-            <div>
-              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">
-                Legenda <span className="text-red-400">*</span>
-              </label>
-              <textarea
-                value={caption}
-                onChange={e => setCaption(e.target.value)}
-                rows={4}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm resize-none focus:border-accent focus:outline-none transition-colors"
-                placeholder="Escreva a legenda do post..."
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={onClose}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => mutation.mutate()}
-                disabled={!canCreate}
-                className={clsx(
-                  'flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-medium transition-all',
-                  canCreate
-                    ? 'bg-accent hover:bg-accent-light active:scale-[0.98]'
-                    : 'bg-gray-700 text-gray-500 cursor-not-allowed',
-                )}
-              >
-                {mutation.isPending ? 'Criando...' : 'Criar post'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </DialogOverlay>
-  );
-}
-
-// ===== Shared overlay =====
-
-function DialogOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      {children}
-    </div>
-  );
-}
-
 // ===== Skeleton / Error =====
 
 function CalendarSkeleton() {
   return (
     <div className="space-y-4 animate-pulse">
-      <div className="h-10 w-64 rounded-lg bg-gray-800/40" />
+      <div className="h-10 w-64 rounded-lg bg-surface-secondary" />
       <div className="grid grid-cols-7 gap-1.5">
-        {DAY_LABELS.map(d => <div key={d} className="text-center text-xs text-gray-500 py-2">{d}</div>)}
+        {DAY_LABELS.map(d => <div key={d} className="text-center text-xs text-text-tertiary py-2">{d}</div>)}
         {Array.from({ length: 35 }).map((_, i) => (
-          <div key={i} className="min-h-[80px] rounded-lg border border-gray-700/50 bg-gray-800/30" />
+          <div key={i} className="min-h-[80px] rounded-lg border border-border bg-surface-secondary/60" />
         ))}
       </div>
     </div>
@@ -705,8 +405,8 @@ function CalendarSkeleton() {
 function CalendarError() {
   return (
     <div className="text-center py-12">
-      <p className="text-red-400 text-sm mb-2">Erro ao carregar calendário</p>
-      <p className="text-gray-500 text-xs">Verifique sua conexão</p>
+      <p className="text-error text-sm mb-2">Erro ao carregar calendário</p>
+      <p className="text-text-tertiary text-xs">Verifique sua conexão</p>
     </div>
   );
 }
