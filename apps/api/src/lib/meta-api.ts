@@ -469,6 +469,7 @@ export interface MetaFacebookPage {
   hasInstagram: boolean;
   instagramUserId: string | null;
   instagramUsername: string | null;
+  accessToken: string;
 }
 
 interface MetaPagesResponse {
@@ -489,7 +490,7 @@ export async function getUserFacebookPages(
 ): Promise<MetaFacebookPage[]> {
   const whatsappField = opts?.includeWhatsApp ? ',whatsapp_business_account' : '';
   const response = await metaApiCall<MetaPagesResponse>(
-    `/me/accounts?fields=id,name${whatsappField},instagram_business_account{id,username}&limit=100`,
+    `/me/accounts?fields=id,name,access_token${whatsappField},instagram_business_account{id,username}&limit=100`,
     accessToken
   );
 
@@ -500,6 +501,7 @@ export async function getUserFacebookPages(
     hasInstagram: Boolean(page.instagram_business_account?.id),
     instagramUserId: page.instagram_business_account?.id ?? null,
     instagramUsername: page.instagram_business_account?.username ?? null,
+    accessToken: (page as any).access_token ?? '',
   }));
 }
 

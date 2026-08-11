@@ -367,7 +367,7 @@ export async function resolveInstagramAccount(tenantId: string): Promise<Instagr
 
   const buildAccount = (p: typeof pagesWithIg[number], source: string) => {
     console.log(`[resolveInstagram] tenant ${tenantId}: ${source} — "${p.name}" IG=${p.instagramUserId} (@${p.instagramUsername || 'sem @'})`);
-    return { igUserId: p.instagramUserId!, accessToken, pageName: p.name, instagramUsername: p.instagramUsername };
+    return { igUserId: p.instagramUserId!, accessToken: p.accessToken || accessToken, pageName: p.name, instagramUsername: p.instagramUsername };
   };
 
   if (selectedPageIds.length > 0) {
