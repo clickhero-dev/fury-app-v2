@@ -77,6 +77,15 @@ export async function runPipeline(tenantId: string, jobId: string, postCount = 1
     const creative = await creativeAgent(ctx, planner);
     update('Creative Agent', 'completed', 75);
 
+    const totalPosts = planner.posts.length;
+    const imagesOk = creative.posts.filter(p => p.imageUrl).length;
+    if (imagesOk < totalPosts * 0.8) {
+      fail(new Error(
+        `Apenas ${imagesOk} de ${totalPosts} imagens foram geradas. Tente novamente mais tarde.`,
+      ));
+      return;
+    }
+
     update('Quality Agent', 'running', 80);
     let quality = await qualityAgent(planner, copywriter);
     update('Quality Agent', 'completed', 85);

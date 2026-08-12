@@ -19,6 +19,7 @@ import type { Post } from '../types';
 interface CalendarPost extends Post {
   _source?: 'plan' | 'manual';
   _planTitle?: string;
+  imageUrl?: string | null;
 }
 
 interface CalendarData {
@@ -242,14 +243,22 @@ export function CalendarView() {
                 }
               }}
               className={clsx(
-                'flex items-center gap-1 mt-1 px-1.5 py-1 rounded cursor-pointer text-[10px] transition-all',
+                'flex items-center gap-1.5 mt-1 px-1.5 py-1 rounded cursor-pointer text-[10px] transition-all',
                 isSelected
                   ? 'bg-accent/30 ring-1 ring-accent shadow-[0_0_8px_rgba(234,88,12,0.2)]'
                   : 'hover:bg-surface-secondary',
                 dragPostId === post.id && 'opacity-50',
               )}
             >
-              <Icon className={clsx('h-3 w-3 shrink-0', isSelected ? 'text-accent' : 'text-text-tertiary')} />
+              {post.imageUrl ? (
+                <img
+                  src={post.imageUrl}
+                  alt=""
+                  className={clsx('h-6 w-6 rounded object-cover shrink-0', isSelected && 'ring-1 ring-accent')}
+                />
+              ) : (
+                <Icon className={clsx('h-3 w-3 shrink-0', isSelected ? 'text-accent' : 'text-text-tertiary')} />
+              )}
               <span className={clsx('truncate', isSelected ? 'text-accent font-medium' : 'text-text-secondary')}>
                 {post.title || post.caption?.slice(0, 20) || 'Sem título'}
               </span>
@@ -271,8 +280,10 @@ export function CalendarView() {
       {toast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300">
           <div className={clsx(
-            'flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium shadow-2xl backdrop-blur-md',
-            toast.type === 'success' ? 'bg-green-900/95 border border-green-600/50 text-green-200' : 'bg-red-900/95 border border-red-600/50 text-red-200',
+            'flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium shadow-2xl backdrop-blur-md border',
+            toast.type === 'success'
+              ? 'bg-success/95 border-success/30 text-white'
+              : 'bg-error/95 border-error/30 text-white',
           )}>
             {toast.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
             {toast.message}
@@ -331,7 +342,7 @@ export function CalendarView() {
           </button>
           <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-900/20 hover:bg-red-900/40 text-red-400 text-sm transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-error/10 hover:bg-error/20 text-error text-sm transition-colors"
           >
             <Trash2 className="h-4 w-4" /> Excluir
           </button>

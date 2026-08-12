@@ -36,6 +36,10 @@
   --color-error: #da3633;
   --color-error-light: #fde8e7;
 
+  /* Paleta auxiliar – usada em gradientes e badges */
+  --color-purple-500: #a855f7;
+  --color-blue-500: #3b82f6;
+
   /* Admin Theme Aliases (Usados no TenantDetailPage e subcomponentes do Admin) */
   --color-admin-bg: #0C0D0A;
   --color-admin-surface: #11120E;
@@ -268,6 +272,31 @@ html.dark .bg-blue-600 {
 }
 html.dark .hover\:bg-blue-700:hover {
   background-color: #1d4ed8 !important;
+}
+
+html.dark .bg-purple-100 {
+  background-color: color-mix(in srgb, #a855f7 22%, var(--color-surface-secondary)) !important;
+}
+html.dark .text-purple-600 {
+  color: #c084fc !important;
+}
+html.dark .bg-pink-100 {
+  background-color: color-mix(in srgb, #ec4899 22%, var(--color-surface-secondary)) !important;
+}
+html.dark .text-pink-600 {
+  color: #f472b6 !important;
+}
+html.dark .bg-red-50 {
+  background-color: color-mix(in srgb, var(--color-error) 12%, var(--color-surface)) !important;
+}
+html.dark .text-red-700 {
+  color: #f85149 !important;
+}
+html.dark .bg-green-100 {
+  background-color: color-mix(in srgb, var(--color-success) 22%, var(--color-surface-secondary)) !important;
+}
+html.dark .text-green-600 {
+  color: #3fb950 !important;
 }
 
 /* === Amber colors in dark mode === */

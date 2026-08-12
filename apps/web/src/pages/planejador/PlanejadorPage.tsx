@@ -145,7 +145,7 @@ export function PlanejadorPage() {
     return (
       <AppLayout>
         <div className="max-w-6xl mx-auto px-4 py-12 text-center">
-          <p className="text-gray-500">Recuperando planejamento...</p>
+          <p className="text-text-tertiary">Recuperando planejamento...</p>
         </div>
       </AppLayout>
     );
@@ -155,7 +155,7 @@ export function PlanejadorPage() {
     <AppLayout>
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {view === 'generating' && (
-          <div className="rounded-xl bg-gray-800/40 border border-gray-700/50 p-6">
+          <div className="rounded-xl bg-surface border border-border p-6 shadow-sm">
             <GeneratingState jobStatus={jobStatus} />
           </div>
         )}
@@ -172,8 +172,8 @@ export function PlanejadorPage() {
 
         {view === 'idle' && errorMsg && (
           <div className="space-y-4">
-            <div className="rounded-xl bg-red-900/20 border border-red-700/30 p-4 text-center">
-              <p className="text-red-400 text-sm">{errorMsg}</p>
+            <div className="rounded-xl bg-error/5 border border-error/20 p-4 text-center">
+              <p className="text-error text-sm font-medium">{errorMsg}</p>
             </div>
             {!preLoading && (
               <IdleStatus onGenerate={handleGenerate} isLoading={generateMutation.isPending} checks={checks} />

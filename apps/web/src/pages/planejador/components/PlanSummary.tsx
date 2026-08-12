@@ -41,10 +41,10 @@ export function PlanSummary({ plan, onViewCalendar }: PlanSummaryProps) {
   const stories = summary.storiesCount ?? plan.posts.filter((p) => p.postType === 'stories').length;
 
   const items = [
-    { icon: Film, label: 'Reels', value: reels, color: 'text-purple-600 bg-purple-100' },
-    { icon: LayoutGrid, label: 'Carrosséis', value: carousels, color: 'text-blue-600 bg-blue-100' },
+    { icon: Film, label: 'Reels', value: reels, color: 'text-purple-500 bg-purple-500/10' },
+    { icon: LayoutGrid, label: 'Carrosséis', value: carousels, color: 'text-blue-500 bg-blue-500/10' },
     { icon: Image, label: 'Posts', value: images, color: 'text-success bg-success/10' },
-    { icon: Sparkles, label: 'Stories', value: stories, color: 'text-pink-600 bg-pink-100' },
+    { icon: Sparkles, label: 'Stories', value: stories, color: 'text-pink-500 bg-pink-500/10' },
   ];
 
   return (

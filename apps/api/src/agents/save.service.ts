@@ -17,8 +17,9 @@ export interface savePlanToDbInput {
 
 export async function savePlanToDb(input: savePlanToDbInput): Promise<string> {
   const { tenantId, context, research, analytics, strategy, planner, copywriter, creative, quality, scheduler, branding } = input;
-  const periodStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const periodEnd = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
+  const now = new Date();
+  const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
   const metadata = { summary: planner.summary, research, analytics, strategy, quality, scheduler, branding } as Record<string, unknown>;
 
@@ -38,6 +39,16 @@ export async function savePlanToDb(input: savePlanToDbInput): Promise<string> {
     const merged = planner.posts.map(p => {
       const copy = copywriter.posts.find(c => c.dayIndex === p.dayIndex);
       const cr = creative.posts.find(c => c.dayIndex === p.dayIndex);
+
+      // Calcula scheduledAt baseado no dayIndex do mês atual
+      // Horário padrão: 12:00 (horário de pico)
+      const scheduledDate = new Date(now.getFullYear(), now.getMonth(), p.dayIndex, 12, 0, 0);
+      // Se o dia já passou ou é hoje, agenda para o próximo mês (mínimo d+1)
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+      if (scheduledDate < tomorrow) {
+        scheduledDate.setMonth(scheduledDate.getMonth() + 1);
+      }
+
       return {
         tenantId,
         planId: plan.id,
@@ -48,7 +59,9 @@ export async function savePlanToDb(input: savePlanToDbInput): Promise<string> {
         cta: copy?.cta ?? '',
         hashtags: copy?.hashtags ?? [],
         imagePrompt: cr?.imagePrompt ?? '',
+        imageUrl: cr?.imageUrl ?? null,
         dayIndex: p.dayIndex,
+        scheduledAt: scheduledDate,
         status: 'draft' as const,
       };
     });

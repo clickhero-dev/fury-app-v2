@@ -13,7 +13,7 @@ export interface PlannerPost { dayIndex: number; postType: 'reel' | 'carousel' |
 export interface CopywriterOutput { posts: CopyPost[]; }
 export interface CopyPost { dayIndex: number; caption: string; cta: string; hashtags: string[]; }
 export interface CreativeOutput { posts: CreativePost[]; }
-export interface CreativePost { dayIndex: number; imagePrompt: string; }
+export interface CreativePost { dayIndex: number; imagePrompt: string; imageUrl?: string; }
 export interface QualityOutput { passed: boolean; checks: { name: string; passed: boolean; message?: string }[]; failedItem?: { agent: string; reason: string }; }
 export interface SchedulerOutput { scheduled: { dayIndex: number; platform: string }[]; approvalStatus: 'pending' | 'approved'; }
 export interface BrandingOutput { approved: boolean; notes?: string; violations?: string[]; }
