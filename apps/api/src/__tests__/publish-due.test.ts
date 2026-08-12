@@ -119,6 +119,117 @@ describe('publishSinglePost', () => {
   });
 });
 
+describe('publishSinglePost — URL sanitization', () => {
+  it('sanitiza URL com prefixo @url: e crases', async () => {
+    createInstagramMedia.mockResolvedValue('container_1');
+    publishInstagramMedia.mockResolvedValue('media_1');
+
+    await publishSinglePost(
+      { id: 'post-san-1', postType: 'image', caption: 'teste', imageUrl: '@url:`https://cdn.example.com/img.jpg`' },
+      igUserId,
+      accessToken,
+    );
+
+    expect(createInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, {
+      imageUrl: 'https://cdn.example.com/img.jpg',
+      caption: 'teste',
+      mediaType: undefined,
+    });
+  });
+
+  it('sanitiza URL com apenas crases', async () => {
+    createInstagramMedia.mockResolvedValue('container_2');
+    publishInstagramMedia.mockResolvedValue('media_2');
+
+    await publishSinglePost(
+      { id: 'post-san-2', postType: 'image', imageUrl: '`https://cdn.example.com/img.png`' },
+      igUserId,
+      accessToken,
+    );
+
+    expect(createInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, {
+      imageUrl: 'https://cdn.example.com/img.png',
+      caption: undefined,
+      mediaType: undefined,
+    });
+  });
+
+  it('sanitiza URL com aspas residuais', async () => {
+    createInstagramMedia.mockResolvedValue('container_3');
+    publishInstagramMedia.mockResolvedValue('media_3');
+
+    await publishSinglePost(
+      { id: 'post-san-3', postType: 'image', imageUrl: '"https://cdn.example.com/img.png"' },
+      igUserId,
+      accessToken,
+    );
+
+    expect(createInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, {
+      imageUrl: 'https://cdn.example.com/img.png',
+      caption: undefined,
+      mediaType: undefined,
+    });
+  });
+
+  it('aceita URL já limpa sem modificação', async () => {
+    createInstagramMedia.mockResolvedValue('container_4');
+    publishInstagramMedia.mockResolvedValue('media_4');
+
+    await publishSinglePost(
+      { id: 'post-san-4', postType: 'image', imageUrl: 'https://cdn.example.com/img.png' },
+      igUserId,
+      accessToken,
+    );
+
+    expect(createInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, {
+      imageUrl: 'https://cdn.example.com/img.png',
+      caption: undefined,
+      mediaType: undefined,
+    });
+  });
+
+  it('lança erro se URL após sanitização não é http/https', async () => {
+    await expect(
+      publishSinglePost(
+        { id: 'post-san-5', postType: 'image', imageUrl: '@url:`not-a-url`' },
+        igUserId,
+        accessToken,
+      ),
+    ).rejects.toThrow('imageUrl inválido após sanitização');
+  });
+});
+
+describe('publishSinglePost — erro #10 (permissão)', () => {
+  it('traduz erro (#10) com dicas de diagnóstico', async () => {
+    // Simula o erro que a Meta API retorna para code 10
+    const metaErr: any = new Error('[Meta API] 10: (#10) Application does not have permission for this action');
+    metaErr.metaCode = 10;
+    createInstagramMedia.mockRejectedValue(metaErr);
+
+    await expect(
+      publishSinglePost(
+        { id: 'post-err-10', postType: 'image', imageUrl: 'https://cdn.example.com/img.png' },
+        igUserId,
+        accessToken,
+      ),
+    ).rejects.toThrow(/permissão negada pela Meta API \(#10\)/);
+  });
+
+  it('erros não-#10 passam direto sem tradução', async () => {
+    const metaErr: any = new Error('[Meta API] 100: Invalid parameter');
+    metaErr.metaCode = 100;
+    createInstagramMedia.mockRejectedValue(metaErr);
+
+    await expect(
+      publishSinglePost(
+        { id: 'post-err-100', postType: 'image', imageUrl: 'https://cdn.example.com/img.png' },
+        igUserId,
+        accessToken,
+      ),
+    ).rejects.toThrow('Invalid parameter');
+  });
+});
+
 describe('retry backoff', () => {
   it('backoff é [1, 5, 15] minutos', () => {
     const RETRY_BACKOFF_MINUTES = [1, 5, 15];

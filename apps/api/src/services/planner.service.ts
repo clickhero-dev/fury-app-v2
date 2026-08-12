@@ -384,23 +384,73 @@ export async function resolveInstagramAccount(tenantId: string): Promise<Instagr
  * Publica um post no Instagram. Função pura — recebe tudo por parâmetro.
  * Testável isoladamente com mock de metaApiCall.
  */
+/**
+ * Sanitiza a URL da mídia antes de enviar para a Meta API.
+ * Remove prefixos/sufixos incorretos que podem ter sido introduzidos por
+ * processamento de LLM ou serialização (ex: "@url:`https://...`").
+ * Se a URL não parecer válida após a limpeza, lança erro descritivo.
+ */
+function sanitizeMediaUrl(rawUrl: string, postId: string): string {
+  let url = rawUrl.trim();
+
+  // Remove prefixo "@url:" (artefato de LLM/markdown)
+  url = url.replace(/^@url:\s*/, '');
+
+  // Remove crases (backticks) envolvendo a URL
+  url = url.replace(/^`+|`+$/g, '');
+
+  // Remove aspas residuais
+  url = url.replace(/^["']+|["']+$/g, '');
+
+  url = url.trim();
+
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    throw new Error(
+      `Post ${postId} tem imageUrl inválido após sanitização: "${url}" (original: "${rawUrl}"). ` +
+      `A URL deve começar com http:// ou https://`
+    );
+  }
+
+  return url;
+}
+
 export async function publishSinglePost(
   post: { id: string; postType: string; caption?: string | null; imageUrl?: string | null },
   igUserId: string,
   accessToken: string,
 ): Promise<{ mediaId: string }> {
   const isReel = post.postType === 'reel';
-  const mediaUrl = post.imageUrl;
-  if (!mediaUrl) {
+  if (!post.imageUrl) {
     throw new Error(`Post ${post.id} não tem imageUrl para publicar`);
   }
+  const mediaUrl = sanitizeMediaUrl(post.imageUrl, post.id);
 
   // 1. Criar media container
-  const containerId = await createInstagramMedia(igUserId, accessToken, {
-    [isReel ? 'videoUrl' : 'imageUrl']: mediaUrl,
-    caption: post.caption || undefined,
-    mediaType: isReel ? 'REELS' : undefined,
-  });
+  let containerId: string;
+  try {
+    containerId = await createInstagramMedia(igUserId, accessToken, {
+      [isReel ? 'videoUrl' : 'imageUrl']: mediaUrl,
+      caption: post.caption || undefined,
+      mediaType: isReel ? 'REELS' : undefined,
+    });
+  } catch (err: any) {
+    // Erro (#10) — Application does not have permission for this action
+    // Ver documentação: https://developers.facebook.com/docs/instagram-platform/content-publishing
+    if (err?.metaCode === 10) {
+      throw new Error(
+        `Post ${post.id}: permissão negada pela Meta API (#10). ` +
+        `Possíveis causas:\n` +
+        `1. O App do Meta não está em modo "Live" ou a permissão ` +
+        `"instagram_content_publish" não foi aprovada via App Review\n` +
+        `2. A Página do Facebook exige PPA (Page Publishing Authorization) — ` +
+        `complete em facebook.com → Configurações da Página → Autorização\n` +
+        `3. Token não é um Page Token válido — reconecte a conta Meta em ` +
+        `Configurações → Integrações\n` +
+        `Erro original: ${err.message}`
+      );
+    }
+    throw err;
+  }
 
   // 2. Se vídeo: polling até FINISHED (3 tentativas, backoff 3s/6s/12s)
   if (isReel) {
