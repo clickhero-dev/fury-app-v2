@@ -7,25 +7,17 @@
     "module": "ESNext",
     "types": ["vite/client"],
     "skipLibCheck": true,
-
-    /* Resolve o erro de '--jsx is not set' */
     "jsx": "react-jsx",
-
-    /* Ignora erros de variáveis soltas e tipagens incompletas no CI */
     "strict": false,
     "noImplicitAny": false,
     "strictNullChecks": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-
-    /* Alinha o bundler com o Vite */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-
-    /* Resolve TODOS os erros de 'Cannot find module @/*' */
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
@@ -35,5 +27,6 @@
       "@/types/*": ["./src/types/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/*.spec.ts", "src/**/*.spec.tsx"]
 }
