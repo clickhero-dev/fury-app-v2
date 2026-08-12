@@ -3,6 +3,7 @@ import { Sparkles, CheckCircle, AlertCircle, Minus, Plus } from 'lucide-react';
 
 export interface PrerequisiteCheck {
   label: string;
+  short: string;
   ok: boolean;
 }
 
@@ -15,56 +16,58 @@ interface IdleStatusProps {
 const MIN_POSTS = 4;
 const MAX_POSTS = 30;
 const DEFAULT_POSTS = 16;
+const QUICK_OPTIONS = [8, 12, 16, 24, 30];
 
 export function IdleStatus({ onGenerate, isLoading, checks }: IdleStatusProps) {
   const [postCount, setPostCount] = useState(DEFAULT_POSTS);
   const allOk = !checks || checks.every(c => c.ok);
+  const pending = checks?.filter(c => !c.ok) ?? [];
 
   const decrement = () => setPostCount(p => Math.max(MIN_POSTS, p - 1));
   const increment = () => setPostCount(p => Math.min(MAX_POSTS, p + 1));
 
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-6">
-      {/* Icon */}
-      <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-accent/10 mb-6">
-        <Sparkles className="w-8 h-8 text-accent" />
+    <div className="flex flex-col items-center justify-center py-12 px-6">
+      {/* Header */}
+      <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-accent/10 mb-4">
+        <Sparkles className="w-6 h-6 text-accent" />
       </div>
-
-      {/* Title */}
-      <h1 className="text-3xl font-semibold text-text-primary mb-3 text-center">
+      <h1 className="text-2xl font-semibold text-text-primary mb-1 text-center">
         Planejador IA
       </h1>
-      <p className="text-text-tertiary text-lg max-w-md text-center mb-12">
-        Sua empresa está pronta. A IA vai criar um mês inteiro de conteúdo com um clique.
+      <p className="text-text-tertiary text-sm max-w-md text-center mb-6">
+        Crie um mês inteiro de conteúdo pronto para publicar.
       </p>
 
-      {/* Dynamic checks */}
-      {checks && (
-        <div className="w-full max-w-sm space-y-3 mb-12">
-          {checks.map((c) => (
-            <div
-              key={c.label}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl bg-surface border border-border"
-            >
-              {c.ok ? (
-                <CheckCircle className="w-5 h-5 text-success shrink-0" />
-              ) : (
-                <AlertCircle className="w-5 h-5 text-yellow-500 shrink-0" />
-              )}
-              <span className={c.ok ? 'text-text-secondary text-sm' : 'text-text-primary text-sm font-medium'}>
-                {c.label}
-              </span>
-            </div>
-          ))}
+      {/* Prerequisites — linha compacta */}
+      {checks && allOk && (
+        <div className="flex items-center gap-2 mb-6">
+          <CheckCircle className="w-4 h-4 text-success shrink-0" />
+          <span className="text-sm text-text-secondary">
+            {checks.map(c => c.short).join(' · ')} prontos
+          </span>
+        </div>
+      )}
+      {pending.length > 0 && (
+        <div className="flex items-start gap-2 w-full max-w-sm px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/25 mb-6">
+          <AlertCircle className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-yellow-600">
+            Faltam: <span className="font-medium">{pending.map(c => c.short).join(', ')}</span>.
+            Complete os requisitos para liberar a geração.
+          </p>
         </div>
       )}
 
-      {/* Post count selector */}
+      {/* Post count — pergunta em destaque */}
       <div className="w-full max-w-sm mb-8">
-        <p className="text-text-tertiary text-sm text-center mb-3">
-          Quantas postagens você quer gerar?
+        <h2 className="text-xl font-semibold text-text-primary text-center mb-2">
+          Quantos posts você quer gerar?
+        </h2>
+        <p className="text-text-tertiary text-sm text-center mb-5">
+          Escolha a quantidade de conteúdos para o próximo mês.
         </p>
-        <div className="flex items-center justify-center gap-4">
+
+        <div className="flex items-center justify-center gap-4 mb-5">
           <button
             onClick={decrement}
             disabled={postCount <= MIN_POSTS || isLoading}
@@ -74,7 +77,7 @@ export function IdleStatus({ onGenerate, isLoading, checks }: IdleStatusProps) {
           >
             <Minus className="w-5 h-5" />
           </button>
-          <div className="flex items-baseline gap-1">
+          <div className="flex items-baseline gap-1 w-28 justify-center">
             <span className="text-4xl font-bold text-accent tabular-nums">{postCount}</span>
             <span className="text-text-tertiary text-lg">posts</span>
           </div>
@@ -88,7 +91,25 @@ export function IdleStatus({ onGenerate, isLoading, checks }: IdleStatusProps) {
             <Plus className="w-5 h-5" />
           </button>
         </div>
-        <p className="text-text-tertiary text-xs text-center mt-2">
+
+        <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
+          {QUICK_OPTIONS.map(n => (
+            <button
+              key={n}
+              onClick={() => setPostCount(n)}
+              disabled={isLoading}
+              className={`px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors
+                ${postCount === n
+                  ? 'bg-accent text-white border-accent'
+                  : 'bg-surface text-text-secondary border-border hover:bg-surface-secondary hover:text-text-primary'
+                } disabled:opacity-40 disabled:cursor-not-allowed`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+
+        <p className="text-text-tertiary text-xs text-center mt-3">
           Mínimo {MIN_POSTS} · Máximo {MAX_POSTS}
         </p>
       </div>
@@ -97,11 +118,11 @@ export function IdleStatus({ onGenerate, isLoading, checks }: IdleStatusProps) {
       <button
         onClick={() => onGenerate(postCount)}
         disabled={isLoading || !allOk}
-        className="relative px-10 py-4 bg-accent hover:bg-accent-light disabled:opacity-50 
+        className="relative px-10 py-3.5 bg-accent hover:bg-accent-light disabled:opacity-50
                    text-white font-semibold rounded-2xl text-lg transition-all duration-200
                    shadow-lg shadow-accent/25 hover:shadow-accent-light/40
                    disabled:cursor-not-allowed"
-        title={!allOk ? 'Complete todos os requisitos acima para gerar' : undefined}
+        title={!allOk ? 'Complete os requisitos pendentes para gerar' : undefined}
       >
         {isLoading ? (
           <span className="flex items-center gap-2">

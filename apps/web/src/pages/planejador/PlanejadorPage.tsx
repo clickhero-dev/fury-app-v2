@@ -52,10 +52,10 @@ export function PlanejadorPage() {
 
   const checks: PrerequisiteCheck[] | undefined = pre
     ? [
-        { label: 'Meta conectada (Instagram + Facebook)', ok: pre.metaConnected },
-        { label: 'Produto principal cadastrado', ok: pre.hasProduct },
-        { label: 'Objetivo de negócio definido', ok: pre.hasObjective },
-        { label: 'Tom de voz definido', ok: pre.hasVoiceTone },
+        { label: 'Meta conectada (Instagram + Facebook)', short: 'Meta', ok: pre.metaConnected },
+        { label: 'Produto principal cadastrado', short: 'Produto', ok: pre.hasProduct },
+        { label: 'Objetivo de negócio definido', short: 'Objetivo', ok: pre.hasObjective },
+        { label: 'Tom de voz definido', short: 'Tom de voz', ok: pre.hasVoiceTone },
       ]
     : undefined;
 

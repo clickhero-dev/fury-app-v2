@@ -1,69 +1,59 @@
-import { CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import type { JobStatus } from '../types';
+import { overallProgress, stageLabel } from '../progress';
 
 interface GeneratingStateProps {
   jobStatus: JobStatus | null;
 }
 
 export function GeneratingState({ jobStatus }: GeneratingStateProps) {
-  const agents = [
-    'Context Agent', 'Research Agent', 'Analytics Agent',
-    'Strategy Agent', 'Planner Agent', 'Copywriter Agent',
-    'Creative Agent', 'Quality Agent', 'Scheduler Agent', 'Branding Agent',
-  ];
-
   if (!jobStatus) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-        <span className="ml-3 text-gray-400">Iniciando pipeline...</span>
+      <div className="flex flex-col items-center justify-center py-16 px-6">
+        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+        <p className="mt-4 text-sm text-text-secondary">Iniciando pipeline…</p>
       </div>
     );
   }
 
   if (jobStatus.status === 'error') {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-red-400">
-        <AlertCircle className="h-12 w-12 mb-4" />
-        <p className="text-lg font-semibold">Erro na geração</p>
-        <p className="text-sm text-gray-500 mt-1">{jobStatus.error || 'Erro desconhecido'}</p>
+      <div className="flex flex-col items-center justify-center py-16 px-6">
+        <AlertCircle className="h-12 w-12 mb-4 text-error" />
+        <p className="text-lg font-semibold text-text-primary">Erro na geração</p>
+        <p className="text-sm text-text-tertiary mt-1">{jobStatus.error || 'Erro desconhecido'}</p>
       </div>
     );
   }
 
+  const done = jobStatus.status === 'done';
+  const pct = done ? 100 : overallProgress(jobStatus.agentProgress);
+
   return (
-    <div className="space-y-3 py-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
-        <span className="text-sm text-gray-300">
-          {jobStatus.status === 'done' ? 'Pipeline concluído' : `Processando: ${jobStatus.currentAgent}`}
-        </span>
+    <div className="flex flex-col items-center justify-center py-16 px-6">
+      {done ? (
+        <CheckCircle2 className="h-8 w-8 text-success mb-4" />
+      ) : (
+        <Loader2 className="h-8 w-8 animate-spin text-accent mb-4" />
+      )}
+
+      <p className="text-base font-medium text-text-primary text-center mb-1">
+        {stageLabel(jobStatus.currentAgent)}
+      </p>
+      <p className="text-2xl font-semibold text-text-secondary tabular-nums mb-6">{pct}%</p>
+
+      <div className="w-full max-w-md h-2.5 rounded-full bg-surface-secondary border border-border overflow-hidden">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-accent to-purple-500 transition-all duration-500 ease-out"
+          style={{ width: `${pct}%` }}
+        />
       </div>
-      <div className="grid gap-2">
-        {agents.map(name => {
-          const step = jobStatus.agentProgress.find(s => s.name === name);
-          const status = step?.status ?? 'pending';
-          return (
-            <div key={name} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-800/50">
-              {status === 'completed' && <CheckCircle className="h-5 w-5 text-green-400 shrink-0" />}
-              {status === 'running' && <Loader2 className="h-5 w-5 animate-spin text-blue-400 shrink-0" />}
-              {status === 'failed' && <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />}
-              {status === 'pending' && <div className="h-5 w-5 rounded-full border-2 border-gray-600 shrink-0" />}
-              <span className={`text-sm ${status === 'completed' ? 'text-gray-300' : status === 'running' ? 'text-blue-300' : 'text-gray-500'}`}>
-                {name}
-              </span>
-              {step?.pct !== undefined && (
-                <div className="ml-auto w-24 h-1.5 rounded-full bg-gray-700 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
-                    style={{ width: `${step.pct}%` }}
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+
+      {!done && (
+        <p className="mt-5 text-xs text-text-tertiary">
+          Leva menos de 1 minuto. Você pode manter esta página aberta.
+        </p>
+      )}
     </div>
   );
 }
