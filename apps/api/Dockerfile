@@ -6,12 +6,12 @@ RUN npm install -g pnpm
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json .npmrc ./
 COPY apps/api/package.json apps/api/
 COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json packages/db/
 
-RUN pnpm install --frozen-lockfile --link-workspace-packages=true
+RUN pnpm install --frozen-lockfile
 
 COPY apps/api/ apps/api/
 COPY packages/shared/ packages/shared/
@@ -21,7 +21,7 @@ RUN pnpm --filter @fury/shared run build
 RUN pnpm --filter @fury/db run build
 RUN pnpm --filter @fury/api run build
 
-RUN pnpm prune --prod
+RUN pnpm prune --prod --config.confirmModulesPurge=false
 
 FROM node:22-alpine
 RUN apk add --no-cache fontconfig font-opensans font-dejavu

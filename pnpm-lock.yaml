@@ -74,10 +74,10 @@ importers:
         specifier: ^3.1064.0
         version: 3.1107.0
       '@fury/db':
-        specifier: '*'
+        specifier: workspace:*
         version: link:../../packages/db
       '@fury/shared':
-        specifier: '*'
+        specifier: workspace:*
         version: link:../../packages/shared
       '@napi-rs/canvas':
         specifier: ^1.0.0
@@ -94,6 +94,9 @@ importers:
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(postgres@3.4.9)
       express:
         specifier: ^4.18.2
         version: 4.22.2(supports-color@7.2.0)
@@ -112,6 +115,9 @@ importers:
       openai:
         specifier: ^6.37.0
         version: 6.49.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/signature-v4@5.6.12)(zod@3.23.8)
+      postgres:
+        specifier: ^3.4.4
+        version: 3.4.9
       sharp:
         specifier: ^0.33.5
         version: 0.33.5
@@ -277,7 +283,7 @@ importers:
   packages/db:
     dependencies:
       '@fury/shared':
-        specifier: '*'
+        specifier: workspace:*
         version: link:../shared
       bcrypt:
         specifier: ^6.0.0
