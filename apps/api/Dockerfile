@@ -42,8 +42,9 @@ COPY --from=builder /app/packages/db/package.json ./packages/db/
 # Install only production dependencies
 RUN pnpm install --frozen-lockfile --prod
 
-# Copy built artifacts (dist only, no source)
+# Copy built artifacts and runtime files
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/swagger.json ./apps/api/swagger.json
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/db/dist ./packages/db/dist
 
