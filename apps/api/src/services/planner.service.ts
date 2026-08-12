@@ -366,7 +366,11 @@ export async function resolveInstagramAccount(tenantId: string): Promise<Instagr
   }
 
   const buildAccount = (p: typeof pagesWithIg[number], source: string) => {
-    console.log(`[resolveInstagram] tenant ${tenantId}: ${source} — "${p.name}" IG=${p.instagramUserId} (@${p.instagramUsername || 'sem @'})`);
+    const pageTokenPresent = Boolean(p.accessToken);
+    console.log(
+      `[resolveInstagram] tenant ${tenantId}: ${source} — "${p.name}" IG=${p.instagramUserId} (@${p.instagramUsername || 'sem @'})` +
+      ` page_token=${pageTokenPresent ? 'SIM' : 'NÃO (fallback user token ⚠️)'}`,
+    );
     return { igUserId: p.instagramUserId!, accessToken: p.accessToken || accessToken, pageName: p.name, instagramUsername: p.instagramUsername };
   };
 
