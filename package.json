@@ -23,7 +23,10 @@
     "test:unit": "vitest run apps/api/src/__tests__/billing-subscription.test.ts apps/api/src/__tests__/campaigns-create.unit.test.ts apps/api/src/__tests__/campaigns-service.test.ts apps/api/src/__tests__/date-sao-paulo.test.ts apps/api/src/__tests__/jwt.test.ts apps/api/src/__tests__/meta-conversion-events.test.ts apps/api/src/__tests__/meta-insights-parser.test.ts apps/api/src/__tests__/metrics-formatter.test.ts apps/api/src/__tests__/rate-limit.test.ts apps/api/src/__tests__/sanitize-log-data.test.ts apps/api/src/__tests__/sse.test.ts apps/api/src/__tests__/studio-copy-simple.test.ts apps/api/src/__tests__/studio-copy-validate.test.ts",
     "qa:audit": "bash scripts/coverage-audit.sh",
     "security:audit": "bash scripts/security-audit.sh",
-    "security:audit:json": "bash scripts/security-audit.sh --json"
+    "security:audit:json": "bash scripts/security-audit.sh --json",
+    "swagger:generate": "npm run --workspace=@fury/api swagger:generate",
+    "swagger:validate": "npm run --workspace=@fury/api swagger:validate",
+    "setup:hooks": "cp apps/api/scripts/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push && echo '✅ Git hooks installed'"
   },
   "devDependencies": {
     "@types/nodemailer": "^8.0.1",

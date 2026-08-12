@@ -7,6 +7,14 @@ import { requestLogger, flushRequestLogs } from './middleware/request-logger.js'
 import { rateLimitMiddleware } from './middleware/rate-limit.middleware.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import routes from './routes/index.js';
+import { serve as swaggerServe, setup as swaggerSetup } from 'swagger-ui-express';
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const swaggerJson = JSON.parse(readFileSync(join(__dirname, '..', 'swagger.json'), 'utf-8'));
 import { closeRedis, waitForRedisReady } from './lib/redis.js';
 import { closeComplianceQueue, closeStudioQueue, closeRedisConnection, closeFuryEngineQueue, closePublishDueQueue } from './lib/queue.js';
 import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
@@ -149,6 +157,15 @@ app.get('/api/public/brand-kit/:slug', async (req, res) => {
 
 app.use('/api', rateLimitMiddleware);
 app.use('/api', routes);
+
+// ── Swagger UI ────────────────────────────────────────────────────────
+app.use('/docs', swaggerServe, swaggerSetup(swaggerJson, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Fury API Docs',
+  swaggerOptions: { persistAuthorization: true },
+}));
+app.get('/swagger.json', (_req, res) => res.json(swaggerJson));
+
 app.use(errorHandler);
 
 app.use((req, res) => {
