@@ -1227,9 +1227,18 @@ export async function metaApiCall<T>(
   const url = new URL(`${META_GRAPH_BASE_URL}${path}`);
   url.searchParams.set('access_token', accessToken);
 
+  // Para tokens reais do Meta (EAAC*), enviamos também o header Authorization: Bearer.
+  // A doc oficial da Meta usa esse header nos exemplos de curl; enviar ambos
+  // (query param + header) é compatível e pode resolver erro (#10) em endpoints
+  // que exigem permissões de alto nível como instagram_content_publish.
+  const hasAuthHeader = accessToken.startsWith('EAAC');
+
   const fetchOptions: RequestInit = {
     method: options?.method || 'GET',
-    headers: { Accept: 'application/json' },
+    headers: {
+      Accept: 'application/json',
+      ...(hasAuthHeader ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
     // Timeout de 15s para evitar que chamadas Meta travem o request
     signal: AbortSignal.timeout(15_000),
   };
@@ -1237,6 +1246,10 @@ export async function metaApiCall<T>(
   if (options?.body) {
     fetchOptions.headers = { ...fetchOptions.headers, 'Content-Type': 'application/json' };
     fetchOptions.body = JSON.stringify(options.body);
+  }
+
+  if (hasAuthHeader) {
+    console.log(`[Meta API] Sending Authorization header for: ${options?.method || 'GET'} ${path}`);
   }
 
   let res: Response;
