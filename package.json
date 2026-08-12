@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "dev": "npm run --workspaces --if-present dev",
-    "build": "npm run build --workspace=@fury/shared && npm run build --workspace=@fury/db && npm run --workspaces --if-present build",
+    "build": "pnpm --filter @fury/shared run build && pnpm --filter @fury/db run build && pnpm --filter @fury/api run build && pnpm --filter web run build",
     "lint": "npm run --workspaces --if-present lint",
     "db:migrate": "npm run --workspace @fury/db migrate",
     "db:studio": "npm run --workspace @fury/db studio",
