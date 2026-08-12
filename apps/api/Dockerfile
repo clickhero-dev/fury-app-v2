@@ -1,24 +1,27 @@
 FROM node:22-alpine AS builder
 RUN apk add --no-cache python3 make g++ fontconfig
 
+# Install pnpm
+RUN npm install -g pnpm
+
 WORKDIR /app
 
-COPY package.json package-lock.json tsconfig.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY apps/api/package.json apps/api/
 COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json packages/db/
 
-RUN npm ci
+RUN pnpm install --frozen-lockfile --link-workspace-packages=true
 
 COPY apps/api/ apps/api/
 COPY packages/shared/ packages/shared/
 COPY packages/db/ packages/db/
 
-RUN npm run build --workspace=@fury/shared
-RUN npm run build --workspace=@fury/db
-RUN npm run build --workspace=@fury/api
+RUN pnpm --filter @fury/shared run build
+RUN pnpm --filter @fury/db run build
+RUN pnpm --filter @fury/api run build
 
-RUN npm prune --omit=dev
+RUN pnpm prune --prod
 
 FROM node:22-alpine
 RUN apk add --no-cache fontconfig font-opensans font-dejavu
