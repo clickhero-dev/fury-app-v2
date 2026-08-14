@@ -18,6 +18,7 @@ import {
   Info,
   MessageCircle,
   Bookmark,
+  ArrowRight,
 } from 'lucide-react';
 import { AppLayout, PageHeader } from '@/components';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -31,6 +32,24 @@ import api from '@/lib/api';
 import { useGoalsProgress, translateObjective } from '@/hooks/useGoalsProgress';
 import { type Period, getPeriodDates, formatPeriodLabel } from '@/lib/period-utils';
 import { PeriodSelector } from '@/components/PeriodSelector';
+
+// ─── Design tokens (ady) ──────────────────────────────────────────────────────
+
+const C = {
+  bg: '#0C0D0A',
+  card: '#161814',
+  cardAlt: '#1F211D',
+  border: '#262824',
+  text: '#ECEDEF',
+  muted: '#9A9D96',
+  faint: '#8A8D86',
+  primary: '#1E88A8',
+  spark: '#CF6F03',
+  danger: '#da3633',
+} as const;
+
+const SURFACE =
+  'rounded-2xl border border-[#262824] bg-[#161814] shadow-[0_1px_2px_rgba(0,0,0,0.4),0_18px_40px_-24px_rgba(0,0,0,0.7)]';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,28 +83,17 @@ interface DailyMetric {
 
 type Sparkline = { date: string; value: number }[];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/*
-function formatAlertValue(type: FuryAlert['type'], value: number) {
-  if (type === 'roas_low') return `${value.toFixed(1)}x`;
-  return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-*/
-
 // ─── Status config ────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-  on_track:  { label: 'No caminho',    bg: 'bg-[#dff3e4]', text: 'text-[#2ea043]', bar: '#2ea043' },
-  at_risk:   { label: 'Em risco',      bg: 'bg-[#fff4d6]', text: 'text-[#e8a317]', bar: '#e8a317' },
-  off_track: { label: 'Fora da meta',  bg: 'bg-[#fde8e7]', text: 'text-[#da3633]', bar: '#da3633' },
-  no_goals:  { label: 'Sem metas',     bg: 'bg-gray-100',  text: 'text-gray-500',  bar: '#d1d5db' },
+  on_track: { label: 'No caminho', bg: 'bg-[#1E88A8]/15', text: 'text-[#1E88A8]', bar: C.primary },
+  at_risk: { label: 'Em risco', bg: 'bg-[#CF6F03]/15', text: 'text-[#CF6F03]', bar: C.spark },
+  off_track: { label: 'Fora da meta', bg: 'bg-[#da3633]/15', text: 'text-[#da3633]', bar: C.danger },
+  no_goals: { label: 'Sem metas', bg: 'bg-[#1F211D]', text: 'text-[#9A9D96]', bar: C.border },
 } as const;
 
-const NO_DATA_CFG = { label: 'Sem dados', bg: 'bg-gray-100', text: 'text-gray-500', bar: '#d1d5db' };
+const NO_DATA_CFG = { label: 'Sem dados', bg: 'bg-[#1F211D]', text: 'text-[#9A9D96]', bar: C.border };
 
-// Recomputes progress directly from current/target so the UI always reflects
-// the real ratio, regardless of how the backend's own progress_pct was derived.
 function computeProgressPercent(current: number, target: number): number {
   return target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
 }
@@ -100,23 +108,25 @@ function statusFromProgress(progressPercent: number): 'on_track' | 'at_risk' | '
 
 function MetaBanner() {
   return (
-    <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
-      <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
-        <Radio className="w-4 h-4 text-blue-600" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-blue-900">
+    <div className="flex flex-col gap-4 rounded-2xl border border-[#CF6F03]/30 bg-[#CF6F03]/[0.07] p-5 sm:flex-row sm:items-center">
+      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#CF6F03]/15 text-[#CF6F03]">
+        <Radio className="size-[18px]" />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-[#ECEDEF]">
           Conecte sua conta Meta Ads para ver seus dados reais
         </p>
-        <p className="text-xs text-blue-600 mt-0.5">
+        <p className="mt-1 text-sm text-[#9A9D96]">
           Os valores abaixo refletem apenas as metas configuradas — sem métricas reais ainda.
         </p>
       </div>
+
       <Link
-        to="/configuracoes/integracoes"
-        className="shrink-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors"
+        to="/integracoes"
+        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#CF6F03]/40 px-4 py-2 text-sm font-semibold text-[#CF6F03] transition-colors hover:bg-[#CF6F03]/10"
       >
-        Conectar agora
+        Conectar agora <ArrowRight className="size-3.5" />
       </Link>
     </div>
   );
@@ -137,77 +147,90 @@ function HeroStrip({
   hasRealData: boolean;
   hasGoals: boolean;
 }) {
-  const pct = hasGoals && hasRealData ? computeProgressPercent(goal.current_value, goal.target_value) : 0;
+  const pct =
+    hasGoals && hasRealData ? computeProgressPercent(goal.current_value, goal.target_value) : 0;
   const statusKey = !hasGoals || !hasRealData ? 'no_goals' : statusFromProgress(pct);
   const cfg = STATUS_CONFIG[statusKey] ?? NO_DATA_CFG;
 
   return (
-    <div className="bg-gradient-to-r from-[#1a0a00] via-[#2d1200] to-[#1c1c1e] rounded-xl px-5 py-3.5 flex items-center gap-5 flex-wrap sm:flex-nowrap border-l-4 border-[#EA580C]">
-      {/* Percentage + objetivo */}
-      <div className="flex items-baseline gap-2 shrink-0">
-        <span
-          className="text-3xl font-black leading-none"
-          style={{ color: hasGoals && hasRealData && pct > 0 ? '#EA580C' : undefined }}
-        >
-          <span className={hasGoals && hasRealData && pct > 0 ? '' : 'text-white/40'}>
-            {pct}
+    <section className={`${SURFACE} p-6`}>
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-5 sm:flex sm:flex-wrap sm:justify-between">
+        <div className="flex min-w-0 items-center gap-6">
+          {/* Círculo com % em tom azul */}
+          <span
+            className="grid size-24 shrink-0 place-items-center rounded-full border border-[#1E88A8]/30 bg-[#1E88A8]/10 text-xl font-bold tabular-nums text-[#1E88A8]"
+          >
+            {pct}%
           </span>
-        </span>
-        <span className="text-lg font-bold text-white/50">%</span>
-      </div>
 
-      {/* Bar + label */}
-      <div className="flex-1 min-w-0">
-        <p className="text-xs mb-1 truncate" style={{ color: '#ffffff' }}>
-          {translateObjective(objective)}
-        </p>
-        {!hasGoals && (
-          <Link to="/configuracoes?tab=metas" className="text-xs text-[#EA580C] underline">
-            Configurar metas →
-          </Link>
-        )}
-        <div className="h-1.5 bg-white/10 rounded-full overflow-hidden mt-1.5">
-          <div
-            className="h-full rounded-full transition-all duration-700 ease-out"
-            style={{
-              width: `${pct}%`,
-              backgroundColor: cfg.bar,
-              boxShadow: pct > 0 ? `0 0 8px ${cfg.bar}40` : undefined,
-            }}
-          />
+          {/* Estrutura vertical de textos */}
+          <div className="flex flex-col min-w-0 gap-0.5">
+            {/* 1. Objetivo: ao lado de Aumentar Vendas */}
+            <p className="truncate text-base font-bold text-[#ECEDEF]">
+              <span className="text-sm font-semibold text-[#8A8D86]">Objetivo: </span>
+              {translateObjective(objective)}
+            </p>
+
+            {/* 2. Meta */}
+            <p className="text-sm text-[#9A9D96]">
+              {hasGoals ? (
+                <>
+                  Meta: {goal.target_value.toLocaleString('pt-BR')}{' '}
+                  {goal.metric === 'conversions' ? 'pessoas' : goal.unit}
+                </>
+              ) : (
+                'Sem meta definida'
+              )}
+            </p>
+
+            {/* 3. Link de ação abaixo */}
+            <Link
+              to="/configuracoes?tab=metas"
+              className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-[#1E88A8] transition-opacity hover:opacity-80 hover:underline"
+            >
+              Configurar metas <ArrowRight className="size-2" />
+            </Link>
+          </div>
+        </div>
+
+        <div className="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-[#9A9D96] sm:col-auto">
+          <span>
+            Projeção:{' '}
+            <span className="font-medium text-[#ECEDEF]">
+              {hasGoals && hasRealData
+                ? `${(goal.projected_value ?? 0).toLocaleString('pt-BR')} ${
+                    goal.metric === 'conversions' ? 'pessoas' : goal.unit
+                  }`
+                : '—'}
+            </span>
+          </span>
+          <span>{daysRemaining} dias restantes</span>
+          <span className={`rounded-full px-3 py-1 text-xs font-medium ${cfg.bg} ${cfg.text}`}>
+            {cfg.label}
+          </span>
         </div>
       </div>
 
-      {/* Meta / projeção */}
-      <div className="flex items-center gap-5 shrink-0 text-xs text-white">
-        <span>
-          <span className="text-white/70">Projeção:{' '}</span>
-          <strong className="text-white/80 font-bold">
-            {hasGoals && hasRealData
-              ? `${(goal.projected_value ?? 0).toLocaleString('pt-BR')} ${goal.metric === 'conversions' ? 'pessoas' : goal.unit}`
-              : '--'}
-          </strong>
-        </span>
-        <span>{daysRemaining} dias restantes</span>
+      {/* Barra de Progresso em Azul (#1E88A8) */}
+      <div className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-[#1F211D]">
+        <div
+          className="h-full rounded-full bg-[#1E88A8] transition-[width] duration-500 shadow-[0_0_8px_rgba(30,136,168,0.4)]"
+          style={{
+            width: `${Math.max(pct, 2)}%`,
+          }}
+        />
       </div>
-
-      {/* Status badge */}
-      <div className="flex items-center shrink-0">
-        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${cfg.bg} ${cfg.text}`}>
-          {cfg.label}
-        </span>
-      </div>
-    </div>
+    </section>
   );
 }
 
 // ─── Metric Card ─────────────────────────────────────────────────────────────
 
 const PROGRESS_COLORS: Record<'on_track' | 'at_risk' | 'off_track' | 'no_goals', string> = {
-  on_track:  '#2ea043',
-  at_risk:   '#e8a317',
-  off_track: '#da3633',
-  no_goals:  '#d1d5db',
+  on_track: C.primary,
+  at_risk: C.spark,
+  off_track: C.danger,
+  no_goals: C.border,
 };
 
 function MetricCard({
@@ -236,81 +259,78 @@ function MetricCard({
   const showSpark = hasRealData && sparkline && sparkline.length >= 2;
   const sparkColor =
     showSpark && sparkline![sparkline!.length - 1].value >= sparkline![0].value
-      ? '#e8631a'
-      : '#da3633';
+      ? C.primary
+      : C.danger;
   const showProgress = hasRealData && progressPct !== undefined && progressStatus !== undefined;
   const isNoGoals = progressStatus === 'no_goals' || !hasGoals;
-  const barColor = showProgress && !isNoGoals ? PROGRESS_COLORS[progressStatus!] : '#d1d5db';
+  const barColor = showProgress && !isNoGoals ? PROGRESS_COLORS[progressStatus!] : C.border;
   const barWidth = showProgress ? Math.min(100, progressPct!) : 0;
 
-  // no_goals: no border color, no dot, no icon color
-  const statusColor = hasRealData && progressStatus && !isNoGoals ? PROGRESS_COLORS[progressStatus] : undefined;
-
   return (
-    <div
-      className="bg-surface border border-border rounded-xl p-4 shadow-sm flex items-center gap-3 relative"
-      style={statusColor ? { borderTopColor: statusColor, borderTopWidth: 2 } : undefined}
-    >
-      {statusColor && (
-        <span
-          className="absolute top-3 right-3 w-2 h-2 rounded-full"
-          style={{ backgroundColor: statusColor }}
-        />
-      )}
-      <div className="w-10 h-10 rounded-lg bg-surface-secondary flex items-center justify-center shrink-0">
-        <Icon className="w-5 h-5" style={{ color: statusColor ?? '#9ca3af' }} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-text-secondary leading-tight flex items-center gap-1">
-          {label}
-          {tooltip && (
+    <div className={`${SURFACE} p-5`}>
+      <div className="flex items-center gap-2.5">
+        <Icon className="size-[18px] shrink-0 text-[#1E88A8]" />
+        <p className="min-w-0 truncate text-sm text-[#9A9D96]">{label}</p>
+        {tooltip && (
+          <TooltipProvider>
             <UiTooltip>
               <TooltipTrigger asChild>
-                <Info className="w-3 h-3 text-muted-foreground" />
+                <button
+                  type="button"
+                  aria-label={`Sobre ${label}`}
+                  className="text-[#8A8D86] transition-colors hover:text-[#ECEDEF]"
+                >
+                  <Info className="size-3.5" />
+                </button>
               </TooltipTrigger>
-              <TooltipContent>{tooltip}</TooltipContent>
+              <TooltipContent className="max-w-[220px] border-[#262824] bg-[#1F211D] text-xs text-[#ECEDEF]">
+                {tooltip}
+              </TooltipContent>
             </UiTooltip>
-          )}
-        </p>
-        <p
-          className={`text-lg md:text-xl font-black leading-tight ${hasRealData ? 'text-[#EA580C]' : 'text-text-secondary'}`}
-        >
-          {value}
-        </p>
-        {showProgress && (
-          <div className="mt-1.5 space-y-1">
-            {isNoGoals ? (
-              <Link to="/configuracoes?tab=metas" className="text-xs text-[#EA580C] underline cursor-pointer">
-                Defina uma meta →
-              </Link>
-            ) : progressLabel ? (
-              <p className="text-xs text-muted-foreground">{progressLabel}</p>
-            ) : null}
-            <div className="h-1 rounded-full bg-surface-secondary overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${barWidth}%`, backgroundColor: barColor }}
-              />
-            </div>
-          </div>
-        )}
-        {showSpark && !showProgress && (
-          <div style={{ height: 40 }} className="mt-1 -mx-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={sparkline} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke={sparkColor}
-                  strokeWidth={1.5}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          </TooltipProvider>
         )}
       </div>
+
+      <p className="mt-4 text-3xl font-semibold tabular-nums text-[#ECEDEF]">{value}</p>
+
+      {showProgress ? (
+        <div className="mt-3 space-y-2">
+          {isNoGoals ? (
+            <Link
+              to="/configuracoes"
+              className="inline-flex items-center gap-1 text-xs font-medium text-[#1E88A8] hover:underline"
+            >
+              Defina uma meta <ArrowRight className="size-3" />
+            </Link>
+          ) : progressLabel ? (
+            <p className="text-xs text-[#9A9D96]">{progressLabel}</p>
+          ) : null}
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#1F211D]">
+            <div
+              className="h-full rounded-full transition-[width] duration-500"
+              style={{ width: `${Math.max(barWidth, 2)}%`, backgroundColor: barColor }}
+            />
+          </div>
+        </div>
+      ) : showSpark ? (
+        <div className="mt-3 h-10">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={sparkline}>
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke={sparkColor}
+                strokeWidth={2}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <p className="mt-1 text-xs text-[#8A8D86]">
+          {hasRealData ? 'No período' : 'Aguardando dados'}
+        </p>
+      )}
     </div>
   );
 }
@@ -336,8 +356,6 @@ function WeeklyChart({
   const isEmpty = !hasRealData || data.length === 0;
   const hasIdealLine = !isEmpty && idealLine && idealLine.length > 0;
 
-  // When ideal_line data is available use it as source (fields: date, real, ideal)
-  // Otherwise fall back to dailyData with field "conversions"
   const chartData: object[] = hasIdealLine
     ? idealLine!
     : isEmpty
@@ -345,43 +363,39 @@ function WeeklyChart({
       : data;
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-5 shadow-sm space-y-4 h-full">
-      <div>
-        <h3 className="text-sm font-bold text-text-primary">Desempenho da Semana</h3>
-        <p className="text-xs text-text-tertiary mt-0.5">Pessoas alcançadas nos últimos 7 dias</p>
-      </div>
+    <section className={`${SURFACE} p-6`}>
+      <h2 className="text-xl font-semibold text-[#ECEDEF]">Desempenho da semana</h2>
+      <p className="mt-1 text-sm text-[#9A9D96]">Pessoas alcançadas nos últimos 7 dias</p>
 
-      <div className="relative" style={{ height: 200 }}>
+      <div className="relative mt-6 h-56">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={chartData}
-            margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+          <LineChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(236,237,239,0.08)" vertical={false} />
             <XAxis
               dataKey="date"
-              tickFormatter={isEmpty ? (v) => v : fmt}
-              tick={{ fontSize: 11, fill: 'var(--color-text-tertiary)' }}
+              tickFormatter={isEmpty && !hasIdealLine ? (v) => String(v) : fmt}
+              tick={{ fontSize: 11, fill: C.muted }}
               tickLine={false}
               axisLine={false}
               interval="preserveStartEnd"
             />
             <YAxis
-              tick={{ fontSize: 11, fill: 'var(--color-text-tertiary)' }}
+              tick={{ fontSize: 11, fill: C.muted }}
               tickLine={false}
               axisLine={false}
-              allowDecimals={false}
+              width={44}
             />
             {!isEmpty && (
               <Tooltip
                 contentStyle={{
-                  background: '#1c1c1e',
-                  border: 'none',
-                  borderRadius: 8,
-                  color: '#fff',
+                  backgroundColor: C.cardAlt,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 12,
                   fontSize: 12,
+                  color: C.text,
                 }}
-                formatter={(val, name) => [
+                labelStyle={{ color: C.muted }}
+                formatter={(val: number, name: string) => [
                   `${Number(val).toLocaleString('pt-BR')} pessoas`,
                   name === 'ideal' ? 'Projeção ideal' : 'Realizado',
                 ]}
@@ -391,125 +405,62 @@ function WeeklyChart({
             <Line
               type="monotone"
               dataKey={hasIdealLine ? 'real' : 'conversions'}
-              stroke={isEmpty ? '#e5e7eb' : '#e8631a'}
-              strokeWidth={isEmpty ? 1.5 : 2.5}
-              dot={isEmpty ? false : { r: 3, fill: '#e8631a', strokeWidth: 0 }}
-              activeDot={isEmpty ? false : { r: 5, fill: '#e8631a', strokeWidth: 0 }}
-              isAnimationActive={!isEmpty}
+              stroke={C.primary}
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{ r: 4, fill: C.primary }}
             />
             {hasIdealLine && (
               <Line
                 type="monotone"
                 dataKey="ideal"
-                stroke="#d1d5db"
-                strokeWidth={1.5}
-                strokeDasharray="4 4"
+                stroke={C.spark}
+                strokeWidth={2}
+                strokeDasharray="5 4"
                 dot={false}
-                isAnimationActive={false}
               />
             )}
           </LineChart>
         </ResponsiveContainer>
 
         {isEmpty && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="bg-surface/90 border border-border rounded-lg px-4 py-2 shadow-sm text-center">
-              <p className="text-xs font-semibold text-text-tertiary">Aguardando dados do Meta Ads</p>
-            </div>
+          <div className="absolute inset-0 grid place-items-center rounded-lg border border-dashed border-[#262824] bg-[#161814]/70">
+            <p className="rounded-full bg-[#1F211D] px-4 py-1.5 text-xs text-[#9A9D96]">
+              Aguardando dados da sua conta de anúncios
+            </p>
           </div>
         )}
       </div>
 
       {hasIdealLine && (
-        <div className="flex items-center gap-4 pt-1">
-          <span className="flex items-center gap-1.5 text-xs text-text-secondary">
-            <span className="w-3 h-0.5 rounded-full bg-[#e8631a] inline-block" />
+        <div className="mt-5 flex flex-wrap items-center gap-5 text-xs text-[#9A9D96]">
+          <span className="inline-flex items-center gap-2">
+            <span className="h-0.5 w-5 rounded-full bg-[#1E88A8]" />
             Realizado
           </span>
-          <span className="flex items-center gap-1.5 text-xs text-text-tertiary">
-            <span className="w-3 border-t border-dashed border-gray-400 inline-block" />
+          <span className="inline-flex items-center gap-2">
+            <span className="h-0.5 w-5 rounded-full bg-[#CF6F03]" />
             Projeção ideal
           </span>
         </div>
       )}
-    </div>
+    </section>
   );
 }
-
-// ─── Fury Alerts (comentado — dashboard simplificado) ───────────────────────
-/*
-const ALERT_CONFIG: Record<FuryAlert['type'], { bg: string; icon: string }> = {
-  cpa_high:  { bg: 'bg-orange-50', icon: 'text-orange-500' },
-  roas_low:  { bg: 'bg-red-50',    icon: 'text-red-500'    },
-  spend_low: { bg: 'bg-orange-50', icon: 'text-orange-500' },
-};
-
-function FuryAlerts({ alerts }: { alerts: FuryAlert[] }) {
-  const items = alerts.slice(0, 5);
-
-  return (
-    <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm space-y-4 h-full">
-      <div>
-        <h3 className="text-sm font-bold text-gray-900">Alertas do FURY</h3>
-        <p className="text-xs text-gray-400 mt-0.5">Desvios detectados nas campanhas</p>
-      </div>
-
-      {items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center">
-            <ShieldCheck className="w-5 h-5 text-green-400" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-gray-400">Nenhum alerta ativo</p>
-            <p className="text-xs text-gray-300 mt-0.5">
-              Nenhum desvio detectado nas campanhas
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {items.map((alert) => {
-            const cfg = ALERT_CONFIG[alert.type];
-            const sign = alert.deviation_pct >= 0 ? '+' : '';
-            const description = `${alert.metric} ${formatAlertValue(alert.type, alert.current_value)} · meta ${formatAlertValue(alert.type, alert.target_value)} · ${sign}${Math.round(alert.deviation_pct)}%`;
-            return (
-              <div key={`${alert.campaignId}-${alert.type}`} className="flex items-start gap-3">
-                <div className={`w-7 h-7 rounded-lg ${cfg.bg} flex items-center justify-center shrink-0 mt-0.5`}>
-                  <AlertTriangle className={`w-3.5 h-3.5 ${cfg.icon}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-gray-800 leading-snug truncate">
-                    {alert.campaignName}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">{description}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-*/
 
 // ─── Active Campaigns Table ───────────────────────────────────────────────────
 
 function fmtBRL(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(v)) return '-';
+  if (v == null || !Number.isFinite(v)) return '—';
   return `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function fmtInt(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(v)) return '-';
+  if (v == null || !Number.isFinite(v)) return '—';
   return Math.round(v).toLocaleString('pt-BR');
 }
 
-function ActiveCampaignsTable({
-  campaigns,
-}: {
-  campaigns: ActiveCampaign[];
-}) {
+function ActiveCampaignsTable({ campaigns }: { campaigns: ActiveCampaign[] }) {
   const sorted = [...campaigns]
     .sort((a, b) => (b.metrics.conversions ?? -1) - (a.metrics.conversions ?? -1))
     .slice(0, 10);
@@ -517,33 +468,39 @@ function ActiveCampaignsTable({
   const topId = sorted[0]?.id;
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-5 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-sm font-bold text-text-primary">Campanhas Ativas</h3>
-          <p className="text-xs text-text-tertiary mt-0.5">Ordenadas por performance</p>
+    <section className={`${SURFACE} p-6`}>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold text-[#ECEDEF]">Campanhas ativas</h2>
+          <p className="mt-1 text-sm text-[#9A9D96]">Ordenadas por resultado</p>
         </div>
-        <Link to="/campanhas" className="text-xs text-[#EA580C] font-medium hover:underline">
-          Ver todas →
+        <Link
+          to="/campanhas"
+          className="shrink-0 text-sm font-medium text-[#1E88A8] hover:underline"
+        >
+          Ver todas
         </Link>
       </div>
 
       {sorted.length === 0 ? (
-        <div className="py-8 text-center">
-          <p className="text-sm text-gray-400 mb-2">Nenhuma campanha ativa no momento</p>
-          <Link to="/campanhas" className="text-xs text-[#EA580C] font-medium hover:underline">
-            Criar campanha →
+        <div className="mt-6 flex flex-col items-center gap-2 rounded-lg border border-dashed border-[#262824] px-6 py-12 text-center">
+          <p className="text-sm text-[#9A9D96]">Nenhuma campanha ativa agora</p>
+          <Link
+            to="/campanhas"
+            className="text-sm font-medium text-[#1E88A8] hover:underline"
+          >
+            Criar campanha
           </Link>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-sm">
+        <div className="mt-6 overflow-x-auto">
+          <table className="w-full min-w-[560px] border-collapse text-sm">
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="pb-2 text-left text-xs font-semibold text-text-tertiary">Campanha</th>
-                <th className="pb-2 text-right text-xs font-semibold text-text-tertiary">Investido</th>
-                <th className="pb-2 text-right text-xs font-semibold text-text-tertiary">Pessoas</th>
-                <th className="pb-2 text-right text-xs font-semibold text-text-tertiary">Custo/Pessoa</th>
+              <tr className="border-b border-[#262824] text-left text-xs font-semibold uppercase tracking-[0.12em] text-[#8A8D86]">
+                <th className="pb-3 pr-4 font-semibold">Campanha</th>
+                <th className="pb-3 pr-4 text-right font-semibold">Investido</th>
+                <th className="pb-3 pr-4 text-right font-semibold">Pessoas</th>
+                <th className="pb-3 text-right font-semibold">Custo/Pessoa</th>
               </tr>
             </thead>
             <tbody>
@@ -552,24 +509,27 @@ function ActiveCampaignsTable({
                 return (
                   <tr
                     key={c.id}
-                    className={`border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors ${isTop ? 'bg-orange-50' : ''}`}
+                    className="border-b border-[#262824]/70 transition-colors last:border-0 hover:bg-[#1F211D]/60"
                   >
-                    <td className="py-2.5 pr-4">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="truncate max-w-[200px] block text-text-secondary"
-                          title={c.name}
-                        >
-                          {c.name}
-                        </span>
+                    <td className="py-3.5 pr-4">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-medium text-[#ECEDEF]">{c.name}</span>
                         {isTop && (
-                          <span className="shrink-0 text-xs text-[#EA580C] font-semibold">⭐ Top</span>
+                          <span className="shrink-0 rounded-full bg-[#CF6F03]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#CF6F03]">
+                            Top
+                          </span>
                         )}
                       </div>
                     </td>
-                    <td className="py-2.5 text-right text-text-secondary">{fmtBRL(c.metrics.spend)}</td>
-                    <td className="py-2.5 text-right text-text-secondary">{fmtInt(c.metrics.conversions)}</td>
-                    <td className="py-2.5 text-right text-text-secondary">{fmtBRL(c.metrics.cpa)}</td>
+                    <td className="py-3.5 pr-4 text-right tabular-nums text-[#9A9D96]">
+                      {fmtBRL(c.metrics.spend)}
+                    </td>
+                    <td className="py-3.5 pr-4 text-right tabular-nums text-[#ECEDEF]">
+                      {fmtInt(c.metrics.conversions)}
+                    </td>
+                    <td className="py-3.5 text-right tabular-nums text-[#9A9D96]">
+                      {fmtBRL(c.metrics.cpa)}
+                    </td>
                   </tr>
                 );
               })}
@@ -577,7 +537,7 @@ function ActiveCampaignsTable({
           </table>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -600,30 +560,42 @@ function InstagramMetricCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-surface border border-border rounded-xl p-4 shadow-sm flex items-center gap-3">
-      <div className="w-10 h-10 rounded-lg bg-surface-secondary flex items-center justify-center shrink-0">
-        <Icon className="w-5 h-5 text-text-tertiary" />
+    <div className={`${SURFACE} p-5`}>
+      <div className="flex items-center gap-2.5">
+        <Icon className="size-[18px] shrink-0 text-[#1E88A8]" />
+        <p className="min-w-0 truncate text-sm text-[#9A9D96]">{label}</p>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-text-secondary leading-tight">{label}</p>
-        {children}
-      </div>
+      <div className="mt-4">{children}</div>
     </div>
   );
 }
 
 function FollowersValue({ value }: { value: number }) {
   if (value > 0) {
-    return <p className="text-lg md:text-xl font-black leading-tight text-green-600">+{value.toLocaleString('pt-BR')}</p>;
+    return (
+      <p className="text-3xl font-semibold tabular-nums text-[#1E88A8]">
+        +{value.toLocaleString('pt-BR')}
+      </p>
+    );
   }
   if (value < 0) {
-    return <p className="text-lg md:text-xl font-black leading-tight text-red-600">{value.toLocaleString('pt-BR')}</p>;
+    return (
+      <p className="text-3xl font-semibold tabular-nums text-[#da3633]">
+        {value.toLocaleString('pt-BR')}
+      </p>
+    );
   }
-  return <p className="text-lg md:text-xl font-black leading-tight text-text-primary">0</p>;
+  return <p className="text-3xl font-semibold tabular-nums text-[#ECEDEF]">0</p>;
 }
 
-function InstagramEngagementSection({ startDate, endDate }: { startDate: string; endDate: string }) {
-  const { data, isLoading } = useQuery<InstagramInsights | null>({
+function InstagramEngagementSection({
+  startDate,
+  endDate,
+}: {
+  startDate: string;
+  endDate: string;
+}) {
+  const { data, isLoading } = useQuery({
     queryKey: ['instagram-insights', startDate, endDate],
     queryFn: async () => {
       try {
@@ -641,37 +613,42 @@ function InstagramEngagementSection({ startDate, endDate }: { startDate: string;
   });
 
   return (
-      <div className="space-y-3">
+    <section className="space-y-4">
       <div>
-        <h3 className="text-sm font-bold text-text-primary">Engajamento Instagram</h3>
-        <p className="text-xs text-text-tertiary mt-0.5">Métricas orgânicas no período selecionado</p>
+        <h2 className="text-xl font-semibold text-[#ECEDEF]">Engajamento no Instagram</h2>
+        <p className="mt-1 text-sm text-[#9A9D96]">Métricas orgânicas no período selecionado</p>
       </div>
 
       {!isLoading && data == null ? (
-        <div className="bg-surface border border-border rounded-xl p-5 shadow-sm text-center">
-          <p className="text-sm text-text-tertiary mb-2">Conecte seu Instagram para ver métricas</p>
-          <Link to="/configuracoes/integracoes" className="text-xs text-[#EA580C] font-medium hover:underline">
-            Ir para Integrações →
+        <div
+          className={`${SURFACE} flex flex-col items-center justify-center gap-2 px-6 py-14 text-center`}
+        >
+          <p className="text-sm text-[#9A9D96]">Conecte seu Instagram para ver as métricas</p>
+          <Link
+            to="/integracoes"
+            className="inline-flex items-center gap-1 text-sm font-medium text-[#1E88A8] hover:underline"
+          >
+            Ir para integrações <ArrowRight className="size-3.5" />
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <InstagramMetricCard icon={MessageCircle} label="💬 Comentários">
-            <p className="text-lg md:text-xl font-black leading-tight text-text-primary">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <InstagramMetricCard icon={MessageCircle} label="Comentários">
+            <p className="text-3xl font-semibold tabular-nums text-[#ECEDEF]">
               {(data?.comments ?? 0).toLocaleString('pt-BR')}
             </p>
           </InstagramMetricCard>
-          <InstagramMetricCard icon={Bookmark} label="🔖 Salvamentos">
-            <p className="text-lg md:text-xl font-black leading-tight text-text-primary">
+          <InstagramMetricCard icon={Bookmark} label="Salvamentos">
+            <p className="text-3xl font-semibold tabular-nums text-[#ECEDEF]">
               {(data?.saves ?? 0).toLocaleString('pt-BR')}
             </p>
           </InstagramMetricCard>
-          <InstagramMetricCard icon={Users} label="👥 Seguidores">
+          <InstagramMetricCard icon={Users} label="Novos seguidores">
             <FollowersValue value={data?.followers ?? 0} />
           </InstagramMetricCard>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -681,7 +658,11 @@ export function Dashboard() {
   const [period, setPeriod] = useState<Period>('this_month');
   const { startDate, endDate } = getPeriodDates(period);
 
-  const { data: goalsData, isFetching: fetchingGoals, isLoading: loadingGoals } = useGoalsProgress(startDate, endDate);
+  const {
+    data: goalsData,
+    isFetching: fetchingGoals,
+    isLoading: loadingGoals,
+  } = useGoalsProgress(startDate, endDate);
   const queryClient = useQueryClient();
   const location = useLocation();
 
@@ -695,13 +676,16 @@ export function Dashboard() {
     }
   }, [location.search, queryClient]);
 
-  // Meta connection status
   const { data: metaConnections } = useQuery<{ id: string }[]>({
     queryKey: ['meta-connections'],
     queryFn: async () => {
       try {
         const res = await api.get<{ success: boolean; data: { id: string }[] }>('/meta/connections');
-        return Array.isArray(res.data.data) ? res.data.data : (Array.isArray(res.data) ? res.data as { id: string }[] : []);
+        return Array.isArray(res.data.data)
+          ? res.data.data
+          : Array.isArray(res.data)
+            ? (res.data as { id: string }[])
+            : [];
       } catch {
         return [];
       }
@@ -712,14 +696,14 @@ export function Dashboard() {
 
   const isMetaConnected = (metaConnections?.length ?? 0) > 0;
 
-  // Metrics summary
-  const { data: summaryRaw } = useQuery<MetricsSummary | null>({
+  const { data: summaryRaw } = useQuery({
     queryKey: ['metrics-summary', startDate, endDate],
     queryFn: async () => {
       try {
-        const res = await api.get<{ success: boolean; data: { summary: MetricsSummary } }>('/metrics/summary', {
-          params: { startDate, endDate },
-        });
+        const res = await api.get<{ success: boolean; data: { summary: MetricsSummary } }>(
+          '/metrics/summary',
+          { params: { startDate, endDate } }
+        );
         return res.data.data.summary ?? null;
       } catch {
         return null;
@@ -729,8 +713,7 @@ export function Dashboard() {
     placeholderData: null,
   });
 
-  // Active campaigns for dashboard table
-  const { data: activeCampaigns = [] } = useQuery<ActiveCampaign[]>({
+  const { data: activeCampaigns = [] } = useQuery({
     queryKey: ['campaigns-active-dashboard', startDate, endDate],
     queryFn: async () => {
       try {
@@ -747,8 +730,7 @@ export function Dashboard() {
     placeholderData: [],
   });
 
-  // Daily metrics for chart
-  const { data: dailyData = [] } = useQuery<DailyMetric[]>({
+  const { data: dailyData = [] } = useQuery({
     queryKey: ['metrics-daily-week', startDate, endDate],
     queryFn: async () => {
       try {
@@ -773,9 +755,8 @@ export function Dashboard() {
 
   const s = summaryRaw ?? { spend: 0, roas: 0, cpa: 0, conversions: 0 };
 
-  // Sparkline + progress per goal metric
   const goalConversions = g?.goals?.find((goal) => goal.metric === 'conversions');
-  const goalBudget      = g?.goals?.find((goal) => goal.metric === 'spend');
+  const goalBudget = g?.goals?.find((goal) => goal.metric === 'spend');
 
   const conversionsProgressPct = goalConversions
     ? computeProgressPercent(goalConversions.current_value, goalConversions.target_value)
@@ -787,123 +768,108 @@ export function Dashboard() {
       : undefined;
 
   const sparkConversions = goalConversions?.sparkline;
-  const sparkBudget      = goalBudget?.sparkline;
-
-  // const alerts   = g?.alerts ?? []; // comentado junto com FuryAlerts
+  const sparkBudget = goalBudget?.sparkline;
   const idealLine = g?.ideal_line;
+
+  const daysRemaining = Math.max(
+    0,
+    Math.ceil((new Date(endDate).getTime() - Date.now()) / 86_400_000)
+  );
 
   if (loadingGoals) {
     return (
       <AppLayout>
-        <div className="space-y-5 pb-8 animate-pulse">
-          <PageHeader title="Dashboard" description="Carregando…" />
-          <div className="h-14 bg-gray-100 rounded-xl" />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-20 bg-gray-100 rounded-xl" />
+        <div className="mx-auto w-full max-w-5xl space-y-10 px-6 py-10 sm:px-10 lg:py-14">
+          <div className="h-9 w-48 animate-pulse rounded-lg bg-[#1F211D]" />
+          <div className="h-28 animate-pulse rounded-2xl bg-[#1F211D]" />
+          <div className="grid gap-4 sm:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-32 animate-pulse rounded-2xl bg-[#1F211D]" />
             ))}
           </div>
-          <div className="h-64 bg-gray-100 rounded-xl" />
+          <div className="h-72 animate-pulse rounded-2xl bg-[#1F211D]" />
         </div>
       </AppLayout>
     );
   }
 
   return (
-    <AppLayout>
-      <TooltipProvider>
-      <div className="space-y-5 pb-8">
-        <PageHeader
-          title="Dashboard"
-          description={
-            g?.objective
-              ? `Objetivo: ${translateObjective(g.objective)} · ${g.days_remaining} dias restantes no mês`
-              : `${g?.days_remaining ?? '—'} dias restantes no mês`
-          }
-          actions={
-            <div className="flex items-center gap-3">
-              {fetchingGoals && (
-                <span className="text-xs text-text-tertiary animate-pulse">Atualizando…</span>
-              )}
-              <PeriodSelector value={period} onChange={setPeriod} />
-            </div>
-          }
-        />
-        <p className="text-xs text-text-tertiary -mt-3">{formatPeriodLabel(startDate, endDate)}</p>
+  <AppLayout>
+    <ErrorBoundary>
+      {/* pt-2 reduz o topo ao mínimo, removendo a folga excessiva */}
+      <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 text-[#ECEDEF] sm:px-10">
+        
+        {/* Cabeçalho */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-2xl font-bold text-[#ECEDEF]">Painel</h1>
 
-        {/* ── Meta connection banner ───────────────────────────────────────── */}
+          <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-[#8A8D86]">
+            {formatPeriodLabel(startDate, endDate)}
+          </span>
+
+          <div className="flex shrink-0 items-center gap-3">
+            {fetchingGoals && (
+              <span className="text-xs text-[#8A8D86]">Atualizando…</span>
+            )}
+            <PeriodSelector value={period} onChange={setPeriod} />
+          </div>
+        </div>
+
         {!isMetaConnected && <MetaBanner />}
 
-        {/* ── Hero strip ──────────────────────────────────────────────────── */}
         {primaryGoal && (
           <HeroStrip
             goal={primaryGoal}
             objective={objective}
-            daysRemaining={g?.days_remaining ?? 0}
+            daysRemaining={daysRemaining}
             hasRealData={hasRealData}
             hasGoals={hasGoals}
           />
         )}
 
-        {/* ── Metrics grid ─────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          <MetricCard
-            icon={Users}
-            label="Pessoas"
-            value={hasRealData ? s.conversions.toLocaleString('pt-BR') : '--'}
-            sparkline={sparkConversions}
-            hasRealData={hasRealData}
-            hasGoals={hasGoals}
-            progressPct={conversionsProgressPct}
-            progressStatus={conversionsStatus}
-            progressLabel={hasGoals && conversionsProgressPct !== undefined ? `${conversionsProgressPct}% da meta mensal` : undefined}
-            tooltip="Inclui resultados de campanhas ativas e pausadas no período selecionado"
-          />
-          <MetricCard
-            icon={DollarSign}
-            label="Investimento Total"
-            value={
-              hasRealData
-                ? `R$ ${s.spend.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-                : '--'
-            }
-            sparkline={sparkBudget}
-            hasRealData={hasRealData}
-            hasGoals={hasGoals}
-            progressPct={goalBudget?.progress_pct}
-            progressStatus={goalBudget?.status}
-            progressLabel={hasGoals && goalBudget ? `${Math.round(goalBudget.progress_pct)}% do orçamento` : undefined}
-          />
-          <MetricCard
-            icon={ShoppingBag}
-            label="Custo por Pessoa"
-            value={
-              hasRealData
-                ? `R$ ${s.cpa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                : '--'
-            }
-          />
-        </div>
+          <section className="grid gap-4 sm:grid-cols-3">
+            <MetricCard
+              icon={Users}
+              label="Clientes alcançados"
+              value={hasRealData ? fmtInt(s.conversions) : '—'}
+              sparkline={sparkConversions}
+              hasRealData={hasRealData}
+              hasGoals={hasGoals}
+              progressPct={conversionsProgressPct}
+              progressStatus={conversionsStatus}
+              progressLabel={
+                goalConversions
+                  ? `${fmtInt(goalConversions.current_value)} de ${fmtInt(goalConversions.target_value)}`
+                  : undefined
+              }
+              tooltip="Pessoas que realizaram a ação principal da sua campanha no período."
+            />
+            <MetricCard
+              icon={DollarSign}
+              label="Investimento total"
+              value={hasRealData ? fmtBRL(s.spend) : '—'}
+              sparkline={sparkBudget}
+              hasRealData={hasRealData}
+              hasGoals={hasGoals}
+              tooltip="Total investido em anúncios no período selecionado."
+            />
+            <MetricCard
+              icon={ShoppingBag}
+              label="Custo por cliente"
+              value={hasRealData ? fmtBRL(s.cpa) : '—'}
+              hasRealData={hasRealData}
+              hasGoals={hasGoals}
+              tooltip="Quanto você gastou, em média, para conquistar cada cliente."
+            />
+          </section>
 
-        {/* ── Instagram engagement ─────────────────────────────────────────── */}
-        <ErrorBoundary>
           <InstagramEngagementSection startDate={startDate} endDate={endDate} />
-        </ErrorBoundary>
 
-        {/* ── Weekly performance chart ──────────────────────────────────────── */}
-        <WeeklyChart data={dailyData} hasRealData={hasRealData} idealLine={idealLine} />
+          <WeeklyChart data={dailyData} hasRealData={hasRealData} idealLine={idealLine} />
 
-        {/* ── Fury alerts (comentado — dashboard simplificado) ─────────────── */}
-        {/* <div className="lg:col-span-2">
-          <FuryAlerts alerts={alerts} />
-        </div> */}
-
-        {/* ── Active campaigns table ────────────────────────────────────────── */}
-        <div className="mt-5">
           <ActiveCampaignsTable campaigns={activeCampaigns} />
         </div>
-      </div>
-      </TooltipProvider>
+      </ErrorBoundary>
     </AppLayout>
   );
 }

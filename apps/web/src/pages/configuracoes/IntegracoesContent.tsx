@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { LogOut } from 'lucide-react';
-import { EmptyState, LoadingSpinner, Button, StatusBadge } from '@/components';
+import { LogOut, Plus, RefreshCw } from 'lucide-react';
+import { LoadingSpinner, PageHeader } from '@/components';
 import {
   Dialog,
   DialogContent,
@@ -21,25 +21,22 @@ interface MetaAuthUrlResponse {
   data: { authUrl: string };
 }
 
+/* ── Estilos de Design Alinhados com o System ── */
+const SURFACE = 'rounded-2xl border border-border bg-surface shadow-sm';
+const SURFACE_CARD = 'rounded-2xl border border-border bg-surface p-6 shadow-sm hover:border-border-light transition-all duration-300';
+const BUTTON_HOVER = 'transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]';
+
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('pt-BR', {
-    year: 'numeric',
-    month: 'long',
     day: 'numeric',
+    month: 'long',
+    year: 'numeric',
   });
 }
 
 function isTokenValid(tokenExpiresAt: string | null): boolean {
-  // tokenExpiresAt nulo significa que o Meta nao retornou expiracao para esse
-  // token (ex.: expires_in=0), o que indica um token sem prazo de validade —
-  // nao um token invalido. So marcar "Pausado" quando ha uma data de
-  // expiracao e ela ja passou.
   if (!tokenExpiresAt) return true;
   return new Date(tokenExpiresAt) > new Date();
-}
-
-function getTokenStatus(valid: boolean): 'active' | 'paused' {
-  return valid ? 'active' : 'paused';
 }
 
 function ConnectionCard({
@@ -61,108 +58,100 @@ function ConnectionCard({
 }) {
   const tokenValid = isTokenValid(connection.tokenExpiresAt);
   const activeAdAccounts = (connection.adAccounts ?? []).filter((a) => a.account_status === 1);
+  const totalAccounts = (connection.adAccounts ?? []).length;
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-6 space-y-5">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          <h3 className="font-bold text-text-primary text-base line-clamp-1">
-            Conta Meta · {connection.metaUserId}
-          </h3>
-        </div>
-        <StatusBadge status={getTokenStatus(tokenValid)} />
-      </div>
-
-      {/* Active account selector */}
-      {activeAdAccounts.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
-            Conta ativa para métricas
-          </p>
-          <div className="relative">
-            <select
-              value={connection.selectedAdAccountId ?? activeAdAccounts[0]?.id ?? ''}
-              onChange={(e) => onSelectAccount(connection.id, e.target.value)}
-              disabled={isSelectingAccount}
-              className="w-full appearance-none bg-surface-secondary border border-border rounded-lg px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-[#E8631A]/30 focus:border-[#E8631A] disabled:opacity-50 cursor-pointer pr-8"
-            >
-              {activeAdAccounts.map((acc) => (
-                <option key={acc.id} value={acc.id}>
-                  {acc.name} · {acc.id}
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center">
-              {isSelectingAccount ? (
-                <span className="w-3.5 h-3.5 border-2 border-[#E8631A]/30 border-t-[#E8631A] rounded-full animate-spin inline-block" />
-              ) : (
-                <svg className="w-3.5 h-3.5 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
+    <div className={`${SURFACE_CARD} flex flex-col justify-between space-y-6`}>
+      <div className="space-y-4">
+        {/* Header do Card com Status */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-base font-semibold text-text-primary">
+              Conta Meta · {connection.metaUserId}
+            </h3>
+            <p className="mt-1 text-xs text-text-tertiary">
+              Conectado em {formatDate(connection.createdAt)}
+            </p>
+          </div>
+          <span
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium',
+              tokenValid
+                ? 'bg-brand/10 text-brand'
+                : 'bg-warning/10 text-warning'
+            )}
+          >
+            <span
+              className={cn(
+                'h-1.5 w-1.5 rounded-full',
+                tokenValid ? 'bg-brand' : 'bg-warning'
               )}
+            />
+            {tokenValid ? 'Ativa' : 'Pausada'}
+          </span>
+        </div>
+
+        {/* Quantidade de Contas de Anúncios */}
+        <div className="pt-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+          Contas de Anúncios ({totalAccounts})
+        </div>
+
+        {/* Seleção de Conta Ativa para métricas */}
+        {activeAdAccounts.length > 0 && (
+          <div className="space-y-1.5 pt-1">
+            <label className="block text-xs font-medium text-text-tertiary">
+              Conta ativa para métricas
+            </label>
+            <div className="relative">
+              <select
+                value={connection.selectedAdAccountId ?? activeAdAccounts[0]?.id ?? ''}
+                onChange={(e) => onSelectAccount(connection.id, e.target.value)}
+                disabled={isSelectingAccount}
+                className="w-full appearance-none rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs text-text-primary outline-none transition focus:border-brand disabled:opacity-50"
+              >
+                {activeAdAccounts.map((acc) => (
+                  <option key={acc.id} value={acc.id} className="bg-surface text-text-primary">
+                    {acc.name} · {acc.id}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+                {isSelectingAccount ? (
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-brand/30 border-t-brand" />
+                ) : (
+                  <svg className="h-3.5 w-3.5 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Metadata */}
-      <div className="flex items-center justify-between text-xs text-text-tertiary pt-2">
-        <span>Conectado em {formatDate(connection.createdAt)}</span>
+        )}
       </div>
 
-      {/* Ad Accounts */}
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
-          Contas de Anúncios ({(connection.adAccounts ?? []).length})
-        </p>
-        <div className="space-y-1.5">
-          {(connection.adAccounts ?? []).map((adAccount) => (
-            <div
-              key={adAccount.id}
-              className="flex items-center justify-between gap-3 p-3 bg-surface-secondary rounded-lg"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-text-primary line-clamp-1">
-                  {adAccount.name}
-                </p>
-                <p className="text-xs text-text-tertiary mt-0.5">{adAccount.id}</p>
-              </div>
-              <div
-                className={cn(
-                  'flex-shrink-0 w-2 h-2 rounded-full',
-                  adAccount.account_status === 1 ? 'bg-success' : 'bg-gray-300'
-                )}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex gap-2 pt-2">
+      {/* Botões de Ação */}
+      <div className="flex items-center gap-2 pt-2">
         {!tokenValid && (
-          <Button
-            variant="primary"
-            size="sm"
-            className="flex-1"
-            disabled={isReconnecting}
+          <button
+            type="button"
             onClick={onReconnect}
+            disabled={isReconnecting}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-full bg-brand py-2 text-xs font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50 cursor-pointer`}
           >
+            <RefreshCw className={cn('h-3.5 w-3.5', isReconnecting && 'animate-spin')} />
             {isReconnecting ? 'Reconectando...' : 'Reconectar'}
-          </Button>
+          </button>
         )}
         <button
+          type="button"
           onClick={() => onDisconnect(connection.id)}
           disabled={isDeleting}
           className={cn(
-            'flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all',
-            isDeleting
-              ? 'bg-error-light text-error opacity-50 cursor-not-allowed'
-              : 'border border-error text-error hover:bg-error-light'
+            'flex flex-1 items-center justify-center gap-2 rounded-full border border-error/40 px-4 py-2 text-xs font-semibold text-error transition-all hover:bg-error/10 hover:border-error cursor-pointer',
+            isDeleting && 'opacity-50 cursor-not-allowed'
           )}
         >
-          <LogOut className="w-4 h-4" />
+          <LogOut className="h-3.5 w-3.5" />
           {isDeleting ? 'Desconectando...' : 'Desconectar'}
         </button>
       </div>
@@ -185,28 +174,30 @@ function DisconnectDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onCancel(); }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md border-border bg-surface text-text-primary">
         <DialogHeader>
-          <DialogTitle>Desconectar conta Meta</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-base font-semibold text-text-primary">Desconectar conta Meta</DialogTitle>
+          <DialogDescription className="text-xs text-text-tertiary">
             Tem certeza que deseja desconectar a conta Meta{' '}
             <span className="font-semibold text-text-primary">{accountId}</span>? Esta ação não
             pode ser desfeita.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
+        <DialogFooter className="mt-4 gap-2">
           <DialogClose asChild>
             <button
+              type="button"
               onClick={onCancel}
-              className="px-4 py-2 rounded-lg text-sm font-semibold border border-border text-text-secondary hover:bg-surface-secondary transition-colors"
+              className="rounded-full border border-border px-4 py-2 text-xs font-medium text-text-primary hover:bg-border cursor-pointer"
             >
               Cancelar
             </button>
           </DialogClose>
           <button
+            type="button"
             onClick={onConfirm}
             disabled={isPending}
-            className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="rounded-full bg-error px-4 py-2 text-xs font-semibold text-white hover:bg-error/90 disabled:opacity-50 cursor-pointer"
           >
             {isPending ? 'Desconectando...' : 'Desconectar'}
           </button>
@@ -286,7 +277,7 @@ export function IntegracoesContent() {
       await api.delete(`/meta/connections/${connectionId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
+      void queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
       setPendingDisconnect(null);
     },
     onError: () => {
@@ -299,41 +290,59 @@ export function IntegracoesContent() {
       await api.patch(`/meta/connections/${connectionId}/select-account`, { adAccountId });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
-      queryClient.invalidateQueries({ queryKey: ['metrics-summary'] });
-      queryClient.invalidateQueries({ queryKey: ['goals-progress-v2'] });
-      queryClient.invalidateQueries({ queryKey: ['metrics-daily-week'] });
+      void queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
+      void queryClient.invalidateQueries({ queryKey: ['metrics-summary'] });
+      void queryClient.invalidateQueries({ queryKey: ['goals-progress-v2'] });
+      void queryClient.invalidateQueries({ queryKey: ['metrics-daily-week'] });
       showToast('Conta ativa atualizada');
     },
   });
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 sm:px-10">
+      {/* Notification Toast */}
       {toast && (
         <div
           className={cn(
-            'fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold text-white',
-            toast.variant === 'error' ? 'bg-red-600' : 'bg-[#2EA043]'
+            'fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-lg text-xs font-semibold text-white',
+            toast.variant === 'error' ? 'bg-error' : 'bg-brand'
           )}
         >
           {toast.variant === 'error' ? '⚠️' : '✅'} {toast.message}
         </div>
       )}
 
-      {needsScopeReconnect && (
-        <div className="flex items-center justify-between gap-4 rounded-xl border border-[#E8631A]/30 bg-[#E8631A]/10 p-4">
-          <p className="text-sm text-text-primary">
-            Reconecte sua conta Meta para habilitar o acesso a posts do Instagram e a criação de campanhas de anúncios.
-          </p>
-          <Button
-            variant="primary"
-            size="sm"
+      {/* Header Unificado do Projeto */}
+      <PageHeader
+        title="Integrações"
+        description="Gerencie suas contas de anúncios conectadas"
+        actions={
+          <button
+            type="button"
             onClick={() => connectMutation.mutate()}
             disabled={connectMutation.isPending}
-            className="flex-shrink-0"
+            className={`inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50 cursor-pointer`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {connectMutation.isPending ? 'Carregando...' : 'Conectar conta'}
+          </button>
+        }
+      />
+
+      {/* Banner de alerta de scopes/permissões */}
+      {needsScopeReconnect && (
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-brand/30 bg-brand/10 p-4">
+          <p className="text-xs text-text-primary">
+            Reconecte sua conta Meta para habilitar o acesso a posts do Instagram e a criação de campanhas de anúncios.
+          </p>
+          <button
+            type="button"
+            onClick={() => connectMutation.mutate()}
+            disabled={connectMutation.isPending}
+            className="shrink-0 rounded-full bg-brand px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-brand/90 disabled:opacity-50 cursor-pointer"
           >
             {connectMutation.isPending ? 'Reconectando...' : 'Reconectar'}
-          </Button>
+          </button>
         </div>
       )}
 
@@ -345,30 +354,28 @@ export function IntegracoesContent() {
         isPending={disconnectMutation.isPending}
       />
 
-      <div>
-        <h3 className="text-lg font-bold text-text-primary">Contas Meta Conectadas</h3>
-        <p className="text-sm text-text-secondary mt-0.5">
-          Gerencie suas contas de anúncios conectadas
-        </p>
-      </div>
-
+      {/* Lista de Contas Conectadas */}
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <LoadingSpinner size="lg" />
+        <div className={`${SURFACE} flex items-center justify-center px-6 py-20`}>
+          <LoadingSpinner />
         </div>
       ) : connections.length === 0 ? (
-        <div className="border border-border rounded-xl">
-          <EmptyState
-            title="Conecte sua conta Meta para começar"
-            description="Integre sua conta Meta para gerenciar campanhas e acessar insights diretamente do FURY"
-            action={{
-              label: 'Conectar conta Meta',
-              onClick: () => connectMutation.mutate(),
-            }}
-          />
+        <div className={`${SURFACE} flex flex-col items-center gap-3 px-6 py-16 text-center`}>
+          <p className="text-base font-medium text-text-primary">Nenhuma conta de anúncio conectada</p>
+          <p className="max-w-sm text-sm text-text-tertiary">
+            Integre sua conta Meta para gerenciar campanhas e acessar métricas diretamente no sistema.
+          </p>
+          <button
+            type="button"
+            onClick={() => connectMutation.mutate()}
+            disabled={connectMutation.isPending}
+            className={`mt-2 rounded-full bg-brand px-5 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50 cursor-pointer`}
+          >
+            Conectar conta Meta
+          </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           {connections.map((connection) => (
             <ConnectionCard
               key={connection.id}

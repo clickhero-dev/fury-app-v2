@@ -3,9 +3,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Mail } from 'lucide-react';
 import { useForgotPassword } from '@/hooks/useForgotPassword';
 import type { ForgotPasswordRequest } from '@/types/auth';
+import { AdySymbol } from '@/components/AdySymbol';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Email inválido').nonempty('Email é obrigatório'),
@@ -50,132 +51,129 @@ export function ForgotPasswordPage() {
 
   if (showSuccess) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="w-full max-w-[400px]">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#EA580C] mb-4">
-              <span className="text-white font-black text-xl">F</span>
-            </div>
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight">FURY</h1>
-            <p className="text-sm text-gray-400 mt-1">Automação de tráfego pago com IA</p>
+      <div className="relative flex min-h-screen items-center justify-center bg-admin-bg px-5 py-16 text-admin-text">
+        <div 
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: 'radial-gradient(120% 90% at 50% -10%, rgba(30,136,168,0.16), transparent 70%)',
+          }}
+        />
+
+        <div className="relative w-full max-w-[400px]">
+          <div className="flex flex-col items-center text-center">
+            <AdySymbol size={52} />
+            <h1 className="mt-5 text-4xl font-medium !text-[#ECEDEF]">ady</h1>
+            <p className="!mt-6 text-sm text-admin-text-muted">Seu gestor de tráfego com IA</p>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-            <div className="text-center space-y-6">
-              <div className="flex justify-center">
-                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                  <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </div>
-
-              <div>
-                <h2 className="text-lg font-bold text-gray-900 mb-2">Email enviado</h2>
-                <p className="text-sm text-gray-600">
-                  Se o email <span className="font-semibold text-gray-900">{successEmail}</span> existir em nossa base, você receberá um código de recuperação.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleContinue}
-                className="w-full bg-[#EA580C] hover:bg-[#D4520B] text-white font-bold py-3 rounded-xl text-sm transition-colors"
-              >
-                Continuar
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowSuccess(false)}
-                className="w-full text-sm font-bold text-center transition-all hover:underline"
-                style={{ color: '#EA580C' }}
-              >
-                Tentar outro email
-              </button>
+          <div className="mt-10 space-y-5 rounded-2xl border border-white/10 bg-admin-surface p-7 text-center shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)]">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-admin-petrol/12 text-admin-petrol">
+              <Mail className="size-6" />
             </div>
+
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold !text-[#ECEDEF]">Email enviado</h2>
+              <p className="text-sm text-admin-text-muted">
+                Se o email <strong className="text-admin-text">{successEmail}</strong> existir em nossa base, você receberá um código de recuperação.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleContinue}
+              className="w-full rounded-lg bg-admin-petrol py-3 text-sm font-semibold text-admin-bg transition-opacity hover:opacity-90"
+            >
+              Continuar
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowSuccess(false)}
+              className="w-full text-sm font-medium text-admin-petrol transition-colors hover:underline"
+            >
+              Tentar outro email
+            </button>
           </div>
+
+          <p className="!mt-10 text-center text-xs text-admin-text-faint">
+            ady é um produto <span className="text-[#CF6F03]">Click Hero</span>
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-[400px]">
+    <div className="relative flex min-h-screen items-center justify-center bg-admin-bg px-5 py-16 text-admin-text">
+      <div 
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: 'radial-gradient(120% 90% at 50% -10%, rgba(30,136,168,0.16), transparent 70%)',
+        }}
+      />
 
-        {/* Logo + tagline */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#EA580C] mb-4">
-            <span className="text-white font-black text-xl">F</span>
-          </div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">FURY</h1>
-          <p className="text-sm text-gray-400 mt-1">Automação de tráfego pago com IA</p>
+      <div className="relative w-full max-w-[400px]">
+        <div className="flex flex-col items-center text-center">
+          <AdySymbol size={52} />
+          <h1 className="mt-5 text-4xl font-medium !text-[#ECEDEF]">ady</h1>
+          <p className="!mt-6 text-sm text-admin-text-muted">Seu gestor de tráfego com IA</p>
         </div>
 
-        {/* Form card */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-          <form onSubmit={handleSubmit(onSubmit)} noValidate>
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 mb-1">Recuperar senha</h2>
-                <p className="text-sm text-gray-600 mb-6">
-                  Digite seu email para receber um código de recuperação
-                </p>
-              </div>
+        <form
+          className="mt-10 space-y-5 rounded-2xl border border-white/10 bg-admin-surface p-7 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)]"
+          onSubmit={handleSubmit(onSubmit)}
+        >
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold !text-[#ECEDEF]">Recuperar senha</h2>
+            <p className="text-sm text-admin-text-muted">
+              Digite seu email para receber um código de recuperação.
+            </p>
+          </div>
 
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  E-mail
-                </label>
-                <input
-                  type="email"
-                  placeholder="seu@email.com"
-                  autoComplete="email"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors"
-                  {...register('email')}
-                />
-                {errors.email?.message && (
-                  <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={forgotPasswordMutation.isPending || !isValid}
-              className="w-full mt-6 bg-[#EA580C] hover:bg-[#D4520B] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
-            >
-              {forgotPasswordMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Processando...
-                </>
-              ) : (
-                'Enviar código'
-              )}
-            </button>
-
-            {/* Error */}
-            {error && (
-              <p className="text-sm text-red-500 text-center mt-3">{error}</p>
+          <label className="block">
+            <span className="mb-2 block text-sm text-admin-text-muted">E-mail</span>
+            <input
+              type="email"
+              autoComplete="email"
+              placeholder="seu@email.com"
+              className="w-full rounded-lg border border-white/15 bg-admin-bg px-4 py-3 text-sm text-admin-text outline-none transition-colors placeholder:text-admin-text-faint focus:border-admin-petrol"
+              {...register('email')}
+            />
+            {errors.email?.message && (
+              <p className="mt-2 text-sm text-admin-danger">{errors.email.message}</p>
             )}
-          </form>
+          </label>
 
-          {/* Back link */}
-          <p className="text-sm text-gray-500 text-center mt-4">
+          <button
+            type="submit"
+            disabled={forgotPasswordMutation.isPending || !isValid}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-admin-petrol py-3 text-sm font-semibold text-admin-bg transition-opacity hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {forgotPasswordMutation.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Processando...
+              </>
+            ) : (
+              'Enviar código'
+            )}
+          </button>
+
+          {error && <p className="text-center text-sm text-admin-danger">{error}</p>}
+
+          <p className="text-center text-sm text-admin-text-muted">
             Lembrou a senha?{' '}
-            <Link
-              to="/login"
-              className="text-[#EA580C] font-semibold hover:underline"
-            >
+            <Link to="/" className="font-medium text-admin-petrol hover:underline">
               Entrar
             </Link>
           </p>
-        </div>
+        </form>
 
+        <p className="!mt-10 text-center text-xs text-admin-text-faint">
+          ady é um produto <span className="text-[#CF6F03]">Click Hero</span>
+        </p>
       </div>
     </div>
   );
