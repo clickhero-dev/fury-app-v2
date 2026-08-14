@@ -156,12 +156,6 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
 export async function updatePostFields(
   postId: string,
   tenantId: string,
-<<<<<<< HEAD
-  fields: { caption?: string; cta?: string; hashtags?: string[] },
-) {
-  const [updated] = await db.update(socialPosts)
-    .set({ ...fields, updatedAt: new Date() })
-=======
   fields: { caption?: string; cta?: string; hashtags?: string[]; imageUrl?: string; scheduledAt?: string | null },
 ) {
   const setData: Record<string, any> = { updatedAt: new Date() };
@@ -173,7 +167,6 @@ export async function updatePostFields(
 
   const [updated] = await db.update(socialPosts)
     .set(setData)
->>>>>>> origin/hmg
     .where(and(eq(socialPosts.id, postId), eq(socialPosts.tenantId, tenantId)))
     .returning();
   if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado ao atualizar');
@@ -208,26 +201,17 @@ export async function getCalendarPosts(tenantId: string, year: number, month: nu
     if (planYear !== year || planMonth !== month) continue;
 
     for (const post of plan.posts) {
-<<<<<<< HEAD
-=======
       if (post.status === 'rejected' || post.status === 'failed') continue;
->>>>>>> origin/hmg
       allPosts.push({ ...post, _source: 'plan', _planTitle: plan.title });
     }
   }
 
   for (const post of manualPosts) {
-<<<<<<< HEAD
-    if (!post.scheduledAt) continue;
-    const postMonth = post.scheduledAt.getMonth() + 1;
-    const postYear = post.scheduledAt.getFullYear();
-=======
     if (post.status === 'rejected' || post.status === 'failed') continue;
     const refDate = post.scheduledAt || post.createdAt;
     if (!refDate) continue;
     const postMonth = refDate.getMonth() + 1;
     const postYear = refDate.getFullYear();
->>>>>>> origin/hmg
     if (postYear !== year || postMonth !== month) continue;
     allPosts.push({ ...post, _source: 'manual' });
   }
@@ -244,27 +228,13 @@ export async function bulkSchedulePosts(tenantId: string, postIds: string[], sch
     })
     .where(and(
       eq(socialPosts.tenantId, tenantId),
-<<<<<<< HEAD
-      sql`${socialPosts.id} = ANY(${postIds}::uuid[])`,
-=======
       inArray(socialPosts.id, postIds),
->>>>>>> origin/hmg
     ))
     .returning();
   return result;
 }
 
 export async function bulkDeletePosts(tenantId: string, postIds: string[]) {
-<<<<<<< HEAD
-  const result = await db.update(socialPosts)
-    .set({ status: 'rejected', updatedAt: new Date() })
-    .where(and(
-      eq(socialPosts.tenantId, tenantId),
-      sql`${socialPosts.id} = ANY(${postIds}::uuid[])`,
-    ))
-    .returning();
-  return result;
-=======
   console.log(`[bulkDelete] tenant ${tenantId}: ${postIds.length} posts`, postIds);
   
   const uuidValues = postIds.map((id) => sql`${id}::uuid`);
@@ -287,7 +257,6 @@ export async function bulkDeletePosts(tenantId: string, postIds: string[]) {
     }
     throw err;
   }
->>>>>>> origin/hmg
 }
 
 export async function createManualPost(tenantId: string, data: {
@@ -297,10 +266,7 @@ export async function createManualPost(tenantId: string, data: {
   platform?: string;
   scheduledAt?: string;
   title?: string;
-<<<<<<< HEAD
-=======
   imageUrl?: string;
->>>>>>> origin/hmg
 }) {
   const [post] = await db.insert(socialPosts)
     .values({
@@ -312,12 +278,8 @@ export async function createManualPost(tenantId: string, data: {
       platform: data.platform || 'instagram',
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
       title: data.title || null,
-<<<<<<< HEAD
-      status: 'draft',
-=======
       imageUrl: data.imageUrl || null,
       status: 'approved',
->>>>>>> origin/hmg
     })
     .returning();
   return post;
@@ -332,10 +294,6 @@ export async function movePostDay(tenantId: string, postId: string, dayIndex: nu
   return updated;
 }
 
-<<<<<<< HEAD
-export async function publishDuePosts(tenantId: string) {
-  const now = new Date();
-=======
 // ===== Calendário Editorial: Publicação Automática =====
 
 const RETRY_BACKOFF_MINUTES = [1, 5, 15];
@@ -442,30 +400,12 @@ export async function publishDuePosts(tenantId: string) {
 
   const now = new Date();
 
->>>>>>> origin/hmg
   const due = await db.query.socialPosts.findMany({
     where: and(
       eq(socialPosts.tenantId, tenantId),
       sql`${socialPosts.scheduledAt} IS NOT NULL`,
       sql`${socialPosts.scheduledAt} <= ${now.toISOString()}::timestamptz`,
       eq(socialPosts.status, 'approved'),
-<<<<<<< HEAD
-    ),
-  });
-
-  if (due.length === 0) return { published: 0, posts: [] };
-
-  const ids = due.map(p => p.id);
-  await db.update(socialPosts)
-    .set({ status: 'published', publishedAt: now, updatedAt: now })
-    .where(and(
-      eq(socialPosts.tenantId, tenantId),
-      sql`${socialPosts.id} = ANY(${ids}::uuid[])`,
-    ));
-
-  // ponytail: só atualiza status. Integração com Meta API via Instagram service fica pra v2.
-  return { published: due.length, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })) };
-=======
       // Respeita backoff: nextRetryAt nulo OU já passou
       or(
         isNull(socialPosts.nextRetryAt),
@@ -539,5 +479,4 @@ export async function publishDuePosts(tenantId: string) {
   }
 
   return { published, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })), pageName: account.pageName, instagramUsername: account.instagramUsername };
->>>>>>> origin/hmg
 }

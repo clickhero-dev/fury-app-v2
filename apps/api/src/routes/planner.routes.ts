@@ -17,10 +17,7 @@ import {
   handleCreatePost,
   handleMovePost,
   handlePublishDue,
-<<<<<<< HEAD
-=======
   handleUploadMedia,
->>>>>>> origin/hmg
 } from '../controllers/planner.controller.js';
 
 const router = Router();
@@ -51,10 +48,7 @@ router.get('/calendar', tenantMiddleware, handleGetCalendar);
 router.patch('/posts/bulk-schedule', tenantMiddleware, handleBulkSchedule);
 router.delete('/posts/bulk', tenantMiddleware, handleBulkDelete);
 router.post('/posts', tenantMiddleware, handleCreatePost);
-<<<<<<< HEAD
-=======
 router.post('/posts/upload', tenantMiddleware, mediaUpload.single('file'), handleUploadMedia);
->>>>>>> origin/hmg
 router.patch('/posts/:postId/move', tenantMiddleware, handleMovePost);
 router.post('/posts/publish-due', tenantMiddleware, handlePublishDue);
 

@@ -2,59 +2,38 @@
 @plugin "tailwindcss-animate";
 
 @theme {
-  --font-sans: "Gantari", ui-sans-serif, system-ui, sans-serif;
+  /* Sidebar */
+  --color-sidebar: #E8631A;
+  --color-sidebar-hover: #D45714;
+  --color-sidebar-active: #BF4B10;
+  --color-sidebar-bg: #E8631A;
+  --color-sidebar-text: #ffffff;
+  --color-sidebar-icon: #ffffff;
 
-  /* ── Paleta ady (Base Theme) ────────────────────────────── */
-  --color-background: #0C0D0A;
-  --color-surface: #141512;
-  --color-surface-secondary: #1C1D1A;
+  /* Accent */
+  --color-accent: #e8631a;
+  --color-accent-light: #ff8a4a;
 
-  /* Sidebar - Dark theme com destaque Petróleo */
-  --color-sidebar-bg: #141512;
-  --color-sidebar: #141512;
-  --color-sidebar-hover: #1C1D1A;
-  --color-sidebar-active: rgba(30, 136, 168, 0.15);
-  --color-sidebar-text: #ECEDEF;
-  --color-sidebar-icon: #1E88A8;
+  /* Surface */
+  --color-surface: #ffffff;
+  --color-surface-secondary: #f6f8fa;
+  --color-background: #ffffff;
 
-  /* Marca ady */
-  --color-brand: #1E88A8;         /* Petróleo */
-  --color-brand-hover: #17708A;
-  --color-brand-light: rgba(30, 136, 168, 0.15);
+  /* Text */
+  --color-text-primary: #1c1c1e;
+  --color-text-secondary: #6e7681;
+  --color-text-tertiary: #9ca3af;
 
-  --color-accent: #CF6F03;        /* Faísca */
-  --color-accent-light: #E07B0B;
-
-  /* Tipografia */
-  --color-text-primary: #ECEDEF;
-  --color-text-secondary: #A3A8B3;
-  --color-text-tertiary: #8E939D;
-
-  /* Bordas */
-  --color-border: #1F211D;
-  --color-border-light: #262824;
+  /* Border */
+  --color-border: #e0e0e0;
+  --color-border-light: #f0f0f0;
 
   /* Status */
   --color-success: #2ea043;
-  --color-success-light: rgba(46, 160, 67, 0.15);
-  --color-warning: #CF6F03;
-  --color-warning-light: rgba(207, 111, 3, 0.15);
+  --color-success-light: #dff3e4;
+  --color-warning: #e8a317;
+  --color-warning-light: #fff4d6;
   --color-error: #da3633;
-<<<<<<< HEAD
-  --color-error-light: rgba(218, 54, 51, 0.15);
-
-  /* Admin Theme Aliases */
-  --color-admin-bg: #0C0D0A;
-  --color-admin-surface: #141512;
-  --color-admin-surface-2: #1C1D1A;
-  --color-admin-border: #1F211D;
-  --color-admin-text: #ECEDEF;
-  --color-admin-text-muted: #8E939D;
-  --color-admin-text-faint: #525853;
-  --color-admin-petrol: #1E88A8;
-  --color-admin-petrol-hover: #17708A;
-  --color-admin-danger: #da3633;
-=======
   --color-error-light: #fde8e7;
 
   /* Admin Theme Aliases (Usados no TenantDetailPage e subcomponentes do Admin) */
@@ -97,15 +76,13 @@ html.dark {
   --color-admin-text-muted: #8A8F8B;
   --color-admin-text-faint: #525853;
   --color-admin-petrol: #1E88A8;
->>>>>>> origin/hmg
 }
 
 body {
   margin: 0;
-  font-family: var(--font-sans);
+  font-family: system-ui, -apple-system, sans-serif;
   background: var(--color-background);
   color: var(--color-text-primary);
-  min-height: 100vh;
 }
 
 * {
@@ -113,57 +90,6 @@ body {
 }
 
 @layer base {
-<<<<<<< HEAD
-  h1, h2, h3, h4, h5, h6 {
-    color: var(--color-text-primary);
-    font-weight: inherit;
-    margin: 0;
-  }
-
-  h1 {
-    font-size: 2rem;
-    line-height: 1.2;
-  }
-
-  h2 {
-    font-size: 1.5rem;
-    line-height: 1.3;
-  }
-
-  h3 {
-    font-size: 1.25rem;
-    line-height: 1.4;
-  }
-
-  p {
-    margin: 0;
-    color: var(--color-text-secondary);
-  }
-}
-
-/* === Global overrides: Redirecionamento da cor Laranja antiga para Petróleo/Faísca === */
-
-/* Fundo Laranja antigo -> Petróleo */
-[class*="bg-[#E8631A]"],
-[class*="bg-[#EA580C]"],
-.bg-orange-500,
-.bg-orange-600 {
-  background-color: #1E88A8 !important;
-}
-
-.hover\:bg-orange-600:hover,
-.hover\:bg-orange-700:hover,
-[class*="hover:bg-[#D45714]"]:hover {
-  background-color: #17708A !important;
-}
-
-/* Texto Laranja antigo -> Petróleo / Faísca */
-[class*="text-[#EA580C]"],
-[class*="text-[#E8631A]"],
-.text-orange-500,
-.text-orange-600 {
-  color: #1E88A8 !important;
-=======
   h1,
   h2,
   h3,
@@ -189,71 +115,55 @@ body {
     font-size: 1.25rem;
     line-height: 1.4;
   }
->>>>>>> origin/hmg
 }
 
-/* Bordas Laranjas */
-[class*="border-[#EA580C]"],
-[class*="border-[#E8631A]"] {
-  border-color: #1E88A8 !important;
+p {
+  margin: 0;
+  color: var(--color-text-secondary);
 }
 
-<<<<<<< HEAD
-/* === Overrides de Telas Claras para o Dark da ady === */
-.bg-white,
-.bg-white\/80,
-.bg-white\/90,
-.bg-\[#FCFCFD\] {
-=======
 /* === Global overrides: dark mode === */
 html.dark .bg-white,
 html.dark .bg-white\/80,
 html.dark .bg-white\/90 {
->>>>>>> origin/hmg
   background-color: var(--color-surface) !important;
 }
 
-.bg-gray-50,
-.bg-gray-50\/50,
-.bg-gray-100,
-.bg-gray-100\/80,
-.bg-\[#F2F4F7\] {
+html.dark .bg-gray-50,
+html.dark .bg-gray-50\/50 {
+  background-color: var(--color-surface-secondary) !important;
+}
+html.dark .bg-gray-100,
+html.dark .bg-gray-100\/80 {
   background-color: var(--color-surface-secondary) !important;
 }
 
-.border-gray-100,
-.border-gray-200,
-.border-gray-300,
-.border-\[#E0E0E0\],
-.border-\[#E6E8EC\] {
+html.dark .border-gray-100,
+html.dark .border-gray-200,
+html.dark .border-gray-300 {
+  border-color: var(--color-border) !important;
+}
+html.dark .border-\[#E0E0E0\],
+html.dark .border-\[#E6E8EC\] {
   border-color: var(--color-border) !important;
 }
 
-.text-gray-400 {
+html.dark .text-gray-400 {
   color: var(--color-text-tertiary) !important;
 }
-.text-gray-500,
-.text-gray-600,
-.text-gray-700 {
+html.dark .text-gray-500 {
   color: var(--color-text-secondary) !important;
 }
-.text-gray-800,
-.text-gray-900 {
+html.dark .text-gray-600 {
+  color: var(--color-text-secondary) !important;
+}
+html.dark .text-gray-700 {
+  color: var(--color-text-secondary) !important;
+}
+html.dark .text-gray-900 {
   color: var(--color-text-primary) !important;
 }
 
-<<<<<<< HEAD
-/* Desvios/Alertas em Laranja fraco -> Fundo escuro com Faísca */
-[class*="bg-[#FFF4ED]"],
-[class*="bg-[#FFF7F4]"],
-.bg-orange-50 {
-  background-color: rgba(207, 111, 3, 0.12) !important;
-}
-
-/* Status verde / vermelho no dark */
-.bg-green-50 {
-  background-color: rgba(46, 160, 67, 0.15) !important;
-=======
 html.dark .bg-\[#FCFCFD\] {
   background-color: var(--color-surface) !important;
 }
@@ -271,19 +181,48 @@ html.dark .bg-orange-50 {
 /* === Onboarding pages dark mode overrides === */
 html.dark [class*="text-[#1C1C1E]"] {
   color: var(--color-text-primary) !important;
->>>>>>> origin/hmg
 }
-.text-green-400,
-.text-green-500,
-.text-green-600,
-.text-green-700 {
+html.dark [class*="text-[#6E7681]"] {
+  color: var(--color-text-secondary) !important;
+}
+html.dark [class*="text-[#9CA3AF]"] {
+  color: var(--color-text-secondary) !important;
+}
+
+/* Background colors */
+html.dark .bg-\[#E5E7EB\] {
+  background-color: var(--color-surface-secondary) !important;
+}
+html.dark .bg-\[#F3F4F6\] {
+  background-color: var(--color-surface-secondary) !important;
+}
+html.dark .bg-\[#D1D5DB\] {
+  background-color: var(--color-text-tertiary) !important;
+}
+html.dark [class*="bg-[#FDDCCC]"] {
+  background-color: color-mix(in srgb, var(--color-accent) 20%, var(--color-surface-secondary)) !important;
+}
+
+/* Border colors */
+html.dark .border-\[#E5E7EB\] {
+  border-color: var(--color-border) !important;
+}
+html.dark .border-\[#F3F4F6\] {
+  border-color: var(--color-border) !important;
+}
+html.dark .border-\[#FDDCCC\] {
+  border-color: color-mix(in srgb, var(--color-accent) 30%, var(--color-border)) !important;
+}
+/* === Status colors (green/red) in dark mode === */
+html.dark .bg-green-50 {
+  background-color: color-mix(in srgb, var(--color-success) 15%, var(--color-surface)) !important;
+}
+html.dark .border-green-200 {
+  border-color: color-mix(in srgb, var(--color-success) 30%, var(--color-border)) !important;
+}
+html.dark .text-green-500 {
   color: #3fb950 !important;
 }
-<<<<<<< HEAD
-.text-red-500,
-.text-red-600 {
-  color: #da3633 !important;
-=======
 html.dark .text-green-700 {
   color: #3fb950 !important;
 }
@@ -340,5 +279,4 @@ html.dark .border-amber-200 {
 }
 html.dark .text-amber-700 {
   color: #fbbf24 !important;
->>>>>>> origin/hmg
 }

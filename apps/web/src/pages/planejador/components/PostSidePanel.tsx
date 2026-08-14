@@ -83,8 +83,6 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiEditor, setShowAiEditor] = useState(false);
   const [pendingEdit, setPendingEdit] = useState<Post | null>(null);
-<<<<<<< HEAD
-=======
   const [editMode, setEditMode] = useState(false);
   const [editCaption, setEditCaption] = useState(post.caption || '');
   const [editCta, setEditCta] = useState(post.cta || '');
@@ -100,7 +98,6 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
     scheduledIso ? scheduledIso.toTimeString().slice(0, 5) : '',
   );
   const editFileRef = useRef<HTMLInputElement>(null);
->>>>>>> origin/hmg
 
   const Icon = postIcons[post.postType] ?? Image;
 
@@ -119,8 +116,6 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
     </button>
   );
 
-<<<<<<< HEAD
-=======
   const saveEditMutation = useMutation({
     mutationFn: async () => {
       let imageUrl = post.imageUrl;
@@ -153,7 +148,6 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
     },
   });
 
->>>>>>> origin/hmg
   // A edição por IA já grava no banco — o post fica em revisão local até o
   // usuário aplicar (confirma o que já está salvo) ou reverter (regrava os
   // valores anteriores, já que o servidor não guarda um histórico).
@@ -427,20 +421,6 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
           {/* Actions */}
           {!pendingEdit && (
             <div className="flex gap-3 pt-4 border-t border-border">
-<<<<<<< HEAD
-              <button className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors">
-                Editar
-              </button>
-              <button className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors">
-                Regenerar
-              </button>
-              <button
-                onClick={() => setShowAiEditor(!showAiEditor)}
-                className="flex-1 px-4 py-2.5 bg-accent/5 hover:bg-accent/10 text-accent font-medium rounded-xl text-sm transition-colors"
-              >
-                Melhorar com IA
-              </button>
-=======
               {editMode ? (
                 <>
                   <button
@@ -476,7 +456,6 @@ export function PostSidePanel({ post, onClose, onUpdate }: PostSidePanelProps) {
                   </button>
                 </>
               )}
->>>>>>> origin/hmg
             </div>
           )}
 
