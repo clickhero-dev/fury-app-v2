@@ -1,22 +1,28 @@
 import { useState, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, Loader2, Sparkles, Trash2 } from 'lucide-react';
-import { AppLayout, Button, Card, CardContent, EmptyState, LoadingSpinner } from '@/components';
+import { AlertCircle, ArrowLeft, ArrowRight, Image as ImageIcon, Loader2, Send, Sparkles, Trash2, Wand2 } from 'lucide-react';
+import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
 import { CampaignWizard } from '@/components/campaign-wizard/CampaignWizard';
 import api from '@/lib/api';
-import type { StudioAsset, GenerateCreativeResponse } from '@/types/studio';
+import type { StudioAsset } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
 
 type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create';
 
-// Vídeos ainda não são suportados no backend, reativar quando estiver pronto
 const FEATURES = {
   videoAnuncios: false,
 };
 
-// ponytail: só imagem, só flux.2 max — sem seletor de tipo nem modelo
 const CREATIVE_TYPE = 'image' as const;
 const IMAGE_MODEL = 'black-forest-labs/flux.2-max';
+
+/* ── Estilos com efeito de Hover estilo Campanhas e Tokens Semânticos ── */
+const SURFACE = 'rounded-2xl border border-border bg-surface shadow-sm';
+const CARD_HOVER = 'transition-all duration-300 ease-in-out hover:border-brand/50 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5';
+const BUTTON_HOVER = 'transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]';
+
+const CHIP_ON = 'bg-brand text-brand-foreground font-semibold shadow-sm';
+const CHIP_OFF = 'text-text-tertiary hover:text-text-primary hover:bg-surface-hover font-medium';
 
 interface StudioAssetResponse {
   assets: StudioAsset[];
@@ -27,7 +33,7 @@ interface StudioAssetResponse {
 export function EstudioHome() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<ViewState>('library');
-  const [generationResult, setGenerationResult] = useState<GenerateCreativeResponse | null>(null);
+  const [generationResult, setGenerationResult] = useState<any>(null);
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -54,7 +60,6 @@ export function EstudioHome() {
     },
   });
 
-  // ─── OpenRouter image mutation (sempre flux.2 max) ─────────────────
   const orImageMutation = useMutation({
     mutationFn: async (payload: { model: string; prompt: string }) => {
       setProgressMessage('Gerando imagem...');
@@ -102,13 +107,12 @@ export function EstudioHome() {
     });
   }, [assetList, filterType, filterStatus]);
 
-  // ponytail: removido handleGenerate / handleSaveToLibrary / handleStartWizard / handleNewCreative
-
   const handleStartQuickCreate = () => {
     setOrPrompt('');
     setQuotaErrorMessage(null);
     setView('quick-create');
   };
+
   const handleQuickCreate = async () => {
     const finalPrompt = orPrompt.trim();
     if (finalPrompt.length < 10) return;
@@ -128,6 +132,7 @@ export function EstudioHome() {
       orImageMutation.mutate({ model: IMAGE_MODEL, prompt: finalPrompt });
     }
   };
+
   const handleBackToLibrary = () => {
     setView('library');
     setGenerationResult(null);
@@ -138,7 +143,7 @@ export function EstudioHome() {
     try {
       const meta = JSON.parse(asset.complianceNotes ?? '{}');
       if (meta.headline) creativeData = { headline: meta.headline, primary_text: meta.primary_text ?? '', cta: meta.cta ?? '', subheadline: meta.subheadline ?? '', layout: meta.layout ?? '', color_scheme: meta.color_scheme ?? '' };
-    } catch { /* use empty fallback */ }
+    } catch { /* fallback */ }
     setGenerationResult({
       type: CREATIVE_TYPE,
       assetId: asset.id,
@@ -148,6 +153,7 @@ export function EstudioHome() {
     });
     setView('result');
   };
+
   const handleUseInCampaign = (asset: StudioAsset) => {
     setWizardAsset({ id: asset.id, url: asset.url });
     setWizardOpen(true);
@@ -170,139 +176,171 @@ export function EstudioHome() {
   const getStatusCount = (status: string) =>
     status === 'all' ? assetList.length : assetList.filter((a) => a.complianceStatus === status).length;
 
-  const header = (
-    <div className="flex items-center justify-between">
-      {view === 'library' ? (
-        <h2 className="text-lg font-bold text-text-primary">Estúdio de Anúncios</h2>
-      ) : (
-        <>
+  const steps = [
+    { icon: Wand2, label: 'Descreva o anúncio que deseja' },
+    { icon: ImageIcon, label: 'O ady cria a imagem para você' },
+    { icon: Send, label: 'Publique direto na sua conta' },
+  ];
+
+  const renderPageHeader = () => {
+    if (view === 'library') {
+      return (
+        <PageHeader
+          title="Estúdio de anúncios"
+          description="Peças prontas para publicar, criadas a partir de uma frase"
+        />
+      );
+    }
+
+    const titleMap: Record<ViewState, string> = {
+      'library': 'Estúdio de anúncios',
+      'quick-create': 'Criação rápida',
+      'loading': 'Gerando...',
+      'result': 'Seu anúncio',
+      'error': 'Erro na geração',
+    };
+
+    return (
+      <PageHeader
+        title={titleMap[view]}
+        actions={
           <button
+            type="button"
             onClick={handleBackToLibrary}
-            className="flex items-center gap-1.5 text-sm font-semibold text-text-tertiary hover:text-text-primary transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-text-tertiary transition-colors hover:text-text-primary"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-3.5 w-3.5" />
             Biblioteca
           </button>
-          <h2 className="text-lg font-bold text-text-primary">
-            {view === 'quick-create' && 'Criação Rápida'}
-            {view === 'loading' && 'Gerando...'}
-            {view === 'result' && 'Seu Anúncio'}
-            {view === 'error' && 'Erro na geração'}
-          </h2>
-        </>
-      )}
-    </div>
-  );
+        }
+      />
+    );
+  };
 
   return (
-    <AppLayout header={header}>
-      <div className="space-y-10">
+    <AppLayout>
+      <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 sm:px-10">
+        {renderPageHeader()}
 
         {/* LIBRARY VIEW */}
         {view === 'library' && (
           <>
-            {/* Hero — só criação rápida */}
-            <div className="flex flex-col items-center text-center pt-4 pb-2 space-y-4">
-              <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-sm text-text-tertiary">
-                <span className="flex items-center gap-2">
-                  <span className="text-base">✨</span>
-                  Descreva o anúncio que deseja
-                </span>
-                <span className="text-border hidden sm:block">→</span>
-                <span className="flex items-center gap-2">
-                  <span className="text-base">🤖</span>
-                  A IA cria a imagem para você
-                </span>
-                <span className="text-border hidden sm:block">→</span>
-                <span className="flex items-center gap-2">
-                  <span className="text-base">📤</span>
-                  Publique direto no Meta
-                </span>
+            {/* Hero */}
+            <section className={`${SURFACE} relative overflow-hidden px-6 py-10`}>
+              <div className="relative flex flex-col items-center gap-4 text-center">
+                <ol className="flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
+                  {steps.map(({ icon: Icon, label }, i) => (
+                    <li key={label} className="flex items-center gap-3">
+                      <span className="flex items-center gap-2 text-sm text-text-primary">
+                        <Icon className="h-4 w-4 shrink-0 text-brand" />
+                        {label}
+                      </span>
+                      {i < steps.length - 1 ? (
+                        <ArrowRight className="hidden h-4 w-4 text-text-tertiary sm:block" />
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+
+                <div className="flex flex-col items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleStartQuickCreate}
+                    disabled={quotaReached}
+                    className={`inline-flex items-center justify-center gap-2 rounded-full bg-brand px-6 py-2.5 text-sm font-semibold text-brand-foreground shadow-md ${BUTTON_HOVER} hover:bg-brand/90 disabled:opacity-50`}
+                  >
+                    <Sparkles className="h-4 w-4 shrink-0" />
+                    Criação rápida
+                  </button>
+
+                  {/* Informação do número de criativos dinâmica */}
+                  {creativesRemaining !== null && (
+                    <p className="text-xs text-text-tertiary">
+                      {quotaReached
+                        ? 'Limite de criativos do mês atingido — faça upgrade do plano para continuar'
+                        : `${creativesRemaining}${creativesLimit !== null ? ` de ${creativesLimit}` : ''} criativo${creativesRemaining !== 1 ? 's' : ''} restante${creativesRemaining !== 1 ? 's' : ''} este mês`}
+                    </p>
+                  )}
+                </div>
               </div>
-
-              <Button
-                onClick={handleStartQuickCreate}
-                disabled={quotaReached}
-                className="inline-flex items-center justify-center gap-2 bg-[#EA580C] hover:bg-[#C2410C] text-white px-8 py-3 text-base font-semibold rounded-2xl h-auto disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Sparkles size={18} />
-                Criação Rápida
-              </Button>
-
-              {creativesRemaining !== null && (
-                <p className={`text-xs font-semibold ${quotaReached ? 'text-red-600' : 'text-text-tertiary'}`}>
-                  {quotaReached
-                    ? 'Limite de criativos do mês atingido — faça upgrade do plano para continuar'
-                    : `${creativesRemaining}${creativesLimit !== null ? ` de ${creativesLimit}` : ''} criativo${creativesRemaining !== 1 ? 's' : ''} restante${creativesRemaining !== 1 ? 's' : ''} este mês`}
-                </p>
-              )}
-            </div>
+            </section>
 
             {/* Library */}
-            <div className="border-t border-border pt-8 space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-bold text-text-primary">Biblioteca de Anúncios</h3>
+            <section className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-xl font-semibold tracking-[-0.02em] text-text-primary">
+                  Biblioteca de anúncios
+                </h2>
                 <span className="text-sm text-text-tertiary">
-                  {assetList.length} ativo{assetList.length !== 1 ? 's' : ''}
+                  {assetList.length} ativos
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-surface border border-border rounded-xl">
-                <span className="text-xs font-semibold text-text-tertiary shrink-0">Tipo:</span>
-                {typeOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setFilterType(option.value)}
-                    className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md font-semibold text-xs transition-all ${
-                      filterType === option.value
-                        ? 'bg-[#EA580C] text-white'
-                        : 'bg-surface-secondary text-text-tertiary hover:bg-border-light'
-                    }`}
-                  >
-                    {option.label}
-                    <span className={`text-[10px] font-bold ${filterType === option.value ? 'opacity-80' : 'opacity-60'}`}>
-                      {getTypeCount(option.value)}
-                    </span>
-                  </button>
-                ))}
+              {/* Barra de Filtros */}
+              <div className={`${SURFACE} flex flex-wrap items-center justify-start gap-6 px-4 py-3 text-sm`}>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-text-tertiary">Tipo:</span>
+                  <div className="flex items-center gap-1.5">
+                    {typeOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setFilterType(option.value)}
+                        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs transition-all ${
+                          filterType === option.value ? CHIP_ON : CHIP_OFF
+                        }`}
+                      >
+                        <span>{option.label}</span>
+                        <span className="opacity-70">{getTypeCount(option.value)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                <span className="border-l border-border self-stretch mx-1" />
-
-                <span className="text-xs font-semibold text-text-tertiary shrink-0">Status:</span>
-                {statusOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setFilterStatus(option.value)}
-                    className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md font-semibold text-xs transition-all ${
-                      filterStatus === option.value
-                        ? 'bg-[#EA580C] text-white'
-                        : 'bg-surface-secondary text-text-tertiary hover:bg-border-light'
-                    }`}
-                  >
-                    {option.label}
-                    <span className={`text-[10px] font-bold ${filterStatus === option.value ? 'opacity-80' : 'opacity-60'}`}>
-                      {getStatusCount(option.value)}
-                    </span>
-                  </button>
-                ))}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-text-tertiary">Status:</span>
+                  <div className="flex items-center gap-1.5">
+                    {statusOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setFilterStatus(option.value)}
+                        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs transition-all ${
+                          filterStatus === option.value ? CHIP_ON : CHIP_OFF
+                        }`}
+                      >
+                        <span>{option.label}</span>
+                        <span className="opacity-70">{getStatusCount(option.value)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {isLoading ? (
-                <div className="flex items-center justify-center py-12">
+                <div className={`${SURFACE} flex items-center justify-center px-6 py-20`}>
                   <LoadingSpinner />
                 </div>
               ) : filteredAssets.length === 0 ? (
-                <EmptyState
-                  title={assetList.length === 0 ? 'Gere seu primeiro anúncio com IA' : 'Nenhum ativo com esses filtros'}
-                  description={
-                    assetList.length === 0
-                      ? 'Clique em "Criação Rápida" para começar'
-                      : 'Ajuste os filtros ou crie novos anúncios'
-                  }
-                  action={{ label: 'Criar Anúncio', onClick: handleStartQuickCreate }}
-                />
+                <div className={`${SURFACE} flex flex-col items-center gap-3 px-6 py-16 text-center`}>
+                  <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-brand">
+                    <ImageIcon className="h-5 w-5" />
+                  </span>
+                  <p className="text-base font-medium text-text-primary">Crie seu primeiro anúncio com o ady</p>
+                  <p className="max-w-sm text-sm text-text-tertiary">
+                    Conte em uma frase o que você quer anunciar — o resto é com ele.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleStartQuickCreate}
+                    disabled={quotaReached}
+                    className={`mt-2 rounded-full border border-border px-5 py-2 text-xs font-semibold text-text-primary ${BUTTON_HOVER} hover:bg-surface-hover hover:border-brand/40`}
+                  >
+                    Criar anúncio
+                  </button>
+                </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {filteredAssets.map((asset) => (
                     <AssetCard
                       key={asset.id}
@@ -318,50 +356,60 @@ export function EstudioHome() {
                   ))}
                 </div>
               )}
-            </div>
+            </section>
           </>
         )}
 
-        {/* QUICK CREATE VIEW — só imagem, flux.2 max */}
+        {/* QUICK CREATE VIEW */}
         {view === 'quick-create' && (
-          <div className="max-w-2xl mx-auto space-y-6">
-            <div className="pt-2">
-              <p className="text-sm text-text-tertiary">Descreva o anúncio que deseja gerar para criar a imagem ideal</p>
-            </div>
+          <div className="mx-auto w-full max-w-2xl space-y-5">
+            <p className="text-sm text-text-tertiary">
+              Descreva o anúncio que deseja gerar para criar a imagem ideal
+            </p>
 
             {quotaReached && (
-              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                <AlertCircle className="h-4 w-4 shrink-0" />
+              <div className="flex items-start gap-2.5 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-text-primary">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                 Limite de criativos do mês atingido — faça upgrade do plano para continuar.
               </div>
             )}
 
-            {/* Prompt */}
-            <Card>
-              <CardContent className="space-y-4">
-                <label className="text-sm font-semibold text-text-primary">Descreva o anúncio</label>
+            <Card className={`${SURFACE} border-0 bg-transparent shadow-none`}>
+              <CardContent className={`${SURFACE} space-y-3 p-5`}>
+                <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">
+                  Descreva o anúncio
+                </label>
                 <textarea
                   value={orPrompt}
+                  maxLength={1000}
                   onChange={(e) => setOrPrompt(e.target.value)}
                   placeholder="Ex: Anúncio fashion minimalista com luz natural, modelo feminina, fundo branco, cores suaves..."
-                  className="min-h-36 w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-text-primary outline-none transition focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/10 resize-none"
+                  className="min-h-36 w-full resize-none rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm text-text-primary placeholder:text-text-disabled outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                 />
                 <div className="flex items-center justify-between text-xs text-text-tertiary">
                   <span>{orPrompt.trim().length}/1000</span>
                   <span>Imagem • explicação detalhada = melhor resultado</span>
                 </div>
-                <Button
-                  onClick={handleQuickCreate}
-                  disabled={orPrompt.trim().length < 10 || orImageMutation.isPending || quotaReached}
-                  className="w-full bg-[#E8631A] hover:bg-[#D45714]"
-                >
-                  {orImageMutation.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="mr-2 h-4 w-4" />
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleQuickCreate}
+                    disabled={orPrompt.trim().length < 10 || orImageMutation.isPending || quotaReached}
+                    className={`inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand py-2.5 text-sm font-semibold text-brand-foreground ${BUTTON_HOVER} disabled:opacity-50`}
+                  >
+                    {orImageMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    Gerar imagem
+                  </button>
+                  {creativesRemaining !== null && (
+                    <p className="text-center text-xs text-text-tertiary">
+                      {creativesRemaining}{creativesLimit !== null ? ` de ${creativesLimit}` : ''} criativo{creativesRemaining !== 1 ? 's' : ''} restante{creativesRemaining !== 1 ? 's' : ''} este mês
+                    </p>
                   )}
-                  Gerar Imagem
-                </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -369,22 +417,22 @@ export function EstudioHome() {
 
         {/* LOADING VIEW */}
         {view === 'loading' && (
-          <div className="flex min-h-[60vh] flex-col items-center justify-center text-center space-y-5">
-            <div className="rounded-full bg-[#FFF4ED] p-5">
-              <Loader2 className="h-10 w-10 animate-spin text-[#EA580C]" />
+          <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-5 text-center">
+            <div className="rounded-full bg-brand/10 p-5">
+              <Loader2 className="h-10 w-10 animate-spin text-brand" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-text-primary">
-                {progressMessage || 'O FURY está criando sua imagem...'}
+              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-text-primary">
+                {progressMessage || 'O ady está criando sua imagem...'}
               </h2>
               <p className="mt-2 text-sm text-text-tertiary">
                 A geração com IA e a renderização podem levar até 15 segundos
               </p>
             </div>
-            <div className="flex flex-col gap-1 text-xs text-text-tertiary">
-              <span>✦ Aprimorando a explicação detalhada com o contexto da marca</span>
-              <span>✦ Gerando imagem com IA</span>
-              <span>✦ Salvando na biblioteca</span>
+            <div className="flex flex-col gap-1.5 text-xs text-text-tertiary">
+              <span><span className="text-warning">✦</span> Aprimorando a explicação detalhada com o contexto da marca</span>
+              <span><span className="text-warning">✦</span> Gerando imagem com IA</span>
+              <span><span className="text-warning">✦</span> Salvando na biblioteca</span>
             </div>
           </div>
         )}
@@ -392,8 +440,8 @@ export function EstudioHome() {
         {/* RESULT VIEW */}
         {view === 'result' && generationResult && (
           <>
-            <div className="pt-2">
-              <p className="text-sm text-text-tertiary">Regenere com ajustes, salve ou publique direto no Meta</p>
+            <div className="pt-1">
+              <p className="text-sm text-text-tertiary">Regenere com ajustes, salve ou publique direto na sua conta</p>
             </div>
             <CreativeResult
               result={generationResult}
@@ -409,23 +457,33 @@ export function EstudioHome() {
 
         {/* ERROR VIEW */}
         {view === 'error' && (
-          <div className="flex min-h-[60vh] flex-col items-center justify-center text-center space-y-5">
-            <div className="rounded-full bg-red-50 p-5">
-              <AlertCircle className="h-10 w-10 text-red-500" />
+          <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-5 text-center">
+            <div className="rounded-full bg-warning/10 p-5">
+              <AlertCircle className="h-10 w-10 text-warning" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-text-primary">Não foi possível gerar o anúncio</h2>
+              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-text-primary">
+                Não foi possível gerar o anúncio
+              </h2>
               <p className="mt-2 text-sm text-text-tertiary">
                 {quotaErrorMessage ?? 'Verifique sua conexão e tente novamente'}
               </p>
             </div>
-            <div className="flex gap-3">
-              <Button onClick={handleStartQuickCreate} className="bg-[#EA580C] hover:bg-[#C2410C] text-white">
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={handleStartQuickCreate}
+                className={`rounded-full bg-brand px-5 py-2 text-sm font-semibold text-brand-foreground ${BUTTON_HOVER}`}
+              >
                 Tentar novamente
-              </Button>
-              <Button variant="outline" onClick={handleBackToLibrary}>
+              </button>
+              <button
+                type="button"
+                onClick={handleBackToLibrary}
+                className={`rounded-full border border-border px-5 py-2 text-sm font-medium text-text-primary ${BUTTON_HOVER} hover:bg-surface-hover`}
+              >
                 Voltar para Biblioteca
-              </Button>
+              </button>
             </div>
           </div>
         )}
@@ -452,7 +510,6 @@ interface AssetCardProps {
   onUseInCampaign: () => void;
 }
 
-// ponytail: relative URLs resolved against API origin, fallback for local dev
 const BACKEND_URL = api.defaults.baseURL?.replace(/\/api$/, '') ?? '';
 
 function resolveAssetUrl(url: string | null | undefined): string | null {
@@ -463,56 +520,55 @@ function resolveAssetUrl(url: string | null | undefined): string | null {
 function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDeleteConfirm, onDeleteCancel, onViewDetails, onUseInCampaign }: AssetCardProps) {
   const imageUrl = resolveAssetUrl(asset.url);
   return (
-    <div className="bg-surface rounded-lg border border-border overflow-hidden hover:shadow-lg transition-shadow">
+    <div className={`group ${SURFACE} ${CARD_HOVER} overflow-hidden`}>
       {imageUrl && asset.type === 'image' ? (
-        <div className="relative w-full aspect-square bg-surface-secondary overflow-hidden">
+        <div className="relative aspect-square w-full overflow-hidden bg-surface-muted">
           <img
             src={imageUrl}
             alt={asset.name}
-            className="w-full h-full object-cover"
+            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
             onError={(e) => {
-              console.error('=== AssetCard image failed:', imageUrl);
               (e.target as HTMLImageElement).style.display = 'none';
             }}
           />
         </div>
       ) : (
-        <div className="w-full aspect-square bg-gradient-to-br from-[#FEF0E7] to-[#FFE8D6] flex items-center justify-center">
-          <Sparkles className="w-10 h-10 text-[#EA580C]/40" />
+        <div className="flex aspect-square w-full items-center justify-center bg-gradient-to-br from-brand/10 to-background">
+          <Sparkles className="h-10 w-10 text-brand/50 transition-transform duration-300 group-hover:scale-110" />
         </div>
       )}
 
-      <div className="p-4 space-y-3">
+      <div className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold text-text-primary text-sm flex-1 line-clamp-2">
+          <h3 className="line-clamp-2 flex-1 text-sm font-semibold text-text-primary transition-colors group-hover:text-text-primary">
             {asset.name ?? `Anúncio de ${asset.type === 'image' ? 'imagem' : asset.type}`}
           </h3>
           <button
             type="button"
             onClick={onDeleteRequest}
-            className="shrink-0 p-1 rounded text-text-secondary hover:text-red-500 hover:bg-error-light transition-colors"
+            className="shrink-0 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-hover hover:text-destructive"
             title="Excluir anúncio"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
 
         {isDeleting ? (
           <div className="space-y-2 pt-1">
-            <p className="text-xs text-red-600 font-medium">Excluir este anúncio?</p>
+            <p className="text-xs font-medium text-destructive">Excluir este anúncio?</p>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={onDeleteConfirm}
                 disabled={deletePending}
-                className="flex-1 px-3 py-2 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors disabled:opacity-50"
+                className="flex-1 rounded-full bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground transition-all hover:opacity-90 disabled:opacity-50"
               >
                 {deletePending ? 'Excluindo...' : 'Confirmar'}
               </button>
               <button
                 type="button"
                 onClick={onDeleteCancel}
-                className="flex-1 px-3 py-2 border border-border rounded-lg text-xs font-semibold hover:bg-surface-secondary transition-colors"
+                className="flex-1 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-text-primary transition-all hover:bg-surface-hover"
               >
                 Cancelar
               </button>
@@ -520,12 +576,17 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
           </div>
         ) : (
           <div className="flex gap-2 pt-2">
-            <button onClick={onUseInCampaign} className="flex-1 px-3 py-2 border border-[#EA580C] text-[#EA580C] rounded-lg text-xs font-semibold hover:bg-[#FEF0E7] transition-colors">
+            <button
+              type="button"
+              onClick={onUseInCampaign}
+              className="flex-1 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand transition-all duration-200 hover:bg-brand hover:text-brand-foreground hover:scale-[1.02] active:scale-[0.98]"
+            >
               Usar em campanha
             </button>
             <button
+              type="button"
               onClick={onViewDetails}
-              className="flex-1 px-3 py-2 bg-[#EA580C] text-white rounded-lg text-xs font-semibold hover:bg-[#C2410C] transition-colors"
+              className="flex-1 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-brand-foreground transition-all duration-200 hover:bg-brand/90 hover:scale-[1.02] active:scale-[0.98]"
             >
               Ver detalhes
             </button>

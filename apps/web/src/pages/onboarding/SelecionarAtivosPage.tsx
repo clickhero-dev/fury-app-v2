@@ -1,111 +1,9 @@
-import { useState } from "react";
+import { useState, useTransition, useId } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-
-// ─── Progress steps (etapa do onboarding) ──────────────────────────────────────
-
-const onboardingSteps = [
-  { label: "Conectar Meta" },
-  { label: "Selecionar Conta" },
-  { label: "Definir Meta" },
-  { label: "Pronto" },
-];
-
-function ProgressSteps({ current }: { current: number }) {
-  return (
-    <div className="flex items-center justify-center gap-0">
-      {onboardingSteps.map((step, i) => {
-        const done = i < current;
-        const active = i === current;
-        return (
-          <div key={step.label} className="flex items-center">
-            <div className="flex flex-col items-center gap-1.5">
-              <div
-                className={[
-                  "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors",
-                  done || active
-                    ? "bg-[#EA580C] text-white"
-                    : "bg-[#E5E7EB] text-[#9CA3AF]",
-                ].join(" ")}
-              >
-                {done ? (
-                  <svg
-                    className="w-4 h-4"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                ) : (
-                  i + 1
-                )}
-              </div>
-              <span
-                className={[
-                  "text-xs font-semibold whitespace-nowrap",
-                  active || done ? "text-[#EA580C]" : "text-[#9CA3AF]",
-                ].join(" ")}
-              >
-                {step.label}
-              </span>
-            </div>
-            {i < onboardingSteps.length - 1 && (
-              <div
-                className={[
-                  "w-12 h-0.5 mb-5 mx-2",
-                  i < current ? "bg-[#EA580C]" : "bg-[#E5E7EB]",
-                ].join(" ")}
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── Sub-steps do fluxo cascateado ─────────────────────────────────────────────
-
-const SUB_STEPS = [
-  { label: "Business Managers" },
-  { label: "Contas de Anúncio" },
-  { label: "Páginas" },
-  { label: "Resumo" },
-];
-
-function SubStepIndicator({ current }: { current: number }) {
-  return (
-    <div className="flex items-center justify-center gap-2 flex-wrap">
-      {SUB_STEPS.map((step, i) => {
-        const stepNumber = i + 1;
-        const isActive = stepNumber === current;
-        const isDone = stepNumber < current;
-        return (
-          <span
-            key={step.label}
-            className={cn(
-              "text-xs font-semibold px-2.5 py-1 rounded-full transition-colors",
-              isActive
-                ? "bg-[#EA580C] text-white"
-                : isDone
-                  ? "bg-orange-50 text-[#EA580C]"
-                  : "bg-[#F3F4F6] text-[#9CA3AF]",
-            )}
-          >
-            {stepNumber}. {step.label}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────────
 
@@ -132,7 +30,111 @@ interface ApiListResponse<T> {
   data: T[];
 }
 
-// ─── Checkbox card ──────────────────────────────────────────────────────────────
+// ─── Constantes de Configuração ─────────────────────────────────────────────────
+
+const ONBOARDING_STEPS = [
+  { label: "Conectar Meta" },
+  { label: "Selecionar Conta" },
+  { label: "Definir Meta" },
+  { label: "Pronto" },
+] as const;
+
+const SUB_STEPS = [
+  { label: "Business Managers" },
+  { label: "Contas de Anúncio" },
+  { label: "Páginas" },
+  { label: "Resumo" },
+] as const;
+
+const ITEMS_PER_PAGE = 10;
+
+// ─── Subcomponentes Utilitários ─────────────────────────────────────────────────
+
+function ProgressSteps({ current }: { current: number }) {
+  return (
+    <nav aria-label="Progresso do Onboarding" className="flex items-center justify-center gap-0">
+      <ol className="flex items-center">
+        {ONBOARDING_STEPS.map((step, i) => {
+          const done = i < current;
+          const active = i === current;
+          return (
+            <li key={step.label} className="flex items-center">
+              <div className="flex flex-col items-center gap-1.5">
+                <div
+                  className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors",
+                    done || active
+                      ? "bg-[#EA580C] text-white"
+                      : "bg-[#E5E7EB] text-[#9CA3AF]"
+                  )}
+                  aria-current={active ? "step" : undefined}
+                >
+                  {done ? (
+                    <Check className="w-4 h-4 text-white" aria-hidden="true" />
+                  ) : (
+                    i + 1
+                  )}
+                </div>
+                <span
+                  className={cn(
+                    "text-xs font-semibold whitespace-nowrap",
+                    active || done ? "text-[#EA580C]" : "text-[#9CA3AF]"
+                  )}
+                >
+                  {step.label}
+                </span>
+              </div>
+              {i < ONBOARDING_STEPS.length - 1 && (
+                <div
+                  className={cn(
+                    "w-12 h-0.5 mb-5 mx-2 transition-colors",
+                    i < current ? "bg-[#EA580C]" : "bg-[#E5E7EB]"
+                  )}
+                  aria-hidden="true"
+                />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+function SubStepIndicator({ current }: { current: number }) {
+  return (
+    <div className="flex items-center justify-center gap-2 flex-wrap" role="tablist">
+      {SUB_STEPS.map((step, i) => {
+        const stepNumber = i + 1;
+        const isActive = stepNumber === current;
+        const isDone = stepNumber < current;
+        return (
+          <span
+            key={step.label}
+            className={cn(
+              "text-xs font-semibold px-2.5 py-1 rounded-full transition-colors",
+              isActive
+                ? "bg-[#EA580C] text-white"
+                : isDone
+                  ? "bg-orange-50 text-[#EA580C]"
+                  : "bg-[#F3F4F6] text-[#9CA3AF]"
+            )}
+          >
+            {stepNumber}. {step.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+interface CheckboxCardProps {
+  checked: boolean;
+  title: string;
+  subtitle?: string;
+  badge?: { label: string; tone: "green" | "gray" };
+  onClick: () => void;
+}
 
 function CheckboxCard({
   checked,
@@ -140,37 +142,38 @@ function CheckboxCard({
   subtitle,
   badge,
   onClick,
-}: {
-  checked: boolean;
-  title: string;
-  subtitle?: string;
-  badge?: { label: string; tone: "green" | "gray" };
-  onClick: () => void;
-}) {
+}: CheckboxCardProps) {
+  const cardId = useId();
+
   return (
     <button
       type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-labelledby={cardId}
       onClick={onClick}
       className={cn(
-        "w-full text-left p-4 rounded-2xl border-2 transition-all duration-150 flex items-center gap-4",
+        "w-full text-left p-4 rounded-2xl border-2 transition-all duration-150 flex items-center gap-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EA580C] focus-visible:ring-offset-2",
         checked
           ? "border-[#EA580C] bg-[#FFF7F4]"
-          : "border-[#E5E7EB] bg-white hover:border-[#EA580C]/40 hover:bg-[#FFF7F4]/50",
+          : "border-[#E5E7EB] bg-white hover:border-[#EA580C]/40 hover:bg-[#FFF7F4]/50"
       )}
     >
       <div
         className={cn(
           "w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-colors",
-          checked ? "border-[#EA580C] bg-[#EA580C]" : "border-[#D1D5DB]",
+          checked ? "border-[#EA580C] bg-[#EA580C]" : "border-[#D1D5DB]"
         )}
       >
-        {checked && <Check className="w-3.5 h-3.5 text-white" />}
+        {checked && <Check className="w-3.5 h-3.5 text-white" aria-hidden="true" />}
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="font-semibold text-[#1C1C1E] truncate">{title}</p>
+        <p id={cardId} className="font-semibold text-[#1C1C1E] truncate">
+          {title}
+        </p>
         {subtitle && (
-          <p className="text-xs text-[#6E7681] mt-0.5">{subtitle}</p>
+          <p className="text-xs text-[#6E7681] mt-0.5 font-mono">{subtitle}</p>
         )}
       </div>
 
@@ -180,7 +183,7 @@ function CheckboxCard({
             "flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full",
             badge.tone === "green"
               ? "bg-green-50 text-green-700"
-              : "bg-gray-100 text-gray-500",
+              : "bg-gray-100 text-gray-500"
           )}
         >
           {badge.label}
@@ -207,16 +210,17 @@ function EmptyState({
 
 function LoadingSpinner() {
   return (
-    <div className="flex justify-center py-12">
-      <span className="w-8 h-8 border-2 border-[#EA580C]/30 border-t-[#EA580C] rounded-full animate-spin" />
+    <div className="flex justify-center py-12" aria-label="Carregando dados">
+      <Loader2 className="w-8 h-8 text-[#EA580C] animate-spin" />
     </div>
   );
 }
 
-// ─── Componente principal ────────────────────────────────────────────────────────
+// ─── Componente Principal ────────────────────────────────────────────────────────
 
 export function SelecionarAtivosPage() {
   const queryClient = useQueryClient();
+  const [, startTransition] = useTransition();
 
   const [subStep, setSubStep] = useState(1);
   const [businessIds, setBusinessIds] = useState<string[]>([]);
@@ -224,54 +228,46 @@ export function SelecionarAtivosPage() {
   const [adAccountIds, setAdAccountIds] = useState<string[]>([]);
   const [businessPage, setBusinessPage] = useState(0);
 
-  // ── Step 1: Business Managers ─────────────────────────────────────────────────
+  // ── Queries ──────────────────────────────────────────────────────────────────
   const businessesQuery = useQuery({
     queryKey: ["meta-businesses"],
     queryFn: async () => {
-      const res =
-        await api.get<ApiListResponse<MetaBusinessOption>>("/meta/businesses");
+      const res = await api.get<ApiListResponse<MetaBusinessOption>>("/meta/businesses");
       return res.data.data;
     },
-    staleTime: 0,
+    staleTime: 1000 * 60 * 5,
     retry: false,
   });
-  const businesses = businessesQuery.data ?? [];
 
-  // ── Step 2: Contas de Anúncio (filtradas pelas BMs selecionadas) ─────────────────
   const adAccountsQuery = useQuery({
     queryKey: ["meta-adaccounts-by-business", businessIds],
     queryFn: async () => {
       const res = await api.post<ApiListResponse<MetaAdAccountOption>>(
         "/meta/adaccounts-by-business",
-        {
-          businessIds,
-        },
+        { businessIds }
       );
       return res.data.data;
     },
     enabled: subStep >= 2 && businessIds.length > 0,
-    staleTime: 0,
+    staleTime: 1000 * 60 * 5,
     retry: false,
   });
-  const adAccounts = adAccountsQuery.data ?? [];
 
-  // ── Step 3: Páginas (filtradas pelas BMs selecionadas) ──────────────────────────
   const pagesQuery = useQuery({
     queryKey: ["meta-pages-by-business", businessIds],
     queryFn: async () => {
       const res = await api.post<ApiListResponse<MetaPageOption>>(
         "/meta/pages-by-business",
-        { businessIds },
+        { businessIds }
       );
       return res.data.data;
     },
     enabled: subStep >= 3 && businessIds.length > 0,
-    staleTime: 0,
+    staleTime: 1000 * 60 * 5,
     retry: false,
   });
-  const pages = pagesQuery.data ?? [];
 
-  // ── Salvar seleção ───────────────────────────────────────────────────────────
+  // ── Mutations ────────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: async () => {
       await api.post("/meta/save-selection", {
@@ -281,29 +277,35 @@ export function SelecionarAtivosPage() {
       });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["meta-connections"] });
-      // A query 'meta-connections' fica `enabled: false` enquanto estamos em /onboarding,
-      // entao invalidateQueries (refetchType padrao 'active') nao a refaz. Forca o refetch
-      // com type 'all' para garantir que o cache ja tenha selectedAdAccountId antes do
-      // AuthenticatedShell decidir se redireciona de volta para o onboarding.
       await queryClient.refetchQueries({
         queryKey: ["meta-connections"],
         type: "all",
       });
-      window.location.href = "/dashboard";
+      // Soft navigation garantindo atualização transicionada
+      startTransition(() => {
+        window.location.assign("/dashboard");
+      });
     },
-    onError: async () => {},
   });
+
+  // ── Mapeamento dos Itens Selecionados ─────────────────────────────────────────
+  const businesses = businessesQuery.data ?? [];
+  const adAccounts = adAccountsQuery.data ?? [];
+  const pages = pagesQuery.data ?? [];
 
   const selectedBusinessNames = businesses
     .filter((b) => businessIds.includes(b.id))
     .map((b) => b.name);
+
   const selectedPageNames = pages
     .filter((p) => pageIds.includes(p.pageId))
     .map((p) => p.name);
+
   const selectedAdAccountNames = adAccounts
     .filter((a) => adAccountIds.includes(a.adAccountId))
     .map((a) => a.name);
+
+  // ── Handlers de Ação ──────────────────────────────────────────────────────────
   function handleContinue() {
     setSubStep((current) => Math.min(current + 1, 4));
   }
@@ -313,16 +315,22 @@ export function SelecionarAtivosPage() {
     setBusinessPage(0);
   }
 
+  function toggleSelection(
+    id: string,
+    getter: string[],
+    setter: React.Dispatch<React.SetStateAction<string[]>>
+  ) {
+    setter(getter.includes(id) ? [] : [id]);
+  }
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      {/* Header */}
       <header className="border-b border-[#F3F4F6] px-6 py-4 flex items-center justify-center">
         <span className="text-xl font-black text-[#1C1C1E] tracking-tight">
           FURY
         </span>
       </header>
 
-      {/* Progress */}
       <div className="pt-10 pb-6 flex justify-center">
         <ProgressSteps current={1} />
       </div>
@@ -331,19 +339,18 @@ export function SelecionarAtivosPage() {
         <SubStepIndicator current={subStep} />
       </div>
 
-      {/* Content */}
       <main className="flex-1 flex items-start justify-center px-6 pt-4 pb-16">
         <div className="w-full max-w-lg space-y-8">
-          {/* ── Step 1: Business Managers ─────────────────────────────────── */}
+          {/* Step 1: Business Managers */}
           {subStep === 1 && (
-            <>
+            <section className="space-y-6">
               <div className="text-center space-y-3">
                 <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
                   Qual Business Manager você quer gerenciar?
                 </h1>
                 <p className="text-[#6E7681] text-lg leading-relaxed">
                   Selecione uma. As Páginas e contas de anúncio das próximas
-                  etapas serão filtrados por essa Business Manager.
+                  etapas serão filtradas por essa Business Manager.
                 </p>
               </div>
 
@@ -358,7 +365,10 @@ export function SelecionarAtivosPage() {
                 <>
                   <div className="space-y-3">
                     {businesses
-                      .slice(businessPage * 10, businessPage * 10 + 10)
+                      .slice(
+                        businessPage * ITEMS_PER_PAGE,
+                        businessPage * ITEMS_PER_PAGE + ITEMS_PER_PAGE
+                      )
                       .map((business) => (
                         <CheckboxCard
                           key={business.id}
@@ -366,16 +376,13 @@ export function SelecionarAtivosPage() {
                           title={business.name}
                           subtitle={business.id}
                           onClick={() =>
-                            setBusinessIds(
-                              businessIds.includes(business.id)
-                                ? []
-                                : [business.id],
-                            )
+                            toggleSelection(business.id, businessIds, setBusinessIds)
                           }
                         />
                       ))}
                   </div>
-                  {businesses.length > 10 && (
+
+                  {businesses.length > ITEMS_PER_PAGE && (
                     <div className="flex items-center justify-center gap-3 text-sm">
                       <button
                         type="button"
@@ -383,22 +390,30 @@ export function SelecionarAtivosPage() {
                           setBusinessPage((p) => Math.max(0, p - 1))
                         }
                         disabled={businessPage === 0}
-                        className="text-[#EA580C] font-medium disabled:text-[#D1D5DB] disabled:cursor-not-allowed hover:underline"
+                        className="inline-flex items-center text-[#EA580C] font-medium disabled:text-[#D1D5DB] disabled:cursor-not-allowed hover:underline focus-visible:outline-none"
                       >
-                        ← Anterior
+                        <ChevronLeft className="w-4 h-4 mr-1" />
+                        Anterior
                       </button>
                       <span className="text-[#6E7681]">
-                        {businessPage * 10 + 1}–
-                        {Math.min(businessPage * 10 + 10, businesses.length)} de{" "}
-                        {businesses.length}
+                        {businessPage * ITEMS_PER_PAGE + 1}–
+                        {Math.min(
+                          (businessPage + 1) * ITEMS_PER_PAGE,
+                          businesses.length
+                        )}{" "}
+                        de {businesses.length}
                       </span>
                       <button
                         type="button"
                         onClick={() => setBusinessPage((p) => p + 1)}
-                        disabled={businessPage * 10 + 10 >= businesses.length}
-                        className="text-[#EA580C] font-medium disabled:text-[#D1D5DB] disabled:cursor-not-allowed hover:underline"
+                        disabled={
+                          (businessPage + 1) * ITEMS_PER_PAGE >=
+                          businesses.length
+                        }
+                        className="inline-flex items-center text-[#EA580C] font-medium disabled:text-[#D1D5DB] disabled:cursor-not-allowed hover:underline focus-visible:outline-none"
                       >
-                        Próxima →
+                        Próxima
+                        <ChevronRight className="w-4 h-4 ml-1" />
                       </button>
                     </div>
                   )}
@@ -414,12 +429,12 @@ export function SelecionarAtivosPage() {
               >
                 Continuar
               </Button>
-            </>
+            </section>
           )}
 
-          {/* ── Step 2: Contas de Anúncio ──────────────────────────────────── */}
+          {/* Step 2: Contas de Anúncio */}
           {subStep === 2 && (
-            <>
+            <section className="space-y-6">
               <div className="text-center space-y-3">
                 <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
                   Qual conta de anúncio você quer gerenciar?
@@ -451,10 +466,10 @@ export function SelecionarAtivosPage() {
                           tone: isActive ? "green" : "gray",
                         }}
                         onClick={() =>
-                          setAdAccountIds(
-                            adAccountIds.includes(account.adAccountId)
-                              ? []
-                              : [account.adAccountId],
+                          toggleSelection(
+                            account.adAccountId,
+                            adAccountIds,
+                            setAdAccountIds
                           )
                         }
                       />
@@ -482,12 +497,12 @@ export function SelecionarAtivosPage() {
                   Continuar
                 </Button>
               </div>
-            </>
+            </section>
           )}
 
-          {/* ── Step 3: Páginas ────────────────────────────────────────────── */}
+          {/* Step 3: Páginas */}
           {subStep === 3 && (
-            <>
+            <section className="space-y-6">
               <div className="text-center space-y-3">
                 <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
                   Qual Página você vai usar?
@@ -519,9 +534,7 @@ export function SelecionarAtivosPage() {
                           : undefined
                       }
                       onClick={() =>
-                        setPageIds(
-                          pageIds.includes(page.pageId) ? [] : [page.pageId],
-                        )
+                        toggleSelection(page.pageId, pageIds, setPageIds)
                       }
                     />
                   ))}
@@ -546,12 +559,12 @@ export function SelecionarAtivosPage() {
                   Continuar
                 </Button>
               </div>
-            </>
+            </section>
           )}
 
-          {/* ── Step 4: Resumo ─────────────────────────────────────────────── */}
+          {/* Step 4: Resumo */}
           {subStep === 4 && (
-            <>
+            <section className="space-y-6">
               <div className="text-center space-y-3">
                 <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
                   Confira sua seleção
@@ -567,7 +580,7 @@ export function SelecionarAtivosPage() {
                     Business Manager ({selectedBusinessNames.length})
                   </div>
                   <div className="text-sm font-medium text-[#1C1C1E]">
-                    {selectedBusinessNames.join(", ")}
+                    {selectedBusinessNames.join(", ") || "Nenhuma"}
                   </div>
                 </div>
 
@@ -576,7 +589,7 @@ export function SelecionarAtivosPage() {
                     Conta de Anúncio ({selectedAdAccountNames.length})
                   </div>
                   <div className="text-sm font-medium text-[#1C1C1E]">
-                    {selectedAdAccountNames.join(", ")}
+                    {selectedAdAccountNames.join(", ") || "Nenhuma"}
                   </div>
                 </div>
 
@@ -593,7 +606,7 @@ export function SelecionarAtivosPage() {
               </div>
 
               {saveMutation.isError && (
-                <p className="text-center text-sm text-red-500">
+                <p className="text-center text-sm text-red-500 font-medium" role="alert">
                   Erro ao salvar a seleção. Tente novamente.
                 </p>
               )}
@@ -625,7 +638,7 @@ export function SelecionarAtivosPage() {
                   )}
                 </Button>
               </div>
-            </>
+            </section>
           )}
         </div>
       </main>

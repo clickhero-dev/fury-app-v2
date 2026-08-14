@@ -1,3 +1,14 @@
+<<<<<<< HEAD
+import { useState, useMemo, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { clsx } from 'clsx';
+import {
+  LayoutGrid, Image, Sparkles, Film,
+  ChevronLeft, ChevronRight, Plus, Trash2, CalendarClock, X,
+} from 'lucide-react';
+import { PostSidePanel } from './PostSidePanel';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
+=======
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
@@ -11,6 +22,7 @@ import { ScheduleDialog } from './ScheduleDialog';
 import { CreatePostDialog } from './CreatePostDialog';
 import { PostTypeDialog } from './PostTypeDialog';
 import { TooltipProvider } from '@/components/ui/tooltip';
+>>>>>>> origin/hmg
 import api from '@/lib/api';
 import type { Post } from '../types';
 
@@ -59,6 +71,10 @@ export function CalendarView() {
   const [selectedPost, setSelectedPost] = useState<CalendarPost | null>(null);
   const [dragPostId, setDragPostId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+<<<<<<< HEAD
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+=======
   const [showPostTypeDialog, setShowPostTypeDialog] = useState(false);
   const [createMode, setCreateMode] = useState<'schedule' | 'now'>('schedule');
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
@@ -69,6 +85,7 @@ export function CalendarView() {
     setTimeout(() => setToast(null), 3000);
   };
   const [preselectedDay, setPreselectedDay] = useState<number | null>(null);
+>>>>>>> origin/hmg
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
@@ -109,6 +126,20 @@ export function CalendarView() {
 
   // ===== Selection =====
 
+<<<<<<< HEAD
+  const toggleDay = (day: number) => {
+    const dayPosts = postsByDay.get(day) || [];
+    if (dayPosts.length === 0) return;
+    const dayIds = new Set(dayPosts.map(p => p.id));
+    const allSelected = dayPosts.every(p => selectedIds.has(p.id));
+    const next = new Set(selectedIds);
+    if (allSelected) dayIds.forEach(id => next.delete(id));
+    else dayIds.forEach(id => next.add(id));
+    setSelectedIds(next);
+  };
+
+=======
+>>>>>>> origin/hmg
   const selectAll = () => {
     if (selectedIds.size === posts.length) setSelectedIds(new Set());
     else setSelectedIds(new Set(posts.map(p => p.id)));
@@ -123,10 +154,13 @@ export function CalendarView() {
       await api.patch(`/planner/posts/${postId}/move`, { dayIndex });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
+<<<<<<< HEAD
+=======
     onError: (err: any) => {
       const msg = err?.response?.data?.message || err?.message || 'Erro ao mover post. Tente novamente.';
       showToast(msg, 'error');
     },
+>>>>>>> origin/hmg
   });
 
   const scheduleMutation = useMutation({
@@ -136,16 +170,22 @@ export function CalendarView() {
       });
     },
     onSuccess: () => { clearSelection(); queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
+<<<<<<< HEAD
+=======
     onError: (err: any) => {
       const msg = err?.response?.data?.message || err?.message || 'Erro ao agendar posts. Tente novamente.';
       showToast(msg, 'error');
     },
+>>>>>>> origin/hmg
   });
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
       await api.delete('/planner/posts/bulk', { data: { postIds: [...selectedIds] } });
     },
+<<<<<<< HEAD
+    onSuccess: () => { clearSelection(); queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
+=======
     onSuccess: () => {
       const count = selectedIds.size;
       clearSelection();
@@ -157,6 +197,7 @@ export function CalendarView() {
       const msg = err?.response?.data?.message || err?.message || 'Erro ao excluir post(s). Tente novamente.';
       showToast(msg, 'error');
     },
+>>>>>>> origin/hmg
   });
 
   // ===== DnD =====
@@ -193,6 +234,10 @@ export function CalendarView() {
 
   for (let day = 1; day <= daysInMonth; day++) {
     const dayPosts = postsByDay.get(day) || [];
+<<<<<<< HEAD
+    const allDaySelected = dayPosts.length > 0 && dayPosts.every(p => selectedIds.has(p.id));
+=======
+>>>>>>> origin/hmg
     const isToday = year === now.getFullYear() && month === now.getMonth() + 1 && day === now.getDate();
 
     grid.push(
@@ -200,6 +245,16 @@ export function CalendarView() {
         key={day}
         onDragOver={handleDragOver}
         onDrop={(e) => handleDrop(e, day)}
+<<<<<<< HEAD
+        className={clsx(
+          'relative min-h-[80px] rounded-lg border p-1.5 transition-colors',
+          isToday ? 'border-accent/50 bg-accent/5' : 'border-gray-700/50',
+          dayPosts.length > 0 ? 'bg-gray-800/60' : 'bg-transparent',
+          dragPostId && 'border-dashed border-accent/30',
+        )}
+      >
+        {/* Day number + checkbox */}
+=======
         onClick={() => {
           if (dayPosts.length === 0) {
             setPreselectedDay(day);
@@ -214,10 +269,22 @@ export function CalendarView() {
         )}
       >
         {/* Day number */}
+>>>>>>> origin/hmg
         <div className="flex items-center justify-between mb-0.5">
           <span className={clsx('text-xs', isToday ? 'text-accent font-bold' : 'text-gray-500')}>
             {day}
           </span>
+<<<<<<< HEAD
+          {dayPosts.length > 0 && (
+            <input
+              type="checkbox"
+              checked={allDaySelected}
+              onChange={() => toggleDay(day)}
+              className="h-3.5 w-3.5 rounded border-gray-600 bg-gray-700 accent-accent cursor-pointer"
+            />
+          )}
+=======
+>>>>>>> origin/hmg
         </div>
 
         {/* Posts */}
@@ -230,6 +297,18 @@ export function CalendarView() {
               draggable
               onDragStart={(e) => handleDragStart(e, post.id)}
               onDragEnd={handleDragEnd}
+<<<<<<< HEAD
+              onClick={(e) => { e.stopPropagation(); setSelectedPost(post); }}
+              className={clsx(
+                'flex items-center gap-1 mt-1 px-1 py-0.5 rounded cursor-pointer text-[10px] transition-colors',
+                selectedIds.has(post.id) ? 'bg-accent/20 ring-1 ring-accent/50' : 'hover:bg-gray-700/50',
+                dragPostId === post.id && 'opacity-50',
+              )}
+            >
+              <Icon className="h-3 w-3 text-gray-400 shrink-0" />
+              <span className="text-gray-400 truncate">{post.title || post.caption?.slice(0, 20) || 'Sem título'}</span>
+              {post._source === 'manual' && <span className="text-[8px] text-accent ml-auto">+</span>}
+=======
               onClick={(e) => {
                 e.stopPropagation();
                 // ponytail: toggle selection on click; click selected post again to view
@@ -255,6 +334,7 @@ export function CalendarView() {
               </span>
               {isSelected && <CheckCircle className="h-3 w-3 text-accent ml-auto shrink-0" />}
               {!isSelected && post._source === 'manual' && <span className="text-[8px] text-accent ml-auto">+</span>}
+>>>>>>> origin/hmg
             </div>
           );
         })}
@@ -267,6 +347,36 @@ export function CalendarView() {
 
   return (
     <div className="space-y-4">
+<<<<<<< HEAD
+      {/* Header: month nav + add post */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={goPrevMonth} className="p-1.5 rounded-lg hover:bg-gray-700/50 text-gray-400">
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <h1 className="text-xl font-bold text-white min-w-[180px] text-center">
+            {MONTH_NAMES[month - 1]} {year}
+          </h1>
+          <button onClick={goNextMonth} className="p-1.5 rounded-lg hover:bg-gray-700/50 text-gray-400">
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          {posts.length > 0 && (
+            <button
+              onClick={selectAll}
+              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              {selectedIds.size === posts.length ? 'Desmarcar todos' : 'Selecionar todos'}
+            </button>
+          )}
+          <button
+            onClick={() => setShowCreateDialog(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-light text-white text-sm font-medium transition-colors"
+          >
+            <Plus className="h-4 w-4" /> Novo post
+          </button>
+=======
       {/* Page-level toast */}
       {toast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300">
@@ -277,9 +387,12 @@ export function CalendarView() {
             {toast.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
             {toast.message}
           </div>
+>>>>>>> origin/hmg
         </div>
-      )}
+      </div>
 
+<<<<<<< HEAD
+=======
       {/* Header: month nav + add post */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -311,6 +424,7 @@ export function CalendarView() {
         </div>
       </div>
 
+>>>>>>> origin/hmg
       {/* Selection toolbar */}
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 p-3 rounded-xl bg-accent/10 border border-accent/30">
@@ -356,17 +470,26 @@ export function CalendarView() {
         <PostSidePanel
           post={selectedPost}
           onClose={() => setSelectedPost(null)}
+<<<<<<< HEAD
+          onUpdate={(updated) => setSelectedPost(updated as CalendarPost)}
+=======
           onUpdate={(updated) => {
             setSelectedPost(updated as CalendarPost);
             showToast('Post atualizado!');
             queryClient.invalidateQueries({ queryKey: ['calendar'] });
           }}
+>>>>>>> origin/hmg
         />
       )}
 
       {/* Dialogs */}
       {showCreateDialog && (
         <CreatePostDialog
+<<<<<<< HEAD
+          year={year} month={month}
+          onClose={() => setShowCreateDialog(false)}
+          onCreated={() => { setShowCreateDialog(false); queryClient.invalidateQueries({ queryKey: ['calendar'] }); }}
+=======
           mode={createMode}
           preselectedDay={preselectedDay}
           onClose={() => { setShowCreateDialog(false); setPreselectedDay(null); }}
@@ -387,6 +510,7 @@ export function CalendarView() {
             setShowCreateDialog(true);
           }}
           onClose={() => { setShowPostTypeDialog(false); setPreselectedDay(null); }}
+>>>>>>> origin/hmg
         />
       )}
       {showScheduleDialog && (
@@ -408,16 +532,176 @@ export function CalendarView() {
   );
 }
 
+<<<<<<< HEAD
+// ===== Dialogs =====
+
+function ScheduleDialog({ count, onConfirm, onClose }: {
+  count: number; onConfirm: (s: string) => void; onClose: () => void;
+}) {
+  const [dateTime, setDateTime] = useState('');
+  return (
+    <DialogOverlay onClose={onClose}>
+      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <h3 className="text-lg font-bold text-white mb-2">Agendar {count} post{count > 1 ? 's' : ''}</h3>
+        <input
+          type="datetime-local"
+          value={dateTime}
+          onChange={e => setDateTime(e.target.value)}
+          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm mb-4"
+        />
+        <div className="flex gap-3 justify-end">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-700 text-gray-300 text-sm">Cancelar</button>
+          <button
+            onClick={() => dateTime && onConfirm(new Date(dateTime).toISOString())}
+            disabled={!dateTime}
+            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-light disabled:opacity-50 text-white text-sm"
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </DialogOverlay>
+  );
+}
+
+function DeleteConfirmDialog({ count, onConfirm, onClose, loading }: {
+  count: number; onConfirm: () => void; onClose: () => void; loading: boolean;
+}) {
+  return (
+    <DialogOverlay onClose={onClose}>
+      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <h3 className="text-lg font-bold text-white mb-2">Excluir {count} post{count > 1 ? 's' : ''}?</h3>
+        <p className="text-sm text-gray-400 mb-4">Esta ação não pode ser desfeita.</p>
+        <div className="flex gap-3 justify-end">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-700 text-gray-300 text-sm">Cancelar</button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm"
+          >
+            {loading ? 'Excluindo...' : 'Excluir'}
+          </button>
+        </div>
+      </div>
+    </DialogOverlay>
+  );
+}
+
+function CreatePostDialog({ year, month, onClose, onCreated }: {
+  year: number; month: number; onClose: () => void; onCreated: () => void;
+}) {
+  const [caption, setCaption] = useState('');
+  const [postType, setPostType] = useState('image');
+  const [dayIndex, setDayIndex] = useState(1);
+  const [scheduledAt, setScheduledAt] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      await api.post('/planner/posts', {
+        caption, postType, dayIndex,
+        scheduledAt: scheduledAt || undefined,
+      });
+    },
+    onSuccess: onCreated,
+  });
+
+  const daysInMonth = getDaysInMonth(year, month);
+
+  return (
+    <DialogOverlay onClose={onClose}>
+      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <h3 className="text-lg font-bold text-white mb-4">Novo post</h3>
+
+        <label className="block text-sm text-gray-400 mb-1">Legenda</label>
+        <textarea
+          value={caption}
+          onChange={e => setCaption(e.target.value)}
+          rows={3}
+          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm mb-3 resize-none"
+          placeholder="Escreva a legenda do post..."
+        />
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Tipo</label>
+            <select
+              value={postType}
+              onChange={e => setPostType(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+            >
+              <option value="image">Post</option>
+              <option value="carousel">Carrossel</option>
+              <option value="reel">Reels</option>
+              <option value="stories">Stories</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Dia do mês</label>
+            <select
+              value={dayIndex}
+              onChange={e => setDayIndex(Number(e.target.value))}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+            >
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
+                <option key={d} value={d}>Dia {d}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <label className="block text-sm text-gray-400 mb-1">Agendar (opcional)</label>
+        <input
+          type="datetime-local"
+          value={scheduledAt}
+          onChange={e => setScheduledAt(e.target.value)}
+          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm mb-4"
+        />
+
+        <div className="flex gap-3 justify-end">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-700 text-gray-300 text-sm">Cancelar</button>
+          <button
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || !caption.trim()}
+            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-light disabled:opacity-50 text-white text-sm"
+          >
+            {mutation.isPending ? 'Criando...' : 'Criar post'}
+          </button>
+        </div>
+      </div>
+    </DialogOverlay>
+  );
+}
+
+// ===== Shared overlay =====
+
+function DialogOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      {children}
+    </div>
+  );
+}
+
+=======
+>>>>>>> origin/hmg
 // ===== Skeleton / Error =====
 
 function CalendarSkeleton() {
   return (
     <div className="space-y-4 animate-pulse">
+<<<<<<< HEAD
+      <div className="h-10 w-64 rounded-lg bg-gray-800/40" />
+      <div className="grid grid-cols-7 gap-1.5">
+        {DAY_LABELS.map(d => <div key={d} className="text-center text-xs text-gray-500 py-2">{d}</div>)}
+        {Array.from({ length: 35 }).map((_, i) => (
+          <div key={i} className="min-h-[80px] rounded-lg border border-gray-700/50 bg-gray-800/30" />
+=======
       <div className="h-10 w-64 rounded-lg bg-surface-secondary" />
       <div className="grid grid-cols-7 gap-1.5">
         {DAY_LABELS.map(d => <div key={d} className="text-center text-xs text-text-tertiary py-2">{d}</div>)}
         {Array.from({ length: 35 }).map((_, i) => (
           <div key={i} className="min-h-[80px] rounded-lg border border-border bg-surface-secondary/60" />
+>>>>>>> origin/hmg
         ))}
       </div>
     </div>
@@ -427,8 +711,13 @@ function CalendarSkeleton() {
 function CalendarError() {
   return (
     <div className="text-center py-12">
+<<<<<<< HEAD
+      <p className="text-red-400 text-sm mb-2">Erro ao carregar calendário</p>
+      <p className="text-gray-500 text-xs">Verifique sua conexão</p>
+=======
       <p className="text-error text-sm mb-2">Erro ao carregar calendário</p>
       <p className="text-text-tertiary text-xs">Verifique sua conexão</p>
+>>>>>>> origin/hmg
     </div>
   );
 }

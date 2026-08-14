@@ -97,6 +97,8 @@ const STEPS: MigrationStep[] = [
   { tag: '0025_add_is_non_expirable_to_subscriptions' },
   { tag: '0026_add_creative_quota_limits' },
   { tag: '0027_add_missing_planner_columns' },
+<<<<<<< HEAD
+=======
   {
     tag: '0011_fr8_publish_retry',
     afterHook: async (client) => {
@@ -104,6 +106,7 @@ const STEPS: MigrationStep[] = [
       console.log('    + added failed to post_status');
     },
   },
+>>>>>>> origin/hmg
 ];
 
 async function runMigrate() {

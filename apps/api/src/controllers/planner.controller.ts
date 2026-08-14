@@ -89,8 +89,11 @@ const editPostSchema = z.union([
     caption: z.string().optional(),
     cta: z.string().optional(),
     hashtags: z.array(z.string()).optional(),
+<<<<<<< HEAD
+=======
     imageUrl: z.string().url().optional(),
     scheduledAt: z.string().datetime().nullable().optional(),
+>>>>>>> origin/hmg
   }),
 ]);
 
@@ -138,6 +141,11 @@ export async function handleBulkDelete(req: Request, res: Response, next: NextFu
     const { postIds } = z.object({
       postIds: z.array(z.string().uuid()).min(1).max(100),
     }).parse(req.body);
+<<<<<<< HEAD
+    const deleted = await bulkDeletePosts(tenantId, postIds);
+    res.json({ success: true, data: { count: deleted.length } });
+  } catch (err) { next(err); }
+=======
     console.log(`[handleBulkDelete] tenant ${tenantId}: ${postIds.length} postIds`, postIds);
     const deleted = await bulkDeletePosts(tenantId, postIds);
     res.json({ success: true, data: { count: deleted.length } });
@@ -149,6 +157,7 @@ export async function handleBulkDelete(req: Request, res: Response, next: NextFu
     }
     next(err);
   }
+>>>>>>> origin/hmg
 }
 
 export async function handleCreatePost(req: Request, res: Response, next: NextFunction) {
@@ -161,7 +170,10 @@ export async function handleCreatePost(req: Request, res: Response, next: NextFu
       platform: z.string().max(50).optional(),
       scheduledAt: z.string().datetime().optional(),
       title: z.string().max(255).optional(),
+<<<<<<< HEAD
+=======
       imageUrl: z.string().url().optional(),
+>>>>>>> origin/hmg
     }).parse(req.body);
     const post = await createManualPost(tenantId, body);
     res.json({ success: true, data: post });
@@ -198,6 +210,8 @@ export async function handlePublishDue(req: Request, res: Response, next: NextFu
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
+<<<<<<< HEAD
+=======
 
 export async function handleUploadMedia(req: Request, res: Response, next: NextFunction) {
   try {
@@ -215,3 +229,4 @@ export async function handleUploadMedia(req: Request, res: Response, next: NextF
     res.json({ success: true, data: { url } });
   } catch (err) { next(err); }
 }
+>>>>>>> origin/hmg

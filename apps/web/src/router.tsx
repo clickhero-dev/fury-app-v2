@@ -92,9 +92,30 @@ export const router = createBrowserRouter([
       { path: '/dashboard', element: <Dashboard /> },
       { path: '/onboarding/metas', element: <AppLayout><MetasPage /></AppLayout> },
       { path: '/dashboard/metas', element: <Metas /> },
-      { path: '/campanhas', element: <PainelCampanhas /> },
-      { path: '/campanhas/regras', element: <RegrasCampanhas /> },
-      { path: '/campanhas/:id/insights', element: <InsightsCampanha /> },
+      { 
+        path: '/campanhas', 
+        element: (
+          <AppLayout>
+            <PainelCampanhas />
+          </AppLayout>
+        ) 
+      },
+      { 
+        path: '/campanhas/regras', 
+        element: (
+          <AppLayout>
+            <RegrasCampanhas />
+          </AppLayout>
+        ) 
+      },
+      { 
+        path: '/campanhas/:id/insights', 
+        element: (
+          <AppLayout>
+            <InsightsCampanha />
+          </AppLayout>
+        ) 
+      },
       { path: '/automacao', element: <MinhasRegras /> },
       { path: '/automacao/minhas-regras', element: <MinhasRegras /> },
       { path: '/estudio-criativo', element: <CreativeStudio /> },

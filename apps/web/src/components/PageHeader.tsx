@@ -9,6 +9,7 @@ interface PageHeaderProps {
   actions?: ReactNode;
   /** Conteúdo adicional renderizado abaixo do cabeçalho (ex: filtros, tabs). */
   children?: ReactNode;
+  titleClassName?: string; 
 }
 
 /**
@@ -31,14 +32,20 @@ interface PageHeaderProps {
  *   <PeriodSelector />
  * </PageHeader>
  */
-export function PageHeader({ title, description, actions, children }: PageHeaderProps) {
+export function PageHeader({ 
+  title, 
+  description, 
+  actions, 
+  children,
+  titleClassName = "text-2xl font-bold text-[#ECEDEF]" // Mantém a regra do título por padrão
+}: PageHeaderProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-2">
-          <h1 className="text-xl md:text-3xl font-black text-text-primary">{title}</h1>
+        <div className="space-y-1">
+          <h1 className={titleClassName}>{title}</h1>
           {description && (
-            <p className="text-sm md:text-base text-text-secondary leading-tight">
+            <p className="text-xs sm:text-sm text-text-secondary leading-tight">
               {description}
             </p>
           )}

@@ -176,15 +176,15 @@ export function MetasPage() {
           className={cn(
             'fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold transition-all duration-300',
             toast.type === 'success'
-              ? 'bg-[#2EA043] text-white'
-              : 'bg-[#DA3633] text-white'
+              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+              : 'bg-red-500/20 text-red-400 border border-red-500/30'
           )}
         >
           {toast.message}
         </div>
       )}
 
-      <div className="max-w-lg mx-auto space-y-6 pb-8">
+      <div className="max-w-lg mx-auto space-y-6 pb-8 text-admin-text">
         <PageHeader
           title={isEditing ? 'Atualizar Metas' : 'Configurar Metas'}
           description={
@@ -194,24 +194,24 @@ export function MetasPage() {
           }
         />
 
-        <Card>
+        <Card className="border border-white/10 bg-admin-surface shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)]">
           <CardContent className="pt-8">
             <div className="space-y-6">
               {/* Progress */}
               <div className="space-y-2">
-                <div className="flex justify-between items-center text-xs font-semibold text-[#6E7681]">
+                <div className="flex justify-between items-center text-xs font-semibold text-admin-text-muted">
                   <span>Passo {step} de 3 — {STEP_LABELS[step - 1]}</span>
-                  <span>{progressPct}%</span>
+                  <span className="text-admin-petrol">{progressPct}%</span>
                 </div>
-                <div className="w-full bg-[#F0F0F0] rounded-full h-2">
+                <div className="w-full bg-admin-bg rounded-full h-2 overflow-hidden border border-white/5">
                   <div
-                    className="bg-[#E8631A] h-2 rounded-full transition-all duration-500"
+                    className="bg-admin-petrol h-2 rounded-full transition-all duration-500"
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
               </div>
 
-              <hr className="border-[#F0F0F0]" />
+              <hr className="border-white/10" />
 
               {/* ── Step 1: Sobre o negócio ─────────────────────────────── */}
               {step === 1 && (
@@ -220,13 +220,15 @@ export function MetasPage() {
                     <select
                       {...register('objective')}
                       className={cn(
-                        'w-full px-4 py-3.5 border rounded-xl bg-white text-[#1C1C1E] transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-base',
-                        errors.objective ? 'border-red-400' : 'border-[#E0E0E0]'
+                        'w-full px-4 py-3 border rounded-xl bg-admin-bg text-[#ECEDEF] transition-all duration-200 focus:outline-none focus:border-admin-petrol text-sm',
+                        errors.objective ? 'border-red-400' : 'border-white/10'
                       )}
                     >
-                      <option value="">Selecione um objetivo...</option>
+                      <option value="" className="bg-admin-surface text-admin-text-muted">Selecione um objetivo...</option>
                       {OBJECTIVES.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
+                        <option key={o.value} value={o.value} className="bg-admin-surface text-[#ECEDEF]">
+                          {o.label}
+                        </option>
                       ))}
                     </select>
                   </Field>
@@ -239,7 +241,10 @@ export function MetasPage() {
                     <Input
                       placeholder="Ex: moda feminina"
                       {...register('niche')}
-                      className={errors.niche ? 'border-red-400 focus:border-red-400 focus:ring-red-400/20' : ''}
+                      className={cn(
+                        'bg-admin-bg border-white/10 text-[#ECEDEF] placeholder:text-admin-text-faint focus:border-admin-petrol',
+                        errors.niche ? 'border-red-400 focus:border-red-400' : ''
+                      )}
                     />
                   </Field>
 
@@ -251,7 +256,10 @@ export function MetasPage() {
                     <Input
                       placeholder="Ex: vestidos casuais para o dia a dia"
                       {...register('mainProduct')}
-                      className={errors.mainProduct ? 'border-red-400 focus:border-red-400 focus:ring-red-400/20' : ''}
+                      className={cn(
+                        'bg-admin-bg border-white/10 text-[#ECEDEF] placeholder:text-admin-text-faint focus:border-admin-petrol',
+                        errors.mainProduct ? 'border-red-400 focus:border-red-400' : ''
+                      )}
                     />
                   </Field>
                 </div>
@@ -262,18 +270,21 @@ export function MetasPage() {
                 <div className="space-y-5">
                   <Field
                     label="Orçamento mensal total"
-                    hint="Valor total que clientes por mês"
+                    hint="Valor total investido por mês"
                     error={errors.monthlyBudget?.message}
                   >
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6E7681] font-semibold text-sm">R$</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-admin-text-muted font-semibold text-sm">R$</span>
                       <Input
                         type="number"
                         min={300}
                         step={50}
                         placeholder="2.000"
                         {...register('monthlyBudget', { valueAsNumber: true })}
-                        className={cn('pl-10', errors.monthlyBudget ? 'border-red-400 focus:border-red-400 focus:ring-red-400/20' : '')}
+                        className={cn(
+                          'pl-10 bg-admin-bg border-white/10 text-[#ECEDEF] placeholder:text-admin-text-faint focus:border-admin-petrol',
+                          errors.monthlyBudget ? 'border-red-400 focus:border-red-400' : ''
+                        )}
                       />
                     </div>
                   </Field>
@@ -288,22 +299,25 @@ export function MetasPage() {
                           error={errors.targetCpa?.message}
                         >
                           <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6E7681] font-semibold text-sm">R$</span>
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-admin-text-muted font-semibold text-sm">R$</span>
                             <Input
                               type="number"
                               min={1}
                               step={1}
                               placeholder="50"
                               {...register('targetCpa', { valueAsNumber: true })}
-                              className={cn('pl-10', errors.targetCpa ? 'border-red-400 focus:border-red-400 focus:ring-red-400/20' : '')}
+                              className={cn(
+                                'pl-10 bg-admin-bg border-white/10 text-[#ECEDEF] placeholder:text-admin-text-faint focus:border-admin-petrol',
+                                errors.targetCpa ? 'border-red-400 focus:border-red-400' : ''
+                              )}
                             />
                           </div>
                         </Field>
 
                         {values.monthlyBudget > 0 && values.targetCpa > 0 && values.targetCpa <= values.monthlyBudget && (
-                          <div className="bg-[#E8631A]/8 border border-[#E8631A]/20 rounded-xl px-4 py-3 text-sm text-[#1C1C1E]">
+                          <div className="bg-admin-petrol/10 border border-admin-petrol/20 rounded-xl px-4 py-3 text-sm text-[#ECEDEF]">
                             Com esse orçamento, você pode atingir até{' '}
-                            <span className="font-bold text-[#E8631A]">
+                            <span className="font-bold text-admin-petrol">
                               {Math.floor(values.monthlyBudget / values.targetCpa)} {objLabels.conversion}s por mês
                             </span>
                           </div>
@@ -317,9 +331,9 @@ export function MetasPage() {
               {/* ── Step 3: Revisão ─────────────────────────────────────── */}
               {step === 3 && (
                 <div className="space-y-4">
-                  <p className="text-sm text-text-secondary">Confirme os dados antes de salvar:</p>
+                  <p className="text-sm text-admin-text-muted">Confirme os dados antes de salvar:</p>
 
-                  <div className="bg-surface-secondary rounded-2xl divide-y divide-border overflow-hidden">
+                  <div className="bg-admin-bg border border-white/10 rounded-2xl divide-y divide-white/5 overflow-hidden">
                     <ReviewRow label="Objetivo" value={translateObjective(values.objective)} />
                     <ReviewRow label="Nicho" value={values.niche} />
                     <ReviewRow label="Produto principal" value={values.mainProduct} />
@@ -335,10 +349,9 @@ export function MetasPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    size="md"
                     onClick={handleBack}
                     disabled={isSaving}
-                    className="flex items-center gap-1.5"
+                    className="flex items-center gap-1.5 border-white/10 bg-transparent text-admin-text hover:bg-white/5 hover:text-white"
                   >
                     <ChevronLeft className="w-4 h-4" />
                     {step === 3 ? 'Voltar e editar' : 'Voltar'}
@@ -348,10 +361,8 @@ export function MetasPage() {
                 {step < 3 ? (
                   <Button
                     type="button"
-                    variant="primary"
-                    size="md"
                     onClick={handleNext}
-                    className="flex-1 flex items-center justify-center gap-1.5"
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-admin-petrol text-admin-bg font-semibold hover:opacity-90"
                   >
                     Próximo
                     <ChevronRight className="w-4 h-4" />
@@ -359,11 +370,9 @@ export function MetasPage() {
                 ) : (
                   <Button
                     type="button"
-                    variant="primary"
-                    size="md"
                     onClick={handleSubmit(onSubmit)}
                     disabled={isSaving}
-                    className="flex-1 flex items-center justify-center gap-2"
+                    className="flex-1 flex items-center justify-center gap-2 bg-admin-petrol text-admin-bg font-semibold hover:opacity-90"
                   >
                     {isSaving ? (
                       <>
@@ -384,9 +393,9 @@ export function MetasPage() {
         </Card>
 
         {step === 1 && (
-          <p className="text-center text-xs text-[#9CA3AF] mt-5">
+          <p className="text-center text-xs text-admin-text-faint mt-5">
             Você pode atualizar suas metas a qualquer momento em{' '}
-            <span className="font-semibold">Configurações → Metas</span>
+            <span className="font-semibold text-admin-text-muted">Configurações → Metas</span>
           </p>
         )}
       </div>
@@ -409,12 +418,12 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-semibold text-[#1C1C1E]">{label}</label>
-      {hint && <p className="text-xs text-[#6E7681]">{hint}</p>}
+      <label className="text-sm font-medium text-[#ECEDEF]">{label}</label>
+      {hint && <p className="text-xs text-admin-text-muted">{hint}</p>}
       {children}
       {error && (
-        <p className="text-xs font-medium text-red-500 flex items-center gap-1 mt-1">
-          <span className="w-1 h-1 rounded-full bg-red-500 flex-shrink-0" />
+        <p className="text-xs font-medium text-red-400 flex items-center gap-1 mt-1">
+          <span className="w-1 h-1 rounded-full bg-red-400 flex-shrink-0" />
           {error}
         </p>
       )}
@@ -425,8 +434,8 @@ function Field({
 function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between items-center px-4 py-3.5">
-      <span className="text-sm text-text-secondary">{label}</span>
-      <span className="text-sm font-semibold text-text-primary text-right max-w-[60%] truncate">{value}</span>
+      <span className="text-sm text-admin-text-muted">{label}</span>
+      <span className="text-sm font-medium text-[#ECEDEF] text-right max-w-[60%] truncate">{value}</span>
     </div>
   );
 }

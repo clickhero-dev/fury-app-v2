@@ -26,10 +26,13 @@ function getFriendlyError(err: unknown): string {
   return 'Ocorreu um erro inesperado. Tente novamente em alguns instantes.';
 }
 
+/** Símbolo ady — "A" abstrato com barra + spark laranja. */
+ import { AdySymbol } from '@/components/AdySymbol';
+
 export function LoginPage() {
   const navigate = useNavigate();
   const loginMutation = useLogin();
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const {
@@ -51,113 +54,107 @@ export function LoginPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-[400px]">
+  const inputClass =
+    'w-full rounded-lg border border-white/15 bg-admin-bg px-4 py-3 text-sm text-admin-text outline-none transition-colors placeholder:text-admin-text-faint focus:border-admin-petrol';
 
-        {/* Logo + tagline */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#EA580C] mb-4">
-            <span className="text-white font-black text-xl">F</span>
-          </div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">FURY</h1>
-          <p className="text-sm text-gray-400 mt-1">Automação de tráfego pago com IA</p>
+  return (
+    <div className="relative flex min-h-screen items-center justify-center bg-admin-bg px-5 py-16 text-admin-text">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(120% 90% at 50% -10%, rgba(30,136,168,0.16), transparent 70%)',
+        }}
+      />
+
+      <div className="relative w-full max-w-[400px]">
+        <div className="flex flex-col items-center text-center">
+          <AdySymbol size={52} />
+          <h1 className="mt-5 text-4xl font-medium !text-[#ECEDEF]">ady</h1>
+          <p className="!mt-6 text-sm text-admin-text-muted">Seu gestor de tráfego com IA</p>
         </div>
 
-        {/* Form card */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-          <form onSubmit={handleSubmit(onSubmit)} noValidate>
-            <div className="space-y-4">
-
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  E-mail
-                </label>
-                <input
-                  type="email"
-                  placeholder="seu@email.com"
-                  autoComplete="email"
-                  className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors"
-                  {...register('email')}
-                />
-                {errors.email?.message && (
-                  <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>
-                )}
-              </div>
-
-              {/* Password */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Senha
-                  </label>
-                  <Link
-                    to="/forgot-password"
-                    className="text-xs text-[#EA580C] font-semibold hover:underline"
-                  >
-                    Esqueci a senha
-                  </Link>
-                </div>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 pr-11 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors"
-                    {...register('password')}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                    aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                  >
-                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                {errors.password?.message && (
-                  <p className="text-xs text-red-500 mt-1">{errors.password.message}</p>
-                )}
-              </div>
-
-            </div>
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loginMutation.isPending}
-              className="w-full mt-6 bg-[#EA580C] hover:bg-[#D4520B] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
-            >
-              {loginMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Entrando...
-                </>
-              ) : (
-                'Entrar'
-              )}
-            </button>
-
-            {/* Error */}
-            {error && (
-              <p className="text-sm text-red-500 text-center mt-3">{error}</p>
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="mt-10 space-y-5 rounded-2xl border border-white/10 bg-admin-surface p-7 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)]"
+        >
+          <label className="block">
+            <span className="mb-2 block text-sm text-admin-text-muted">E-mail</span>
+            <input
+              type="email"
+              placeholder="seu@email.com"
+              autoComplete="email"
+              className={inputClass}
+              {...register('email')}
+            />
+            {errors.email?.message && (
+              <span className="mt-2 block text-xs text-admin-danger">{errors.email.message}</span>
             )}
-          </form>
+          </label>
 
-          {/* Sign up link */}
-          <p className="text-sm text-gray-500 text-center mt-4">
+          <label className="block">
+            <span className="mb-2 flex items-center justify-between gap-3">
+              <span className="text-sm text-admin-text-muted">Senha</span>
+              <Link
+                to="/forgot-password"
+                className="text-xs font-medium text-admin-petrol hover:underline"
+              >
+                Esqueci a senha
+              </Link>
+            </span>
+            <span className="relative block">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                className={`${inputClass} pr-11`}
+                {...register('password')}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-admin-text-faint transition-colors hover:text-admin-text"
+              >
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </span>
+            {errors.password?.message && (
+              <span className="mt-2 block text-xs text-admin-danger">{errors.password.message}</span>
+            )}
+          </label>
+
+          <button
+            type="submit"
+            disabled={loginMutation.isPending}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-admin-petrol py-3 text-sm font-semibold text-admin-bg transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {loginMutation.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Entrando...
+              </>
+            ) : (
+              'Entrar'
+            )}
+          </button>
+
+          {error && (
+            <p className="rounded-lg border border-admin-danger/25 bg-admin-danger/10 px-4 py-3 text-center text-xs text-admin-danger">
+              {error}
+            </p>
+          )}
+
+          <p className="text-center text-sm text-admin-text-muted">
             Não tem conta?{' '}
-            <Link
-              to="/cadastro"
-              className="text-[#EA580C] font-semibold hover:underline"
-            >
+            <Link to="/cadastro" className="font-medium text-admin-petrol hover:underline">
               Criar conta gratuita
             </Link>
           </p>
-        </div>
-{/* Fim do card */}
+        </form>
 
+        <p className="!mt-10 text-center text-xs text-admin-text-faint">ady é um produto <span className="text-[#CF6F03]">Click Hero</span></p>
       </div>
     </div>
   );
