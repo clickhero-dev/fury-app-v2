@@ -727,6 +727,36 @@ export class CampaignsService {
     let adSetId: string | undefined;
     let adCreativeId: string | undefined;
     let metaAdId: string | undefined;
+    let dbCampaignId: string | undefined;
+
+    // Rollback de "limpeza total": se a criação falhar em qualquer etapa, remove
+    // do Meta os objetos já criados (ad → adset → adcreative → campaign) e, se
+    // houver, o registro local no banco. Falhas no próprio cleanup só são logadas.
+    const rollback = async (step: string): Promise<void> => {
+      const pendingDeletes: Array<{ id: string; label: string; del: () => Promise<void> }> = [];
+      if (metaAdId) pendingDeletes.push({ id: metaAdId, label: 'ad', del: () => this.meta.deleteAd(metaAdId!, accessToken) });
+      if (adSetId) pendingDeletes.push({ id: adSetId, label: 'adset', del: () => this.meta.deleteAdSet(adSetId!, accessToken) });
+      if (adCreativeId) pendingDeletes.push({ id: adCreativeId, label: 'adcreative', del: () => this.meta.deleteAdCreative(adCreativeId!, accessToken) });
+      if (metaCampaignId) pendingDeletes.push({ id: metaCampaignId, label: 'campaign', del: () => this.meta.deleteCampaign(metaCampaignId!, accessToken) });
+
+      for (const { id, label, del } of pendingDeletes) {
+        try {
+          await del();
+          console.warn(`[CampaignWizard] ${label} ${id} deletado no Meta após falha na etapa "${step}"`);
+        } catch (cleanupErr) {
+          console.error(`[CampaignWizard] Falha ao deletar ${label} ${id} no Meta após falha na etapa "${step}":`, cleanupErr);
+        }
+      }
+
+      if (dbCampaignId) {
+        try {
+          await this.repo.deleteCampaign(dbCampaignId);
+          console.warn(`[CampaignWizard] Registro local ${dbCampaignId} removido após falha na etapa "${step}"`);
+        } catch (cleanupErr) {
+          console.error(`[CampaignWizard] Falha ao remover registro local ${dbCampaignId} após falha na etapa "${step}":`, cleanupErr);
+        }
+      }
+    };
 
     try {
       const campaignBody = {
@@ -817,33 +847,41 @@ export class CampaignsService {
       metaAdId = adResponse.id;
     } catch (err) {
       const step = !metaCampaignId ? 'campaign' : !adSetId ? 'adset' : !adCreativeId ? 'creative' : 'ad';
+      await rollback(step);
       mapWizardMetaError(err, step);
     }
 
-    const campaign = await this.repo.createCampaign({
-      tenantId: args.tenantId, metaCampaignId, name: campaignName, status: 'active',
-      budget: {
-        daily_budget: Math.round(args.dailyBudgetBrl * 100), objective: objectiveConfig.metaObjective,
-        created_via: 'wizard', ad_set_id: adSetId, ad_creative_id: adCreativeId, ad_id: metaAdId,
-        duration_days: args.durationDays ?? null,
-        creative_asset_id: args.creativeAssetId ?? null,
-        creative_image_url: imageUrl ?? null,
-        creative_headline: args.headline ?? null,
-        creative_primary_text: args.primaryText ?? null,
-        ...(args.objective === 'whatsapp' ? {
-          destinations: messagingDestinations, destination_type: messagingDestinationType,
-          whatsapp_page_id: args.whatsappPageId, whatsapp_page_name: args.whatsappPageName ?? null,
-          whatsapp_phone_number_id: messagingDestinations.includes('whatsapp') ? args.whatsappPhoneNumberId ?? null : null,
-          whatsapp_phone_number: messagingDestinations.includes('whatsapp') ? args.whatsappPhoneNumber ?? null : null,
-          instagram_user_id: messagingDestinations.includes('instagram_direct') ? args.instagramUserId ?? null : null,
-          instagram_username: messagingDestinations.includes('instagram_direct') ? args.instagramUsername ?? null : null,
-        } : {}),
-      },
-    } as any);
+    let campaign: { id: string };
+    try {
+      campaign = await this.repo.createCampaign({
+        tenantId: args.tenantId, metaCampaignId, name: campaignName, status: 'active',
+        budget: {
+          daily_budget: Math.round(args.dailyBudgetBrl * 100), objective: objectiveConfig.metaObjective,
+          created_via: 'wizard', ad_set_id: adSetId, ad_creative_id: adCreativeId, ad_id: metaAdId,
+          duration_days: args.durationDays ?? null,
+          creative_asset_id: args.creativeAssetId ?? null,
+          creative_image_url: imageUrl ?? null,
+          creative_headline: args.headline ?? null,
+          creative_primary_text: args.primaryText ?? null,
+          ...(args.objective === 'whatsapp' ? {
+            destinations: messagingDestinations, destination_type: messagingDestinationType,
+            whatsapp_page_id: args.whatsappPageId, whatsapp_page_name: args.whatsappPageName ?? null,
+            whatsapp_phone_number_id: messagingDestinations.includes('whatsapp') ? args.whatsappPhoneNumberId ?? null : null,
+            whatsapp_phone_number: messagingDestinations.includes('whatsapp') ? args.whatsappPhoneNumber ?? null : null,
+            instagram_user_id: messagingDestinations.includes('instagram_direct') ? args.instagramUserId ?? null : null,
+            instagram_username: messagingDestinations.includes('instagram_direct') ? args.instagramUsername ?? null : null,
+          } : {}),
+        },
+      } as any);
+      dbCampaignId = campaign.id;
+      await this.deps.invalidateCampaignsCache(args.tenantId);
+    } catch (err) {
+      // Falhou após a criação no Meta (DB ou invalidação de cache) — reverte tudo.
+      await rollback('db');
+      throw err;
+    }
 
-    await this.deps.invalidateCampaignsCache(args.tenantId);
-
-    return { success: true, campaign_id: campaign.id, meta_campaign_id: metaCampaignId, campaign_name: campaignName };
+    return { success: true, campaign_id: dbCampaignId, meta_campaign_id: metaCampaignId, campaign_name: campaignName };
   }
 
   async searchMetaLocations(args: { tenantId: string; query: string }): Promise<any[]> {

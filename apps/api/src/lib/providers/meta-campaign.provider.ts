@@ -42,6 +42,14 @@ export interface IMetaCampaignProvider {
     body: Record<string, unknown>
   ): Promise<{ id: string }>;
 
+  deleteCampaign(campaignId: string, accessToken: string): Promise<void>;
+
+  deleteAdSet(adSetId: string, accessToken: string): Promise<void>;
+
+  deleteAdCreative(adCreativeId: string, accessToken: string): Promise<void>;
+
+  deleteAd(adId: string, accessToken: string): Promise<void>;
+
   getInsights(
     params: {
       accessToken: string;

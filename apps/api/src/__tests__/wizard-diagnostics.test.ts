@@ -174,6 +174,8 @@ describe('Wizard Diagnostics (dados de produção)', () => {
     await expect(createCampaignFromWizard(wizardPayload)).rejects.toMatchObject({
       statusCode: 400, code: 'META_API_ERROR',
     });
+    // rollback: a campaign criada deve ser deletada no Meta
+    expect(mockMetaApiCall.mock.calls.some((c) => (c[2] as any)?.method === 'DELETE')).toBe(true);
   });
 
   it('DIAG 6: Falha no creative (depois de campaign + adset)', async () => {
@@ -186,6 +188,11 @@ describe('Wizard Diagnostics (dados de produção)', () => {
     await expect(createCampaignFromWizard(wizardPayload)).rejects.toMatchObject({
       statusCode: 400, code: 'META_API_ERROR',
     });
+    // rollback em ordem reversa: adset e campaign
+    const deletePaths = mockMetaApiCall.mock.calls
+      .filter((c) => (c[2] as any)?.method === 'DELETE')
+      .map((c) => c[0]);
+    expect(deletePaths).toEqual(['/as_ok', '/c_ok']);
   });
 
   it('DIAG 7: Falha na busca de cidade', async () => {
@@ -211,6 +218,8 @@ describe('Wizard Diagnostics (dados de produção)', () => {
     await expect(createCampaignFromWizard(wizardPayload)).rejects.toMatchObject({
       statusCode: 401, code: 'META_TOKEN_EXPIRED',
     });
+    // rollback: campaign criada antes do token expirar deve ser deletada
+    expect(mockMetaApiCall.mock.calls.some((c) => (c[2] as any)?.method === 'DELETE')).toBe(true);
   });
 
   it('DIAG 9: AD_ACCOUNT_NOT_SELECTED', async () => {

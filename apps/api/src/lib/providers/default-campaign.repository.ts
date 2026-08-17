@@ -84,6 +84,10 @@ export class DefaultCampaignRepository implements ICampaignRepository {
     return row as CampaignRecord;
   }
 
+  async deleteCampaign(id: string): Promise<void> {
+    await db.delete(campaigns).where(eq(campaigns.id, id));
+  }
+
   async findCreativeAsset(id: string, tenantId: string): Promise<CreativeAssetRecord | null> {
     const row = await db.query.creativeAssets.findFirst({
       where: and(eq(creativeAssets.id, id), eq(creativeAssets.tenantId, tenantId)),

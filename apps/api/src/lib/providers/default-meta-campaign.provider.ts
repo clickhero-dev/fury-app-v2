@@ -82,6 +82,22 @@ export class DefaultMetaCampaignProvider implements IMetaCampaignProvider {
     );
   }
 
+  async deleteCampaign(campaignId: string, accessToken: string): Promise<void> {
+    await metaApiCall(`/${encodeURIComponent(campaignId)}`, accessToken, { method: 'DELETE' });
+  }
+
+  async deleteAdSet(adSetId: string, accessToken: string): Promise<void> {
+    await metaApiCall(`/${encodeURIComponent(adSetId)}`, accessToken, { method: 'DELETE' });
+  }
+
+  async deleteAdCreative(adCreativeId: string, accessToken: string): Promise<void> {
+    await metaApiCall(`/${encodeURIComponent(adCreativeId)}`, accessToken, { method: 'DELETE' });
+  }
+
+  async deleteAd(adId: string, accessToken: string): Promise<void> {
+    await metaApiCall(`/${encodeURIComponent(adId)}`, accessToken, { method: 'DELETE' });
+  }
+
   async getInsights(params: {
     accessToken: string;
     entityId: string;

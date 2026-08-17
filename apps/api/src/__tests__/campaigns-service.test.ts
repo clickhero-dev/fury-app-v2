@@ -11,7 +11,13 @@ vi.mock('@fury/db', () => ({
   eq: vi.fn(),
 }));
 
-function makeService() {
+function makeService(overrides: Partial<{
+  decryptMetaToken: (token: string) => string;
+  invalidateCampaignsCache: () => Promise<void>;
+  getMetaLocationsCache: () => Promise<any>;
+  setMetaLocationsCache: () => Promise<void>;
+  getResolvedTenantAssetSelection: () => Promise<{ pages: Array<{ instagramUserId?: string; pageId?: string }> }>;
+}> = {}) {
   const meta = new MockMetaCampaignProvider();
   const repo = new MockCampaignRepository();
   const deps = {
@@ -20,7 +26,8 @@ function makeService() {
     getMetaLocationsCache: async () => null as any,
     setMetaLocationsCache: async () => {},
     getResolvedTenantAssetSelection: async () => ({ pages: [] }),
-  };
+    ...overrides,
+  } as any;
   const service = new CampaignsService(meta, repo, deps);
   return { service, meta, repo };
 }
@@ -271,6 +278,103 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     expect(meta.createdAdSets).toHaveLength(1);
     expect(meta.createdAdCreatives).toHaveLength(1);
     expect(meta.createdAds).toHaveLength(1);
+  });
+
+  const wizardArgs = {
+    tenantId: TENANT_ID, objective: 'visits' as const,
+    headline: 'Oferta', primaryText: 'Imperdivel',
+    locationCity: 'Sao Paulo', locationRadiusKm: 30,
+    ageMin: 18, ageMax: 65, gender: 'all' as const, dailyBudgetBrl: 100,
+    destinationUrl: 'https://example.com',
+    creativeUploadUrl: 'https://example.com/img.jpg',
+  };
+
+  it('limpeza total: falha no ad deleta adset, adcreative e campaign no Meta', async () => {
+    const { service, meta, repo } = makeService();
+    repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+      createdAt: new Date(),
+    } as any);
+    meta.locationsResult = [{ key: 'city_key_1' }];
+    meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+    meta.uploadAdImageResult = 'img_hash';
+    meta.failCreateStep = 'ad';
+
+    await expect(service.createCampaignFromWizard(wizardArgs)).rejects.toThrow(AppError);
+
+    // ad não chegou a ser criado — nada a deletar
+    expect(meta.deletedAds).toEqual([]);
+    expect(meta.deletedAdSets).toEqual(['meta_adset_1']);
+    expect(meta.deletedAdCreatives).toEqual(['meta_creative_1']);
+    expect(meta.deletedCampaigns).toEqual(['meta_campaign_1']);
+    // nenhum registro local foi criado
+    expect(repo.campaigns).toHaveLength(0);
+  });
+
+  it('falha no adset deleta apenas a campaign no Meta', async () => {
+    const { service, meta, repo } = makeService();
+    repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+      createdAt: new Date(),
+    } as any);
+    meta.locationsResult = [{ key: 'city_key_1' }];
+    meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+    meta.uploadAdImageResult = 'img_hash';
+    meta.failCreateStep = 'adset';
+
+    await expect(service.createCampaignFromWizard(wizardArgs)).rejects.toThrow(AppError);
+
+    expect(meta.deletedCampaigns).toEqual(['meta_campaign_1']);
+    expect(meta.deletedAdSets).toEqual([]);
+    expect(meta.deletedAdCreatives).toEqual([]);
+    expect(meta.deletedAds).toEqual([]);
+    expect(repo.campaigns).toHaveLength(0);
+  });
+
+  it('falha na criação do registro no banco reverte todos os objetos do Meta', async () => {
+    const { service, meta, repo } = makeService();
+    repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+      createdAt: new Date(),
+    } as any);
+    meta.locationsResult = [{ key: 'city_key_1' }];
+    meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+    meta.uploadAdImageResult = 'img_hash';
+    repo.failCreateCampaign = true;
+
+    await expect(service.createCampaignFromWizard(wizardArgs)).rejects.toThrow('DB insert fail');
+
+    expect(meta.deletedAds).toEqual(['meta_ad_1']);
+    expect(meta.deletedAdSets).toEqual(['meta_adset_1']);
+    expect(meta.deletedAdCreatives).toEqual(['meta_creative_1']);
+    expect(meta.deletedCampaigns).toEqual(['meta_campaign_1']);
+    expect(repo.campaigns).toHaveLength(0);
+  });
+
+  it('falha ao invalidar cache remove o registro local e reverte o Meta', async () => {
+    const { service, meta, repo } = makeService({
+      invalidateCampaignsCache: async () => { throw new Error('cache fail'); },
+    });
+    repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+      createdAt: new Date(),
+    } as any);
+    meta.locationsResult = [{ key: 'city_key_1' }];
+    meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+    meta.uploadAdImageResult = 'img_hash';
+
+    await expect(service.createCampaignFromWizard(wizardArgs)).rejects.toThrow('cache fail');
+
+    expect(meta.deletedAds).toEqual(['meta_ad_1']);
+    expect(meta.deletedAdSets).toEqual(['meta_adset_1']);
+    expect(meta.deletedAdCreatives).toEqual(['meta_creative_1']);
+    expect(meta.deletedCampaigns).toEqual(['meta_campaign_1']);
+    // registro local foi removido pelo rollback
+    expect(repo.campaigns).toHaveLength(0);
   });
 
   it('rejeita whatsapp sem phone number', async () => {
