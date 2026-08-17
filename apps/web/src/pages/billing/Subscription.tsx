@@ -171,9 +171,7 @@ export function Subscription() {
               <h2 className="text-lg font-bold text-text-primary">
                 {subscription.plan?.name ?? 'Plano'}
               </h2>
-              <p className="text-text-secondary text-sm mt-0.5">
-                {subscription.plan ? formatCurrency(subscription.plan.priceCents) + '/mês' : '—'}
-              </p>
+
             </div>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${statusConfig.bg} ${statusConfig.text}`}
