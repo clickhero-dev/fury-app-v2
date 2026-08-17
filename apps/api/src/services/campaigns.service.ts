@@ -734,7 +734,7 @@ export class CampaignsService {
       if (!instagramCreativeActorId && imageUrl) {
         adImageHashPromise = (async () => {
           try {
-            const result = await this.meta.downloadImage(imageUrl, AbortSignal.timeout(15_000));
+            const result = await this.meta.downloadImage(imageUrl, AbortSignal.timeout(90_000));
             if (!result) throw new Error(`Falha ao baixar imagem (HTTP). Verifique se a URL está acessível.`);
             if (!result.contentType.includes('jpeg') && !result.contentType.includes('png') && !result.contentType.includes('image/')) {
               throw new Error(`Formato de imagem nao suportado: ${result.contentType || 'desconhecido'}. Use uma imagem JPEG ou PNG acessivel publicamente.`);
