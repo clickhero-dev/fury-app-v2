@@ -132,7 +132,7 @@ function MetaBanner() {
   );
 }
 
-// ─── Compact Hero Strip ───────────────────────────────────────────────────────
+// ─── Compact Hero Strip (Modo Claro + Escuro Ajustados) ─────────────────────
 
 function HeroStrip({
   goal,
@@ -149,30 +149,31 @@ function HeroStrip({
 }) {
   const pct =
     hasGoals && hasRealData ? computeProgressPercent(goal.current_value, goal.target_value) : 0;
+  
   const statusKey = !hasGoals || !hasRealData ? 'no_goals' : statusFromProgress(pct);
   const cfg = STATUS_CONFIG[statusKey] ?? NO_DATA_CFG;
 
   return (
-    <section className={`${SURFACE} p-6`}>
+    <section className={`${SURFACE} p-6 border border-slate-200 bg-white dark:border-[#262824] dark:bg-[#161814]`}>
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-5 sm:flex sm:flex-wrap sm:justify-between">
         <div className="flex min-w-0 items-center gap-6">
-          {/* Círculo com % em tom azul */}
-          <span
-            className="grid size-24 shrink-0 place-items-center rounded-full border border-[#1E88A8]/30 bg-[#1E88A8]/10 text-xl font-bold tabular-nums text-[#1E88A8]"
-          >
+          
+          {/* Círculo com formato mantido em 100% arredondado nos dois modos */}
+          <div 
+          className="icon-meta-circle flex h-20 w-20 shrink-0 items-center justify-center border border-[#1E88A8]/40 bg-[#1E88A8]/10 text-xl font-bold tabular-nums text-[#1E88A8] dark:bg-[#1E88A8]/20"
+          style={{ borderRadius: '50%' }}
+        >
             {pct}%
-          </span>
+          </div>
 
-          {/* Estrutura vertical de textos */}
-          <div className="flex flex-col min-w-0 gap-0.5">
-            {/* 1. Objetivo: ao lado de Aumentar Vendas */}
-            <p className="truncate text-base font-bold text-[#ECEDEF]">
-              <span className="text-sm font-semibold text-[#8A8D86]">Objetivo: </span>
+          {/* Textos da Meta */}
+          <div className="flex flex-col min-w-0 gap-1">
+            <p className="truncate text-base font-bold text-slate-800 dark:text-[#ECEDEF]">
+              <span className="text-sm font-semibold text-slate-500 dark:text-[#8A8D86]">Objetivo: </span>
               {translateObjective(objective)}
             </p>
 
-            {/* 2. Meta */}
-            <p className="text-sm text-[#9A9D96]">
+            <p className="text-sm font-medium text-slate-600 dark:text-[#9A9D96]">
               {hasGoals ? (
                 <>
                   Meta: {goal.target_value.toLocaleString('pt-BR')}{' '}
@@ -183,20 +184,20 @@ function HeroStrip({
               )}
             </p>
 
-            {/* 3. Link de ação abaixo */}
             <Link
               to="/configuracoes?tab=metas"
-              className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-[#1E88A8] transition-opacity hover:opacity-80 hover:underline"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[#1E88A8] transition-colors hover:underline"
             >
-              Configurar metas <ArrowRight className="size-2" />
+              Configurar metas <ArrowRight className="size-3" />
             </Link>
           </div>
         </div>
 
-        <div className="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-[#9A9D96] sm:col-auto">
+        {/* Projeção e Status */}
+        <div className="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600 dark:text-[#9A9D96] sm:col-auto">
           <span>
             Projeção:{' '}
-            <span className="font-medium text-[#ECEDEF]">
+            <span className="font-semibold text-slate-800 dark:text-[#ECEDEF]">
               {hasGoals && hasRealData
                 ? `${(goal.projected_value ?? 0).toLocaleString('pt-BR')} ${
                     goal.metric === 'conversions' ? 'pessoas' : goal.unit
@@ -205,18 +206,20 @@ function HeroStrip({
             </span>
           </span>
           <span>{daysRemaining} dias restantes</span>
-          <span className={`rounded-full px-3 py-1 text-xs font-medium ${cfg.bg} ${cfg.text}`}>
+
+          {/* Badge de Status adaptável */}
+          <span className="rounded-full border border-[#1E88A8]/30 bg-[#1E88A8]/15 px-3 py-1 text-xs font-semibold text-[#1E88A8]">
             {cfg.label}
           </span>
         </div>
       </div>
 
-      {/* Barra de Progresso em Azul (#1E88A8) */}
-      <div className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-[#1F211D]">
+      {/* Trilho e Barra de Progresso adaptados para Modo Claro e Escuro */}
+      <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-[#262824]">
         <div
-          className="h-full rounded-full bg-[#1E88A8] transition-[width] duration-500 shadow-[0_0_8px_rgba(30,136,168,0.4)]"
+          className="progress-fill-bar h-full rounded-full bg-[#1E88A8] transition-all duration-500"
           style={{
-            width: `${Math.max(pct, 2)}%`,
+            width: `${Math.max(pct, 3)}%`,
           }}
         />
       </div>

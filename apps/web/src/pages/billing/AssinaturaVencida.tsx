@@ -1,48 +1,105 @@
+import { useEffect } from 'react';
+import { AlertTriangle, Mail, ArrowRight } from 'lucide-react';
+import { AdySymbol } from '@/components/AdySymbol';
+
 export function AssinaturaVencida() {
+  // Garantir sincronização/limpeza inicial de tema se necessário
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('ady-theme');
+
+    if (savedTheme === 'escuro' || savedTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else if (savedTheme === 'claro' || savedTheme === 'light') {
+      document.documentElement.classList.remove('dark');
+    } else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+  }, []);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface p-8">
-      <div className="max-w-md text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-warning/10">
-          <svg
-            className="h-8 w-8 text-warning"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
-            />
-          </svg>
+    <div className="relative flex min-h-screen items-center justify-center bg-[#f3f6f8] px-5 py-16 text-slate-900 transition-colors duration-300 overflow-hidden">
+      
+      {/* Grid de Fundo */}
+      <div 
+        aria-hidden 
+        className="pointer-events-none absolute inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
+          backgroundSize: '24px 24px'
+        }}
+      />
+
+      {/* Glow Radial */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `radial-gradient(circle at 50% -10%, rgba(30, 136, 168, 0.22) 0%, transparent 60%)`,
+        }}
+      />
+
+      <div className="relative z-10 w-full max-w-[420px]">
+        {/* Header / Logo */}
+        <div className="flex flex-col items-center text-center">
+          <div className="p-2">
+            <AdySymbol size={52} />
+          </div>
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900">ady</h1>
+          <p className="!mt-1.5 text-sm font-medium text-slate-500">Seu gestor de tráfego com IA</p>
         </div>
-        <h1 className="mb-3 text-2xl font-bold text-white">
-          Assinatura Vencida
-        </h1>
-        <p className="mb-8 text-gray-400">
-          Sua assinatura está vencida. Entre em contato com o suporte para
-          regularizar seu acesso.
-        </p>
-        <div className="rounded-lg bg-surface-secondary p-6 text-left">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-500">
-            Canais de atendimento
-          </h2>
-          <div className="space-y-3 text-sm text-gray-400">
-            <div className="flex items-center gap-3">
-              <svg className="h-5 w-5 shrink-0 text-brand" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-              </svg>
-              <span>rafael@clickhero.com.br</span>
+
+        {/* Card Principal - Branco e Limpo no Tema Claro */}
+        <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-7 shadow-xl backdrop-blur-md transition-all text-center space-y-6">
+          
+          {/* Ícone de Alerta */}
+          <div className="flex justify-center">
+            <div className="relative">
+              <div className="absolute inset-0 bg-amber-500/20 rounded-full blur-md" />
+              <div className="relative inline-flex items-center justify-center size-14 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600">
+                <AlertTriangle className="size-7" strokeWidth={1.75} />
+              </div>
             </div>
           </div>
+
+          {/* Textos Informativos */}
+          <div className="space-y-2">
+            <h2 className="text-xl font-semibold text-slate-900">Assinatura Vencida</h2>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Sua assinatura expirou. Para continuar aproveitando todas as funcionalidades do ady, escolha um novo plano ou entre em contato com o suporte.
+            </p>
+          </div>
+
+          {/* Canais de Atendimento */}
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-4 text-left">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Canais de atendimento
+            </h3>
+            <div className="flex items-center gap-2.5 text-sm font-medium text-slate-700">
+              <Mail className="size-4 text-[#1E88A8]" />
+              <a 
+                href="mailto:rafael@clickhero.com.br" 
+                className="hover:text-[#1E88A8] transition-colors"
+              >
+                rafael@clickhero.com.br
+              </a>
+            </div>
+          </div>
+
+          {/* Botão de Ação */}
+          <a
+            href="/planos"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88A8] py-3 text-sm font-semibold text-white shadow-md shadow-[#1E88A8]/20 transition-all duration-200 hover:!bg-[#17708A] hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99]"
+          >
+            <span>Ver planos disponíveis</span>
+            <ArrowRight className="size-4" />
+          </a>
+
         </div>
-        <a
-          href="/planos"
-          className="mt-6 inline-block rounded-lg bg-brand px-6 py-3 text-sm font-semibold text-white hover:bg-brand-hover transition-colors"
-        >
-          Ver planos disponíveis
-        </a>
       </div>
     </div>
   );

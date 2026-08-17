@@ -13,7 +13,7 @@ export function PeriodSelector({ value, onChange }: { value: Period; onChange: (
             // Ajuste nas classes de borda e hover
             className={`text-xs px-4 py-2 rounded-full font-medium transition-all duration-150 cursor-pointer border ${
               isActive
-                ? 'bg-brand text-white border-brand' // Ativo: Borda da cor da marca
+                ? 'filter-pill-active bg-brand text-white border-brand' // Ativo: Borda da cor da marca
                 : 'bg-[#1A1B18] text-[#A3A8B3] border-transparent hover:bg-[#242622] hover:text-white hover:border-[#3F423B]' // Inativo: Borda transparente vira cinza no hover
             }`}
           >

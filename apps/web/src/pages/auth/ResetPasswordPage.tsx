@@ -34,6 +34,24 @@ export function ResetPasswordPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [resendCountdown, setResendCountdown] = useState<number>(0);
 
+  // 🔄 DETECÇÃO DO MODO DO NAVEGADOR / SISTEMA
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('ady-theme');
+
+    if (savedTheme === 'escuro' || savedTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else if (savedTheme === 'claro' || savedTheme === 'light') {
+      document.documentElement.classList.remove('dark');
+    } else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+  }, []);
+
   const {
     register,
     handleSubmit,
@@ -50,44 +68,6 @@ export function ResetPasswordPage() {
       return () => clearTimeout(timer);
     }
   }, [resendCountdown]);
-
-  if (!email) {
-    return (
-      <div className="relative flex min-h-screen items-center justify-center bg-admin-bg px-5 py-16 text-admin-text">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background: 'radial-gradient(120% 90% at 50% -10%, rgba(30,136,168,0.16), transparent 70%)',
-          }}
-        />
-
-        <div className="relative w-full max-w-[400px]">
-          <div className="flex flex-col items-center text-center">
-            <AdySymbol size={52} />
-            <h1 className="mt-5 text-4xl font-medium !text-[#ECEDEF]">ady</h1>
-            <p className="!mt-6 text-sm text-admin-text-muted">Seu gestor de tráfego com IA</p>
-          </div>
-
-          <div className="mt-10 rounded-2xl border border-white/10 bg-admin-surface p-7 text-center shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)]">
-            <p className="mb-6 text-sm text-admin-text-muted">
-              Acesso inválido. Por favor, inicie o processo de recuperação de senha novamente.
-            </p>
-            <Link
-              to="/forgot-password"
-              className="font-medium text-admin-petrol hover:underline text-sm"
-            >
-              Voltar para recuperação
-            </Link>
-          </div>
-
-          <p className="!mt-10 text-center text-xs text-admin-text-faint">
-            ady é um produto <span className="text-[#CF6F03]">Click Hero</span>
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   const onSubmit = async (data: ResetPasswordFormValues) => {
     if (otpValue.length !== 6) {
@@ -129,41 +109,108 @@ export function ResetPasswordPage() {
     }
   };
 
+  // Estilo padronizado dos inputs com Hover e Focus
+  const inputClass =
+    'w-full rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/80 dark:bg-[#12130F] px-4 py-3 text-sm text-slate-900 dark:text-white outline-none transition-all duration-200 placeholder:text-slate-400 dark:placeholder:text-zinc-500 hover:border-[#1E88A8] hover:ring-2 hover:ring-[#1E88A8]/20 hover:bg-white dark:hover:bg-[#12130F] focus:border-[#1E88A8] focus:bg-white dark:focus:bg-[#12130F] focus:ring-2 focus:ring-[#1E88A8]/20';
+
+  // Se o e-mail não for informado
+  if (!email) {
+    return (
+      <div className="relative flex min-h-screen items-center justify-center bg-[#f3f6f8] dark:bg-[#0c0d0a] px-5 py-16 text-slate-900 dark:text-white transition-colors duration-300 overflow-hidden">
+        
+        {/* 🌌 GRID DE FUNDO */}
+        <div 
+          aria-hidden 
+          className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+          style={{
+            backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
+            backgroundSize: '24px 24px'
+          }}
+        />
+
+        {/* 🌟 GLOW APENAS AZUL */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: `radial-gradient(circle at 50% -10%, rgba(30, 136, 168, 0.22) 0%, transparent 60%)`,
+          }}
+        />
+
+        <div className="relative z-10 w-full max-w-[400px]">
+          {/* Logo Estática */}
+          <div className="flex flex-col items-center text-center">
+            <div className="p-2">
+              <AdySymbol size={52} />
+            </div>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900 dark:text-white">ady</h1>
+            <p className="!mt-1.5 text-sm font-medium text-slate-500 dark:text-zinc-400">Seu gestor de tráfego com IA</p>
+          </div>
+
+          <div className="mt-8 rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white/95 dark:bg-[#181915] p-7 text-center shadow-[0_12px_32px_-8px_rgba(15,23,42,0.08)] dark:shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)] backdrop-blur-md">
+            <p className="mb-6 text-sm text-slate-600 dark:text-zinc-400">
+              Acesso inválido. Por favor, inicie o processo de recuperação de senha novamente.
+            </p>
+            <Link
+              to="/forgot-password"
+              className="font-semibold text-[#1E88A8] hover:underline text-sm transition-colors"
+            >
+              Voltar para recuperação
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-admin-bg px-5 py-16 text-admin-text">
-      {/* Fundo Iluminado */}
+    <div className="relative flex min-h-screen items-center justify-center bg-[#f3f6f8] dark:bg-[#0c0d0a] px-5 py-16 text-slate-900 dark:text-white transition-colors duration-300 overflow-hidden">
+      
+      {/* 🌌 GRID DE FUNDO */}
+      <div 
+        aria-hidden 
+        className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+        style={{
+          backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
+          backgroundSize: '24px 24px'
+        }}
+      />
+
+      {/* 🌟 GLOW APENAS AZUL */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
-          background: 'radial-gradient(120% 90% at 50% -10%, rgba(30,136,168,0.16), transparent 70%)',
+          background: `radial-gradient(circle at 50% -10%, rgba(30, 136, 168, 0.22) 0%, transparent 60%)`,
         }}
       />
 
-      <div className="relative w-full max-w-[400px]">
-        {/* Cabeçalho */}
+      <div className="relative z-10 w-full max-w-[400px]">
+        {/* Logo Estática */}
         <div className="flex flex-col items-center text-center">
-          <AdySymbol size={52} />
-          <h1 className="mt-5 text-4xl font-medium !text-[#ECEDEF]">ady</h1>
-          <p className="!mt-6 text-sm text-admin-text-muted">Seu gestor de tráfego com IA</p>
+          <div className="p-2">
+            <AdySymbol size={52} />
+          </div>
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900 dark:text-white">ady</h1>
+          <p className="!mt-1.5 text-sm font-medium text-slate-500 dark:text-zinc-400">Seu gestor de tráfego com IA</p>
         </div>
 
         {/* Card do Formulário */}
         <form
-          className="mt-10 space-y-5 rounded-2xl border border-white/10 bg-admin-surface p-7 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)]"
+          className="mt-8 space-y-4 rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white/95 dark:bg-[#181915] p-7 shadow-[0_12px_32px_-8px_rgba(15,23,42,0.08)] dark:shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)] backdrop-blur-md transition-all"
           onSubmit={handleSubmit(onSubmit)}
           noValidate
         >
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold !text-[#ECEDEF]">Redefinir senha</h2>
-            <p className="text-sm text-admin-text-muted">
-              Enviamos um código para <strong className="text-admin-text">{email}</strong>
+          <div className="space-y-1 mb-2">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Redefinir senha</h2>
+            <p className="text-sm text-slate-600 dark:text-zinc-400">
+              Enviamos um código para <strong className="text-slate-900 dark:text-white">{email}</strong>
             </p>
           </div>
 
           {/* OTP Input */}
           <div>
-            <label className="mb-2 block text-sm text-admin-text-muted">
+            <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-zinc-300">
               Código de recuperação
             </label>
             <OtpInput
@@ -176,63 +223,66 @@ export function ResetPasswordPage() {
             />
           </div>
 
-          {/* New Password */}
-          <div>
-            <label className="mb-2 block text-sm text-admin-text-muted">
-              Nova senha
-            </label>
-            <div className="relative">
+          {/* Nova Senha */}
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-zinc-300">Nova senha</span>
+            <span className="relative block">
               <input
                 type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                className="w-full rounded-lg border border-white/15 bg-admin-bg px-4 py-3 pr-11 text-sm text-admin-text outline-none transition-colors placeholder:text-admin-text-faint focus:border-admin-petrol"
+                placeholder="Mínimo 8 caracteres"
+                className={`${inputClass} pr-11`}
                 {...register('newPassword')}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-admin-text-faint hover:text-admin-text transition-colors"
                 aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-white transition-colors"
               >
                 {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
               </button>
-            </div>
+            </span>
             {errors.newPassword?.message && (
-              <p className="mt-2 text-sm text-admin-danger">{errors.newPassword.message}</p>
+              <span className="mt-1 block text-xs font-medium text-red-500">{errors.newPassword.message}</span>
             )}
-          </div>
+          </label>
 
-          {/* Confirm Password */}
-          <div>
-            <label className="mb-2 block text-sm text-admin-text-muted">
-              Confirmar senha
-            </label>
-            <div className="relative">
+          {/* Confirmar Senha */}
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-zinc-300">Confirmar senha</span>
+            <span className="relative block">
               <input
                 type={showConfirmPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                className="w-full rounded-lg border border-white/15 bg-admin-bg px-4 py-3 pr-11 text-sm text-admin-text outline-none transition-colors placeholder:text-admin-text-faint focus:border-admin-petrol"
+                placeholder="Confirme sua nova senha"
+                className={`${inputClass} pr-11`}
                 {...register('confirmPassword')}
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-admin-text-faint hover:text-admin-text transition-colors"
                 aria-label={showConfirmPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-white transition-colors"
               >
                 {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
               </button>
-            </div>
+            </span>
             {errors.confirmPassword?.message && (
-              <p className="mt-2 text-sm text-admin-danger">{errors.confirmPassword.message}</p>
+              <span className="mt-1 block text-xs font-medium text-red-500">{errors.confirmPassword.message}</span>
             )}
-          </div>
+          </label>
 
-          {/* Submit */}
+          {/* Mensagem de Erro Geral */}
+          {generalError && (
+            <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-center text-xs font-medium text-red-600 dark:text-red-400">
+              {generalError}
+            </p>
+          )}
+
+          {/* Botão de Redefinir */}
           <button
             type="submit"
             disabled={resetPasswordMutation.isPending || !isValid || otpValue.length !== 6}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-admin-petrol py-3 text-sm font-semibold text-admin-bg transition-opacity hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88A8] py-3 text-sm font-semibold text-white shadow-md shadow-[#1E88A8]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#17708A] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed !mt-6"
           >
             {resetPasswordMutation.isPending ? (
               <>
@@ -244,15 +294,10 @@ export function ResetPasswordPage() {
             )}
           </button>
 
-          {/* Errors */}
-          {generalError && (
-            <p className="text-center text-sm text-admin-danger">{generalError}</p>
-          )}
-
-          {/* Resend Code */}
-          <div className="mt-6 pt-5 border-t border-white/10">
+          {/* Reenviar Código */}
+          <div className="pt-4 border-t border-slate-200 dark:border-white/10">
             {resendCountdown > 0 ? (
-              <p className="text-sm text-center text-admin-text-muted">
+              <p className="text-sm text-center text-slate-500 dark:text-zinc-400 font-medium">
                 Reenviar código em {resendCountdown}s
               </p>
             ) : (
@@ -260,7 +305,7 @@ export function ResetPasswordPage() {
                 type="button"
                 onClick={handleResendOtp}
                 disabled={resendOtpMutation.isPending}
-                className="w-full text-sm font-medium text-admin-petrol transition-colors hover:underline"
+                className="w-full text-sm font-semibold text-center text-[#1E88A8] hover:text-[#17708A] hover:underline transition-all"
               >
                 {resendOtpMutation.isPending ? 'Reenviando...' : 'Reenviar código'}
               </button>
@@ -268,17 +313,12 @@ export function ResetPasswordPage() {
           </div>
 
           {/* Link para trocar e-mail */}
-          <p className="text-center text-sm text-admin-text-muted">
-            <Link to="/forgot-password" className="font-medium text-admin-petrol hover:underline">
+          <p className="text-center text-sm text-slate-600 dark:text-zinc-400">
+            <Link to="/forgot-password" className="font-semibold text-[#1E88A8] hover:underline transition-colors">
               Tentar outro email
             </Link>
           </p>
         </form>
-
-        {/* Rodapé */}
-        <p className="!mt-10 text-center text-xs text-admin-text-faint">
-          ady é um produto <span className="text-[#CF6F03]">Click Hero</span>
-        </p>
       </div>
     </div>
   );

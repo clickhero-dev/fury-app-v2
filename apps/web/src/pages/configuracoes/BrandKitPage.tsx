@@ -183,60 +183,71 @@ export function BrandKitContent() {
               <CardTitle>Logo da Marca</CardTitle>
             </CardHeader>
             <CardContent>
-              <input
-                ref={logoInputRef}
-                type="file"
-                accept="image/png,image/svg+xml"
-                className="hidden"
-                onChange={handleLogoSelect}
-              />
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/png,image/svg+xml"
+          className="hidden"
+          onChange={handleLogoSelect}
+        />
 
-              {brandKit?.logo_url ? (
-                <div className="flex items-center gap-4">
-                  <img
-                    src={brandKit.logo_url}
-                    alt="Logo da marca"
-                    className="w-20 h-20 object-contain rounded-lg border border-gray-200 bg-gray-50 p-2"
-                  />
-                  <div className="flex flex-col gap-2">
-                    <Button variant="outline" size="sm" onClick={() => logoInputRef.current?.click()} disabled={uploadLogo.isPending}>
-                      Substituir
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={handleRemoveLogo} disabled={saveBrandKit.isPending}>
-                      <Trash2 className="w-4 h-4 mr-1.5 inline" />
-                      Remover
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  onClick={() => logoInputRef.current?.click()}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const file = e.dataTransfer.files?.[0];
-                    if (file && logoInputRef.current) {
-                      const dt = new DataTransfer();
-                      dt.items.add(file);
-                      logoInputRef.current.files = dt.files;
-                      handleLogoSelect({ target: logoInputRef.current } as React.ChangeEvent<HTMLInputElement>);
-                    }
-                  }}
-                  className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-xl py-10 px-6 cursor-pointer hover:border-[#E8631A]/50 hover:bg-orange-50/40 transition-colors"
-                >
-                  {uploadLogo.isPending ? (
-                    <p className="text-sm text-text-secondary">Enviando...</p>
-                  ) : (
-                    <>
-                      <Upload className="w-6 h-6 text-gray-400" />
-                      <p className="text-sm text-text-secondary">
-                        Arraste sua logo aqui ou clique para enviar (PNG ou SVG, máx. 2MB)
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-            </CardContent>
+        {brandKit?.logo_url ? (
+          <div className="flex items-center gap-4">
+            <img
+              src={brandKit.logo_url}
+              alt="Logo da marca"
+              className="w-20 h-20 object-contain rounded-lg border border-border bg-background p-2"
+            />
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={uploadLogo.isPending}
+              >
+                Substituir
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRemoveLogo}
+                disabled={saveBrandKit.isPending}
+                className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+              >
+                <Trash2 className="w-4 h-4 mr-1.5 inline" />
+                Remover
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div
+            onClick={() => logoInputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const file = e.dataTransfer.files?.[0];
+              if (file && logoInputRef.current) {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                logoInputRef.current.files = dt.files;
+                handleLogoSelect({ target: logoInputRef.current } as React.ChangeEvent<HTMLInputElement>);
+              }
+            }}
+            className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border rounded-xl py-10 px-6 cursor-pointer hover:border-admin-petrol/50 hover:bg-admin-petrol/5 transition-all duration-200"
+          >
+            {uploadLogo.isPending ? (
+              <p className="text-sm text-muted-foreground">Enviando...</p>
+            ) : (
+              <>
+                <Upload className="w-6 h-6 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  Arraste sua logo aqui ou clique para enviar (PNG ou SVG, máx. 2MB)
+                </p>
+              </>
+            )}
+          </div>
+        )}
+      </CardContent>
           </Card>
 
           {/* SEÇÃO 2 - Paleta de Cores */}
@@ -314,7 +325,7 @@ export function BrandKitContent() {
                   placeholder="(11) 99999-9999"
                   value={whatsappNumber}
                   onChange={(e) => setWhatsappNumber(fmtPhone(e.target.value))}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8631A]/50 focus:border-[#E8631A]"
+                  className="w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm transition-colors outline-none focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol"
                 />
                 {!phoneValid && digitsOnly.length > 0 && (
                   <p className="text-xs text-red-500 mt-1">Número incompleto. Informe com DDD + 8 ou 9 dígitos.</p>
