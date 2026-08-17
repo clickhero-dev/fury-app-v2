@@ -4,6 +4,7 @@ import { AppLayout, ErrorBoundary, PageHeader, LoadingSpinner } from '@/componen
 import { cn } from '@/lib/utils';
 import { GoogleConnectionCard } from './components/GoogleConnectionCard';
 import { ProfileLookupResult } from './components/ProfileLookupResult';
+import { BusinessProfileForm } from './components/BusinessProfileForm';
 import {
   useGoogleConnection,
   useGoogleLookup,
@@ -89,6 +90,11 @@ function GoogleMeuNegocioContent() {
         isLoading={lookupLoading}
         isError={lookupError}
         hasConnection={!!connection}
+      />
+
+      <BusinessProfileForm
+        onSaved={() => showToast('Dados do negócio salvos com sucesso.')}
+        onError={(message) => showToast(message, 'error')}
       />
     </div>
   );

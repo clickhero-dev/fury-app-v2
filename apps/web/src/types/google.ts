@@ -64,6 +64,24 @@ export interface GoogleBusinessSettings {
   prefilledFrom?: string[];
 }
 
+/** Payload de salvamento dos dados do negócio (PUT /google/settings). */
+export interface GoogleBusinessSettingsInput {
+  name: string;
+  address: GoogleAddress;
+  phone: string;
+  email: string;
+  website: string;
+  categoryId: string | null;
+  hours: GoogleBusinessHours | null;
+}
+
+/** Categoria do catálogo oficial da GBP (GET /google/categories). */
+export interface GoogleCategory {
+  categoryId: string;
+  displayName: string;
+  parentId: string | null;
+}
+
 /** Perfil espelhado da GBP para o tenant. */
 export interface GoogleBusinessProfile {
   id: string;
