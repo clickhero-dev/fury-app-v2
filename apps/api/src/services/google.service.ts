@@ -3,6 +3,8 @@ import { and, eq } from 'drizzle-orm';
 import {
   db as dbInstance,
   googleConnections,
+  googleBusinessProfiles,
+  googleSyncLogs,
   businessProfileSettings,
   tenants,
   type Database,
@@ -15,6 +17,7 @@ import {
   type GbpCategory,
   type GbpLocation,
   type GbpLocationMatch,
+  type GbpOpenPeriod,
   type GoogleApiClient,
 } from '../lib/google-api.js';
 import { encryptToken, decryptToken } from '../utils/crypto.js';
@@ -117,6 +120,110 @@ export interface GoogleSettingsUpsertResult {
 }
 
 const EMPTY_ADDRESS: GoogleAddress = { street: '', city: '', state: '', postalCode: '', country: 'BR' };
+
+export interface GoogleProfileCreateResult {
+  id: string;
+  gbpLocationId: string;
+  name: string;
+  syncStatus: 'awaiting_verification';
+  verificationState: 'UNVERIFIED';
+  created: true;
+  verificationInstructions: string;
+}
+
+export interface GoogleVerificationOption {
+  method: 'POSTAL' | 'PHONE' | 'EMAIL';
+  description: string;
+}
+
+export interface GoogleVerificationResult {
+  verificationState: 'UNVERIFIED' | 'VERIFIED';
+  options: GoogleVerificationOption[];
+  instructions: string;
+}
+
+export type GoogleCompleteVerificationResult =
+  | { verificationState: 'UNVERIFIED'; awaitingPin: true }
+  | { verificationState: 'VERIFIED'; syncStatus: 'verified' }
+  | { verificationState: 'UNVERIFIED'; postalGuidance: true; instructions: string };
+
+const VERIFICATION_INSTRUCTIONS =
+  'A Google enviou uma verificação para o seu negócio. Acompanhe o status pelo painel do Google Meu Negócio e conclua os passos solicitados para confirmar que o negócio é seu.';
+
+const POSTAL_VERIFICATION_INSTRUCTIONS =
+  'A verificação por cartão postal envia uma carta com um código para o endereço comercial do seu negócio. Quando receber, siga as instruções do cartão e insira o código no Google Meu Negócio.';
+
+const DAY_OF_WEEK_MAP: Record<string, string> = {
+  monday: 'MONDAY',
+  tuesday: 'TUESDAY',
+  wednesday: 'WEDNESDAY',
+  thursday: 'THURSDAY',
+  friday: 'FRIDAY',
+  saturday: 'SATURDAY',
+  sunday: 'SUNDAY',
+};
+
+function parseGbpTime(time: string): { hours: number; minutes: number } {
+  const [hours, minutes] = time.split(':').map(Number);
+  return { hours: hours || 0, minutes: minutes || 0 };
+}
+
+function mapBusinessHoursToPeriods(hours: GoogleBusinessHours): GbpOpenPeriod[] {
+  const periods: GbpOpenPeriod[] = [];
+  for (const [day, ranges] of Object.entries(hours)) {
+    const openDay = DAY_OF_WEEK_MAP[day.toLowerCase()];
+    if (!openDay || !ranges || ranges.length === 0) continue;
+    for (const range of ranges) {
+      periods.push({
+        openDay,
+        openTime: parseGbpTime(range.open),
+        closeDay: openDay,
+        closeTime: parseGbpTime(range.close),
+      });
+    }
+  }
+  return periods;
+}
+
+function buildGbpLocationFromSettings(
+  settings: typeof businessProfileSettings.$inferSelect,
+): Partial<GbpLocation> {
+  const address = settings.address as Partial<GoogleAddress> | null;
+  const location: Partial<GbpLocation> = {
+    title: settings.name,
+    phoneNumbers: { primaryPhone: settings.phone },
+  };
+
+  if (address && (address.street || address.city)) {
+    location.address = {
+      addressLines: address.street ? [address.street] : undefined,
+      locality: address.city || undefined,
+      administrativeArea: address.state || undefined,
+      postalCode: address.postalCode || undefined,
+      regionCode: address.country || 'BR',
+      languageCode: 'pt-BR',
+    };
+  }
+
+  if (settings.email) {
+    location.emailAddress = settings.email;
+  }
+  if (settings.website) {
+    location.websiteUri = settings.website;
+  }
+  if (settings.categoryId) {
+    location.categories = [{ categoryId: settings.categoryId }];
+  }
+  const hours = settings.hours as GoogleBusinessHours | null;
+  if (hours) {
+    const periods = mapBusinessHoursToPeriods(hours);
+    if (periods.length > 0) {
+      location.openInfo = { periods };
+    }
+  }
+
+  return location;
+}
 
 const CATEGORIES_CACHE_TTL_MS = 60_000;
 const categoriesCache = new Map<string, { expiresAt: number; categories: GoogleCategory[] }>();
@@ -305,8 +412,8 @@ export async function disconnectGoogleConnection(
   return { id: connectionId, disconnected: true };
 }
 
-async function getTenantConnection(tenantId: string) {
-  const connection = await db.query.googleConnections.findFirst({
+async function getTenantConnection(tenantId: string, database: Database = dbInstance) {
+  const connection = await database.query.googleConnections.findFirst({
     where: eq(googleConnections.tenantId, tenantId),
   });
 
@@ -678,4 +785,267 @@ export async function getGoogleCategories(
   const categories = gbpCategories.map(mapGbpCategory).filter((c) => c.displayName);
   categoriesCache.set(cacheKey, { expiresAt: Date.now() + CATEGORIES_CACHE_TTL_MS, categories });
   return { categories };
+}
+
+function settingsAreComplete(
+  settings: typeof businessProfileSettings.$inferSelect | null,
+  tenant: typeof tenants.$inferSelect | null,
+): boolean {
+  const name = settings?.name ?? tenant?.name ?? '';
+  const address = settings?.address as Partial<GoogleAddress> | null;
+  const hasAddress = Boolean(address?.street?.trim() || address?.city?.trim());
+  const phone = settings?.phone ?? '';
+  return Boolean(name.trim()) && hasAddress && Boolean(phone.trim());
+}
+
+/**
+ * Cria um novo perfil na GBP com os dados de business_profile_settings (US2).
+ * Valida dados completos, bloqueia duplicado com confiança alta (FR-011),
+ * cria a location no Google e persiste o espelho + log de sincronização.
+ */
+export async function createProfile(
+  tenantId: string,
+  database: Database = dbInstance,
+  googleApi?: GoogleApiClient,
+): Promise<GoogleProfileCreateResult> {
+  const connection = await getTenantConnection(tenantId, database);
+  const settings =
+    (await database.query.businessProfileSettings.findFirst({
+      where: eq(businessProfileSettings.tenantId, tenantId),
+    })) ?? null;
+  const tenant =
+    (await database.query.tenants.findFirst({
+      where: eq(tenants.id, tenantId),
+    })) ?? null;
+
+  if (!settings || !settingsAreComplete(settings, tenant)) {
+    throw new AppError(
+      400,
+      GOOGLE_ERROR_CODES.BUSINESS_SETTINGS_INCOMPLETE,
+      'Preencha os dados do negócio antes de criar o perfil.'
+    );
+  }
+
+  const client = googleApi ?? createClientForConnection(connection);
+
+  const searchLocation = buildSearchLocation(settings, tenant);
+  const searchTitle = searchLocation.title ?? '';
+  let matches: GbpLocationMatch[] = [];
+  if (searchTitle) {
+    matches = await client.searchGoogleLocations({
+      location: searchLocation,
+      languageCode: 'pt-BR',
+      pageSize: 5,
+    });
+  }
+
+  const highConfidence = matches
+    .map((match) => mapGbpMatch(match, searchTitle))
+    .filter((match) => match.confidence === 'HIGH');
+
+  if (highConfidence.length > 0) {
+    throw new AppError(
+      409,
+      GOOGLE_ERROR_CODES.DUPLICATE_LOCATION,
+      'Já existe um perfil para este endereço no Google. Deseja reivindicá-lo?',
+      {
+        matches: highConfidence.map((match) => ({
+          gbpLocationId: match.gbpLocationId,
+          confidence: match.confidence,
+        })),
+      }
+    );
+  }
+
+  const accountName = connection.accountId;
+  if (!accountName) {
+    throw new AppError(
+      422,
+      GOOGLE_ERROR_CODES.GBP_CREATION_NOT_SUPPORTED,
+      'O Google não permite criar o perfil automaticamente. Vamos orientar a criação manual.',
+      { reason: 'Nenhuma conta de negócio foi selecionada.' }
+    );
+  }
+
+  let createdLocation: GbpLocation;
+  try {
+    createdLocation = await client.createLocation(accountName, buildGbpLocationFromSettings(settings));
+  } catch (error) {
+    if (
+      (error as AppError)?.code === GOOGLE_ERROR_CODES.GOOGLE_TOKEN_EXPIRED &&
+      (error as AppError)?.statusCode === 401
+    ) {
+      throw error;
+    }
+    const reason = error instanceof Error ? error.message : 'Erro desconhecido da API do Google.';
+    throw new AppError(
+      422,
+      GOOGLE_ERROR_CODES.GBP_CREATION_NOT_SUPPORTED,
+      'O Google não permite criar o perfil automaticamente. Vamos orientar a criação manual.',
+      { reason }
+    );
+  }
+
+  const gbpLocationId = createdLocation.name ?? '';
+
+  const inserted = await database
+    .insert(googleBusinessProfiles)
+    .values({
+      tenantId,
+      connectionId: connection.id,
+      gbpLocationId,
+      name: settings.name,
+      address: settings.address,
+      phone: settings.phone,
+      email: settings.email ?? '',
+      website: settings.website ?? '',
+      categoryId: settings.categoryId || null,
+      categoryDisplayName: null,
+      hours: settings.hours ?? null,
+      verificationState: 'UNVERIFIED',
+      syncStatus: 'awaiting_verification',
+    })
+    .returning({ id: googleBusinessProfiles.id, name: googleBusinessProfiles.name });
+
+  await database.insert(googleSyncLogs).values({
+    tenantId,
+    connectionId: connection.id,
+    profileId: inserted[0]?.id,
+    operation: 'create',
+    status: 'success',
+    message: 'Perfil criado. Aguardando verificação.',
+    details: { gbpLocationId },
+  });
+
+  return {
+    id: inserted[0]?.id ?? '',
+    gbpLocationId,
+    name: inserted[0]?.name ?? settings.name,
+    syncStatus: 'awaiting_verification',
+    verificationState: 'UNVERIFIED',
+    created: true,
+    verificationInstructions: VERIFICATION_INSTRUCTIONS,
+  };
+}
+
+async function getProfileConnection(profileId: string, tenantId: string, database: Database) {
+  const profile = await database.query.googleBusinessProfiles.findFirst({
+    where: and(eq(googleBusinessProfiles.id, profileId), eq(googleBusinessProfiles.tenantId, tenantId)),
+  });
+  if (!profile) {
+    throw new AppError(404, GOOGLE_ERROR_CODES.NOT_FOUND, 'Perfil não encontrado.');
+  }
+  return profile;
+}
+
+/**
+ * Retorna o status de verificação do perfil e os métodos elegíveis (US2).
+ */
+export async function getVerification(
+  profileId: string,
+  tenantId: string,
+  database: Database = dbInstance,
+  googleApi?: GoogleApiClient,
+): Promise<GoogleVerificationResult> {
+  const profile = await getProfileConnection(profileId, tenantId, database);
+
+  if (profile.verificationState === 'VERIFIED') {
+    return {
+      verificationState: 'VERIFIED',
+      options: [],
+      instructions: VERIFICATION_INSTRUCTIONS,
+    };
+  }
+
+  const connection = await database.query.googleConnections.findFirst({
+    where: eq(googleConnections.id, profile.connectionId),
+  });
+  if (!connection) {
+    throw new AppError(
+      404,
+      GOOGLE_ERROR_CODES.NOT_FOUND,
+      'Nenhuma conexão Google encontrada. Conecte sua conta Google para continuar.'
+    );
+  }
+
+  const client = googleApi ?? createClientForConnection(connection);
+  const options = await client.fetchVerificationOptions(profile.gbpLocationId);
+
+  return {
+    verificationState: 'UNVERIFIED',
+    options: options
+      .filter(
+        (option) =>
+          option.verificationMethod === 'POSTAL' ||
+          option.verificationMethod === 'PHONE' ||
+          option.verificationMethod === 'EMAIL'
+      )
+      .map((option) => ({
+        method: option.verificationMethod as 'POSTAL' | 'PHONE' | 'EMAIL',
+        description: option.announcement ?? '',
+      })),
+    instructions: VERIFICATION_INSTRUCTIONS,
+  };
+}
+
+/**
+ * Conclui a verificação do perfil: envia PIN via verifyLocation para
+ * PHONE/EMAIL, ou orienta o cartão postal quando o método é POSTAL (US2).
+ */
+export async function completeVerification(
+  profileId: string,
+  tenantId: string,
+  method: string,
+  database: Database = dbInstance,
+  googleApi?: GoogleApiClient,
+): Promise<GoogleCompleteVerificationResult> {
+  const profile = await getProfileConnection(profileId, tenantId, database);
+
+  if (method === 'POSTAL') {
+    return {
+      verificationState: 'UNVERIFIED',
+      postalGuidance: true,
+      instructions: POSTAL_VERIFICATION_INSTRUCTIONS,
+    };
+  }
+
+  const connection = await database.query.googleConnections.findFirst({
+    where: eq(googleConnections.id, profile.connectionId),
+  });
+  if (!connection) {
+    throw new AppError(
+      404,
+      GOOGLE_ERROR_CODES.NOT_FOUND,
+      'Nenhuma conexão Google encontrada. Conecte sua conta Google para continuar.'
+    );
+  }
+
+  const client = googleApi ?? createClientForConnection(connection);
+  await client.verifyLocation(profile.gbpLocationId, method);
+  const gbpLocation = await client.getLocation(profile.gbpLocationId);
+
+  if (gbpLocation.verification?.state === 'VERIFIED') {
+    await database
+      .update(googleBusinessProfiles)
+      .set({
+        verificationState: 'VERIFIED',
+        syncStatus: 'verified',
+        lastSyncedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(googleBusinessProfiles.id, profile.id));
+
+    await database.insert(googleSyncLogs).values({
+      tenantId,
+      connectionId: connection.id,
+      profileId: profile.id,
+      operation: 'verify',
+      status: 'success',
+      message: 'Perfil verificado pelo Google.',
+    });
+
+    return { verificationState: 'VERIFIED', syncStatus: 'verified' };
+  }
+
+  return { verificationState: 'UNVERIFIED', awaitingPin: true };
 }

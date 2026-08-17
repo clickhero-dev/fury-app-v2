@@ -5,6 +5,8 @@ import {
   contextQuerySchema,
   oauthCallbackQuerySchema,
   connectionIdParamsSchema,
+  profileIdParamsSchema,
+  verificationSchema,
   categoriesQuerySchema,
 } from '../schemas/google.schemas.js';
 
@@ -166,6 +168,57 @@ export async function getCategories(req: Request, res: Response, next: NextFunct
     const { query } = categoriesQuerySchema.parse(req.query);
     const client = await googleService.getGoogleApiClient(req.tenant.tenantId);
     const data = await googleService.getGoogleCategories(query ?? '', client, req.tenant.tenantId);
+    res.status(200).json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createProfile(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const data = await googleService.createProfile(req.tenant.tenantId);
+    res.status(201).json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getVerification(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const { id } = profileIdParamsSchema.parse(req.params);
+    const data = await googleService.getVerification(id, req.tenant.tenantId);
+    res.status(200).json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function completeVerification(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const { id } = profileIdParamsSchema.parse(req.params);
+    const { method } = verificationSchema.parse(req.body);
+    const data = await googleService.completeVerification(id, req.tenant.tenantId, method);
     res.status(200).json({
       success: true,
       data,

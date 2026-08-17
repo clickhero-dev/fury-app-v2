@@ -14,5 +14,13 @@ router.get('/lookup', authMiddleware, tenantMiddleware, googleController.lookup)
 router.get('/categories', authMiddleware, tenantMiddleware, googleController.getCategories);
 router.get('/settings', authMiddleware, tenantMiddleware, googleController.getSettings);
 router.put('/settings', authMiddleware, tenantMiddleware, googleController.updateSettings);
+router.post('/profiles', authMiddleware, tenantMiddleware, googleController.createProfile);
+router.get('/profiles/:id/verification', authMiddleware, tenantMiddleware, googleController.getVerification);
+router.post(
+  '/profiles/:id/verification/complete',
+  authMiddleware,
+  tenantMiddleware,
+  googleController.completeVerification
+);
 
 export default router;
