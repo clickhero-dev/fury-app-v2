@@ -146,11 +146,11 @@ O que existe hoje na base e será reutilizado/extendido:
 - **FR-011**: Sistema DEVE impedir criação de perfil duplicado quando o endereço indicar perfil já existente (sugerir reivindicação).
 - **FR-012**: Sistema DEVE validar categoria contra o catálogo oficial de categorias da GBP API.
 
-*Marcadores de requisitos a clarificar:*
+*Requisitos clarificados:*
 
-- **FR-008**: [NEEDS CLARIFICATION] "Patrocinado" no Google é entregue por produtos de publicidade (Google Ads / Local Services Ads), não pela GBP API. Qual produto será usado, quem paga (cliente direto ou via Ady) e qual orçamento?
-- **FR-003**: [NEEDS CLARIFICATION] A criação de perfil via API tem limitações da Google (ex.: exige conta em um país/estado suportado, verificação obrigatória). Qual o comportamento quando a API não permite criação direta (fallback para orientação de criação manual)?
-- **FR-006**: [NEEDS CLARIFICATION] Fotos: o cliente faz upload na interface e o Ady publica na GBP API, ou apenas guarda localmente? (A feature diz que o Ady não atualiza fotos automaticamente.)
+- **FR-008**: Patrocinado = Google Ads com extensões de localização (quando o usuário busca, o perfil aparece destacado). O cliente paga diretamente ao Google; o Ady apenas configura e gerencia os dados do anúncio.
+- **FR-003**: A criação de perfil via GBP API pode exigir verificação adicional (cartão postal, telefone, email). Se a API não permite criação direta, o Ady orienta o cliente a criar manualmente e acompanhar o status.
+- **FR-006**: Fotos são armazenadas localmente no Ady (via `storage.service.ts`). O Ady NÃO publica fotos na GBP API — apenas associa as fotos fornecidas pelo cliente de forma manual na interface.
 
 ### Key Entities
 
