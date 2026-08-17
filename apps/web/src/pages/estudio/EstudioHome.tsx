@@ -247,7 +247,7 @@ export function EstudioHome() {
                     type="button"
                     onClick={handleStartQuickCreate}
                     disabled={quotaReached}
-                    className={`inline-flex items-center justify-center gap-2 rounded-full bg-brand px-6 py-2.5 text-sm font-semibold text-brand-foreground shadow-md ${BUTTON_HOVER} hover:bg-brand/90 disabled:opacity-50`}
+                    className={`quick-create-btn inline-flex items-center justify-center gap-2 rounded-full bg-brand px-6 py-2.5 text-sm font-semibold text-brand-foreground shadow-md ${BUTTON_HOVER} hover:bg-brand/90 disabled:opacity-50`}
                   >
                     <Sparkles className="h-4 w-4 shrink-0" />
                     Criação rápida
@@ -281,38 +281,48 @@ export function EstudioHome() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-text-tertiary">Tipo:</span>
                   <div className="flex items-center gap-1.5">
-                    {typeOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setFilterType(option.value)}
-                        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs transition-all ${
-                          filterType === option.value ? CHIP_ON : CHIP_OFF
-                        }`}
-                      >
-                        <span>{option.label}</span>
-                        <span className="opacity-70">{getTypeCount(option.value)}</span>
-                      </button>
-                    ))}
+                  {typeOptions.map((option) => {
+                            const isActive = filterType === option.value;
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => setFilterType(option.value)}
+                                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs transition-all ${
+                                  isActive ? `chip-active ${CHIP_ON}` : CHIP_OFF
+                                }`}
+                              >
+                                <span className={isActive ? '!text-white' : ''}>{option.label}</span>
+                                <span className={`opacity-70 ${isActive ? '!text-white' : ''}`}>
+                                  {getTypeCount(option.value)}
+                                </span>
+                              </button>
+                            );
+                          })}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-text-tertiary">Status:</span>
                   <div className="flex items-center gap-1.5">
-                    {statusOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setFilterStatus(option.value)}
-                        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs transition-all ${
-                          filterStatus === option.value ? CHIP_ON : CHIP_OFF
-                        }`}
-                      >
-                        <span>{option.label}</span>
-                        <span className="opacity-70">{getStatusCount(option.value)}</span>
-                      </button>
-                    ))}
+                  {statusOptions.map((option) => {
+                  const isActive = filterStatus === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setFilterStatus(option.value)}
+                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs transition-all ${
+                        isActive ? CHIP_ON : CHIP_OFF
+                      }`}
+                    >
+                      <span className={isActive ? '!text-white' : ''}>{option.label}</span>
+                      <span className={`opacity-70 ${isActive ? '!text-white' : ''}`}>
+                        {getStatusCount(option.value)}
+                      </span>
+                    </button>
+                  );
+                })}
                   </div>
                 </div>
               </div>
@@ -579,14 +589,14 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
             <button
               type="button"
               onClick={onUseInCampaign}
-              className="flex-1 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand transition-all duration-200 hover:bg-brand hover:text-brand-foreground hover:scale-[1.02] active:scale-[0.98]"
+              className="flex-1 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand transition-all duration-200 hover:bg-brand hover:text-white hover:scale-[1.02] active:scale-[0.98]"
             >
               Usar em campanha
             </button>
             <button
               type="button"
               onClick={onViewDetails}
-              className="flex-1 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-brand-foreground transition-all duration-200 hover:bg-brand/90 hover:scale-[1.02] active:scale-[0.98]"
+              className="flex-1 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-brand/90 hover:scale-[1.02] active:scale-[0.98]"
             >
               Ver detalhes
             </button>

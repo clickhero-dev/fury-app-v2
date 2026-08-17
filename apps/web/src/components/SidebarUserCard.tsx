@@ -25,7 +25,7 @@ export function SidebarUserCard({ collapsed = false }: SidebarUserCardProps) {
       }`}
     >
       {/* Avatar redondo em tom ciano escuro */}
-      <div className="w-9 h-9 rounded-full bg-[#122b2e] text-[#22d3ee] flex items-center justify-center text-sm font-semibold shrink-0">
+      <div className="w-9 h-9 rounded-full bg-[rgb(228,_237,_240)] text-[rgb(30,_136,_168)] dark:bg-[#122b2e] dark:text-[#22d3ee] flex items-center justify-center text-sm font-semibold shrink-0">
         {initial}
       </div>
 

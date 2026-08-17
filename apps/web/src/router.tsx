@@ -41,6 +41,9 @@ import { UsersPage } from './pages/superadmin/UsersPage';
 import { TenantCampaignsPage } from './pages/superadmin/TenantCampaignsPage';
 import { DashboardAdminPage } from './pages/superadmin/AdminDashboard';
 
+// 1. IMPORTAR O FORCE DARK MODE QUE VOCÊ CRIOU
+import { ForceDarkMode } from './pages/superadmin/ForceDarkMode';
+
 export const router = createBrowserRouter([
   {
     path: '/',
@@ -136,15 +139,29 @@ export const router = createBrowserRouter([
     path: '/assinatura-vencida',
     element: <AssinaturaVencida />,
   },
+  
+  /* =========================================================
+     ÁREA DE LOGIN DO ADMIN (Forçada no Modo Escuro)
+     ========================================================= */
   {
     path: '/admin/login',
-    element: <AdminLogin />,
+    element: (
+      <ForceDarkMode>
+        <AdminLogin />
+      </ForceDarkMode>
+    ),
   },
+
+  /* =========================================================
+     ÁREA RESTRITA DO SUPERADMIN (Forçada no Modo Escuro)
+     ========================================================= */
   {
     path: '/admin',
     element: (
       <RequireSuperadmin>
-        <AdminShell />
+        <ForceDarkMode>
+          <AdminShell />
+        </ForceDarkMode>
       </RequireSuperadmin>
     ),
     children: [

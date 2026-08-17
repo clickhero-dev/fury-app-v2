@@ -109,8 +109,7 @@ export function PublicoContent() {
               onChange={(e) => setBusinessContext(e.target.value)}
               placeholder="Ex: Somos uma clínica de estética em São Paulo especializada em tratamentos faciais. Nosso público são mulheres de 25 a 50 anos, classes A e B, que buscam procedimentos não-invasivos como toxina botulínica e preenchimento."
               rows={6}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20 resize-y min-h-[120px]"
-            />
+              className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/20 resize-y min-h-[120px]"            />
             <p className="text-xs text-gray-500 mt-1">
               Seja detalhado: quanto mais informações, melhor a IA entenderá seu negócio.
               Ex: nicho, porte, região, ticket médio, diferencial competitivo, público-alvo.
@@ -147,8 +146,7 @@ export function PublicoContent() {
                   onFocus={() => setShowDropdown(true)}
                   onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
                   placeholder="Digite o nome da cidade"
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20"
-                />
+                  className="w-full pl-10 pr-4 py-3 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/20"                />
                 {loadingLocations && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
               </div>
 
@@ -169,57 +167,57 @@ export function PublicoContent() {
             </div>
 
             {/* Faixa etária */}
-            <div>
-              <label className="text-sm font-bold text-gray-900 mb-1 block">Faixa etária</label>
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-500">De</span>
-                <Select
-                  value={ageMin}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    setAgeMin(val);
-                    setAgeMax(Math.max(val, ageMax));
-                  }}
-                  className="flex-1"
-                >
-                  {AGE_OPTIONS.map((age) => (
-                    <option key={age} value={age}>{age}</option>
-                  ))}
-                </Select>
-                <span className="text-sm text-gray-500">até</span>
-                <Select
-                  value={ageMax}
-                  onChange={(e) => setAgeMax(Number(e.target.value))}
-                  className="flex-1"
-                >
-                  {AGE_OPTIONS.filter((age) => age >= ageMin).map((age) => (
-                    <option key={age} value={age}>{age}</option>
-                  ))}
-                </Select>
-              </div>
-            </div>
+<div>
+  <label className="text-sm font-bold text-foreground mb-1 block">Faixa etária</label>
+  <div className="flex items-center gap-3">
+    <span className="text-sm text-muted-foreground">De</span>
+    <Select
+      value={ageMin}
+      onChange={(e) => {
+        const val = Number(e.target.value);
+        setAgeMin(val);
+        setAgeMax(Math.max(val, ageMax));
+      }}
+      className="flex-1 cursor-pointer"
+    >
+      {AGE_OPTIONS.map((age) => (
+        <option key={age} value={age}>{age}</option>
+      ))}
+    </Select>
+    <span className="text-sm text-muted-foreground">até</span>
+    <Select
+      value={ageMax}
+      onChange={(e) => setAgeMax(Number(e.target.value))}
+      className="flex-1 cursor-pointer"
+    >
+      {AGE_OPTIONS.filter((age) => age >= ageMin).map((age) => (
+        <option key={age} value={age}>{age}</option>
+      ))}
+    </Select>
+  </div>
+</div>
 
-            {/* Gênero */}
-            <div>
-              <label className="text-sm font-bold text-gray-900 mb-1 block">Gênero</label>
-              <div className="grid grid-cols-3 gap-2">
-                {GENDER_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setGender(option.value)}
-                    className={cn(
-                      'py-3 rounded-lg border-2 text-sm font-bold transition-all',
-                      gender === option.value
-                        ? 'border-[#E8631A] bg-orange-50 text-[#E8631A]'
-                        : 'border-gray-200 text-gray-600 hover:border-[#E8631A]/40'
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+{/* Gênero */}
+<div>
+  <label className="text-sm font-bold text-foreground mb-1 block">Gênero</label>
+  <div className="grid grid-cols-3 gap-2">
+    {GENDER_OPTIONS.map((option) => (
+      <button
+        key={option.value}
+        type="button"
+        onClick={() => setGender(option.value)}
+        className={cn(
+          'py-3 rounded-lg border-2 text-sm font-bold transition-all duration-200 cursor-pointer',
+          gender === option.value
+            ? 'border-admin-petrol bg-admin-petrol/10 text-admin-petrol'
+            : 'border-border text-muted-foreground bg-background hover:border-admin-petrol/40'
+        )}
+      >
+        {option.label}
+      </button>
+    ))}
+  </div>
+</div>
           </div>
         </div>
       </Card>

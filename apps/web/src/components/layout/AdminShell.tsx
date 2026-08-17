@@ -18,7 +18,7 @@ const navItems: NavItem[] = [
 ];
 
 export function AdminShell() {
-  useFavicon('/faviconadmin.svg', 'ADY ADMIN');
+  useFavicon('/faviconadmin.svg', 'Ady Admin');
 
   const navigate = useNavigate();
   const location = useLocation();

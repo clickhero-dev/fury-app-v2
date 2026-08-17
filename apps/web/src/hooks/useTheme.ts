@@ -3,20 +3,34 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { selectTheme, setTheme as setThemeAction } from '../store/slices/authSlice';
 
 export function useTheme() {
-  const isDark = useAppSelector(selectTheme) === 'dark';
+  const theme = useAppSelector(selectTheme);
   const dispatch = useAppDispatch();
 
+  // 1. Verifica a preferência do navegador
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+  // 2. Se o usuário já salvou algo, usa o salvo. Se for o primeiro acesso, usa o do navegador.
+  const isDark = theme ? theme === 'dark' : prefersDark;
+
   const setDark = (value: boolean) => {
-    const theme = value ? 'dark' : 'light';
-    dispatch(setThemeAction(theme));
-    localStorage.setItem('fury-theme', theme);
+    const newTheme = value ? 'dark' : 'light';
+    dispatch(setThemeAction(newTheme));
+    
+    localStorage.setItem('fury-theme', newTheme);
+    localStorage.setItem('ady-theme', value ? 'escuro' : 'claro');
   };
 
   useEffect(() => {
+    const root = document.documentElement;
+
     if (isDark) {
-      document.documentElement.classList.add('dark');
+      root.classList.add('dark');
+      root.setAttribute('data-theme', 'escuro');
+      root.style.colorScheme = 'dark';
     } else {
-      document.documentElement.classList.remove('dark');
+      root.classList.remove('dark');
+      root.setAttribute('data-theme', 'claro');
+      root.style.colorScheme = 'light';
     }
   }, [isDark]);
 

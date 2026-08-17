@@ -216,117 +216,130 @@ export function MetasPage() {
               {/* ── Step 1: Sobre o negócio ─────────────────────────────── */}
               {step === 1 && (
                 <div className="space-y-5">
-                  <Field label="Qual é o objetivo da campanha?" error={errors.objective?.message}>
-                    <select
-                      {...register('objective')}
-                      className={cn(
-                        'w-full px-4 py-3 border rounded-xl bg-admin-bg text-[#ECEDEF] transition-all duration-200 focus:outline-none focus:border-admin-petrol text-sm',
-                        errors.objective ? 'border-red-400' : 'border-white/10'
-                      )}
-                    >
-                      <option value="" className="bg-admin-surface text-admin-text-muted">Selecione um objetivo...</option>
-                      {OBJECTIVES.map((o) => (
-                        <option key={o.value} value={o.value} className="bg-admin-surface text-[#ECEDEF]">
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
+                 <Field label="Qual é o objetivo da campanha?" error={errors.objective?.message}>
+            <select
+              {...register('objective')}
+              className={cn(
+                'w-full h-12 px-4 py-2 border rounded-xl bg-background text-foreground transition-all duration-200 focus:outline-none text-sm appearance-none',
+                errors.objective ? 'border-red-400 focus:border-red-400' : 'border-admin-petrol focus:border-admin-petrol'
+              )}
+            >
+              <option value="" className="bg-background text-muted-foreground">
+                Selecione um objetivo...
+              </option>
+              {OBJECTIVES.map((o) => (
+                <option key={o.value} value={o.value} className="bg-background text-foreground">
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-                  <Field
-                    label="Qual é o nicho do seu negócio?"
-                    hint="Ex: moda feminina, suplementos, cursos online"
-                    error={errors.niche?.message}
-                  >
-                    <Input
-                      placeholder="Ex: moda feminina"
-                      {...register('niche')}
-                      className={cn(
-                        'bg-admin-bg border-white/10 text-[#ECEDEF] placeholder:text-admin-text-faint focus:border-admin-petrol',
-                        errors.niche ? 'border-red-400 focus:border-red-400' : ''
-                      )}
-                    />
-                  </Field>
+          <Field
+          label="Qual é o nicho do seu negócio?"
+          hint="Ex: moda feminina, suplementos, cursos online"
+          error={errors.niche?.message}
+        >
+          <Input
+            placeholder="Ex: moda feminina"
+            {...register('niche')}
+            className={cn(
+              'w-full h-12 px-4 py-2 rounded-xl bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 outline-none focus:outline-none focus:ring-2 focus:ring-admin-petrol/20 focus:border-admin-petrol text-sm',
+              errors.niche ? 'border border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border border-border'
+            )}
+          />
+        </Field>
 
-                  <Field
-                    label="Qual é o seu produto ou serviço principal?"
-                    hint="Seja específico — isso ajuda a IA a gerar melhores insights"
-                    error={errors.mainProduct?.message}
-                  >
-                    <Input
-                      placeholder="Ex: vestidos casuais para o dia a dia"
-                      {...register('mainProduct')}
-                      className={cn(
-                        'bg-admin-bg border-white/10 text-[#ECEDEF] placeholder:text-admin-text-faint focus:border-admin-petrol',
-                        errors.mainProduct ? 'border-red-400 focus:border-red-400' : ''
-                      )}
-                    />
-                  </Field>
+        <Field
+          label="Qual é o seu produto ou serviço principal?"
+          hint="Seja específico — isso ajuda a IA a gerar melhores insights"
+          error={errors.mainProduct?.message}
+        >
+          <Input
+            placeholder="Ex: vestidos casuais para o dia a dia"
+            {...register('mainProduct')}
+            className={cn(
+              'w-full h-12 px-4 py-2 rounded-xl bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 outline-none focus:outline-none focus:ring-2 focus:ring-admin-petrol/20 focus:border-admin-petrol text-sm',
+              errors.mainProduct ? 'border border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border border-border'
+            )}
+          />
+        </Field>
                 </div>
               )}
 
-              {/* ── Step 2: Orçamento e metas ───────────────────────────── */}
-              {step === 2 && (
-                <div className="space-y-5">
-                  <Field
-                    label="Orçamento mensal total"
-                    hint="Valor total investido por mês"
-                    error={errors.monthlyBudget?.message}
-                  >
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-admin-text-muted font-semibold text-sm">R$</span>
-                      <Input
-                        type="number"
-                        min={300}
-                        step={50}
-                        placeholder="2.000"
-                        {...register('monthlyBudget', { valueAsNumber: true })}
-                        className={cn(
-                          'pl-10 bg-admin-bg border-white/10 text-[#ECEDEF] placeholder:text-admin-text-faint focus:border-admin-petrol',
-                          errors.monthlyBudget ? 'border-red-400 focus:border-red-400' : ''
-                        )}
-                      />
-                    </div>
-                  </Field>
+      {/* ── Step 2: Orçamento e metas ───────────────────────────── */}
+{step === 2 && (
+  <div className="space-y-5">
+    <Field
+      label="Orçamento mensal total"
+      hint="Valor total investido por mês"
+      error={errors.monthlyBudget?.message}
+    >
+      <div className="relative">
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-sm">
+          R$
+        </span>
+        <Input
+          type="number"
+          min={300}
+          step={50}
+          placeholder="2.000"
+          {...register('monthlyBudget', { valueAsNumber: true })}
+          className={cn(
+            'w-full h-12 pl-10 pr-4 py-2 rounded-xl bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-admin-petrol/20 focus:border-admin-petrol text-sm',
+            errors.monthlyBudget
+              ? 'border border-red-500 focus:border-red-500 focus:ring-red-500/20'
+              : 'border border-border'
+          )}
+        />
+      </div>
+    </Field>
 
-                  {(() => {
-                    const objLabels = getObjectiveLabels(values.objective ?? '');
-                    return (
-                      <>
-                        <Field
-                          label={objLabels.label}
-                          hint={objLabels.description}
-                          error={errors.targetCpa?.message}
-                        >
-                          <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-admin-text-muted font-semibold text-sm">R$</span>
-                            <Input
-                              type="number"
-                              min={1}
-                              step={1}
-                              placeholder="50"
-                              {...register('targetCpa', { valueAsNumber: true })}
-                              className={cn(
-                                'pl-10 bg-admin-bg border-white/10 text-[#ECEDEF] placeholder:text-admin-text-faint focus:border-admin-petrol',
-                                errors.targetCpa ? 'border-red-400 focus:border-red-400' : ''
-                              )}
-                            />
-                          </div>
-                        </Field>
+    {(() => {
+      const objLabels = getObjectiveLabels(values.objective ?? '');
+      return (
+        <>
+          <Field
+            label={objLabels.label}
+            hint={objLabels.description}
+            error={errors.targetCpa?.message}
+          >
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-sm">
+                R$
+              </span>
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                placeholder="50"
+                {...register('targetCpa', { valueAsNumber: true })}
+                className={cn(
+                  'w-full h-12 pl-10 pr-4 py-2 rounded-xl bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-admin-petrol/20 focus:border-admin-petrol text-sm',
+                  errors.targetCpa
+                    ? 'border border-red-500 focus:border-red-500 focus:ring-red-500/20'
+                    : 'border border-border'
+                )}
+              />
+            </div>
+          </Field>
 
-                        {values.monthlyBudget > 0 && values.targetCpa > 0 && values.targetCpa <= values.monthlyBudget && (
-                          <div className="bg-admin-petrol/10 border border-admin-petrol/20 rounded-xl px-4 py-3 text-sm text-[#ECEDEF]">
-                            Com esse orçamento, você pode atingir até{' '}
-                            <span className="font-bold text-admin-petrol">
-                              {Math.floor(values.monthlyBudget / values.targetCpa)} {objLabels.conversion}s por mês
-                            </span>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
+          {values.monthlyBudget > 0 &&
+            values.targetCpa > 0 &&
+            values.targetCpa <= values.monthlyBudget && (
+              <div className="bg-admin-petrol/10 border border-admin-petrol/20 rounded-xl px-4 py-3 text-sm text-foreground">
+                Com esse orçamento, você pode atingir até{' '}
+                <span className="font-bold text-admin-petrol">
+                  {Math.floor(values.monthlyBudget / values.targetCpa)} {objLabels.conversion}s por mês
+                </span>
+              </div>
+            )}
+        </>
+      );
+    })()}
+  </div>
+)}
+              
 
               {/* ── Step 3: Revisão ─────────────────────────────────────── */}
               {step === 3 && (
@@ -359,14 +372,14 @@ export function MetasPage() {
                 )}
 
                 {step < 3 ? (
-                  <Button
-                    type="button"
-                    onClick={handleNext}
-                    className="flex-1 flex items-center justify-center gap-1.5 bg-admin-petrol text-admin-bg font-semibold hover:opacity-90"
-                  >
-                    Próximo
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
+                      <Button
+                      type="button"
+                      onClick={handleNext}
+                      className="flex-1 flex items-center justify-center gap-1.5 bg-admin-petrol text-admin-bg font-semibold hover:bg-admin-petrol/80 dark:hover:bg-admin-petrol/80 disabled:bg-white/10 disabled:text-white/30 disabled:border disabled:border-white/10 disabled:cursor-not-allowed disabled:opacity-100 transition-all cursor-pointer"
+                    >
+                      Próximo
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
                 ) : (
                   <Button
                     type="button"
