@@ -50,6 +50,29 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', [
 export const invoiceStatusEnum = pgEnum('invoice_status', ['pending', 'paid', 'overdue', 'cancelled']);
 export const voiceToneEnum = pgEnum('voice_tone', ['professional', 'casual', 'urgent', 'premium']);
 export const formSubmissionStatusEnum = pgEnum('form_submission_status', ['PENDING', 'COMPLETED', 'ERROR', 'ABANDONED']);
+export const googleVerificationStateEnum = pgEnum('google_verification_state', ['UNVERIFIED', 'VERIFIED']);
+
+export const googleSyncStatusEnum = pgEnum('google_sync_status', [
+  'not_connected',
+  'connected',
+  'no_profile',
+  'awaiting_verification',
+  'verified',
+  'syncing',
+  'error',
+]);
+
+export const googleSyncOperationEnum = pgEnum('google_sync_operation', [
+  'oauth_connect',
+  'lookup',
+  'create',
+  'update',
+  'verify',
+  'sync',
+  'error',
+]);
+
+export const googleSyncLogStatusEnum = pgEnum('google_sync_log_status', ['pending', 'in_progress', 'success', 'failed']);
 
 // Tenants table
 export const tenants = pgTable(
@@ -568,6 +591,154 @@ export const socialPostsRelations = relations(socialPosts, ({ one }) => ({
   }),
 }));
 
+// ===== Google Meu Negócio (Google Business Profile) tables =====
+
+export const googleConnections = pgTable(
+  'google_connections',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    googleUserId: varchar('google_user_id', { length: 255 }).notNull(),
+    accessToken: text('access_token').notNull(),
+    refreshToken: text('refresh_token').notNull(),
+    tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }).notNull(),
+    accountId: varchar('account_id', { length: 255 }),
+    accountName: varchar('account_name', { length: 255 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('google_connections_tenant_id_idx').on(table.tenantId),
+    googleUserIdIdx: index('google_connections_google_user_id_idx').on(table.googleUserId),
+    tenantIdUnique: unique('google_connections_tenant_id_unique').on(table.tenantId),
+  })
+);
+
+export const googleBusinessProfiles = pgTable(
+  'google_business_profiles',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => googleConnections.id, { onDelete: 'cascade' }),
+    gbpLocationId: varchar('gbp_location_id', { length: 255 }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    address: jsonb('address').notNull(),
+    phone: varchar('phone', { length: 40 }),
+    email: varchar('email', { length: 255 }),
+    website: varchar('website', { length: 2048 }),
+    categoryId: varchar('category_id', { length: 255 }),
+    categoryDisplayName: varchar('category_display_name', { length: 255 }),
+    hours: jsonb('hours'),
+    photos: jsonb('photos').default(sql`'[]'::jsonb`),
+    verificationState: googleVerificationStateEnum('verification_state').notNull().default('UNVERIFIED'),
+    syncStatus: googleSyncStatusEnum('sync_status').notNull().default('no_profile'),
+    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('google_business_profiles_tenant_id_idx').on(table.tenantId),
+    gbpLocationIdIdx: index('google_business_profiles_gbp_location_id_idx').on(table.gbpLocationId),
+    syncStatusIdx: index('google_business_profiles_sync_status_idx').on(table.syncStatus),
+    tenantIdUnique: unique('google_business_profiles_tenant_id_unique').on(table.tenantId),
+  })
+);
+
+export const businessProfileSettings = pgTable(
+  'business_profile_settings',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    address: jsonb('address').notNull(),
+    phone: varchar('phone', { length: 40 }).notNull(),
+    email: varchar('email', { length: 255 }),
+    website: varchar('website', { length: 2048 }),
+    categoryId: varchar('category_id', { length: 255 }).notNull(),
+    hours: jsonb('hours'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('business_profile_settings_tenant_id_idx').on(table.tenantId),
+    tenantIdUnique: unique('business_profile_settings_tenant_id_unique').on(table.tenantId),
+  })
+);
+
+export const googleSyncLogs = pgTable(
+  'google_sync_logs',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id').references(() => googleConnections.id, { onDelete: 'set null' }),
+    profileId: uuid('profile_id').references(() => googleBusinessProfiles.id, { onDelete: 'set null' }),
+    operation: googleSyncOperationEnum('operation').notNull(),
+    status: googleSyncLogStatusEnum('status').notNull().default('in_progress'),
+    message: text('message'),
+    details: jsonb('details'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('google_sync_logs_tenant_id_idx').on(table.tenantId),
+    profileIdx: index('google_sync_logs_profile_id_idx').on(table.profileId),
+    createdAtIdx: index('google_sync_logs_created_at_idx').on(table.createdAt),
+  })
+);
+
+export const googleConnectionsRelations = relations(googleConnections, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [googleConnections.tenantId],
+    references: [tenants.id],
+  }),
+  profile: one(googleBusinessProfiles),
+  syncLogs: many(googleSyncLogs),
+}));
+
+export const googleBusinessProfilesRelations = relations(googleBusinessProfiles, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [googleBusinessProfiles.tenantId],
+    references: [tenants.id],
+  }),
+  connection: one(googleConnections, {
+    fields: [googleBusinessProfiles.connectionId],
+    references: [googleConnections.id],
+  }),
+  syncLogs: many(googleSyncLogs),
+}));
+
+export const businessProfileSettingsRelations = relations(businessProfileSettings, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [businessProfileSettings.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const googleSyncLogsRelations = relations(googleSyncLogs, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [googleSyncLogs.tenantId],
+    references: [tenants.id],
+  }),
+  connection: one(googleConnections, {
+    fields: [googleSyncLogs.connectionId],
+    references: [googleConnections.id],
+  }),
+  profile: one(googleBusinessProfiles, {
+    fields: [googleSyncLogs.profileId],
+    references: [googleBusinessProfiles.id],
+  }),
+}));
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -591,4 +762,8 @@ export const allTables = {
   requestLogs,
   campaignPlans,
   socialPosts,
+  googleConnections,
+  googleBusinessProfiles,
+  businessProfileSettings,
+  googleSyncLogs,
 };
