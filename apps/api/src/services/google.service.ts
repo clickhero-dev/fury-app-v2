@@ -1,16 +1,25 @@
 import jwt from 'jsonwebtoken';
 import { and, eq } from 'drizzle-orm';
-import { db, googleConnections, businessProfileSettings, tenants } from '../lib/db.js';
+import {
+  db as dbInstance,
+  googleConnections,
+  businessProfileSettings,
+  tenants,
+  type Database,
+} from '../lib/db.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { GOOGLE_ERROR_CODES } from '../schemas/google.schemas.js';
+import { GOOGLE_ERROR_CODES, settingsSchema } from '../schemas/google.schemas.js';
 import { exchangeCodeForToken, getGoogleOAuthConfig, revokeGoogleToken } from '../lib/google-oauth.js';
 import {
   createGoogleApiClient,
+  type GbpCategory,
   type GbpLocation,
   type GbpLocationMatch,
   type GoogleApiClient,
 } from '../lib/google-api.js';
 import { encryptToken, decryptToken } from '../utils/crypto.js';
+
+const db = dbInstance;
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_OAUTH_SCOPE = 'https://www.googleapis.com/auth/business.manage';
@@ -69,6 +78,55 @@ export interface GoogleLookupResult {
   found: boolean;
   matches: GoogleLookupMatch[];
   duplicateAlert: boolean;
+}
+
+export interface GoogleAddress {
+  street: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+}
+
+export interface GoogleBusinessHours {
+  [day: string]: { open: string; close: string }[] | undefined;
+}
+
+export interface GoogleSettings {
+  name: string;
+  address: GoogleAddress;
+  phone: string;
+  email: string;
+  website: string;
+  categoryId: string | null;
+  categoryDisplayName?: string | null;
+  hours: GoogleBusinessHours | null;
+  prefilledFrom?: string[];
+}
+
+export interface GoogleCategory {
+  categoryId: string;
+  displayName: string;
+  parentId: string | null;
+}
+
+export interface GoogleSettingsUpsertResult {
+  id: string;
+  name: string;
+  categoryDisplayName: string | null;
+}
+
+const EMPTY_ADDRESS: GoogleAddress = { street: '', city: '', state: '', postalCode: '', country: 'BR' };
+
+const CATEGORIES_CACHE_TTL_MS = 60_000;
+const categoriesCache = new Map<string, { expiresAt: number; categories: GoogleCategory[] }>();
+
+function mapGbpCategory(category: GbpCategory): GoogleCategory {
+  return {
+    categoryId: category.categoryId,
+    displayName: category.displayName ?? '',
+    parentId: category.parentId ?? null,
+  };
 }
 
 function getRequiredEnv(name: string): string {
@@ -417,4 +475,207 @@ export async function lookupGoogleProfile(tenantId: string): Promise<GoogleLooku
     matches: normalized,
     duplicateAlert: normalized.length > 0 && !found,
   };
+}
+
+/** Constrói o client da API do Google para o tenant (lança NOT_FOUND sem conexão). */
+export async function getGoogleApiClient(tenantId: string): Promise<GoogleApiClient> {
+  const connection = await getTenantConnection(tenantId);
+  return createClientForConnection(connection);
+}
+
+/** Busca o catálogo de categorias da GBP com cache curto em memória (FR-012). */
+async function getCatalogCategories(
+  client: GoogleApiClient,
+  database: Database,
+  tenantId: string,
+): Promise<GoogleCategory[]> {
+  const cacheKey = `catalog:${tenantId}`;
+  const cached = categoriesCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.categories;
+  }
+  const gbpCategories = await client.listCategories({ regionCode: 'BR', pageSize: 100 });
+  const categories = gbpCategories.map(mapGbpCategory).filter((c) => c.displayName);
+  categoriesCache.set(cacheKey, { expiresAt: Date.now() + CATEGORIES_CACHE_TTL_MS, categories });
+  return categories;
+}
+
+/** Valida a categoria contra o catálogo oficial e devolve o displayName. */
+async function resolveCategoryDisplayName(
+  categoryId: string,
+  tenantId: string,
+  database: Database,
+): Promise<string | null> {
+  const connection = await database.query.googleConnections.findFirst({
+    where: eq(googleConnections.tenantId, tenantId),
+  });
+
+  let client: GoogleApiClient | null = null;
+  if (connection) {
+    client = createClientForConnection(connection);
+  } else if (process.env.GOOGLE_API_MOCK === 'true') {
+    client = createGoogleApiClient({ accessToken: 'mock', tokenExpiresAt: null });
+  }
+
+  if (!client) {
+    return null;
+  }
+
+  const categories = await getCatalogCategories(client, database, tenantId);
+  const found = categories.find((c) => c.categoryId === categoryId);
+  if (!found) {
+    throw new AppError(
+      422,
+      GOOGLE_ERROR_CODES.INVALID_CATEGORY,
+      'A categoria selecionada não existe no catálogo do Google.'
+    );
+  }
+  return found.displayName || null;
+}
+
+/**
+ * Retorna business_profile_settings do tenant, pré-preenchido de
+ * `tenants.name` + `tenants.businessContext` quando nunca salvo.
+ */
+export async function getGoogleSettings(
+  tenantId: string,
+  database: Database = dbInstance,
+): Promise<GoogleSettings> {
+  const [settings, tenant] = await Promise.all([
+    database.query.businessProfileSettings.findFirst({
+      where: eq(businessProfileSettings.tenantId, tenantId),
+    }),
+    database.query.tenants.findFirst({
+      where: eq(tenants.id, tenantId),
+    }),
+  ]);
+
+  if (settings) {
+    const result: GoogleSettings = {
+      name: settings.name,
+      address: { ...EMPTY_ADDRESS, ...(settings.address as Partial<GoogleAddress> | null) },
+      phone: settings.phone,
+      email: settings.email ?? '',
+      website: settings.website ?? '',
+      categoryId: settings.categoryId || null,
+      categoryDisplayName: null,
+      hours: (settings.hours as GoogleBusinessHours | null) ?? null,
+      prefilledFrom: [],
+    };
+    if (settings.categoryId) {
+      try {
+        result.categoryDisplayName = await resolveCategoryDisplayName(settings.categoryId, tenantId, database);
+      } catch {
+        result.categoryDisplayName = null;
+      }
+    }
+    return result;
+  }
+
+  return {
+    name: tenant?.name ?? '',
+    address: EMPTY_ADDRESS,
+    phone: '',
+    email: '',
+    website: '',
+    categoryId: null,
+    categoryDisplayName: null,
+    hours: null,
+    prefilledFrom: ['tenant.name', 'tenant.businessContext'],
+  };
+}
+
+/** Valida e faz upsert (1/tenant) dos dados do negócio em business_profile_settings. */
+export async function updateGoogleSettings(
+  tenantId: string,
+  data: unknown,
+  database: Database = dbInstance,
+): Promise<GoogleSettingsUpsertResult> {
+  const parsed = settingsSchema.safeParse(data);
+  if (!parsed.success) {
+    const fields = parsed.error.issues.map((issue) => issue.path.join('.'));
+    throw new AppError(400, GOOGLE_ERROR_CODES.VALIDATION_ERROR, 'Dados do negócio inválidos.', { fields });
+  }
+  const values = parsed.data;
+
+  const fields: string[] = [];
+  if (!values.name?.trim()) fields.push('name');
+  const address = values.address ?? {};
+  if (!address.street?.trim() && !address.city?.trim()) fields.push('address');
+  if (!values.phone?.trim()) fields.push('phone');
+  if (fields.length > 0) {
+    throw new AppError(
+      400,
+      GOOGLE_ERROR_CODES.VALIDATION_ERROR,
+      'Preencha os campos obrigatórios do negócio.',
+      { fields }
+    );
+  }
+
+  let categoryDisplayName: string | null = null;
+  if (values.categoryId) {
+    categoryDisplayName = await resolveCategoryDisplayName(values.categoryId, tenantId, database);
+  }
+
+  const payload = {
+    name: values.name,
+    address: values.address,
+    phone: values.phone,
+    email: values.email ?? '',
+    website: values.website ?? '',
+    categoryId: values.categoryId || '',
+    hours: values.hours ?? null,
+    updatedAt: new Date(),
+  };
+
+  const existing = await database.query.businessProfileSettings.findFirst({
+    where: eq(businessProfileSettings.tenantId, tenantId),
+  });
+
+  if (existing) {
+    await database
+      .update(businessProfileSettings)
+      .set(payload)
+      .where(eq(businessProfileSettings.tenantId, tenantId));
+    return { id: existing.id, name: payload.name, categoryDisplayName };
+  }
+
+  const inserted = await database
+    .insert(businessProfileSettings)
+    .values({ ...payload, tenantId, createdAt: new Date() })
+    .returning({ id: businessProfileSettings.id, name: businessProfileSettings.name });
+
+  return {
+    id: inserted[0]?.id ?? '',
+    name: inserted[0]?.name ?? payload.name,
+    categoryDisplayName,
+  };
+}
+
+/** Autocomplete de categorias do catálogo oficial da GBP (FR-012) com cache em memória. */
+export async function getGoogleCategories(
+  query: string,
+  googleApi: GoogleApiClient,
+  tenantId: string,
+): Promise<{ categories: GoogleCategory[] }> {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return { categories: [] };
+  }
+
+  const cacheKey = `${tenantId}:${normalizedQuery}`;
+  const cached = categoriesCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { categories: cached.categories };
+  }
+
+  const gbpCategories = await googleApi.listCategories({
+    query,
+    regionCode: 'BR',
+    pageSize: 20,
+  });
+
+  const categories = gbpCategories.map(mapGbpCategory).filter((c) => c.displayName);
+  categoriesCache.set(cacheKey, { expiresAt: Date.now() + CATEGORIES_CACHE_TTL_MS, categories });
+  return { categories };
 }

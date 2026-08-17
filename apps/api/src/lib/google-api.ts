@@ -24,6 +24,7 @@ export interface GbpAddress {
 export interface GbpCategory {
   categoryId: string;
   displayName?: string;
+  parentId?: string;
 }
 
 export interface GbpOpenPeriod {
@@ -463,6 +464,7 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
       const response = await request<GbpCategoriesResponse>('/categories', { query });
       return (response.categories ?? []).map(({ parentCategory, ...category }) => ({
         ...category,
+        parentId: parentCategory ?? undefined,
       }));
     },
   };

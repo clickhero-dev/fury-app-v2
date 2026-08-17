@@ -73,3 +73,7 @@ export const oauthCallbackQuerySchema = z.object({
 export const lookupQuerySchema = z.object({
   query: z.string().min(1).max(255).optional(),
 });
+
+export const categoriesQuerySchema = z.object({
+  query: z.string().max(255).optional(),
+});
