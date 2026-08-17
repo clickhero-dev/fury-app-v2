@@ -1,22 +1,41 @@
 import { useAuth } from '@/hooks/useAuth';
+import { useSubscription } from '@/hooks/useBilling';
 
 interface SidebarUserCardProps {
   collapsed?: boolean;
 }
 
+/**
+ * Pega apenas a primeira letra do nome do usuário (ou do e-mail como fallback).
+ */
 function getInitial(name?: string | null, email?: string | null): string {
-  if (name) return name[0].toUpperCase();
-  if (email) return email[0].toUpperCase();
-  return 'M';
+  if (name && name.trim()) {
+    return name.trim()[0].toUpperCase();
+  }
+
+  if (email && email.trim()) {
+    return email.trim()[0].toUpperCase();
+  }
+
+  return '?';
 }
 
 export function SidebarUserCard({ collapsed = false }: SidebarUserCardProps) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading: isLoadingAuth } = useAuth();
+  const { data: subscription, isLoading: isLoadingSub } = useSubscription();
 
-  if (isLoading) return null;
+  if (isLoadingAuth || !user) return null;
 
-  const initial = getInitial(user?.name, user?.email);
-  const displayName = user?.name || 'Mallyssa Holanda';
+  // Nome do usuário: se null, assume "Meu Perfil"
+  const displayName = user.name && user.name.trim() !== '' ? user.name : 'Meu Perfil';
+
+  // Apenas a PRIMEIRA letra para o avatar
+  const initial = getInitial(user.name, user.email);
+
+  // Nome do plano retornado pela API
+  const userPlan = isLoadingSub
+    ? 'Carregando...'
+    : subscription?.plan?.name ?? 'Sem plano ativo';
 
   return (
     <div
@@ -29,14 +48,14 @@ export function SidebarUserCard({ collapsed = false }: SidebarUserCardProps) {
         {initial}
       </div>
 
-      {/* Dados do usuário */}
+      {/* Nome e Plano do Usuário */}
       {!collapsed && (
         <div className="flex-1 min-w-0 text-left">
           <span className="block text-sm font-medium truncate text-foreground leading-tight">
             {displayName}
           </span>
           <span className="block text-xs truncate text-muted-foreground mt-0.5">
-            Plano Pro
+            {userPlan}
           </span>
         </div>
       )}

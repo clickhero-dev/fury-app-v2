@@ -32,6 +32,7 @@ import { Plans } from './pages/billing/Plans';
 import { Subscription } from './pages/billing/Subscription';
 import { AssinaturaVencida } from './pages/billing/AssinaturaVencida';
 import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
+import { RoadmapPage } from './pages/roadmap/RoadmapPage';
 import { AdminLogin } from './pages/superadmin/AdminLogin';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { TenantsPage } from './pages/superadmin/TenantsPage';
@@ -88,6 +89,10 @@ export const router = createBrowserRouter([
   {
     path: '/l/:codigo',
     element: <LandingPage />,
+  },
+  {
+    path: '/roadmap',
+    element: <RoadmapPage />,
   },
   {
     element: <AuthenticatedShell />,

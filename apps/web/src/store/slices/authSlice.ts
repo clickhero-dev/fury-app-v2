@@ -1,4 +1,4 @@
-import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, createSelector, type PayloadAction } from '@reduxjs/toolkit';
 
 export interface AuthState {
   token: string | null;
@@ -47,7 +47,16 @@ const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
-    login(state, action: PayloadAction<{ token: string; refreshToken: string; name: string | null; email: string; tenantId: string }>) {
+    login(
+      state,
+      action: PayloadAction<{
+        token: string;
+        refreshToken: string;
+        name: string | null;
+        email: string;
+        tenantId: string;
+      }>
+    ) {
       state.token = action.payload.token;
       state.refreshToken = action.payload.refreshToken;
       state.name = action.payload.name;
@@ -86,16 +95,20 @@ const authSlice = createSlice({
   },
 });
 
-export const { login, setTokens, setUserProfile, setMetaId, setPlan, setTheme, logout } = authSlice.actions;
+export const {
+  login,
+  setTokens,
+  setUserProfile,
+  setMetaId,
+  setPlan,
+  setTheme,
+  logout,
+} = authSlice.actions;
 
+// Selectors de Primitivos
 export const selectToken = (state: { auth: AuthState }) => state.auth.token;
 export const selectRefreshToken = (state: { auth: AuthState }) => state.auth.refreshToken;
 export const selectIsAuthenticated = (state: { auth: AuthState }) => !!state.auth.token;
-export const selectUser = (state: { auth: AuthState }) => ({
-  name: state.auth.name,
-  email: state.auth.email,
-  tenantId: state.auth.tenantId,
-});
 export const selectName = (state: { auth: AuthState }) => state.auth.name;
 export const selectEmail = (state: { auth: AuthState }) => state.auth.email;
 export const selectTenantId = (state: { auth: AuthState }) => state.auth.tenantId;
@@ -103,5 +116,14 @@ export const selectMetaId = (state: { auth: AuthState }) => state.auth.metaId;
 export const selectPlan = (state: { auth: AuthState }) => state.auth.plan;
 export const selectPlanExpiration = (state: { auth: AuthState }) => state.auth.planExpiration;
 export const selectTheme = (state: { auth: AuthState }) => state.auth.theme;
+
+// Selector Memoizado (evita re-renders e elimina a warning no console)
+export const selectUser = createSelector(
+  [selectName, selectEmail, selectTenantId],
+  (name, email, tenantId) => {
+    if (!email) return null;
+    return { name, email, tenantId };
+  }
+);
 
 export default authSlice.reducer;
