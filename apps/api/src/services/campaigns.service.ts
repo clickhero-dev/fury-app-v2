@@ -154,6 +154,9 @@ export function mapWizardMetaError(err: unknown, step: string): never {
     metaCode, metaSubcode, metaType, httpStatus, message, metaUserTitle, metaUserMsg, metaBlameField,
   });
 
+  if (httpStatus === 504 || message.toLowerCase().includes('timeout')) {
+    throw new AppError(504, 'META_TIMEOUT', 'A conexão com os servidores do Meta está lenta no momento. Por favor, tente novamente mais tarde.');
+  }
   if (metaCode === 190) {
     throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão com Meta expirada. Reconecte em Configurações');
   }
@@ -733,22 +736,17 @@ export class CampaignsService {
       let adImageHashPromise: Promise<string | undefined> = Promise.resolve(undefined);
       if (!instagramCreativeActorId && imageUrl) {
         adImageHashPromise = (async () => {
-          try {
-            const result = await this.meta.downloadImage(imageUrl, AbortSignal.timeout(90_000));
-            if (!result) throw new Error(`Falha ao baixar imagem (HTTP). Verifique se a URL está acessível.`);
-            if (!result.contentType.includes('jpeg') && !result.contentType.includes('png') && !result.contentType.includes('image/')) {
-              throw new Error(`Formato de imagem nao suportado: ${result.contentType || 'desconhecido'}. Use uma imagem JPEG ou PNG acessivel publicamente.`);
-            }
-            const ext = result.contentType.includes('png') ? 'png' : 'jpg';
-            const hash = await this.meta.uploadAdImage({
-              adAccountId, base64: result.buffer.toString('base64'),
-              filename: `fury_creative_${Date.now()}.${ext}`, accessToken,
-            });
-            return hash;
-          } catch (uploadErr) {
-            console.error('[CampaignWizard] Falha ao enviar imagem para Meta, usando URL original:', uploadErr);
-            return undefined;
+          const result = await this.meta.downloadImage(imageUrl, AbortSignal.timeout(90_000));
+          if (!result) throw new Error(`Falha ao baixar imagem (HTTP). Verifique se a URL está acessível.`);
+          if (!result.contentType.includes('jpeg') && !result.contentType.includes('png') && !result.contentType.includes('image/')) {
+            throw new Error(`Formato de imagem nao suportado: ${result.contentType || 'desconhecido'}. Use uma imagem JPEG ou PNG acessivel publicamente.`);
           }
+          const ext = result.contentType.includes('png') ? 'png' : 'jpg';
+          const hash = await this.meta.uploadAdImage({
+            adAccountId, base64: result.buffer.toString('base64'),
+            filename: `fury_creative_${Date.now()}.${ext}`, accessToken,
+          });
+          return hash;
         })();
       }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, ImagePlus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
@@ -39,6 +39,7 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
   const [audience, setAudience] = useState<AudienceDefaults>({});
   const [audienceLoading, setAudienceLoading] = useState(true);
   const [showSlowWarning, setShowSlowWarning] = useState(false);
+  const slowWarningTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     api.get<{ success: boolean; data: { audienceDefaults?: AudienceDefaults } }>('/auth/me')
@@ -54,16 +55,10 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
       .finally(() => setAudienceLoading(false));
   }, []);
 
-  // Mostra alerta se a publicação demorar mais que 15s
+  // Limpa o timer ao desmontar
   useEffect(() => {
-    if (mutation.isPending) {
-      setShowSlowWarning(false); // reseta ao iniciar
-      const timer = setTimeout(() => setShowSlowWarning(true), 15_000);
-      return () => clearTimeout(timer);
-    } else {
-      setShowSlowWarning(false);
-    }
-  }, [mutation.isPending]);
+    return () => { if (slowWarningTimer.current) clearTimeout(slowWarningTimer.current); };
+  }, []);
 
   const isInstagramCreative = Boolean(state.creative.instagramMediaId);
   const imageUrl = isInstagramCreative
@@ -108,7 +103,15 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
         : {}),
     };
 
-    mutation.mutate(payload);
+    setShowSlowWarning(false);
+    if (slowWarningTimer.current) clearTimeout(slowWarningTimer.current);
+    slowWarningTimer.current = setTimeout(() => setShowSlowWarning(true), 15_000);
+    mutation.mutate(payload, {
+      onSettled: () => {
+        setShowSlowWarning(false);
+        if (slowWarningTimer.current) clearTimeout(slowWarningTimer.current);
+      },
+    });
   }
 
   if (mutation.isSuccess) {
