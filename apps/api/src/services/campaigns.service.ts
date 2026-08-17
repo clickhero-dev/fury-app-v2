@@ -694,7 +694,8 @@ export class CampaignsService {
 
     const today = new Date();
     const dataLabel = today.toLocaleDateString('pt-BR');
-    const campaignName = `${objectiveConfig.label} — FURY — ${dataLabel}`;
+    // o nome da campanha reflete o título do anúncio (headline) definido no wizard
+    const campaignName = args.headline;
 
     const selectedPageIds = (metaConn.selectedPageIds as string[] | null) ?? [];
     let pageId = args.objective === 'whatsapp' ? args.whatsappPageId! : selectedPageIds[0] || process.env.META_PAGE_ID || '';

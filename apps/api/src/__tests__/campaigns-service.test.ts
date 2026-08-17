@@ -263,8 +263,11 @@ describe('CampaignsService.createCampaignFromWizard', () => {
 
     expect(result.success).toBe(true);
     expect(result.meta_campaign_id).toBe('meta_campaign_1');
+    expect(result.campaign_name).toBe('Oferta');
     expect(repo.campaigns).toHaveLength(1);
+    expect(repo.campaigns[0].name).toBe('Oferta');
     expect(meta.createdCampaigns).toHaveLength(1);
+    expect(meta.createdCampaigns[0].name).toBe('Oferta');
     expect(meta.createdAdSets).toHaveLength(1);
     expect(meta.createdAdCreatives).toHaveLength(1);
     expect(meta.createdAds).toHaveLength(1);
