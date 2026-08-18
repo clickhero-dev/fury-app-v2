@@ -299,6 +299,13 @@ function getSocialRedirectUri(): string {
   return process.env.GOOGLE_SOCIAL_REDIRECT_URI || 'http://localhost:5173/auth/google/callback';
 }
 
+/** Derive the frontend base URL from the OAuth redirect URI configured for this environment. */
+function getSocialFrontendUrl(): string {
+  const uri = process.env.GOOGLE_SOCIAL_REDIRECT_URI || 'http://localhost:5173/auth/google/callback';
+  const u = new URL(uri);
+  return `${u.protocol}//${u.host}`;
+}
+
 export async function googleSocialUrl(req: Request, res: Response, next: NextFunction) {
   try {
     const { getGoogleOAuthConfig } = await import('../lib/google-oauth.js');
@@ -317,7 +324,7 @@ export async function googleSocialUrl(req: Request, res: Response, next: NextFun
 
 export async function googleSocialCallback(req: Request, res: Response, next: NextFunction) {
   const redirectUri = getSocialRedirectUri();
-  const frontendUrl = process.env.GOOGLE_SOCIAL_FRONTEND_URL || 'http://localhost:5173';
+  const frontendUrl = getSocialFrontendUrl();
 
   try {
     const errorParam = req.query.error as string | undefined;
