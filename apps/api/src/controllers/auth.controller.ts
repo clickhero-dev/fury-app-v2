@@ -295,15 +295,15 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
   }
 }
 
-function getSocialRedirectUri(req: Request): string {
-  return `${req.protocol}://${req.get('host')}/api/auth/google/callback`;
+function getSocialRedirectUri(): string {
+  return process.env.GOOGLE_SOCIAL_REDIRECT_URI || 'http://localhost:5173/auth/google/callback';
 }
 
 export async function googleSocialUrl(req: Request, res: Response, next: NextFunction) {
   try {
     const { getGoogleOAuthConfig } = await import('../lib/google-oauth.js');
     const { clientId } = getGoogleOAuthConfig();
-    const redirectUri = getSocialRedirectUri(req);
+    const redirectUri = getSocialRedirectUri();
     const authUrl = socialAuthService.generateSocialLoginUrl(redirectUri, clientId);
     res.status(200).json({
       success: true,
@@ -316,13 +316,8 @@ export async function googleSocialUrl(req: Request, res: Response, next: NextFun
 }
 
 export async function googleSocialCallback(req: Request, res: Response, next: NextFunction) {
-  // Derive frontend URL from request host to keep local/HMG/prod consistent
-  const reqHost = req.get('host') || 'localhost:5173';
-  const isLocalhost = reqHost.startsWith('localhost');
-  const frontendUrl = isLocalhost
-    ? `http://${reqHost.replace(/:\d+$/, ':5173')}`
-    : `https://${reqHost.replace('-fury-api', '-fury-web')}`;
-  const redirectUri = getSocialRedirectUri(req);
+  const redirectUri = getSocialRedirectUri();
+  const frontendUrl = process.env.GOOGLE_SOCIAL_FRONTEND_URL || 'http://localhost:5173';
 
   try {
     const errorParam = req.query.error as string | undefined;
