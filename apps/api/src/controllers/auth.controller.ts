@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import jwt from 'jsonwebtoken';
 import * as authService from '../services/auth.service.js';
 import * as socialAuthService from '../services/social-auth.service.js';
+import { AppError } from '../middleware/errorHandler.js';
 import { checkEmailVerificationRateLimit, checkForgotPasswordRateLimit, checkResetPasswordRateLimit } from '../middleware/rate-limit.middleware.js';
 
 const updateMeSchema = z.object({
@@ -296,14 +298,31 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
 }
 
 function getSocialRedirectUri(): string {
-  return process.env.GOOGLE_SOCIAL_REDIRECT_URI || 'http://localhost:5173/auth/google/callback';
+  return process.env.GOOGLE_SOCIAL_REDIRECT_URI || 'http://localhost:3000/api/auth/google/callback';
 }
 
-/** Derive the frontend base URL from the OAuth redirect URI configured for this environment. */
-function getSocialFrontendUrl(): string {
-  const uri = process.env.GOOGLE_SOCIAL_REDIRECT_URI || 'http://localhost:5173/auth/google/callback';
-  const u = new URL(uri);
-  return `${u.protocol}//${u.host}`;
+function getSocialFrontendUrl(state?: SocialStatePayload): string {
+  // Prefer the frontend URL captured in the OAuth state (set by the initiating env)
+  if (state?.frontendUrl) return state.frontendUrl;
+  return process.env.GOOGLE_SOCIAL_FRONTEND_URL || 'http://localhost:5173';
+}
+
+interface SocialStatePayload {
+  frontendUrl: string;
+}
+
+function signSocialState(frontendUrl: string): string {
+  const secret = process.env.JWT_SECRET || 'fallback';
+  return jwt.sign({ frontendUrl } as SocialStatePayload, secret, { expiresIn: '10m' });
+}
+
+function verifySocialState(state: string): SocialStatePayload {
+  try {
+    const secret = process.env.JWT_SECRET || 'fallback';
+    return jwt.verify(state, secret) as SocialStatePayload;
+  } catch {
+    throw new AppError(401, 'INVALID_OAUTH_STATE', 'State OAuth invalido ou expirado.');
+  }
 }
 
 export async function googleSocialUrl(req: Request, res: Response, next: NextFunction) {
@@ -311,7 +330,15 @@ export async function googleSocialUrl(req: Request, res: Response, next: NextFun
     const { getGoogleOAuthConfig } = await import('../lib/google-oauth.js');
     const { clientId } = getGoogleOAuthConfig();
     const redirectUri = getSocialRedirectUri();
-    const authUrl = socialAuthService.generateSocialLoginUrl(redirectUri, clientId);
+
+    // Accept frontend URL from query or header — enables multi-env without hardcoding
+    const frontendOrigin = (req.query.origin as string)
+      || req.get('origin')
+      || req.get('referer')
+      || 'http://localhost:5173';
+    const state = signSocialState(frontendOrigin);
+
+    const authUrl = socialAuthService.generateSocialLoginUrl(redirectUri, clientId, state);
     res.status(200).json({
       success: true,
       data: { authUrl },
@@ -324,10 +351,13 @@ export async function googleSocialUrl(req: Request, res: Response, next: NextFun
 
 export async function googleSocialCallback(req: Request, res: Response, next: NextFunction) {
   const redirectUri = getSocialRedirectUri();
-  const frontendUrl = getSocialFrontendUrl();
 
   try {
     const errorParam = req.query.error as string | undefined;
+    const stateParam = req.query.state as string | undefined;
+    const verifiedState = stateParam ? verifySocialState(stateParam) : undefined;
+    const frontendUrl = getSocialFrontendUrl(verifiedState);
+
     if (errorParam) {
       res.redirect(`${frontendUrl}/login?error=oauth_cancelled`);
       return;
@@ -378,6 +408,9 @@ export async function googleSocialCallback(req: Request, res: Response, next: Ne
   } catch (error) {
     const { AppError } = await import('../middleware/errorHandler.js');
     const message = error instanceof AppError ? error.message : 'Erro ao fazer login com Google';
+    const stateParam = req.query.state as string | undefined;
+    const verifiedState = stateParam ? verifySocialState(stateParam) : undefined;
+    const frontendUrl = getSocialFrontendUrl(verifiedState);
     if (req.method === 'POST') {
       return res.status(401).json({ success: false, error: { code: 'SOCIAL_LOGIN_FAILED', message } });
     }
