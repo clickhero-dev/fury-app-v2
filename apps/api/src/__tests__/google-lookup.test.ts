@@ -13,10 +13,13 @@ const {
   dbMock,
   mockCreateGoogleApiClient,
   mockSearchGoogleLocations,
+  mockCreateLocation,
+  mockListCategories,
 } = vi.hoisted(() => ({
   dbMock: {
     query: {
       googleConnections: { findFirst: vi.fn() },
+      googleBusinessProfiles: { findFirst: vi.fn() },
       businessProfileSettings: { findFirst: vi.fn() },
       tenants: { findFirst: vi.fn() },
     },
@@ -26,6 +29,8 @@ const {
   } as any,
   mockCreateGoogleApiClient: vi.fn(),
   mockSearchGoogleLocations: vi.fn(),
+  mockCreateLocation: vi.fn(),
+  mockListCategories: vi.fn(),
 }));
 
 vi.mock('@fury/db', () => ({
@@ -43,7 +48,8 @@ vi.mock('../lib/google-api.js', () => ({
   createGoogleApiClient: mockCreateGoogleApiClient,
 }));
 
-import { lookupGoogleProfile, getGoogleAccounts } from '../services/google.service.js';
+import { lookupGoogleProfile, getGoogleAccounts, createProfile } from '../services/google.service.js';
+import { AppError } from '../middleware/errorHandler.js';
 
 function makeConnection(tenantId: string, overrides: Record<string, unknown> = {}) {
   return {
@@ -133,8 +139,23 @@ function resetMocks() {
   vi.clearAllMocks();
   mockCreateGoogleApiClient.mockReturnValue({
     searchGoogleLocations: mockSearchGoogleLocations,
+    createLocation: mockCreateLocation,
+    listCategories: mockListCategories,
     listAccounts: vi.fn(),
   });
+  dbMock.insert.mockImplementation(() => {
+    const valuesResult = Object.assign(Promise.resolve(undefined), {
+      returning: vi.fn().mockResolvedValue([{ id: 'profile-1', name: 'Minha Empresa Ltda' }]),
+    });
+    return { values: vi.fn().mockReturnValue(valuesResult) };
+  });
+  dbMock.update.mockReturnValue({
+    set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
+  });
+  mockListCategories.mockResolvedValue([
+    { categoryId: 'gcid:bakery', displayName: 'Padaria' },
+    { categoryId: 'gcid:coffee_shop', displayName: 'Cafeteria' },
+  ]);
 }
 
 describe('lookupGoogleProfile — googleLocations:search', () => {
@@ -303,6 +324,111 @@ describe('getGoogleAccounts — listAccounts + selectedAccountId', () => {
     await expect(getGoogleAccounts('tenant-B')).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
+    });
+  });
+});
+
+describe('createProfile — bloqueios e criação (US2)', () => {
+  beforeEach(() => {
+    resetMocks();
+    dbMock.query.googleConnections.findFirst.mockResolvedValue(makeConnection('tenant-A'));
+    dbMock.query.businessProfileSettings.findFirst.mockResolvedValue(makeSettings('tenant-A'));
+    dbMock.query.tenants.findFirst.mockResolvedValue(makeTenant('tenant-A'));
+  });
+
+  it('409 DUPLICATE_LOCATION quando o lookup tem confiança HIGH (FR-011)', async () => {
+    mockSearchGoogleLocations.mockResolvedValue([makeUnclaimedMatch()]);
+
+    await expect(createProfile('tenant-A')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'DUPLICATE_LOCATION',
+      details: {
+        matches: [{ gbpLocationId: 'accounts/999999/locations/123', confidence: 'HIGH' }],
+      },
+    });
+
+    expect(mockCreateLocation).not.toHaveBeenCalled();
+    expect(dbMock.insert).not.toHaveBeenCalled();
+  });
+
+  it('400 BUSINESS_SETTINGS_INCOMPLETE quando faltam dados do negócio', async () => {
+    dbMock.query.businessProfileSettings.findFirst.mockResolvedValue(
+      makeSettings('tenant-A', { phone: '', categoryId: '' })
+    );
+    mockSearchGoogleLocations.mockResolvedValue([]);
+
+    await expect(createProfile('tenant-A')).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'BUSINESS_SETTINGS_INCOMPLETE',
+    });
+
+    expect(mockCreateLocation).not.toHaveBeenCalled();
+    expect(dbMock.insert).not.toHaveBeenCalled();
+  });
+
+  it('cria a location na GBP e persiste o espelho com syncStatus awaiting_verification', async () => {
+    mockSearchGoogleLocations.mockResolvedValue([]);
+    mockCreateLocation.mockResolvedValue({
+      name: 'accounts/123456/locations/789',
+      title: 'Minha Empresa Ltda',
+    });
+
+    const result = await createProfile('tenant-A');
+
+    expect(mockCreateLocation).toHaveBeenCalledTimes(1);
+    const [accountName, payload] = mockCreateLocation.mock.calls[0] as [string, Record<string, unknown>];
+    expect(accountName).toBe('accounts/123456');
+    expect(payload.title).toBe('Minha Empresa Ltda');
+    expect(payload.categories).toEqual([{ categoryId: 'gcid:bakery' }]);
+    expect(payload.phoneNumbers).toEqual({ primaryPhone: '+5511999999999' });
+
+    expect(result).toMatchObject({
+      id: 'profile-1',
+      gbpLocationId: 'accounts/123456/locations/789',
+      name: 'Minha Empresa Ltda',
+      syncStatus: 'awaiting_verification',
+      verificationState: 'UNVERIFIED',
+      created: true,
+    });
+
+    expect(dbMock.insert).toHaveBeenCalledTimes(2);
+    const profileValues = dbMock.insert.mock.calls[0][0];
+    expect(profileValues).toBeDefined();
+    const insertedProfile = dbMock.insert.mock.results[0].value.values.mock.calls[0][0] as Record<string, unknown>;
+    expect(insertedProfile.syncStatus).toBe('awaiting_verification');
+    expect(insertedProfile.verificationState).toBe('UNVERIFIED');
+    expect(insertedProfile.tenantId).toBe('tenant-A');
+
+    const insertedLog = dbMock.insert.mock.results[1].value.values.mock.calls[0][0] as Record<string, unknown>;
+    expect(insertedLog.operation).toBe('create');
+    expect(insertedLog.status).toBe('success');
+    expect(insertedLog.message).toContain('Aguardando verificação');
+  });
+
+  it('422 GBP_CREATION_NOT_SUPPORTED com orientação manual quando o Google recusa', async () => {
+    mockSearchGoogleLocations.mockResolvedValue([]);
+    mockCreateLocation.mockRejectedValue(
+      new AppError(422, 'GOOGLE_API_ERROR', 'Google não suporta criação automática neste país.')
+    );
+
+    await expect(createProfile('tenant-A')).rejects.toMatchObject({
+      statusCode: 422,
+      code: 'GBP_CREATION_NOT_SUPPORTED',
+      details: { reason: 'Google não suporta criação automática neste país.' },
+    });
+
+    expect(dbMock.insert).not.toHaveBeenCalled();
+  });
+
+  it('propaga GOOGLE_TOKEN_EXPIRED (401) sem converter em 422', async () => {
+    mockSearchGoogleLocations.mockResolvedValue([]);
+    mockCreateLocation.mockRejectedValue(
+      Object.assign(new Error('refresh failed'), { statusCode: 401, code: 'GOOGLE_TOKEN_EXPIRED' })
+    );
+
+    await expect(createProfile('tenant-A')).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'GOOGLE_TOKEN_EXPIRED',
     });
   });
 });

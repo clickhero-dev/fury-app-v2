@@ -77,3 +77,7 @@ export const lookupQuerySchema = z.object({
 export const categoriesQuerySchema = z.object({
   query: z.string().max(255).optional(),
 });
+
+export const syncLogsQuerySchema = z.object({
+  limit: z.coerce.number().min(1).max(100).default(20),
+});

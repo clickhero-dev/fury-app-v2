@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { RegisterFormPage } from './pages/auth/RegisterFormPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
 import { ResetPasswordSuccessPage } from './pages/auth/ResetPasswordSuccessPage';
@@ -58,6 +59,10 @@ export const router = createBrowserRouter([
   {
     path: '/cadastro',
     element: <RegisterPage />,
+  },
+  {
+    path: '/cadastro/formulario',
+    element: <RegisterFormPage />,
   },
   {
     path: '/forgot-password',

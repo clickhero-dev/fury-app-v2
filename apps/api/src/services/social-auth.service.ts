@@ -76,7 +76,7 @@ export interface GoogleUserInfo {
 }
 
 /** Gera URL de OAuth social Google (apenas userinfo, sem business.manage). */
-export function generateSocialLoginUrl(redirectUri: string, clientId: string): string {
+export function generateSocialLoginUrl(redirectUri: string, clientId: string, state?: string): string {
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -84,6 +84,7 @@ export function generateSocialLoginUrl(redirectUri: string, clientId: string): s
     scope: SOCIAL_LOGIN_SCOPE,
     access_type: 'online',
   });
+  if (state) params.set('state', state);
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 

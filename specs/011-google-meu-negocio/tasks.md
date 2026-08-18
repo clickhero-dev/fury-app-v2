@@ -134,14 +134,14 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T029 [P] [US3] Profile sync unit tests in `apps/api/src/__tests__/google-profile-sync.test.ts`: PATCH → `syncStatus: syncing` → confirmed `verified`; `GBP_UPDATE_REJECTED` (409) with reason mapped to friendly message; tenant isolation. AC: tests FAIL before implementation; pass after T030.
+- [x] T029 [P] [US3] Profile sync unit tests in `apps/api/src/__tests__/google-profile-sync.test.ts`: PATCH → `syncStatus: syncing` → confirmed `verified`; `GBP_UPDATE_REJECTED` (409) with reason mapped to friendly message; tenant isolation. AC: tests FAIL before implementation; pass after T030.
 
 ### Implementation for User Story 3
 
-- [ ] T030 [US3] Implement get/update/sync in `google.service.ts` + `GET /profiles`, `PATCH /profiles/:id`, `POST /profiles/:id/sync` routes/controller. AC: `GET /profiles` returns GBP-fetched mirror (or `data: null`); `PATCH` validates partial Zod, sets `syncing`, patches GBP location, maps rejections to `GBP_UPDATE_REJECTED` 409 with pt-BR reason, logs to `google_sync_logs`; `POST /:id/sync` triggers immediate sync.
-- [ ] T031 [US3] Implement photos (FR-006 — manual association ONLY) in `google.service.ts` + `POST /profiles/:id/photos` (multipart) + `DELETE /profiles/:id/photos?url=` routes/controller. AC: upload goes to Cloudflare R2 via `storage.service.ts` (bucket `fury-studio-assets`), URL added to `photos` jsonb; NEVER calls GBP media endpoints; delete removes from R2 (`deleteAsset`) + array; response `{ photos, associatedManually: true }`.
-- [ ] T032 [US3] Create `PhotoUploader.tsx` in `apps/web/src/pages/configuracoes/google-meu-negocio/components/` (upload + list + remove, manual association). AC: uploads via multipart to `POST /photos`; photo list rendered from profile `photos`; remove calls `DELETE /photos`; explicit label that photos are stored locally, not published to Google.
-- [ ] T033 [US3] Add edit/sync/photo UI to `useGoogleMeuNegocio.ts` + wire into `GoogleMeuNegocioPage.tsx` (`BusinessProfileForm` prefilled from GBP profile data when editing). AC: profile data displayed comes from GBP (not local settings); edit shows `sincronizando` → confirmed; `GBP_UPDATE_REJECTED` shows friendly reason.
+- [x] T030 [US3] Implement get/update/sync in `google.service.ts` + `GET /profiles`, `PATCH /profiles/:id`, `POST /profiles/:id/sync` routes/controller. AC: `GET /profiles` returns GBP-fetched mirror (or `data: null`); `PATCH` validates partial Zod, sets `syncing`, patches GBP location, maps rejections to `GBP_UPDATE_REJECTED` 409 with pt-BR reason, logs to `google_sync_logs`; `POST /:id/sync` triggers immediate sync.
+- [x] T031 [US3] Implement photos (FR-006 — manual association ONLY) in `google.service.ts` + `POST /profiles/:id/photos` (multipart) + `DELETE /profiles/:id/photos?url=` routes/controller. AC: upload goes to Cloudflare R2 via `storage.service.ts` (bucket `fury-studio-assets`), URL added to `photos` jsonb; NEVER calls GBP media endpoints; delete removes from R2 (`deleteAsset`) + array; response `{ photos, associatedManually: true }`.
+- [x] T032 [US3] Create `PhotoUploader.tsx` in `apps/web/src/pages/configuracoes/google-meu-negocio/components/` (upload + list + remove, manual association). AC: uploads via multipart to `POST /photos`; photo list rendered from profile `photos`; remove calls `DELETE /photos`; explicit label that photos are stored locally, not published to Google.
+- [x] T033 [US3] Add edit/sync/photo UI to `useGoogleMeuNegocio.ts` + wire into `GoogleMeuNegocioPage.tsx` (`BusinessProfileForm` prefilled from GBP profile data when editing). AC: profile data displayed comes from GBP (not local settings); edit shows `sincronizando` → confirmed; `GBP_UPDATE_REJECTED` shows friendly reason.
 
 **Checkpoint**: US3 complete — manage existing profile, SC-003 (first-sync success) + C7 photo scenario.
 
@@ -157,14 +157,14 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T034 [P] [US5] Sync worker unit tests in `apps/api/src/__tests__/google-profile-sync.test.ts` (extend): BullMQ job syncs `awaiting_verification`/`syncing` profiles, transitions → `verified`, writes sync-log, triggers email notification; per-tenant isolation. AC: tests FAIL before implementation; pass after T035.
+- [x] T034 [P] [US5] Sync worker unit tests in `apps/api/src/__tests__/google-profile-sync.test.ts` (extend): BullMQ job syncs `awaiting_verification`/`syncing` profiles, transitions → `verified`, writes sync-log, triggers email notification; per-tenant isolation. AC: tests FAIL before implementation; pass after T035.
 
 ### Implementation for User Story 5
 
-- [ ] T035 [US5] Implement `apps/api/src/services/google-sync.worker.ts` — BullMQ `repeat` job (`* * * * *`, pattern `publish-due-manager`) that syncs `awaiting_verification`/`syncing` profiles from GBP, updates `syncStatus`, writes `google_sync_logs`, and enqueues email via `email.service.ts` on transitions (verified, error). AC: no aggressive polling (quota 300 QPM respected); transition → notification < 1 min (SC-004); per-tenant scoped.
-- [ ] T036 [US5] Implement `GET /profiles/:id/sync-logs?limit=` in `google.service.ts` + routes/controller. AC: returns `{ logs: [{ id, operation, status, message, createdAt }] }` chronological (index `created_at`); tenant-scoped.
-- [ ] T037 [US5] Create `ProfileStatusPanel.tsx` in `apps/web/src/pages/configuracoes/google-meu-negocio/components/` (status badge, lastSyncedAt, sync logs history, "Tentar novamente" on error → `POST /:id/sync`). AC: renders all `syncStatus` values (not_connected → error); shows last sync + history; retry re-syncs on error; matches C6.
-- [ ] T038 [US5] Wire `ProfileStatusPanel` into `GoogleMeuNegocioPage.tsx` + `useGoogleSyncLogs` hook. AC: panel visible with profile; status transitions reflected after sync job runs.
+- [x] T035 [US5] Implement `apps/api/src/services/google-sync.worker.ts` — BullMQ `repeat` job (`* * * * *`, pattern `publish-due-manager`) that syncs `awaiting_verification`/`syncing` profiles from GBP, updates `syncStatus`, writes `google_sync_logs`, and enqueues email via `email.service.ts` on transitions (verified, error). AC: no aggressive polling (quota 300 QPM respected); transition → notification < 1 min (SC-004); per-tenant scoped.
+- [x] T036 [US5] Implement `GET /profiles/:id/sync-logs?limit=` in `google.service.ts` + routes/controller. AC: returns `{ logs: [{ id, operation, status, message, createdAt }] }` chronological (index `created_at`); tenant-scoped.
+- [x] T037 [US5] Create `ProfileStatusPanel.tsx` in `apps/web/src/pages/configuracoes/google-meu-negocio/components/` (status badge, lastSyncedAt, sync logs history, "Tentar novamente" on error → `POST /:id/sync`). AC: renders all `syncStatus` values (not_connected → error); shows last sync + history; retry re-syncs on error; matches C6.
+- [x] T038 [US5] Wire `ProfileStatusPanel` into `GoogleMeuNegocioPage.tsx` + `useGoogleSyncLogs` hook. AC: panel visible with profile; status transitions reflected after sync job runs.
 
 **Checkpoint**: US5 complete — status + history + notifications (SC-004, C6).
 

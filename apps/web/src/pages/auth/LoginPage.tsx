@@ -203,6 +203,7 @@ export function LoginPage() {
           </div>
 
           <GoogleLoginButton
+            label="Entrar com Google"
             onSuccess={(data) => {
               localStorage.setItem('token', data.token);
               localStorage.setItem('refreshToken', data.refreshToken);

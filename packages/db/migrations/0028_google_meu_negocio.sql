@@ -5,7 +5,7 @@ EXCEPTION
 END $$;
 
 DO $$ BEGIN
-  CREATE TYPE "google_sync_status" AS ENUM ('not_connected', 'connected', 'no_profile', 'awaiting_verification', 'verified', 'syncing', 'error');
+  CREATE TYPE "google_sync_status" AS ENUM ('not_connected', 'connected', 'no_profile', 'awaiting_verification', 'verified', 'syncing', 'synced', 'error');
 EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;

@@ -21,6 +21,7 @@ import {
   type GoogleApiClient,
 } from '../lib/google-api.js';
 import { encryptToken, decryptToken } from '../utils/crypto.js';
+import { uploadAsset, deleteAsset } from './storage.service.js';
 
 const db = dbInstance;
 
@@ -1048,4 +1049,417 @@ export async function completeVerification(
   }
 
   return { verificationState: 'UNVERIFIED', awaitingPin: true };
+}
+
+export interface GoogleProfileResult {
+  id: string;
+  gbpLocationId: string;
+  name: string;
+  address: GoogleAddress;
+  phone: string;
+  email: string;
+  website: string;
+  categoryId: string | null;
+  categoryDisplayName: string | null;
+  hours: GoogleBusinessHours | null;
+  photos: string[];
+  verificationState: 'UNVERIFIED' | 'VERIFIED';
+  syncStatus: 'not_connected' | 'connected' | 'no_profile' | 'awaiting_verification' | 'verified' | 'syncing' | 'synced' | 'error';
+  lastSyncedAt: string | null;
+}
+
+export interface GoogleSyncLogEntry {
+  id: string;
+  operation: string;
+  status: string;
+  message: string | null;
+  createdAt: string;
+}
+
+export interface GoogleSyncLogsResult {
+  logs: GoogleSyncLogEntry[];
+}
+
+function mapGbpLocationToProfile(
+  profile: typeof googleBusinessProfiles.$inferSelect,
+  gbpLocation: GbpLocation,
+  overrideSyncStatus?: GoogleProfileResult['syncStatus'],
+): GoogleProfileResult {
+  const address = gbpLocation.address ?? {};
+  const phoneNumbers = gbpLocation.phoneNumbers ?? {};
+
+  return {
+    id: profile.id,
+    gbpLocationId: profile.gbpLocationId,
+    name: gbpLocation.title ?? profile.name,
+    address: {
+      street: address.addressLines?.join(', ') ?? '',
+      city: address.locality ?? '',
+      state: address.administrativeArea ?? '',
+      postalCode: address.postalCode ?? '',
+      country: address.regionCode ?? 'BR',
+    },
+    phone: phoneNumbers.primaryPhone ?? profile.phone ?? '',
+    email: gbpLocation.emailAddress ?? profile.email ?? '',
+    website: gbpLocation.websiteUri ?? profile.website ?? '',
+    categoryId: gbpLocation.categories?.[0]?.categoryId ?? profile.categoryId,
+    categoryDisplayName: gbpLocation.categories?.[0]?.displayName ?? profile.categoryDisplayName,
+    hours: profile.hours as GoogleBusinessHours | null,
+    photos: (profile.photos as string[]) ?? [],
+    verificationState: (gbpLocation.verification?.state ?? profile.verificationState) as 'UNVERIFIED' | 'VERIFIED',
+    syncStatus: overrideSyncStatus ?? (profile.syncStatus as GoogleProfileResult['syncStatus']),
+    lastSyncedAt: profile.lastSyncedAt?.toISOString() ?? null,
+  };
+}
+
+const FIELD_MASK_MAP: Record<string, string> = {
+  name: 'title',
+  phone: 'phoneNumbers',
+  email: 'emailAddress',
+  website: 'websiteUri',
+  categoryId: 'categories',
+  hours: 'openInfo',
+  address: 'address',
+};
+
+function buildFieldMask(updates: Partial<GbpLocation>): string[] {
+  const mask: string[] = [];
+  for (const key of Object.keys(updates)) {
+    const gbpField = FIELD_MASK_MAP[key];
+    if (gbpField) {
+      mask.push(gbpField);
+    }
+  }
+  return mask;
+}
+
+function buildGbpPatchPayload(data: Record<string, unknown>): Partial<GbpLocation> {
+  const payload: Partial<GbpLocation> = {};
+
+  if (data.name !== undefined) {
+    payload.title = data.name as string;
+  }
+  if (data.phone !== undefined) {
+    payload.phoneNumbers = { primaryPhone: data.phone as string };
+  }
+  if (data.email !== undefined) {
+    payload.emailAddress = data.email as string;
+  }
+  if (data.website !== undefined) {
+    payload.websiteUri = data.website as string;
+  }
+  if (data.categoryId !== undefined) {
+    payload.categories = data.categoryId ? [{ categoryId: data.categoryId as string }] : undefined;
+  }
+  if (data.hours !== undefined) {
+    const hours = data.hours as GoogleBusinessHours | null;
+    if (hours) {
+      payload.openInfo = { periods: mapBusinessHoursToPeriods(hours) };
+    }
+  }
+  if (data.address !== undefined) {
+    const addr = data.address as Partial<GoogleAddress>;
+    payload.address = {
+      addressLines: addr.street ? [addr.street] : undefined,
+      locality: addr.city || undefined,
+      administrativeArea: addr.state || undefined,
+      postalCode: addr.postalCode || undefined,
+      regionCode: addr.country || 'BR',
+      languageCode: 'pt-BR',
+    };
+  }
+
+  return payload;
+}
+
+function hasActualChanges(
+  profile: typeof googleBusinessProfiles.$inferSelect,
+  data: Record<string, unknown>,
+): boolean {
+  if (data.name && data.name !== profile.name) return true;
+  if (data.phone && data.phone !== profile.phone) return true;
+  if (data.email && data.email !== (profile.email ?? '')) return true;
+  if (data.website && data.website !== (profile.website ?? '')) return true;
+  if (data.categoryId && data.categoryId !== (profile.categoryId ?? '')) return true;
+  if (data.hours && JSON.stringify(data.hours) !== JSON.stringify(profile.hours)) return true;
+  if (data.address) {
+    const currentAddr = profile.address as Partial<GoogleAddress> | null;
+    const newAddr = data.address as Partial<GoogleAddress>;
+    if (
+      newAddr.street !== (currentAddr?.street ?? '') ||
+      newAddr.city !== (currentAddr?.city ?? '') ||
+      newAddr.state !== (currentAddr?.state ?? '') ||
+      newAddr.postalCode !== (currentAddr?.postalCode ?? '') ||
+      newAddr.country !== (currentAddr?.country ?? 'BR')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Retorna o perfil espelhado com dados frescos do GBP (US3).
+ */
+export async function getProfile(
+  profileId: string,
+  tenantId: string,
+  database: Database = dbInstance,
+  googleApi?: GoogleApiClient,
+): Promise<GoogleProfileResult> {
+  const profile = await getProfileConnection(profileId, tenantId, database);
+
+  const connection = await database.query.googleConnections.findFirst({
+    where: eq(googleConnections.id, profile.connectionId),
+  });
+  if (!connection) {
+    throw new AppError(
+      404,
+      GOOGLE_ERROR_CODES.NOT_FOUND,
+      'Nenhuma conexão Google encontrada. Conecte sua conta Google para continuar.'
+    );
+  }
+
+  const client = googleApi ?? createClientForConnection(connection);
+  const gbpLocation = await client.getLocation(profile.gbpLocationId);
+
+  await database
+    .update(googleBusinessProfiles)
+    .set({
+      lastSyncedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(googleBusinessProfiles.id, profile.id));
+
+  return mapGbpLocationToProfile(profile, gbpLocation);
+}
+
+/**
+ * Atualiza campos do perfil no GBP com field mask e retorna com syncStatus syncing (US3).
+ */
+export async function updateProfile(
+  profileId: string,
+  tenantId: string,
+  data: Record<string, unknown>,
+  database: Database = dbInstance,
+  googleApi?: GoogleApiClient,
+): Promise<GoogleProfileResult> {
+  const profile = await getProfileConnection(profileId, tenantId, database);
+
+  if (!hasActualChanges(profile, data)) {
+    const connection = await database.query.googleConnections.findFirst({
+      where: eq(googleConnections.id, profile.connectionId),
+    });
+    if (!connection) {
+      throw new AppError(
+        404,
+        GOOGLE_ERROR_CODES.NOT_FOUND,
+        'Nenhuma conexão Google encontrada.'
+      );
+    }
+    const client = googleApi ?? createClientForConnection(connection);
+    const gbpLocation = await client.getLocation(profile.gbpLocationId);
+  return mapGbpLocationToProfile(profile, gbpLocation, 'synced');
+}
+
+  const connection = await database.query.googleConnections.findFirst({
+    where: eq(googleConnections.id, profile.connectionId),
+  });
+  if (!connection) {
+    throw new AppError(
+      404,
+      GOOGLE_ERROR_CODES.NOT_FOUND,
+      'Nenhuma conexão Google encontrada. Conecte sua conta Google para continuar.'
+    );
+  }
+
+  const client = googleApi ?? createClientForConnection(connection);
+  const patchPayload = buildGbpPatchPayload(data);
+  const fieldMask = buildFieldMask(patchPayload);
+
+  try {
+    const updatedLocation = await client.patchLocation(profile.gbpLocationId, patchPayload, fieldMask);
+
+    await database
+      .update(googleBusinessProfiles)
+      .set({
+        syncStatus: 'synced' as any,
+        lastSyncedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(googleBusinessProfiles.id, profile.id));
+
+    await database.insert(googleSyncLogs).values({
+      tenantId,
+      connectionId: connection.id,
+      profileId: profile.id,
+      operation: 'update',
+      status: 'success',
+      message: 'Perfil atualizado com sucesso.',
+      details: { fieldMask },
+    });
+
+    return mapGbpLocationToProfile(profile, updatedLocation, 'synced');
+  } catch (error) {
+    await database
+      .update(googleBusinessProfiles)
+      .set({
+        syncStatus: 'error',
+        lastError: error instanceof Error ? error.message : 'Erro desconhecido',
+        updatedAt: new Date(),
+      })
+      .where(eq(googleBusinessProfiles.id, profile.id));
+
+    const reason = error instanceof Error ? error.message : 'Erro desconhecido da API do Google.';
+    throw new AppError(
+      409,
+      GOOGLE_ERROR_CODES.GBP_UPDATE_REJECTED,
+      'O Google rejeitou a atualização do perfil.',
+      { reason }
+    );
+  }
+}
+
+/**
+ * Dispara sync imediato do perfil com o GBP (US3).
+ */
+export async function syncProfile(
+  profileId: string,
+  tenantId: string,
+  database: Database = dbInstance,
+  googleApi?: GoogleApiClient,
+): Promise<GoogleProfileResult> {
+  const profile = await getProfileConnection(profileId, tenantId, database);
+
+  const connection = await database.query.googleConnections.findFirst({
+    where: eq(googleConnections.id, profile.connectionId),
+  });
+  if (!connection) {
+    throw new AppError(
+      404,
+      GOOGLE_ERROR_CODES.NOT_FOUND,
+      'Nenhuma conexão Google encontrada. Conecte sua conta Google para continuar.'
+    );
+  }
+
+  const client = googleApi ?? createClientForConnection(connection);
+  const gbpLocation = await client.getLocation(profile.gbpLocationId);
+
+  await database
+    .update(googleBusinessProfiles)
+    .set({
+      syncStatus: 'synced' as any,
+      lastSyncedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(googleBusinessProfiles.id, profile.id));
+
+  await database.insert(googleSyncLogs).values({
+    tenantId,
+    connectionId: connection.id,
+    profileId: profile.id,
+    operation: 'sync',
+    status: 'success',
+    message: 'Sincronizado com sucesso.',
+  });
+
+  return mapGbpLocationToProfile(profile, gbpLocation);
+}
+
+/**
+ * Retorna histórico de operações de sincronização do perfil (US3).
+ */
+export async function getSyncLogs(
+  profileId: string,
+  tenantId: string,
+  limit = 20,
+  database: Database = dbInstance,
+): Promise<GoogleSyncLogsResult> {
+  const profile = await getProfileConnection(profileId, tenantId, database);
+
+  const logs = await database.query.googleSyncLogs.findMany({
+    where: eq(googleSyncLogs.profileId, profile.id),
+    orderBy: (googleSyncLogs, { desc }) => [desc(googleSyncLogs.createdAt)],
+    limit,
+  });
+
+  return {
+    logs: logs.map((log) => ({
+      id: log.id,
+      operation: log.operation,
+      status: log.status,
+      message: log.message ?? null,
+      createdAt: log.createdAt.toISOString(),
+    })),
+  };
+}
+
+export interface GooglePhotoUploadResult {
+  photos: string[];
+  associatedManually: true;
+}
+
+/**
+ * Adiciona foto ao perfil (upload para R2, associação manual — FR-006).
+ */
+export async function addPhoto(
+  profileId: string,
+  tenantId: string,
+  buffer: Buffer,
+  fileName: string,
+  mimeType: string,
+  database: Database = dbInstance,
+): Promise<GooglePhotoUploadResult> {
+  const profile = await getProfileConnection(profileId, tenantId, database);
+
+  const photoUrl = await uploadAsset(buffer, fileName, mimeType);
+
+  const currentPhotos = (profile.photos as string[]) ?? [];
+  const updatedPhotos = [...currentPhotos, photoUrl];
+
+  await database
+    .update(googleBusinessProfiles)
+    .set({
+      photos: updatedPhotos,
+      updatedAt: new Date(),
+    })
+    .where(eq(googleBusinessProfiles.id, profile.id));
+
+  await database.insert(googleSyncLogs).values({
+    tenantId,
+    connectionId: profile.connectionId,
+    profileId: profile.id,
+    operation: 'update',
+    status: 'success',
+    message: 'Foto associada manualmente ao perfil.',
+  });
+
+  return { photos: updatedPhotos, associatedManually: true };
+}
+
+/**
+ * Remove foto do perfil (apenas local — NÃO remove do GBP).
+ */
+export async function removePhoto(
+  profileId: string,
+  tenantId: string,
+  photoUrl: string,
+  database: Database = dbInstance,
+): Promise<GooglePhotoUploadResult> {
+  const profile = await getProfileConnection(profileId, tenantId, database);
+
+  const currentPhotos = (profile.photos as string[]) ?? [];
+  const updatedPhotos = currentPhotos.filter((p) => p !== photoUrl);
+
+  await deleteAsset(photoUrl);
+
+  await database
+    .update(googleBusinessProfiles)
+    .set({
+      photos: updatedPhotos,
+      updatedAt: new Date(),
+    })
+    .where(eq(googleBusinessProfiles.id, profile.id));
+
+  return { photos: updatedPhotos, associatedManually: true };
 }

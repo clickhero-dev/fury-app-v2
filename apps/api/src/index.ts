@@ -17,6 +17,7 @@ import { startStudioGenerationWorker, stopStudioGenerationWorker } from './worke
 import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
 import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
+import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 
 const app = express();
@@ -222,6 +223,9 @@ app.use((req, res) => {
       void startPublishDueManager().catch((error) => {
         console.error('Failed to start publish-due manager:', error);
       });
+      void startGoogleSyncManager().catch((error) => {
+        console.error('Failed to start google-sync manager:', error);
+      });
     });
 
     // Tratamento de encerramento (único handler)
@@ -229,6 +233,7 @@ app.use((req, res) => {
       console.log('SIGTERM received, shutting down gracefully...');
       server.close(async () => {
         await stopPublishDueManager();
+        await stopGoogleSyncManager();
         await flushRequestLogs();
         await stopSyncJobsWorker();
         await stopRuleEngine();

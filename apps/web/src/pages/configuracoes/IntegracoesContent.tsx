@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import type { MetaConnection } from '@/types/meta';
+import { GoogleIntegrationCard } from './GoogleIntegrationCard';
 
 interface MetaAuthUrlResponse {
   success: boolean;
@@ -400,6 +401,14 @@ export function IntegracoesContent() {
           ))}
         </div>
       )}
+
+      {/* Google Meu Negócio */}
+      <div className="space-y-4">
+        <div className="pt-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+          Google Meu Negócio
+        </div>
+        <GoogleIntegrationCard />
+      </div>
     </div>
   );
 }

@@ -8,6 +8,8 @@ import {
   profileIdParamsSchema,
   verificationSchema,
   categoriesQuerySchema,
+  profileUpdateSchema,
+  syncLogsQuerySchema,
 } from '../schemas/google.schemas.js';
 
 const GOOGLE_MEU_NEGOCIO_PATH = '/configuracoes/google-meu-negocio';
@@ -219,6 +221,126 @@ export async function completeVerification(req: Request, res: Response, next: Ne
     const { id } = profileIdParamsSchema.parse(req.params);
     const { method } = verificationSchema.parse(req.body);
     const data = await googleService.completeVerification(id, req.tenant.tenantId, method);
+    res.status(200).json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getProfile(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const { id } = profileIdParamsSchema.parse(req.params);
+    const data = await googleService.getProfile(id, req.tenant.tenantId);
+    res.status(200).json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateProfile(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const { id } = profileIdParamsSchema.parse(req.params);
+    const parsed = profileUpdateSchema.parse(req.body);
+    const data = await googleService.updateProfile(id, req.tenant.tenantId, parsed);
+    res.status(200).json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function syncProfile(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const { id } = profileIdParamsSchema.parse(req.params);
+    const data = await googleService.syncProfile(id, req.tenant.tenantId);
+    res.status(200).json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getSyncLogs(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const { id } = profileIdParamsSchema.parse(req.params);
+    const { limit } = syncLogsQuerySchema.parse(req.query);
+    const data = await googleService.getSyncLogs(id, req.tenant.tenantId, limit);
+    res.status(200).json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function uploadPhoto(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const { id } = profileIdParamsSchema.parse(req.params);
+
+    if (!req.file) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Arquivo de foto e obrigatorio.');
+    }
+
+    const fileName = `google-photos/${id}/${Date.now()}-${req.file.originalname}`;
+    const data = await googleService.addPhoto(
+      id,
+      req.tenant.tenantId,
+      req.file.buffer,
+      fileName,
+      req.file.mimetype
+    );
+    res.status(200).json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deletePhoto(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.tenant?.tenantId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    }
+    const { id } = profileIdParamsSchema.parse(req.params);
+    const { url } = req.query;
+    if (!url || typeof url !== 'string') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'URL da foto e obrigatoria.');
+    }
+    const data = await googleService.removePhoto(id, req.tenant.tenantId, url);
     res.status(200).json({
       success: true,
       data,

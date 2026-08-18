@@ -1,8 +1,9 @@
 import { Loader2 } from 'lucide-react';
-import { api } from '@/lib/api';
+import api from '@/lib/api';
 import { useState } from 'react';
 
 interface GoogleLoginButtonProps {
+  label?: string;
   onSuccess: (data: {
     token: string;
     refreshToken: string;
@@ -21,14 +22,14 @@ const GOOGLE_ICON = (
   </svg>
 );
 
-export function GoogleLoginButton({ onSuccess, onError }: GoogleLoginButtonProps) {
+export function GoogleLoginButton({ label = 'Continuar com Google', onSuccess, onError }: GoogleLoginButtonProps) {
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
     try {
       setLoading(true);
       // Get Google OAuth URL from API
-      const { data } = await api.get('/api/auth/google/url');
+      const { data } = await api.get('/auth/google/url');
       // Redirect to Google OAuth
       window.location.href = data.data.authUrl;
     } catch (err) {
@@ -49,7 +50,7 @@ export function GoogleLoginButton({ onSuccess, onError }: GoogleLoginButtonProps
       ) : (
         <>
           {GOOGLE_ICON}
-          <span>Continuar com Google</span>
+          <span>{label}</span>
         </>
       )}
     </button>

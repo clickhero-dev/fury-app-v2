@@ -2,15 +2,24 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AppLayout, ErrorBoundary, PageHeader, LoadingSpinner } from '@/components';
 import { cn } from '@/lib/utils';
+import { useGoogleSettings } from '@/hooks/useGoogleSettings';
 import { GoogleConnectionCard } from './components/GoogleConnectionCard';
 import { ProfileLookupResult } from './components/ProfileLookupResult';
 import { BusinessProfileForm } from './components/BusinessProfileForm';
+import { ProfileStatusPanel } from './components/ProfileStatusPanel';
 import {
   useGoogleConnection,
   useGoogleLookup,
   useGoogleConnect,
   useGoogleDisconnect,
+  useCreateProfile,
+  useVerification,
+  useCompleteVerification,
+  useGoogleProfile,
+  useSyncProfile,
+  useSyncLogs,
 } from './useGoogleMeuNegocio';
+import type { GoogleCompleteVerificationInput, GoogleCreateProfileResult } from '@/types/google';
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   oauth_cancelled: 'Conexão com o Google cancelada ou expirada. Tente novamente.',
@@ -18,14 +27,49 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   token_exchange_failed: 'Não foi possível concluir a conexão com o Google. Tente novamente.',
 };
 
+function errorMessage(err: unknown): string {
+  const axiosErr = err as {
+    response?: { data?: { error?: { message?: string } } };
+    message?: string;
+  };
+  return (
+    axiosErr.response?.data?.error?.message ??
+    axiosErr.message ??
+    'Não foi possível concluir a operação. Tente novamente.'
+  );
+}
+
 function GoogleMeuNegocioContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
+  const [createdProfile, setCreatedProfile] = useState<GoogleCreateProfileResult | null>(null);
 
   const { data: connection, isLoading: connectionLoading } = useGoogleConnection();
   const { data: lookup, isLoading: lookupLoading, isError: lookupError } = useGoogleLookup(!!connection);
+  const { data: settings } = useGoogleSettings();
   const connectMutation = useGoogleConnect();
   const disconnectMutation = useGoogleDisconnect();
+  const createMutation = useCreateProfile();
+  const { data: verification, isLoading: verificationLoading } = useVerification(
+    createdProfile?.id ?? null,
+    !!createdProfile
+  );
+  const completeMutation = useCompleteVerification();
+  const { data: profile, isLoading: profileLoading } = useGoogleProfile(
+    createdProfile?.id ?? null,
+    !!createdProfile
+  );
+  const syncMutation = useSyncProfile();
+  const { data: syncLogs, isLoading: syncLogsLoading } = useSyncLogs(
+    createdProfile?.id ?? null,
+    !!createdProfile
+  );
+
+  const settingsComplete = Boolean(
+    settings?.name?.trim() &&
+      settings?.phone?.trim() &&
+      (settings?.address?.street?.trim() || settings?.address?.city?.trim())
+  );
 
   function showToast(message: string, variant: 'success' | 'error' = 'success') {
     setToast({ message, variant });
@@ -51,6 +95,40 @@ function GoogleMeuNegocioContent() {
       setSearchParams(next, { replace: true });
     }
   }, [searchParams, setSearchParams]);
+
+  function handleCreateProfile() {
+    createMutation.mutate(undefined, {
+      onSuccess: (data) => {
+        setCreatedProfile(data);
+        showToast('Perfil criado no Google. Aguardando verificação.');
+      },
+      onError: (err) => {
+        showToast(errorMessage(err), 'error');
+      },
+    });
+  }
+
+  function handleCompleteVerification(method: GoogleCompleteVerificationInput['method']) {
+    if (!createdProfile) return;
+    completeMutation.mutate(
+      { profileId: createdProfile.id, method },
+      {
+        onSuccess: (result) => {
+          if (result.syncStatus === 'verified') {
+            setCreatedProfile(null);
+            showToast('Perfil verificado pelo Google.');
+          } else if (result.postalGuidance) {
+            showToast('Cartão postal enviado. Siga as instruções para concluir a verificação.');
+          } else if (result.awaitingPin) {
+            showToast('PIN enviado. Confira seu telefone ou email e conclua a verificação no Google.');
+          }
+        },
+        onError: (err) => {
+          showToast(errorMessage(err), 'error');
+        },
+      }
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 sm:px-10">
@@ -90,7 +168,36 @@ function GoogleMeuNegocioContent() {
         isLoading={lookupLoading}
         isError={lookupError}
         hasConnection={!!connection}
+        settingsComplete={settingsComplete}
+        createdProfile={createdProfile}
+        isCreating={createMutation.isPending}
+        onCreate={handleCreateProfile}
+        verification={verification}
+        isVerificationLoading={verificationLoading}
+        onComplete={handleCompleteVerification}
+        isCompleting={completeMutation.isPending}
       />
+
+      {createdProfile && !profileLoading && profile && (
+        <ProfileStatusPanel
+          profile={profile}
+          syncLogs={syncLogs}
+          isSyncing={syncLogsLoading || syncMutation.isPending}
+          onSync={() =>
+            syncMutation.mutate(createdProfile.id, {
+              onSuccess: (synced) => {
+                if (synced.syncStatus === 'verified') {
+                  setCreatedProfile(null);
+                  showToast('Perfil sincronizado e verificado pelo Google.');
+                } else {
+                  showToast('Perfil sincronizado com sucesso.');
+                }
+              },
+              onError: (err) => showToast(errorMessage(err), 'error'),
+            })
+          }
+        />
+      )}
 
       <BusinessProfileForm
         onSaved={() => showToast('Dados do negócio salvos com sucesso.')}
