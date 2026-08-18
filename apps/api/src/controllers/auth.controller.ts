@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as authService from '../services/auth.service.js';
+import * as socialAuthService from '../services/social-auth.service.js';
 import { checkEmailVerificationRateLimit, checkForgotPasswordRateLimit, checkResetPasswordRateLimit } from '../middleware/rate-limit.middleware.js';
 
 const updateMeSchema = z.object({
@@ -291,5 +292,83 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
     });
   } catch (error) {
     next(error);
+  }
+}
+
+const SOCIAL_LOGIN_REDIRECT_URI = `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/auth/google/callback`;
+
+export async function googleSocialUrl(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { getGoogleOAuthConfig } = await import('../lib/google-oauth.js');
+    const { clientId } = getGoogleOAuthConfig();
+    const authUrl = socialAuthService.generateSocialLoginUrl(SOCIAL_LOGIN_REDIRECT_URI, clientId);
+    res.status(200).json({
+      success: true,
+      data: { authUrl },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function googleSocialCallback(req: Request, res: Response, next: NextFunction) {
+  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+
+  try {
+    const errorParam = req.query.error as string | undefined;
+    if (errorParam) {
+      res.redirect(`${frontendUrl}/login?error=oauth_cancelled`);
+      return;
+    }
+
+    const code = req.query.code as string | undefined;
+    if (!code) {
+      const { code: bodyCode } = (req.body || {}) as { code?: string };
+      if (!bodyCode) {
+        const { AppError } = await import('../middleware/errorHandler.js');
+        throw new AppError(400, 'MISSING_CODE', 'Code obrigatorio para login social.');
+      }
+      const result = await socialAuthService.handleGoogleSocialLogin(bodyCode, SOCIAL_LOGIN_REDIRECT_URI);
+      res.status(200).json({
+        success: true,
+        data: {
+          token: result.tokens.accessToken,
+          refreshToken: result.tokens.refreshToken,
+          user: {
+            id: result.user.id,
+            email: result.user.email,
+            name: result.user.name,
+            role: result.user.role,
+            tenantId: result.user.tenantId,
+          },
+          isNewUser: result.isNewUser,
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const result = await socialAuthService.handleGoogleSocialLogin(code, SOCIAL_LOGIN_REDIRECT_URI);
+    const tokenData = encodeURIComponent(JSON.stringify({
+      token: result.tokens.accessToken,
+      refreshToken: result.tokens.refreshToken,
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        name: result.user.name,
+        role: result.user.role,
+        tenantId: result.user.tenantId,
+      },
+      isNewUser: result.isNewUser,
+    }));
+    res.redirect(`${frontendUrl}/login?social_login=${tokenData}`);
+  } catch (error) {
+    const { AppError } = await import('../middleware/errorHandler.js');
+    const message = error instanceof AppError ? error.message : 'Erro ao fazer login com Google';
+    if (req.method === 'POST') {
+      return res.status(401).json({ success: false, error: { code: 'SOCIAL_LOGIN_FAILED', message } });
+    }
+    res.redirect(`${frontendUrl}/login?error=social_login_failed`);
   }
 }

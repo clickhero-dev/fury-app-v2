@@ -18,4 +18,9 @@ router.get('/me', authMiddleware, authController.getMe);
 router.patch('/me', authMiddleware, authController.updateMe);
 router.post('/change-password', authMiddleware, authController.changePassword);
 
+// Google social login
+router.get('/google/url', authController.googleSocialUrl);
+router.get('/google/callback', authController.googleSocialCallback);
+router.post('/google/callback', authController.googleSocialCallback);
+
 export default router;

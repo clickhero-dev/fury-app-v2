@@ -59,6 +59,7 @@ export const googleSyncStatusEnum = pgEnum('google_sync_status', [
   'awaiting_verification',
   'verified',
   'syncing',
+  'synced',
   'error',
 ]);
 
@@ -100,8 +101,9 @@ export const users = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 255 }),
-    email: varchar('email', { length: 255 }).notNull(),
-    passwordHash: text('password_hash').notNull(),
+    email: varchar('email', { length: 255 }).notNull().unique(),
+    passwordHash: text('password_hash'),
+    googleId: varchar('google_id', { length: 255 }),
     role: userRoleEnum('role').notNull().default('member'),
     notificationPrefs: jsonb('notification_prefs').default(sql`'{"campanhas":true,"performance":true,"equipe":false}'::jsonb`),
     audienceDefaults: jsonb('audience_defaults').default(sql`'{"city":"","ageMin":18,"ageMax":65,"gender":"all"}'::jsonb`),

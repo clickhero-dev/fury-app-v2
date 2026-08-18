@@ -98,6 +98,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0026_add_creative_quota_limits' },
   { tag: '0027_add_missing_planner_columns' },
   { tag: '0028_google_meu_negocio' },
+  { tag: '0029_google_social_login' },
   {
     tag: '0011_fr8_publish_retry',
     afterHook: async (client) => {
