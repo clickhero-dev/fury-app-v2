@@ -10,6 +10,9 @@ import { useVerifyEmail } from '@/hooks/useVerifyEmail';
 import { useResendOtp } from '@/hooks/useResendOtp';
 import type { RegisterRequest } from '@/types/auth';
 import { AdySymbol } from '@/components/AdySymbol';
+import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton';
+import { login as authLogin } from '@/store/slices/authSlice';
+import { store } from '@/store';
 
 const registerSchema = z.object({
   name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
@@ -39,6 +42,33 @@ export function RegisterPage() {
 
   // 🔄 DETECÇÃO DO MODO DO NAVEGADOR / SISTEMA
   useEffect(() => {
+    // Handle social login redirect
+    const params = new URLSearchParams(window.location.search);
+    const socialData = params.get('social_login');
+    if (socialData) {
+      try {
+        const data = JSON.parse(decodeURIComponent(socialData));
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        store.dispatch(authLogin({
+          token: data.token,
+          refreshToken: data.refreshToken,
+          name: data.user.name,
+          email: data.user.email,
+          tenantId: data.user.tenantId,
+        }));
+        if (data.isNewUser) {
+          navigate('/onboarding/conectar-meta');
+        } else {
+          navigate('/dashboard');
+        }
+        return;
+      } catch {
+        setError('Erro ao fazer cadastro com Google');
+      }
+    }
+
     const savedTheme = localStorage.getItem('theme') || localStorage.getItem('ady-theme');
 
     if (savedTheme === 'escuro' || savedTheme === 'dark') {
@@ -366,10 +396,31 @@ export function RegisterPage() {
           </button>
 
           {/* Divisor */}
-          <div className="relative my-4 flex items-center justify-center">
+          <div className="relative flex items-center justify-center">
             <div className="w-full border-t border-slate-200 dark:border-white/10" />
-            
+            <span className="absolute px-3 text-xs text-slate-400 dark:text-zinc-500 bg-white dark:bg-[#181915]">ou</span>
           </div>
+
+          <GoogleLoginButton
+            onSuccess={(data) => {
+              localStorage.setItem('token', data.token);
+              localStorage.setItem('refreshToken', data.refreshToken);
+              localStorage.setItem('user', JSON.stringify(data.user));
+              store.dispatch(authLogin({
+                token: data.token,
+                refreshToken: data.refreshToken,
+                name: data.user.name,
+                email: data.user.email,
+                tenantId: data.user.tenantId,
+              }));
+              if (data.isNewUser) {
+                navigate('/onboarding/conectar-meta');
+              } else {
+                navigate('/dashboard');
+              }
+            }}
+            onError={(msg) => setError(msg)}
+          />
 
           {/* Link para Login */}
           <p className="text-center text-sm text-slate-600 dark:text-zinc-400">

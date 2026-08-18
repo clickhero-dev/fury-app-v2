@@ -7,6 +7,9 @@ import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { useLogin } from '@/hooks/useLogin';
 import { AdySymbol } from '@/components/AdySymbol';
+import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton';
+import { login as authLogin } from '@/store/slices/authSlice';
+import { store } from '@/store';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -34,6 +37,29 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
+    // Handle social login redirect
+    const params = new URLSearchParams(window.location.search);
+    const socialData = params.get('social_login');
+    if (socialData) {
+      try {
+        const data = JSON.parse(decodeURIComponent(socialData));
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        store.dispatch(authLogin({
+          token: data.token,
+          refreshToken: data.refreshToken,
+          name: data.user.name,
+          email: data.user.email,
+          tenantId: data.user.tenantId,
+        }));
+        navigate('/dashboard');
+        return;
+      } catch {
+        setError('Erro ao fazer login com Google');
+      }
+    }
+
     const savedTheme = localStorage.getItem('theme') || localStorage.getItem('ady-theme');
 
     if (savedTheme === 'escuro' || savedTheme === 'dark') {
@@ -170,6 +196,28 @@ export function LoginPage() {
               'Entrar'
             )}
           </button>
+
+          <div className="relative flex items-center justify-center">
+            <div className="w-full border-t border-slate-200 dark:border-white/10" />
+            <span className="absolute px-3 text-xs text-slate-400 dark:text-zinc-500 bg-white dark:bg-[#181915]">ou</span>
+          </div>
+
+          <GoogleLoginButton
+            onSuccess={(data) => {
+              localStorage.setItem('token', data.token);
+              localStorage.setItem('refreshToken', data.refreshToken);
+              localStorage.setItem('user', JSON.stringify(data.user));
+              store.dispatch(authLogin({
+                token: data.token,
+                refreshToken: data.refreshToken,
+                name: data.user.name,
+                email: data.user.email,
+                tenantId: data.user.tenantId,
+              }));
+              navigate('/dashboard');
+            }}
+            onError={(msg) => setError(msg)}
+          />
 
           {error && (
             <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-center text-xs font-medium text-red-600 dark:text-red-400">
