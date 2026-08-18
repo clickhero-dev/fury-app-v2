@@ -297,8 +297,16 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
   }
 }
 
-function getSocialRedirectUri(): string {
-  return process.env.GOOGLE_SOCIAL_REDIRECT_URI || 'http://localhost:3000/api/auth/google/callback';
+function getSocialRedirectUri(req?: Request): string {
+  // Derive from the actual request host so it works in local/HMG/prod without
+  // a per-environment env var. Falls back to the env var if set, then localhost.
+  const envUri = process.env.GOOGLE_SOCIAL_REDIRECT_URI;
+  if (envUri && !envUri.includes('localhost')) return envUri;
+  if (req) {
+    const host = req.get('host');
+    if (host) return `${req.protocol}://${host}/api/auth/google/callback`;
+  }
+  return envUri || 'http://localhost:3000/api/auth/google/callback';
 }
 
 function getSocialFrontendUrl(state?: SocialStatePayload): string {
@@ -329,7 +337,7 @@ export async function googleSocialUrl(req: Request, res: Response, next: NextFun
   try {
     const { getGoogleOAuthConfig } = await import('../lib/google-oauth.js');
     const { clientId } = getGoogleOAuthConfig();
-    const redirectUri = getSocialRedirectUri();
+    const redirectUri = getSocialRedirectUri(req);
 
     // Accept frontend URL from query or header — enables multi-env without hardcoding
     const frontendOrigin = (req.query.origin as string)
@@ -350,7 +358,7 @@ export async function googleSocialUrl(req: Request, res: Response, next: NextFun
 }
 
 export async function googleSocialCallback(req: Request, res: Response, next: NextFunction) {
-  const redirectUri = getSocialRedirectUri();
+  const redirectUri = getSocialRedirectUri(req);
 
   try {
     const errorParam = req.query.error as string | undefined;
