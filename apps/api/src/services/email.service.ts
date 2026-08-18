@@ -35,7 +35,7 @@ interface SendEmailOptions {
   html: string;
 }
 
-async function sendEmail(options: SendEmailOptions): Promise<void> {
+export async function sendEmail(options: SendEmailOptions): Promise<void> {
   const transport = getTransporter();
   
   // O Resend em contas gratuitas exige o uso deste remetente padrão para testes

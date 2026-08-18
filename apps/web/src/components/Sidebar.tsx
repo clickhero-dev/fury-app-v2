@@ -10,7 +10,6 @@ import {
   BrainCircuit,
   CalendarDays,
   ChevronLeft,
-  Map,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useLogout } from '@/hooks/useLogout';
@@ -28,7 +27,6 @@ const nav = [
   { to: '/planejador', label: 'Planejador IA', icon: BrainCircuit },
   { to: '/calendario', label: 'Calendário', icon: CalendarDays },
   { to: '/estudio', label: 'Estúdio', icon: Palette },
-  { to: '/roadmap', label: 'Roadmap', icon: Map },
   { to: '/configuracoes/integracoes', label: 'Integrações', icon: Plug },
   { to: '/configuracoes', label: 'Configurações', icon: Settings },
   { to: '/assinatura', label: 'Assinatura', icon: CreditCard },

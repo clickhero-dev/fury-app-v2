@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { RegisterFormPage } from './pages/auth/RegisterFormPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
 import { ResetPasswordSuccessPage } from './pages/auth/ResetPasswordSuccessPage';
@@ -26,6 +27,7 @@ import { PlanejadorPage } from './pages/planejador/PlanejadorPage';
 import { CalendarioPage } from './pages/planejador/CalendarioPage';
 import { Configuracoes } from './pages/configuracoes/Configuracoes';
 import { Integracoes } from './pages/configuracoes/Integracoes';
+import { GoogleMeuNegocioPage } from './pages/configuracoes/google-meu-negocio/GoogleMeuNegocioPage';
 import { MinhasRegras } from './pages/automacao/MinhasRegras';
 import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
@@ -57,6 +59,10 @@ export const router = createBrowserRouter([
   {
     path: '/cadastro',
     element: <RegisterPage />,
+  },
+  {
+    path: '/cadastro/formulario',
+    element: <RegisterFormPage />,
   },
   {
     path: '/forgot-password',
@@ -133,6 +139,7 @@ export const router = createBrowserRouter([
       { path: '/calendario', element: <CalendarioPage /> },
       { path: '/configuracoes', element: <Configuracoes /> },
       { path: '/configuracoes/integracoes', element: <Integracoes /> },
+      { path: '/configuracoes/google-meu-negocio', element: <GoogleMeuNegocioPage /> },
       { path: '/configuracoes/brand-kit', element: <Navigate to="/configuracoes?tab=publico" replace /> },
       { path: '/planos', element: <Plans /> },
       { path: '/assinatura', element: <Subscription /> },

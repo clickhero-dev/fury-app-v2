@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppLayout, PageHeader } from '@/components'; // IMPORTANTE: Importar PageHeader
 import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
 import { useTheme } from '@/hooks/useTheme';
-import { Sun, Moon, Copy, ExternalLink } from 'lucide-react';
+import { Sun, Moon, Copy, ExternalLink, Megaphone, Building2 } from 'lucide-react';
 import api from '@/lib/api';
 import { MetasPage } from '../onboarding/MetasPage';
 import { PublicoContent } from './PublicoContent';
@@ -323,6 +323,51 @@ export function Configuracoes() {
                     </div>
                   </>
                 )}
+
+                {/* Seção 4: Integrações disponíveis */}
+                <hr className="border-border" />
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-text-primary">Integrações</h3>
+                    <p className="text-xs text-text-tertiary mt-0.5">
+                      Conecte e gerencie suas contas e perfis externos.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Link
+                      to="/configuracoes/integracoes"
+                      className={`${SURFACE_CARD} group flex items-center justify-between gap-4`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand/10 text-brand">
+                          <Megaphone className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-text-primary">Meta Ads</p>
+                          <p className="text-xs text-text-tertiary">Contas de anúncios conectadas</p>
+                        </div>
+                      </div>
+                      <span className="text-text-tertiary transition group-hover:text-brand">→</span>
+                    </Link>
+
+                    <Link
+                      to="/configuracoes/google-meu-negocio"
+                      className={`${SURFACE_CARD} group flex items-center justify-between gap-4`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand/10 text-brand">
+                          <Building2 className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-text-primary">Google Meu Negócio</p>
+                          <p className="text-xs text-text-tertiary">Perfil da sua empresa no Google</p>
+                        </div>
+                      </div>
+                      <span className="text-text-tertiary transition group-hover:text-brand">→</span>
+                    </Link>
+                  </div>
+                </div>
 
                 {/* Rodapé de Ações */}
                 <div className="flex justify-end gap-3 pt-4 border-t border-border">

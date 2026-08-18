@@ -171,6 +171,11 @@ export async function login(data: {
     throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
   }
 
+  // Users registered via Google have passwordHash = null
+  if (!user.passwordHash) {
+    throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+  }
+
   const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
 
   if (!isPasswordValid) {
@@ -432,6 +437,10 @@ export async function changePassword(
 
   if (!user) {
     throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
+  }
+
+  if (!user.passwordHash) {
+    throw new AppError(400, 'NO_PASSWORD', 'Login feito com Google. Defina uma senha nas configurações.');
   }
 
   const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
