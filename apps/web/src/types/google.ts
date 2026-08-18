@@ -103,6 +103,7 @@ export interface GoogleBusinessProfile {
     | 'awaiting_verification'
     | 'verified'
     | 'syncing'
+    | 'synced'
     | 'error';
   lastSyncedAt: string | null;
 }
@@ -116,6 +117,11 @@ export interface GoogleSyncLog {
   createdAt: string;
 }
 
+/** Resposta paginada de histórico de sincronização (GET /profiles/:id/sync-logs). */
+export interface GoogleSyncLogsResult {
+  logs: GoogleSyncLog[];
+}
+
 /** Resposta de criação de perfil (US2). */
 export interface GoogleCreateProfileResult {
   id: string;
@@ -124,4 +130,38 @@ export interface GoogleCreateProfileResult {
   syncStatus: GoogleBusinessProfile['syncStatus'];
   verificationState: GoogleBusinessProfile['verificationState'];
   created: boolean;
+  verificationInstructions?: string;
+}
+
+/** Método de verificação elegível (GET /profiles/:id/verification). */
+export interface GoogleVerificationOption {
+  method: 'POSTAL' | 'PHONE' | 'EMAIL';
+  description: string;
+}
+
+/** Status e opções de verificação do perfil (US2). */
+export interface GoogleVerificationResult {
+  verificationState: GoogleBusinessProfile['verificationState'];
+  options: GoogleVerificationOption[];
+  instructions: string;
+}
+
+/** Payload para concluir a verificação (POST /profiles/:id/verification/complete). */
+export interface GoogleCompleteVerificationInput {
+  method: 'POSTAL' | 'PHONE' | 'EMAIL';
+}
+
+/** Resultado da conclusão da verificação (US2). */
+export interface GoogleCompleteVerificationResult {
+  verificationState: GoogleBusinessProfile['verificationState'];
+  awaitingPin?: boolean;
+  postalGuidance?: boolean;
+  syncStatus?: GoogleBusinessProfile['syncStatus'];
+  instructions?: string;
+}
+
+/** Resultado de upload/remoção de foto (US3). */
+export interface GooglePhotoUploadResult {
+  photos: string[];
+  associatedManually: true;
 }
