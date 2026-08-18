@@ -295,13 +295,16 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
   }
 }
 
-const SOCIAL_LOGIN_REDIRECT_URI = `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/auth/google/callback`;
+function getSocialRedirectUri(req: Request): string {
+  return `${req.protocol}://${req.get('host')}/api/auth/google/callback`;
+}
 
 export async function googleSocialUrl(req: Request, res: Response, next: NextFunction) {
   try {
     const { getGoogleOAuthConfig } = await import('../lib/google-oauth.js');
     const { clientId } = getGoogleOAuthConfig();
-    const authUrl = socialAuthService.generateSocialLoginUrl(SOCIAL_LOGIN_REDIRECT_URI, clientId);
+    const redirectUri = getSocialRedirectUri(req);
+    const authUrl = socialAuthService.generateSocialLoginUrl(redirectUri, clientId);
     res.status(200).json({
       success: true,
       data: { authUrl },
@@ -313,7 +316,13 @@ export async function googleSocialUrl(req: Request, res: Response, next: NextFun
 }
 
 export async function googleSocialCallback(req: Request, res: Response, next: NextFunction) {
-  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+  // Derive frontend URL from request host to keep local/HMG/prod consistent
+  const reqHost = req.get('host') || 'localhost:5173';
+  const isLocalhost = reqHost.startsWith('localhost');
+  const frontendUrl = isLocalhost
+    ? `http://${reqHost.replace(/:\d+$/, ':5173')}`
+    : `https://${reqHost.replace('-fury-api', '-fury-web')}`;
+  const redirectUri = getSocialRedirectUri(req);
 
   try {
     const errorParam = req.query.error as string | undefined;
@@ -329,7 +338,7 @@ export async function googleSocialCallback(req: Request, res: Response, next: Ne
         const { AppError } = await import('../middleware/errorHandler.js');
         throw new AppError(400, 'MISSING_CODE', 'Code obrigatorio para login social.');
       }
-      const result = await socialAuthService.handleGoogleSocialLogin(bodyCode, SOCIAL_LOGIN_REDIRECT_URI);
+      const result = await socialAuthService.handleGoogleSocialLogin(bodyCode, redirectUri);
       res.status(200).json({
         success: true,
         data: {
@@ -349,7 +358,7 @@ export async function googleSocialCallback(req: Request, res: Response, next: Ne
       return;
     }
 
-    const result = await socialAuthService.handleGoogleSocialLogin(code, SOCIAL_LOGIN_REDIRECT_URI);
+    const result = await socialAuthService.handleGoogleSocialLogin(code, redirectUri);
     const tokenData = encodeURIComponent(JSON.stringify({
       token: result.tokens.accessToken,
       refreshToken: result.tokens.refreshToken,
@@ -362,7 +371,8 @@ export async function googleSocialCallback(req: Request, res: Response, next: Ne
       },
       isNewUser: result.isNewUser,
     }));
-    res.redirect(`${frontendUrl}/login?social_login=${tokenData}`);
+    const redirectPath = result.isNewUser ? '/cadastro' : '/login';
+    res.redirect(`${frontendUrl}${redirectPath}?social_login=${tokenData}`);
   } catch (error) {
     const { AppError } = await import('../middleware/errorHandler.js');
     const message = error instanceof AppError ? error.message : 'Erro ao fazer login com Google';
