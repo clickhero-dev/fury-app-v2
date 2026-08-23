@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'default' | 'primary' | 'outline' | 'ghost' | 'destructive';
+  variant?: 'default' | 'primary' | 'outline' | 'ghost' | 'destructive' | 'spark' | 'soft';
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -37,7 +37,15 @@ export function Button({
         // Destructive: Vermelho sutil
         variant === 'destructive' &&
           'bg-[#E5534B] text-white hover:bg-[#E5534B]/90 active:bg-[#E5534B]/80',
-        
+
+        // Spark: Laranja vibrante com texto branco (para chamadas de ação)
+        variant === 'spark' &&
+          'bg-[#F97316] text-white hover:bg-[#F97316]/90 hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg',
+
+        // Soft: Fundo suave com texto colorido (para ações secundárias)
+        variant === 'soft' &&
+          'bg-[#1E88A8]/10 text-[#1E88A8] hover:bg-[#1E88A8]/20 active:bg-[#1E88A8]/30 border border-[#1E88A8]/20',
+
         // Tamanhos
         size === 'sm' && 'px-4 py-2 text-xs',
         size === 'md' && 'px-5 py-2.5 text-xs',

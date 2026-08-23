@@ -4,8 +4,10 @@ import { CalendarView } from './components/CalendarView';
 export function CalendarioPage() {
   return (
     <AppLayout>
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        <CalendarView />
+      <div className="flex w-full items-center justify-center p-3 sm:p-4 md:h-[calc(100vh-3.5rem)]">
+        <div className="w-full max-w-6xl">
+          <CalendarView />
+        </div>
       </div>
     </AppLayout>
   );

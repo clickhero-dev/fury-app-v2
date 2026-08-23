@@ -1,5 +1,5 @@
 import { generateAccessToken } from '../../lib/jwt.js';
-import { db, tenants, users, metaConnections, campaigns, creativeAssets, automationRules } from '@fury/db';
+import { db, tenants, users, metaConnections, campaigns, creativeAssets, automationRules, campaignPlans, socialPosts } from '@fury/db';
 import { eq } from 'drizzle-orm';
 
 export interface TestUser {
@@ -71,6 +71,10 @@ export async function cleanupDatabase() {
     // Delete in correct order due to foreign keys
     const { furyInsights, clientGoals } = await import('@fury/db');
 
+    // Fase 4: adicionar limpeza de calendar-related tables
+    await db.delete(socialPosts); // Deve vir antes de campaignPlans por FK
+    await db.delete(campaignPlans); // Deve vir antes de tenants por FK
+
     await db.delete(furyInsights);
     await db.delete(clientGoals);
     await db.delete(campaigns);
@@ -82,6 +86,63 @@ export async function cleanupDatabase() {
   } catch (error) {
     console.error('Error cleaning up database:', error);
   }
+}
+
+/**
+ * Cria um plano de teste para testes de calendário (Fase 4)
+ */
+export async function createTestPlan(
+  tenantId: string,
+  periodStart: Date = new Date(2026, 7, 1), // agosto 2026
+): Promise<typeof campaignPlans.$inferSelect> {
+  const periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
+
+  const [plan] = await db
+    .insert(campaignPlans)
+    .values({
+      tenantId,
+      title: `Test Plan ${periodStart.toISOString()}`,
+      type: 'monthly',
+      periodStart,
+      periodEnd,
+      status: 'draft',
+    })
+    .returning();
+
+  return plan;
+}
+
+/**
+ * Cria um post social de teste para testes de calendário (Fase 4)
+ */
+export async function createTestSocialPost(
+  tenantId: string,
+  opts: {
+    planId?: string | null;
+    dayIndex?: number;
+    calendarDate?: string;
+    platform?: string;
+    postType?: string;
+    status?: string;
+    scheduledAt?: Date | null;
+  } = {}
+): Promise<typeof socialPosts.$inferSelect> {
+  const [post] = await db
+    .insert(socialPosts)
+    .values({
+      tenantId,
+      planId: opts.planId ?? null,
+      dayIndex: opts.dayIndex ?? 15,
+      calendarDate: opts.calendarDate ?? null,
+      platform: opts.platform ?? 'instagram',
+      postType: opts.postType ?? 'image',
+      status: opts.status ?? 'draft',
+      caption: 'Test caption',
+      scheduledAt: opts.scheduledAt ?? null,
+    })
+    .returning();
+
+  return post;
 }
 
 export function getAuthHeader(token: string): { Authorization: string } {

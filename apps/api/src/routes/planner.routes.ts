@@ -20,7 +20,8 @@ import {
   handleUploadMedia,
 } from '../controllers/planner.controller.js';
 
-const router = Router();
+
+const router: Router = Router();
 
 const mediaUpload = multer({
   storage: multer.memoryStorage(),

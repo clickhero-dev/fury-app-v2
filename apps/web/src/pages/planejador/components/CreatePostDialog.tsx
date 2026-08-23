@@ -6,7 +6,10 @@ import api from '@/lib/api';
 
 interface Props {
   mode: 'schedule' | 'now';
+  /** Fase 6: Legado — dia do mês (1-31) */
   preselectedDay?: number | null;
+  /** Fase 8: Novo — ISO date string (ex: "2026-08-19") */
+  preselectedDate?: string | null;
   onClose: () => void;
   onCreated: (message: string) => void;
   onError?: (msg: string) => void;
@@ -19,18 +22,33 @@ const TYPE_OPTIONS = [
   { value: 'stories', label: 'Stories', icon: Sparkles, desc: 'Efêmero 24h' },
 ] as const;
 
-export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, onError }: Props) {
+export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, preselectedDate, onError }: Props) {
   const [caption, setCaption] = useState('');
   const [postType, setPostType] = useState('image');
-  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledDate, setScheduledDate] = useState(preselectedDate || '');
   const [scheduledTime, setScheduledTime] = useState('');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [showSchedule, setShowSchedule] = useState(mode === 'schedule');
+  const [showSchedule, setShowSchedule] = useState(mode === 'schedule' || !!preselectedDate);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const today = preselectedDay ?? new Date().getDate();
+  // Fase 8: Prioriza preselectedDate (novo) sobre preselectedDay (legado)
+  const getEffectiveDate = (): string => {
+    if (preselectedDate) return preselectedDate; // ISO string: "2026-08-19"
+    if (preselectedDay) {
+      // Legado: construir ISO date a partir de dia do mês
+      const now = new Date();
+      const dateObj = new Date(now.getFullYear(), now.getMonth(), preselectedDay);
+      return dateObj.toISOString().split('T')[0];
+    }
+    // Default: hoje
+    return new Date().toISOString().split('T')[0];
+  };
+
+  const effectiveDate = getEffectiveDate();
+  // Extrair dayIndex do effective date (para compatibilidade backward)
+  const dayIndexFromDate = parseInt(effectiveDate.split('-')[2]);
 
   const scheduledAt = scheduledDate && scheduledTime
     ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
@@ -64,8 +82,12 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, onE
         });
         imageUrl = uploadRes.data.url;
       }
+      // Fase 8: Enviar `date` (novo formato) ao invés de `dayIndex` (legado)
+      // API aceita ambos (z.union), mas novo formato é preferido
       await api.post('/planner/posts', {
-        caption, postType, dayIndex: today,
+        caption,
+        postType,
+        date: scheduledDate || effectiveDate, // ISO string: "2026-08-19"
         scheduledAt: scheduledAt || (isNow ? new Date().toISOString() : undefined),
         imageUrl,
       });

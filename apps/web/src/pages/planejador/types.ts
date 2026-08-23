@@ -30,6 +30,7 @@ export interface Post {
   imagePrompt?: string;
   imageUrl?: string;
   dayIndex: number;
+  date: string; // Fase 5: ISO date string (ex: "2026-08-19") — sempre presente da API
   status: string;
   scheduledAt?: string;
 }

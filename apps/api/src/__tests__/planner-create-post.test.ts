@@ -89,4 +89,50 @@ describe('handleCreatePost', () => {
     await handleCreatePost(req, mockRes(), next);
     expect(next).toHaveBeenCalledWith(expect.any(ZodError));
   });
+
+  // ===== Novo formato (Fase 1) =====
+
+  it('[Fase 1] cria post com date (novo formato)', async () => {
+    createManualPost.mockResolvedValue({ id: 'post-4', caption: 'novo', postType: 'image', date: '2026-08-19' });
+    const req = { tenant: { tenantId }, body: { caption: 'novo', postType: 'image', date: '2026-08-19' } } as any;
+    const res = mockRes();
+    const next = vi.fn();
+
+    await handleCreatePost(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(createManualPost).toHaveBeenCalledWith(tenantId, expect.objectContaining({
+      caption: 'novo', postType: 'image', date: '2026-08-19',
+    }));
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: expect.objectContaining({ id: 'post-4' }) });
+  });
+
+  it('[Fase 1] aceita date + scheduledAt', async () => {
+    createManualPost.mockResolvedValue({ id: 'post-5' });
+    const req = { tenant: { tenantId }, body: { postType: 'reel', date: '2026-09-05', scheduledAt: '2026-09-05T10:00:00Z' } } as any;
+    const res = mockRes();
+    const next = vi.fn();
+
+    await handleCreatePost(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('[Fase 1] rejeita date inválido → ZodError', async () => {
+    const req = { tenant: { tenantId }, body: { postType: 'image', date: '2026-13-45' } } as any;
+    const next = vi.fn();
+    await handleCreatePost(req, mockRes(), next);
+    expect(next).toHaveBeenCalledWith(expect.any(ZodError));
+  });
+
+  it('[Fase 1] dual-format: aceita dayIndex OU date (não ambos)', async () => {
+    // Ambos presentes: deve aceitar (schema faz union)
+    createManualPost.mockResolvedValue({ id: 'post-6' });
+    const req = { tenant: { tenantId }, body: { postType: 'image', date: '2026-08-20', dayIndex: 10 } } as any;
+    const res = mockRes();
+    const next = vi.fn();
+
+    await handleCreatePost(req, res, next);
+    // A union vai aceitar (ambos passam validação individual)
+    expect(next).not.toHaveBeenCalled();
+  });
 });

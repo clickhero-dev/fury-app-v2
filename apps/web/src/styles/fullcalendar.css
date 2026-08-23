@@ -1,0 +1,52 @@
+/**
+ * Fase 7: FullCalendar v6.1.21 CSS Import
+ *
+ * Este arquivo importa os estilos globais do FullCalendar.
+ * As variáveis CSS (--fc-*) são definidas em index.css
+ * e sincronizam automaticamente com o tema light/dark.
+ *
+ * Uso: import '@/styles/fullcalendar.css' em CalendarView.tsx
+ *      ou @import url('./styles/fullcalendar.css') em index.css
+ */
+
+/**
+ * IMPORTANTE: FullCalendar CSS deve ser importado via <link> tag no HTML (index.html)
+ * ou via npm package sem usar @import (export issue com v6.1.21).
+ *
+ * Adicionado na seção <head> do index.html (Fase 7.1):
+ * <link href="/node_modules/@fullcalendar/core/index.global.css" rel="stylesheet" />
+ * <link href="/node_modules/@fullcalendar/daygrid/index.global.css" rel="stylesheet" />
+ * <link href="/node_modules/@fullcalendar/timegrid/index.global.css" rel="stylesheet" />
+ * <link href="/node_modules/@fullcalendar/list/index.global.css" rel="stylesheet" />
+ *
+ * Ou instalar via CDN:
+ * https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.21/index.global.css
+ *
+ * As variáveis CSS (--fc-*) em index.css substituem as cores padrão.
+ */
+
+/**
+ * Ajustes adicionais para sincronizar com tema FURY
+ * (complementa as variáveis --fc-* do index.css)
+ */
+
+/* Garantir que o container do FullCalendar herda cores do tema */
+.fc {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Reforçar contraste em dark mode */
+.dark .fc-button {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Eventos com melhor contraste */
+.fc-event {
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.dark .fc-event {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}

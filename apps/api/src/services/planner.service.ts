@@ -1,5 +1,5 @@
 import { db, campaignPlans, socialPosts, metaConnections, clientGoals, brandKits } from '@fury/db';
-import { eq, and, desc, gt, inArray, isNull, or, lte, sql } from 'drizzle-orm';
+import { eq, and, desc, gt, gte, lt, not, inArray, isNull, or, lte, sql } from 'drizzle-orm';
 import { jobs, generateId, runPipeline } from '../agents/orchestrator.js';
 import { openrouterService } from './openrouter.service.js';
 import type { JobStatus } from '../agents/types.js';
@@ -175,48 +175,54 @@ export async function updatePostFields(
 
 // ===== Calendário Editorial =====
 
-export async function getCalendarPosts(tenantId: string, year: number, month: number) {
-  // ponytail: traz todos os posts do tenant, frontend filtra por mês
-  // Posts de plano: month vem do campaignPlans.periodStart
-  // Posts manuais: month vem do scheduledAt
-  const plans = await db.query.campaignPlans.findMany({
-    where: eq(campaignPlans.tenantId, tenantId),
-    with: { posts: true },
-  });
-
-  const manualPosts = await db.query.socialPosts.findMany({
+/**
+ * Função genérica: retorna posts de um range de datas usando calendar_date direto.
+ *
+ * @param tenantId - ID do tenant
+ * @param startDate - ISO string (ex: "2026-08-01")
+ * @param endDate - ISO string, exclusivo (ex: "2026-09-01")
+ *
+ * Lógica (Fase 3 — query direta em calendar_date):
+ * - Filtra posts onde calendar_date >= startDate AND calendar_date < endDate
+ * - Exclui posts com status 'rejected' ou 'failed'
+ * - Carrega dados do plano pai (se houver) para preencher _source/_planTitle
+ */
+export async function getCalendarPostsByDateRange(
+  tenantId: string,
+  startDate: string,
+  endDate: string,
+): Promise<Array<Record<string, any>>> {
+  // Query direta: filtra por calendar_date no range [startDate, endDate)
+  const allPosts = await db.query.socialPosts.findMany({
     where: and(
       eq(socialPosts.tenantId, tenantId),
-      isNull(socialPosts.planId),
+      gte(socialPosts.calendarDate, startDate),
+      lt(socialPosts.calendarDate, endDate),
+      not(inArray(socialPosts.status, ['rejected', 'failed'])),
     ),
+    with: { plan: true }, // Carrega plano pai para _planTitle
   });
 
-  // Computa month pra cada post
-  const allPosts: Array<Record<string, any>> = [];
+  // Enriquece com metadados
+  return allPosts.map(post => ({
+    ...post,
+    _source: post.planId ? 'plan' : 'manual',
+    _planTitle: post.plan?.title ?? null,
+  }));
+}
 
-  for (const plan of plans) {
-    if (!plan.periodStart) continue;
-    const planMonth = plan.periodStart.getMonth() + 1;
-    const planYear = plan.periodStart.getFullYear();
-    if (planYear !== year || planMonth !== month) continue;
+/**
+ * Função antiga (mantida para backwards compatibility com queries year/month).
+ * Internamente converte para range de datas e chama getCalendarPostsByDateRange.
+ */
+export async function getCalendarPosts(tenantId: string, year: number, month: number) {
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 1);
 
-    for (const post of plan.posts) {
-      if (post.status === 'rejected' || post.status === 'failed') continue;
-      allPosts.push({ ...post, _source: 'plan', _planTitle: plan.title });
-    }
-  }
+  const startDateStr = startDate.toISOString().split('T')[0];
+  const endDateStr = endDate.toISOString().split('T')[0];
 
-  for (const post of manualPosts) {
-    if (post.status === 'rejected' || post.status === 'failed') continue;
-    const refDate = post.scheduledAt || post.createdAt;
-    if (!refDate) continue;
-    const postMonth = refDate.getMonth() + 1;
-    const postYear = refDate.getFullYear();
-    if (postYear !== year || postMonth !== month) continue;
-    allPosts.push({ ...post, _source: 'manual' });
-  }
-
-  return allPosts;
+  return getCalendarPostsByDateRange(tenantId, startDateStr, endDateStr);
 }
 
 export async function bulkSchedulePosts(tenantId: string, postIds: string[], scheduledAt: string | null) {
@@ -262,19 +268,49 @@ export async function bulkDeletePosts(tenantId: string, postIds: string[]) {
 export async function createManualPost(tenantId: string, data: {
   caption?: string;
   postType: string;
-  dayIndex: number;
+  dayIndex?: number;
+  date?: string; // ISO date: "2026-08-19" (novo formato, Fase 1)
   platform?: string;
   scheduledAt?: string;
   title?: string;
   imageUrl?: string;
 }) {
+  // Dual-format: calcula dayIndex e calendarDate a partir de date ou dayIndex
+  let dayIndex = data.dayIndex;
+  let calendarDate: string | null = null;
+
+  if (data.date) {
+    // Novo formato: date completa
+    const dateObj = new Date(data.date);
+    dayIndex = dateObj.getUTCDate();
+    calendarDate = data.date;
+  } else if (dayIndex) {
+    // Formato antigo: dayIndex — calendarDate usa mês corrente (fallback Fase 2, seção 4, passo 2/3)
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const lastDayOfMonth = new Date(year, month + 1, 0).getUTCDate();
+    const clampedDay = Math.min(dayIndex, lastDayOfMonth);
+    const date = new Date(Date.UTC(year, month, clampedDay));
+    calendarDate = date.toISOString().split('T')[0];
+  } else {
+    // Fallback: dia 1 de mês corrente
+    const now = new Date();
+    dayIndex = 1;
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const date = new Date(Date.UTC(year, month, 1));
+    calendarDate = date.toISOString().split('T')[0];
+  }
+
   const [post] = await db.insert(socialPosts)
     .values({
       tenantId,
       planId: null,
       caption: data.caption || '',
       postType: data.postType as any,
-      dayIndex: data.dayIndex,
+      dayIndex: dayIndex || 1,
+      calendarDate,
       platform: data.platform || 'instagram',
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
       title: data.title || null,
@@ -285,15 +321,82 @@ export async function createManualPost(tenantId: string, data: {
   return post;
 }
 
+/**
+ * Move post por dayIndex (formato legado da Fase 1).
+ * Mantém o mês vigente: busca calendar_date atual, troca só o dia, grava resultado.
+ * Isso preserva o comportamento "move dentro do mês" para clientes antigos.
+ */
 export async function movePostDay(tenantId: string, postId: string, dayIndex: number) {
+  // Busca o post atual para ter a calendar_date vigente
+  const [post] = await db.query.socialPosts.findMany({
+    where: and(eq(socialPosts.id, postId), eq(socialPosts.tenantId, tenantId)),
+    limit: 1,
+  });
+  if (!post) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+
+  // Se o post tem calendar_date, extrai mês/ano e aplica novo dayIndex
+  let newCalendarDate: string | null = null;
+  if (post.calendarDate) {
+    const currentDate = new Date(post.calendarDate);
+    const year = currentDate.getUTCFullYear();
+    const month = currentDate.getUTCMonth();
+    const lastDayOfMonth = new Date(year, month + 1, 0).getUTCDate();
+    const clampedDay = Math.min(dayIndex, lastDayOfMonth);
+    const newDate = new Date(Date.UTC(year, month, clampedDay));
+    newCalendarDate = newDate.toISOString().split('T')[0];
+  } else {
+    // Fallback: nenhuma calendar_date, usar mês corrente
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const lastDayOfMonth = new Date(year, month + 1, 0).getUTCDate();
+    const clampedDay = Math.min(dayIndex, lastDayOfMonth);
+    const newDate = new Date(Date.UTC(year, month, clampedDay));
+    newCalendarDate = newDate.toISOString().split('T')[0];
+  }
+
   const [updated] = await db.update(socialPosts)
-    .set({ dayIndex, updatedAt: new Date() })
+    .set({ dayIndex, calendarDate: newCalendarDate, updatedAt: new Date() })
     .where(and(eq(socialPosts.id, postId), eq(socialPosts.tenantId, tenantId)))
     .returning();
   if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
   return updated;
 }
 
+/**
+ * Move post por data completa (novo formato, Fase 1).
+ * Extrai o dayIndex da data e grava tanto dayIndex quanto calendar_date.
+ */
+export async function movePostDate(
+  tenantId: string, 
+  postId: string, 
+  date: string, 
+  scheduledAt?: string
+) {
+  const dateObj = new Date(date);
+  const dayIndex = dateObj.getUTCDate();
+  const calendarDate = date;
+
+  // Monta o objeto de atualização
+  const updateData: Record<string, any> = {
+    dayIndex,
+    calendarDate,
+    updatedAt: new Date(),
+  };
+
+  // Se um novo scheduledAt (data + hora) foi informado, converte e adiciona
+  if (scheduledAt) {
+    updateData.scheduledAt = new Date(scheduledAt);
+  }
+
+  const [updated] = await db.update(socialPosts)
+    .set(updateData)
+    .where(and(eq(socialPosts.id, postId), eq(socialPosts.tenantId, tenantId)))
+    .returning();
+
+  if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+  return updated;
+}
 // ===== Calendário Editorial: Publicação Automática =====
 
 const RETRY_BACKOFF_MINUTES = [1, 5, 15];

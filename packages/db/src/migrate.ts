@@ -99,6 +99,8 @@ const STEPS: MigrationStep[] = [
   { tag: '0027_add_missing_planner_columns' },
   { tag: '0028_google_meu_negocio' },
   { tag: '0029_google_social_login' },
+  { tag: '0030_add_calendar_date_to_social_posts' },
+ 
   {
     tag: '0011_fr8_publish_retry',
     afterHook: async (client) => {

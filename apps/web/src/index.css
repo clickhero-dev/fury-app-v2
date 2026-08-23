@@ -1,764 +1,512 @@
 @import "tailwindcss";
+@import "./pages/planejador/components/CalendarView.css";
 
 @plugin "tailwindcss-animate";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-
-
 /* =========================================================
-
    1. DEFINIÇÃO DAS VARIÁVEIS DE CORES
-
    ========================================================= */
-
-
 
 /* ── TEMA CLARO (Padrão) ────────────────────────────────── */
-
 :root,
-
 html[data-theme="claro"] {
-
   color-scheme: light;
 
-
-
   /* Fundo e Superfícies */
-
   --bg-background: #EBEEF0;
-
   --bg-surface: #FFFFFF;
-
   --bg-surface-secondary: #F1F5F9;
 
-
-
   /* Sidebar */
-
   --bg-sidebar: #FFFFFF;
-
   --bg-sidebar-hover: #F1F5F9;
-
   --bg-sidebar-active: rgba(30, 136, 168, 0.1);
-
   --text-sidebar: #0F172A;
-
   --icon-sidebar: #1E88A8;
 
-
-
   /* Tipografia */
-
   --text-primary: #0F172A;
-
   --text-secondary: #475569;
-
   --text-tertiary: #64748B;
 
-
-
   /* Bordas */
-
   --border-main: #E2E8F0;
-
   --border-light: #CBD5E1;
 
-
-
   /* Admin Aliases */
-
   --admin-bg: #EBEEF0;
-
   --admin-surface: #FFFFFF;
-
   --admin-surface-2: #F1F5F9;
-
   --admin-border: #E2E8F0;
-
   --admin-text: #0F172A;
-
   --admin-text-muted: #64748B;
-
   --admin-text-faint: #94A3B8;
 
+  /* Mapeamento das Cores do Planejador IA */
+  --teal: #1E88A8;
+  --teal-soft: #e6f4f8;
+  --spark: #CF6F03;
+  --spark-foreground: #ffffff;
+  --gradient-teal: linear-gradient(135deg, #16728d, #1e88a8);
+  --gradient-spark: linear-gradient(135deg, #CF6F03, #B55F02);
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px -16px rgba(15, 23, 42, 0.18);
+  --shadow-lift: 0 2px 4px rgba(15, 23, 42, 0.05), 0 24px 48px -24px rgba(30, 136, 168, 0.35);
 }
-
-
 
 /* ── TEMA ESCURO ───────────────────────────────────────── */
-
 .dark,
-
 html[data-theme="escuro"] {
-
   color-scheme: dark;
 
-
-
   /* Fundo e Superfícies */
-
   --bg-background: #0C0D0A;
-
   --bg-surface: #141512;
-
   --bg-surface-secondary: #1C1D1A;
 
-
-
   /* Sidebar */
-
   --bg-sidebar: #141512;
-
   --bg-sidebar-hover: #1C1D1A;
-
   --bg-sidebar-active: rgba(30, 136, 168, 0.15);
-
   --text-sidebar: #ECEDEF;
-
   --icon-sidebar: #1E88A8;
 
-
-
   /* Tipografia */
-
   --text-primary: #ECEDEF;
-
   --text-secondary: #A3A8B3;
-
   --text-tertiary: #8E939D;
 
-
-
   /* Bordas */
-
   --border-main: #1F211D;
-
   --border-light: #262824;
 
-
-
   /* Admin Aliases */
-
   --admin-bg: #0C0D0A;
-
   --admin-surface: #141512;
-
   --admin-surface-2: #1C1D1A;
-
   --admin-border: #1F211D;
-
   --admin-text: #ECEDEF;
-
   --admin-text-muted: #8E939D;
-
   --admin-text-faint: #525853;
 
+  /* Mapeamento das Cores do Planejador IA (Escuro) */
+  --teal: #1E88A8;
+  --teal-soft: rgba(30, 136, 168, 0.2);
+  --spark: #CF6F03;
+  --spark-foreground: #ffffff;
+  --gradient-teal: linear-gradient(135deg, #0e4c5f, #16728d);
+  --gradient-spark: linear-gradient(135deg, #CF6F03, #B55F02);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 32px -16px rgba(0, 0, 0, 0.6);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.4), 0 24px 48px -24px rgba(0, 0, 0, 0.7);
 }
 
-
-
-
-
 /* =========================================================
-
    2. CONFIGURAÇÃO DO TAILWIND THEME (V4)
-
    ========================================================= */
-
 @theme {
-
   --font-sans: "Gantari", ui-sans-serif, system-ui, sans-serif;
 
-
-
   /* Mapeamento dinâmico das variáveis */
-
   --color-background: var(--bg-background);
-
   --color-surface: var(--bg-surface);
-
   --color-surface-secondary: var(--bg-surface-secondary);
 
-
-
   --color-sidebar-bg: var(--bg-sidebar);
-
   --color-sidebar: var(--bg-sidebar);
-
   --color-sidebar-hover: var(--bg-sidebar-hover);
-
   --color-sidebar-active: var(--bg-sidebar-active);
-
   --color-sidebar-text: var(--text-sidebar);
-
   --color-sidebar-icon: var(--icon-sidebar);
 
-
-
   /* Marca ady */
-
   --color-brand: #1E88A8;
-
   --color-brand-hover: #17708A;
-
   --color-brand-light: rgba(30, 136, 168, 0.15);
 
-
-
   --color-accent: #CF6F03;
-
   --color-accent-light: #E07B0B;
 
-
+  /* Cores do Planejador */
+  --color-spark: var(--spark);
+  --color-spark-foreground: var(--spark-foreground);
+  --color-teal: var(--teal);
+  --color-teal-soft: var(--teal-soft);
 
   /* Tipografia */
-
   --color-text-primary: var(--text-primary);
-
   --color-text-secondary: var(--text-secondary);
-
   --color-text-tertiary: var(--text-tertiary);
 
-
-
   /* Bordas */
-
   --color-border: var(--border-main);
-
   --color-border-light: var(--border-light);
 
-
-
   /* Status */
-
   --color-success: #2ea043;
-
   --color-success-light: rgba(46, 160, 67, 0.15);
-
   --color-warning: #CF6F03;
-
   --color-warning-light: rgba(207, 111, 3, 0.15);
-
   --color-error: #da3633;
-
   --color-error-light: rgba(218, 54, 51, 0.15);
 
-
-
   /* Admin Theme Aliases */
-
   --color-admin-bg: var(--admin-bg);
-
   --color-admin-surface: var(--admin-surface);
-
   --color-admin-surface-2: var(--admin-surface-2);
-
   --color-admin-border: var(--admin-border);
-
   --color-admin-text: var(--admin-text);
-
   --color-admin-text-muted: var(--admin-text-muted);
-
   --color-admin-text-faint: var(--admin-text-faint);
-
   --color-admin-petrol: #1E88A8;
-
   --color-admin-petrol-hover: #17708A;
-
   --color-admin-danger: #da3633;
-
 }
 
+/* Utilitários Visuais do Lovable */
+@utility surface-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-main);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-soft);
+}
 
+@utility gradient-teal {
+  background-image: var(--gradient-teal) !important;
+}
 
+@utility gradient-spark {
+  background-image: var(--gradient-spark) !important;
+}
 
+@utility shadow-lift {
+  box-shadow: var(--shadow-lift);
+}
+
+@utility grid-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.2) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
 
 /* =========================================================
-
    3. ESTILOS BASE E OVERRIDES SENSÍVEIS AO TEMA
-
    ========================================================= */
-
-
 
 body {
-
   margin: 0;
-
   font-family: var(--font-sans);
-
   background: var(--color-background);
-
   color: var(--color-text-primary);
-
   min-height: 100vh;
-
 }
-
-
 
 * {
-
   box-sizing: border-box;
-
 }
 
-
+@import "tailwindcss";
 
 @layer base {
+  /* Reset completo e forçado para botões */
+  button, 
+  [type='button'], 
+  [type='reset'], 
+  [type='submit'] {
+    background-color: transparent;
+    background-image: none;
+    border-style: none;
+    border-width: 0;
+    padding: 0;
+    margin: 0;
+    font-family: inherit;
+    font-size: 100%;
+    line-height: inherit;
+    color: inherit;
+    -webkit-appearance: button;
+  }
 
   h1, h2, h3, h4, h5, h6 {
-
     color: var(--color-text-primary);
-
     font-weight: inherit;
-
     margin: 0;
-
   }
-
-
 
   h1 { font-size: 2rem; line-height: 1.2; }
-
   h2 { font-size: 1.5rem; line-height: 1.3; }
-
   h3 { font-size: 1.25rem; line-height: 1.4; }
 
-
-
   p {
-
     margin: 0;
-
     color: var(--color-text-secondary);
-
   }
-
 }
-
-
-
-/* === Redirecionamento de Laranja para Petróleo (Exceto Click Hero) === */
-
-[class*="bg-[#E8631A]"],
-
-[class*="bg-[#EA580C]"] {
-
+/* === Redirecionamento de Laranja para Petróleo (Exceto Botão Gerar do Planejador) === */
+[class*="bg-[#E8631A]"]:not(.gradient-spark),
+[class*="bg-[#EA580C]"]:not(.gradient-spark) {
   background-color: #1E88A8 !important;
-
 }
-
-
 
 .hover\:bg-orange-600:hover,
-
 .hover\:bg-orange-700:hover,
-
-[class*="hover:bg-[#D45714]"]:hover {
-
+[class*="hover:bg-[#D45714]"]:hover:not(.gradient-spark:hover) {
   background-color: #17708A !important;
-
 }
-
-
 
 [class*="border-[#EA580C]"],
-
 [class*="border-[#E8631A]"] {
-
   border-color: #1E88A8 !important;
-
 }
-
 
 /* === Overrides aplicados APENAS quando o tema for ESCURO === */
-
 .dark {
-
   .bg-white,
-
   .bg-white\/80,
-
   .bg-white\/90,
-
   .bg-\[#FCFCFD\] {
-
     background-color: var(--color-surface) !important;
-
   }
-
-
 
   .bg-gray-50,
-
   .bg-gray-50\/50,
-
   .bg-gray-100,
-
   .bg-gray-100\/80,
-
   .bg-\[#F2F4F7\] {
-
     background-color: var(--color-surface-secondary) !important;
-
   }
-
-
 
   .border-gray-100,
-
   .border-gray-200,
-
   .border-gray-300,
-
   .border-\[#E0E0E0\],
-
   .border-\[#E6E8EC\] {
-
     border-color: var(--color-border) !important;
-
   }
-
-
 
   .text-gray-400 {
-
     color: var(--color-text-tertiary) !important;
-
   }
-
   .text-gray-500,
-
   .text-gray-600,
-
   .text-gray-700 {
-
     color: var(--color-text-secondary) !important;
-
   }
-
   .text-gray-800,
-
   .text-gray-900 {
-
     color: var(--color-text-primary) !important;
-
   }
-
-
 
   [class*="bg-[#FFF4ED]"],
-
   [class*="bg-[#FFF7F4]"],
-
   .bg-orange-50 {
-
     background-color: rgba(207, 111, 3, 0.12) !important;
-
   }
-
-
 
   .bg-green-50 {
-
     background-color: rgba(46, 160, 67, 0.15) !important;
-
   }
-
   .text-green-400,
-
   .text-green-500,
-
   .text-green-600,
-
   .text-green-700 {
-
     color: #3fb950 !important;
-
   }
-
   .text-red-500,
-
   .text-red-600 {
-
     color: #da3633 !important;
-
   }
-
 }
-
-
 
 /* =========================================================
-
    REGRAS PARA O MODO CLARO (Quando NÃO tem a classe .dark)
-
    ========================================================= */
-
 html:not(.dark) {
-
-  /* Fundo principal da aplicação e telas de auth */
-
+  /* Fundo principal da aplicação, Admin e telas de auth */
   body,
-
   #root,
-
   .bg-background,
-
   main {
-
     background-color: #EBEEF0 !important;
-
   }
-
-
 
   /* Sidebar */
-
   aside,
-
   .bg-sidebar-bg {
-
     background-color: #ffffff !important;
-
     border-right: 1px solid #e2e8f0 !important;
-
   }
-
-
 
   aside a,
-
   aside button,
-
   aside nav [class*="bg-"] {
-
     border: none !important;
-
     box-shadow: none !important;
-
   }
-
-
 
   aside .bg-sidebar-active,
-
   aside [class*="bg-sidebar-active"] {
-
     background-color: #e4edf0 !important;
-
     color: #1e88a8 !important;
-
     border: none !important;
-
   }
 
-
-
-  /* Cards do Painel e Form do Login */
-
-  main [class*="bg-["],
-
+  /* Cards do Painel, Admin e Form de Login (Excluindo os elementos do Planejador IA) */
+  main [class*="bg-["]:not(.gradient-teal):not(.gradient-spark):not([class*="bg-primary-foreground"]),
   main [class*="bg-zinc"],
-
   main [class*="bg-slate"],
-
   main [class*="bg-neutral"],
-
   main [class*="bg-stone"],
-
   main [class*="bg-black"],
-
   main .bg-surface,
-
   form {
-
     background-color: #ffffff !important;
-
     border: 1px solid #e2e8f0 !important;
-
     box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04) !important;
-
     border-radius: 1rem !important;
-
   }
-
-
 
   /* Inputs dentro do Formulário */
-
   form input {
-
     background-color: #f8fafc !important;
-
     border: 1px solid #e2e8f0 !important;
-
     color: #0f172a !important;
-
   }
-
-
 
   /* Correção de Botões Secundários */
-
-  main button:not([type="submit"]):not(.bg-brand),
-
-  .flex button:not([type="submit"]):not(.bg-brand) {
-
+  main button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-calendar-shell button),
+  .flex button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-calendar-shell button) {
     border: 1px solid #e2e8f0 !important;
-
     border-radius: 0.75rem !important;
-
     color: #475569 !important;
-
   }
 
-
-
-  main button:not([type="submit"]):not(.bg-brand):hover,
-
-  .flex button:not([type="submit"]):not(.bg-brand):hover {
-
+  main button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):hover,
+  .flex button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):hover {
     background-color: #f1f5f9 !important;
-
     color: #0f172a !important;
-
   }
 
-
-
-  /* Botão Primário/Petróleo (Entrar, Salvar, etc.) */
-
-  html:not(.dark) .bg-primary,
-
+  /* Botão Primário/Petróleo (Entrar, Salvar, Admin, etc.) */
+  html:not(.dark) .bg-primary:not(.gradient-teal),
   html:not(.dark) .bg-brand,
-
-  html:not(.dark) [class*="bg-primary"],
-
-  html:not(.dark) [class*="bg-[#1E88A8]"],
-
+  html:not(.dark) [class*="bg-primary"]:not(.gradient-teal):not(.text-primary-foreground),
+  html:not(.dark) [class*="bg-[#1E88A8]"]:not(.gradient-teal),
   form button[type="submit"] {
-
     background-color: #1e88a8 !important;
-
     color: #ffffff !important;
-
     border: none !important;
-
     box-shadow: none !important;
-
   }
 
+  /* ISOLAMENTO VISUAL DO PLANEJADOR IA */
 
+  /* Banner Principal e elementos internos */
+  .gradient-teal {
+    background-image: var(--gradient-teal) !important;
+    color: #ffffff !important;
+    border: none !important;
+  }
 
-  /* Tipografia */
+  .gradient-teal h1,
+  .gradient-teal p,
+  .gradient-teal div {
+    color: #ffffff !important;
+  }
 
-  h1, h2, h3, h4,
+  /* Botão Laranja "Gerar Planejamento" */
+  .gradient-spark {
+    background-image: var(--gradient-spark) !important;
+    color: #ffffff !important;
+    border: none !important;
+  }
 
-  .text-white:not(.bg-brand),
+  .gradient-spark * {
+    color: #ffffff !important;
+  }
 
-  .text-foreground,
+  /* Badges do topo "PLANEJADOR IA" e Círculos (1, 2, 3) */
+  .bg-accent,
+  [class*="bg-accent"] {
+    background-color: #e6f4f8 !important;
+    color: #1e88a8 !important;
+    border: none !important;
+  }
 
-  [class*="text-foreground"] {
+  .bg-accent *,
+  [class*="bg-accent"] * {
+    color: #1e88a8 !important;
+  }
 
+  /* Tipografia Genérica do App e do Admin */
+  h1:not(.gradient-teal h1),
+  h2:not(.gradient-teal h2),
+  h3:not(.gradient-teal h3),
+  h4 {
     color: #0f172a !important;
-
   }
-
-
-
-  p, span, label,
-
-  .text-muted-foreground {
-
-    color: #475569 !important;
-
-  }
-
-
-
-  /* Destaque "Click Hero" Laranja sempre preservado */
-
-  .text-brand-orange,
-
-  .text-orange-500,
-
-  [class*="text-[#CF6F03]"],
-
-  [class*="text-[#f97316]"] {
-
-    color: #f97316 !important;
-
-    font-weight: 600 !important;
-
-  }
-
+/* Por isto: */
+p:not(.gradient-teal p):not(.gradient-spark p),
+span:not(.gradient-teal span):not(.gradient-spark span):not(.bg-accent *):not(.bg-accent),
+label,
+.text-muted-foreground {
+  color: #475569 !important;
 }
 
-/* Correção pontual: garante círculo perfeito no ícone de meta, sem afetar login */
+  /* Destaque "Click Hero" Laranja sempre preservado */
+  .text-brand-orange,
+  .text-orange-500,
+  [class*="text-[#CF6F03]"],
+  [class*="text-[#f97316]"] {
+    color: #f97316 !important;
+    font-weight: 600 !important;
+  }
+}
+
+/* Correções pontuais já existentes */
 html:not(.dark) .icon-meta-circle.icon-meta-circle {
   border-radius: 9999px !important;
 }
 
-/* Correção pontual: mantém a barra de progresso azul no modo claro */
 html:not(.dark) .progress-fill-bar.progress-fill-bar {
   background-color: #1E88A8 !important;
 }
-/* Correção pontual: mantém texto branco no filtro de período ativo (modo claro) */
+
 html:not(.dark) button.filter-pill-active.filter-pill-active.filter-pill-active {
   color: #ffffff !important;
 }
-/* Correção pontual: remove efeito de hover indevido no filtro ativo (modo claro) */
+
 html:not(.dark) button.filter-pill-active.filter-pill-active.filter-pill-active:hover {
   background-color: #1E88A8 !important;
   color: #ffffff !important;
 }
 
-/* Correção pontual: mantém texto branco no botão Criação rápida (modo claro) */
 html:not(.dark) button.quick-create-btn.quick-create-btn.quick-create-btn {
   color: #ffffff !important;
 }
-/* Correção pontual: mantém cor do botão Criação rápida no hover, sem clarear (modo claro) */
+
 html:not(.dark) button.quick-create-btn.quick-create-btn.quick-create-btn:hover {
   background-color: #1E88A8 !important;
   color: #ffffff !important;
 }
-/* Correção pontual: mantém texto branco e cor no chip de filtro ativo (modo claro) */
+
 html:not(.dark) button.chip-active.chip-active.chip-active {
   color: #ffffff !important;
 }
+
 html:not(.dark) button.chip-active.chip-active.chip-active:hover {
   background-color: #1E88A8 !important;
   color: #ffffff !important;
 }
 
-/* FORÇAR O FUNDO CLARO NAS TELAS DE AUTENTICAÇÃO (LOGIN, REGISTRO, RECOVERY) */
-
+/* FORÇAR O FUNDO CLARO NAS TELAS DE AUTENTICAÇÃO E ADMIN */
 html:not(.dark) body,
-
 html:not(.dark) #root,
-
 html:not(.dark) body > div,
-
 html:not(.dark) #root > div {
-
   background-color: #f1f5f9 !important;
-
 }
 
-
-
-/* Garante que o título 'ady' e outros textos fiquem visíveis no claro */
-
 html:not(.dark) h1,
-
 html:not(.dark) h2,
-
 html:not(.dark) h3 {
-
   color: #0f172a !important;
-
-} 
-
+}

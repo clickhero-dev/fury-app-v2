@@ -14,6 +14,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/bcryptjs": "^2.4.6",
+    "@types/body-parser": "^1.19.5",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.21",
     "@types/ioredis": "^4.28.10",
@@ -30,19 +31,23 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
     "@aws-sdk/client-s3": "^3.1064.0",
-    "@fury/db": "*",
-    "@fury/shared": "*",
+    "@fury/db": "workspace:*",
+    "@fury/shared": "workspace:*",
     "@napi-rs/canvas": "^1.0.0",
+    "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",
+    "body-parser": "^1.20.3",
     "bullmq": "^5.58.5",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
     "express": "^4.18.2",
     "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^9.0.3",
     "openai": "^6.37.0",
+    "postgres": "^3.4.9",
     "sharp": "^0.33.5",
     "zod": "^3.22.4"
   }

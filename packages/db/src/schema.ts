@@ -15,6 +15,7 @@ import {
   bigint,
   bigserial,
   smallint,
+  date,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -517,7 +518,7 @@ export const requestLogs = pgTable(
 // ===== Planejador IA tables =====
 
 export const postTypeEnum = pgEnum('post_type', ['reel', 'carousel', 'image', 'stories']);
-export const postStatusEnum = pgEnum('post_status', ['draft', 'approved', 'rejected', 'published', 'confirmed', 'failed']);
+export const postStatusEnum = pgEnum('post_status', ['draft', 'approved', 'scheduled', 'rejected', 'published', 'confirmed', 'failed']);
 export const planStatusEnum = pgEnum('plan_status', ['draft', 'active', 'completed', 'cancelled']);
 
 export const campaignPlans = pgTable(
@@ -570,6 +571,7 @@ export const socialPosts = pgTable(
     platformPostId: varchar('platform_post_id', { length: 255 }),
     metrics: jsonb('metrics').default(sql`'{}'::jsonb`),
     dayIndex: integer('day_index'), // dia do mês (1-31) para ordenação no calendário
+    calendarDate: date('calendar_date').notNull(), // ISO date string 'YYYY-MM-DD' para FullCalendar range queries (Fase 3 — NOT NULL após Fase 1-2 writepoints garantido)
     publishAttempts: integer('publish_attempts').default(0).notNull(),
     lastPublishError: text('last_publish_error'),
     nextRetryAt: timestamp('next_retry_at', { withTimezone: true }),
@@ -579,6 +581,7 @@ export const socialPosts = pgTable(
   (table) => ({
     tenantIdIdx: index('social_posts_tenant_id_idx').on(table.tenantId),
     planIdIdx: index('social_posts_plan_id_idx').on(table.planId),
+    tenantCalendarDateIdx: index('social_posts_tenant_calendar_date_idx').on(table.tenantId, table.calendarDate), // Fase 3: índice composto para queries de range
   })
 );
 
