@@ -565,6 +565,7 @@ export const socialPosts = pgTable(
     hashtags: jsonb('hashtags').default(sql`'[]'::jsonb`),
     imagePrompt: text('image_prompt'),
     imageUrl: text('image_url'),
+    imageUrls: jsonb('image_urls').default(sql`'[]'::jsonb`),
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
     publishedAt: timestamp('published_at', { withTimezone: true }),
     status: postStatusEnum('status').notNull().default('draft'),

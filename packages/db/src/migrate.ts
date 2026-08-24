@@ -110,6 +110,7 @@ const STEPS: MigrationStep[] = [
       console.log('    + added rejected, confirmed to post_status');
     },
   },
+  { tag: '0031_migrate_carousel_images' },
   { tag: '0030_workflow_jobs' },
   {
     tag: '0011_fr8_publish_retry',
