@@ -26,18 +26,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Instala o pnpm na versão correta do projeto
       - uses: pnpm/action-setup@v3
         with:
           version: 9
+          run_install: false
 
-      # Configura o Node.js utilizando o cache do pnpm
       - uses: actions/setup-node@v4
         with: 
           node-version: '22'
           cache: 'pnpm'
 
-      # Instala as dependências resolvendo os pacotes workspace:*
       - run: pnpm install --no-frozen-lockfile
 
       - run: npx tsc -b
