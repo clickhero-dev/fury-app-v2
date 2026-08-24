@@ -5,14 +5,20 @@ export class MockMetaCampaignProvider implements IMetaCampaignProvider {
   createdAdSets: any[] = [];
   createdAdCreatives: any[] = [];
   createdAds: any[] = [];
+  deletedCampaigns: string[] = [];
+  deletedAdSets: string[] = [];
+  deletedAdCreatives: string[] = [];
+  deletedAds: string[] = [];
   updatedCampaigns: Map<string, any> = new Map();
   getCampaignResult: Record<string, unknown> = {};
   insightsResult: any = { data: [] };
   locationsResult: any[] = [];
   uploadAdImageResult: string | undefined = 'mock_hash';
   downloadImageResult: { buffer: Buffer; contentType: string } | null = null;
+  failCreateStep?: 'campaign' | 'adset' | 'creative' | 'ad';
 
   async createCampaign(adAccountId: string, accessToken: string, body: any) {
+    if (this.failCreateStep === 'campaign') throw new Error('Campaign fail');
     const id = `meta_campaign_${this.createdCampaigns.length + 1}`;
     this.createdCampaigns.push(body);
     return { id };
@@ -27,21 +33,40 @@ export class MockMetaCampaignProvider implements IMetaCampaignProvider {
   }
 
   async createAdSet(adAccountId: string, accessToken: string, body: any) {
+    if (this.failCreateStep === 'adset') throw new Error('AdSet fail');
     const id = `meta_adset_${this.createdAdSets.length + 1}`;
     this.createdAdSets.push(body);
     return { id };
   }
 
   async createAdCreative(adAccountId: string, accessToken: string, body: any) {
+    if (this.failCreateStep === 'creative') throw new Error('Creative fail');
     const id = `meta_creative_${this.createdAdCreatives.length + 1}`;
     this.createdAdCreatives.push(body);
     return { id };
   }
 
   async createAd(adAccountId: string, accessToken: string, body: any) {
+    if (this.failCreateStep === 'ad') throw new Error('Ad fail');
     const id = `meta_ad_${this.createdAds.length + 1}`;
     this.createdAds.push(body);
     return { id };
+  }
+
+  async deleteCampaign(campaignId: string, accessToken: string): Promise<void> {
+    this.deletedCampaigns.push(campaignId);
+  }
+
+  async deleteAdSet(adSetId: string, accessToken: string): Promise<void> {
+    this.deletedAdSets.push(adSetId);
+  }
+
+  async deleteAdCreative(adCreativeId: string, accessToken: string): Promise<void> {
+    this.deletedAdCreatives.push(adCreativeId);
+  }
+
+  async deleteAd(adId: string, accessToken: string): Promise<void> {
+    this.deletedAds.push(adId);
   }
 
   async getInsights(params: any) { return this.insightsResult; }

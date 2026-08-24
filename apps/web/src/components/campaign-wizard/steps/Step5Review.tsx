@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, ImagePlus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
@@ -38,6 +38,8 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
   const mutation = useCreateCampaign();
   const [audience, setAudience] = useState<AudienceDefaults>({});
   const [audienceLoading, setAudienceLoading] = useState(true);
+  const [showSlowWarning, setShowSlowWarning] = useState(false);
+  const slowWarningTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     api.get<{ success: boolean; data: { audienceDefaults?: AudienceDefaults } }>('/auth/me')
@@ -51,6 +53,11 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
         // silently ignore — audience stays empty
       })
       .finally(() => setAudienceLoading(false));
+  }, []);
+
+  // Limpa o timer ao desmontar
+  useEffect(() => {
+    return () => { if (slowWarningTimer.current) clearTimeout(slowWarningTimer.current); };
   }, []);
 
   const isInstagramCreative = Boolean(state.creative.instagramMediaId);
@@ -96,7 +103,15 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
         : {}),
     };
 
-    mutation.mutate(payload);
+    setShowSlowWarning(false);
+    if (slowWarningTimer.current) clearTimeout(slowWarningTimer.current);
+    slowWarningTimer.current = setTimeout(() => setShowSlowWarning(true), 15_000);
+    mutation.mutate(payload, {
+      onSettled: () => {
+        setShowSlowWarning(false);
+        if (slowWarningTimer.current) clearTimeout(slowWarningTimer.current);
+      },
+    });
   }
 
   if (mutation.isSuccess) {
@@ -204,6 +219,17 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
           )}
         </div>
       </div>
+
+      {showSlowWarning && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
+          <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>
+            Isso pode demorar um pouco mais — estamos enviando sua imagem para o Meta Ads. Aguarde na página.
+          </span>
+        </div>
+      )}
 
       {mutation.isError && (
         <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">

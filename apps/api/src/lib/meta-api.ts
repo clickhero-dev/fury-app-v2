@@ -469,6 +469,7 @@ export interface MetaFacebookPage {
   hasInstagram: boolean;
   instagramUserId: string | null;
   instagramUsername: string | null;
+  accessToken: string;
 }
 
 interface MetaPagesResponse {
@@ -489,7 +490,7 @@ export async function getUserFacebookPages(
 ): Promise<MetaFacebookPage[]> {
   const whatsappField = opts?.includeWhatsApp ? ',whatsapp_business_account' : '';
   const response = await metaApiCall<MetaPagesResponse>(
-    `/me/accounts?fields=id,name${whatsappField},instagram_business_account{id,username}&limit=100`,
+    `/me/accounts?fields=id,name,access_token${whatsappField},instagram_business_account{id,username}&limit=100`,
     accessToken
   );
 
@@ -500,6 +501,7 @@ export async function getUserFacebookPages(
     hasInstagram: Boolean(page.instagram_business_account?.id),
     instagramUserId: page.instagram_business_account?.id ?? null,
     instagramUsername: page.instagram_business_account?.username ?? null,
+    accessToken: (page as any).access_token ?? '',
   }));
 }
 
@@ -1067,6 +1069,7 @@ export async function metaApiCall<T>(
             { permission: 'pages_read_engagement', status: 'granted' },
             { permission: 'instagram_basic', status: 'granted' },
             { permission: 'instagram_manage_insights', status: 'granted' },
+            { permission: 'instagram_content_publish', status: 'granted' },
           ],
         } as T;
       }
@@ -1227,8 +1230,8 @@ export async function metaApiCall<T>(
   const fetchOptions: RequestInit = {
     method: options?.method || 'GET',
     headers: { Accept: 'application/json' },
-    // Timeout de 15s para evitar que chamadas Meta travem o request
-    signal: AbortSignal.timeout(15_000),
+    // Timeout de 90s para chamadas Meta (upload/download de imagem pode ser lento)
+    signal: AbortSignal.timeout(90_000),
   };
 
   if (options?.body) {
@@ -1243,8 +1246,8 @@ export async function metaApiCall<T>(
     json = (await res.json()) as unknown;
   } catch (fetchErr: any) {
     if (fetchErr.name === 'TimeoutError' || fetchErr.name === 'AbortError') {
-      console.error(`[Meta API] Timeout (15s) ao chamar: ${path}`);
-      const err = new Error(`[Meta API] Timeout ao chamar ${path} (>15s)`);
+      console.error(`[Meta API] Timeout (90s) ao chamar: ${path}`);
+      const err = new Error(`[Meta API] Timeout ao chamar ${path} (>90s)`);
       (err as MetaApiError).httpStatus = 504;
       throw err;
     }

@@ -99,6 +99,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0026_add_creative_quota_limits' },
   { tag: '0027_add_missing_planner_columns' },
   { tag: '0028_google_meu_negocio' },
+  { tag: '0028_add_missing_post_status_values' },
   { tag: '0029_google_social_login' },
   { tag: '0030_add_calendar_date_to_social_posts' },
   {

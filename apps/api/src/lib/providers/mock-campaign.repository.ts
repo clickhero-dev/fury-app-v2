@@ -6,6 +6,7 @@ export class MockCampaignRepository implements ICampaignRepository {
   creativeAssets: CreativeAssetRecord[] = [];
   furyInsights: FuryInsightRecord[] = [];
   automationRules: AutomationRuleRecord[] = [];
+  failCreateCampaign = false;
 
   async findMetaConnection(tenantId: string): Promise<MetaConnectionRecord | null> {
     return this.metaConnections.find((c) => c.tenantId === tenantId) ?? null;
@@ -30,6 +31,7 @@ export class MockCampaignRepository implements ICampaignRepository {
   }
 
   async createCampaign(data: any): Promise<CampaignRecord> {
+    if (this.failCreateCampaign) throw new Error('DB insert fail');
     const id = `campaign_${this.campaigns.length + 1}`;
     const campaign = { ...data, id, createdAt: new Date(), updatedAt: new Date() } as CampaignRecord;
     this.campaigns.push(campaign);
@@ -41,6 +43,10 @@ export class MockCampaignRepository implements ICampaignRepository {
     if (idx === -1) throw new Error(`Campaign ${id} not found`);
     this.campaigns[idx] = { ...this.campaigns[idx], ...data, updatedAt: new Date() };
     return this.campaigns[idx];
+  }
+
+  async deleteCampaign(id: string): Promise<void> {
+    this.campaigns = this.campaigns.filter((c) => c.id !== id);
   }
 
   async findCreativeAsset(id: string, tenantId: string): Promise<CreativeAssetRecord | null> {

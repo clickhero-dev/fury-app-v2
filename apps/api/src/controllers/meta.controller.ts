@@ -53,7 +53,11 @@ export async function authCallback(req: Request, res: Response, next: NextFuncti
   } catch (error) {
     // Erros de token/state OAuth redirecionam para integracoes; falhas na busca de
     // ativos sao tratadas no service e nao chegam aqui (conexao ja persistida).
-    console.error('[OAuth Callback] ERRO:', error);
+    const err = error as any;
+    console.error(`[OAuth Callback] ERRO — code=${err?.code || '?'} message=${err?.message || err}`, {
+      stack: err?.stack?.split('\n').slice(0, 3).join(' | '),
+      metaError: err?.metaError ? JSON.stringify(err.metaError).slice(0, 300) : undefined,
+    });
     res.redirect(`${frontendUrl}/configuracoes/integracoes?error=oauth_cancelled`);
   }
 }

@@ -43,6 +43,7 @@ const META_SCOPES = [
   // 3) Instagram (depende das Paginas)
   'instagram_basic',
   'instagram_manage_insights',
+  'instagram_content_publish',
   // 4) Conta de Anuncios
   'ads_management',
   'ads_read',
@@ -169,25 +170,43 @@ export async function handleMetaOAuthCallback(
   state: string,
 ): Promise<{ tenantId: string; context: OAuthContext; returnUrl: string }> {
   const { tenantId, context, returnUrl } = verifyOAuthState(state);
+  console.log(`[OAuth] state verificado — tenantId=${tenantId} context=${context}`);
   const appId = getRequiredEnv('META_APP_ID');
   const appSecret = getRequiredEnv('META_APP_SECRET');
   const redirectUri =
     process.env.META_REDIRECT_URI ??
     `${process.env.APP_URL ?? `https://${process.env.DOMAIN ?? 'clickhero-fury-api.u7pe19.easypanel.host'}`}/api/meta/auth/callback`;
-  const shortToken = await exchangeCodeForToken({
-    clientId: appId,
-    clientSecret: appSecret,
-    redirectUri,
-    code,
-  });
+  console.log(`[OAuth] redirectUri=${redirectUri} appId=${appId}`);
 
-  const longLivedToken = await exchangeForLongLivedToken({
-    clientId: appId,
-    clientSecret: appSecret,
-    shortLivedToken: shortToken.access_token,
-  });
+  let shortToken: any;
+  try {
+    shortToken = await exchangeCodeForToken({
+      clientId: appId,
+      clientSecret: appSecret,
+      redirectUri,
+      code,
+    });
+    console.log(`[OAuth] short token obtido — expires_in=${shortToken.expires_in}`);
+  } catch (err: any) {
+    console.error(`[OAuth] FALHA ao trocar code por token — redirectUri=${redirectUri}`, err?.message || err);
+    throw err;
+  }
+
+  let longLivedToken: any;
+  try {
+    longLivedToken = await exchangeForLongLivedToken({
+      clientId: appId,
+      clientSecret: appSecret,
+      shortLivedToken: shortToken.access_token,
+    });
+    console.log(`[OAuth] long-lived token obtido — expires_in=${longLivedToken.expires_in}`);
+  } catch (err: any) {
+    console.error(`[OAuth] FALHA ao trocar por long-lived token`, err?.message || err);
+    throw err;
+  }
 
   const metaUserId = await getMetaUserId(longLivedToken.access_token);
+  console.log(`[OAuth] metaUserId=${metaUserId}`);
   const encryptedToken = encryptToken(longLivedToken.access_token);
   const tokenExpiresAt = getTokenExpiration(longLivedToken.expires_in);
 

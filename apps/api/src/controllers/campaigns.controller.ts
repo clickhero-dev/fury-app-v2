@@ -450,9 +450,10 @@ const createWizardSchema = z
   );
 
 export async function createWizardCampaignHandler(req: Request, res: Response, next: NextFunction) {
-  // Timeout de 55s — se estourar, retorna JSON 504 em vez de deixar o proxy
-  // (Traefik) retornar 502 HTML.
-  const timeoutMs = 55_000;
+  // Timeout de 120s — se estourar, retorna JSON 504 em vez de deixar o proxy
+  // (Traefik) retornar 502 HTML. Operações de upload de imagem ao Meta podem
+  // demorar bastante, então aumentamos de 55s para 120s.
+  const timeoutMs = 120_000;
   req.setTimeout(timeoutMs);
   res.setTimeout(timeoutMs);
 

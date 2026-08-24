@@ -149,6 +149,8 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
               onCreated('Post criado! Conecte o Instagram em Configurações → Integrações.');
             } else if (reason === 'no_due_posts') {
               onCreated('Post criado! Aguardando processamento.');
+            } else if (reason === 'publish_failed') {
+              onCreated('Post criado, mas a publicação falhou. Verifique o token do Meta em Configurações → Integrações.');
             } else {
               onCreated('Post criado com sucesso! Verifique a conexão com o Instagram.');
             }

@@ -257,7 +257,7 @@ export function IntegracoesContent() {
     placeholderData: [],
   });
 
-  const REQUIRED_SCOPES = ['pages_show_list', 'ads_management', 'ads_read'];
+  const REQUIRED_SCOPES = ['pages_show_list', 'ads_management', 'ads_read', 'instagram_content_publish'];
   const needsScopeReconnect =
     connections.length > 0 && REQUIRED_SCOPES.some((scope) => !scopes.includes(scope));
 

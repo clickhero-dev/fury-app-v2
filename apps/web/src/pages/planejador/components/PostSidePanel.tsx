@@ -39,22 +39,22 @@ const statusLabels: Record<string, string> = {
 const statusColors: Record<string, string> = {
   draft: 'text-text-tertiary bg-surface-secondary',
   approved: 'text-success bg-success/10',
-  rejected: 'text-red-600 bg-red-50',
-  confirmed: 'text-green-600 bg-green-100',
-  published: 'text-blue-600 bg-blue-50',
+  rejected: 'text-error bg-error/10',
+  confirmed: 'text-success bg-success/10',
+  published: 'text-blue-500 bg-blue-500/10',
 };
 
 const typeBg: Record<string, string> = {
-  carousel: 'bg-blue-100',
-  reel: 'bg-purple-100',
-  stories: 'bg-pink-100',
+  carousel: 'bg-blue-500/10',
+  reel: 'bg-purple-500/10',
+  stories: 'bg-pink-500/10',
   image: 'bg-success/10',
 };
 
 const typeText: Record<string, string> = {
-  carousel: 'text-blue-600',
-  reel: 'text-purple-600',
-  stories: 'text-pink-600',
+  carousel: 'text-blue-500',
+  reel: 'text-purple-500',
+  stories: 'text-pink-500',
   image: 'text-success',
 };
 
@@ -66,7 +66,7 @@ function DiffField({ label, before, after }: { label: string; before?: string; a
       <div className="space-y-1.5">
         <p className={clsx(
           'text-sm rounded-lg p-2',
-          changed ? 'bg-red-50 text-red-700 line-through' : 'bg-surface-secondary text-text-secondary',
+          changed ? 'bg-error/10 text-error line-through' : 'bg-surface-secondary text-text-secondary',
         )}>
           {before || '—'}
         </p>
@@ -416,13 +416,13 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
               <input
                 value={editHashtags}
                 onChange={e => setEditHashtags(e.target.value)}
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-blue-600 focus:outline-none focus:border-accent/50"
+                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-blue-500 focus:outline-none focus:border-accent/50"
                 placeholder="#hashtag1 #hashtag2"
               />
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {post.hashtags?.map((tag) => (
-                  <span key={tag} className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                  <span key={tag} className="text-xs text-blue-500 bg-blue-500/10 px-2 py-1 rounded-full">
                     {tag}
                   </span>
                 )) ?? '—'}
@@ -458,11 +458,11 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
                   onClick={() => editFileRef.current?.click()}
                   className={clsx(
                     'flex flex-col items-center justify-center h-32 rounded-xl border-2 border-dashed cursor-pointer transition-all',
-                    editDragOver ? 'border-accent bg-accent/10' : 'border-gray-600 hover:border-gray-500',
+                    editDragOver ? 'border-accent bg-accent/10' : 'border-border hover:border-text-tertiary',
                   )}
                 >
-                  <Upload className="h-6 w-6 text-gray-500 mb-1" />
-                  <p className="text-xs text-gray-400">Arraste ou clique para trocar</p>
+                  <Upload className="h-6 w-6 text-text-tertiary mb-1" />
+                  <p className="text-xs text-text-tertiary">Arraste ou clique para trocar</p>
                 </div>
               )
             ) : (
@@ -491,7 +491,7 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
             {editMode ? (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Data</label>
+                  <label className="block text-[10px] font-medium text-text-tertiary mb-1">Data</label>
                   <input
                     type="date"
                     value={editScheduledDate}
@@ -500,7 +500,7 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1">Hora</label>
+                  <label className="block text-[10px] font-medium text-text-tertiary mb-1">Hora</label>
                   <input
                     type="time"
                     value={editScheduledTime}

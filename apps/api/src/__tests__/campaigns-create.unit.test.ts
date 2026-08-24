@@ -81,6 +81,13 @@ vi.mock('../services/meta.service.js', () => ({
 // ─── Imports ──────────────────────────────────────────────────────────────
 import { createCampaign, createCampaignFromWizard } from '../services/campaigns.service.js';
 
+// O wizard baixa o criativo via fetch real (downloadImage) quando usa
+// creativeUploadUrl. Stub global p/ manter o teste offline (como o restante).
+vi.stubGlobal('fetch', vi.fn(async () => new Response(
+  new Uint8Array([137, 80, 78, 71]), // PNG mínimo
+  { status: 200, headers: { 'content-type': 'image/png' } },
+)));
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 function makeMetaConnection(overrides: Record<string, unknown> = {}) {
   return {

@@ -1,0 +1,7105 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Fury App API",
+    "version": "1.0.0",
+    "description": "API da plataforma Fury — gestão de campanhas Meta Ads, métricas, studio criativo, automação, planejador, billing e administração multi-tenant.\n\n**Autenticação**: Bearer Token (JWT) obtido em `POST /api/auth/login`.",
+    "contact": {
+      "name": "Fury Team",
+      "email": "diogommtdes@gmail.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Relativo (usa o host do deploy)"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT obtido em POST /api/auth/login. Enviar como `Authorization: Bearer <token>`."
+      }
+    },
+    "responses": {
+      "UnauthorizedError": {
+        "description": "Token ausente ou inválido",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ForbiddenError": {
+        "description": "Usuário autenticado mas sem contexto de tenant",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFoundError": {
+        "description": "Recurso não encontrado",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Erro de validação (Zod)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ValidationError"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "NOT_FOUND"
+              },
+              "message": {
+                "type": "string",
+                "example": "Resource not found"
+              }
+            }
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "Validation error"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "message": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {},
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "email",
+          "password",
+          "companyName"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "João Silva"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "joao@empresa.com"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "example": "12345678"
+          },
+          "companyName": {
+            "type": "string",
+            "example": "Empresa LTDA"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "joao@empresa.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "12345678"
+          }
+        }
+      },
+      "AuthTokens": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "accessToken": {
+                "type": "string"
+              },
+              "refreshToken": {
+                "type": "string"
+              },
+              "user": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "superadmin",
+                      "admin",
+                      "user",
+                      "mock"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "required": [
+          "refreshToken"
+        ],
+        "properties": {
+          "refreshToken": {
+            "type": "string"
+          }
+        }
+      },
+      "VerifyEmailRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "otp"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "otp": {
+            "type": "string",
+            "pattern": "^\\d{6}$",
+            "example": "123456"
+          }
+        }
+      },
+      "ForgotPasswordRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "otp",
+          "newPassword"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "otp": {
+            "type": "string",
+            "pattern": "^\\d{6}$"
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 8
+          }
+        }
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 8
+          }
+        }
+      },
+      "UpdateMeRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tenantName": {
+            "type": "string"
+          },
+          "notificationPrefs": {
+            "type": "object",
+            "properties": {
+              "campanhas": {
+                "type": "boolean"
+              },
+              "performance": {
+                "type": "boolean"
+              },
+              "equipe": {
+                "type": "boolean"
+              }
+            }
+          },
+          "audienceDefaults": {
+            "type": "object",
+            "properties": {
+              "city": {
+                "type": "string"
+              },
+              "cityKey": {
+                "type": "string"
+              },
+              "ageMin": {
+                "type": "integer",
+                "minimum": 18,
+                "maximum": 65
+              },
+              "ageMax": {
+                "type": "integer",
+                "minimum": 18,
+                "maximum": 65
+              },
+              "gender": {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "male",
+                  "female"
+                ]
+              }
+            }
+          },
+          "businessContext": {
+            "type": "string"
+          }
+        }
+      },
+      "GoalSetupRequest": {
+        "type": "object",
+        "required": [
+          "objective",
+          "niche",
+          "mainProduct",
+          "monthlyBudget",
+          "targetCpa"
+        ],
+        "properties": {
+          "objective": {
+            "type": "string",
+            "example": "gerar leads"
+          },
+          "niche": {
+            "type": "string",
+            "example": "pet shop"
+          },
+          "mainProduct": {
+            "type": "string",
+            "example": "ração premium"
+          },
+          "monthlyBudget": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "example": 3000
+          },
+          "targetCpa": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "example": 25
+          }
+        }
+      },
+      "UpsertBrandKitRequest": {
+        "type": "object",
+        "properties": {
+          "primary_color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$",
+            "example": "#E8631A"
+          },
+          "secondary_color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$",
+            "example": "#f5f5f5"
+          },
+          "voice_tone": {
+            "type": "string",
+            "enum": [
+              "professional",
+              "casual",
+              "urgent",
+              "premium"
+            ]
+          },
+          "logo_url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "photo_urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "whatsapp_number": {
+            "type": "string",
+            "pattern": "^\\d{10,15}$",
+            "nullable": true,
+            "example": "5511999999999"
+          }
+        }
+      },
+      "SubscribeRequest": {
+        "type": "object",
+        "required": [
+          "planId",
+          "customerName",
+          "customerEmail",
+          "customerCpfCnpj"
+        ],
+        "properties": {
+          "planId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "billingType": {
+            "type": "string",
+            "enum": [
+              "BOLETO",
+              "PIX",
+              "CREDIT_CARD"
+            ],
+            "default": "PIX"
+          },
+          "customerName": {
+            "type": "string",
+            "minLength": 2
+          },
+          "customerEmail": {
+            "type": "string",
+            "format": "email"
+          },
+          "customerCpfCnpj": {
+            "type": "string",
+            "minLength": 11,
+            "description": "CPF (11 dígitos) ou CNPJ (14 dígitos)"
+          }
+        }
+      },
+      "AsaasWebhookEvent": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": "string"
+          },
+          "payment": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "RECEIVED",
+                  "CONFIRMED",
+                  "OVERDUE",
+                  "PENDING"
+                ]
+              },
+              "subscription": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "CreateCampaignRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "objective": {
+            "type": "string",
+            "enum": [
+              "OUTCOME_AWARENESS",
+              "OUTCOME_TRAFFIC",
+              "OUTCOME_ENGAGEMENT",
+              "OUTCOME_LEADS",
+              "OUTCOME_SALES"
+            ]
+          },
+          "budgetDaily": {
+            "type": "number"
+          },
+          "budgetLifetime": {
+            "type": "number"
+          },
+          "startTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "PAUSED"
+            ]
+          }
+        }
+      },
+      "UpdateCampaignRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "budgetDaily": {
+            "type": "number"
+          },
+          "budgetLifetime": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateBudgetRequest": {
+        "type": "object",
+        "required": [
+          "budgetDaily"
+        ],
+        "properties": {
+          "budgetDaily": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        }
+      },
+      "UpdateCampaignStatusRequest": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "PAUSED"
+            ]
+          }
+        }
+      },
+      "GenerateCreativeRequest": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "type": "string"
+          },
+          "promise": {
+            "type": "string"
+          },
+          "offer": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "string"
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "editorial_headline",
+              "offer_burst",
+              "split_diagonal_product",
+              "photo_immersive",
+              "split_horizontal_photo"
+            ]
+          },
+          "hasProductImage": {
+            "type": "boolean",
+            "default": false
+          },
+          "headline": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "subheadline": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "qualifier": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "offer_text": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "subtitle": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "subtitle_highlight": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "benefits": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "maxItems": 4
+          },
+          "cta": {
+            "type": "string",
+            "maxLength": 24
+          },
+          "cta_icon": {
+            "type": "string",
+            "enum": [
+              "arrow",
+              "phone",
+              "whatsapp",
+              "none"
+            ]
+          },
+          "price_text": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "tone": {
+            "type": "string",
+            "enum": [
+              "institutional",
+              "energetic"
+            ]
+          },
+          "top_zone_color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "highlight_color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "includeLogo": {
+            "type": "boolean",
+            "default": true
+          },
+          "skipCopy": {
+            "type": "boolean",
+            "description": "Quando true, NÃO chama o LLM — renderiza direto com os textos do body"
+          },
+          "background_image_url": {
+            "type": "string"
+          },
+          "product_image_url": {
+            "type": "string"
+          },
+          "hero_image_url": {
+            "type": "string"
+          }
+        }
+      },
+      "RegenerateCreativeRequest": {
+        "type": "object",
+        "required": [
+          "assetId",
+          "feedback"
+        ],
+        "properties": {
+          "assetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "feedback": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "SelectLayoutRequest": {
+        "type": "object",
+        "required": [
+          "product",
+          "promise",
+          "audience"
+        ],
+        "properties": {
+          "product": {
+            "type": "string",
+            "minLength": 1
+          },
+          "promise": {
+            "type": "string",
+            "minLength": 1
+          },
+          "offer": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "string",
+            "minLength": 1
+          },
+          "objective": {
+            "type": "string",
+            "enum": [
+              "awareness",
+              "consideration",
+              "conversion",
+              "content"
+            ]
+          },
+          "hasProductImage": {
+            "type": "boolean",
+            "default": false
+          },
+          "productImageUrl": {
+            "type": "string"
+          },
+          "background_image_url": {
+            "type": "string"
+          }
+        }
+      },
+      "PreviewCreativeRequest": {
+        "type": "object",
+        "required": [
+          "layout"
+        ],
+        "properties": {
+          "layout": {
+            "type": "string",
+            "enum": [
+              "editorial_headline",
+              "offer_burst",
+              "split_diagonal_product",
+              "photo_immersive",
+              "split_horizontal_photo"
+            ]
+          },
+          "headline": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "qualifier": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "offer_text": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "subheadline": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "subtitle": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "subtitle_highlight": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "benefits": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "maxItems": 4
+          },
+          "cta": {
+            "type": "string",
+            "maxLength": 24
+          },
+          "cta_icon": {
+            "type": "string",
+            "enum": [
+              "arrow",
+              "phone",
+              "whatsapp",
+              "none"
+            ]
+          },
+          "price_text": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "tone": {
+            "type": "string",
+            "enum": [
+              "institutional",
+              "energetic"
+            ]
+          },
+          "top_zone_color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "highlight_color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "includeLogo": {
+            "type": "boolean"
+          }
+        }
+      },
+      "GenerateImageRequest": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "1024x1024",
+              "1792x1024",
+              "1024x1792"
+            ]
+          }
+        }
+      },
+      "RenderCreativeRequest": {
+        "type": "object",
+        "properties": {
+          "layout": {
+            "type": "string"
+          },
+          "headline": {
+            "type": "string"
+          },
+          "subheadline": {
+            "type": "string"
+          },
+          "cta": {
+            "type": "string"
+          }
+        }
+      },
+      "PublishAssetRequest": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string"
+          }
+        }
+      },
+      "UploadToMetaRequest": {
+        "type": "object",
+        "required": [
+          "assetId",
+          "adAccountId"
+        ],
+        "properties": {
+          "assetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "adAccountId": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateRuleRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string"
+          },
+          "ruleType": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean",
+            "default": true
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "threshold": {
+            "type": "number",
+            "minimum": 0
+          },
+          "action": {
+            "type": "string"
+          }
+        }
+      },
+      "BudgetSmartRequest": {
+        "type": "object",
+        "properties": {
+          "campaignId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          }
+        }
+      },
+      "FuryConfigRequest": {
+        "type": "object",
+        "properties": {
+          "benchmarks": {
+            "type": "object"
+          },
+          "thresholds": {
+            "type": "object"
+          }
+        }
+      },
+      "CreateFuryRuleRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "condition": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateBudgetConfigRequest": {
+        "type": "object",
+        "properties": {
+          "autoOptimize": {
+            "type": "boolean"
+          },
+          "maxDailyBudget": {
+            "type": "number"
+          },
+          "minRoi": {
+            "type": "number"
+          }
+        }
+      },
+      "ApplyBulkRequest": {
+        "type": "object",
+        "required": [
+          "suggestionIds"
+        ],
+        "properties": {
+          "suggestionIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
+      "SaveSelectionRequest": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "string"
+          },
+          "adAccountId": {
+            "type": "string"
+          },
+          "whatsappNumberId": {
+            "type": "string"
+          }
+        }
+      },
+      "SelectAdAccountRequest": {
+        "type": "object",
+        "required": [
+          "adAccountId"
+        ],
+        "properties": {
+          "adAccountId": {
+            "type": "string"
+          }
+        }
+      },
+      "BusinessIdsRequest": {
+        "type": "object",
+        "required": [
+          "businessIds"
+        ],
+        "properties": {
+          "businessIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PageIdsRequest": {
+        "type": "object",
+        "required": [
+          "pageIds"
+        ],
+        "properties": {
+          "pageIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "GeneratePlanRequest": {
+        "type": "object",
+        "properties": {
+          "objective": {
+            "type": "string"
+          },
+          "niche": {
+            "type": "string"
+          },
+          "monthlyBudget": {
+            "type": "number"
+          },
+          "audience": {
+            "type": "string"
+          }
+        }
+      },
+      "ConfirmPlanRequest": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "EditPostRequest": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreatePostRequest": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "platform": {
+            "type": "string"
+          }
+        }
+      },
+      "BulkScheduleRequest": {
+        "type": "object",
+        "required": [
+          "postIds",
+          "scheduledAt"
+        ],
+        "properties": {
+          "postIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "scheduledAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "EnhancePromptRequest": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
+        }
+      },
+      "GenerateImageOrRequest": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string"
+          }
+        }
+      },
+      "GenerateVideoRequest": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "integer"
+          }
+        }
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "email",
+          "password"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8
+          },
+          "role": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "SetupTenantRequest": {
+        "type": "object",
+        "required": [
+          "tenantName",
+          "userName",
+          "userEmail",
+          "planId"
+        ],
+        "properties": {
+          "tenantName": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string"
+          },
+          "userEmail": {
+            "type": "string",
+            "format": "email"
+          },
+          "planId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "password": {
+            "type": "string"
+          },
+          "codigo": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateSubscriptionRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trial",
+              "past_due",
+              "cancelled",
+              "inactive"
+            ]
+          },
+          "planId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "CreatePlanRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "priceCents",
+          "interval"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "priceCents": {
+            "type": "integer"
+          },
+          "interval": {
+            "type": "string",
+            "enum": [
+              "monthly",
+              "yearly"
+            ]
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "limits": {
+            "type": "object"
+          }
+        }
+      },
+      "FormStartRequest": {
+        "type": "object",
+        "properties": {
+          "formType": {
+            "type": "string"
+          },
+          "step": {
+            "type": "string"
+          }
+        }
+      },
+      "FormCompleteRequest": {
+        "type": "object",
+        "properties": {
+          "formType": {
+            "type": "string"
+          },
+          "formData": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Health check"
+    },
+    {
+      "name": "Auth",
+      "description": "Autenticação e gestão de usuário"
+    },
+    {
+      "name": "Public",
+      "description": "Endpoints públicos sem autenticação"
+    },
+    {
+      "name": "Meta",
+      "description": "Integração Meta Ads (Facebook/Instagram)"
+    },
+    {
+      "name": "Metrics",
+      "description": "Métricas de campanhas"
+    },
+    {
+      "name": "Campaigns",
+      "description": "Gestão de campanhas"
+    },
+    {
+      "name": "Budget",
+      "description": "Otimização de orçamento"
+    },
+    {
+      "name": "Studio",
+      "description": "Studio criativo (geração de criativos)"
+    },
+    {
+      "name": "Automation",
+      "description": "Automação e regras"
+    },
+    {
+      "name": "Fury",
+      "description": "Fury Engine — scores, regras e live feed"
+    },
+    {
+      "name": "Dashboard",
+      "description": "Dados do dashboard"
+    },
+    {
+      "name": "Forms",
+      "description": "Tracking de formulários"
+    },
+    {
+      "name": "Goals",
+      "description": "Configuração de objetivos"
+    },
+    {
+      "name": "Billing",
+      "description": "Assinaturas e pagamentos (Asaas)"
+    },
+    {
+      "name": "Brand Kit",
+      "description": "Configuração de identidade visual"
+    },
+    {
+      "name": "Planner",
+      "description": "Planejador de conteúdo"
+    },
+    {
+      "name": "OpenRouter",
+      "description": "Geração de IA via OpenRouter"
+    },
+    {
+      "name": "Observability",
+      "description": "KPIs de observabilidade"
+    },
+    {
+      "name": "Superadmin",
+      "description": "Administração multi-tenant (superadmin)"
+    },
+    {
+      "name": "Instagram",
+      "description": "Integração Instagram"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "operationId": "get_api_health",
+        "summary": "Health check",
+        "tags": [
+          "Health"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lp/{slug}": {
+      "get": {
+        "operationId": "get_api_lp_slug",
+        "summary": "Landing page pública WhatsApp",
+        "tags": [
+          "Public"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/public/brand-kit/{slug}": {
+      "get": {
+        "operationId": "get_api_public_brand-kit_slug",
+        "summary": "Dados públicos do brand kit por slug",
+        "tags": [
+          "Public"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "operationId": "post_api_auth_register",
+        "summary": "Registrar usuário + tenant",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "operationId": "post_api_auth_login",
+        "summary": "Login — retorna accessToken + refreshToken",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "operationId": "post_api_auth_refresh",
+        "summary": "Renovar accessToken",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/verify-email": {
+      "post": {
+        "operationId": "post_api_auth_verify-email",
+        "summary": "Verificar email com OTP de 6 dígitos",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/forgot-password": {
+      "post": {
+        "operationId": "post_api_auth_forgot-password",
+        "summary": "Solicitar reset de senha",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/reset-password": {
+      "post": {
+        "operationId": "post_api_auth_reset-password",
+        "summary": "Resetar senha com OTP",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "post_api_auth_logout",
+        "summary": "Logout — invalida refresh token",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "operationId": "get_api_auth_me",
+        "summary": "Dados do usuário logado",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      },
+      "patch": {
+        "operationId": "patch_api_auth_me",
+        "summary": "Atualizar perfil/notificações",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/change-password": {
+      "post": {
+        "operationId": "post_api_auth_change-password",
+        "summary": "Trocar senha",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meta/auth/test": {
+      "get": {
+        "operationId": "get_api_meta_auth_test",
+        "summary": "Teste de conectividade Meta Auth",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meta/auth/url": {
+      "get": {
+        "operationId": "get_api_meta_auth_url",
+        "summary": "Gerar URL de autorização Meta OAuth",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/meta/auth/callback": {
+      "get": {
+        "operationId": "get_api_meta_auth_callback",
+        "summary": "Callback OAuth do Meta",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meta/scopes": {
+      "get": {
+        "operationId": "get_api_meta_scopes",
+        "summary": "Listar escopos concedidos",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/meta/pages": {
+      "get": {
+        "operationId": "get_api_meta_pages",
+        "summary": "Listar páginas do Facebook",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/meta/pages/{pageId}/whatsapp-numbers": {
+      "get": {
+        "operationId": "get_api_meta_pages_pageId_whatsapp-numbers",
+        "summary": "Listar números WhatsApp da página",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/meta/businesses": {
+      "get": {
+        "operationId": "get_api_meta_businesses",
+        "summary": "Listar Business Managers",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/meta/pages-by-business": {
+      "post": {
+        "operationId": "post_api_meta_pages-by-business",
+        "summary": "Listar páginas por business",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessIdsRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meta/adaccounts-by-business": {
+      "post": {
+        "operationId": "post_api_meta_adaccounts-by-business",
+        "summary": "Listar ad accounts por business",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessIdsRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meta/whatsapp-by-pages": {
+      "post": {
+        "operationId": "post_api_meta_whatsapp-by-pages",
+        "summary": "Listar WhatsApp numbers por páginas",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageIdsRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meta/save-selection": {
+      "post": {
+        "operationId": "post_api_meta_save-selection",
+        "summary": "Salvar seleção de assets Meta",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSelectionRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meta/asset-selection": {
+      "get": {
+        "operationId": "get_api_meta_asset-selection",
+        "summary": "Obter seleção de assets salva",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/meta/connections": {
+      "get": {
+        "operationId": "get_api_meta_connections",
+        "summary": "Listar conexões Meta",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/meta/connections/{id}/select-account": {
+      "patch": {
+        "operationId": "patch_api_meta_connections_id_select-account",
+        "summary": "Selecionar ad account",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectAdAccountRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/meta/connections/{id}": {
+      "delete": {
+        "operationId": "delete_api_meta_connections_id",
+        "summary": "Remover conexão Meta",
+        "tags": [
+          "Meta"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/metrics/summary": {
+      "get": {
+        "operationId": "get_api_metrics_summary",
+        "summary": "Resumo de métricas (adsets)",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/metrics/campaigns": {
+      "get": {
+        "operationId": "get_api_metrics_campaigns",
+        "summary": "Listar métricas por campanha",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/metrics/campaigns/{campaignId}/adsets": {
+      "get": {
+        "operationId": "get_api_metrics_campaigns_campaignId_adsets",
+        "summary": "Adsets de uma campanha",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "campaignId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/metrics/campaigns/{campaignId}/insights": {
+      "get": {
+        "operationId": "get_api_metrics_campaigns_campaignId_insights",
+        "summary": "Insights detalhados de campanha",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "campaignId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/metrics/daily": {
+      "get": {
+        "operationId": "get_api_metrics_daily",
+        "summary": "Métricas diárias",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/metrics/goals-progress": {
+      "get": {
+        "operationId": "get_api_metrics_goals-progress",
+        "summary": "Progresso das metas",
+        "tags": [
+          "Metrics"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/campaigns": {
+      "get": {
+        "operationId": "get_api_campaigns",
+        "summary": "Listar campanhas",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/campaigns/create": {
+      "post": {
+        "operationId": "post_api_campaigns_create",
+        "summary": "Criar campanha",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCampaignRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/campaigns/create-wizard": {
+      "post": {
+        "operationId": "post_api_campaigns_create-wizard",
+        "summary": "Criar campanha via wizard",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/campaigns/mcp-log": {
+      "post": {
+        "operationId": "post_api_campaigns_mcp-log",
+        "summary": "Log do wizard (MCP)",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/campaigns/create-wizard-diag": {
+      "get": {
+        "operationId": "get_api_campaigns_create-wizard-diag",
+        "summary": "Diagnóstico do wizard",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/campaigns/upload-creative": {
+      "post": {
+        "operationId": "post_api_campaigns_upload-creative",
+        "summary": "Upload de criativo (multipart)",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/campaigns/suggest-text": {
+      "post": {
+        "operationId": "post_api_campaigns_suggest-text",
+        "summary": "Sugerir texto via IA",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestTextRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/campaigns/meta-locations": {
+      "get": {
+        "operationId": "get_api_campaigns_meta-locations",
+        "summary": "Buscar localizações Meta",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/campaigns/meta-interests": {
+      "get": {
+        "operationId": "get_api_campaigns_meta-interests",
+        "summary": "Buscar interesses Meta",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/campaigns/{id}": {
+      "get": {
+        "operationId": "get_api_campaigns_id",
+        "summary": "Detalhes da campanha",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_api_campaigns_id",
+        "summary": "Atualizar campanha",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCampaignRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "delete_api_campaigns_id",
+        "summary": "Soft delete da campanha",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/campaigns/{id}/pause": {
+      "patch": {
+        "operationId": "patch_api_campaigns_id_pause",
+        "summary": "Pausar campanha",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/campaigns/{id}/resume": {
+      "patch": {
+        "operationId": "patch_api_campaigns_id_resume",
+        "summary": "Retomar campanha",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/campaigns/{id}/status": {
+      "patch": {
+        "operationId": "patch_api_campaigns_id_status",
+        "summary": "Atualizar status",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCampaignStatusRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/campaigns/{id}/budget": {
+      "patch": {
+        "operationId": "patch_api_campaigns_id_budget",
+        "summary": "Atualizar budget",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBudgetRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/campaigns/{id}/insights": {
+      "get": {
+        "operationId": "get_api_campaigns_id_insights",
+        "summary": "Insights da campanha",
+        "tags": [
+          "Campaigns"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/budget/optimize": {
+      "post": {
+        "operationId": "post_api_budget_optimize",
+        "summary": "Disparar otimização de budget",
+        "tags": [
+          "Budget"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/budget/suggestions": {
+      "get": {
+        "operationId": "get_api_budget_suggestions",
+        "summary": "Listar sugestões de budget",
+        "tags": [
+          "Budget"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/budget/suggestions/{id}/apply": {
+      "post": {
+        "operationId": "post_api_budget_suggestions_id_apply",
+        "summary": "Aplicar uma sugestão",
+        "tags": [
+          "Budget"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/budget/suggestions/{id}/reject": {
+      "post": {
+        "operationId": "post_api_budget_suggestions_id_reject",
+        "summary": "Rejeitar uma sugestão",
+        "tags": [
+          "Budget"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/budget/apply-bulk": {
+      "post": {
+        "operationId": "post_api_budget_apply-bulk",
+        "summary": "Aplicar sugestões em lote",
+        "tags": [
+          "Budget"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyBulkRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/budget/reject-bulk": {
+      "post": {
+        "operationId": "post_api_budget_reject-bulk",
+        "summary": "Rejeitar sugestões em lote",
+        "tags": [
+          "Budget"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyBulkRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/budget/config": {
+      "get": {
+        "operationId": "get_api_budget_config",
+        "summary": "Obter configuração de budget",
+        "tags": [
+          "Budget"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      },
+      "patch": {
+        "operationId": "patch_api_budget_config",
+        "summary": "Atualizar configuração de budget",
+        "tags": [
+          "Budget"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBudgetConfigRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studio/storage-check": {
+      "get": {
+        "operationId": "get_api_studio_storage-check",
+        "summary": "Verificar storage disponível",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studio/assets": {
+      "get": {
+        "operationId": "get_api_studio_assets",
+        "summary": "Listar assets criativos",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/studio/assets/{assetId}": {
+      "get": {
+        "operationId": "get_api_studio_assets_assetId",
+        "summary": "Detalhes do asset",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "delete_api_studio_assets_assetId",
+        "summary": "Excluir asset",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/studio/assets/{assetId}/compliance-status": {
+      "get": {
+        "operationId": "get_api_studio_assets_assetId_compliance-status",
+        "summary": "Status de compliance do asset",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/studio/generate-copy": {
+      "post": {
+        "operationId": "post_api_studio_generate-copy",
+        "summary": "Gerar copy via DeepSeek",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateCreativeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studio/copy/generate": {
+      "post": {
+        "operationId": "post_api_studio_copy_generate",
+        "summary": "Gerar copy (endpoint alternativo)",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateCreativeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studio/generate-image": {
+      "post": {
+        "operationId": "post_api_studio_generate-image",
+        "summary": "Gerar imagem criativa",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateImageRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studio/render-creative": {
+      "post": {
+        "operationId": "post_api_studio_render-creative",
+        "summary": "Renderizar criativo final",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderCreativeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studio/publish/{assetId}": {
+      "post": {
+        "operationId": "post_api_studio_publish_assetId",
+        "summary": "Publicar asset",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishAssetRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/studio/upload-to-meta": {
+      "post": {
+        "operationId": "post_api_studio_upload-to-meta",
+        "summary": "Upload para Meta Ads",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadToMetaRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studio/creative/validate-context": {
+      "post": {
+        "operationId": "post_api_studio_creative_validate-context",
+        "summary": "Validar contexto criativo",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/studio/creative/generate": {
+      "post": {
+        "operationId": "post_api_studio_creative_generate",
+        "summary": "Gerar criativo completo",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateCreativeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studio/creative/regenerate": {
+      "post": {
+        "operationId": "post_api_studio_creative_regenerate",
+        "summary": "Regenerar criativo com feedback",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegenerateCreativeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studio/select-layout": {
+      "post": {
+        "operationId": "post_api_studio_select-layout",
+        "summary": "Selecionar layout (Layout Selector Agent)",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectLayoutRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studio/preview-png": {
+      "post": {
+        "operationId": "post_api_studio_preview-png",
+        "summary": "Preview PNG fiel (sem LLM, sem DB)",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewCreativeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/automation/feed": {
+      "get": {
+        "operationId": "get_api_automation_feed",
+        "summary": "SSE feed de automação",
+        "tags": [
+          "Automation"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/automation/rules": {
+      "get": {
+        "operationId": "get_api_automation_rules",
+        "summary": "Listar regras de automação",
+        "tags": [
+          "Automation"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      },
+      "post": {
+        "operationId": "post_api_automation_rules",
+        "summary": "Criar regra de automação",
+        "tags": [
+          "Automation"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRuleRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/automation/rules/{id}": {
+      "delete": {
+        "operationId": "delete_api_automation_rules_id",
+        "summary": "Excluir regra",
+        "tags": [
+          "Automation"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/automation/takedowns": {
+      "get": {
+        "operationId": "get_api_automation_takedowns",
+        "summary": "Listar takedowns",
+        "tags": [
+          "Automation"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/automation/budget-smart": {
+      "post": {
+        "operationId": "post_api_automation_budget-smart",
+        "summary": "Budget Smart (automação)",
+        "tags": [
+          "Automation"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BudgetSmartRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fury/live-feed": {
+      "get": {
+        "operationId": "get_api_fury_live-feed",
+        "summary": "SSE feed do Fury Engine",
+        "tags": [
+          "Fury"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/fury/config": {
+      "get": {
+        "operationId": "get_api_fury_config",
+        "summary": "Configuração do Fury Engine",
+        "tags": [
+          "Fury"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      },
+      "patch": {
+        "operationId": "patch_api_fury_config",
+        "summary": "Atualizar config do Fury Engine",
+        "tags": [
+          "Fury"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FuryConfigRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fury/rules": {
+      "get": {
+        "operationId": "get_api_fury_rules",
+        "summary": "Listar regras do Fury",
+        "tags": [
+          "Fury"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      },
+      "post": {
+        "operationId": "post_api_fury_rules",
+        "summary": "Criar regra do Fury",
+        "tags": [
+          "Fury"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFuryRuleRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fury/rules/{id}": {
+      "patch": {
+        "operationId": "patch_api_fury_rules_id",
+        "summary": "Atualizar regra do Fury",
+        "tags": [
+          "Fury"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "delete_api_fury_rules_id",
+        "summary": "Excluir regra do Fury",
+        "tags": [
+          "Fury"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/fury/scores": {
+      "get": {
+        "operationId": "get_api_fury_scores",
+        "summary": "Scores do Fury Engine",
+        "tags": [
+          "Fury"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/fury/history": {
+      "get": {
+        "operationId": "get_api_fury_history",
+        "summary": "Histórico do Fury Engine",
+        "tags": [
+          "Fury"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/dashboard/instagram-insights": {
+      "get": {
+        "operationId": "get_api_dashboard_instagram-insights",
+        "summary": "Insights do Instagram",
+        "tags": [
+          "Dashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/forms/start": {
+      "post": {
+        "operationId": "post_api_forms_start",
+        "summary": "Iniciar tracking de formulário",
+        "tags": [
+          "Forms"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormStartRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/forms/complete": {
+      "post": {
+        "operationId": "post_api_forms_complete",
+        "summary": "Completar formulário",
+        "tags": [
+          "Forms"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormCompleteRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/forms/error": {
+      "post": {
+        "operationId": "post_api_forms_error",
+        "summary": "Registrar erro de formulário",
+        "tags": [
+          "Forms"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/forms/abandoned": {
+      "post": {
+        "operationId": "post_api_forms_abandoned",
+        "summary": "Registrar abandono de formulário",
+        "tags": [
+          "Forms"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/goals": {
+      "get": {
+        "operationId": "get_api_goals",
+        "summary": "Objetivos do tenant",
+        "tags": [
+          "Goals"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      },
+      "put": {
+        "operationId": "put_api_goals",
+        "summary": "Atualizar objetivos",
+        "tags": [
+          "Goals"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalSetupRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goals/setup": {
+      "post": {
+        "operationId": "post_api_goals_setup",
+        "summary": "Criar/atualizar objetivos",
+        "tags": [
+          "Goals"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalSetupRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goals/progress": {
+      "get": {
+        "operationId": "get_api_goals_progress",
+        "summary": "Progresso dos objetivos",
+        "tags": [
+          "Goals"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/billing/plans": {
+      "get": {
+        "operationId": "get_api_billing_plans",
+        "summary": "Listar planos disponíveis",
+        "tags": [
+          "Billing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/webhook": {
+      "post": {
+        "operationId": "post_api_billing_webhook",
+        "summary": "Webhook do Asaas",
+        "tags": [
+          "Billing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/subscribe": {
+      "post": {
+        "operationId": "post_api_billing_subscribe",
+        "summary": "Assinar plano",
+        "tags": [
+          "Billing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscribeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/subscription": {
+      "get": {
+        "operationId": "get_api_billing_subscription",
+        "summary": "Assinatura atual",
+        "tags": [
+          "Billing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      },
+      "delete": {
+        "operationId": "delete_api_billing_subscription",
+        "summary": "Cancelar assinatura",
+        "tags": [
+          "Billing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/billing/invoices": {
+      "get": {
+        "operationId": "get_api_billing_invoices",
+        "summary": "Faturas recentes",
+        "tags": [
+          "Billing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/brand-kit": {
+      "get": {
+        "operationId": "get_api_brand-kit",
+        "summary": "Obter brand kit",
+        "tags": [
+          "Brand Kit"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      },
+      "put": {
+        "operationId": "put_api_brand-kit",
+        "summary": "Upsert brand kit",
+        "tags": [
+          "Brand Kit"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBrandKitRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/brand-kit/logo": {
+      "post": {
+        "operationId": "post_api_brand-kit_logo",
+        "summary": "Upload de logo (multipart)",
+        "tags": [
+          "Brand Kit"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/brand-kit/photos": {
+      "post": {
+        "operationId": "post_api_brand-kit_photos",
+        "summary": "Upload de fotos (multipart)",
+        "tags": [
+          "Brand Kit"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      },
+      "delete": {
+        "operationId": "delete_api_brand-kit_photos",
+        "summary": "Remover fotos",
+        "tags": [
+          "Brand Kit"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/planner/generate": {
+      "post": {
+        "operationId": "post_api_planner_generate",
+        "summary": "Gerar plano de conteúdo",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePlanRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/planner/jobs/{jobId}": {
+      "get": {
+        "operationId": "get_api_planner_jobs_jobId",
+        "summary": "Status do job de geração",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/planner/plans/latest": {
+      "get": {
+        "operationId": "get_api_planner_plans_latest",
+        "summary": "Plano mais recente",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/planner/plans/{planId}": {
+      "get": {
+        "operationId": "get_api_planner_plans_planId",
+        "summary": "Detalhes do plano",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "planId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/planner/prerequisites": {
+      "get": {
+        "operationId": "get_api_planner_prerequisites",
+        "summary": "Pré-requisitos do planner",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/planner/plans/confirm": {
+      "post": {
+        "operationId": "post_api_planner_plans_confirm",
+        "summary": "Confirmar plano",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPlanRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/planner/plans/revalidate": {
+      "post": {
+        "operationId": "post_api_planner_plans_revalidate",
+        "summary": "Revalidar plano",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/planner/calendar": {
+      "get": {
+        "operationId": "get_api_planner_calendar",
+        "summary": "Calendário de posts",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/planner/posts/{postId}": {
+      "patch": {
+        "operationId": "patch_api_planner_posts_postId",
+        "summary": "Editar post",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditPostRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "postId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/planner/posts/bulk-schedule": {
+      "patch": {
+        "operationId": "patch_api_planner_posts_bulk-schedule",
+        "summary": "Agendar posts em lote",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkScheduleRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/planner/posts/bulk": {
+      "delete": {
+        "operationId": "delete_api_planner_posts_bulk",
+        "summary": "Excluir posts em lote",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/planner/posts": {
+      "post": {
+        "operationId": "post_api_planner_posts",
+        "summary": "Criar post",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePostRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/planner/posts/upload": {
+      "post": {
+        "operationId": "post_api_planner_posts_upload",
+        "summary": "Upload de mídia (multipart)",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/planner/posts/{postId}/move": {
+      "patch": {
+        "operationId": "patch_api_planner_posts_postId_move",
+        "summary": "Mover post no calendário",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "postId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/planner/posts/publish-due": {
+      "post": {
+        "operationId": "post_api_planner_posts_publish-due",
+        "summary": "Publicar posts agendados",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/planner/cron/publish-due": {
+      "post": {
+        "operationId": "post_api_planner_cron_publish-due",
+        "summary": "Cron: publicar posts agendados",
+        "tags": [
+          "Planner"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/openrouter/models": {
+      "get": {
+        "operationId": "get_api_openrouter_models",
+        "summary": "Listar modelos disponíveis",
+        "tags": [
+          "OpenRouter"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/openrouter/enhance-prompt": {
+      "post": {
+        "operationId": "post_api_openrouter_enhance-prompt",
+        "summary": "Melhorar prompt via IA",
+        "tags": [
+          "OpenRouter"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnhancePromptRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/openrouter/generate-image": {
+      "post": {
+        "operationId": "post_api_openrouter_generate-image",
+        "summary": "Gerar imagem via IA",
+        "tags": [
+          "OpenRouter"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateImageOrRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/openrouter/generate-video": {
+      "post": {
+        "operationId": "post_api_openrouter_generate-video",
+        "summary": "Gerar vídeo via IA",
+        "tags": [
+          "OpenRouter"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateVideoRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/openrouter/regenerate": {
+      "post": {
+        "operationId": "post_api_openrouter_regenerate",
+        "summary": "Regenerar conteúdo",
+        "tags": [
+          "OpenRouter"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/openrouter/regenerate-ad": {
+      "post": {
+        "operationId": "post_api_openrouter_regenerate-ad",
+        "summary": "Regenerar anúncio com máscara",
+        "tags": [
+          "OpenRouter"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/observability/kpis": {
+      "get": {
+        "operationId": "get_api_observability_kpis",
+        "summary": "KPIs de observabilidade",
+        "tags": [
+          "Observability"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/observability/kpis/list": {
+      "get": {
+        "operationId": "get_api_observability_kpis_list",
+        "summary": "Lista de KPIs disponíveis",
+        "tags": [
+          "Observability"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/admin/tenants": {
+      "get": {
+        "operationId": "get_api_admin_tenants",
+        "summary": "Listar tenants",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/admin/tenants/{id}": {
+      "get": {
+        "operationId": "get_api_admin_tenants_id",
+        "summary": "Detalhes do tenant",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "delete_api_admin_tenants_id",
+        "summary": "Excluir tenant",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "operationId": "get_api_admin_users",
+        "summary": "Listar usuários",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      },
+      "post": {
+        "operationId": "post_api_admin_users",
+        "summary": "Criar usuário",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/check-email/{email}": {
+      "get": {
+        "operationId": "get_api_admin_users_check-email_email",
+        "summary": "Verificar disponibilidade de email",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "email",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/users/{id}": {
+      "patch": {
+        "operationId": "patch_api_admin_users_id",
+        "summary": "Atualizar usuário",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "delete_api_admin_users_id",
+        "summary": "Excluir usuário",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/setup-tenant": {
+      "post": {
+        "operationId": "post_api_admin_setup-tenant",
+        "summary": "Setup completo de tenant + usuário",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupTenantRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/tenants/{tenantId}/subscription": {
+      "patch": {
+        "operationId": "patch_api_admin_tenants_tenantId_subscription",
+        "summary": "Atualizar assinatura",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSubscriptionRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/tenants/{tenantId}/fury-config": {
+      "patch": {
+        "operationId": "patch_api_admin_tenants_tenantId_fury-config",
+        "summary": "Atualizar Fury Config",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/tenants/{tenantId}/brand-kit": {
+      "get": {
+        "operationId": "get_api_admin_tenants_tenantId_brand-kit",
+        "summary": "Ver brand kit do tenant",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_api_admin_tenants_tenantId_brand-kit",
+        "summary": "Editar brand kit do tenant",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBrandKitRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/tenants/{tenantId}/campaigns": {
+      "get": {
+        "operationId": "get_api_admin_tenants_tenantId_campaigns",
+        "summary": "Listar campanhas do tenant",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/tenants/{tenantId}/goals": {
+      "put": {
+        "operationId": "put_api_admin_tenants_tenantId_goals",
+        "summary": "Upsert goals do tenant",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalSetupRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/tenants/{tenantId}/audience": {
+      "patch": {
+        "operationId": "patch_api_admin_tenants_tenantId_audience",
+        "summary": "Atualizar audiência do tenant",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/plans": {
+      "get": {
+        "operationId": "get_api_admin_plans",
+        "summary": "Listar planos",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      },
+      "post": {
+        "operationId": "post_api_admin_plans",
+        "summary": "Criar plano",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlanRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/plans/{id}": {
+      "patch": {
+        "operationId": "patch_api_admin_plans_id",
+        "summary": "Atualizar plano",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "delete_api_admin_plans_id",
+        "summary": "Excluir plano",
+        "tags": [
+          "Superadmin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/instagram/posts-ranked": {
+      "get": {
+        "operationId": "get_api_instagram_posts-ranked",
+        "summary": "Posts ranqueados do Instagram",
+        "tags": [
+          "Instagram"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/instagram/media-proxy": {
+      "get": {
+        "operationId": "get_api_instagram_media-proxy",
+        "summary": "Proxy de mídia do Instagram",
+        "tags": [
+          "Instagram"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    }
+  }
+}

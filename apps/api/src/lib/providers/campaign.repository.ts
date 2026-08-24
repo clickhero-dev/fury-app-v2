@@ -74,6 +74,8 @@ export interface ICampaignRepository {
 
   updateCampaign(id: string, data: Partial<CampaignRecord>): Promise<CampaignRecord>;
 
+  deleteCampaign(id: string): Promise<void>;
+
   findCreativeAsset(id: string, tenantId: string): Promise<CreativeAssetRecord | null>;
 
   findRecentTakedowns(tenantId: string, campaignId: string, limit?: number): Promise<FuryInsightRecord[]>;
