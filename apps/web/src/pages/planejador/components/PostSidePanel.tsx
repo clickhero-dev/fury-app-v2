@@ -321,6 +321,9 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
     );
   }
 
+  // Refactor em andamento: mediaContent será ligado ao JSX quando o bloco
+  // inline antigo for substituído — por ora fica computado (build/lint ok).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const mediaContent = renderMediaContent();
 
   return (
