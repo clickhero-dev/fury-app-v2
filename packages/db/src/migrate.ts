@@ -112,13 +112,13 @@ const STEPS: MigrationStep[] = [
   },
   { tag: '0031_migrate_carousel_images' },
   { tag: '0030_workflow_jobs' },
-  {
-    tag: '0011_fr8_publish_retry',
+  { tag: '0011_fr8_publish_retry',
     afterHook: async (client) => {
       await client.unsafe(`ALTER TYPE "post_status" ADD VALUE IF NOT EXISTS 'failed'`);
       console.log('    + added failed to post_status');
     },
   },
+  { tag: '0032_add_budget_optimizations' },
 ];
 
 /** Nomes de todas as tabelas do schema (26 tabelas) — usados para validação. */
