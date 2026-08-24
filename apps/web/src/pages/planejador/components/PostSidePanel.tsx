@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { X, Copy, Check, LayoutGrid, Image, Sparkles, Film, Upload, Trash2, RotateCcw } from 'lucide-react';
+import { X, Copy, Check, LayoutGrid, Image, Sparkles, Film, Upload, Trash2, RotateCcw, Plus } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useMutation } from '@tanstack/react-query';
 import api from '@/lib/api';
@@ -25,6 +25,8 @@ const postLabels: Record<string, string> = {
   image: 'Post',
   stories: 'Stories',
 };
+
+const MAX_CAROUSEL_IMAGES = 5;
 
 const statusLabels: Record<string, string> = {
   draft: 'Rascunho',
@@ -99,6 +101,8 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
     scheduledIso ? scheduledIso.toTimeString().slice(0, 5) : '',
   );
   const editFileRef = useRef<HTMLInputElement>(null);
+  const [editCarouselImages, setEditCarouselImages] = useState<string[]>([]);
+  const carouselFileRef = useRef<HTMLInputElement>(null);
 
   // 💡 VERIFICA SE O POST É PASSADO OU JÁ FOI PUBLICADO
   const isPastOrPublished =
@@ -191,6 +195,21 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
     onClose();
   };
 
+  const getPostImages = (post: Post): string[] => {
+    if (post.imageUrls?.length) return post.imageUrls;
+    return post.imageUrl ? [post.imageUrl] : [];
+  };
+
+  const addCarouselImage = (file: File) => {
+    setEditCarouselImages((prev) => {
+      if (prev.length >= MAX_CAROUSEL_IMAGES) return prev;
+      return [...prev, URL.createObjectURL(file)];
+    });
+  };
+
+  const removeCarouselImage = (idx: number) =>
+    setEditCarouselImages((prev) => prev.filter((_, i) => i !== idx));
+
   // Compute media content based on mode and post type
   function renderMediaContent(): React.ReactNode {
     if (!editMode) {
@@ -280,28 +299,31 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
           </div>
         </div>
       );
+    }
 
-      return (
-        <div>
-          <div
-            onDragOver={(e) => { e.preventDefault(); setEditDragOver(true); }}
-            onDragLeave={() => setEditDragOver(false)}
-            onDrop={(e) => { e.preventDefault(); setEditDragOver(false); const f = e.dataTransfer.files[0]; if (f) setEditFile(f); }}
-            onClick={() => { editFileRef.current?.click(); }}
-            className={clsx(
-              'flex flex-col items-center justify-center h-32 rounded-xl border-2 border-dashed cursor-pointer transition-all',
-              editDragOver ? 'border-accent bg-accent/10' : 'border-gray-600 hover:border-gray-500',
-            )}
-          >
-            <Upload className="h-6 w-6 text-gray-500 mb-1" />
-            <p className="text-xs text-gray-400">Arraste ou clique para trocar</p>
-          </div>
+    // Fallback: dropzone para inserir/trocar mídia
+    return (
+      <div>
+        <div
+          onDragOver={(e) => { e.preventDefault(); setEditDragOver(true); }}
+          onDragLeave={() => setEditDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setEditDragOver(false); const f = e.dataTransfer.files[0]; if (f) setEditFile(f); }}
+          onClick={() => { editFileRef.current?.click(); }}
+          className={clsx(
+            'flex flex-col items-center justify-center h-32 rounded-xl border-2 border-dashed cursor-pointer transition-all',
+            editDragOver ? 'border-accent bg-accent/10' : 'border-gray-600 hover:border-gray-500',
+          )}
+        >
+          <Upload className="h-6 w-6 text-gray-500 mb-1" />
+          <p className="text-xs text-gray-400">Arraste ou clique para trocar</p>
         </div>
-      );
+      </div>
+    );
   }
 
   const mediaContent = renderMediaContent();
 
+  return (
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Overlay */}
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
