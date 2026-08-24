@@ -93,6 +93,7 @@ const editPostSchema = z.union([
     cta: z.string().optional(),
     hashtags: z.array(z.string()).optional(),
     imageUrl: z.string().url().optional(),
+    imageUrls: z.array(z.string().url()).max(5).optional(),
     scheduledAt: z.string().datetime().nullable().optional(),
   }),
 ]);
@@ -172,6 +173,7 @@ export async function handleCreatePost(req: Request, res: Response, next: NextFu
       scheduledAt: z.string().datetime().optional(),
       title: z.string().max(255).optional(),
       imageUrl: z.string().url().optional(),
+      imageUrls: z.array(z.string().url()).max(5).optional(),
     }).and(
       z.union([
         z.object({ date: z.string().date() }), // Novo: ISO date "2026-08-19"

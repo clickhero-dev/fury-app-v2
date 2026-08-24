@@ -157,13 +157,14 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
 export async function updatePostFields(
   postId: string,
   tenantId: string,
-  fields: { caption?: string; cta?: string; hashtags?: string[]; imageUrl?: string; scheduledAt?: string | null },
+  fields: { caption?: string; cta?: string; hashtags?: string[]; imageUrl?: string; imageUrls?: string[]; scheduledAt?: string | null },
 ) {
   const setData: Record<string, any> = { updatedAt: new Date() };
   if (fields.caption !== undefined) setData.caption = fields.caption;
   if (fields.cta !== undefined) setData.cta = fields.cta;
   if (fields.hashtags !== undefined) setData.hashtags = fields.hashtags;
   if (fields.imageUrl !== undefined) setData.imageUrl = fields.imageUrl;
+  if (fields.imageUrls !== undefined) setData.imageUrls = fields.imageUrls;
   if (fields.scheduledAt !== undefined) setData.scheduledAt = fields.scheduledAt ? new Date(fields.scheduledAt) : null;
 
   const [updated] = await db.update(socialPosts)
@@ -275,6 +276,7 @@ export async function createManualPost(tenantId: string, data: {
   scheduledAt?: string;
   title?: string;
   imageUrl?: string;
+  imageUrls?: string[];
 }) {
   // Dual-format: calcula dayIndex e calendarDate a partir de date ou dayIndex
   let dayIndex = data.dayIndex;
@@ -316,6 +318,7 @@ export async function createManualPost(tenantId: string, data: {
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
       title: data.title || null,
       imageUrl: data.imageUrl || null,
+      imageUrls: data.imageUrls ?? null,
       status: 'approved',
     })
     .returning();
