@@ -42,6 +42,18 @@ describe('Metrics Endpoints', () => {
     accessToken = loginResponse.body.data.token;
     tenantId = loginResponse.body.data.user.tenantId;
 
+    // Billing gate: checkSubscriptionActive exige subscription ativa
+    const [plan] = await db
+      .insert(schema.plans)
+      .values({ name: 'Test Plan', priceCents: 100, interval: 'monthly', isActive: true })
+      .returning();
+    await db.insert(schema.subscriptions).values({
+      tenantId,
+      planId: plan.id,
+      status: 'active',
+      isNonExpirable: true,
+    });
+
     // Create campaigns with metrics
     const campaigns = await db
       .insert(schema.campaigns)

@@ -174,7 +174,7 @@ export function PlanejadorPage() {
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         {/* Estado de Geração de Conteúdo */}
         {view === 'generating' && (
-          <div className="rounded-xl bg-gray-800/40 border border-gray-700/50 p-6">
+          <div className="rounded-xl bg-surface-secondary/40 border border-border/50 p-6">
             <GeneratingState jobStatus={jobStatus} agentLabels={agentLabels} />
           </div>
         )}

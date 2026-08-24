@@ -7,7 +7,7 @@ const STAGE_LABELS: Record<string, string> = {
   'Strategy Agent': 'Definindo estratégia de conteúdo…',
   'Planner Agent': 'Planejando os posts do mês…',
   'Copywriter Agent': 'Escrevendo os conteúdos…',
-  'Creative Agent': 'Gerando imagens com IA…',
+  'Creative Agent': 'Criando sugestões de artes…',
   'Quality Agent': 'Revisando a qualidade…',
   'Scheduler Agent': 'Agendando no calendário…',
   'Branding Agent': 'Validando com a marca…',
