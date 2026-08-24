@@ -1,6 +1,6 @@
 import { db, campaignPlans, socialPosts, metaConnections, clientGoals, brandKits } from '@fury/db';
 import { eq, and, desc, gt, gte, lt, not, inArray, isNull, or, lte, sql } from 'drizzle-orm';
-import { jobs, generateId, runPipeline } from '../agents/orchestrator.js';
+import { generateId } from '../agents/orchestrator.js';
 import { openrouterService } from './openrouter.service.js';
 import type { JobStatus } from '../agents/types.js';
 import { parseAgentJSON } from '../agents/utils.js';
