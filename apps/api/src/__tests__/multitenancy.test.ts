@@ -25,29 +25,43 @@ describe('Multi-tenancy Isolation', () => {
   beforeEach(async () => {
     await clearData();
 
-    // Create tenant 1 and user
+    // Create tenant 1 and user (register não retorna tokens — login em seguida)
     const id1 = uniqueId();
-    const tenant1Response = await request(app).post('/api/auth/register').send({
+    const email1 = `tenant1-${id1}@test.com`;
+    const password1 = 'SecurePass123!';
+    await request(app).post('/api/auth/register').send({
       name: `Tenant One ${id1}`,
-      email: `tenant1-${id1}@test.com`,
-      password: 'SecurePass123!',
+      email: email1,
+      password: password1,
       companyName: `Company One ${id1}`,
     });
 
-    tenant1AccessToken = tenant1Response.body.data.tokens.accessToken;
-    tenant1Id = tenant1Response.body.data.user.tenantId;
+    const tenant1Login = await request(app).post('/api/auth/login').send({
+      email: email1,
+      password: password1,
+    });
+
+    tenant1AccessToken = tenant1Login.body.data.token;
+    tenant1Id = tenant1Login.body.data.user.tenantId;
 
     // Create tenant 2 and user
     const id2 = uniqueId();
-    const tenant2Response = await request(app).post('/api/auth/register').send({
+    const email2 = `tenant2-${id2}@test.com`;
+    const password2 = 'SecurePass123!';
+    await request(app).post('/api/auth/register').send({
       name: `Tenant Two ${id2}`,
-      email: `tenant2-${id2}@test.com`,
-      password: 'SecurePass123!',
+      email: email2,
+      password: password2,
       companyName: `Company Two ${id2}`,
     });
 
-    tenant2AccessToken = tenant2Response.body.data.tokens.accessToken;
-    tenant2Id = tenant2Response.body.data.user.tenantId;
+    const tenant2Login = await request(app).post('/api/auth/login').send({
+      email: email2,
+      password: password2,
+    });
+
+    tenant2AccessToken = tenant2Login.body.data.token;
+    tenant2Id = tenant2Login.body.data.user.tenantId;
   });
 
 

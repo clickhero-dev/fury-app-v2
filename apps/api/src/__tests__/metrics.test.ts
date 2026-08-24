@@ -25,15 +25,22 @@ describe('Metrics Endpoints', () => {
 
     // Create user
     const id = uniqueId();
-    const registerResponse = await request(app).post('/api/auth/register').send({
+    const email = `test-${id}@test.com`;
+    const password = 'SecurePass123!';
+    await request(app).post('/api/auth/register').send({
       name: 'Test User',
-      email: `test-${id}@test.com`,
-      password: 'SecurePass123!',
+      email,
+      password,
       companyName: `Test Company ${id}`,
     });
 
-    accessToken = registerResponse.body.data.tokens.accessToken;
-    tenantId = registerResponse.body.data.user.tenantId;
+    const loginResponse = await request(app).post('/api/auth/login').send({
+      email,
+      password,
+    });
+
+    accessToken = loginResponse.body.data.token;
+    tenantId = loginResponse.body.data.user.tenantId;
 
     // Create campaigns with metrics
     const campaigns = await db

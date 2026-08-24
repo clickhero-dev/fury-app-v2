@@ -18,7 +18,7 @@ describe('Auth Endpoints', () => {
 
 
   describe('POST /api/auth/register', () => {
-    it('should create tenant + user and return valid tokens', async () => {
+    it('should create tenant + user (sem tokens — login é fluxo separado)', async () => {
       const id = uniqueId();
       const response = await request(app).post('/api/auth/register').send({
         name: 'John Doe',
@@ -29,9 +29,6 @@ describe('Auth Endpoints', () => {
 
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
-      expect(response.body.data).toHaveProperty('tokens');
-      expect(response.body.data.tokens).toHaveProperty('accessToken');
-      expect(response.body.data.tokens).toHaveProperty('refreshToken');
       expect(response.body.data.user).toEqual(
         expect.objectContaining({
           role: 'owner',
@@ -40,6 +37,7 @@ describe('Auth Endpoints', () => {
           tenantId: expect.any(String),
         })
       );
+      expect(response.body.data).not.toHaveProperty('tokens');
       expect(response.body.data.user).not.toHaveProperty('passwordHash');
     });
 
@@ -116,7 +114,7 @@ describe('Auth Endpoints', () => {
       });
     });
 
-    it('should return tokens with valid credentials', async () => {
+    it('should return flat token + refreshToken with valid credentials', async () => {
       const response = await request(app).post('/api/auth/login').send({
         email: testEmail,
         password: testPassword,
@@ -124,9 +122,11 @@ describe('Auth Endpoints', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.data).toHaveProperty('tokens');
-      expect(response.body.data.tokens).toHaveProperty('accessToken');
-      expect(response.body.data.tokens).toHaveProperty('refreshToken');
+      expect(response.body.data).toHaveProperty('token');
+      expect(response.body.data).toHaveProperty('refreshToken');
+      expect(response.body.data.token).toBeDefined();
+      expect(response.body.data.refreshToken).toBeDefined();
+      expect(response.body.data).not.toHaveProperty('tokens');
       expect(response.body.data.user.email).toBe(testEmail);
     });
 
@@ -157,18 +157,24 @@ describe('Auth Endpoints', () => {
     let testEmail: string;
 
     beforeEach(async () => {
-      // Create a user and get token
+      // Create a user and get token via login (register não retorna tokens)
       const id = uniqueId();
+      const testPassword = 'SecurePass123!';
       testEmail = `john-${id}@test.com`;
 
-      const registerResponse = await request(app).post('/api/auth/register').send({
+      await request(app).post('/api/auth/register').send({
         name: 'John Doe',
         email: testEmail,
-        password: 'SecurePass123!',
+        password: testPassword,
         companyName: `Test Company ${id}`,
       });
 
-      accessToken = registerResponse.body.data.tokens.accessToken;
+      const loginResponse = await request(app).post('/api/auth/login').send({
+        email: testEmail,
+        password: testPassword,
+      });
+
+      accessToken = loginResponse.body.data.token;
     });
 
     it('should return user data with valid token', async () => {
@@ -217,14 +223,22 @@ describe('Auth Endpoints', () => {
 
     beforeEach(async () => {
       const id = uniqueId();
-      const registerResponse = await request(app).post('/api/auth/register').send({
+      const email = `john-${id}@test.com`;
+      const password = 'SecurePass123!';
+
+      await request(app).post('/api/auth/register').send({
         name: 'John Doe',
-        email: `john-${id}@test.com`,
-        password: 'SecurePass123!',
+        email,
+        password,
         companyName: `Test Company ${id}`,
       });
 
-      refreshToken = registerResponse.body.data.tokens.refreshToken;
+      const loginResponse = await request(app).post('/api/auth/login').send({
+        email,
+        password,
+      });
+
+      refreshToken = loginResponse.body.data.refreshToken;
     });
 
     it('should return new tokens with valid refresh token', async () => {
@@ -255,14 +269,22 @@ describe('Auth Endpoints', () => {
 
     beforeEach(async () => {
       const id = uniqueId();
-      const registerResponse = await request(app).post('/api/auth/register').send({
+      const email = `john-${id}@test.com`;
+      const password = 'SecurePass123!';
+
+      await request(app).post('/api/auth/register').send({
         name: 'John Doe',
-        email: `john-${id}@test.com`,
-        password: 'SecurePass123!',
+        email,
+        password,
         companyName: `Test Company ${id}`,
       });
 
-      accessToken = registerResponse.body.data.tokens.accessToken;
+      const loginResponse = await request(app).post('/api/auth/login').send({
+        email,
+        password,
+      });
+
+      accessToken = loginResponse.body.data.token;
     });
 
     it('should logout successfully with valid token', async () => {
