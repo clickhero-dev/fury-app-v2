@@ -21,12 +21,13 @@ import {
   movePostDay,
   movePostDate,
   publishDuePosts,
+  getAgentLabels,
 } from '../services/planner.service.js';
 
 export async function generatePlan(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenant!.tenantId;
-    const jobStatus = startPlanGeneration(tenantId);
+    const jobStatus = await startPlanGeneration(tenantId);
     res.json({ success: true, data: jobStatus });
   } catch (err) { next(err); }
 }
@@ -34,7 +35,7 @@ export async function generatePlan(req: Request, res: Response, next: NextFuncti
 export async function getJob(req: Request, res: Response, next: NextFunction) {
   try {
     const { jobId } = req.params;
-    const job = getJobProgress(jobId);
+    const job = await getJobProgress(jobId);
     if (!job || job.tenantId !== req.tenant!.tenantId) {
       throw new AppError(404, 'NOT_FOUND', 'Job não encontrado');
     }
@@ -244,5 +245,12 @@ export async function handleUploadMedia(req: Request, res: Response, next: NextF
     const fileName = `posts/${tenantId}/${randomUUID()}.${ext}`;
     const url = await uploadAsset(req.file.buffer, fileName, req.file.mimetype);
     res.json({ success: true, data: { url } });
+  } catch (err) { next(err); }
+}
+
+export async function handleGetAgentLabels(req: Request, res: Response, next: NextFunction) {
+  try {
+    const labels = getAgentLabels();
+    res.json({ success: true, data: labels });
   } catch (err) { next(err); }
 }

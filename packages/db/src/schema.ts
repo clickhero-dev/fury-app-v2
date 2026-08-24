@@ -596,6 +596,43 @@ export const socialPostsRelations = relations(socialPosts, ({ one }) => ({
   }),
 }));
 
+// ===== State machine / Workflow jobs =====
+
+export const workflowStatusEnum = pgEnum('workflow_status', ['pending', 'running', 'done', 'error']);
+
+export const workflowJobs = pgTable(
+  'workflow_jobs',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    workflow: varchar('workflow', { length: 100 }).notNull(),
+    status: workflowStatusEnum('status').notNull().default('pending'),
+    lockKey: varchar('lock_key', { length: 255 }).notNull(),
+    currentStage: varchar('current_stage', { length: 100 }),
+    stages: jsonb('stages').notNull().default(sql`'[]'::jsonb`),
+    artifacts: jsonb('artifacts').notNull().default(sql`'{}'::jsonb`),
+    error: text('error'),
+    planId: uuid('plan_id').references(() => campaignPlans.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('workflow_jobs_tenant_id_idx').on(table.tenantId, table.createdAt),
+    workflowIdx: index('workflow_jobs_workflow_idx').on(table.workflow),
+    lockKeyIdx: index('workflow_jobs_lock_key_idx').on(table.lockKey),
+    statusIdx: index('workflow_jobs_status_idx').on(table.status),
+  })
+);
+
+export const workflowJobsRelations = relations(workflowJobs, ({ one }) => ({
+  plan: one(campaignPlans, {
+    fields: [workflowJobs.planId],
+    references: [campaignPlans.id],
+  }),
+}));
+
 // ===== Google Meu Negócio (Google Business Profile) tables =====
 
 export const googleConnections = pgTable(
@@ -767,6 +804,7 @@ export const allTables = {
   requestLogs,
   campaignPlans,
   socialPosts,
+  workflowJobs,
   googleConnections,
   googleBusinessProfiles,
   businessProfileSettings,

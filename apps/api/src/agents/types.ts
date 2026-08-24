@@ -14,13 +14,27 @@ export interface CopywriterOutput { posts: CopyPost[]; }
 export interface CopyPost { dayIndex: number; caption: string; cta: string; hashtags: string[]; }
 export interface CreativeOutput { posts: CreativePost[]; }
 export interface CreativePost { dayIndex: number; imagePrompt: string; }
+
+export interface ImageGenerationOutput { posts: GeneratedImagePost[]; }
+export interface GeneratedImagePost {
+  dayIndex: number;
+  imageUrl: string;
+  width: number;
+  height: number;
+  format: 'jpeg' | 'png' | 'webp';
+  sizeBytes: number;
+  postType: 'feed' | 'carousel' | 'image' | 'stories';
+  aspectRatio: string;
+  validated: boolean;
+}
+
 export interface QualityOutput { passed: boolean; checks: { name: string; passed: boolean; message?: string }[]; failedItem?: { agent: string; reason: string }; }
 export interface SchedulerOutput { scheduled: { dayIndex: number; platform: string }[]; approvalStatus: 'pending' | 'approved'; }
 export interface BrandingOutput { approved: boolean; notes?: string; violations?: string[]; }
 
 export type AgentStepStatus = 'pending' | 'running' | 'completed' | 'failed';
 export interface AgentStep { name: string; status: AgentStepStatus; pct: number; }
-export interface JobStatus { id: string; tenantId: string; status: 'pending' | 'running' | 'generating' | 'done' | 'error'; currentAgent: string; agentProgress: AgentStep[]; planId?: string; error?: string; }
+export interface JobStatus { id: string; tenantId: string; status: 'pending' | 'running' | 'generating' | 'done' | 'error'; currentAgent: string; agentProgress: AgentStep[]; planId?: string; error?: string; _recoverable?: boolean; }
 
 export interface PipelineState {
   tenantId: string; context: AgentContext; research: ResearchOutput | null; analytics: AnalyticsOutput | null;

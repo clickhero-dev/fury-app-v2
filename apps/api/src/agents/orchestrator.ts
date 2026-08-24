@@ -1,3 +1,5 @@
+import { eq } from 'drizzle-orm';
+import { db, campaignPlans, socialPosts } from '@fury/db';
 import { contextAgent } from './context.agent.js';
 import { researchAgent } from './research.agent.js';
 import { analyticsAgent } from './analytics.agent.js';
@@ -5,128 +7,200 @@ import { strategyAgent } from './strategy.agent.js';
 import { plannerAgent } from './planner.agent.js';
 import { copywriterAgent } from './copywriter.agent.js';
 import { creativeAgent } from './creative.agent.js';
+import { imageGenerationAgent } from './image-generation.agent.js';
 import { qualityAgent } from './quality.agent.js';
 import { schedulerAgent } from './scheduler.agent.js';
 import { brandingAgent } from './branding.agent.js';
-import { savePlanToDb, savePlanToDbInput } from './save.service.js';
-import type { AgentStep } from './types.js';
-
-export const jobs = new Map<string, {
-  id: string;
-  tenantId: string;
-  status: 'pending' | 'running' | 'generating' | 'done' | 'error';
-  currentAgent: string;
-  agentProgress: AgentStep[];
-  planId?: string;
-  error?: string;
-}>();
+import { savePlanToDb } from './save.service.js';
+import type { WorkflowDefinition } from '../services/stateMachine/stageInterface.js';
+import { RetryDependencyError } from '../services/stateMachine/workflow.engine.js';
+import type { ArtifactMap } from '../services/stateMachine/types.js';
 
 export function generateId(): string {
   return crypto.randomUUID();
 }
 
-export async function runPipeline(tenantId: string, jobId: string): Promise<void> {
-  const update = (name: string, status: AgentStep['status'], pct: number) => {
-    const job = jobs.get(jobId);
-    if (!job) return;
-    job.currentAgent = name;
-    job.status = 'generating';
-    const existing = job.agentProgress.find(s => s.name === name);
-    if (existing) {
-      existing.status = status;
-      existing.pct = pct;
-    } else {
-      job.agentProgress.push({ name, status, pct });
-    }
-  };
-
-  const fail = (err: unknown) => {
-    const j = jobs.get(jobId);
-    if (j) {
-      j.status = 'error';
-      j.error = err instanceof Error ? err.message : 'Erro interno';
-    }
-  };
-
-  try {
-    update('Context Agent', 'running', 10);
-    const ctx = await contextAgent(tenantId);
-    update('Context Agent', 'completed', 15);
-
-    update('Research Agent', 'running', 20);
-    const research = await researchAgent(ctx);
-    update('Research Agent', 'completed', 25);
-
-    update('Analytics Agent', 'running', 30);
-    const analytics = await analyticsAgent(ctx);
-    update('Analytics Agent', 'completed', 35);
-
-    update('Strategy Agent', 'running', 40);
-    const strategy = await strategyAgent(ctx, research, analytics);
-    update('Strategy Agent', 'completed', 45);
-
-    update('Planner Agent', 'running', 50);
-    const planner = await plannerAgent(ctx, research, strategy);
-    update('Planner Agent', 'completed', 55);
-
-    update('Copywriter Agent', 'running', 60);
-    let copywriter = await copywriterAgent(ctx, planner);
-    update('Copywriter Agent', 'completed', 65);
-
-    update('Creative Agent', 'running', 70);
-    const creative = await creativeAgent(ctx, planner);
-    update('Creative Agent', 'completed', 75);
-
-    update('Quality Agent', 'running', 80);
-    let quality = await qualityAgent(planner, copywriter);
-    update('Quality Agent', 'completed', 85);
-
-    if (!quality.passed) {
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        update('Copywriter Agent', 'running', 60);
-        copywriter = await copywriterAgent(ctx, planner);
-        update('Copywriter Agent', 'completed', 65);
-
-        update('Quality Agent', 'running', 80);
-        quality = await qualityAgent(planner, copywriter);
-        update('Quality Agent', 'completed', 85);
-
-        if (quality.passed) break;
-        if (attempt === 2) {
-          fail(new Error(
-            'Qualidade não passou após 2 tentativas: ' +
-            quality.checks.filter(c => !c.passed).map(c => c.message).join(', '),
-          ));
-          return;
-        }
-      }
-    }
-
-    update('Scheduler Agent', 'running', 90);
-    const scheduler = await schedulerAgent(planner);
-    update('Scheduler Agent', 'completed', 93);
-
-    update('Branding Agent', 'running', 95);
-    const branding = await brandingAgent(ctx, planner, copywriter, creative);
-    update('Branding Agent', 'completed', 98);
-
-    if (!branding.approved) {
-      fail(new Error('Compliance rejeitou: ' + (branding.notes ?? '—')));
-      return;
-    }
-
-    const planId = await savePlanToDb({
-      tenantId, context: ctx, research, analytics, strategy,
-      planner, copywriter, creative, quality, scheduler, branding,
-    } satisfies savePlanToDbInput);
-
-    update('Pipeline concluído', 'completed', 100);
-    const job = jobs.get(jobId);
-    if (job) {
-      job.planId = planId;
-      job.status = 'done';
-    }
-  } catch (err: unknown) {
-    fail(err);
-  }
+/** Input inicial do workflow do planejador. */
+export interface PlannerWorkflowInput {
+  tenantId: string;
+  currentDate: string; // ISO string - usado para calcular d+1 no planner
 }
+
+/** Leitura tipada de artefato. */
+function artifact<T>(artifacts: ArtifactMap, key: string): T {
+  return artifacts[key] as T;
+}
+
+const AGENTS = [
+  'Context Agent',
+  'Research Agent',
+  'Analytics Agent',
+  'Strategy Agent',
+  'Planner Agent',
+  'Copywriter Agent',
+  'Creative Agent',
+  'Image Generation Agent',
+  'Quality Agent',
+  'Scheduler Agent',
+  'Branding Agent',
+];
+
+export const PLANNER_AGENT_NAMES = AGENTS;
+
+/**
+ * Definição declarativa do workflow do planejador de IA.
+ * Cada agente vira um stage com artifactKey, retryPolicy e rollback.
+ */
+export const plannerWorkflow: WorkflowDefinition<PlannerWorkflowInput> = {
+  id: 'planner-generate',
+  lockKey: (ctx) => ctx.tenantId,
+  defaultRetry: { maxAttempts: 2, backoffMs: 1000, backoffType: 'exponential' },
+  stages: [
+    {
+      id: 'context',
+      artifactKey: 'context',
+      execute: (ctx) => contextAgent(ctx.tenantId),
+    },
+    {
+      id: 'research',
+      deps: ['context'],
+      artifactKey: 'research',
+      execute: (_ctx, artifacts) => researchAgent(artifact(artifacts, 'context')),
+    },
+    {
+      id: 'analytics',
+      deps: ['context'],
+      artifactKey: 'analytics',
+      execute: (_ctx, artifacts) => analyticsAgent(artifact(artifacts, 'context')),
+    },
+    {
+      id: 'strategy',
+      deps: ['research', 'analytics'],
+      artifactKey: 'strategy',
+      execute: (_ctx, artifacts) => strategyAgent(
+        artifact(artifacts, 'context'),
+        artifact(artifacts, 'research'),
+        artifact(artifacts, 'analytics'),
+      ),
+    },
+    {
+      id: 'planner',
+      deps: ['research', 'strategy'],
+      artifactKey: 'planner',
+      retryPolicy: { maxAttempts: 3, backoffMs: 1000, backoffType: 'exponential' },
+      execute: (ctx, artifacts) => plannerAgent(
+        artifact(artifacts, 'context'),
+        artifact(artifacts, 'research'),
+        artifact(artifacts, 'strategy'),
+        ctx.currentDate, // Pass currentDate for d+1 logic
+      ),
+    },
+    {
+      id: 'copywriter',
+      deps: ['planner'],
+      artifactKey: 'copywriter',
+      retryPolicy: { maxAttempts: 3, backoffMs: 800, backoffType: 'exponential' },
+      execute: (_ctx, artifacts) => copywriterAgent(
+        artifact(artifacts, 'context'),
+        artifact(artifacts, 'planner'),
+      ),
+    },
+    {
+      id: 'creative',
+      deps: ['planner'],
+      artifactKey: 'creative',
+      execute: (_ctx, artifacts) => creativeAgent(
+        artifact(artifacts, 'context'),
+        artifact(artifacts, 'planner'),
+      ),
+    },
+    {
+      id: 'image-generation',
+      deps: ['creative', 'planner'],
+      artifactKey: 'images',
+      retryPolicy: { maxAttempts: 3, backoffMs: 2000, backoffType: 'exponential' },
+      execute: async (_ctx, artifacts) => imageGenerationAgent(
+        artifact(artifacts, 'context'),
+        artifact(artifacts, 'creative'),
+        artifact(artifacts, 'planner'),
+      ),
+      rollback: async (_ctx, artifacts) => {
+        const images = artifacts.images as { posts: { imageUrl: string }[] } | undefined;
+        if (images?.posts) {
+          const { deleteGeneratedImages } = await import('../lib/image-validation.js');
+          await deleteGeneratedImages(images.posts.map(p => p.imageUrl));
+        }
+      },
+    },
+    {
+      id: 'quality',
+      deps: ['planner', 'copywriter'],
+      artifactKey: 'quality',
+      retryPolicy: { maxAttempts: 2, backoffMs: 500, backoffType: 'fixed' },
+      execute: async (_ctx, artifacts) => {
+        const quality = await qualityAgent(
+          artifact(artifacts, 'planner'),
+          artifact(artifacts, 'copywriter'),
+        );
+        if (!quality.passed) {
+          const reasons = quality.checks.filter((c) => !c.passed).map((c) => c.message).join(', ');
+          throw new RetryDependencyError('copywriter', `Qualidade não passou: ${reasons}`);
+        }
+        return quality;
+      },
+    },
+    {
+      id: 'scheduler',
+      deps: ['planner'],
+      artifactKey: 'scheduler',
+      execute: (_ctx, artifacts) => schedulerAgent(artifact(artifacts, 'planner')),
+    },
+    {
+      id: 'branding',
+      deps: ['planner', 'copywriter', 'creative'],
+      artifactKey: 'branding',
+      execute: async (_ctx, artifacts) => {
+        const branding = await brandingAgent(
+          artifact(artifacts, 'context'),
+          artifact(artifacts, 'planner'),
+          artifact(artifacts, 'copywriter'),
+          artifact(artifacts, 'creative'),
+        );
+        if (!branding.approved) {
+          throw new Error('Compliance rejeitou: ' + (branding.notes ?? '—'));
+        }
+        return branding;
+      },
+    },
+    {
+      id: 'save',
+      deps: ['context', 'research', 'analytics', 'strategy', 'planner', 'copywriter', 'creative', 'image-generation', 'quality', 'scheduler', 'branding'],
+      artifactKey: 'planId',
+      execute: (ctx, artifacts) => savePlanToDb({
+        tenantId: ctx.tenantId,
+        context: artifact(artifacts, 'context'),
+        research: artifact(artifacts, 'research'),
+        analytics: artifact(artifacts, 'analytics'),
+        strategy: artifact(artifacts, 'strategy'),
+        planner: artifact(artifacts, 'planner'),
+        copywriter: artifact(artifacts, 'copywriter'),
+        creative: artifact(artifacts, 'creative'),
+        images: artifact(artifacts, 'images'),
+        quality: artifact(artifacts, 'quality'),
+        scheduler: artifact(artifacts, 'scheduler'),
+        branding: artifact(artifacts, 'branding'),
+      }),
+      rollback: async (ctx, artifacts) => {
+        const planId = artifacts.planId as string | undefined;
+        if (planId) {
+          await db.delete(socialPosts).where(eq(socialPosts.planId, planId));
+          await db.delete(campaignPlans).where(eq(campaignPlans.id, planId));
+        }
+        void ctx;
+      },
+    },
+  ],
+  finalize: (_ctx, artifacts) => ({
+    planId: typeof artifacts.planId === 'string' ? artifacts.planId : undefined,
+  }),
+};

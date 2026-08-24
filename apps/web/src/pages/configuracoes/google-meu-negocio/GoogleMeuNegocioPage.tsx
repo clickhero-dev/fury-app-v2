@@ -7,6 +7,7 @@ import { GoogleConnectionCard } from './components/GoogleConnectionCard';
 import { ProfileLookupResult } from './components/ProfileLookupResult';
 import { BusinessProfileForm } from './components/BusinessProfileForm';
 import { ProfileStatusPanel } from './components/ProfileStatusPanel';
+import { PhotoUploader } from './components/PhotoUploader';
 import {
   useGoogleConnection,
   useGoogleLookup,
@@ -196,6 +197,16 @@ function GoogleMeuNegocioContent() {
               onError: (err) => showToast(errorMessage(err), 'error'),
             })
           }
+        />
+      )}
+
+      {createdProfile && !profileLoading && profile && (
+        <PhotoUploader
+          profileId={createdProfile.id}
+          photos={profile.photos}
+          onPhotosChange={(photos) => {
+            // O query cache é invalidado automaticamente pelo hook
+          }}
         />
       )}
 

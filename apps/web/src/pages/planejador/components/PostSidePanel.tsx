@@ -191,7 +191,117 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
     onClose();
   };
 
-  return (
+  // Compute media content based on mode and post type
+  function renderMediaContent(): React.ReactNode {
+    if (!editMode) {
+      // View mode
+      if (post.postType === 'carousel') {
+        return (
+          <div className="grid grid-cols-2 gap-2">
+            {getPostImages(post).map((url, idx) => (
+              <div key={idx} className="relative rounded-xl overflow-hidden border border-border bg-surface-secondary aspect-square">
+                <img src={url} alt={`Carousel ${idx + 1}`} className="w-full h-full object-cover" />
+              </div>
+            ))}
+          </div>
+        );
+      }
+      return (
+        post.imageUrl && (
+          <div className="rounded-xl overflow-hidden border border-border bg-surface-secondary">
+            {post.postType === 'reel' ? (
+              <video src={post.imageUrl} controls className="w-full max-h-48 object-cover" />
+            ) : (
+              <img src={post.imageUrl} alt="Preview" className="w-full max-h-48 object-cover" />
+            )}
+          </div>
+        )
+      );
+    }
+
+    // Edit mode
+    if (post.postType === 'carousel') {
+      return (
+        <div>
+          {(editCarouselImages.length > 0 ? editCarouselImages : getPostImages(post)).map((url, idx) => (
+            <div key={idx} className="relative group rounded-xl overflow-hidden border border-border bg-surface-secondary">
+              <img src={url} alt={`Carousel ${idx + 1}`} className="w-full aspect-square object-cover" />
+              <button
+                onClick={() => removeCarouselImage(idx)}
+                className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+          {(editCarouselImages.length || getPostImages(post).length) < MAX_CAROUSEL_IMAGES && (
+            <div
+              onDragOver={(e) => { e.preventDefault(); setEditDragOver(true); }}
+              onDragLeave={() => setEditDragOver(false)}
+              onDrop={(e) => { e.preventDefault(); setEditDragOver(false); const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')); files.forEach(f => addCarouselImage(f)); }}
+              onClick={() => carouselFileRef.current?.click()}
+              className={clsx(
+                'flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-all',
+                editDragOver ? 'border-accent bg-accent/10' : 'border-gray-600 hover:border-gray-500',
+              )}
+            >
+              <Plus className="h-6 w-6 text-gray-500 mb-1" />
+              <p className="text-xs text-gray-400">Adicionar imagem</p>
+            </div>
+          )}
+          <input
+            ref={carouselFileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            multiple
+            onChange={e => e.target.files && Array.from(e.target.files).forEach(f => addCarouselImage(f))}
+            className="hidden"
+          />
+        </div>
+      );
+    }
+
+    // Single image/video (reel, image, stories)
+    if (editFile) {
+      return (
+        <div>
+          <div className="relative group rounded-xl overflow-hidden border border-border bg-surface-secondary">
+            {editFile.type.startsWith('video/') ? (
+              <video src={URL.createObjectURL(editFile)} controls className="w-full max-h-48 object-cover" />
+            ) : (
+              <img src={URL.createObjectURL(editFile)} alt="Preview" className="w-full max-h-48 object-cover" />
+            )}
+            <button
+              onClick={() => setEditFile(null)}
+              className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      );
+
+      return (
+        <div>
+          <div
+            onDragOver={(e) => { e.preventDefault(); setEditDragOver(true); }}
+            onDragLeave={() => setEditDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setEditDragOver(false); const f = e.dataTransfer.files[0]; if (f) setEditFile(f); }}
+            onClick={() => { editFileRef.current?.click(); }}
+            className={clsx(
+              'flex flex-col items-center justify-center h-32 rounded-xl border-2 border-dashed cursor-pointer transition-all',
+              editDragOver ? 'border-accent bg-accent/10' : 'border-gray-600 hover:border-gray-500',
+            )}
+          >
+            <Upload className="h-6 w-6 text-gray-500 mb-1" />
+            <p className="text-xs text-gray-400">Arraste ou clique para trocar</p>
+          </div>
+        </div>
+      );
+  }
+
+  const mediaContent = renderMediaContent();
+
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Overlay */}
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} />

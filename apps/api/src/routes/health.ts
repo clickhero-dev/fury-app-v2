@@ -1,16 +1,18 @@
 import { Router } from 'express';
-import { HealthCheckResponse } from '../lib/shared.js';
+import { getApiState } from '../lib/api-state.js';
 
 const router = Router();
 
 router.get('/', (_req, res) => {
-  const response: HealthCheckResponse = {
-    status: 'ok',
+  const state = getApiState();
+  res.json({
+    status: state.status,
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-  };
-
-  res.json(response);
+    checks: state.checks,
+    startedAt: state.startedAt,
+    healthyAt: state.healthyAt,
+  });
 });
 
 export default router;

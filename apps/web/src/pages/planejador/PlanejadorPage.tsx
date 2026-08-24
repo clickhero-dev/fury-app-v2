@@ -8,6 +8,11 @@ import { IdleStatus } from './components/IdleStatus';
 import type { PrerequisiteCheck } from './components/IdleStatus';
 import type { JobStatus, ViewState } from './types';
 
+interface AgentLabelsResponse {
+  order: string[];
+  labels: Record<string, string>;
+}
+
 const STORAGE_KEY = 'fury_planner_job_id';
 
 function loadSavedJobId(): string | null {
@@ -34,6 +39,16 @@ export function PlanejadorPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [recovered, setRecovered] = useState(false);
   const recoveryChecked = useRef(false);
+
+  // Busca labels dos agentes (para o GeneratingState)
+  const { data: agentLabels } = useQuery<{ order: string[]; labels: Record<string, string> }>({
+    queryKey: ['planner-agent-labels'],
+    queryFn: async () => {
+      const { data } = await api.get('/planner/agent-labels');
+      return data.data as { order: string[]; labels: Record<string, string> };
+    },
+    staleTime: 60 * 60 * 1000, // 1h — labels mudam raramente
+  });
 
   // Busca pré-requisitos do tenant
   const { data: pre, isLoading: preLoading } = useQuery({
@@ -159,7 +174,9 @@ export function PlanejadorPage() {
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         {/* Estado de Geração de Conteúdo */}
         {view === 'generating' && (
-          <GeneratingState jobStatus={jobStatus} />
+          <div className="rounded-xl bg-gray-800/40 border border-gray-700/50 p-6">
+            <GeneratingState jobStatus={jobStatus} agentLabels={agentLabels} />
+          </div>
         )}
 
         {/* Loading dos Pré-requisitos */}

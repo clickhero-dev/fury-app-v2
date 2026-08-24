@@ -7,41 +7,42 @@ import { parseAgentJSON } from '../agents/utils.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { createInstagramMedia, getMediaContainerStatus, publishInstagramMedia, getUserFacebookPages } from '../lib/meta-api.js';
 import { decryptMetaToken } from '../utils/crypto.js';
+import { plannerStore } from '../planner-workflow-runner.js';
+import { enqueuePlanGeneration } from '../workers/planner.worker.js';
+import { snapshotToJobStatus } from '../agents/job-status-adapter.js';
 
-export { jobs } from '../agents/orchestrator.js';
-
-export function startPlanGeneration(tenantId: string): JobStatus {
-  // Lock: rejeita se tenant já tiver um job rodando
-  const existing = Array.from(jobs.values()).find(
-    j => j.tenantId === tenantId && (j.status === 'running' || j.status === 'generating' || j.status === 'pending'),
-  );
+export async function startPlanGeneration(tenantId: string): Promise<JobStatus> {
+  // Lock: rejeita se tenant já tiver um job ativo (running/pending)
+  const existing = await plannerStore.findActiveByLockKey(tenantId, 'planner-generate');
   if (existing) throw new AppError(409, 'CONFLICT', 'Já existe um planejamento em andamento');
 
   const id = generateId();
-  const status: JobStatus = {
+  await plannerStore.create({
     id,
     tenantId,
-    status: 'running',
-    currentAgent: 'Context Agent',
-    agentProgress: [{ name: 'Context Agent', status: 'running', pct: 5 }],
-  };
-  jobs.set(id, status as any);
-
-  runPipeline(tenantId, id).catch(() => {
-    const j = jobs.get(id);
-    if (j) {
-      j.status = 'error';
-      j.error = j.error || 'Pipeline error';
-    }
+    workflow: 'planner-generate',
+    lockKey: tenantId,
   });
 
-  return jobs.get(id) as JobStatus;
+  try {
+    await enqueuePlanGeneration(id, tenantId);
+  } catch (err) {
+    console.warn('[planner] falha ao enfileirar no BullMQ, executando inline:', err);
+    const { runPlannerWorkflow } = await import('../planner-workflow-runner.js');
+    void runPlannerWorkflow(id, tenantId).catch((pipelineErr) => {
+      console.error('[planner] pipeline inline falhou:', pipelineErr);
+    });
+  }
+
+  const snapshot = await plannerStore.load(id);
+  if (!snapshot) throw new AppError(500, 'INTERNAL', 'Falha ao criar job de planejamento');
+  return snapshotToJobStatus(snapshot);
 }
 
-export function getJobProgress(jobId: string): JobStatus | null {
-  const job = jobs.get(jobId);
-  if (!job) return null;
-  return job as JobStatus;
+export async function getJobProgress(jobId: string): Promise<JobStatus | null> {
+  const snapshot = await plannerStore.load(jobId);
+  if (!snapshot) return null;
+  return snapshotToJobStatus(snapshot);
 }
 
 export async function getPlanById(planId: string, tenantId: string) {
@@ -582,4 +583,48 @@ export async function publishDuePosts(tenantId: string) {
   }
 
   return { published, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })), pageName: account.pageName, instagramUsername: account.instagramUsername };
+}
+
+export interface AgentLabel {
+  id: string;
+  label: string;
+}
+
+export interface AgentLabelsResponse {
+  order: string[];
+  labels: Record<string, string>;
+}
+
+export function getAgentLabels(): AgentLabelsResponse {
+  const order = [
+    'context',
+    'research',
+    'analytics',
+    'strategy',
+    'planner',
+    'copywriter',
+    'creative',
+    'image-generation',
+    'quality',
+    'scheduler',
+    'branding',
+    'save',
+  ];
+
+  const labels: Record<string, string> = {
+    context: 'Coletando contexto do seu negócio',
+    research: 'Pesquisando tendências e datas comemorativas',
+    analytics: 'Analisando melhores formatos e horários',
+    strategy: 'Definindo estratégia e pilares de conteúdo',
+    planner: 'Montando calendário de posts',
+    copywriter: 'Escrevendo legendas e CTAs',
+    creative: 'Criando prompts de imagem',
+    'image-generation': 'Gerando imagens dos posts',
+    quality: 'Validando qualidade do conteúdo',
+    scheduler: 'Programando melhores horários de publicação',
+    branding: 'Verificando compliance da marca',
+    save: 'Salvando plano no banco',
+  };
+
+  return { order, labels };
 }

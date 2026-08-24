@@ -18,6 +18,7 @@ import {
   handleMovePost,
   handlePublishDue,
   handleUploadMedia,
+  handleGetAgentLabels,
 } from '../controllers/planner.controller.js';
 
 
@@ -55,5 +56,8 @@ router.post('/posts/publish-due', tenantMiddleware, handlePublishDue);
 
 // Cron: publish-due sem auth (usa API key)
 router.post('/cron/publish-due', handlePublishDue);
+
+// Agent labels (public endpoint para o frontend consumir)
+router.get('/agent-labels', handleGetAgentLabels);
 
 export default router;

@@ -7,7 +7,8 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js",
-    "./schema": "./dist/schema.js"
+    "./schema": "./dist/schema.js",
+    "./migrate": "./dist/migrate.js"
   },
   "scripts": {
     "build": "tsc",

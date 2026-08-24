@@ -1,5 +1,5 @@
 import { db, campaignPlans, socialPosts } from '@fury/db';
-import type { AgentContext, ResearchOutput, AnalyticsOutput, StrategyOutput, PlannerOutput, CopywriterOutput, CreativeOutput, QualityOutput, SchedulerOutput, BrandingOutput } from './types.js';
+import type { AgentContext, ResearchOutput, AnalyticsOutput, StrategyOutput, PlannerOutput, CopywriterOutput, CreativeOutput, QualityOutput, SchedulerOutput, BrandingOutput, ImageGenerationOutput } from './types.js';
 
 /**
  * Computa a "data efetiva" de um post de plano para calendar_date.
@@ -31,17 +31,26 @@ export interface savePlanToDbInput {
   planner: PlannerOutput;
   copywriter: CopywriterOutput;
   creative: CreativeOutput;
+  images?: ImageGenerationOutput;
   quality: QualityOutput;
   scheduler: SchedulerOutput;
   branding: BrandingOutput;
 }
 
 export async function savePlanToDb(input: savePlanToDbInput): Promise<string> {
-  const { tenantId, context, research, analytics, strategy, planner, copywriter, creative, quality, scheduler, branding } = input;
+  const { tenantId, context, research, analytics, strategy, planner, copywriter, creative, images, quality, scheduler, branding } = input;
+
+  // Calcula d+1 (amanhã) como dia mínimo válido
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const minDayIndex = tomorrow.getDate();
+  const maxDayIndex = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
   const periodStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const periodEnd = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
 
-  const metadata = { summary: planner.summary, research, analytics, strategy, quality, scheduler, branding } as Record<string, unknown>;
+  const metadata = { summary: planner.summary, research, analytics, strategy, quality, scheduler, branding, images } as Record<string, unknown>;
 
   const [plan] = await db.insert(campaignPlans).values({
     tenantId,
@@ -57,8 +66,12 @@ export async function savePlanToDb(input: savePlanToDbInput): Promise<string> {
 
   if (planner.posts.length > 0) {
     const merged = planner.posts.map(p => {
+      // Validação de segurança: dayIndex deve ser >= d+1 e <= último dia do mês
+      const safeDayIndex = Math.max(minDayIndex, Math.min(maxDayIndex, p.dayIndex));
+
       const copy = copywriter.posts.find(c => c.dayIndex === p.dayIndex);
       const cr = creative.posts.find(c => c.dayIndex === p.dayIndex);
+      const img = images?.posts.find(i => i.dayIndex === p.dayIndex);
       return {
         tenantId,
         planId: plan.id,
@@ -69,8 +82,9 @@ export async function savePlanToDb(input: savePlanToDbInput): Promise<string> {
         cta: copy?.cta ?? '',
         hashtags: copy?.hashtags ?? [],
         imagePrompt: cr?.imagePrompt ?? '',
-        dayIndex: p.dayIndex,
-        calendarDate: computeCalendarDate(periodStart, p.dayIndex), // Fase 3: persistir calendar_date
+        imageUrl: img?.imageUrl ?? '',
+        dayIndex: safeDayIndex,
+        calendarDate: computeCalendarDate(periodStart, safeDayIndex),
         status: 'draft' as const,
       };
     });

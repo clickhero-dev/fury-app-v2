@@ -55,6 +55,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0012_add_brand_kits' },
   { tag: '0013_meta_connections_dedupe_unique' },
   { tag: '0014_add_asset_selection' },
+  { tag: '0015_form_submissions' },
   { tag: '0015_add_request_logs' },
   { tag: '0016_fix_request_logs_user_id' },
   { tag: '0018_add_audience_defaults' },
@@ -108,6 +109,7 @@ const STEPS: MigrationStep[] = [
       console.log('    + added rejected, confirmed to post_status');
     },
   },
+  { tag: '0030_workflow_jobs' },
   {
     tag: '0011_fr8_publish_retry',
     afterHook: async (client) => {
@@ -117,7 +119,41 @@ const STEPS: MigrationStep[] = [
   },
 ];
 
-async function runMigrate() {
+/** Nomes de todas as tabelas do schema (26 tabelas) — usados para validação. */
+export const REQUIRED_TABLES = [
+  'tenants',
+  'users',
+  'meta_connections',
+  'campaigns',
+  'creative_assets',
+  'client_goals',
+  'fury_insights',
+  'automation_rules',
+  'budget_optimizations',
+  'performance_rules',
+  'performance_scores',
+  'rule_executions',
+  'fury_config',
+  'form_submissions',
+  'plans',
+  'subscriptions',
+  'invoices',
+  'brand_kits',
+  'request_logs',
+  'campaign_plans',
+  'social_posts',
+  'workflow_jobs',
+  'google_connections',
+  'google_business_profiles',
+  'business_profile_settings',
+  'google_sync_logs',
+];
+
+/**
+ * Executa todas as migrations pendentes.
+ * Idempotente: pode ser chamado múltiplas vezes.
+ */
+export async function runMigrations(): Promise<void> {
   const client = postgres(connectionString, { max: 1 });
 
   try {
@@ -179,9 +215,54 @@ async function runMigrate() {
   }
 }
 
-runMigrate().catch((err) => {
-  console.error('Migration failed:', err);
-  console.error('Stack:', err?.stack);
-  console.error('Error details:', JSON.stringify(err, null, 2));
-  process.exit(1);
-});
+/**
+ * Valida se todas as tabelas obrigatórias existem no banco.
+ * Retorna { ok: true, missing: [] } se todas existirem,
+ * ou { ok: false, missing: string[] } com as tabelas faltantes.
+ */
+export async function validateRequiredTables(): Promise<{ ok: boolean; missing: string[] }> {
+  const client = postgres(connectionString, { max: 1 });
+
+  try {
+    const rows = await client<{ table_name: string }[]>`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+    `;
+    const existingTables = new Set(rows.map((r) => r.table_name));
+    const missing = REQUIRED_TABLES.filter((t) => !existingTables.has(t));
+
+    if (missing.length === 0) {
+      console.log('[validateRequiredTables] All 26 required tables exist');
+      return { ok: true, missing: [] };
+    }
+
+    console.error('[validateRequiredTables] Missing tables:', missing);
+    return { ok: false, missing };
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Executa migrations e valida tabelas — uso principal no boot da API.
+ */
+export async function runMigrationsAndValidate(): Promise<void> {
+  await runMigrations();
+  const validation = await validateRequiredTables();
+  if (!validation.ok) {
+    throw new Error(`Migration validation failed: missing tables ${validation.missing.join(', ')}`);
+  }
+}
+
+// CLI entry point — only runs when file is executed directly
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
+  runMigrations().catch((err) => {
+    console.error('Migration failed:', err);
+    console.error('Stack:', err?.stack);
+    console.error('Error details:', JSON.stringify(err, null, 2));
+    process.exit(1);
+  });
+}
