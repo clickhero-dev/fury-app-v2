@@ -1,7 +1,10 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+linkWorkspacePackages: true
+preferWorkspacePackages: true
 allowBuilds:
+  '@scarf/scarf': false
   bcrypt: true
   esbuild: true
   msgpackr-extract: true
