@@ -47,6 +47,9 @@ COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/swagger.json ./apps/api/swagger.json
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/db/dist ./packages/db/dist
+# dist/migrate.js lê os .sql de packages/db/migrations ao aplicar migrações
+# pendentes no boot — sem eles, o container cai com ENOENT na 1ª pendente.
+COPY --from=builder /app/packages/db/migrations ./packages/db/migrations
 
 EXPOSE 3000
 CMD ["sh", "-c", "node packages/db/dist/migrate.js && node apps/api/dist/index.js"]
