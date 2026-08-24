@@ -176,15 +176,15 @@ export function MetasPage() {
           className={cn(
             'fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold transition-all duration-300',
             toast.type === 'success'
-              ? 'bg-[#2EA043] text-white'
-              : 'bg-[#DA3633] text-white'
+              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+              : 'bg-red-500/20 text-red-400 border border-red-500/30'
           )}
         >
           {toast.message}
         </div>
       )}
 
-      <div className="max-w-lg mx-auto space-y-6 pb-8">
+      <div className="max-w-lg mx-auto space-y-6 pb-8 text-admin-text">
         <PageHeader
           title={isEditing ? 'Atualizar Metas' : 'Configurar Metas'}
           description={
@@ -194,132 +194,159 @@ export function MetasPage() {
           }
         />
 
-        <Card>
+        <Card className="border border-white/10 bg-admin-surface shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)]">
           <CardContent className="pt-8">
             <div className="space-y-6">
               {/* Progress */}
               <div className="space-y-2">
-                <div className="flex justify-between items-center text-xs font-semibold text-[#6E7681]">
+                <div className="flex justify-between items-center text-xs font-semibold text-admin-text-muted">
                   <span>Passo {step} de 3 — {STEP_LABELS[step - 1]}</span>
-                  <span>{progressPct}%</span>
+                  <span className="text-admin-petrol">{progressPct}%</span>
                 </div>
-                <div className="w-full bg-[#F0F0F0] rounded-full h-2">
+                <div className="w-full bg-admin-bg rounded-full h-2 overflow-hidden border border-white/5">
                   <div
-                    className="bg-[#E8631A] h-2 rounded-full transition-all duration-500"
+                    className="bg-admin-petrol h-2 rounded-full transition-all duration-500"
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
               </div>
 
-              <hr className="border-[#F0F0F0]" />
+              <hr className="border-white/10" />
 
               {/* ── Step 1: Sobre o negócio ─────────────────────────────── */}
               {step === 1 && (
                 <div className="space-y-5">
-                  <Field label="Qual é o objetivo da campanha?" error={errors.objective?.message}>
-                    <select
-                      {...register('objective')}
-                      className={cn(
-                        'w-full px-4 py-3.5 border rounded-xl bg-white text-[#1C1C1E] transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-base',
-                        errors.objective ? 'border-red-400' : 'border-[#E0E0E0]'
-                      )}
-                    >
-                      <option value="">Selecione um objetivo...</option>
-                      {OBJECTIVES.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </Field>
+                 <Field label="Qual é o objetivo da campanha?" error={errors.objective?.message}>
+            <select
+              {...register('objective')}
+              className={cn(
+                'w-full h-12 px-4 py-2 border rounded-xl bg-background text-foreground transition-all duration-200 focus:outline-none text-sm appearance-none',
+                errors.objective ? 'border-red-400 focus:border-red-400' : 'border-admin-petrol focus:border-admin-petrol'
+              )}
+            >
+              <option value="" className="bg-background text-muted-foreground">
+                Selecione um objetivo...
+              </option>
+              {OBJECTIVES.map((o) => (
+                <option key={o.value} value={o.value} className="bg-background text-foreground">
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-                  <Field
-                    label="Qual é o nicho do seu negócio?"
-                    hint="Ex: moda feminina, suplementos, cursos online"
-                    error={errors.niche?.message}
-                  >
-                    <Input
-                      placeholder="Ex: moda feminina"
-                      {...register('niche')}
-                      className={errors.niche ? 'border-red-400 focus:border-red-400 focus:ring-red-400/20' : ''}
-                    />
-                  </Field>
+          <Field
+          label="Qual é o nicho do seu negócio?"
+          hint="Ex: moda feminina, suplementos, cursos online"
+          error={errors.niche?.message}
+        >
+          <Input
+            placeholder="Ex: moda feminina"
+            {...register('niche')}
+            className={cn(
+              'w-full h-12 px-4 py-2 rounded-xl bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 outline-none focus:outline-none focus:ring-2 focus:ring-admin-petrol/20 focus:border-admin-petrol text-sm',
+              errors.niche ? 'border border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border border-border'
+            )}
+          />
+        </Field>
 
-                  <Field
-                    label="Qual é o seu produto ou serviço principal?"
-                    hint="Seja específico — isso ajuda a IA a gerar melhores insights"
-                    error={errors.mainProduct?.message}
-                  >
-                    <Input
-                      placeholder="Ex: vestidos casuais para o dia a dia"
-                      {...register('mainProduct')}
-                      className={errors.mainProduct ? 'border-red-400 focus:border-red-400 focus:ring-red-400/20' : ''}
-                    />
-                  </Field>
+        <Field
+          label="Qual é o seu produto ou serviço principal?"
+          hint="Seja específico — isso ajuda a IA a gerar melhores insights"
+          error={errors.mainProduct?.message}
+        >
+          <Input
+            placeholder="Ex: vestidos casuais para o dia a dia"
+            {...register('mainProduct')}
+            className={cn(
+              'w-full h-12 px-4 py-2 rounded-xl bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 outline-none focus:outline-none focus:ring-2 focus:ring-admin-petrol/20 focus:border-admin-petrol text-sm',
+              errors.mainProduct ? 'border border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border border-border'
+            )}
+          />
+        </Field>
                 </div>
               )}
 
-              {/* ── Step 2: Orçamento e metas ───────────────────────────── */}
-              {step === 2 && (
-                <div className="space-y-5">
-                  <Field
-                    label="Orçamento mensal total"
-                    hint="Valor total que clientes por mês"
-                    error={errors.monthlyBudget?.message}
-                  >
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6E7681] font-semibold text-sm">R$</span>
-                      <Input
-                        type="number"
-                        min={300}
-                        step={50}
-                        placeholder="2.000"
-                        {...register('monthlyBudget', { valueAsNumber: true })}
-                        className={cn('pl-10', errors.monthlyBudget ? 'border-red-400 focus:border-red-400 focus:ring-red-400/20' : '')}
-                      />
-                    </div>
-                  </Field>
+      {/* ── Step 2: Orçamento e metas ───────────────────────────── */}
+{step === 2 && (
+  <div className="space-y-5">
+    <Field
+      label="Orçamento mensal total"
+      hint="Valor total investido por mês"
+      error={errors.monthlyBudget?.message}
+    >
+      <div className="relative">
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-sm">
+          R$
+        </span>
+        <Input
+          type="number"
+          min={300}
+          step={50}
+          placeholder="2.000"
+          {...register('monthlyBudget', { valueAsNumber: true })}
+          className={cn(
+            'w-full h-12 pl-10 pr-4 py-2 rounded-xl bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-admin-petrol/20 focus:border-admin-petrol text-sm',
+            errors.monthlyBudget
+              ? 'border border-red-500 focus:border-red-500 focus:ring-red-500/20'
+              : 'border border-border'
+          )}
+        />
+      </div>
+    </Field>
 
-                  {(() => {
-                    const objLabels = getObjectiveLabels(values.objective ?? '');
-                    return (
-                      <>
-                        <Field
-                          label={objLabels.label}
-                          hint={objLabels.description}
-                          error={errors.targetCpa?.message}
-                        >
-                          <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6E7681] font-semibold text-sm">R$</span>
-                            <Input
-                              type="number"
-                              min={1}
-                              step={1}
-                              placeholder="50"
-                              {...register('targetCpa', { valueAsNumber: true })}
-                              className={cn('pl-10', errors.targetCpa ? 'border-red-400 focus:border-red-400 focus:ring-red-400/20' : '')}
-                            />
-                          </div>
-                        </Field>
+    {(() => {
+      const objLabels = getObjectiveLabels(values.objective ?? '');
+      return (
+        <>
+          <Field
+            label={objLabels.label}
+            hint={objLabels.description}
+            error={errors.targetCpa?.message}
+          >
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-sm">
+                R$
+              </span>
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                placeholder="50"
+                {...register('targetCpa', { valueAsNumber: true })}
+                className={cn(
+                  'w-full h-12 pl-10 pr-4 py-2 rounded-xl bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-admin-petrol/20 focus:border-admin-petrol text-sm',
+                  errors.targetCpa
+                    ? 'border border-red-500 focus:border-red-500 focus:ring-red-500/20'
+                    : 'border border-border'
+                )}
+              />
+            </div>
+          </Field>
 
-                        {values.monthlyBudget > 0 && values.targetCpa > 0 && values.targetCpa <= values.monthlyBudget && (
-                          <div className="bg-[#E8631A]/8 border border-[#E8631A]/20 rounded-xl px-4 py-3 text-sm text-[#1C1C1E]">
-                            Com esse orçamento, você pode atingir até{' '}
-                            <span className="font-bold text-[#E8631A]">
-                              {Math.floor(values.monthlyBudget / values.targetCpa)} {objLabels.conversion}s por mês
-                            </span>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
+          {values.monthlyBudget > 0 &&
+            values.targetCpa > 0 &&
+            values.targetCpa <= values.monthlyBudget && (
+              <div className="bg-admin-petrol/10 border border-admin-petrol/20 rounded-xl px-4 py-3 text-sm text-foreground">
+                Com esse orçamento, você pode atingir até{' '}
+                <span className="font-bold text-admin-petrol">
+                  {Math.floor(values.monthlyBudget / values.targetCpa)} {objLabels.conversion}s por mês
+                </span>
+              </div>
+            )}
+        </>
+      );
+    })()}
+  </div>
+)}
+              
 
               {/* ── Step 3: Revisão ─────────────────────────────────────── */}
               {step === 3 && (
                 <div className="space-y-4">
-                  <p className="text-sm text-text-secondary">Confirme os dados antes de salvar:</p>
+                  <p className="text-sm text-admin-text-muted">Confirme os dados antes de salvar:</p>
 
-                  <div className="bg-surface-secondary rounded-2xl divide-y divide-border overflow-hidden">
+                  <div className="bg-admin-bg border border-white/10 rounded-2xl divide-y divide-white/5 overflow-hidden">
                     <ReviewRow label="Objetivo" value={translateObjective(values.objective)} />
                     <ReviewRow label="Nicho" value={values.niche} />
                     <ReviewRow label="Produto principal" value={values.mainProduct} />
@@ -335,10 +362,9 @@ export function MetasPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    size="md"
                     onClick={handleBack}
                     disabled={isSaving}
-                    className="flex items-center gap-1.5"
+                    className="flex items-center gap-1.5 border-white/10 bg-transparent text-admin-text hover:bg-white/5 hover:text-white"
                   >
                     <ChevronLeft className="w-4 h-4" />
                     {step === 3 ? 'Voltar e editar' : 'Voltar'}
@@ -346,24 +372,20 @@ export function MetasPage() {
                 )}
 
                 {step < 3 ? (
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="md"
-                    onClick={handleNext}
-                    className="flex-1 flex items-center justify-center gap-1.5"
-                  >
-                    Próximo
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
+                      <Button
+                      type="button"
+                      onClick={handleNext}
+                      className="flex-1 flex items-center justify-center gap-1.5 bg-admin-petrol text-admin-bg font-semibold hover:bg-admin-petrol/80 dark:hover:bg-admin-petrol/80 disabled:bg-white/10 disabled:text-white/30 disabled:border disabled:border-white/10 disabled:cursor-not-allowed disabled:opacity-100 transition-all cursor-pointer"
+                    >
+                      Próximo
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
                 ) : (
                   <Button
                     type="button"
-                    variant="primary"
-                    size="md"
                     onClick={handleSubmit(onSubmit)}
                     disabled={isSaving}
-                    className="flex-1 flex items-center justify-center gap-2"
+                    className="flex-1 flex items-center justify-center gap-2 bg-admin-petrol text-admin-bg font-semibold hover:opacity-90"
                   >
                     {isSaving ? (
                       <>
@@ -384,9 +406,9 @@ export function MetasPage() {
         </Card>
 
         {step === 1 && (
-          <p className="text-center text-xs text-[#9CA3AF] mt-5">
+          <p className="text-center text-xs text-admin-text-faint mt-5">
             Você pode atualizar suas metas a qualquer momento em{' '}
-            <span className="font-semibold">Configurações → Metas</span>
+            <span className="font-semibold text-admin-text-muted">Configurações → Metas</span>
           </p>
         )}
       </div>
@@ -409,12 +431,12 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-semibold text-[#1C1C1E]">{label}</label>
-      {hint && <p className="text-xs text-[#6E7681]">{hint}</p>}
+      <label className="text-sm font-medium text-[#ECEDEF]">{label}</label>
+      {hint && <p className="text-xs text-admin-text-muted">{hint}</p>}
       {children}
       {error && (
-        <p className="text-xs font-medium text-red-500 flex items-center gap-1 mt-1">
-          <span className="w-1 h-1 rounded-full bg-red-500 flex-shrink-0" />
+        <p className="text-xs font-medium text-red-400 flex items-center gap-1 mt-1">
+          <span className="w-1 h-1 rounded-full bg-red-400 flex-shrink-0" />
           {error}
         </p>
       )}
@@ -425,8 +447,8 @@ function Field({
 function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between items-center px-4 py-3.5">
-      <span className="text-sm text-text-secondary">{label}</span>
-      <span className="text-sm font-semibold text-text-primary text-right max-w-[60%] truncate">{value}</span>
+      <span className="text-sm text-admin-text-muted">{label}</span>
+      <span className="text-sm font-medium text-[#ECEDEF] text-right max-w-[60%] truncate">{value}</span>
     </div>
   );
 }

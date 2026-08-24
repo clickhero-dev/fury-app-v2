@@ -1,10 +1,8 @@
 packages:
-  - "apps/*"
-  - "packages/*"
-
+  - 'apps/*'
+  - 'packages/*'
 allowBuilds:
   bcrypt: true
   esbuild: true
+  msgpackr-extract: true
   sharp: true
-  "@scarf/scarf": false
-  msgpackr-extract: false

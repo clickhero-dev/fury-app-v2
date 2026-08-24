@@ -51,9 +51,32 @@ vi.mock('drizzle-orm', () => ({
 }));
 
 vi.mock('../agents/orchestrator.js', () => ({
-  jobs: new Map(),
   generateId: vi.fn(() => 'job-123'),
-  runPipeline: vi.fn(),
+  plannerWorkflow: { id: 'planner-generate', stages: [], lockKey: () => 't1' },
+}));
+
+vi.mock('../agents/job-status-adapter.js', () => ({
+  snapshotToJobStatus: vi.fn((s: any) => ({ id: s.id, tenantId: s.tenantId, status: s.status, currentAgent: '', agentProgress: [] })),
+}));
+
+vi.mock('../planner-workflow-runner.js', () => ({
+  plannerStore: {
+    create: vi.fn(),
+    load: vi.fn(),
+    save: vi.fn(),
+    markFailed: vi.fn(),
+    markDone: vi.fn(),
+    listRecoverable: vi.fn(async () => []),
+    findActiveByLockKey: vi.fn(async () => null),
+  },
+  runPlannerWorkflow: vi.fn(),
+  recoverInterruptedPlannerWorkflows: vi.fn(async () => 0),
+}));
+
+vi.mock('../workers/planner.worker.js', () => ({
+  enqueuePlanGeneration: vi.fn(async () => {}),
+  startPlannerWorker: vi.fn(async () => {}),
+  stopPlannerWorker: vi.fn(async () => {}),
 }));
 
 vi.mock('../services/openrouter.service.js', () => ({

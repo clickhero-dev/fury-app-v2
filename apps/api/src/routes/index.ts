@@ -2,6 +2,7 @@ import { Router } from "express";
 import healthRoutes from "./health.js";
 import authRoutes from "./auth.routes.js";
 import metaRoutes from "./meta.routes.js";
+import googleRoutes from "./google.routes.js";
 import metricsRoutes from "./metrics.routes.js";
 import automationRoutes from "./automation.routes.js";
 import studioRoutes from "./studio.routes.js";
@@ -33,6 +34,7 @@ const router = Router();
 router.use("/health", healthRoutes);
 router.use("/auth", authRoutes);
 router.use("/meta", metaRoutes);
+router.use("/google", googleRoutes);
 
 router.use("/metrics", ...AUTH_TENANT_SUB, metricsRoutes);
 router.use("/automation", automationRoutes);

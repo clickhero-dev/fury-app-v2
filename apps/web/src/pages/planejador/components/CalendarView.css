@@ -1,0 +1,181 @@
+/* ---------- FullCalendar theming (ady) ----------
+   Traduzido para os tokens reais do projeto (index.css),
+   não os tokens genéricos shadcn/ui da referência do Lovable.
+   Mapeamento usado:
+     --border          → --color-border      (var(--border-main))
+     --muted           → --color-surface-secondary (var(--bg-surface-secondary))
+     --card-foreground → --color-text-primary
+     --muted-foreground→ --color-text-secondary / --color-text-tertiary
+     --foreground      → --color-text-primary
+     --primary         → --color-brand
+     --spark           → --color-accent
+   Tokens SEM equivalente direto no projeto (assumi um fallback,
+   confirma se preferem outro valor):
+     --radius     → não existe; usei 0.75rem (mesmo valor do Lovable)
+     --ring       → não existe; usei --color-brand (mesma cor do primary)
+     --popover    → não existe; usei --color-surface (mesma superfície de card)
+     --shadow-soft→ não existe; usei uma sombra equivalente definida abaixo
+*/
+
+.ady-calendar {
+  --fc-border-color: var(--color-border);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: var(--color-surface-secondary);
+  --fc-today-bg-color: color-mix(in oklab, var(--color-brand) 10%, transparent);
+  --fc-event-bg-color: transparent;
+  --fc-event-border-color: transparent;
+  --fc-event-text-color: var(--color-text-primary);
+  --fc-list-event-hover-bg-color: var(--color-surface-secondary);
+  --fc-highlight-color: color-mix(in oklab, var(--color-accent) 18%, transparent);
+  font-family: var(--font-sans);
+}
+
+.ady-calendar .fc-theme-standard .fc-scrollgrid,
+.ady-calendar .fc-theme-standard td,
+.ady-calendar .fc-theme-standard th {
+  border-color: var(--color-border);
+}
+
+.ady-calendar .fc-col-header-cell {
+  background: transparent;
+  padding: 0.65rem 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.ady-calendar .fc-daygrid-day-number,
+.ady-calendar .fc-list-day-text,
+.ady-calendar .fc-list-day-side-text {
+  color: var(--color-text-primary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.5rem;
+}
+
+.ady-calendar .fc-day-today .fc-daygrid-day-number {
+  color: var(--color-brand);
+  font-weight: 700;
+}
+
+.ady-calendar .fc-daygrid-day {
+  transition: background-color 0.2s ease;
+}
+
+.ady-calendar .fc-daygrid-day:hover {
+  background: color-mix(in oklab, var(--color-text-primary) 4%, transparent);
+}
+
+.ady-calendar .fc-event {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  margin-bottom: 0.25rem;
+}
+
+.ady-calendar .fc-event:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+.ady-calendar .fc-daygrid-event-harness {
+  margin-inline: 0.25rem;
+}
+
+.ady-calendar .fc-timegrid-slot,
+.ady-calendar .fc-timegrid-axis {
+  color: var(--color-text-tertiary);
+  font-size: 0.72rem;
+}
+
+.ady-calendar .fc-list {
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.ady-calendar .fc-list-day-cushion {
+  background: var(--color-surface-secondary);
+}
+
+.ady-calendar .fc-list-event td {
+  padding: 0.5rem 0.75rem;
+}
+
+.ady-calendar .fc-more-link {
+  color: var(--color-brand);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding-inline: 0.25rem;
+}
+
+.ady-calendar .fc-popover {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2), 0 8px 24px -12px rgb(0 0 0 / 0.35);
+}
+
+.ady-calendar .fc-popover-header {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+}
+
+.ady-calendar .fc-daygrid-day-frame {
+  min-height: 120px !important;
+}
+
+.ady-calendar .fc-daygrid-day-events {
+  margin-bottom: 0 !important;
+  min-height: 0 !important;
+}
+
+/* ---------- Ajustes de Visão de Semana e Agenda ---------- */
+
+/* 1. Remove a limitação de altura travada que cortava o grid de 24h */
+.ady-calendar .fc-timegrid-body {
+  width: 100% !important;
+  min-height: 100% !important;
+  max-height: none !important; /* Libera para desenhar até às 24h */
+}
+
+/* 2. Garante que o fundo do dia atual (Hoje) cubra até a última linha */
+.ady-calendar .fc-timegrid-col.fc-day-today {
+  background-color: color-mix(in oklab, var(--color-brand) 10%, transparent) !important;
+}
+
+.ady-calendar .fc-timegrid-col-frame {
+  height: 100% !important;
+  min-height: 100% !important;
+}
+
+/* 3. Mantém as linhas horizontais de 30min visíveis até o rodapé */
+.ady-calendar .fc-timegrid-slot {
+  height: 32px !important;
+  border-bottom: 1px solid var(--color-border) !important;
+}
+
+/* 4. Remove o scroll horizontal e customiza o scroll vertical */
+.ady-calendar .fc-scroller {
+  overflow-x: hidden !important;
+}
+
+.ady-calendar .fc-scroller::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ady-calendar .fc-scroller::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+/* 5. Preenche a visão de Agenda na altura total do card */
+.ady-calendar .fc-list {
+  min-height: 100% !important;
+}
+
+.ady-calendar .fc-timegrid-slot {
+  height: 42px !important; /* Altura ideal para gerar a barra de rolagem interna */
+  border-bottom: 1px solid var(--color-border) !important;
+}

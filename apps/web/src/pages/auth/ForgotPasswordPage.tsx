@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Mail } from 'lucide-react';
 import { useForgotPassword } from '@/hooks/useForgotPassword';
 import type { ForgotPasswordRequest } from '@/types/auth';
+import { AdySymbol } from '@/components/AdySymbol';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Email inválido').nonempty('Email é obrigatório'),
@@ -19,6 +20,23 @@ export function ForgotPasswordPage() {
   const [error, setError] = useState<string>('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [successEmail, setSuccessEmail] = useState<string>('');
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('ady-theme');
+
+    if (savedTheme === 'escuro' || savedTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else if (savedTheme === 'claro' || savedTheme === 'light') {
+      document.documentElement.classList.remove('dark');
+    } else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+  }, []);
 
   const {
     register,
@@ -48,134 +66,158 @@ export function ForgotPasswordPage() {
     navigate('/reset-password', { state: { email: successEmail } });
   };
 
-  if (showSuccess) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="w-full max-w-[400px]">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#EA580C] mb-4">
-              <span className="text-white font-black text-xl">F</span>
-            </div>
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight">FURY</h1>
-            <p className="text-sm text-gray-400 mt-1">Automação de tráfego pago com IA</p>
-          </div>
+  const inputClass =
+    'w-full rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/80 dark:bg-[#12130F] px-4 py-3 text-sm text-slate-900 dark:text-white outline-none transition-all duration-200 placeholder:text-slate-400 dark:placeholder:text-zinc-500 hover:border-[#1E88A8] hover:ring-2 hover:ring-[#1E88A8]/20 hover:bg-white dark:hover:bg-[#12130F] focus:border-[#1E88A8] focus:bg-white dark:focus:bg-[#12130F] focus:ring-2 focus:ring-[#1E88A8]/20';
 
-          <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-            <div className="text-center space-y-6">
-              <div className="flex justify-center">
-                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                  <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                </div>
+    if (showSuccess) {
+      return (
+        <div className="relative flex min-h-screen items-center justify-center bg-[#f3f6f8] dark:bg-[#0c0d0a] px-5 py-16 text-slate-900 dark:text-white transition-colors duration-300 overflow-hidden">
+          {/* Grid de Fundo */}
+          <div 
+            aria-hidden 
+            className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+            style={{
+              backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
+              backgroundSize: '24px 24px'
+            }}
+          />
+          {/* Glow Radial */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background: `radial-gradient(circle at 50% -10%, rgba(30, 136, 168, 0.22) 0%, transparent 60%)`,
+            }}
+          />
+    
+          <div className="relative z-10 w-full max-w-[400px]">
+            {/* Cabeçalho / Logo */}
+            <div className="flex flex-col items-center text-center">
+              <div className="p-2">
+                <AdySymbol size={52} />
               </div>
-
-              <div>
-                <h2 className="text-lg font-bold text-gray-900 mb-2">Email enviado</h2>
-                <p className="text-sm text-gray-600">
-                  Se o email <span className="font-semibold text-gray-900">{successEmail}</span> existir em nossa base, você receberá um código de recuperação.
+              <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900 dark:text-white">ady</h1>
+              <p className="!mt-1.5 text-sm font-medium text-slate-500 dark:text-zinc-400">Seu gestor de tráfego com IA</p>
+            </div>
+    
+            {/* Card de Sucesso */}
+            <div className="mt-8 space-y-5 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#181915] p-7 text-center shadow-xl dark:shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)] backdrop-blur-md">
+              {/* Ícone */}
+              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-[#1E88A8]/10 dark:bg-[#1E88A8]/20 text-[#1E88A8]">
+                <Mail className="size-6 text-[#1E88A8]" />
+              </div>
+    
+              {/* Texto */}
+              <div className="space-y-1.5">
+                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Email enviado</h2>
+                <p className="text-sm text-slate-600 dark:text-zinc-400">
+                  Se o email <strong className="font-semibold text-slate-900 dark:text-white">{successEmail}</strong> existir em nossa base, você receberá um código de recuperação.
                 </p>
               </div>
-
+    
+              {/* Botão Continuar */}
               <button
                 type="button"
                 onClick={handleContinue}
-                className="w-full bg-[#EA580C] hover:bg-[#D4520B] text-white font-bold py-3 rounded-xl text-sm transition-colors"
+                className="w-full rounded-xl bg-[#1E88A8] py-3 text-sm font-semibold text-white shadow-md shadow-[#1E88A8]/20 transition-all hover:bg-[#17708A] hover:-translate-y-0.5 active:scale-[0.99]"
               >
                 Continuar
               </button>
-
+    
+              {/* Botão Tentar Outro Email */}
               <button
                 type="button"
                 onClick={() => setShowSuccess(false)}
-                className="w-full text-sm font-bold text-center transition-all hover:underline"
-                style={{ color: '#EA580C' }}
+                className="w-full text-sm font-semibold text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors"
               >
                 Tentar outro email
               </button>
             </div>
           </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-[400px]">
+    <div className="relative flex min-h-screen items-center justify-center bg-[#f3f6f8] dark:bg-[#0c0d0a] px-5 py-16 text-slate-900 dark:text-white transition-colors duration-300 overflow-hidden">
+      <div 
+        aria-hidden 
+        className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+        style={{
+          backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
+          backgroundSize: '24px 24px'
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `radial-gradient(circle at 50% -10%, rgba(30, 136, 168, 0.22) 0%, transparent 60%)`,
+        }}
+      />
 
-        {/* Logo + tagline */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#EA580C] mb-4">
-            <span className="text-white font-black text-xl">F</span>
+      <div className="relative z-10 w-full max-w-[400px]">
+        <div className="flex flex-col items-center text-center">
+          <div className="p-2">
+            <AdySymbol size={52} />
           </div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">FURY</h1>
-          <p className="text-sm text-gray-400 mt-1">Automação de tráfego pago com IA</p>
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900 dark:text-white">ady</h1>
+          <p className="!mt-1.5 text-sm font-medium text-slate-500 dark:text-zinc-400">Seu gestor de tráfego com IA</p>
         </div>
 
-        {/* Form card */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-          <form onSubmit={handleSubmit(onSubmit)} noValidate>
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 mb-1">Recuperar senha</h2>
-                <p className="text-sm text-gray-600 mb-6">
-                  Digite seu email para receber um código de recuperação
-                </p>
-              </div>
+        <form
+          className="mt-8 space-y-5 rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white/95 dark:bg-[#181915] p-7 shadow-[0_12px_32px_-8px_rgba(15,23,42,0.08)] dark:shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)] backdrop-blur-md transition-all"
+          onSubmit={handleSubmit(onSubmit)}
+        >
+          <div className="space-y-1">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Recuperar senha</h2>
+            <p className="text-sm text-slate-600 dark:text-zinc-400">
+              Digite seu email para receber um código de recuperação.
+            </p>
+          </div>
 
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  E-mail
-                </label>
-                <input
-                  type="email"
-                  placeholder="seu@email.com"
-                  autoComplete="email"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors"
-                  {...register('email')}
-                />
-                {errors.email?.message && (
-                  <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={forgotPasswordMutation.isPending || !isValid}
-              className="w-full mt-6 bg-[#EA580C] hover:bg-[#D4520B] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
-            >
-              {forgotPasswordMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Processando...
-                </>
-              ) : (
-                'Enviar código'
-              )}
-            </button>
-
-            {/* Error */}
-            {error && (
-              <p className="text-sm text-red-500 text-center mt-3">{error}</p>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-slate-700 dark:text-zinc-300">E-mail</span>
+            <input
+              type="email"
+              autoComplete="email"
+              placeholder="seu@email.com"
+              className={inputClass}
+              {...register('email')}
+            />
+            {errors.email?.message && (
+              <p className="mt-2 text-xs font-medium text-red-500">{errors.email.message}</p>
             )}
-          </form>
+          </label>
 
-          {/* Back link */}
-          <p className="text-sm text-gray-500 text-center mt-4">
+          <button
+            type="submit"
+            disabled={forgotPasswordMutation.isPending || !isValid}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88A8] py-3 text-sm font-semibold text-white shadow-md shadow-[#1E88A8]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#17708A] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {forgotPasswordMutation.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Processando...
+              </>
+            ) : (
+              'Enviar código'
+            )}
+          </button>
+
+          {error && (
+            <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-center text-xs font-medium text-red-600 dark:text-red-400">
+              {error}
+            </p>
+          )}
+
+          <p className="text-center text-sm text-slate-600 dark:text-zinc-400">
             Lembrou a senha?{' '}
-            <Link
-              to="/login"
-              className="text-[#EA580C] font-semibold hover:underline"
-            >
+            <Link to="/" className="font-semibold text-[#1E88A8] hover:underline transition-colors">
               Entrar
             </Link>
           </p>
-        </div>
-
+        </form>
       </div>
     </div>
   );

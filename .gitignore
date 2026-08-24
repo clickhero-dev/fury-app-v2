@@ -21,8 +21,8 @@ pids
 lib-cov
 
 # Coverage directory used by tools like istanbul
-coverage/
-*.lcov
+coverage
+#*.lcov
 
 # nyc test coverage
 .nyc_output
@@ -158,14 +158,10 @@ packages/db/src/*.js
 # Local config overrides
 *.local
 
-# SSL / certs / keys
+# SSL / certs
 *.pem
 *.key
 *.crt
-*.p12
-*.pfx
-id_rsa*
-*.secret
 
 # direnv
 .envrc
@@ -184,19 +180,7 @@ apps/api/scripts/_samples/
 apps/api/_samples/
 
 prompt.md
+fury-api-log.txt   
+gen-token.mjs   
 fury-api-log.txt
 gen-token.mjs
-
-# OS junk
-Thumbs.db
-Desktop.ini
-*.swp
-*~
-
-# Generated audit reports / API collection
-fury-api-insomnia.json
-auditoria-arquitetura-backend.html
-auditoria-arquitetura-backend.pdf
-docs/*.pdf
-docs/*.html
-bug.md

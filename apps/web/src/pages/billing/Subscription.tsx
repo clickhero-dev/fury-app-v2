@@ -26,32 +26,32 @@ const STATUS_CONFIG: Record<SubscriptionStatus, {
 }> = {
   active: {
     label: 'Ativo',
-    icon: <CheckCircle2 className="w-4 h-4" />,
+    icon: <CheckCircle2 className="w-3.5 h-3.5" />,
     bg: 'bg-success/10',
     text: 'text-success',
   },
   trial: {
     label: 'Trial',
-    icon: <Clock className="w-4 h-4" />,
+    icon: <Clock className="w-3.5 h-3.5" />,
     bg: 'bg-warning/10',
     text: 'text-warning',
   },
   past_due: {
     label: 'Pagamento atrasado',
-    icon: <AlertTriangle className="w-4 h-4" />,
+    icon: <AlertTriangle className="w-3.5 h-3.5" />,
     bg: 'bg-error/10',
     text: 'text-error',
   },
   cancelled: {
     label: 'Cancelado',
-    icon: <XCircle className="w-4 h-4" />,
-    bg: 'bg-border',
+    icon: <XCircle className="w-3.5 h-3.5" />,
+    bg: 'bg-white/5',
     text: 'text-text-secondary',
   },
   inactive: {
     label: 'Inativo',
-    icon: <XCircle className="w-4 h-4" />,
-    bg: 'bg-border',
+    icon: <XCircle className="w-3.5 h-3.5" />,
+    bg: 'bg-white/5',
     text: 'text-text-secondary',
   },
 };
@@ -73,7 +73,11 @@ function formatCurrency(cents: number): string {
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('pt-BR');
+  return new Date(dateStr).toLocaleDateString('pt-BR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 function daysRemaining(dateStr: string | null): number | null {
@@ -106,24 +110,24 @@ export function Subscription() {
 
   if (!subscription || subscription.status === 'cancelled') {
     return (
-      <AppLayout
-        header={
-          <div className="px-6 py-4">
-            <PageHeader title="Minha Assinatura" description="Gerencie sua assinatura FURY" />
+      <AppLayout>
+        <div className="space-y-6 max-w-4xl mx-auto">
+          <PageHeader title="Minha assinatura" description="Gerencie seu plano ady" />
+
+          <div className="max-w-2xl mx-auto text-center py-16">
+            <div className="w-16 h-16 rounded-2xl bg-[#1E88A8]/10 flex items-center justify-center mx-auto mb-6">
+              <CreditCard className="w-8 h-8 text-[#1E88A8]" />
+            </div>
+            <h2 className="text-xl font-bold text-text-primary mb-2">Sem assinatura ativa</h2>
+            <p className="text-text-secondary mb-8">
+              Você ainda não possui uma assinatura. Escolha um plano para começar.
+            </p>
+            <Link to="/planos">
+              <Button variant="primary" size="md" className="bg-[#1E88A8] hover:bg-[#1E88A8]/80 text-white">
+                Ver planos disponíveis
+              </Button>
+            </Link>
           </div>
-        }
-      >
-        <div className="max-w-2xl mx-auto text-center py-20">
-          <div className="w-16 h-16 rounded-2xl bg-[#EA580C]/10 flex items-center justify-center mx-auto mb-6">
-            <CreditCard className="w-8 h-8 text-[#EA580C]" />
-          </div>
-          <h2 className="text-xl font-bold text-text-primary mb-2">Sem assinatura ativa</h2>
-          <p className="text-text-secondary mb-8">
-            Você ainda não possui uma assinatura. Escolha um plano para começar.
-          </p>
-          <Link to="/planos">
-            <Button variant="primary" size="md">Ver planos disponíveis</Button>
-          </Link>
         </div>
       </AppLayout>
     );
@@ -133,14 +137,10 @@ export function Subscription() {
   const canCancel = subscription.status === 'active' || subscription.status === 'trial';
 
   return (
-    <AppLayout
-      header={
-        <div className="px-6 py-4">
-          <PageHeader title="Minha Assinatura" description="Gerencie sua assinatura FURY" />
-        </div>
-      }
-    >
-      <div className="max-w-3xl mx-auto space-y-6">
+    <AppLayout>
+      <div className="max-w-4xl mx-auto space-y-6">
+        <PageHeader title="Minha assinatura" description="Gerencie seu plano ady" />
+
         {subscription.status === 'trial' && (
           <div className="rounded-2xl border border-warning/20 bg-warning/5 p-5">
             <div className="flex items-start gap-4">
@@ -165,25 +165,28 @@ export function Subscription() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-border bg-surface p-7">
+        {/* Card do Plano Atual */}
+        <div className="rounded-2xl border border-white/10 bg-[#161814] p-6 sm:p-8">
           <div className="flex items-start justify-between flex-wrap gap-4 mb-6">
             <div>
-              <h2 className="text-lg font-bold text-text-primary">
-                {subscription.plan?.name ?? 'Plano'}
+              <h2 className="text-xl font-bold text-text-primary">
+                {subscription.plan?.name ?? 'Básico'}
               </h2>
-
+              <p className="text-text-secondary text-sm mt-1">
+                {subscription.plan ? formatCurrency(subscription.plan.priceCents) + ' por mês' : 'R$ 50 por mês'}
+              </p>
             </div>
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${statusConfig.bg} ${statusConfig.text}`}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}
             >
               {statusConfig.icon}
               {statusConfig.label}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-6">
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-surface-secondary">
-              <Calendar className="w-5 h-5 text-[#EA580C]" />
+          <div className="mb-6">
+            <div className="flex items-center gap-3.5 p-4 rounded-xl bg-[#1A1B17] border border-white/5 max-w-md">
+              <Calendar className="w-5 h-5 text-[#1E88A8]" />
               <div>
                 <p className="text-xs text-text-secondary">Próxima cobrança</p>
                 <p className="text-sm font-semibold text-text-primary">
@@ -191,111 +194,105 @@ export function Subscription() {
                 </p>
               </div>
             </div>
-
-            {subscription.status === 'trial' && subscription.trialEndsAt && (
-              <div className="flex items-center gap-3 p-4 rounded-xl bg-warning/10">
-                <Clock className="w-5 h-5 text-warning" />
-                <div>
-                  <p className="text-xs text-warning/80">Trial encerra em</p>
-                  <p className="text-sm font-semibold text-warning">
-                    {formatDate(subscription.trialEndsAt)}
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
 
           {canCancel && (
-            <div className="border-t border-border pt-5">
-              <Button
-                variant="outline"
-                size="sm"
+            <div className="pt-2">
+              <button
+                type="button"
                 onClick={() => setCancelDialogOpen(true)}
-                className="border-error/40 text-error hover:bg-error/10"
+                className="inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium border border-error/40 bg-transparent text-error hover:border-error hover:bg-error/10 transition-all duration-200 cursor-pointer"
               >
                 Cancelar assinatura
-              </Button>
+              </button>
             </div>
           )}
         </div>
 
-        <div className="rounded-2xl border border-border bg-surface">
-          <div className="px-7 py-5 border-b border-border">
-            <h3 className="font-bold text-text-primary">Histórico de Faturas</h3>
-          </div>
+        {/* Histórico de Faturas */}
+        <div className="rounded-2xl border border-white/10 bg-[#161814] p-6 sm:p-8 space-y-6">
+          <h3 className="text-base font-bold text-text-primary">Histórico de faturas</h3>
 
           {isInvoicesLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-5 h-5 animate-spin text-text-secondary" />
+              <Loader2 className="w-5 h-5 animate-spin text-[#1E88A8]" />
             </div>
           ) : !invoices || invoices.length === 0 ? (
-            <EmptyState
-              icon={<Receipt className="w-6 h-6 text-[#EA580C]" />}
-              title="Nenhuma fatura encontrada ainda"
-              description="Suas faturas aparecerão aqui assim que forem geradas."
-            />
+            <div className="rounded-xl border border-dashed border-white/10 bg-[#1A1B17]/50 p-8">
+              <EmptyState
+                icon={<Receipt className="w-6 h-6 text-[#1E88A8]" />}
+                title="Nenhuma fatura ainda"
+                description="Suas faturas aparecem aqui assim que forem geradas."
+              />
+            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Valor (R$)</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ação</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoices.map((invoice) => {
-                  const invoiceStatus = INVOICE_STATUS_CONFIG[invoice.status];
-                  return (
-                    <TableRow key={invoice.id}>
-                      <TableCell>{formatDate(invoice.paidAt ?? invoice.createdAt)}</TableCell>
-                      <TableCell>{formatCurrency(invoice.amountCents)}</TableCell>
-                      <TableCell>
-                        <Badge variant={invoiceStatus.variant}>{invoiceStatus.label}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {invoice.invoiceUrl ? (
-                          <a
-                            href={invoice.invoiceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-sm font-medium text-[#EA580C] hover:underline"
-                          >
-                            Ver fatura
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        ) : (
-                          <span className="text-sm text-text-secondary">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-white/5 hover:bg-transparent">
+                    <TableHead className="text-text-secondary">Data</TableHead>
+                    <TableHead className="text-text-secondary">Valor (R$)</TableHead>
+                    <TableHead className="text-text-secondary">Status</TableHead>
+                    <TableHead className="text-right text-text-secondary">Ação</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invoices.map((invoice) => {
+                    const invoiceStatus = INVOICE_STATUS_CONFIG[invoice.status];
+                    return (
+                      <TableRow key={invoice.id} className="border-white/5 hover:bg-white/[0.02]">
+                        <TableCell className="text-text-primary">{formatDate(invoice.paidAt ?? invoice.createdAt)}</TableCell>
+                        <TableCell className="text-text-primary">{formatCurrency(invoice.amountCents)}</TableCell>
+                        <TableCell>
+                          <Badge variant={invoiceStatus.variant}>{invoiceStatus.label}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {invoice.invoiceUrl ? (
+                            <a
+                              href={invoice.invoiceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-sm font-medium text-[#1E88A8] hover:underline"
+                            >
+                              Ver fatura
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          ) : (
+                            <span className="text-sm text-text-secondary">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </div>
       </div>
 
+      {/* Modal de Cancelamento */}
       <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <DialogContent>
+        <DialogContent className="bg-[#161814] border-white/10 text-text-primary">
           <DialogHeader>
             <DialogTitle>Cancelar assinatura</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-text-secondary">
               Tem certeza que deseja cancelar sua assinatura? Você perderá acesso às funcionalidades
               do plano ao final do período atual.
             </DialogDescription>
           </DialogHeader>
 
           {cancelError && (
-            <p className="text-sm text-error bg-error/10 rounded-lg px-3 py-2">{cancelError}</p>
+            <p className="text-sm text-error bg-error/10 border border-error/20 rounded-lg px-3 py-2">
+              {cancelError}
+            </p>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <button
+              type="button"
               onClick={() => setCancelDialogOpen(false)}
-              className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
+              className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
             >
               Manter assinatura
             </button>
@@ -304,7 +301,7 @@ export function Subscription() {
               size="sm"
               onClick={handleCancel}
               disabled={cancelSubscription.isPending}
-              className="bg-error hover:bg-error/90 text-white"
+              className="bg-error hover:bg-error/90 text-white cursor-pointer"
             >
               {cancelSubscription.isPending ? (
                 <span className="flex items-center gap-2">

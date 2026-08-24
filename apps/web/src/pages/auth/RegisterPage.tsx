@@ -1,352 +1,157 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
-import { OtpInput } from '@/components/auth/OtpInput';
-import { useRegister } from '@/hooks/useRegister';
-import { useVerifyEmail } from '@/hooks/useVerifyEmail';
-import { useResendOtp } from '@/hooks/useResendOtp';
-import type { RegisterRequest } from '@/types/auth';
-
-const registerSchema = z.object({
-  name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
-  email: z.string().email('Email inválido'),
-  password: z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
-  companyName: z.string().min(2, 'Nome da empresa é obrigatório'),
-});
-
-type RegisterFormValues = z.infer<typeof registerSchema>;
+import { AdySymbol } from '@/components/AdySymbol';
+import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton';
+import { login as authLogin } from '@/store/slices/authSlice';
+import { store } from '@/store';
 
 /**
- * Página de cadastro de novos usuários na plataforma FURY.
- *
- * Exibe um formulário com validação via Zod + React Hook Form coletando
- * nome, e-mail, senha e empresa. Em caso de sucesso, redireciona para
- * o fluxo de onboarding em `/onboarding/conectar-meta`.
- *
- * @remarks
- * - Utiliza `useRegister` para executar a mutation de criação de conta
- * - Step 1: formulário de cadastro
- * - Step 2: verificação de email via OTP
- * - O cast `data as RegisterRequest` é necessário por limitação de inferência
- *   do Zod + RHF no TypeScript 5.6, onde campos obrigatórios são inferidos
- *   como opcionais
- *
- * @example
- * // Registrada na rota pública `/cadastro`
- * <Route path="/cadastro" element={<RegisterPage />} />
+ * Tela de escolha de cadastro: cadastro social (Google) ou formulário manual.
  */
 export function RegisterPage() {
   const navigate = useNavigate();
-  const registerMutation = useRegister();
-  const verifyMutation = useVerifyEmail();
-  const resendMutation = useResendOtp();
-  const [step, setStep] = useState<1 | 2>(1);
-  const [userId, setUserId] = useState<string>('');
-  const [email, setEmail] = useState<string>('');
   const [error, setError] = useState<string>('');
-  const [otpValue, setOtpValue] = useState<string>('');
-  const [otpError, setOtpError] = useState<string>('');
-  const [resendCountdown, setResendCountdown] = useState<number>(0);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<RegisterFormValues>({
-    resolver: zodResolver(registerSchema as any),
-    defaultValues: {
-      name: '',
-      email: '',
-      password: '',
-      companyName: '',
-    },
-  });
 
   useEffect(() => {
-    if (resendCountdown > 0) {
-      const timer = setTimeout(() => setResendCountdown(resendCountdown - 1), 1000);
-      return () => clearTimeout(timer);
+    // Handle social login redirect (novo usuário volta aqui após autorizar no Google)
+    const params = new URLSearchParams(window.location.search);
+    const socialData = params.get('social_login');
+    if (socialData) {
+      try {
+        const data = JSON.parse(decodeURIComponent(socialData));
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        store.dispatch(authLogin({
+          token: data.token,
+          refreshToken: data.refreshToken,
+          name: data.user.name,
+          email: data.user.email,
+          tenantId: data.user.tenantId,
+        }));
+        if (data.isNewUser) {
+          navigate('/onboarding/conectar-meta');
+        } else {
+          navigate('/dashboard');
+        }
+        return;
+      } catch {
+        setError('Erro ao fazer cadastro com Google');
+      }
     }
-  }, [resendCountdown]);
 
-  const onSubmit = async (data: RegisterFormValues) => {
-    try {
-      setError('');
-      const response = await registerMutation.mutateAsync(data as RegisterRequest);
-      setUserId(response.user.id);
-      setEmail(data.email);
-      setStep(2);
-      setResendCountdown(30);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao registrar');
+    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('ady-theme');
+
+    if (savedTheme === 'escuro' || savedTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else if (savedTheme === 'claro' || savedTheme === 'light') {
+      document.documentElement.classList.remove('dark');
+    } else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
     }
-  };
+  }, [navigate]);
 
-  const handleVerifyOtp = async (code: string) => {
-    try {
-      setOtpError('');
-      const response = await verifyMutation.mutateAsync({
-        userId,
-        code,
-      });
-      localStorage.setItem('token', response.token);
-      localStorage.setItem('refreshToken', response.refreshToken);
-      localStorage.setItem('user', JSON.stringify(response.user));
-      navigate('/onboarding/conectar-meta');
-    } catch (err) {
-      setOtpError(err instanceof Error ? err.message : 'Código inválido');
-    }
-  };
+  const buttonHover =
+    'transition-all duration-200 hover:border-[#1E88A8]/50 hover:bg-white dark:hover:bg-[#1a1b17] [&:hover:not(:disabled)]:shadow-md [&:active:not(:disabled)]:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed';
 
-  const handleResendOtp = async () => {
-    try {
-      setOtpError('');
-      await resendMutation.mutateAsync(userId);
-      setResendCountdown(30);
-    } catch (err) {
-      setOtpError(err instanceof Error ? err.message : 'Erro ao reenviar código');
-    }
-  };
-
-  // Step 2: OTP Verification
-  if (step === 2) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="w-full max-w-[400px]">
-
-          {/* Logo + tagline */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#EA580C] mb-4">
-              <span className="text-white font-black text-xl">F</span>
-            </div>
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight">FURY</h1>
-            <p className="text-sm text-gray-400 mt-1">Automação de tráfego pago com IA</p>
-          </div>
-
-          {/* Card */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-            <div className="space-y-6">
-
-              {/* Header */}
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 mb-1">Verificar email</h2>
-                <p className="text-sm text-gray-600">
-                  Enviamos um código para <span className="font-semibold text-gray-900">{email}</span>
-                </p>
-              </div>
-
-              {/* OTP Input */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Código de verificação
-                </label>
-                <OtpInput
-                  length={6}
-                  value={otpValue}
-                  onChange={setOtpValue}
-                  onComplete={handleVerifyOtp}
-                  disabled={verifyMutation.isPending}
-                  error={otpError}
-                />
-              </div>
-
-              {/* Verify Button */}
-              <button
-                type="button"
-                disabled={verifyMutation.isPending || otpValue.length !== 6}
-                onClick={() => handleVerifyOtp(otpValue)}
-                className="w-full bg-[#EA580C] hover:bg-[#D4520B] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
-              >
-                {verifyMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Verificando...
-                  </>
-                ) : (
-                  'Verificar código'
-                )}
-              </button>
-
-              {/* Resend Code */}
-              <div className="pt-4 border-t border-gray-200">
-                {resendCountdown > 0 ? (
-                  <p className="text-sm text-center text-gray-600 font-medium">
-                    Reenviar código em {resendCountdown}s
-                  </p>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleResendOtp}
-                    disabled={resendMutation.isPending}
-                    className="w-full text-sm font-bold text-center transition-all hover:underline"
-                    style={{ color: '#EA580C' }}
-                  >
-                    {resendMutation.isPending ? 'Reenviando...' : 'Reenviar código'}
-                  </button>
-                )}
-              </div>
-
-              {/* Back Link */}
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStep(1);
-                    setOtpValue('');
-                    setOtpError('');
-                  }}
-                  className="text-sm text-gray-600 font-semibold hover:underline transition-all"
-                >
-                  Voltar para cadastro
-                </button>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    );
-  }
-
-  // Step 1: Registration Form
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-[400px]">
+    <div className="relative flex min-h-screen items-center justify-center bg-[#f3f6f8] dark:bg-[#0c0d0a] px-5 py-16 text-slate-900 dark:text-white transition-colors duration-300 overflow-hidden">
+      {/* 🌌 GRID DE FUNDO */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+        style={{
+          backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
+          backgroundSize: '24px 24px',
+        }}
+      />
 
-        {/* Logo + tagline */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#EA580C] mb-4">
-            <span className="text-white font-black text-xl">F</span>
+      {/* 🌟 GLOW APENAS AZUL */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `radial-gradient(circle at 50% -10%, rgba(30, 136, 168, 0.22) 0%, transparent 60%)`,
+        }}
+      />
+
+      <div className="relative z-10 w-full max-w-[400px]">
+        {/* Logo Estática */}
+        <div className="flex flex-col items-center text-center">
+          <div className="p-2">
+            <AdySymbol size={52} />
           </div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">FURY</h1>
-          <p className="text-sm text-gray-400 mt-1">Automação de tráfego pago com IA</p>
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900 dark:text-white">ady</h1>
+          <p className="!mt-1.5 text-sm font-medium text-slate-500 dark:text-zinc-400">Seu gestor de tráfego com IA</p>
         </div>
 
-        {/* Card */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-          <form onSubmit={handleSubmit(onSubmit)} noValidate>
-            <div className="space-y-4">
-
-              {/* Header */}
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-1">Criar conta</h2>
-                <p className="text-sm text-gray-600">Comece a automatizar campanhas com FURY</p>
-              </div>
-
-              {/* Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Nome Completo
-                </label>
-                <input
-                  type="text"
-                  placeholder="Seu nome completo"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors"
-                  {...register('name')}
-                />
-                {errors.name?.message && (
-                  <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>
-                )}
-              </div>
-
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  E-mail
-                </label>
-                <input
-                  type="email"
-                  placeholder="seu@email.com"
-                  autoComplete="email"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors"
-                  {...register('email')}
-                />
-                {errors.email?.message && (
-                  <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>
-                )}
-              </div>
-
-              {/* Password */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Senha
-                </label>
-                <input
-                  type="password"
-                  placeholder="Mínimo 8 caracteres"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors"
-                  {...register('password')}
-                />
-                {errors.password?.message && (
-                  <p className="text-xs text-red-500 mt-1">{errors.password.message}</p>
-                )}
-              </div>
-
-              {/* Company */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Empresa
-                </label>
-                <input
-                  type="text"
-                  placeholder="Nome da sua empresa"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors"
-                  {...register('companyName')}
-                />
-                {errors.companyName?.message && (
-                  <p className="text-xs text-red-500 mt-1">{errors.companyName.message}</p>
-                )}
-              </div>
-
-            </div>
-
-            {/* Error */}
-            {error && (
-              <p className="text-sm text-red-500 text-center mt-4">{error}</p>
-            )}
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={registerMutation.isPending}
-              className="w-full mt-6 bg-[#EA580C] hover:bg-[#D4520B] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
-            >
-              {registerMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Criando conta...
-                </>
-              ) : (
-                'Criar conta FURY'
-              )}
-            </button>
-          </form>
-
-          {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-3 bg-white text-gray-600">ou</span>
-            </div>
+        {/* Card de Escolha de Cadastro */}
+        <div className="mt-8 space-y-4 rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white/95 dark:bg-[#181915] p-7 shadow-[0_12px_32px_-8px_rgba(15,23,42,0.08)] dark:shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)] backdrop-blur-md transition-all">
+          <div className="space-y-1 mb-2">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Criar conta</h2>
+            <p className="text-sm text-slate-600 dark:text-zinc-400">Comece a automatizar campanhas com ady</p>
           </div>
 
-          {/* Sign In Link */}
-          <p className="text-sm text-gray-600 text-center">
+          {/* Cadastro social Google */}
+          <GoogleLoginButton
+            label="Cadastrar com Google"
+            onSuccess={(data) => {
+              localStorage.setItem('token', data.token);
+              localStorage.setItem('refreshToken', data.refreshToken);
+              localStorage.setItem('user', JSON.stringify(data.user));
+              store.dispatch(authLogin({
+                token: data.token,
+                refreshToken: data.refreshToken,
+                name: data.user.name,
+                email: data.user.email,
+                tenantId: data.user.tenantId,
+              }));
+              if (data.isNewUser) {
+                navigate('/onboarding/conectar-meta');
+              } else {
+                navigate('/dashboard');
+              }
+            }}
+            onError={(msg) => setError(msg)}
+          />
+
+          {/* Divisor */}
+          <div className="relative flex items-center justify-center">
+            <div className="w-full border-t border-slate-200 dark:border-white/10" />
+            <span className="absolute px-3 text-xs text-slate-400 dark:text-zinc-500 bg-white dark:bg-[#181915]">ou</span>
+          </div>
+
+          {/* Cadastro manual */}
+          <button
+            type="button"
+            onClick={() => navigate('/cadastro/formulario')}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88A8] py-3 text-sm font-semibold text-white shadow-md shadow-[#1E88A8]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#17708A] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99]"
+          >
+            <Loader2 className="size-4 hidden" />
+            Cadastrar
+          </button>
+
+          {/* Mensagem de Erro */}
+          {error && (
+            <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-center text-xs font-medium text-red-600 dark:text-red-400">
+              {error}
+            </p>
+          )}
+
+          {/* Link para Login */}
+          <p className="text-center text-sm text-slate-600 dark:text-zinc-400">
             Já tem conta?{' '}
-            <Link
-              to="/login"
-              className="text-[#EA580C] font-semibold hover:underline transition-all"
-            >
+            <Link to="/login" className="font-semibold text-[#1E88A8] hover:underline transition-colors">
               Entrar aqui
             </Link>
           </p>
         </div>
-
       </div>
     </div>
   );

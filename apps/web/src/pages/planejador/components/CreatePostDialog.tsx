@@ -1,12 +1,15 @@
 import { useState, useRef, type DragEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import { LayoutGrid, Image, Sparkles, Film, Upload, Trash2, X } from 'lucide-react';
+import { LayoutGrid, Image, Sparkles, Film, Upload, Trash2, X, Plus } from 'lucide-react';
 import api from '@/lib/api';
 
 interface Props {
   mode: 'schedule' | 'now';
+  /** Fase 6: Legado — dia do mês (1-31) */
   preselectedDay?: number | null;
+  /** Fase 8: Novo — ISO date string (ex: "2026-08-19") */
+  preselectedDate?: string | null;
   onClose: () => void;
   onCreated: (message: string) => void;
   onError?: (msg: string) => void;
@@ -14,23 +17,43 @@ interface Props {
 
 const TYPE_OPTIONS = [
   { value: 'image', label: 'Post', icon: Image, desc: 'Imagem única' },
-  { value: 'carousel', label: 'Carrossel', icon: LayoutGrid, desc: 'Múltiplas imagens' },
+  { value: 'carousel', label: 'Carrossel', icon: LayoutGrid, desc: 'Múltiplas imagens (máx. 5)' },
   { value: 'reel', label: 'Reels', icon: Film, desc: 'Vídeo curto' },
   { value: 'stories', label: 'Stories', icon: Sparkles, desc: 'Efêmero 24h' },
 ] as const;
 
-export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, onError }: Props) {
+const MAX_CAROUSEL_IMAGES = 5;
+
+export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, preselectedDate, onError }: Props) {
   const [caption, setCaption] = useState('');
   const [postType, setPostType] = useState('image');
-  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledDate, setScheduledDate] = useState(preselectedDate || '');
   const [scheduledTime, setScheduledTime] = useState('');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [carouselFiles, setCarouselFiles] = useState<File[]>([]);
+  const [carouselPreviews, setCarouselPreviews] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
-  const [showSchedule, setShowSchedule] = useState(mode === 'schedule');
+  const [showSchedule, setShowSchedule] = useState(mode === 'schedule' || !!preselectedDate);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const carouselInputRef = useRef<HTMLInputElement>(null);
 
-  const today = preselectedDay ?? new Date().getDate();
+  // Fase 8: Prioriza preselectedDate (novo) sobre preselectedDay (legado)
+  const getEffectiveDate = (): string => {
+    if (preselectedDate) return preselectedDate; // ISO string: "2026-08-19"
+    if (preselectedDay) {
+      // Legado: construir ISO date a partir de dia do mês
+      const now = new Date();
+      const dateObj = new Date(now.getFullYear(), now.getMonth(), preselectedDay);
+      return dateObj.toISOString().split('T')[0];
+    }
+    // Default: hoje
+    return new Date().toISOString().split('T')[0];
+  };
+
+  const effectiveDate = getEffectiveDate();
+  // Extrair dayIndex do effective date (para compatibilidade backward)
+  const dayIndexFromDate = parseInt(effectiveDate.split('-')[2]);
 
   const scheduledAt = scheduledDate && scheduledTime
     ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
@@ -42,11 +65,33 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, onE
     setMediaPreview(URL.createObjectURL(file));
   };
 
+  const handleCarouselFiles = (files: File[]) => {
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    const remainingSlots = MAX_CAROUSEL_IMAGES - carouselFiles.length;
+    const toAdd = imageFiles.slice(0, remainingSlots);
+    const newFiles = [...carouselFiles, ...toAdd];
+    const newPreviews = toAdd.map(f => URL.createObjectURL(f));
+    setCarouselFiles(newFiles);
+    setCarouselPreviews(prev => [...prev, ...newPreviews]);
+  };
+
+  const removeCarouselFile = (idx: number) => {
+    setCarouselFiles(prev => prev.filter((_, i) => i !== idx));
+    setCarouselPreviews(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
     if (file) handleFile(file);
+  };
+
+  const handleCarouselDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    handleCarouselFiles(files);
   };
 
   const isNow = mode === 'now';
@@ -56,6 +101,9 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, onE
   const mutation = useMutation({
     mutationFn: async () => {
       let imageUrl: string | undefined;
+      let imageUrls: string[] | undefined;
+
+      // Upload single image/video
       if (mediaFile) {
         const formData = new FormData();
         formData.append('file', mediaFile);
@@ -64,10 +112,29 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, onE
         });
         imageUrl = uploadRes.data.url;
       }
+      // Fase 8: Enviar `date` (novo formato) ao invés de `dayIndex` (legado)
+      // API aceita ambos (z.union), mas novo formato é preferido
+
+      // Upload carousel images
+      if (postType === 'carousel' && carouselFiles.length > 0) {
+        const uploadedUrls: string[] = [];
+        for (const file of carouselFiles) {
+          const formData = new FormData();
+          formData.append('file', file);
+          const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          uploadedUrls.push(uploadRes.data.url);
+        }
+        imageUrls = uploadedUrls.length > 0 ? uploadedUrls : undefined;
+      }
       await api.post('/planner/posts', {
-        caption, postType, dayIndex: today,
+        caption,
+        postType,
+        date: scheduledDate || effectiveDate, // ISO string: "2026-08-19"
         scheduledAt: scheduledAt || (isNow ? new Date().toISOString() : undefined),
         imageUrl,
+        imageUrls,
       });
     },
     onSuccess: async () => {
@@ -101,7 +168,10 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, onE
     },
   });
 
-  const canCreate = caption.trim() && mediaFile && !mutation.isPending;
+  const canCreate = caption.trim() && !mutation.isPending && (
+    (postType === 'carousel' && carouselFiles.length > 0) ||
+    (postType !== 'carousel' && mediaFile)
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
@@ -122,49 +192,101 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, onE
             <label className="block text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2">
               Mídia <span className="text-error">*</span>
             </label>
-            {mediaPreview ? (
-              <div className="relative group rounded-xl overflow-hidden border border-border bg-surface-secondary">
-                {mediaFile?.type.startsWith('video/') ? (
-                  <video src={mediaPreview} controls className="w-full aspect-square object-cover" />
-                ) : (
-                  <img src={mediaPreview} alt="Preview" className="w-full aspect-square object-cover" />
+            {postType === 'carousel' ? (
+              // Carousel: multiple images
+              <div>
+                {carouselPreviews.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    {carouselPreviews.map((preview, idx) => {
+                      return (
+                        <div key={idx} className="relative group rounded-xl overflow-hidden border border-border bg-surface-secondary aspect-square">
+                          <img src={preview} alt={`Carousel ${idx + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => removeCarouselFile(idx)}
+                            className="absolute top-1 right-1 p-1 rounded bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
-                <button
-                  onClick={() => { setMediaFile(null); setMediaPreview(null); }}
-                  className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
-                  <p className="text-xs text-white font-medium truncate">{mediaFile?.name}</p>
-                  <p className="text-[10px] text-white/70">{(mediaFile!.size / 1024 / 1024).toFixed(1)} MB</p>
-                </div>
+                {carouselFiles.length < MAX_CAROUSEL_IMAGES && (
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={handleCarouselDrop}
+                    onClick={() => carouselInputRef.current?.click()}
+                    className={clsx(
+                      'flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-all',
+                      dragOver
+                        ? 'border-accent bg-accent/10'
+                        : 'border-border hover:border-text-tertiary bg-surface-secondary',
+                    )}
+                  >
+                    <Plus className="h-8 w-8 text-text-tertiary mb-2" />
+                    <p className="text-sm text-text-secondary font-medium">Adicionar imagem ({carouselFiles.length}/{MAX_CAROUSEL_IMAGES})</p>
+                    <p className="text-xs text-text-tertiary mt-1">PNG, JPG, WebP</p>
+                  </div>
+                )}
+                <input
+                  ref={carouselInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  multiple
+                  onChange={e => e.target.files && handleCarouselFiles(Array.from(e.target.files))}
+                  className="hidden"
+                />
               </div>
             ) : (
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={clsx(
-                  'flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-all',
-                  dragOver
-                    ? 'border-accent bg-accent/10 scale-[1.02]'
-                    : 'border-border hover:border-text-tertiary bg-surface-secondary',
+              // Single image/video
+              <div>
+                {mediaPreview ? (
+                  <div className="relative group rounded-xl overflow-hidden border border-border bg-surface-secondary">
+                    {mediaFile?.type.startsWith('video/') ? (
+                      <video src={mediaPreview} controls className="w-full aspect-square object-cover" />
+                    ) : (
+                      <img src={mediaPreview} alt="Preview" className="w-full aspect-square object-cover" />
+                    )}
+                    <button
+                      onClick={() => { setMediaFile(null); setMediaPreview(null); }}
+                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
+                      <p className="text-xs text-white font-medium truncate">{mediaFile?.name}</p>
+                      <p className="text-[10px] text-white/70">{(mediaFile!.size / 1024 / 1024).toFixed(1)} MB</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={clsx(
+                      'flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-all',
+                      dragOver
+                        ? 'border-accent bg-accent/10 scale-[1.02]'
+                        : 'border-border hover:border-text-tertiary bg-surface-secondary',
+                    )}
+                  >
+                    <Upload className="h-8 w-8 text-text-tertiary mb-2" />
+                    <p className="text-sm text-text-secondary font-medium">Arraste ou clique</p>
+                    <p className="text-xs text-text-tertiary mt-1">PNG, JPG, WebP, MP4</p>
+                  </div>
                 )}
-              >
-                <Upload className="h-8 w-8 text-text-tertiary mb-2" />
-                <p className="text-sm text-text-secondary font-medium">Arraste ou clique</p>
-                <p className="text-xs text-text-tertiary mt-1">PNG, JPG, WebP, MP4</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
+                  onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
+                  className="hidden"
+                />
               </div>
             )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
-              onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
-              className="hidden"
-            />
           </div>
 
           {/* Right: post details */}

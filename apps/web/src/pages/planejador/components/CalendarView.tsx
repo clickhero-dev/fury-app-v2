@@ -1,146 +1,282 @@
-import { useState, useMemo } from 'react';
+import { useRef, useState, useCallback, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
+import FullCalendar from '@fullcalendar/react';
+import './CalendarView.css';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import timeGridPlugin from '@fullcalendar/timegrid';
+import listPlugin from '@fullcalendar/list';
+import interactionPlugin from '@fullcalendar/interaction';
+import type {
+  EventClickArg,
+  EventDropArg,
+  DatesSetArg,
+  EventContentArg,
+} from '@fullcalendar/core';
+import ptBrLocale from '@fullcalendar/core/locales/pt-br';
 import {
-  LayoutGrid, Image, Sparkles, Film, CheckCircle, XCircle,
-  ChevronLeft, ChevronRight, Plus, Trash2, CalendarClock, X,
+  Trash2,
+  CalendarClock,
+  X,
+  CheckCircle,
+  XCircle,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Globe,
+  MessageCircle,
+  Check,
+  Share2,
 } from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { ScheduleDialog } from './ScheduleDialog';
 import { CreatePostDialog } from './CreatePostDialog';
 import { PostTypeDialog } from './PostTypeDialog';
+import { Button } from '@/components/ui/button';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import api from '@/lib/api';
 import type { Post } from '../types';
+import { postToEvent, extractEventDropData, getPostFromEvent } from './calendarAdapter';
 
 // ===== Types =====
 
 interface CalendarPost extends Post {
   _source?: 'plan' | 'manual';
   _planTitle?: string;
-  imageUrl?: string | null;
 }
 
-interface CalendarData {
-  posts: CalendarPost[];
-  year: number;
-  month: number;
-}
+type Channel = 'meta' | 'google' | 'whatsapp';
+type Status = 'agendado' | 'publicado' | 'acao';
 
-// ===== Constants =====
+const views = [
+  { key: 'dayGridMonth', label: 'Mês' },
+  { key: 'timeGridWeek', label: 'Semana' },
+  { key: 'listMonth', label: 'Agenda' },
+] as const;
 
-const DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const TYPE_ICONS: Record<string, typeof Image> = {
-  carousel: LayoutGrid, reel: Film, image: Image, stories: Sparkles,
+const channelLabels: Record<Channel, string> = {
+  meta: 'Meta',
+  google: 'Google Ads',
+  whatsapp: 'WhatsApp',
 };
-const TYPE_LABELS: Record<string, string> = {
-  carousel: 'Carrossel', reel: 'Reels', image: 'Post', stories: 'Stories',
-};
-const MONTH_NAMES = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
-];
 
-function getDayOfWeek(year: number, month: number, day: number): number {
-  return new Date(year, month - 1, day).getDay();
+const channelStyles: Record<Channel, string> = {
+  meta: 'bg-[#1877F2]/12 text-[#1877F2] dark:text-[#6EA8FF]',
+  google: 'bg-[#34A853]/12 text-[#1E7C3C] dark:text-[#6FD08C]',
+  whatsapp: 'bg-[#25D366]/12 text-[#1B8B48] dark:text-[#5FE39A]',
+};
+
+const channelIcons: Record<Channel, React.ComponentType<{ className?: string }>> = {
+  meta: Share2,
+  google: Globe,
+  whatsapp: MessageCircle,
+};
+
+const statusLabels: Record<Status, string> = {
+  agendado: 'Agendado',
+  publicado: 'Publicado',
+  acao: 'Ação pendente',
+};
+
+function resolveChannel(post: Record<string, unknown>): Channel {
+  const raw = String(post.channel ?? post.platform ?? '').toLowerCase();
+  if (raw.includes('google') || raw.includes('ads')) return 'google';
+  if (raw.includes('whats')) return 'whatsapp';
+  return 'meta';
 }
 
-function getDaysInMonth(year: number, month: number): number {
-  return new Date(year, month, 0).getDate();
+function resolveStatus(post: Record<string, unknown>): Status {
+  const raw = String(post.status ?? '').toLowerCase();
+  if (raw.includes('publi') || raw === 'published' || raw === 'posted') return 'publicado';
+  if (raw.includes('schedul') || raw.includes('agend')) return 'agendado';
+  if (!raw || raw.includes('draft') || raw.includes('pend') || raw.includes('review')) return 'acao';
+  return 'agendado';
 }
 
 // ===== CalendarView =====
 
 export function CalendarView() {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const now = useMemo(() => new Date(), []);
+  const calendarRef = useRef<FullCalendar | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedPost, setSelectedPost] = useState<CalendarPost | null>(null);
-  const [dragPostId, setDragPostId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showPostTypeDialog, setShowPostTypeDialog] = useState(false);
   const [createMode, setCreateMode] = useState<'schedule' | 'now'>('schedule');
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string } | null>(null);
+  const [preselectedDay, setPreselectedDay] = useState<number | null>(null);
+  const [title, setTitle] = useState('');
+  const [currentView, setCurrentView] = useState<string>('dayGridMonth');
+  const queryClient = useQueryClient();
+
+  const api_ = () => calendarRef.current?.getApi();
+
+  const changeView = (next: string) => {
+    api_()?.changeView(next);
+    setCurrentView(next);
+  };
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
-  const [preselectedDay, setPreselectedDay] = useState<number | null>(null);
-  const queryClient = useQueryClient();
+
+  const getErrorMessage = (err: unknown, defaultMessage: string): string => {
+    if (err instanceof Error) return err.message;
+    if (err && typeof err === 'object') {
+      const axiosError = err as Record<string, unknown>;
+      if (axiosError.response && typeof axiosError.response === 'object') {
+        const responseData = axiosError.response as Record<string, unknown>;
+        if (responseData.data && typeof responseData.data === 'object') {
+          const data = responseData.data as Record<string, unknown>;
+          if (typeof data.message === 'string') return data.message;
+        }
+      }
+    }
+    return defaultMessage;
+  };
+
+  // Safe useEffect com limpeza de timer
+  useEffect(() => {
+    if (currentView !== 'timeGridWeek') return;
+
+    const timer = setTimeout(() => {
+      const calendarApi = calendarRef.current?.getApi?.();
+      if (calendarApi) {
+        calendarApi.scrollToTime('06:00:00');
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [currentView]);
+
+  const initialRange = useMemo(() => {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return {
+      startDate: start.toISOString().split('T')[0],
+      endDate: end.toISOString().split('T')[0],
+    };
+  }, [now]);
+
+  const effectiveRange = dateRange || initialRange;
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['calendar', year, month],
+    queryKey: ['calendar', effectiveRange.startDate, effectiveRange.endDate],
     queryFn: async () => {
-      const { data: res } = await api.get('/planner/calendar', { params: { year, month } });
-      return res.data as CalendarData;
+      try {
+        const { data: res } = await api.get('/planner/calendar', {
+          params: { startDate: effectiveRange.startDate, endDate: effectiveRange.endDate },
+        });
+        return res.data as { posts: CalendarPost[] };
+      } catch (err) {
+        console.error('Falha na requisição da API:', err);
+        return { posts: [] };
+      }
     },
+    retry: 1,
   });
 
   const posts = data?.posts ?? [];
-  const daysInMonth = getDaysInMonth(year, month);
-  const firstDay = getDayOfWeek(year, month, 1);
 
-  // Group posts by day
-  const postsByDay = useMemo(() => {
-    const map = new Map<number, CalendarPost[]>();
-    posts.forEach(p => {
-      const arr = map.get(p.dayIndex) || [];
-      arr.push(p);
-      map.set(p.dayIndex, arr);
+  const handleDatesSet = useCallback((info: DatesSetArg) => {
+    const extractDateOnly = (dateStr: string): string =>
+      /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : dateStr.split('T')[0];
+
+    const newStart = extractDateOnly(info.startStr);
+    const newEnd = extractDateOnly(info.endStr);
+
+    setTitle(info.view.title);
+
+    setDateRange((prev) => {
+      if (prev?.startDate === newStart && prev?.endDate === newEnd) return prev;
+      return { startDate: newStart, endDate: newEnd };
     });
-    return map;
-  }, [posts]);
+  }, []);
 
-  // ===== Navigation =====
+  const handleEventClick = useCallback(
+    (info: EventClickArg) => {
+      const post = getPostFromEvent(info.event);
+      if (!post) return;
 
-  const goPrevMonth = () => {
-    if (month === 1) { setMonth(12); setYear(y => y - 1); }
-    else setMonth(m => m - 1);
-    setSelectedIds(new Set());
-  };
-  const goNextMonth = () => {
-    if (month === 12) { setMonth(1); setYear(y => y + 1); }
-    else setMonth(m => m + 1);
-    setSelectedIds(new Set());
-  };
-
-  // ===== Selection =====
-
-  const selectAll = () => {
-    if (selectedIds.size === posts.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(posts.map(p => p.id)));
-  };
-
-  const clearSelection = () => setSelectedIds(new Set());
-
-  // ===== Mutations =====
-
-  const moveMutation = useMutation({
-    mutationFn: async ({ postId, dayIndex }: { postId: string; dayIndex: number }) => {
-      await api.patch(`/planner/posts/${postId}/move`, { dayIndex });
+      if (selectedIds.has(post.id)) {
+        setSelectedPost(post as CalendarPost);
+      } else {
+        const next = new Set(selectedIds);
+        next.add(post.id);
+        setSelectedIds(next);
+      }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.message || err?.message || 'Erro ao mover post. Tente novamente.';
-      showToast(msg, 'error');
+    [selectedIds],
+  );
+
+  const handleDateClick = useCallback((info: { dateStr: string }) => {
+    const clickedDate = new Date(info.dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    clickedDate.setHours(0, 0, 0, 0);
+    if (clickedDate < today) return;
+
+    setPreselectedDay(clickedDate.getDate());
+    setCreateMode('schedule');
+    setShowPostTypeDialog(true);
+  }, []);
+
+  const handleEventDrop = useCallback(
+    async (info: EventDropArg) => {
+      const { postId, newDate, scheduledAt } = extractEventDropData(info.event);
+
+      if (!newDate) {
+        info.revert();
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+
+      if (newDate < today) {
+        showToast('Não é possível mover posts para datas passadas.', 'error');
+        info.revert();
+        return;
+      }
+
+      const timePart = info.event.start
+        ? info.event.start.toTimeString().split(' ')[0]
+        : '00:00:00';
+
+      try {
+        await api.patch(`/planner/posts/${postId}/move`, {
+          date: newDate,
+          time: timePart,
+          scheduledAt: scheduledAt,
+        });
+
+        await queryClient.invalidateQueries({ queryKey: ['calendar'] });
+        showToast('Post movido com sucesso!');
+      } catch (err) {
+        showToast(getErrorMessage(err, 'Erro ao mover post'), 'error');
+        info.revert();
+      }
     },
-  });
+    [queryClient],
+  );
 
   const scheduleMutation = useMutation({
     mutationFn: async (scheduledAt: string | null) => {
       await api.patch('/planner/posts/bulk-schedule', {
-        postIds: [...selectedIds], scheduledAt,
+        postIds: [...selectedIds],
+        scheduledAt,
       });
     },
-    onSuccess: () => { clearSelection(); queryClient.invalidateQueries({ queryKey: ['calendar'] }); },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.message || err?.message || 'Erro ao agendar posts. Tente novamente.';
-      showToast(msg, 'error');
+    onSuccess: () => {
+      clearSelection();
+      setShowScheduleDialog(false);
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
     },
+    onError: (err) => showToast(getErrorMessage(err, 'Erro ao agendar posts'), 'error'),
   });
 
   const deleteMutation = useMutation({
@@ -154,292 +290,353 @@ export function CalendarView() {
       showToast(count > 1 ? `${count} posts excluídos com sucesso!` : 'Post excluído com sucesso!');
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
     },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.message || err?.message || 'Erro ao excluir post(s). Tente novamente.';
-      showToast(msg, 'error');
-    },
+    onError: (err) => showToast(getErrorMessage(err, 'Erro ao excluir post(s)'), 'error'),
   });
 
-  // ===== DnD =====
+  const clearSelection = () => setSelectedIds(new Set());
 
-  const handleDragStart = (e: React.DragEvent, postId: string) => {
-    e.dataTransfer.setData('text/plain', postId);
-    e.dataTransfer.effectAllowed = 'move';
-    setDragPostId(postId);
+  const selectAll = () => {
+    if (selectedIds.size === posts.length) clearSelection();
+    else setSelectedIds(new Set(posts.map((p) => p.id)));
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
+  const events = useMemo(() => posts.map((post) => postToEvent(post)), [posts]);
 
-  const handleDrop = (e: React.DragEvent, dayIndex: number) => {
-    e.preventDefault();
-    const postId = e.dataTransfer.getData('text/plain');
-    if (postId) moveMutation.mutate({ postId, dayIndex });
-    setDragPostId(null);
-  };
+  const legend = [
+    { label: 'Agendado / Publicado', className: 'bg-brand' },
+    { label: 'Ação pendente', className: 'bg-accent' },
+  ];
 
-  const handleDragEnd = () => setDragPostId(null);
-
-  // ===== Loading / Error / Empty =====
-
-  if (isLoading) return <CalendarSkeleton />;
-  if (error && !data) return <CalendarError />;
-
-  // ===== Grid =====
-
-  const grid: React.ReactNode[] = [];
-  for (let i = 0; i < firstDay; i++) grid.push(<div key={`empty-${i}`} />);
-
-  for (let day = 1; day <= daysInMonth; day++) {
-    const dayPosts = postsByDay.get(day) || [];
-    const isToday = year === now.getFullYear() && month === now.getMonth() + 1 && day === now.getDate();
-
-    grid.push(
-      <div
-        key={day}
-        onDragOver={handleDragOver}
-        onDrop={(e) => handleDrop(e, day)}
-        onClick={() => {
-          if (dayPosts.length === 0) {
-            setPreselectedDay(day);
-            setShowPostTypeDialog(true);
-          }
-        }}
-        className={clsx(
-          'relative min-h-[80px] rounded-lg border p-1.5 transition-colors',
-          isToday ? 'border-accent/50 bg-accent/5' : 'border-border',
-          dayPosts.length > 0 ? 'bg-surface-secondary/60' : 'bg-transparent hover:bg-surface-secondary/30 cursor-pointer',
-          dragPostId && 'border-dashed border-accent/30',
-        )}
-      >
-        {/* Day number */}
-        <div className="flex items-center justify-between mb-0.5">
-          <span className={clsx('text-xs', isToday ? 'text-accent font-bold' : 'text-text-tertiary')}>
-            {day}
-          </span>
+  if (error && !data) {
+    return (
+      <div className="grid min-h-[420px] place-items-center rounded-2xl border border-border bg-surface p-8 text-center shadow-lg">
+        <div>
+          <p className="text-base font-semibold text-text-primary">Erro ao carregar calendário</p>
+          <p className="mt-1 text-sm text-text-secondary">Verifique sua conexão ou dados de login.</p>
         </div>
+      </div>
+    );
+  }
 
-        {/* Posts */}
-        {dayPosts.slice(0, 3).map(post => {
-          const Icon = TYPE_ICONS[post.postType] || Image;
-          const isSelected = selectedIds.has(post.id);
-          return (
-            <div
-              key={post.id}
-              draggable
-              onDragStart={(e) => handleDragStart(e, post.id)}
-              onDragEnd={handleDragEnd}
-              onClick={(e) => {
-                e.stopPropagation();
-                // ponytail: toggle selection on click; click selected post again to view
-                if (isSelected) {
-                  setSelectedPost(post);
-                } else {
-                  const next = new Set(selectedIds);
-                  next.add(post.id);
-                  setSelectedIds(next);
-                }
-              }}
-              className={clsx(
-                'flex items-center gap-1.5 mt-1 px-1.5 py-1 rounded cursor-pointer text-[10px] transition-all',
-                isSelected
-                  ? 'bg-accent/30 ring-1 ring-accent shadow-[0_0_8px_rgba(234,88,12,0.2)]'
-                  : 'hover:bg-surface-secondary',
-                dragPostId === post.id && 'opacity-50',
-              )}
-            >
-              {post.imageUrl ? (
-                <img
-                  src={post.imageUrl}
-                  alt=""
-                  className={clsx('h-6 w-6 rounded object-cover shrink-0', isSelected && 'ring-1 ring-accent')}
-                />
-              ) : (
-                <Icon className={clsx('h-3 w-3 shrink-0', isSelected ? 'text-accent' : 'text-text-tertiary')} />
-              )}
-              <span className={clsx('truncate', isSelected ? 'text-accent font-medium' : 'text-text-secondary')}>
-                {post.title || post.caption?.slice(0, 20) || 'Sem título'}
-              </span>
-              {isSelected && <CheckCircle className="h-3 w-3 text-accent ml-auto shrink-0" />}
-              {!isSelected && post._source === 'manual' && <span className="text-[8px] text-accent ml-auto">+</span>}
-            </div>
-          );
-        })}
-        {dayPosts.length > 3 && (
-          <span className="text-[10px] text-text-tertiary px-1">+{dayPosts.length - 3}</span>
-        )}
-      </div>,
+  if (isLoading && !data && !dateRange) {
+    return (
+      <div className="rounded-2xl border border-border bg-surface p-4 shadow-lg sm:p-6">
+        <div className="h-10 w-64 animate-pulse rounded-lg bg-surface-secondary/60" />
+        <div className="mt-4 h-[520px] animate-pulse rounded-xl bg-surface-secondary/60" />
+      </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {/* Page-level toast */}
-      {toast && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300">
-          <div className={clsx(
-            'flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium shadow-2xl backdrop-blur-md border',
-            toast.type === 'success'
-              ? 'bg-success/95 border-success/30 text-white'
-              : 'bg-error/95 border-error/30 text-white',
-          )}>
-            {toast.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-            {toast.message}
-          </div>
-        </div>
-      )}
-
-      {/* Header: month nav + add post */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={goPrevMonth} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary transition-colors">
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <h1 className="text-xl font-bold text-text-primary min-w-[180px] text-center">
-            {MONTH_NAMES[month - 1]} {year}
-          </h1>
-          <button onClick={goNextMonth} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary transition-colors">
-            <ChevronRight className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="flex items-center gap-2">
-          {posts.length > 0 && (
-            <button
-              onClick={selectAll}
-              className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+    <TooltipProvider>
+      <section className="ady-calendar-shell rounded-2xl border border-border bg-surface p-4 shadow-lg sm:p-6">
+        {toast && (
+          <div className="fixed right-6 top-6 z-50">
+            <div
+              className={clsx(
+                'flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm shadow-lg',
+                toast.type === 'success'
+                  ? 'border-brand/30 bg-surface text-text-primary'
+                  : 'border-error/40 bg-surface text-error',
+              )}
             >
-              {selectedIds.size === posts.length ? 'Desmarcar todos' : 'Selecionar todos'}
+              {toast.type === 'success' ? (
+                <CheckCircle className="size-4 text-brand" />
+              ) : (
+                <XCircle className="size-4" />
+              )}
+              {toast.message}
+            </div>
+          </div>
+        )}
+
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-lg border border-border">
+              <button
+                aria-label="Mês anterior"
+                onClick={() => api_()?.prev()}
+                className="cursor-pointer rounded-l-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <button
+                aria-label="Próximo mês"
+                onClick={() => api_()?.next()}
+                className="cursor-pointer rounded-r-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+
+            <button
+              onClick={() => api_()?.today()}
+              className="cursor-pointer rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-surface-secondary"
+            >
+              Hoje
             </button>
+
+            <h2 className="ml-1 text-lg font-semibold tracking-tight first-letter:uppercase sm:text-xl">
+              {title}
+            </h2>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {posts.length > 0 && (
+              <button
+                onClick={selectAll}
+                className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
+              >
+                {selectedIds.size === posts.length ? 'Desmarcar todos' : 'Selecionar todos'}
+              </button>
+            )}
+            <div className="flex rounded-lg border border-border p-0.5">
+              {views.map((v) => (
+                <button
+                  key={v.key}
+                  onClick={() => changeView(v.key)}
+                  className={clsx(
+                    'cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                    currentView === v.key
+                      ? 'bg-brand text-white'
+                      : 'text-text-secondary hover:text-text-primary',
+                  )}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            <Button
+  variant="spark"
+  size="sm"
+  className="text-slate-900 dark:text-white hover:text-slate-900 dark:hover:text-white"
+  onClick={() => {
+    setPreselectedDay(null);
+    setCreateMode('schedule');
+    setShowPostTypeDialog(true);
+  }}
+>
+  <Plus className="size-4" /> Novo Post / Campanha
+</Button>
+          </div>
+        </header>
+
+        <div className="mt-4 flex h-10 items-center justify-between border-t border-border pt-3">
+          <div className="flex items-center gap-4">
+            {legend.map((l) => (
+              <span
+                key={l.label}
+                className="flex items-center gap-1.5 text-[11px] text-text-secondary"
+              >
+                <span className={clsx('size-2 rounded-full', l.className)} />
+                {l.label}
+              </span>
+            ))}
+          </div>
+
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-secondary/80 px-2.5 py-1">
+              <span className="mr-1 text-xs font-medium text-text-secondary">
+                {selectedIds.size} {selectedIds.size > 1 ? 'posts selecionados' : 'post selecionado'}
+              </span>
+
+              <Button variant="spark" size="sm" onClick={() => setShowScheduleDialog(true)}>
+                <CalendarClock className="size-3.5" /> Agendar
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={scheduleMutation.isPending}
+                onClick={() => scheduleMutation.mutate(null)}
+              >
+                Desprogramar
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-error/20 bg-error/10 text-error hover:bg-error/20 hover:text-error"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 className="size-3.5" /> Excluir
+              </Button>
+
+              <button
+                aria-label="Limpar seleção"
+                onClick={clearSelection}
+                className="ml-1 cursor-pointer rounded-md p-1.5 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
           )}
-          <button
-            onClick={() => setShowPostTypeDialog(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-light text-white text-sm font-medium transition-colors"
-          >
-            <Plus className="h-4 w-4" /> Novo post
-          </button>
         </div>
-      </div>
 
-      {/* Selection toolbar */}
-      {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-accent/10 border border-accent/30">
-          <span className="text-sm text-accent font-medium">{selectedIds.size} posts selecionados</span>
-          <div className="flex-1" />
-          <button
-            onClick={() => setShowScheduleDialog(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/20 hover:bg-accent/30 text-accent text-sm transition-colors"
-          >
-            <CalendarClock className="h-4 w-4" /> Agendar
-          </button>
-          <button
-            onClick={() => scheduleMutation.mutate(null)}
-            disabled={scheduleMutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-secondary hover:bg-surface-secondary text-text-secondary text-sm transition-colors"
-          >
-            Desprogramar
-          </button>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-error/10 hover:bg-error/20 text-error text-sm transition-colors"
-          >
-            <Trash2 className="h-4 w-4" /> Excluir
-          </button>
-          <button onClick={clearSelection} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary">
-            <X className="h-4 w-4" />
-          </button>
+        <div className="ady-calendar mt-3">
+          <FullCalendar
+            ref={calendarRef}
+            plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+            height={currentView === 'dayGridMonth' ? 'auto' : '770px'}
+            expandRows={false}
+            scrollTime="6:00:00"
+            locale={ptBrLocale}
+            firstDay={0}
+            headerToolbar={false}
+            dayMaxEvents={3}
+            editable
+            droppable
+            slotDuration="00:30:00"
+            snapDuration="00:15:00"
+            eventAllow={(dropInfo) => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              return dropInfo.start >= today;
+            }}
+            eventDurationEditable={false}
+            nowIndicator
+            slotMinTime="00:00:00"
+            slotMaxTime="24:00:00"
+            allDaySlot={false}
+            events={events}
+            eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+            datesSet={handleDatesSet}
+            eventClick={handleEventClick}
+            eventDrop={handleEventDrop}
+            dateClick={handleDateClick}
+            eventContent={(info: EventContentArg) => (
+              <EventCard arg={info} selectedIds={selectedIds} />
+            )}
+            themeSystem="standard"
+            noEventsText="Nenhuma publicação agendada"
+          />
         </div>
-      )}
 
-      {/* Calendar grid */}
-      <TooltipProvider>
-        <div className="grid grid-cols-7 gap-1.5">
-          {DAY_LABELS.map(d => (
-            <div key={d} className="text-center text-xs font-medium text-text-tertiary py-2">{d}</div>
-          ))}
-          {grid}
-        </div>
-      </TooltipProvider>
+        {selectedPost && (
+          <PostSidePanel
+            post={selectedPost}
+            onClose={() => setSelectedPost(null)}
+            onUpdate={(updated) => {
+              setSelectedPost(updated as CalendarPost);
+              showToast('Post atualizado!');
+              queryClient.invalidateQueries({ queryKey: ['calendar'] });
+            }}
+          />
+        )}
 
-      {/* Post side panel */}
-      {selectedPost && (
-        <PostSidePanel
-          post={selectedPost}
-          onClose={() => setSelectedPost(null)}
-          onUpdate={(updated) => {
-            setSelectedPost(updated as CalendarPost);
-            showToast('Post atualizado!');
-            queryClient.invalidateQueries({ queryKey: ['calendar'] });
-          }}
-        />
-      )}
-
-      {/* Dialogs */}
-      {showCreateDialog && (
-        <CreatePostDialog
-          mode={createMode}
-          preselectedDay={preselectedDay}
-          onClose={() => { setShowCreateDialog(false); setPreselectedDay(null); }}
-          onCreated={(message) => {
-            setShowCreateDialog(false);
-            setPreselectedDay(null);
-            showToast(message);
-            queryClient.invalidateQueries({ queryKey: ['calendar'] });
-          }}
-          onError={(msg) => showToast(msg, 'error')}
-        />
-      )}
-      {showPostTypeDialog && (
-        <PostTypeDialog
-          onSelect={(mode) => {
-            setShowPostTypeDialog(false);
-            setCreateMode(mode);
-            setShowCreateDialog(true);
-          }}
-          onClose={() => { setShowPostTypeDialog(false); setPreselectedDay(null); }}
-        />
-      )}
-      {showScheduleDialog && (
-        <ScheduleDialog
-          count={selectedIds.size}
-          onConfirm={(scheduledAt) => scheduleMutation.mutate(scheduledAt)}
-          onClose={() => setShowScheduleDialog(false)}
-        />
-      )}
-      {showDeleteConfirm && (
-        <DeleteConfirmDialog
-          count={selectedIds.size}
-          onConfirm={() => deleteMutation.mutate()}
-          onClose={() => setShowDeleteConfirm(false)}
-          loading={deleteMutation.isPending}
-        />
-      )}
-    </div>
+        {showCreateDialog && (
+          <CreatePostDialog
+            mode={createMode}
+            preselectedDay={preselectedDay}
+            onClose={() => {
+              setShowCreateDialog(false);
+              setPreselectedDay(null);
+            }}
+            onCreated={(message) => {
+              setShowCreateDialog(false);
+              setPreselectedDay(null);
+              showToast(message);
+              queryClient.invalidateQueries({ queryKey: ['calendar'] });
+            }}
+            onError={(msg) => showToast(msg, 'error')}
+          />
+        )}
+        {showPostTypeDialog && (
+          <PostTypeDialog
+            onSelect={(mode) => {
+              setShowPostTypeDialog(false);
+              setCreateMode(mode);
+              setShowCreateDialog(true);
+            }}
+            onClose={() => {
+              setShowPostTypeDialog(false);
+              setPreselectedDay(null);
+            }}
+          />
+        )}
+        {showScheduleDialog && (
+          <ScheduleDialog
+            count={selectedIds.size}
+            onConfirm={(scheduledAt) => scheduleMutation.mutate(scheduledAt)}
+            onClose={() => setShowScheduleDialog(false)}
+          />
+        )}
+        {showDeleteConfirm && (
+          <DeleteConfirmDialog
+            count={selectedIds.size}
+            onConfirm={() => deleteMutation.mutate()}
+            onClose={() => setShowDeleteConfirm(false)}
+            loading={deleteMutation.isPending}
+          />
+        )}
+      </section>
+    </TooltipProvider>
   );
 }
 
-// ===== Skeleton / Error =====
+function EventCard({ arg, selectedIds }: { arg: EventContentArg; selectedIds: Set<string> }) {
+  const post = getPostFromEvent(arg.event) as (CalendarPost & Record<string, unknown>) | null;
+  const channel = resolveChannel((post ?? {}) as Record<string, unknown>);
+  const status = resolveStatus((post ?? {}) as Record<string, unknown>);
+  const tone = status === 'acao' ? 'accent' : 'brand';
+  const isList = arg.view.type.startsWith('list');
+  const isSelected = post ? selectedIds.has(post.id) : false;
+  const ChannelIcon = channelIcons[channel];
 
-function CalendarSkeleton() {
+  const eventDate = arg.event.start ? new Date(arg.event.start) : null;
+  const isPast = eventDate ? eventDate < new Date() : false;
+
+  const title =
+    arg.event.title || post?.title || (post?.caption ? String(post.caption).slice(0, 40) : 'Sem título');
+
   return (
-    <div className="space-y-4 animate-pulse">
-      <div className="h-10 w-64 rounded-lg bg-surface-secondary" />
-      <div className="grid grid-cols-7 gap-1.5">
-        {DAY_LABELS.map(d => <div key={d} className="text-center text-xs text-text-tertiary py-2">{d}</div>)}
-        {Array.from({ length: 35 }).map((_, i) => (
-          <div key={i} className="min-h-[80px] rounded-lg border border-border bg-surface-secondary/60" />
-        ))}
+    <div
+      className={clsx(
+        'group w-full overflow-hidden rounded-lg border-l-[3px] bg-surface px-2 py-1.5 text-left transition-all duration-200',
+        isList ? 'border border-l-[3px] border-border' : 'shadow-sm',
+        tone === 'brand' ? 'border-l-brand' : 'border-l-accent',
+        isSelected && 'ring-1 ring-brand',
+        isPast
+          ? 'opacity-60 grayscale-[25%] hover:opacity-85'
+          : 'hover:-translate-y-px hover:shadow-lg',
+      )}
+    >
+      <div className="flex items-center gap-1.5">
+        <span
+          className={clsx(
+            'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none',
+            channelStyles[channel],
+          )}
+        >
+          <ChannelIcon className="size-3" />
+          {channelLabels[channel]}
+        </span>
+        {arg.timeText ? (
+          <span className="text-[10px] font-medium text-text-secondary">{arg.timeText}</span>
+        ) : null}
       </div>
-    </div>
-  );
-}
 
-function CalendarError() {
-  return (
-    <div className="text-center py-12">
-      <p className="text-error text-sm mb-2">Erro ao carregar calendário</p>
-      <p className="text-text-tertiary text-xs">Verifique sua conexão</p>
+      <p className="mt-1 flex items-center gap-1 truncate text-xs font-medium text-text-primary">
+        {isSelected && <Check className="size-3 shrink-0 text-brand" />}
+        {title}
+      </p>
+
+      <div className="mt-1 flex items-center justify-between gap-1">
+        <span
+          className={clsx(
+            'text-[10px] font-medium',
+            tone === 'brand' ? 'text-brand' : 'text-accent',
+          )}
+        >
+          {statusLabels[status]}
+        </span>
+
+        {isPast && (
+          <span className="text-[9px] font-normal text-text-tertiary">
+            Concluído
+          </span>
+        )}
+      </div>
     </div>
   );
 }

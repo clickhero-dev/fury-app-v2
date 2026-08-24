@@ -28,8 +28,10 @@ export interface Post {
   cta?: string;
   hashtags?: string[];
   imagePrompt?: string;
-  imageUrl?: string;
+  imageUrl?: string;        // Single image (reel, image, stories) - legacy/compat
+  imageUrls?: string[];     // Multiple images for carousel (max 5)
   dayIndex: number;
+  date: string; // Fase 5: ISO date string (ex: "2026-08-19") — sempre presente da API
   status: string;
   scheduledAt?: string;
 }

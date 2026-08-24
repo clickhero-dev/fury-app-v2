@@ -25,7 +25,11 @@ import { startStudioGenerationWorker, stopStudioGenerationWorker } from './worke
 import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
 import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
+import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
 import { seedStartup } from './lib/seed-superadmin.js';
+import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
+import { recoverInterruptedPlannerWorkflows } from './planner-workflow-runner.js';
+import { runApiStartupWorkflow } from './workflows/api-startup-runner.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -182,11 +186,11 @@ app.use((req, res) => {
 // Tudo que precisa de await fica dentro da IIFE
 (async () => {
   if (NODE_ENV !== 'test') {
+    // 🚀 Run API startup workflow: db check → migrations → redis → env validation
+    await runApiStartupWorkflow();
+
     // 🚀 Run seed: ensures superadmin + demo users exist before accepting requests
     await seedStartup();
-
-    // Aguarda o Redis estar pronto antes de iniciar qualquer worker
-    await waitForRedisReady();
 
     // ponytail: setInterval, não BullMQ. Migrate quando precisar de retry ou isolamento.
     const server = app.listen(PORT, () => {
@@ -240,6 +244,16 @@ app.use((req, res) => {
       void startPublishDueManager().catch((error) => {
         console.error('Failed to start publish-due manager:', error);
       });
+      void startGoogleSyncManager().catch((error) => {
+        console.error('Failed to start google-sync manager:', error);
+      });
+      void startPlannerWorker().then(() => {
+        return recoverInterruptedPlannerWorkflows().then((count) => {
+          if (count > 0) console.log(`♻️  Recuperados ${count} workflows interrompidos`);
+        });
+      }).catch((error) => {
+        console.error('Failed to start planner worker:', error);
+      });
     });
 
     // Tratamento de encerramento (único handler)
@@ -247,6 +261,7 @@ app.use((req, res) => {
       console.log('SIGTERM received, shutting down gracefully...');
       server.close(async () => {
         await stopPublishDueManager();
+        await stopGoogleSyncManager();
         await flushRequestLogs();
         await stopSyncJobsWorker();
         await stopRuleEngine();
@@ -254,6 +269,7 @@ app.use((req, res) => {
         await stopComplianceCheckWorker();
         await stopBudgetOptimizerWorker();
         await stopFuryEngine();
+        await stopPlannerWorker();
         await closeStudioQueue();
         await closeComplianceQueue();
         await closeFuryEngineQueue();

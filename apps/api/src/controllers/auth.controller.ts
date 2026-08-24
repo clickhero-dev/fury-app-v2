@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import jwt from 'jsonwebtoken';
 import * as authService from '../services/auth.service.js';
+import * as socialAuthService from '../services/social-auth.service.js';
+import { AppError } from '../middleware/errorHandler.js';
 import { checkEmailVerificationRateLimit, checkForgotPasswordRateLimit, checkResetPasswordRateLimit } from '../middleware/rate-limit.middleware.js';
 
 const updateMeSchema = z.object({
@@ -291,5 +294,134 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
     });
   } catch (error) {
     next(error);
+  }
+}
+
+function getSocialRedirectUri(req?: Request): string {
+  // Derive from the actual request host so it works in local/HMG/prod without
+  // a per-environment env var. Falls back to the env var if set, then localhost.
+  const envUri = process.env.GOOGLE_SOCIAL_REDIRECT_URI;
+  if (envUri && !envUri.includes('localhost')) return envUri;
+  if (req) {
+    const host = req.get('host');
+    if (host) return `${req.protocol}://${host}/api/auth/google/callback`;
+  }
+  return envUri || 'http://localhost:3000/api/auth/google/callback';
+}
+
+function getSocialFrontendUrl(state?: SocialStatePayload): string {
+  // Prefer the frontend URL captured in the OAuth state (set by the initiating env)
+  if (state?.frontendUrl) return state.frontendUrl;
+  return process.env.GOOGLE_SOCIAL_FRONTEND_URL || 'http://localhost:5173';
+}
+
+interface SocialStatePayload {
+  frontendUrl: string;
+}
+
+function signSocialState(frontendUrl: string): string {
+  const secret = process.env.JWT_SECRET || 'fallback';
+  return jwt.sign({ frontendUrl } as SocialStatePayload, secret, { expiresIn: '10m' });
+}
+
+function verifySocialState(state: string): SocialStatePayload {
+  try {
+    const secret = process.env.JWT_SECRET || 'fallback';
+    return jwt.verify(state, secret) as SocialStatePayload;
+  } catch {
+    throw new AppError(401, 'INVALID_OAUTH_STATE', 'State OAuth invalido ou expirado.');
+  }
+}
+
+export async function googleSocialUrl(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { getGoogleOAuthConfig } = await import('../lib/google-oauth.js');
+    const { clientId } = getGoogleOAuthConfig();
+    const redirectUri = getSocialRedirectUri(req);
+
+    // Accept frontend URL from query or header — enables multi-env without hardcoding
+    const frontendOrigin = (req.query.origin as string)
+      || req.get('origin')
+      || req.get('referer')
+      || 'http://localhost:5173';
+    const state = signSocialState(frontendOrigin);
+
+    const authUrl = socialAuthService.generateSocialLoginUrl(redirectUri, clientId, state);
+    res.status(200).json({
+      success: true,
+      data: { authUrl },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function googleSocialCallback(req: Request, res: Response, next: NextFunction) {
+  const redirectUri = getSocialRedirectUri(req);
+
+  try {
+    const errorParam = req.query.error as string | undefined;
+    const stateParam = req.query.state as string | undefined;
+    const verifiedState = stateParam ? verifySocialState(stateParam) : undefined;
+    const frontendUrl = getSocialFrontendUrl(verifiedState);
+
+    if (errorParam) {
+      res.redirect(`${frontendUrl}/login?error=oauth_cancelled`);
+      return;
+    }
+
+    const code = req.query.code as string | undefined;
+    if (!code) {
+      const { code: bodyCode } = (req.body || {}) as { code?: string };
+      if (!bodyCode) {
+        const { AppError } = await import('../middleware/errorHandler.js');
+        throw new AppError(400, 'MISSING_CODE', 'Code obrigatorio para login social.');
+      }
+      const result = await socialAuthService.handleGoogleSocialLogin(bodyCode, redirectUri);
+      res.status(200).json({
+        success: true,
+        data: {
+          token: result.tokens.accessToken,
+          refreshToken: result.tokens.refreshToken,
+          user: {
+            id: result.user.id,
+            email: result.user.email,
+            name: result.user.name,
+            role: result.user.role,
+            tenantId: result.user.tenantId,
+          },
+          isNewUser: result.isNewUser,
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const result = await socialAuthService.handleGoogleSocialLogin(code, redirectUri);
+    const tokenData = encodeURIComponent(JSON.stringify({
+      token: result.tokens.accessToken,
+      refreshToken: result.tokens.refreshToken,
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        name: result.user.name,
+        role: result.user.role,
+        tenantId: result.user.tenantId,
+      },
+      isNewUser: result.isNewUser,
+    }));
+    const redirectPath = result.isNewUser ? '/cadastro' : '/login';
+    res.redirect(`${frontendUrl}${redirectPath}?social_login=${tokenData}`);
+  } catch (error) {
+    const { AppError } = await import('../middleware/errorHandler.js');
+    const message = error instanceof AppError ? error.message : 'Erro ao fazer login com Google';
+    const stateParam = req.query.state as string | undefined;
+    const verifiedState = stateParam ? verifySocialState(stateParam) : undefined;
+    const frontendUrl = getSocialFrontendUrl(verifiedState);
+    if (req.method === 'POST') {
+      return res.status(401).json({ success: false, error: { code: 'SOCIAL_LOGIN_FAILED', message } });
+    }
+    res.redirect(`${frontendUrl}/login?error=social_login_failed`);
   }
 }

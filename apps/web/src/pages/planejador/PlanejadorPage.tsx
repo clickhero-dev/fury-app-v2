@@ -8,6 +8,11 @@ import { IdleStatus } from './components/IdleStatus';
 import type { PrerequisiteCheck } from './components/IdleStatus';
 import type { JobStatus, ViewState } from './types';
 
+interface AgentLabelsResponse {
+  order: string[];
+  labels: Record<string, string>;
+}
+
 const STORAGE_KEY = 'fury_planner_job_id';
 
 function loadSavedJobId(): string | null {
@@ -35,7 +40,17 @@ export function PlanejadorPage() {
   const [recovered, setRecovered] = useState(false);
   const recoveryChecked = useRef(false);
 
-  // Busca prerequisites do tenant
+  // Busca labels dos agentes (para o GeneratingState)
+  const { data: agentLabels } = useQuery<{ order: string[]; labels: Record<string, string> }>({
+    queryKey: ['planner-agent-labels'],
+    queryFn: async () => {
+      const { data } = await api.get('/planner/agent-labels');
+      return data.data as { order: string[]; labels: Record<string, string> };
+    },
+    staleTime: 60 * 60 * 1000, // 1h — labels mudam raramente
+  });
+
+  // Busca pré-requisitos do tenant
   const { data: pre, isLoading: preLoading } = useQuery({
     queryKey: ['planner-prerequisites'],
     queryFn: async () => {
@@ -47,19 +62,19 @@ export function PlanejadorPage() {
         hasVoiceTone: boolean;
       };
     },
-    staleTime: 30_000, // 30s — não precisa refetch a cada clique
+    staleTime: 30_000,
   });
 
   const checks: PrerequisiteCheck[] | undefined = pre
     ? [
-        { label: 'Meta conectada (Instagram + Facebook)', short: 'Meta', ok: pre.metaConnected },
-        { label: 'Produto principal cadastrado', short: 'Produto', ok: pre.hasProduct },
-        { label: 'Objetivo de negócio definido', short: 'Objetivo', ok: pre.hasObjective },
-        { label: 'Tom de voz definido', short: 'Tom de voz', ok: pre.hasVoiceTone },
+        { label: 'Meta conectada (Instagram + Facebook)', ok: pre.metaConnected },
+        { label: 'Produto principal cadastrado', ok: pre.hasProduct },
+        { label: 'Objetivo de negócio definido', ok: pre.hasObjective },
+        { label: 'Tom de voz definido', ok: pre.hasVoiceTone },
       ]
     : undefined;
 
-  // No mount: se tinha jobId salvo, tenta recuperar
+  // Recupera job salvo ao montar a página
   useEffect(() => {
     if (jobId && !recoveryChecked.current) {
       recoveryChecked.current = true;
@@ -69,8 +84,8 @@ export function PlanejadorPage() {
   }, [jobId]);
 
   const generateMutation = useMutation({
-    mutationFn: async (postCount: number) => {
-      const { data } = await api.post('/planner/generate', { postCount });
+    mutationFn: async () => {
+      const { data } = await api.post('/planner/generate');
       return data.data as JobStatus;
     },
     onSuccess: (job) => {
@@ -99,7 +114,7 @@ export function PlanejadorPage() {
     },
     enabled: !!jobId && view === 'generating',
     refetchInterval: (query) => {
-      if (recovered && !query.state.data) return false; // espera primeira resposta
+      if (recovered && !query.state.data) return false;
       const status = query.state.data?.status;
       if (status === 'done' || status === 'error') return false;
       return 1500;
@@ -107,7 +122,7 @@ export function PlanejadorPage() {
     retry: 1,
   });
 
-  // Efeito: job completou → redirect
+  // Redireciona para o calendário ao concluir
   useEffect(() => {
     if (jobStatus?.status === 'done') {
       saveJobId(null);
@@ -115,7 +130,7 @@ export function PlanejadorPage() {
     }
   }, [jobStatus, navigate]);
 
-  // Efeito: job falhou → limpa storage + mostra erro
+  // Limpa o job e exibe erro caso falhe
   useEffect(() => {
     if (jobStatus?.status === 'error') {
       saveJobId(null);
@@ -125,7 +140,7 @@ export function PlanejadorPage() {
     }
   }, [jobStatus]);
 
-  // Efeito: recuperação falhou (404 / job perdido no restart)
+  // Trata falhas no processo de recuperação de estado
   useEffect(() => {
     if (recovered && isFetched && !jobStatus && jobQueryError) {
       saveJobId(null);
@@ -136,49 +151,57 @@ export function PlanejadorPage() {
     }
   }, [recovered, isFetched, jobStatus, jobQueryError]);
 
-  const handleGenerate = useCallback((postCount: number) => {
-    generateMutation.mutate(postCount);
+  const handleGenerate = useCallback(() => {
+    generateMutation.mutate();
   }, [generateMutation]);
 
-  // Estado de loading inicial (recuperando job salvo)
-  if (recovered && !isFetched) {
-    return (
-      <AppLayout>
-        <div className="max-w-6xl mx-auto px-4 py-12 text-center">
-          <p className="text-text-tertiary">Recuperando planejamento...</p>
-        </div>
-      </AppLayout>
-    );
-  }
+ // Loading do estado de recuperação
+ if (recovered && !isFetched) {
+  return (
+    <AppLayout>
+      <div className="flex min-h-[60vh] flex-col items-center justify-center p-6 text-center">
+        <LoadingSpinner />
+        <p className="mt-4 text-sm font-medium text-slate-400">
+          Recuperando planejamento...
+        </p>
+      </div>
+    </AppLayout>
+  );
+}
 
   return (
     <AppLayout>
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+        {/* Estado de Geração de Conteúdo */}
         {view === 'generating' && (
-          <div className="rounded-xl bg-surface border border-border p-6 shadow-sm">
-            <GeneratingState jobStatus={jobStatus} />
+          <div className="rounded-xl bg-gray-800/40 border border-gray-700/50 p-6">
+            <GeneratingState jobStatus={jobStatus} agentLabels={agentLabels} />
           </div>
         )}
 
+        {/* Loading dos Pré-requisitos */}
         {view === 'idle' && preLoading && (
           <div className="flex items-center justify-center py-16">
             <LoadingSpinner />
           </div>
         )}
 
-        {view === 'idle' && !preLoading && !generateMutation.isPending && !errorMsg && (
-          <IdleStatus onGenerate={handleGenerate} isLoading={generateMutation.isPending} checks={checks} />
+        {/* Mensagem de Erro quando houver */}
+        {view === 'idle' && errorMsg && (
+          <div className="max-w-5xl mx-auto">
+            <div className="rounded-2xl bg-red-950/20 border border-red-800/30 p-4 text-center">
+              <p className="text-red-400 text-sm font-medium">{errorMsg}</p>
+            </div>
+          </div>
         )}
 
-        {view === 'idle' && errorMsg && (
-          <div className="space-y-4">
-            <div className="rounded-xl bg-error/5 border border-error/20 p-4 text-center">
-              <p className="text-error text-sm font-medium">{errorMsg}</p>
-            </div>
-            {!preLoading && (
-              <IdleStatus onGenerate={handleGenerate} isLoading={generateMutation.isPending} checks={checks} />
-            )}
-          </div>
+        {/* Estado de Idle (Início) */}
+        {view === 'idle' && !preLoading && (
+          <IdleStatus
+            onGenerate={handleGenerate}
+            isLoading={generateMutation.isPending}
+            checks={checks}
+          />
         )}
       </div>
     </AppLayout>

@@ -14,26 +14,6 @@ interface ProgressGoalProps {
   targetLabel: string;
 }
 
-/**
- * Componente de progresso de meta com indicador de status visual.
- *
- * Exibe uma barra de progresso colorida e um chip de status baseados
- * no percentual atingido e se a meta está no caminho certo.
- *
- * Lógica de status:
- * - ✅ Verde "No caminho certo" → `onTrack = true`
- * - ⚠️ Amarelo "Atenção necessária" → `onTrack = false` e progresso ≥ 40%
- * - ❌ Vermelho "Abaixo da meta" → `onTrack = false` e progresso < 40%
- *
- * @example
- * <ProgressGoal
- *   label="ROAS"
- *   progressPercent={75}
- *   onTrack={true}
- *   currentLabel="4.2x"
- *   targetLabel="4.0x"
- * />
- */
 export function ProgressGoal({ label, progressPercent, onTrack, currentLabel, targetLabel }: ProgressGoalProps) {
   // Limita o progresso entre 0 e 100 para evitar overflow na barra
   const clamped = Math.min(100, Math.max(0, progressPercent));
@@ -45,46 +25,47 @@ export function ProgressGoal({ label, progressPercent, onTrack, currentLabel, ta
   const statusText = isGreen ? 'No caminho certo' : isYellow ? 'Atenção necessária' : 'Abaixo da meta';
 
   const statusChipClass = isGreen
-    ? 'bg-success-light text-success'
+    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
     : isYellow
-      ? 'bg-warning-light text-warning'
-      : 'bg-error-light text-error';
-
-  const barClass = isGreen ? 'bg-success' : isYellow ? 'bg-warning' : 'bg-error';
+      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+      : 'bg-rose-500/10 text-rose-600 dark:text-rose-400';
 
   return (
-    <div className="bg-surface rounded-xl border border-border p-6 space-y-4">
-      {/* Cabeçalho: label, percentual e chip de status */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{label}</p>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-3xl font-black text-text-primary">{clamped}%</span>
-            <span className="text-sm text-text-secondary">do mês concluído</span>
+    <div className="bg-white dark:bg-[#12130F] rounded-2xl border border-slate-200 dark:border-white/10 p-6 space-y-5 shadow-sm">
+      {/* Cabeçalho: Círculo de %, label e chip de status */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-4">
+          {/* Círculo do percentual arredondado */}
+          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[#1E88A8]/30 bg-[#1E88A8]/10 text-[#1E88A8]">
+            <span className="text-xl font-bold">{clamped}%</span>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">{label}</p>
+            <p className="text-sm font-medium text-slate-700 dark:text-zinc-300 mt-0.5">do mês concluído</p>
           </div>
         </div>
-        <span className={cn('flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg', statusChipClass)}>
-          <StatusIcon className="w-3.5 h-3.5" />
+
+        <span className={cn('flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full', statusChipClass)}>
+          <StatusIcon className="w-4 h-4" />
           {statusText}
         </span>
       </div>
 
-      {/* Barra de progresso e valores atual/meta */}
+      {/* Barra de progresso sempre no tom Azul Petróleo */}
       <div className="space-y-2">
-        <div className="h-2.5 bg-surface-secondary rounded-full overflow-hidden">
+        <div className="h-2.5 w-full bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
           <div
-            className={cn('h-full rounded-full transition-all duration-700', barClass)}
+            className="h-full bg-[#1E88A8] rounded-full transition-all duration-700"
             style={{ width: `${clamped}%` }}
           />
         </div>
-        <div className="flex justify-between text-xs text-text-secondary">
+        <div className="flex justify-between text-xs text-slate-500 dark:text-zinc-400 font-medium">
           <span>
-            Atual:{' '}
-            <span className="font-semibold text-text-primary">{currentLabel}</span>
+            Atual: <span className="font-semibold text-slate-900 dark:text-white">{currentLabel}</span>
           </span>
           <span>
-            Meta:{' '}
-            <span className="font-semibold text-text-primary">{targetLabel}</span>
+            Meta: <span className="font-semibold text-slate-900 dark:text-white">{targetLabel}</span>
           </span>
         </div>
       </div>

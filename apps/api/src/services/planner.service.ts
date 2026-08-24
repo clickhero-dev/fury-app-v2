@@ -1,47 +1,48 @@
 import { db, campaignPlans, socialPosts, metaConnections, clientGoals, brandKits } from '@fury/db';
-import { eq, and, desc, gt, inArray, isNull, or, lte, sql } from 'drizzle-orm';
-import { jobs, generateId, runPipeline } from '../agents/orchestrator.js';
+import { eq, and, desc, gt, gte, lt, not, inArray, isNull, or, lte, sql } from 'drizzle-orm';
+import { generateId } from '../agents/orchestrator.js';
 import { openrouterService } from './openrouter.service.js';
 import type { JobStatus } from '../agents/types.js';
 import { parseAgentJSON } from '../agents/utils.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { createInstagramMedia, getMediaContainerStatus, publishInstagramMedia, getUserFacebookPages } from '../lib/meta-api.js';
 import { decryptMetaToken } from '../utils/crypto.js';
+import { plannerStore } from '../planner-workflow-runner.js';
+import { enqueuePlanGeneration } from '../workers/planner.worker.js';
+import { snapshotToJobStatus } from '../agents/job-status-adapter.js';
 
-export { jobs } from '../agents/orchestrator.js';
-
-export function startPlanGeneration(tenantId: string, postCount = 16): JobStatus {
-  // Lock: rejeita se tenant já tiver um job rodando
-  const existing = Array.from(jobs.values()).find(
-    j => j.tenantId === tenantId && (j.status === 'running' || j.status === 'generating' || j.status === 'pending'),
-  );
+export async function startPlanGeneration(tenantId: string): Promise<JobStatus> {
+  // Lock: rejeita se tenant já tiver um job ativo (running/pending)
+  const existing = await plannerStore.findActiveByLockKey(tenantId, 'planner-generate');
   if (existing) throw new AppError(409, 'CONFLICT', 'Já existe um planejamento em andamento');
 
   const id = generateId();
-  const status: JobStatus = {
+  await plannerStore.create({
     id,
     tenantId,
-    status: 'running',
-    currentAgent: 'Context Agent',
-    agentProgress: [{ name: 'Context Agent', status: 'running', pct: 5 }],
-  };
-  jobs.set(id, status as any);
-
-  runPipeline(tenantId, id, postCount).catch(() => {
-    const j = jobs.get(id);
-    if (j) {
-      j.status = 'error';
-      j.error = j.error || 'Pipeline error';
-    }
+    workflow: 'planner-generate',
+    lockKey: tenantId,
   });
 
-  return jobs.get(id) as JobStatus;
+  try {
+    await enqueuePlanGeneration(id, tenantId);
+  } catch (err) {
+    console.warn('[planner] falha ao enfileirar no BullMQ, executando inline:', err);
+    const { runPlannerWorkflow } = await import('../planner-workflow-runner.js');
+    void runPlannerWorkflow(id, tenantId).catch((pipelineErr) => {
+      console.error('[planner] pipeline inline falhou:', pipelineErr);
+    });
+  }
+
+  const snapshot = await plannerStore.load(id);
+  if (!snapshot) throw new AppError(500, 'INTERNAL', 'Falha ao criar job de planejamento');
+  return snapshotToJobStatus(snapshot);
 }
 
-export function getJobProgress(jobId: string): JobStatus | null {
-  const job = jobs.get(jobId);
-  if (!job) return null;
-  return job as JobStatus;
+export async function getJobProgress(jobId: string): Promise<JobStatus | null> {
+  const snapshot = await plannerStore.load(jobId);
+  if (!snapshot) return null;
+  return snapshotToJobStatus(snapshot);
 }
 
 export async function getPlanById(planId: string, tenantId: string) {
@@ -60,14 +61,11 @@ export async function getLatestPlanByTenant(tenantId: string) {
 }
 
 export async function getPrerequisites(tenantId: string) {
-  // ponytail: basta ter uma conexão com token válido — selectedPageIds não é
-  // necessário aqui, pois resolveInstagramAccount faz fallback para qualquer
-  // página com Instagram. Exigir selectedPageIds criava um estado onde
-  // metaConnected=false mesmo com conexão válida e token válido.
   const meta = await db.query.metaConnections.findFirst({
     where: and(
       eq(metaConnections.tenantId, tenantId),
       or(gt(metaConnections.tokenExpiresAt, new Date()), isNull(metaConnections.tokenExpiresAt)),
+      sql`coalesce(${metaConnections.selectedPageIds}, '[]'::jsonb) != '[]'::jsonb`,
     ),
   });
   const goals = await db.query.clientGoals.findFirst({
@@ -178,122 +176,142 @@ export async function updatePostFields(
 
 // ===== Calendário Editorial =====
 
-export async function getCalendarPosts(tenantId: string, year: number, month: number) {
-  // ponytail: traz todos os posts do tenant, frontend filtra por mês
-  // Posts de plano: month vem do campaignPlans.periodStart
-  // Posts manuais: month vem do scheduledAt
-  const plans = await db.query.campaignPlans.findMany({
-    where: eq(campaignPlans.tenantId, tenantId),
-    with: { posts: true },
-  });
-
-  const manualPosts = await db.query.socialPosts.findMany({
+/**
+ * Função genérica: retorna posts de um range de datas usando calendar_date direto.
+ *
+ * @param tenantId - ID do tenant
+ * @param startDate - ISO string (ex: "2026-08-01")
+ * @param endDate - ISO string, exclusivo (ex: "2026-09-01")
+ *
+ * Lógica (Fase 3 — query direta em calendar_date):
+ * - Filtra posts onde calendar_date >= startDate AND calendar_date < endDate
+ * - Exclui posts com status 'rejected' ou 'failed'
+ * - Carrega dados do plano pai (se houver) para preencher _source/_planTitle
+ */
+export async function getCalendarPostsByDateRange(
+  tenantId: string,
+  startDate: string,
+  endDate: string,
+): Promise<Array<Record<string, any>>> {
+  // Query direta: filtra por calendar_date no range [startDate, endDate)
+  const allPosts = await db.query.socialPosts.findMany({
     where: and(
       eq(socialPosts.tenantId, tenantId),
-      isNull(socialPosts.planId),
+      gte(socialPosts.calendarDate, startDate),
+      lt(socialPosts.calendarDate, endDate),
+      not(inArray(socialPosts.status, ['rejected', 'failed'])),
     ),
+    with: { plan: true }, // Carrega plano pai para _planTitle
   });
 
-  // Computa month pra cada post
-  const allPosts: Array<Record<string, any>> = [];
+  // Enriquece com metadados
+  return allPosts.map(post => ({
+    ...post,
+    _source: post.planId ? 'plan' : 'manual',
+    _planTitle: post.plan?.title ?? null,
+  }));
+}
 
-  for (const plan of plans) {
-    if (!plan.periodStart) continue;
-    const planMonth = plan.periodStart.getMonth() + 1;
-    const planYear = plan.periodStart.getFullYear();
-    if (planYear !== year || planMonth !== month) continue;
+/**
+ * Função antiga (mantida para backwards compatibility com queries year/month).
+ * Internamente converte para range de datas e chama getCalendarPostsByDateRange.
+ */
+export async function getCalendarPosts(tenantId: string, year: number, month: number) {
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 1);
 
-    for (const post of plan.posts) {
-      if (post.status === 'rejected' || post.status === 'failed') continue;
-      allPosts.push({ ...post, _source: 'plan', _planTitle: plan.title });
-    }
-  }
+  const startDateStr = startDate.toISOString().split('T')[0];
+  const endDateStr = endDate.toISOString().split('T')[0];
 
-  for (const post of manualPosts) {
-    if (post.status === 'rejected' || post.status === 'failed') continue;
-    const refDate = post.scheduledAt || post.createdAt;
-    if (!refDate) continue;
-    const postMonth = refDate.getMonth() + 1;
-    const postYear = refDate.getFullYear();
-    if (postYear !== year || postMonth !== month) continue;
-    allPosts.push({ ...post, _source: 'manual' });
-  }
-
-  return allPosts;
+  return getCalendarPostsByDateRange(tenantId, startDateStr, endDateStr);
 }
 
 export async function bulkSchedulePosts(tenantId: string, postIds: string[], scheduledAt: string | null) {
-  if (postIds.length === 0) {
-    throw new AppError(400, 'VALIDATION_ERROR', 'Nenhum post selecionado para agendamento');
-  }
-
-  try {
-    const result = await db.update(socialPosts)
-      .set({
-        scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
-        status: scheduledAt ? 'approved' : 'draft',
-        updatedAt: new Date(),
-      })
-      .where(and(
-        eq(socialPosts.tenantId, tenantId),
-        inArray(socialPosts.id, postIds),
-      ))
-      .returning();
-
-    if (result.length === 0) {
-      throw new AppError(404, 'NOT_FOUND', 'Nenhum dos posts selecionados foi encontrado');
-    }
-
-    return result;
-  } catch (err) {
-    if (err instanceof AppError) throw err;
-    console.error('[bulkSchedulePosts] Erro ao agendar posts:', err);
-    throw new AppError(500, 'SCHEDULE_ERROR', 'Erro ao agendar posts. Tente novamente.');
-  }
+  const result = await db.update(socialPosts)
+    .set({
+      scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      status: scheduledAt ? 'approved' : 'draft',
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(socialPosts.tenantId, tenantId),
+      inArray(socialPosts.id, postIds),
+    ))
+    .returning();
+  return result;
 }
 
 export async function bulkDeletePosts(tenantId: string, postIds: string[]) {
-  if (postIds.length === 0) {
-    throw new AppError(400, 'VALIDATION_ERROR', 'Nenhum post selecionado para exclusão');
-  }
-
+  console.log(`[bulkDelete] tenant ${tenantId}: ${postIds.length} posts`, postIds);
+  
+  const uuidValues = postIds.map((id) => sql`${id}::uuid`);
+  
   try {
     const result = await db.update(socialPosts)
       .set({ status: 'rejected', updatedAt: new Date() })
       .where(and(
         eq(socialPosts.tenantId, tenantId),
-        inArray(socialPosts.id, postIds),
+        sql`${socialPosts.id} IN (${sql.join(uuidValues, sql`, `)})`,
       ))
       .returning();
-
-    if (result.length === 0) {
-      throw new AppError(404, 'NOT_FOUND', 'Nenhum dos posts selecionados foi encontrado');
-    }
-
+    console.log(`[bulkDelete] tenant ${tenantId}: ${result.length} deletados`);
     return result;
   } catch (err) {
-    if (err instanceof AppError) throw err;
-    console.error('[bulkDeletePosts] Erro ao deletar posts:', err);
-    throw new AppError(500, 'DELETE_ERROR', 'Erro ao excluir posts. Tente novamente.');
+    console.error(`[bulkDelete] tenant ${tenantId} ERROR:`, err);
+    if (err instanceof Error) {
+      console.error(`[bulkDelete] message:`, err.message);
+      console.error(`[bulkDelete] stack:`, err.stack?.split('\n').slice(0, 5).join('\n'));
+    }
+    throw err;
   }
 }
 
 export async function createManualPost(tenantId: string, data: {
   caption?: string;
   postType: string;
-  dayIndex: number;
+  dayIndex?: number;
+  date?: string; // ISO date: "2026-08-19" (novo formato, Fase 1)
   platform?: string;
   scheduledAt?: string;
   title?: string;
   imageUrl?: string;
 }) {
+  // Dual-format: calcula dayIndex e calendarDate a partir de date ou dayIndex
+  let dayIndex = data.dayIndex;
+  let calendarDate: string | null = null;
+
+  if (data.date) {
+    // Novo formato: date completa
+    const dateObj = new Date(data.date);
+    dayIndex = dateObj.getUTCDate();
+    calendarDate = data.date;
+  } else if (dayIndex) {
+    // Formato antigo: dayIndex — calendarDate usa mês corrente (fallback Fase 2, seção 4, passo 2/3)
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const lastDayOfMonth = new Date(year, month + 1, 0).getUTCDate();
+    const clampedDay = Math.min(dayIndex, lastDayOfMonth);
+    const date = new Date(Date.UTC(year, month, clampedDay));
+    calendarDate = date.toISOString().split('T')[0];
+  } else {
+    // Fallback: dia 1 de mês corrente
+    const now = new Date();
+    dayIndex = 1;
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const date = new Date(Date.UTC(year, month, 1));
+    calendarDate = date.toISOString().split('T')[0];
+  }
+
   const [post] = await db.insert(socialPosts)
     .values({
       tenantId,
       planId: null,
       caption: data.caption || '',
       postType: data.postType as any,
-      dayIndex: data.dayIndex,
+      dayIndex: dayIndex || 1,
+      calendarDate,
       platform: data.platform || 'instagram',
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
       title: data.title || null,
@@ -304,15 +322,82 @@ export async function createManualPost(tenantId: string, data: {
   return post;
 }
 
+/**
+ * Move post por dayIndex (formato legado da Fase 1).
+ * Mantém o mês vigente: busca calendar_date atual, troca só o dia, grava resultado.
+ * Isso preserva o comportamento "move dentro do mês" para clientes antigos.
+ */
 export async function movePostDay(tenantId: string, postId: string, dayIndex: number) {
+  // Busca o post atual para ter a calendar_date vigente
+  const [post] = await db.query.socialPosts.findMany({
+    where: and(eq(socialPosts.id, postId), eq(socialPosts.tenantId, tenantId)),
+    limit: 1,
+  });
+  if (!post) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+
+  // Se o post tem calendar_date, extrai mês/ano e aplica novo dayIndex
+  let newCalendarDate: string | null = null;
+  if (post.calendarDate) {
+    const currentDate = new Date(post.calendarDate);
+    const year = currentDate.getUTCFullYear();
+    const month = currentDate.getUTCMonth();
+    const lastDayOfMonth = new Date(year, month + 1, 0).getUTCDate();
+    const clampedDay = Math.min(dayIndex, lastDayOfMonth);
+    const newDate = new Date(Date.UTC(year, month, clampedDay));
+    newCalendarDate = newDate.toISOString().split('T')[0];
+  } else {
+    // Fallback: nenhuma calendar_date, usar mês corrente
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const lastDayOfMonth = new Date(year, month + 1, 0).getUTCDate();
+    const clampedDay = Math.min(dayIndex, lastDayOfMonth);
+    const newDate = new Date(Date.UTC(year, month, clampedDay));
+    newCalendarDate = newDate.toISOString().split('T')[0];
+  }
+
   const [updated] = await db.update(socialPosts)
-    .set({ dayIndex, updatedAt: new Date() })
+    .set({ dayIndex, calendarDate: newCalendarDate, updatedAt: new Date() })
     .where(and(eq(socialPosts.id, postId), eq(socialPosts.tenantId, tenantId)))
     .returning();
   if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
   return updated;
 }
 
+/**
+ * Move post por data completa (novo formato, Fase 1).
+ * Extrai o dayIndex da data e grava tanto dayIndex quanto calendar_date.
+ */
+export async function movePostDate(
+  tenantId: string, 
+  postId: string, 
+  date: string, 
+  scheduledAt?: string
+) {
+  const dateObj = new Date(date);
+  const dayIndex = dateObj.getUTCDate();
+  const calendarDate = date;
+
+  // Monta o objeto de atualização
+  const updateData: Record<string, any> = {
+    dayIndex,
+    calendarDate,
+    updatedAt: new Date(),
+  };
+
+  // Se um novo scheduledAt (data + hora) foi informado, converte e adiciona
+  if (scheduledAt) {
+    updateData.scheduledAt = new Date(scheduledAt);
+  }
+
+  const [updated] = await db.update(socialPosts)
+    .set(updateData)
+    .where(and(eq(socialPosts.id, postId), eq(socialPosts.tenantId, tenantId)))
+    .returning();
+
+  if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+  return updated;
+}
 // ===== Calendário Editorial: Publicação Automática =====
 
 const RETRY_BACKOFF_MINUTES = [1, 5, 15];
@@ -340,21 +425,9 @@ export async function resolveInstagramAccount(tenantId: string): Promise<Instagr
     return null;
   }
 
-  let accessToken: string;
-  try {
-    accessToken = decryptMetaToken(conn.accessToken);
-  } catch (err) {
-    console.error(`[resolveInstagram] tenant ${tenantId}: erro ao descriptografar token — reconecte o Meta em Configurações → Integrações`);
-    throw new AppError(400, 'TOKEN_DECRYPT_ERROR', 'Token do Meta inválido ou corrompido. Reconecte sua conta em Configurações → Integrações.');
-  }
+  const accessToken = decryptMetaToken(conn.accessToken);
   const selectedPageIds: string[] = (conn.selectedPageIds as any[]) || [];
-  let pages;
-  try {
-    pages = await getUserFacebookPages(accessToken);
-  } catch (err) {
-    console.error(`[resolveInstagram] tenant ${tenantId}: erro ao buscar páginas do Facebook:`, err);
-    throw new AppError(400, 'META_TOKEN_ERROR', 'Token do Meta inválido ou expirado. Reconecte sua conta em Configurações → Integrações.');
-  }
+  const pages = await getUserFacebookPages(accessToken);
 
   console.log(`[resolveInstagram] tenant ${tenantId}: Facebook retornou ${pages.length} páginas:`,
     JSON.stringify(pages.map(p => ({ pageId: p.pageId, name: p.name, hasInstagram: p.hasInstagram, instagramUserId: p.instagramUserId }))));
@@ -367,7 +440,7 @@ export async function resolveInstagramAccount(tenantId: string): Promise<Instagr
 
   const buildAccount = (p: typeof pagesWithIg[number], source: string) => {
     console.log(`[resolveInstagram] tenant ${tenantId}: ${source} — "${p.name}" IG=${p.instagramUserId} (@${p.instagramUsername || 'sem @'})`);
-    return { igUserId: p.instagramUserId!, accessToken: p.accessToken || accessToken, pageName: p.name, instagramUsername: p.instagramUsername };
+    return { igUserId: p.instagramUserId!, accessToken, pageName: p.name, instagramUsername: p.instagramUsername };
   };
 
   if (selectedPageIds.length > 0) {
@@ -509,10 +582,49 @@ export async function publishDuePosts(tenantId: string) {
     }
   }
 
-  // ponytail: incluir reason quando published=0 e havia posts elegíveis —
-  // publish_failed indica que posts existiam mas todos falharam na API do Meta.
-  const failedCount = due.filter(p => p.postType === 'image' || p.postType === 'reel').length;
-  const reason = published === 0 && failedCount > 0 ? 'publish_failed' as const : undefined;
+  return { published, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })), pageName: account.pageName, instagramUsername: account.instagramUsername };
+}
 
-  return { published, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })), pageName: account.pageName, instagramUsername: account.instagramUsername, reason };
+export interface AgentLabel {
+  id: string;
+  label: string;
+}
+
+export interface AgentLabelsResponse {
+  order: string[];
+  labels: Record<string, string>;
+}
+
+export function getAgentLabels(): AgentLabelsResponse {
+  const order = [
+    'context',
+    'research',
+    'analytics',
+    'strategy',
+    'planner',
+    'copywriter',
+    'creative',
+    'image-generation',
+    'quality',
+    'scheduler',
+    'branding',
+    'save',
+  ];
+
+  const labels: Record<string, string> = {
+    context: 'Coletando contexto do seu negócio',
+    research: 'Pesquisando tendências e datas comemorativas',
+    analytics: 'Analisando melhores formatos e horários',
+    strategy: 'Definindo estratégia e pilares de conteúdo',
+    planner: 'Montando calendário de posts',
+    copywriter: 'Escrevendo legendas e CTAs',
+    creative: 'Criando prompts de imagem',
+    'image-generation': 'Gerando imagens dos posts',
+    quality: 'Validando qualidade do conteúdo',
+    scheduler: 'Programando melhores horários de publicação',
+    branding: 'Verificando compliance da marca',
+    save: 'Salvando plano no banco',
+  };
+
+  return { order, labels };
 }

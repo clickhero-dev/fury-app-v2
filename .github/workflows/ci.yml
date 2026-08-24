@@ -1,19 +1,49 @@
 name: CI - EasyPanel
 on:
   push:
-    branches: [dev, main]
+    branches: [dev, main, hmg]
   pull_request:
-    branches: [dev, main]
+    branches: [dev, main, hmg]
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fury_test
+          POSTGRES_USER: fury
+          POSTGRES_PASSWORD: fury_local
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - run: npm install
+        with: 
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm install --install-links
+
       - run: npx tsc -b
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
+
       - run: npm run build
+
+      - run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://fury:fury_local@localhost:5432/fury_test
+          NODE_ENV: test
+
       - run: npm run test:unit
+        env:
+          TEST_DATABASE_URL: postgresql://fury:fury_local@localhost:5432/fury_test

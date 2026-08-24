@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { RegisterFormPage } from './pages/auth/RegisterFormPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
 import { ResetPasswordSuccessPage } from './pages/auth/ResetPasswordSuccessPage';
@@ -22,17 +23,18 @@ import { InsightsCampanha } from './pages/campanhas/InsightsCampanha';
 import { CreativeStudio } from './pages/estudio/CreativeStudio';
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
-// imported by PlanejadorPage/CalendarioPage — rotas ocultas nesta fase
-// import { PlanejadorPage } from './pages/planejador/PlanejadorPage';
-// import { CalendarioPage } from './pages/planejador/CalendarioPage';
+import { PlanejadorPage } from './pages/planejador/PlanejadorPage';
+import { CalendarioPage } from './pages/planejador/CalendarioPage';
 import { Configuracoes } from './pages/configuracoes/Configuracoes';
 import { Integracoes } from './pages/configuracoes/Integracoes';
+import { GoogleMeuNegocioPage } from './pages/configuracoes/google-meu-negocio/GoogleMeuNegocioPage';
 import { MinhasRegras } from './pages/automacao/MinhasRegras';
 import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
 import { Subscription } from './pages/billing/Subscription';
 import { AssinaturaVencida } from './pages/billing/AssinaturaVencida';
 import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
+import { RoadmapPage } from './pages/roadmap/RoadmapPage';
 import { AdminLogin } from './pages/superadmin/AdminLogin';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { TenantsPage } from './pages/superadmin/TenantsPage';
@@ -41,6 +43,9 @@ import { PlansPage } from './pages/superadmin/PlansPage';
 import { UsersPage } from './pages/superadmin/UsersPage';
 import { TenantCampaignsPage } from './pages/superadmin/TenantCampaignsPage';
 import { DashboardAdminPage } from './pages/superadmin/AdminDashboard';
+
+// 1. IMPORTAR O FORCE DARK MODE QUE VOCÊ CRIOU
+import { ForceDarkMode } from './pages/superadmin/ForceDarkMode';
 
 export const router = createBrowserRouter([
   {
@@ -54,6 +59,10 @@ export const router = createBrowserRouter([
   {
     path: '/cadastro',
     element: <RegisterPage />,
+  },
+  {
+    path: '/cadastro/formulario',
+    element: <RegisterFormPage />,
   },
   {
     path: '/forgot-password',
@@ -88,24 +97,49 @@ export const router = createBrowserRouter([
     element: <LandingPage />,
   },
   {
+    path: '/roadmap',
+    element: <RoadmapPage />,
+  },
+  {
     element: <AuthenticatedShell />,
     children: [
       { path: '/dashboard', element: <Dashboard /> },
       { path: '/onboarding/metas', element: <AppLayout><MetasPage /></AppLayout> },
       { path: '/dashboard/metas', element: <Metas /> },
-      { path: '/campanhas', element: <PainelCampanhas /> },
-      { path: '/campanhas/regras', element: <RegrasCampanhas /> },
-      { path: '/campanhas/:id/insights', element: <InsightsCampanha /> },
+      { 
+        path: '/campanhas', 
+        element: (
+          <AppLayout>
+            <PainelCampanhas />
+          </AppLayout>
+        ) 
+      },
+      { 
+        path: '/campanhas/regras', 
+        element: (
+          <AppLayout>
+            <RegrasCampanhas />
+          </AppLayout>
+        ) 
+      },
+      { 
+        path: '/campanhas/:id/insights', 
+        element: (
+          <AppLayout>
+            <InsightsCampanha />
+          </AppLayout>
+        ) 
+      },
       { path: '/automacao', element: <MinhasRegras /> },
       { path: '/automacao/minhas-regras', element: <MinhasRegras /> },
       { path: '/estudio-criativo', element: <CreativeStudio /> },
       { path: '/estudio', element: <EstudioHome /> },
       { path: '/estudio/imagem', element: <GeradorImagem /> },
-      // ponytail: rotas do Planejador IA e Calendário ocultas nesta fase
-      // { path: '/planejador', element: <PlanejadorPage /> },
-      // { path: '/calendario', element: <CalendarioPage /> },
+      { path: '/planejador', element: <PlanejadorPage /> },
+      { path: '/calendario', element: <CalendarioPage /> },
       { path: '/configuracoes', element: <Configuracoes /> },
       { path: '/configuracoes/integracoes', element: <Integracoes /> },
+      { path: '/configuracoes/google-meu-negocio', element: <GoogleMeuNegocioPage /> },
       { path: '/configuracoes/brand-kit', element: <Navigate to="/configuracoes?tab=publico" replace /> },
       { path: '/planos', element: <Plans /> },
       { path: '/assinatura', element: <Subscription /> },
@@ -117,15 +151,29 @@ export const router = createBrowserRouter([
     path: '/assinatura-vencida',
     element: <AssinaturaVencida />,
   },
+  
+  /* =========================================================
+     ÁREA DE LOGIN DO ADMIN (Forçada no Modo Escuro)
+     ========================================================= */
   {
     path: '/admin/login',
-    element: <AdminLogin />,
+    element: (
+      <ForceDarkMode>
+        <AdminLogin />
+      </ForceDarkMode>
+    ),
   },
+
+  /* =========================================================
+     ÁREA RESTRITA DO SUPERADMIN (Forçada no Modo Escuro)
+     ========================================================= */
   {
     path: '/admin',
     element: (
       <RequireSuperadmin>
-        <AdminShell />
+        <ForceDarkMode>
+          <AdminShell />
+        </ForceDarkMode>
       </RequireSuperadmin>
     ),
     children: [

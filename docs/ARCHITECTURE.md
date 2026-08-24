@@ -108,6 +108,22 @@ Endpoints relacionados:
 
 ---
 
+## Fluxo 6: Workflows (State Machine / Saga)
+
+Fluxos encadeados de agentes de IA são executados por uma **engine de
+workflows** genérica (checkpoints no Postgres + fila BullMQ + retry/rollback +
+recuperação de estado). O planejamento de conteúdo com IA é o primeiro fluxo
+registrado.
+
+> Documentação completa em [`docs/workflows/`](./workflows/README.md):
+> - [Workflow Engine](./workflows/workflow-engine.md) — a biblioteca (conceitos, retry, rollback, recuperação)
+> - [Planejar conteúdo](./workflows/planner-generate.md) — passo a passo do workflow `planner-generate`
+
+Novos fluxos (campanhas, publicação, criativos) são adicionados apenas com
+uma definição declarativa de stages — sem tocar na engine.
+
+---
+
 ## Fluxo 5: Observabilidade e Métricas
 
 ```

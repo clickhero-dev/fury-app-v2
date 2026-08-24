@@ -1,0 +1,2 @@
+-- Migração: adiciona 'rejected' e 'confirmed' ao enum post_status
+-- ALTER TYPE ... ADD VALUE é feito via afterHook em migrate.ts

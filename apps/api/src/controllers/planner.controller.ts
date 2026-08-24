@@ -14,20 +14,20 @@ import {
   editPostWithAI,
   updatePostFields,
   getCalendarPosts,
+  getCalendarPostsByDateRange,
   bulkSchedulePosts,
   bulkDeletePosts,
   createManualPost,
   movePostDay,
+  movePostDate,
   publishDuePosts,
+  getAgentLabels,
 } from '../services/planner.service.js';
 
 export async function generatePlan(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenant!.tenantId;
-    const { postCount } = z.object({
-      postCount: z.number().int().min(4).max(30).optional(),
-    }).parse(req.body ?? {});
-    const jobStatus = startPlanGeneration(tenantId, postCount);
+    const jobStatus = await startPlanGeneration(tenantId);
     res.json({ success: true, data: jobStatus });
   } catch (err) { next(err); }
 }
@@ -35,7 +35,7 @@ export async function generatePlan(req: Request, res: Response, next: NextFuncti
 export async function getJob(req: Request, res: Response, next: NextFunction) {
   try {
     const { jobId } = req.params;
-    const job = getJobProgress(jobId);
+    const job = await getJobProgress(jobId);
     if (!job || job.tenantId !== req.tenant!.tenantId) {
       throw new AppError(404, 'NOT_FOUND', 'Job não encontrado');
     }
@@ -114,12 +114,18 @@ export async function handleEditPost(req: Request, res: Response, next: NextFunc
 export async function handleGetCalendar(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenant!.tenantId;
-    const { year, month } = z.object({
-      year: z.coerce.number().int().min(2020).max(2100),
-      month: z.coerce.number().int().min(1).max(12),
-    }).parse(req.query);
-    const posts = await getCalendarPosts(tenantId, year, month);
-    res.json({ success: true, data: { posts, year, month } });
+
+    // Fase 6: Novo formato ISO dates (startDate/endDate)
+    // Nenhum outro consumidor usa o formato antigo (year/month)
+    const querySchema = z.object({
+      startDate: z.string().date(), // ISO date: "2026-08-01"
+      endDate: z.string().date(),   // ISO date: "2026-09-01"
+    });
+
+    const query = querySchema.parse(req.query);
+    const posts = await getCalendarPostsByDateRange(tenantId, query.startDate, query.endDate);
+
+    res.json({ success: true, data: { posts, startDate: query.startDate, endDate: query.endDate } });
   } catch (err) { next(err); }
 }
 
@@ -141,9 +147,15 @@ export async function handleBulkDelete(req: Request, res: Response, next: NextFu
     const { postIds } = z.object({
       postIds: z.array(z.string().uuid()).min(1).max(100),
     }).parse(req.body);
+    console.log(`[handleBulkDelete] tenant ${tenantId}: ${postIds.length} postIds`, postIds);
     const deleted = await bulkDeletePosts(tenantId, postIds);
     res.json({ success: true, data: { count: deleted.length } });
   } catch (err) {
+    console.error('[handleBulkDelete] ERROR:', err);
+    if (err instanceof Error) {
+      console.error('[handleBulkDelete] message:', err.message);
+      console.error('[handleBulkDelete] stack:', err.stack?.split('\n').slice(0, 3).join('\n'));
+    }
     next(err);
   }
 }
@@ -151,16 +163,24 @@ export async function handleBulkDelete(req: Request, res: Response, next: NextFu
 export async function handleCreatePost(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenant!.tenantId;
-    const body = z.object({
+
+    // Dual-format: aceita (date) novo OU (dayIndex) antigo
+    const bodySchema = z.object({
       caption: z.string().max(5000).optional(),
       postType: z.enum(['image', 'carousel', 'reel', 'stories']),
-      dayIndex: z.number().int().min(1).max(31),
       platform: z.string().max(50).optional(),
       scheduledAt: z.string().datetime().optional(),
       title: z.string().max(255).optional(),
       imageUrl: z.string().url().optional(),
-    }).parse(req.body);
-    const post = await createManualPost(tenantId, body);
+    }).and(
+      z.union([
+        z.object({ date: z.string().date() }), // Novo: ISO date "2026-08-19"
+        z.object({ dayIndex: z.number().int().min(1).max(31) }), // Antigo: dia do mês
+      ])
+    );
+
+    const body = bodySchema.parse(req.body);
+    const post = await createManualPost(tenantId, body as any);
     res.json({ success: true, data: post });
   } catch (err) { next(err); }
 }
@@ -168,10 +188,25 @@ export async function handleCreatePost(req: Request, res: Response, next: NextFu
 export async function handleMovePost(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenant!.tenantId;
-    const { dayIndex } = z.object({
-      dayIndex: z.number().int().min(1).max(31),
-    }).parse(req.body);
-    const updated = await movePostDay(tenantId, req.params.postId, dayIndex);
+    const postId = req.params.postId;
+
+    const bodySchema = z.union([
+      z.object({ 
+        date: z.string().date(),
+        scheduledAt: z.string().datetime().optional(), // Suporte opcional a horário no move
+      }), 
+      z.object({ dayIndex: z.number().int().min(1).max(31) }),
+    ]);
+
+    const body = bodySchema.parse(req.body);
+
+    let updated;
+    if ('date' in body) {
+      updated = await movePostDate(tenantId, postId, body.date, body.scheduledAt);
+    } else {
+      updated = await movePostDay(tenantId, postId, body.dayIndex);
+    }
+
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 }
@@ -210,5 +245,12 @@ export async function handleUploadMedia(req: Request, res: Response, next: NextF
     const fileName = `posts/${tenantId}/${randomUUID()}.${ext}`;
     const url = await uploadAsset(req.file.buffer, fileName, req.file.mimetype);
     res.json({ success: true, data: { url } });
+  } catch (err) { next(err); }
+}
+
+export async function handleGetAgentLabels(req: Request, res: Response, next: NextFunction) {
+  try {
+    const labels = getAgentLabels();
+    res.json({ success: true, data: labels });
   } catch (err) { next(err); }
 }
