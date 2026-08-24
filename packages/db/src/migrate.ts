@@ -100,7 +100,14 @@ const STEPS: MigrationStep[] = [
   { tag: '0028_google_meu_negocio' },
   { tag: '0029_google_social_login' },
   { tag: '0030_add_calendar_date_to_social_posts' },
- 
+  {
+    tag: '0031_add_post_status_rejected_confirmed',
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "post_status" ADD VALUE IF NOT EXISTS 'rejected'`);
+      await client.unsafe(`ALTER TYPE "post_status" ADD VALUE IF NOT EXISTS 'confirmed'`);
+      console.log('    + added rejected, confirmed to post_status');
+    },
+  },
   {
     tag: '0011_fr8_publish_retry',
     afterHook: async (client) => {
