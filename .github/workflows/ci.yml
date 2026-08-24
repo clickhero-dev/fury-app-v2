@@ -29,7 +29,7 @@ jobs:
         with: 
           node-version: '22'
           npm-version: '10'
-      - run: npm install
+      - run: npm install --legacy-peer-deps
       - run: npx tsc -b
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
