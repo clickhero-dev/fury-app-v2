@@ -24,9 +24,11 @@
     "@types/nodemailer": "^8.0.1",
     "@types/supertest": "^6.0.2",
     "@types/swagger-ui-express": "^4.1.8",
+    "globals": "^17.11.0",
     "supertest": "^6.3.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
+    "typescript-eslint": "^8.67.0",
     "vitest": "^1.6.1"
   },
   "dependencies": {
