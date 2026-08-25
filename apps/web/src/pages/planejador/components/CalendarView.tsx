@@ -206,8 +206,18 @@ export function CalendarView() {
       const post = getPostFromEvent(info.event);
       if (!post) return;
 
-      if (selectedIds.has(post.id)) {
+      // Ctrl/Cmd+Click abre o painel lateral; clique normal alterna seleção
+      const isModifierClick = info.jsEvent.ctrlKey || info.jsEvent.metaKey;
+
+      if (isModifierClick) {
         setSelectedPost(post as CalendarPost);
+        return;
+      }
+
+      if (selectedIds.has(post.id)) {
+        const next = new Set(selectedIds);
+        next.delete(post.id);
+        setSelectedIds(next);
       } else {
         const next = new Set(selectedIds);
         next.add(post.id);
