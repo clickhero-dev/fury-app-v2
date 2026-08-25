@@ -120,3 +120,20 @@ afetada (planner, stateMachine/api-startup, créditos) **45+37 testes pass**; `t
 0 erros; diff limpo (só o topo do `startPlanGeneration`).
 
 **Commits:** `cdf5290` (RED) + `ae42f4f` (GREEN).
+
+## Addendum — fix 3: etapa visível "Prerequisites" no workflow
+
+Para o usuário enxergar o gate, adicionei um **primeiro stage** no workflow
+(`plannerWorkflow`) chamado `prerequisites`, exibido ao front como
+"Checando pré-requisitos e disponibilidade do gerador":
+- `orchestrator.ts`: stage `prerequisites` (antes de `context`), execute →
+  `openrouterService.assertCreditsAvailable()` fail-fast (`maxAttempts 1`);
+  `AGENTS`/`PLANNER_AGENT_NAMES` passam a incluir "Prerequisites Agent".
+- `job-status-adapter.ts`: `STAGE_TO_AGENT['prerequisites'] =
+  'Prerequisites Agent'` e prependido em `STAGE_ORDER` (vira o 1º step).
+- `getAgentLabels()` (`planner.service.ts`): `order` + `labels.prerequisites`.
+
+O cérebro do gate é o mesmo `assertCreditsAvailable()`; o stage só o expõe como
+passo tangível no progresso do planejador.
+
+**Commits:** `fc7345f` (RED) + `4bc51d9` (GREEN).
