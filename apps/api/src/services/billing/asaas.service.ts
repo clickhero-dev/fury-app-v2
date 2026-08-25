@@ -1,4 +1,4 @@
-import { AppError } from '../middleware/errorHandler.js';
+import { AppError } from '../../middleware/errorHandler.js';
 
 const BASE_URL =
   process.env.ASAAS_ENV === 'production'

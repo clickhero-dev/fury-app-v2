@@ -15,7 +15,7 @@ import {
   BudgetOptimizerError,
   BudgetMode,
   type BudgetConfig,
-} from '../services/budget-optimizer.service.js';
+} from '../services/campaigns/budget-optimizer.service.js';
 import { triggerBudgetOptimization } from '../workers/budget-optimizer.worker.js';
 
 /**

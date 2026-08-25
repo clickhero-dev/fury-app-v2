@@ -52,7 +52,7 @@ import {
   updateProfile,
   syncProfile,
   getSyncLogs,
-} from '../services/google.service.js';
+} from '../services/google/google.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 function makeConnection(tenantId: string, overrides: Record<string, unknown> = {}) {

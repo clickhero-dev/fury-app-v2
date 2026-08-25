@@ -1,7 +1,7 @@
-import { db, clientGoals } from '../lib/db.js';
+import { db, clientGoals } from '../../lib/db.js';
 import { eq } from 'drizzle-orm';
-import { AppError } from '../middleware/errorHandler.js';
-import { centavosToReais } from '../utils/metrics-formatter.js';
+import { AppError } from '../../middleware/errorHandler.js';
+import { centavosToReais } from '../../utils/metrics-formatter.js';
 
 export type ClientGoalsForMetrics = {
   id: string;

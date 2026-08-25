@@ -92,12 +92,12 @@ vi.mock('../lib/google-api.js', () => ({
   createGoogleApiClient: mockCreateGoogleApiClient,
 }));
 
-vi.mock('../services/email.service.js', () => ({
+vi.mock('../services/email/email.service.js', () => ({
   sendEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { startGoogleSyncWorker, stopGoogleSyncWorker, processSyncJob } from '../workers/google-sync.worker.js';
-import { sendEmail } from '../services/email.service.js';
+import { sendEmail } from '../services/email/email.service.js';
 
 function makeConnection(tenantId: string) {
   return {

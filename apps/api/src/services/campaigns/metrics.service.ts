@@ -1,5 +1,5 @@
-import { IMetricsProvider } from '../lib/providers/metrics.provider.js';
-import { todaySaoPauloYMD, daysAgoSaoPauloYMD } from '../utils/date-sao-paulo.js';
+import { IMetricsProvider } from '../../lib/providers/metrics.provider.js';
+import { todaySaoPauloYMD, daysAgoSaoPauloYMD } from '../../utils/date-sao-paulo.js';
 import type {
   MetricsSummaryResponse,
   CampaignResponse,
@@ -8,7 +8,7 @@ import type {
   CampaignInsightsResponse,
   AdsetResponse,
   GoalsProgressResponse,
-} from '../types/metrics.types.js';
+} from '../../types/metrics.types.js';
 
 export class MetricsService {
   constructor(private provider: IMetricsProvider) {}

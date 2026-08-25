@@ -26,7 +26,7 @@ import type {
   AdsetResponse,
   GoalsProgressResponse,
 } from '../../types/metrics.types.js';
-import { getClientGoals } from '../../services/goal-service.js';
+import { getClientGoals } from '../../services/campaigns/goal.service.js';
 
 export class DatabaseMetricsProvider implements IMetricsProvider {
   private async fetchMetaInsights(params: {

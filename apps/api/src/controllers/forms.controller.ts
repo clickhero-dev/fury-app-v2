@@ -9,7 +9,7 @@ import {
   completeFormSubmission,
   errorFormSubmission,
   abandonedFormSubmission,
-} from '../services/forms.service.js';
+} from '../services/forms/forms.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export async function startFormHandler(req: Request, res: Response, next: NextFunction) {

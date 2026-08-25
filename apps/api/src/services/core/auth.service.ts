@@ -1,13 +1,13 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcrypt';
-import { db } from '../lib/db.js';
-import { tenants, users } from '../lib/db.js';
+import { db } from '../../lib/db.js';
+import { tenants, users } from '../../lib/db.js';
 import { eq, and } from 'drizzle-orm';
-import { getRedis } from '../lib/redis.js';
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../lib/jwt.js';
-import { AppError } from '../middleware/errorHandler.js';
-import { sendWelcomeEmail, sendOtpEmail, sendPasswordResetConfirmation } from './email.service.js';
-import type { UserDTO } from '../lib/shared.js';
+import { getRedis } from '../../lib/redis.js';
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../../lib/jwt.js';
+import { AppError } from '../../middleware/errorHandler.js';
+import { sendWelcomeEmail, sendOtpEmail, sendPasswordResetConfirmation } from '../email/email.service.js';
+import type { UserDTO } from '../../lib/shared.js';
 
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
-import { getRankedInstagramPosts } from '../services/instagram.service.js';
+import { getRankedInstagramPosts } from '../services/meta/instagram.service.js';
 
 const postsRankedQuerySchema = z.object({
   objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp']),

@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { db, automationRules } from '@fury/db';
-import { AppError } from '../middleware/errorHandler.js';
+import { AppError } from '../../middleware/errorHandler.js';
 
 export async function createAutomationRule(args: {
   tenantId: string;

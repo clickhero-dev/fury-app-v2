@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { openrouterService } from '../services/openrouter.service.js';
-import { uploadAsset } from '../services/storage.service.js';
+import { openrouterService } from '../services/llms/openrouter.service.js';
+import { uploadAsset } from '../services/storage/storage.service.js';
 import type { AgentContext, PlannerOutput, CreativeOutput } from './types.js';
 import { parseAgentJSON } from './utils.js';
 

@@ -1,8 +1,8 @@
 import { db } from '@fury/db';
 import { formSubmissions } from '@fury/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { AppError } from '../middleware/errorHandler.js';
-import type { FormSubmissionStatus } from '../schemas/forms.schema.js';
+import { AppError } from '../../middleware/errorHandler.js';
+import type { FormSubmissionStatus } from '../../schemas/forms.schema.js';
 
 export async function startFormSubmission(
   tenantId: string,

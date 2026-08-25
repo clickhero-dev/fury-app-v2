@@ -12,7 +12,7 @@ import {
   createSubscription,
   cancelSubscription,
   getPayment,
-} from '../services/asaas.service.js';
+} from '../services/billing/asaas.service.js';
 
 const router = Router();
 

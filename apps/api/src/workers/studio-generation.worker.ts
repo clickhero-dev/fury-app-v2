@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { processStudioGenerationJob, type StudioGenerationJobData, type GenerateStudioImageResult } from '../services/studio.service.js';
+import { processStudioGenerationJob, type StudioGenerationJobData, type GenerateStudioImageResult } from '../services/studio/studio.service.js';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 

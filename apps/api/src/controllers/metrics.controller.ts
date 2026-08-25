@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { MetricsService } from '../services/metrics.service.js';
+import { MetricsService } from '../services/campaigns/metrics.service.js';
 import {
   metricsQuerySchema,
   campaignsQuerySchema,

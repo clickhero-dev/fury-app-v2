@@ -1,4 +1,4 @@
-import { openrouterService } from '../services/openrouter.service.js';
+import { openrouterService } from '../services/llms/openrouter.service.js';
 import { db, brandKits } from '@fury/db';
 import { eq } from 'drizzle-orm';
 import type { AgentContext, PlannerOutput, CreativeOutput, ImageGenerationOutput } from './types.js';

@@ -1,4 +1,4 @@
-import { openrouterService } from '../services/openrouter.service.js';
+import { openrouterService } from '../services/llms/openrouter.service.js';
 import type { AgentContext, PlannerOutput, CopywriterOutput, CreativeOutput, BrandingOutput } from './types.js';
 import { parseAgentJSON } from './utils.js';
 

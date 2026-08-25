@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { and, eq, gte } from 'drizzle-orm';
 import { db, clientGoals, campaigns, furyInsights, performanceRules, performanceScores, ruleExecutions, furyConfig } from '@fury/db';
-import { AppError } from '../middleware/errorHandler.js';
+import { AppError } from '../../middleware/errorHandler.js';
 
 export type CampaignMetrics = {
   spend?: number;

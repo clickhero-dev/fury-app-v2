@@ -1,9 +1,9 @@
 import { and, eq } from 'drizzle-orm';
-import { db as dbInstance, users, tenants, type Database } from '../lib/db.js';
-import { AppError } from '../middleware/errorHandler.js';
-import { generateAccessToken, generateRefreshToken } from '../lib/jwt.js';
-import { exchangeCodeForToken } from '../lib/google-oauth.js';
-import type { UserDTO } from '../lib/shared.js';
+import { db as dbInstance, users, tenants, type Database } from '../../lib/db.js';
+import { AppError } from '../../middleware/errorHandler.js';
+import { generateAccessToken, generateRefreshToken } from '../../lib/jwt.js';
+import { exchangeCodeForToken } from '../../lib/google-oauth.js';
+import type { UserDTO } from '../../lib/shared.js';
 import crypto from 'node:crypto';
 
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
@@ -56,14 +56,14 @@ function generateCodigo(companyName: string, tenantId: string): string {
 }
 
 async function storeRefreshTokenHash(userId: string, refreshToken: string): Promise<void> {
-  const { getRedis } = await import('../lib/redis.js');
+  const { getRedis } = await import('../../lib/redis.js');
   const redis = getRedis();
   const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
   await redis.setex(`refresh:${userId}`, REFRESH_TOKEN_TTL, hash);
 }
 
 async function revokeRefreshToken(userId: string): Promise<void> {
-  const { getRedis } = await import('../lib/redis.js');
+  const { getRedis } = await import('../../lib/redis.js');
   await getRedis().del(`refresh:${userId}`);
 }
 
@@ -90,7 +90,7 @@ export function generateSocialLoginUrl(redirectUri: string, clientId: string, st
 
 /** Troca code por tokens e busca userinfo do Google. */
 async function fetchGoogleUserInfo(code: string, redirectUri: string): Promise<GoogleUserInfo> {
-  const { getGoogleOAuthConfig } = await import('../lib/google-oauth.js');
+  const { getGoogleOAuthConfig } = await import('../../lib/google-oauth.js');
   const { clientId, clientSecret } = getGoogleOAuthConfig();
 
   // Exchange code

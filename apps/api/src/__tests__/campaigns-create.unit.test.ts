@@ -74,12 +74,12 @@ vi.mock('../lib/locations-cache.js', () => ({
   setMetaLocationsCache: vi.fn(),
 }));
 
-vi.mock('../services/meta.service.js', () => ({
+vi.mock('../services/meta/meta.service.js', () => ({
   getResolvedTenantAssetSelection: vi.fn().mockResolvedValue({ pages: [] }),
 }));
 
 // ─── Imports ──────────────────────────────────────────────────────────────
-import { createCampaign, createCampaignFromWizard } from '../services/campaigns.service.js';
+import { createCampaign, createCampaignFromWizard } from '../services/campaigns/campaigns.service.js';
 
 // O wizard baixa o criativo via fetch real (downloadImage) quando usa
 // creativeUploadUrl. Stub global p/ manter o teste offline (como o restante).

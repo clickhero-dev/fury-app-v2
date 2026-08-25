@@ -5,7 +5,7 @@
  * Uso: npx tsx test-wizard-local.ts
  */
 import 'dotenv/config';
-import { createCampaignFromWizard } from './src/services/campaigns.service.js';
+import { createCampaignFromWizard } from './src/services/campaigns/campaigns.service.js';
 
 // DEBUG: check env
 console.log("DEBUG DATABASE_URL length:", process.env.DATABASE_URL?.length);

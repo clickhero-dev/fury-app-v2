@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { openrouterService } from '../services/openrouter.service.js';
+import { openrouterService } from '../services/llms/openrouter.service.js';
 
 // 10x10 PNG: red (#FF0000)
 const RED_PIXEL_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAIAAAACUFjqAAAAEklEQVR4nGP4z8CAB+GTG8HSALfKY52fTcuYAAAAAElFTkSuQmCC';

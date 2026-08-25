@@ -96,13 +96,13 @@ vi.mock('../lib/locations-cache.js', () => ({
   setMetaLocationsCache: mockSetMetaLocationsCache,
 }));
 
-vi.mock('../services/meta.service.js', () => ({
+vi.mock('../services/meta/meta.service.js', () => ({
   getResolvedTenantAssetSelection: mockGetResolvedTenantAssetSelection,
 }));
 
 // ─── IMPORT ────────────────────────────────────────────────────────────────
-import { createCampaignFromWizard } from './src/services/campaigns.service.js';
-import type { CreateWizardCampaignArgs } from './src/services/campaigns.service.js';
+import { createCampaignFromWizard } from './src/services/campaigns/campaigns.service.js';
+import type { CreateWizardCampaignArgs } from './src/services/campaigns/campaigns.service.js';
 
 // ─── HELPER: simula meta_connections completo ──────────────────────────────
 function makeProdMetaConnection() {

@@ -7,16 +7,16 @@ import { db, creativeAssets } from '@fury/db';
 import { eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
-import { openrouterService } from '../services/openrouter.service.js';
+import { openrouterService } from '../services/llms/openrouter.service.js';
 import { saveTemporaryStudioImage, studioAssetsDir } from '../lib/temp-storage.js';
-import { uploadAsset } from '../services/storage.service.js';
+import { uploadAsset } from '../services/storage/storage.service.js';
 import {
   consumeCreativeQuota,
   refundCreativeQuota,
   consumeModificationQuota,
   refundModificationQuota,
   getModificationsPerCreativeLimit,
-} from '../services/creative-quota.service.js';
+} from '../services/studio/creative-quota.service.js';
 
 const router = Router();
 

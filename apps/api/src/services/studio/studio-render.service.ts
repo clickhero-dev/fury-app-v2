@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import { db, creativeAssets } from '@fury/db';
-import { AppError } from '../middleware/errorHandler.js';
-import { getComplianceQueue } from '../lib/queue.js';
+import { AppError } from '../../middleware/errorHandler.js';
+import { getComplianceQueue } from '../../lib/queue.js';
 
 export type RenderCreativeInput = {
   tenantId: string;

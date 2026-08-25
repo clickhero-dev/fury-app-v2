@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db, creativeAssets, subscriptions, plans } from '@fury/db';
-import { AppError } from '../middleware/errorHandler.js';
+import { AppError } from '../../middleware/errorHandler.js';
 
 type PlanLimits = {
   creativesPerMonth?: number | null;

@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { db, campaigns } from '../lib/db.js';
+import { db, campaigns } from '../../lib/db.js';
 
 /**
  * Custom error class for budget optimizer validation errors

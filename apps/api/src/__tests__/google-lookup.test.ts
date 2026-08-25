@@ -48,7 +48,7 @@ vi.mock('../lib/google-api.js', () => ({
   createGoogleApiClient: mockCreateGoogleApiClient,
 }));
 
-import { lookupGoogleProfile, getGoogleAccounts, createProfile } from '../services/google.service.js';
+import { lookupGoogleProfile, getGoogleAccounts, createProfile } from '../services/google/google.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 function makeConnection(tenantId: string, overrides: Record<string, unknown> = {}) {

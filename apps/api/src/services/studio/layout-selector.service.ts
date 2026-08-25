@@ -7,7 +7,7 @@
 
 import type { CreativeLayout } from '@fury/shared';
 import { CREATIVE_LAYOUTS } from '@fury/shared';
-import { deepseekService } from './deepseek.service.js';
+import { deepseekService } from '../llms/deepseek.service.js';
 
 export interface LayoutSelectorInput {
   tenantId: string;

@@ -1,14 +1,14 @@
 import { eq } from 'drizzle-orm';
-import { db, metaConnections } from '../lib/db.js';
+import { db, metaConnections } from '../../lib/db.js';
 import {
   getInstagramAccountInsights,
   getInstagramMedia,
   getInstagramMediaInsights,
   getUserFacebookPages,
   type InstagramMediaInsights,
-} from '../lib/meta-api.js';
-import { decryptMetaToken } from '../utils/crypto.js';
-import { AppError } from '../middleware/errorHandler.js';
+} from '../../lib/meta-api.js';
+import { decryptMetaToken } from '../../utils/crypto.js';
+import { AppError } from '../../middleware/errorHandler.js';
 import { getResolvedTenantAssetSelection } from './meta.service.js';
 
 export type InstagramRankingObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';

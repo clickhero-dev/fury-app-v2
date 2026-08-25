@@ -1,12 +1,12 @@
 import OpenAI from 'openai';
 import { and, eq } from 'drizzle-orm';
 import { db, creativeAssets, metaConnections, brandKits } from '@fury/db';
-import { AppError } from '../middleware/errorHandler.js';
-import { createAdCreativeFromCopy, uploadAdImage } from '../lib/meta-api.js';
-import { decryptMetaToken } from '../utils/crypto.js';
-import { saveTemporaryStudioImage } from '../lib/temp-storage.js';
-import { getComplianceQueue } from '../lib/queue.js';
-import { openrouterService } from './openrouter.service.js';
+import { AppError } from '../../middleware/errorHandler.js';
+import { createAdCreativeFromCopy, uploadAdImage } from '../../lib/meta-api.js';
+import { decryptMetaToken } from '../../utils/crypto.js';
+import { saveTemporaryStudioImage } from '../../lib/temp-storage.js';
+import { getComplianceQueue } from '../../lib/queue.js';
+import { openrouterService } from '../llms/openrouter.service.js';
 
 export type StudioImageGenerationResult = {
   creativeAssetId: string;

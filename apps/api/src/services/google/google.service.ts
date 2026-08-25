@@ -8,10 +8,10 @@ import {
   businessProfileSettings,
   tenants,
   type Database,
-} from '../lib/db.js';
-import { AppError } from '../middleware/errorHandler.js';
-import { GOOGLE_ERROR_CODES, settingsSchema } from '../schemas/google.schemas.js';
-import { exchangeCodeForToken, getGoogleOAuthConfig, revokeGoogleToken } from '../lib/google-oauth.js';
+} from '../../lib/db.js';
+import { AppError } from '../../middleware/errorHandler.js';
+import { GOOGLE_ERROR_CODES, settingsSchema } from '../../schemas/google.schemas.js';
+import { exchangeCodeForToken, getGoogleOAuthConfig, revokeGoogleToken } from '../../lib/google-oauth.js';
 import {
   createGoogleApiClient,
   type GbpCategory,
@@ -19,9 +19,9 @@ import {
   type GbpLocationMatch,
   type GbpOpenPeriod,
   type GoogleApiClient,
-} from '../lib/google-api.js';
-import { encryptToken, decryptToken } from '../utils/crypto.js';
-import { uploadAsset, deleteAsset } from './storage.service.js';
+} from '../../lib/google-api.js';
+import { encryptToken, decryptToken } from '../../utils/crypto.js';
+import { uploadAsset, deleteAsset } from '../storage/storage.service.js';
 
 const db = dbInstance;
 

@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { and, eq } from 'drizzle-orm';
-import { db, metaConnections } from '../lib/db.js';
-import { AppError } from '../middleware/errorHandler.js';
+import { db, metaConnections } from '../../lib/db.js';
+import { AppError } from '../../middleware/errorHandler.js';
 import {
   exchangeCodeForToken,
   exchangeForLongLivedToken,
@@ -20,8 +20,8 @@ import {
   type MetaFacebookPage,
   type MetaOwnedPage,
   type MetaWhatsappNumber,
-} from '../lib/meta-api.js';
-import { addSyncJob } from '../lib/sync-jobs.js';
+} from '../../lib/meta-api.js';
+import { addSyncJob } from '../../lib/sync-jobs.js';
 
 const META_OAUTH_URL = 'https://www.facebook.com/v20.0/dialog/oauth';
 

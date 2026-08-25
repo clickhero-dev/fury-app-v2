@@ -8,7 +8,7 @@ import {
 } from '../lib/db.js';
 import { createGoogleApiClient } from '../lib/google-api.js';
 import { decryptToken } from '../utils/crypto.js';
-import { sendEmail } from '../services/email.service.js';
+import { sendEmail } from '../services/email/email.service.js';
 
 const GOOGLE_SYNC_QUEUE_NAME = 'google-sync';
 

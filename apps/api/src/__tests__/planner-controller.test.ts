@@ -5,7 +5,7 @@ const startPlanGeneration = vi.fn();
 const getJobProgress = vi.fn();
 const bulkDeletePosts = vi.fn();
 const bulkSchedulePosts = vi.fn();
-vi.mock('../services/planner.service.js', () => ({
+vi.mock('../services/planner/planner.service.js', () => ({
   startPlanGeneration: (...args: any[]) => startPlanGeneration(...args),
   getJobProgress: (jid: string) => getJobProgress(jid),
   getPlanById: vi.fn(),

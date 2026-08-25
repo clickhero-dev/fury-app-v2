@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db, brandKits } from '@fury/db';
-import { uploadAsset, deleteAsset } from '../services/storage.service.js';
+import { uploadAsset, deleteAsset } from '../services/storage/storage.service.js';
 
 const router = Router();
 

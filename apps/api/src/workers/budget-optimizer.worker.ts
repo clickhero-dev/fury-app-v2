@@ -8,7 +8,7 @@ import {
   saveSuggestions,
   getBudgetConfig,
   BudgetOptimizerError,
-} from '../services/budget-optimizer.service.js';
+} from '../services/campaigns/budget-optimizer.service.js';
 
 interface BudgetOptimizeJobData {
   tenantId: string;

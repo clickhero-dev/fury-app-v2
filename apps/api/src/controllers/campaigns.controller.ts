@@ -2,7 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import { uploadAsset } from '../services/storage.service.js';
+import { uploadAsset } from '../services/storage/storage.service.js';
 import {
   createCampaign,
   pauseCampaign,
@@ -17,7 +17,7 @@ import {
   createCampaignFromWizard,
   searchMetaLocations,
   searchMetaInterests,
-} from '../services/campaigns.service.js';
+} from '../services/campaigns/campaigns.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import {
   getCampaignsCache,
@@ -26,7 +26,7 @@ import {
 } from '../lib/campaigns-cache.js';
 import { db, brandKits, tenants } from '@fury/db';
 import { eq } from 'drizzle-orm';
-import { openrouterService, type ChatMessage } from '../services/openrouter.service.js';
+import { openrouterService, type ChatMessage } from '../services/llms/openrouter.service.js';
 
 const createCampaignSchema = z.object({
   name: z.string().min(3, 'Campaign name must be at least 3 characters'),
@@ -729,7 +729,7 @@ export async function searchMetaInterestsHandler(req: Request, res: Response, ne
 export async function createWizardCampaignDiagHandler(req: any, res: any) {
   // DIAG: Test if createCampaignFromWizard is importable and callable
   try {
-    const { createCampaignFromWizard } = await import('../services/campaigns.service.js');
+    const { createCampaignFromWizard } = await import('../services/campaigns/campaigns.service.js');
     if (typeof createCampaignFromWizard !== 'function') {
       return res.json({ success: false, error: { code: 'NOT_A_FUNCTION', type: typeof createCampaignFromWizard } });
     }

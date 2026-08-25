@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ZodError } from 'zod';
 
 const createManualPost = vi.fn();
-vi.mock('../services/planner.service.js', () => ({
+vi.mock('../services/planner/planner.service.js', () => ({
   createManualPost: (...args: any[]) => createManualPost(...args),
 }));
 
-vi.mock('../services/storage.service.js', () => ({
+vi.mock('../services/storage/storage.service.js', () => ({
   uploadAsset: vi.fn(),
 }));
 

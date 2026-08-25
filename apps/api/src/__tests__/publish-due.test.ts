@@ -11,7 +11,7 @@ vi.mock('../lib/meta-api.js', () => ({
   publishInstagramMedia: (...args: any[]) => publishInstagramMedia(...args),
 }));
 
-import { publishSinglePost } from '../services/planner.service.js';
+import { publishSinglePost } from '../services/planner/planner.service.js';
 
 const igUserId = 'mock_ig_user_id';
 const accessToken = 'mock_access_token';

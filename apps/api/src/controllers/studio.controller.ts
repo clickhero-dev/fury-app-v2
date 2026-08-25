@@ -4,14 +4,14 @@ import { AppError } from '../middleware/errorHandler.js';
 import {
   listStudioAssetsForTenant,
   deleteStudioAsset,
-} from '../services/studio.service.js';
+} from '../services/studio/studio.service.js';
 import {
   generateImage as generateStudioImage,
   getStudioAssetById,
   publishStudioAssetToMeta,
-} from '../services/studio-image.service.js';
-import { renderCreative as renderCreativeService } from '../services/studio-render.service.js';
-import { getCreativeQuotaSnapshot } from '../services/creative-quota.service.js';
+} from '../services/studio/studio-image.service.js';
+import { renderCreative as renderCreativeService } from '../services/studio/studio-render.service.js';
+import { getCreativeQuotaSnapshot } from '../services/studio/creative-quota.service.js';
 import { db, brandKits } from '@fury/db';
 import { eq } from 'drizzle-orm';
 

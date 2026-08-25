@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { MetricsController } from '../controllers/metrics.controller.js';
-import { MetricsService } from '../services/metrics.service.js';
+import { MetricsService } from '../services/campaigns/metrics.service.js';
 import { MockMetricsProvider } from '../lib/providers/mock-metrics.provider.js';
 import { DatabaseMetricsProvider } from '../lib/providers/db-metrics.provider.js';
 

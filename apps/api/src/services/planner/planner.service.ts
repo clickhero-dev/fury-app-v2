@@ -1,15 +1,15 @@
 import { db, campaignPlans, socialPosts, metaConnections, clientGoals, brandKits } from '@fury/db';
 import { eq, and, desc, gt, gte, lt, not, inArray, isNull, or, lte, sql } from 'drizzle-orm';
-import { generateId } from '../agents/orchestrator.js';
-import { openrouterService } from './openrouter.service.js';
-import type { JobStatus } from '../agents/types.js';
-import { parseAgentJSON } from '../agents/utils.js';
-import { AppError } from '../middleware/errorHandler.js';
-import { createInstagramMedia, getMediaContainerStatus, publishInstagramMedia, getUserFacebookPages } from '../lib/meta-api.js';
-import { decryptMetaToken } from '../utils/crypto.js';
-import { plannerStore } from '../planner-workflow-runner.js';
-import { enqueuePlanGeneration } from '../workers/planner.worker.js';
-import { snapshotToJobStatus } from '../agents/job-status-adapter.js';
+import { generateId } from '../../agents/orchestrator.js';
+import { openrouterService } from '../llms/openrouter.service.js';
+import type { JobStatus } from '../../agents/types.js';
+import { parseAgentJSON } from '../../agents/utils.js';
+import { AppError } from '../../middleware/errorHandler.js';
+import { createInstagramMedia, getMediaContainerStatus, publishInstagramMedia, getUserFacebookPages } from '../../lib/meta-api.js';
+import { decryptMetaToken } from '../../utils/crypto.js';
+import { plannerStore } from '../../planner-workflow-runner.js';
+import { enqueuePlanGeneration } from '../../workers/planner.worker.js';
+import { snapshotToJobStatus } from '../../agents/job-status-adapter.js';
 
 export async function startPlanGeneration(tenantId: string): Promise<JobStatus> {
   // Lock: rejeita se tenant já tiver um job ativo (running/pending)
@@ -28,7 +28,7 @@ export async function startPlanGeneration(tenantId: string): Promise<JobStatus> 
     await enqueuePlanGeneration(id, tenantId);
   } catch (err) {
     console.warn('[planner] falha ao enfileirar no BullMQ, executando inline:', err);
-    const { runPlannerWorkflow } = await import('../planner-workflow-runner.js');
+    const { runPlannerWorkflow } = await import('../../planner-workflow-runner.js');
     void runPlannerWorkflow(id, tenantId).catch((pipelineErr) => {
       console.error('[planner] pipeline inline falhou:', pipelineErr);
     });

@@ -3,7 +3,7 @@
 //
 // Run: DEEPSEEK_API_KEY=sk-... node --loader ts-node/esm apps/api/scripts/test-layout-selector.ts
 import 'dotenv/config';
-import { selectLayout, type LayoutSelectorInput } from '../src/services/layout-selector.service.js';
+import { selectLayout, type LayoutSelectorInput } from '../src/services/studio/layout-selector.service.js';
 
 type Scenario = {
   nome: string;

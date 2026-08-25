@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db, campaigns, tenants } from '@fury/db';
 import { emitToTenant } from '../lib/sse.js';
 import { createBullConnection, FURY_ENGINE_QUEUE_NAME, type FuryEngineJobPayload } from '../lib/queue.js';
-import { calculateScore, getGrade, evaluateRules, computeAndSaveScore, type CampaignMetrics } from '../services/fury-engine.service.js';
+import { calculateScore, getGrade, evaluateRules, computeAndSaveScore, type CampaignMetrics } from '../services/llms/fury-engine.service.js';
 
 interface FuryJobResult {
   tenantsProcessed: number;

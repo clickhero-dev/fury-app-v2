@@ -50,7 +50,7 @@ vi.mock('../lib/google-oauth.js', () => ({
   revokeGoogleToken: mockRevokeGoogleToken,
 }));
 
-import { generateGoogleAuthUrl, handleGoogleOAuthCallback, disconnectGoogleConnection } from '../services/google.service.js';
+import { generateGoogleAuthUrl, handleGoogleOAuthCallback, disconnectGoogleConnection } from '../services/google/google.service.js';
 import { encryptToken, decryptToken } from '../utils/crypto.js';
 import { AppError } from '../middleware/errorHandler.js';
 import googleRoutes from '../routes/google.routes.js';

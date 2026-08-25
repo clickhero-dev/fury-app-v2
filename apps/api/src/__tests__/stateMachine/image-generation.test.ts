@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { validateAndUploadImage, getAspectRatio, getResolution, getExpectedDimensions } from '../../lib/image-validation.js';
 
-vi.mock('../../services/storage.service.js', () => ({
+vi.mock('../../services/storage/storage.service.js', () => ({
   uploadAsset: vi.fn().mockResolvedValue('https://r2.example.com/test.png'),
   deleteAsset: vi.fn().mockResolvedValue(undefined),
 }));

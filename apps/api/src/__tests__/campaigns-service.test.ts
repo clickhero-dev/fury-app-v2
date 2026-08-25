@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { CampaignsService, normalizeCampaignPanelMetrics, formatCampaignListItem, calculateDateRange, mapWizardMetaError } from '../services/campaigns.service.js';
+import { CampaignsService, normalizeCampaignPanelMetrics, formatCampaignListItem, calculateDateRange, mapWizardMetaError } from '../services/campaigns/campaigns.service.js';
 import { MockMetaCampaignProvider } from '../lib/providers/mock-campaign.provider.js';
 import { MockCampaignRepository } from '../lib/providers/mock-campaign.repository.js';
 import { AppError } from '../middleware/errorHandler.js';

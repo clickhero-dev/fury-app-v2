@@ -1,4 +1,4 @@
-import type { CampaignListItem } from '../../services/campaigns.service.js';
+import type { CampaignListItem } from '../../services/campaigns/campaigns.service.js';
 
 export interface CampaignRecord {
   id: string;

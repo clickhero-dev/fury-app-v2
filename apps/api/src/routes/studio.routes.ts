@@ -10,17 +10,17 @@ import { db, creativeAssets, tenants, clientGoals, brandKits } from '@fury/db';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import * as studioController from '../controllers/studio.controller.js';
-import { studioCopyService } from '../services/studio-copy.service.js';
-import { deepseekService } from '../services/deepseek.service.js';
+import { studioCopyService } from '../services/studio/studio-copy.service.js';
+import { deepseekService } from '../services/llms/deepseek.service.js';
 import { buildCreativePrompt, buildRegeneratePrompt, buildValidationPrompt, type CreativeContext } from '../prompts/creative-studio.prompt.js';
-import { convertHTMLToPNG, type BrandColors } from '../services/html-to-png.service.js';
+import { convertHTMLToPNG, type BrandColors } from '../services/studio/html-to-png.service.js';
 import { sanitizeTypos } from '../utils/sanitize-typos.js';
-import type { CreativeData } from '../services/creative-data.js';
-import { selectLayout } from '../services/layout-selector.service.js';
+import type { CreativeData } from '../services/studio/creative-data.js';
+import { selectLayout } from '../services/studio/layout-selector.service.js';
 import type { CreativeLayout } from '@fury/shared';
 import { CREATIVE_LAYOUT_LABELS, CREATIVE_LAYOUT_FUNNEL_STAGE } from '@fury/shared';
 import { studioAssetsDir } from '../lib/temp-storage.js';
-import { uploadAsset } from '../services/storage.service.js';
+import { uploadAsset } from '../services/storage/storage.service.js';
 
 console.log('=== STUDIO studioAssetsDir:', studioAssetsDir);
 
@@ -274,7 +274,7 @@ const generateCreativeSchema = z.object({
   skipCopy:        z.boolean().optional(),
 
   // Nota: templateStyle foi removido. O layout é determinado pelo
-  // Layout Selector Agent (apps/api/src/services/layout-selector.service.ts).
+  // Layout Selector Agent (apps/api/src/services/studio/layout-selector.service.ts).
   // Ver: docs/CREATIVE_STUDIO_ARCHETYPES.md
 });
 
@@ -340,7 +340,7 @@ function parseCreativeJSON(raw: string) {
 
 // TEMPLATE_LAYOUT_MAP removido em 15/06/2026.
 // O layout é agora determinado pelo Layout Selector Agent
-// (apps/api/src/services/layout-selector.service.ts), com prioridade para
+// (apps/api/src/services/studio/layout-selector.service.ts), com prioridade para
 // body.layout quando o cliente já passa o arquétipo escolhido.
 // Ver: docs/CREATIVE_STUDIO_ARCHETYPES.md
 

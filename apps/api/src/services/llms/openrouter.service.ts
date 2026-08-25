@@ -1,6 +1,6 @@
-import { AppError } from '../middleware/errorHandler.js';
+import { AppError } from '../../middleware/errorHandler.js';
 import OpenAI from 'openai';
-import { persistOpenRouterImageResponse } from '../lib/openrouter-image-response.js';
+import { persistOpenRouterImageResponse } from '../../lib/openrouter-image-response.js';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 

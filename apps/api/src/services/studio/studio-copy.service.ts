@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { db, creativeAssets } from '@fury/db';
-import { sanitizeTypos } from '../utils/sanitize-typos.js';
+import { sanitizeTypos } from '../../utils/sanitize-typos.js';
 
 type AdCopyInput = {
   objective?: string;

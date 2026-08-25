@@ -66,11 +66,11 @@ vi.mock('../lib/locations-cache.js', () => ({
   getMetaLocationsCache: vi.fn().mockResolvedValue(null),
   setMetaLocationsCache: vi.fn(),
 }));
-vi.mock('../services/meta.service.js', () => ({
+vi.mock('../services/meta/meta.service.js', () => ({
   getResolvedTenantAssetSelection: vi.fn().mockResolvedValue({ pages: [] }),
 }));
 
-import { createCampaignFromWizard } from '../services/campaigns.service.js';
+import { createCampaignFromWizard } from '../services/campaigns/campaigns.service.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function prodConnection() {

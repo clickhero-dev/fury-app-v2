@@ -79,7 +79,7 @@ vi.mock('../workers/planner.worker.js', () => ({
   stopPlannerWorker: vi.fn(async () => {}),
 }));
 
-vi.mock('../services/openrouter.service.js', () => ({
+vi.mock('../services/llms/openrouter.service.js', () => ({
   openrouterService: { chat: vi.fn() },
 }));
 
@@ -96,7 +96,7 @@ vi.mock('../middleware/errorHandler.js', () => {
   return { AppError };
 });
 
-import { getPrerequisites } from '../services/planner.service.js';
+import { getPrerequisites } from '../services/planner/planner.service.js';
 
 describe('getPrerequisites — metaConnected', () => {
   beforeEach(() => {

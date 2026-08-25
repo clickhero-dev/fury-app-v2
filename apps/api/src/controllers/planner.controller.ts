@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { AppError } from '../middleware/errorHandler.js';
-import { uploadAsset } from '../services/storage.service.js';
+import { uploadAsset } from '../services/storage/storage.service.js';
 import {
   startPlanGeneration,
   getJobProgress,
@@ -22,7 +22,7 @@ import {
   movePostDate,
   publishDuePosts,
   getAgentLabels,
-} from '../services/planner.service.js';
+} from '../services/planner/planner.service.js';
 
 export async function generatePlan(req: Request, res: Response, next: NextFunction) {
   try {

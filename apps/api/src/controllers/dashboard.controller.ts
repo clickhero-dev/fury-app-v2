@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
-import { getInstagramDashboardInsights } from '../services/instagram.service.js';
+import { getInstagramDashboardInsights } from '../services/meta/instagram.service.js';
 
 const instagramInsightsQuerySchema = z.object({
   date_from: z.string().min(1, 'date_from obrigatorio'),

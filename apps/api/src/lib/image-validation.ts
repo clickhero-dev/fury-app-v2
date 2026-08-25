@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import sharp from 'sharp';
-import { uploadAsset, deleteAsset } from '../services/storage.service.js';
+import { uploadAsset, deleteAsset } from '../services/storage/storage.service.js';
 import type { AgentContext } from '../agents/types.js';
 
 export type PostType = 'feed' | 'carousel' | 'image' | 'stories';
