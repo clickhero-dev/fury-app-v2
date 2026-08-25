@@ -50,7 +50,7 @@ describe('image-generation — lib/image-validation', () => {
   describe('validateAndUploadImage', () => {
     const smallBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9mH9kAAAAASUVORK5CYII='; // 1x1 pixel
 
-    it('falha se imagem menor que 0.5 MB', async () => {
+    it('falha se imagem menor que 0.05 MB', async () => {
       await expect(validateAndUploadImage(smallBase64, 'feed', 1, 'tenant-1'))
         .rejects.toThrow('Imagem muito pequena');
     });

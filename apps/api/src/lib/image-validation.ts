@@ -18,7 +18,7 @@ const POST_TYPE_DIMENSIONS: Record<PostType, ExpectedDimensions> = {
   stories: { width: 1080, height: 1920, aspectRatio: '9:16' },
 };
 
-const MIN_SIZE_MB = 0.5;
+const MIN_SIZE_MB = 0.05;
 const MAX_SIZE_MB = 1000;
 const MIN_SIZE_BYTES = MIN_SIZE_MB * 1024 * 1024;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
