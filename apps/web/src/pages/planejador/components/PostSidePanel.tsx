@@ -120,7 +120,7 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
   const copyBtn = (text: string, field: string) => (
     <button
       onClick={() => copyToClipboard(text, field)}
-      className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary hover:text-text-primary transition-colors"
+      className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
     >
       {copiedField === field ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
     </button>
@@ -346,7 +346,7 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
               </p>
             </div>
           </div>
-          <button onClick={handleClose} className="p-2 rounded-lg hover:bg-surface-secondary text-text-tertiary">
+          <button onClick={handleClose} className="p-2 rounded-lg hover:bg-surface-secondary text-text-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -545,14 +545,14 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
                 <button
                   onClick={() => revertMutation.mutate()}
                   disabled={revertMutation.isPending}
-                  className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border disabled:opacity-50 text-text-primary font-medium rounded-xl text-sm transition-colors"
+                  className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border disabled:opacity-50 text-text-primary font-medium rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                 >
                   {revertMutation.isPending ? 'Revertendo...' : 'Voltar ao original'}
                 </button>
                 <button
                   onClick={handleApply}
                   disabled={revertMutation.isPending}
-                  className="flex-1 px-4 py-2.5 bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
+                  className="flex-1 px-4 py-2.5 bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                 >
                   Aplicar alteração
                 </button>
@@ -567,7 +567,7 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
                 /* 💡 AÇÃO PARA POSTS PASSADOS / PUBLICADOS */
                 <button
                   onClick={() => onDuplicate && onDuplicate(post)}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-accent/10 hover:bg-accent/20 text-accent font-medium rounded-xl text-sm transition-colors"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-accent/10 hover:bg-accent/20 text-accent font-medium rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                 >
                   <RotateCcw className="w-4 h-4" />
                   Reutilizar Post
@@ -577,14 +577,14 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
                 <>
                   <button
                     onClick={() => setEditMode(false)}
-                    className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors"
+                    className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                   >
                     Cancelar
                   </button>
                   <button
                     onClick={() => saveEditMutation.mutate()}
                     disabled={saveEditMutation.isPending}
-                    className="flex-1 px-4 py-2.5 bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
+                    className="flex-1 px-4 py-2.5 bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                   >
                     {saveEditMutation.isPending ? 'Salvando...' : 'Salvar'}
                   </button>
@@ -594,16 +594,16 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
                 <>
                   <button
                     onClick={() => setEditMode(true)}
-                    className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors"
+                    className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                   >
                     Editar
                   </button>
-                  <button className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors">
+                  <button className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface">
                     Regenerar
                   </button>
                   <button
                     onClick={() => setShowAiEditor(!showAiEditor)}
-                    className="flex-1 px-4 py-2.5 bg-accent/5 hover:bg-accent/10 text-accent font-medium rounded-xl text-sm transition-colors"
+                    className="flex-1 px-4 py-2.5 bg-accent/5 hover:bg-accent/10 text-accent font-medium rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                   >
                     Melhorar com IA
                   </button>

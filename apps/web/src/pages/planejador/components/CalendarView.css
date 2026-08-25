@@ -38,12 +38,13 @@
 
 .ady-calendar .fc-col-header-cell {
   background: transparent;
-  padding: 0.65rem 0;
+  padding: 0.75rem 0;
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-text-secondary);
+  min-height: 44px;
 }
 
 .ady-calendar .fc-daygrid-day-number,
@@ -52,7 +53,12 @@
   color: var(--color-text-primary);
   font-size: 0.78rem;
   font-weight: 500;
-  padding: 0.5rem;
+  padding: 0.75rem;
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ady-calendar .fc-day-today .fc-daygrid-day-number {
@@ -178,4 +184,26 @@
 .ady-calendar .fc-timegrid-slot {
   height: 42px !important; /* Altura ideal para gerar a barra de rolagem interna */
   border-bottom: 1px solid var(--color-border) !important;
+}
+
+/* Focus visible for keyboard accessibility (WCAG 2.2) */
+.ady-calendar .fc-button:focus-visible,
+.ady-calendar .fc-daygrid-day-number:focus-visible,
+.ady-calendar .fc-timegrid-slot:focus-visible,
+.ady-calendar .fc-event:focus-visible,
+.ady-calendar .fc-col-header-cell:focus-visible {
+  outline: 2px solid var(--color-brand) !important;
+  outline-offset: 2px !important;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .ady-calendar .fc-event,
+  .ady-calendar .fc-daygrid-day,
+  .ady-calendar .fc-button,
+  .ady-calendar .fc-col-header-cell,
+  .ady-calendar .fc-timegrid-slot {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

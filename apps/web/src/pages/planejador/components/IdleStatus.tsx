@@ -48,7 +48,7 @@ export function IdleStatus({ onGenerate, isLoading, checks }: IdleStatusProps) {
               onClick={onGenerate}
               disabled={isLoading || !allOk}
               title={!allOk ? 'Complete todos os requisitos pendentes para gerar' : undefined}
-              className="mt-8 inline-flex items-center gap-2 rounded-xl gradient-spark px-6 py-3.5 text-base font-semibold text-white shadow-soft transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+              className="mt-8 inline-flex items-center gap-2 rounded-xl gradient-spark px-6 py-3.5 text-base font-semibold text-white shadow-soft transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
             >
               {isLoading ? (
                 <>
@@ -110,31 +110,31 @@ export function IdleStatus({ onGenerate, isLoading, checks }: IdleStatusProps) {
       {/* Cards Informativos do Rodapé */}
       <footer className="mt-6 grid gap-4 md:grid-cols-3">
         <div className="surface-card p-6">
-          <span className="flex size-7 items-center justify-center rounded-full bg-[oklch(0.95_0.018_220.5)] dark:bg-[oklch(0.32_0.04_220.5)] text-xs font-bold text-[#1E88A8] dark:text-[#67c2dc]">
+          <span className="flex size-7 items-center justify-center rounded-full bg-teal-soft dark:bg-teal-soft/30 text-xs font-bold text-teal dark:text-teal">
             1
           </span>
-          <h3 className="mt-3 text-base font-bold text-slate-900 dark:text-slate-100">Lê o seu negócio</h3>
-          <p className="mt-1 text-xs lg:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+          <h3 className="mt-3 text-base font-bold text-text-primary">Lê o seu negócio</h3>
+          <p className="mt-1 text-xs lg:text-sm text-text-secondary leading-relaxed">
             Usa o que já sabe da sua empresa, das campanhas anteriores e do que deu certo.
           </p>
         </div>
 
         <div className="surface-card p-6">
-          <span className="flex size-7 items-center justify-center rounded-full bg-[oklch(0.95_0.018_220.5)] dark:bg-[oklch(0.32_0.04_220.5)] text-xs font-bold text-[#1E88A8] dark:text-[#67c2dc]">
+          <span className="flex size-7 items-center justify-center rounded-full bg-teal-soft dark:bg-teal-soft/30 text-xs font-bold text-teal dark:text-teal">
             2
           </span>
-          <h3 className="mt-3 text-base font-bold text-slate-900 dark:text-slate-100">Monta o mês</h3>
-          <p className="mt-1 text-xs lg:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+          <h3 className="mt-3 text-base font-bold text-text-primary">Monta o mês</h3>
+          <p className="mt-1 text-xs lg:text-sm text-text-secondary leading-relaxed">
             Temas semanais, peças de conteúdo e verba sugerida, dia a dia, com justificativa.
           </p>
         </div>
 
         <div className="surface-card p-6">
-          <span className="flex size-7 items-center justify-center rounded-full bg-[oklch(0.95_0.018_220.5)] dark:bg-[oklch(0.32_0.04_220.5)] text-xs font-bold text-[#1E88A8] dark:text-[#67c2dc]">
+          <span className="flex size-7 items-center justify-center rounded-full bg-teal-soft dark:bg-teal-soft/30 text-xs font-bold text-teal dark:text-teal">
             3
           </span>
-          <h3 className="mt-3 text-base font-bold text-slate-900 dark:text-slate-100">Você aprova</h3>
-          <p className="mt-1 text-xs lg:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+          <h3 className="mt-3 text-base font-bold text-text-primary">Você aprova</h3>
+          <p className="mt-1 text-xs lg:text-sm text-text-secondary leading-relaxed">
             Revise, ajuste o que quiser e envie tudo para o calendário com um clique.
           </p>
         </div>

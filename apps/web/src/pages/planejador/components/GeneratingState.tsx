@@ -100,7 +100,7 @@ export function GeneratingState({ jobStatus, agentLabels }: GeneratingStateProps
           const step = jobStatus.agentProgress.find(s => s.name === agentName);
           const status = step?.status ?? 'pending';
           return (
-            <div key={key} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-secondary/50">
+            <div key={key} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface">
               {status === 'completed' && <CheckCircle className="h-5 w-5 text-success shrink-0" />}
               {status === 'running' && <Loader2 className="h-5 w-5 animate-spin text-brand shrink-0" />}
               {status === 'failed' && <AlertCircle className="h-5 w-5 text-error shrink-0" />}

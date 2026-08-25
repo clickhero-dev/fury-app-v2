@@ -27,6 +27,9 @@ import {
   MessageCircle,
   Check,
   Share2,
+  ArrowUp,
+  ArrowDown,
+  MoreHorizontal,
 } from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
@@ -356,14 +359,14 @@ export function CalendarView() {
               <button
                 aria-label="Mês anterior"
                 onClick={() => api_()?.prev()}
-                className="cursor-pointer rounded-l-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
+                className="cursor-pointer rounded-l-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               >
                 <ChevronLeft className="size-4" />
               </button>
               <button
                 aria-label="Próximo mês"
                 onClick={() => api_()?.next()}
-                className="cursor-pointer rounded-r-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
+                className="cursor-pointer rounded-r-lg p-2 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               >
                 <ChevronRight className="size-4" />
               </button>
@@ -371,7 +374,7 @@ export function CalendarView() {
 
             <button
               onClick={() => api_()?.today()}
-              className="cursor-pointer rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-surface-secondary"
+              className="cursor-pointer rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-text-primary transition-colors hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
             >
               Hoje
             </button>
@@ -385,7 +388,7 @@ export function CalendarView() {
             {posts.length > 0 && (
               <button
                 onClick={selectAll}
-                className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
+                className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               >
                 {selectedIds.size === posts.length ? 'Desmarcar todos' : 'Selecionar todos'}
               </button>
@@ -396,7 +399,7 @@ export function CalendarView() {
                   key={v.key}
                   onClick={() => changeView(v.key)}
                   className={clsx(
-                    'cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                    'cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
                     currentView === v.key
                       ? 'bg-brand text-white'
                       : 'text-text-secondary hover:text-text-primary',
@@ -409,7 +412,7 @@ export function CalendarView() {
             <Button
   variant="spark"
   size="sm"
-  className="text-slate-900 dark:text-white hover:text-slate-900 dark:hover:text-white"
+  className="text-slate-900 dark:text-white hover:text-slate-900 dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
   onClick={() => {
     setPreselectedDay(null);
     setCreateMode('schedule');
@@ -440,7 +443,7 @@ export function CalendarView() {
                 {selectedIds.size} {selectedIds.size > 1 ? 'posts selecionados' : 'post selecionado'}
               </span>
 
-              <Button variant="spark" size="sm" onClick={() => setShowScheduleDialog(true)}>
+              <Button variant="spark" size="sm" onClick={() => setShowScheduleDialog(true)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface">
                 <CalendarClock className="size-3.5" /> Agendar
               </Button>
 
@@ -449,6 +452,7 @@ export function CalendarView() {
                 size="sm"
                 disabled={scheduleMutation.isPending}
                 onClick={() => scheduleMutation.mutate(null)}
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               >
                 Desprogramar
               </Button>
@@ -456,7 +460,7 @@ export function CalendarView() {
               <Button
                 variant="outline"
                 size="sm"
-                className="border-error/20 bg-error/10 text-error hover:bg-error/20 hover:text-error"
+                className="border-error/20 bg-error/10 text-error hover:bg-error/20 hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                 onClick={() => setShowDeleteConfirm(true)}
               >
                 <Trash2 className="size-3.5" /> Excluir
@@ -465,7 +469,7 @@ export function CalendarView() {
               <button
                 aria-label="Limpar seleção"
                 onClick={clearSelection}
-                className="ml-1 cursor-pointer rounded-md p-1.5 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary"
+                className="ml-1 cursor-pointer rounded-md p-1.5 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               >
                 <X className="size-4" />
               </button>
@@ -505,7 +509,13 @@ export function CalendarView() {
             eventDrop={handleEventDrop}
             dateClick={handleDateClick}
             eventContent={(info: EventContentArg) => (
-              <EventCard arg={info} selectedIds={selectedIds} />
+              <EventCard
+                arg={info}
+                selectedIds={selectedIds}
+                showToast={showToast}
+                queryClient={queryClient}
+                getErrorMessage={getErrorMessage}
+              />
             )}
             themeSystem="standard"
             noEventsText="Nenhuma publicação agendada"
@@ -574,7 +584,19 @@ export function CalendarView() {
   );
 }
 
-function EventCard({ arg, selectedIds }: { arg: EventContentArg; selectedIds: Set<string> }) {
+function EventCard({
+  arg,
+  selectedIds,
+  showToast,
+  queryClient,
+  getErrorMessage,
+}: {
+  arg: EventContentArg;
+  selectedIds: Set<string>;
+  showToast: (message: string, type?: 'success' | 'error') => void;
+  queryClient: ReturnType<typeof useQueryClient>;
+  getErrorMessage: (err: unknown, defaultMessage: string) => string;
+}) {
   const post = getPostFromEvent(arg.event) as (CalendarPost & Record<string, unknown>) | null;
   const channel = resolveChannel((post ?? {}) as Record<string, unknown>);
   const status = resolveStatus((post ?? {}) as Record<string, unknown>);
@@ -588,6 +610,38 @@ function EventCard({ arg, selectedIds }: { arg: EventContentArg; selectedIds: Se
 
   const title =
     arg.event.title || post?.title || (post?.caption ? String(post.caption).slice(0, 40) : 'Sem título');
+
+  // Keyboard-accessible move actions
+  const movePost = useCallback(async (direction: 'prev' | 'next') => {
+    if (!post) return;
+    const currentDate = new Date(post.date);
+    const newDate = new Date(currentDate);
+    newDate.setDate(currentDate.getDate() + (direction === 'prev' ? -1 : 1));
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (newDate < today) {
+      showToast('Não é possível mover posts para datas passadas.', 'error');
+      return;
+    }
+
+    const newDateStr = newDate.toISOString().split('T')[0];
+    const timePart = post.scheduledAt 
+      ? new Date(post.scheduledAt).toTimeString().split(' ')[0]
+      : '00:00:00';
+
+    try {
+      await api.patch(`/planner/posts/${post.id}/move`, {
+        date: newDateStr,
+        time: timePart,
+        scheduledAt: post.scheduledAt,
+      });
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      showToast(`Post movido para ${newDate.toLocaleDateString('pt-BR')}`);
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Erro ao mover post'), 'error');
+    }
+  }, [post, queryClient]);
 
   return (
     <div
@@ -614,6 +668,39 @@ function EventCard({ arg, selectedIds }: { arg: EventContentArg; selectedIds: Se
         {arg.timeText ? (
           <span className="text-[10px] font-medium text-text-secondary">{arg.timeText}</span>
         ) : null}
+        {/* Keyboard-accessible move menu */}
+        {!isPast && (
+          <div className="relative ml-auto">
+            <button
+              type="button"
+              aria-label="Opções de movimentação"
+              className="p-1 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand transition-colors"
+            >
+              <MoreHorizontal className="size-3.5" />
+            </button>
+            <div className="absolute right-0 top-full mt-1 z-10 rounded-lg border border-border bg-surface shadow-lg min-w-[140px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">
+              <button
+                type="button"
+                onClick={() => movePost('prev')}
+                disabled={!post}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-surface-secondary focus-visible:outline-none focus-visible:bg-surface-secondary"
+              >
+                <ArrowUp className="size-4" />
+                Mover para dia anterior
+              </button>
+              <hr className="border-border my-1" />
+              <button
+                type="button"
+                onClick={() => movePost('next')}
+                disabled={!post}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-surface-secondary focus-visible:outline-none focus-visible:bg-surface-secondary"
+              >
+                <ArrowDown className="size-4" />
+                Mover para próximo dia
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <p className="mt-1 flex items-center gap-1 truncate text-xs font-medium text-text-primary">
