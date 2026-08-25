@@ -140,6 +140,11 @@ vi.mock('../lib/seed-superadmin.js', () => ({
   seedStartup: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../workflows/api-startup-runner.js', () => ({
+  runApiStartupWorkflow: vi.fn().mockResolvedValue(undefined),
+  getStartupState: vi.fn(() => ({})),
+}));
+
 vi.mock('../lib/rule-engine-manager.js', () => ({
   startRuleEngine: vi.fn().mockResolvedValue(undefined),
   stopRuleEngine: vi.fn().mockResolvedValue(undefined),
@@ -179,9 +184,23 @@ vi.mock('../middleware/logger.js', () => ({
   loggerMiddleware: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-vi.mock('../middleware/errorHandler.js', () => ({
-  errorHandler: (_err: unknown, _req: unknown, _res: unknown, next: () => void) => next(),
-}));
+vi.mock('../middleware/errorHandler.js', () => {
+  class AppError extends Error {
+    statusCode: number;
+    code: string;
+    details?: Record<string, unknown>;
+    constructor(statusCode: number, code: string, message: string, details?: Record<string, unknown>) {
+      super(message);
+      this.statusCode = statusCode;
+      this.code = code;
+      this.details = details;
+    }
+  }
+  return {
+    AppError,
+    errorHandler: (_err: unknown, _req: unknown, _res: unknown, next: () => void) => next(),
+  };
+});
 
 vi.mock('../routes/index.js', () => ({
   default: (_req: unknown, _res: unknown, next: () => void) => next(),
@@ -369,9 +388,9 @@ describe('Compliance Check Worker', () => {
     try {
       await import('../index.js');
       // Allow the async IIFE in index.ts to resume after its awaited promises
-      await new Promise((r) => setImmediate(r));
-
-      expect(startComplianceCheckWorkerMock).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(startComplianceCheckWorkerMock).toHaveBeenCalledTimes(1);
+      });
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
     }

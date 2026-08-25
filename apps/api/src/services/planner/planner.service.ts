@@ -65,7 +65,6 @@ export async function getPrerequisites(tenantId: string) {
     where: and(
       eq(metaConnections.tenantId, tenantId),
       or(gt(metaConnections.tokenExpiresAt, new Date()), isNull(metaConnections.tokenExpiresAt)),
-      sql`coalesce(${metaConnections.selectedPageIds}, '[]'::jsonb) != '[]'::jsonb`,
     ),
   });
   const goals = await db.query.clientGoals.findFirst({

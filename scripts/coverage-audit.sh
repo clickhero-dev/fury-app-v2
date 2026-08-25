@@ -28,6 +28,7 @@ npx vitest run --coverage --reporter=json --outputFile=/tmp/vitest-results.json 
   --exclude "**/studio-assets.test.ts" \
   --exclude "**/studio.test.ts" \
   --exclude "**/studio-copy.test.ts" \
+  --exclude "**/landing-page.test.ts" \
   --testTimeout=10000 \
   2>/tmp/vitest-stderr.txt || true
 

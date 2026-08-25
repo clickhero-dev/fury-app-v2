@@ -51,20 +51,31 @@ describe('publishSinglePost', () => {
       .mockResolvedValueOnce('FINISHED');
     publishInstagramMedia.mockResolvedValue('media_456');
 
-    const result = await publishSinglePost(
-      { id: 'post-2', postType: 'reel', caption: 'Reel top', imageUrl: 'https://cdn.example.com/video.mp4' },
-      igUserId,
-      accessToken,
-    );
+    vi.useFakeTimers();
+    try {
+      const resultPromise = publishSinglePost(
+        { id: 'post-2', postType: 'reel', caption: 'Reel top', imageUrl: 'https://cdn.example.com/video.mp4' },
+        igUserId,
+        accessToken,
+      );
 
-    expect(result.mediaId).toBe('media_456');
-    expect(createInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, {
-      videoUrl: 'https://cdn.example.com/video.mp4',
-      caption: 'Reel top',
-      mediaType: 'REELS',
-    });
-    expect(getMediaContainerStatus).toHaveBeenCalledTimes(2);
-    expect(publishInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, 'container_video');
+      // 1º poll (3s): IN_PROGRESS → continua; 2º poll (6s): FINISHED → break
+      await vi.advanceTimersByTimeAsync(3_000);
+      await vi.advanceTimersByTimeAsync(6_000);
+
+      const result = await resultPromise;
+
+      expect(result.mediaId).toBe('media_456');
+      expect(createInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, {
+        videoUrl: 'https://cdn.example.com/video.mp4',
+        caption: 'Reel top',
+        mediaType: 'REELS',
+      });
+      expect(getMediaContainerStatus).toHaveBeenCalledTimes(2);
+      expect(publishInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, 'container_video');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('lança erro se post não tem imageUrl', async () => {
@@ -81,16 +92,29 @@ describe('publishSinglePost', () => {
     createInstagramMedia.mockResolvedValue('container_stuck');
     getMediaContainerStatus.mockResolvedValue('IN_PROGRESS'); // nunca termina
 
-    await expect(
-      publishSinglePost(
+    vi.useFakeTimers();
+    try {
+      const resultPromise = publishSinglePost(
         { id: 'post-4', postType: 'reel', imageUrl: 'https://cdn.example.com/video.mp4' },
         igUserId,
         accessToken,
-      ),
-    ).rejects.toThrow('still IN_PROGRESS');
+      );
 
-    expect(getMediaContainerStatus).toHaveBeenCalledTimes(3);
-    expect(publishInstagramMedia).not.toHaveBeenCalled();
+      // Anexa o handler de rejeição ANTES de avançar o tempo, evitando
+      // "unhandled rejection" quando a promise lança durante o advance.
+      const rejection = expect(resultPromise).rejects.toThrow('still IN_PROGRESS');
+
+      // 3 polls (3s/6s/12s) — todos IN_PROGRESS → lança erro no último
+      await vi.advanceTimersByTimeAsync(3_000);
+      await vi.advanceTimersByTimeAsync(6_000);
+      await vi.advanceTimersByTimeAsync(12_000);
+
+      await rejection;
+      expect(getMediaContainerStatus).toHaveBeenCalledTimes(3);
+      expect(publishInstagramMedia).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('lança erro se container retorna ERROR', async () => {
