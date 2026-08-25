@@ -96,7 +96,15 @@ vi.mock('../middleware/errorHandler.js', () => {
   return { AppError };
 });
 
-import { getPrerequisites } from '../services/planner/planner.service.js';
+import { getPrerequisites, getAgentLabels } from '../services/planner/planner.service.js';
+
+describe('getAgentLabels — primeiro passo de pré-requisitos', () => {
+  it('inclui prerequisites como primeiro step, com label', () => {
+    const { order, labels } = getAgentLabels();
+    expect(order[0]).toBe('prerequisites');
+    expect(labels.prerequisites).toBe('Checando pré-requisitos e disponibilidade do gerador');
+  });
+});
 
 describe('getPrerequisites — metaConnected', () => {
   beforeEach(() => {
