@@ -3,7 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const dbMock = vi.hoisted(() => ({
   query: { brandKits: { findFirst: vi.fn() } },
 }));
-const openrouterMock = vi.hoisted(() => ({ generateImage: vi.fn() }));
+const openrouterMock = vi.hoisted(() => ({
+  generateImage: vi.fn(),
+  assertCreditsAvailable: vi.fn(),
+}));
 const validationMock = vi.hoisted(() => ({
   validateAndUploadImage: vi.fn(),
   getFluxResolution: vi.fn(() => '1024x1024'),
@@ -51,6 +54,7 @@ describe('imageGenerationAgent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.OPENROUTER_API_KEY = 'test-key';
+    openrouterMock.assertCreditsAvailable.mockResolvedValue(undefined);
     dbMock.query.brandKits.findFirst.mockResolvedValue({ tenantId: 't-1', logoUrl: 'http://logo.png' });
     openrouterMock.generateImage.mockResolvedValue('data:image/png;base64,AAAA');
     validationMock.validateAndUploadImage.mockResolvedValue({
@@ -97,5 +101,20 @@ describe('imageGenerationAgent', () => {
     const result = await imageGenerationAgent(ctx, { posts: [] }, planner);
     expect(result.posts).toEqual([]);
     expect(openrouterMock.generateImage).not.toHaveBeenCalled();
+  });
+
+  it('checa créditos uma vez ANTES de gerar qualquer imagem', async () => {
+    await imageGenerationAgent(ctx, creative, planner);
+    expect(openrouterMock.assertCreditsAvailable).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborta sem gerar imagens quando não há créditos suficientes', async () => {
+    openrouterMock.assertCreditsAvailable.mockRejectedValue(
+      new Error('OPENROUTER_INSUFFICIENT_CREDITS'),
+    );
+
+    await expect(imageGenerationAgent(ctx, creative, planner)).rejects.toThrow('OPENROUTER_INSUFFICIENT_CREDITS');
+    expect(openrouterMock.generateImage).not.toHaveBeenCalled();
+    expect(validationMock.validateAndUploadImage).not.toHaveBeenCalled();
   });
 });
