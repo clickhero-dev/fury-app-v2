@@ -97,3 +97,26 @@ apenas os arquivos/linhas do escopo se quiser o gate em 80%.
 - `aeeed37` `test: cover credit edge branches (parse shapes, network fail-open, non-JSON 402)` — 15+4+2 pass
 
 Se estes forem squashados, mover este resumo RED/GREEN para o corpo do PR/squash.
+
+## Addendum — fix 2: gate antes de o pipeline INICIAR (bug reportado após o 1º push)
+
+**Problema relatado:** "no planejador de IA, esse fluxo não funcionou bem, ele
+**iniciou**, enquanto deveria ser parado." O check anterior ficava nos agentes
+`creative`/`image-generation` (etapas 7-8), mas o pipeline já havia rodado
+Context → Research → Analytics → Strategy → Planner → Copywriter (chamadas de
+LLM via OpenRouter que **também** consomem crédito e custo) antes.
+
+**Correção:** gate no **início** do fluxo.
+- `startPlanGeneration()` (`planner.service.ts`) chama `assertCreditsAvailable()`
+  no topo, antes do lock e da criação/enfileiramento do job → sem saldo, devolve
+  402 ao front **sem iniciar nada** (nem cria job, nem enfileira, nem chama LLM).
+- `runPlannerWorkflow()` (`planner-workflow-runner.ts`) tem a mesma guard como
+  safety net dos caminhos que não passam por `startPlanGeneration` (fallback
+  inline do enqueue e recovery de jobs interrompidos).
+
+**RED/GREEN:** `planner-credits-gate.test.ts` (RED: pipeline prosseguia sem gate →
+GREEN: 402 + `plannerStore.create`/`enqueuePlanGeneration` não chamados). Suíte
+afetada (planner, stateMachine/api-startup, créditos) **45+37 testes pass**; `tsc`
+0 erros; diff limpo (só o topo do `startPlanGeneration`).
+
+**Commits:** `cdf5290` (RED) + `ae42f4f` (GREEN).
