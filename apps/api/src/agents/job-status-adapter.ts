@@ -3,6 +3,7 @@ import type { AgentStep, JobStatus } from '../agents/types.js';
 
 /** Mapeia stageId → nome de agente exibido no frontend. */
 const STAGE_TO_AGENT: Record<string, string> = {
+  prerequisites: 'Prerequisites Agent',
   context: 'Context Agent',
   research: 'Research Agent',
   analytics: 'Analytics Agent',
@@ -18,7 +19,7 @@ const STAGE_TO_AGENT: Record<string, string> = {
 };
 
 const STAGE_ORDER = [
-  'context', 'research', 'analytics', 'strategy', 'planner',
+  'prerequisites', 'context', 'research', 'analytics', 'strategy', 'planner',
   'copywriter', 'creative', 'image-generation', 'quality', 'scheduler', 'branding', 'save',
 ];
 

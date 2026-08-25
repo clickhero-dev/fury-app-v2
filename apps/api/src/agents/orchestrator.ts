@@ -12,6 +12,7 @@ import { qualityAgent } from './quality.agent.js';
 import { schedulerAgent } from './scheduler.agent.js';
 import { brandingAgent } from './branding.agent.js';
 import { savePlanToDb } from './save.service.js';
+import { openrouterService } from '../services/llms/openrouter.service.js';
 import type { WorkflowDefinition } from '../services/stateMachine/stageInterface.js';
 import { RetryDependencyError } from '../services/stateMachine/workflow.engine.js';
 import type { ArtifactMap } from '../services/stateMachine/types.js';
@@ -32,6 +33,7 @@ function artifact<T>(artifacts: ArtifactMap, key: string): T {
 }
 
 const AGENTS = [
+  'Prerequisites Agent',
   'Context Agent',
   'Research Agent',
   'Analytics Agent',
@@ -56,6 +58,18 @@ export const plannerWorkflow: WorkflowDefinition<PlannerWorkflowInput> = {
   lockKey: (ctx) => ctx.tenantId,
   defaultRetry: { maxAttempts: 2, backoffMs: 1000, backoffType: 'exponential' },
   stages: [
+    {
+      id: 'prerequisites',
+      deps: [],
+      artifactKey: 'prerequisites',
+      // Falha rápido: saldo é cacheado internamente; sem créditos, o front
+      // recebe o estado de erro do job sem gastar LLM em nenhuma etapa.
+      retryPolicy: { maxAttempts: 1, backoffMs: 0, backoffType: 'fixed' },
+      execute: async () => {
+        await openrouterService.assertCreditsAvailable();
+        return true;
+      },
+    },
     {
       id: 'context',
       artifactKey: 'context',

@@ -604,6 +604,7 @@ export interface AgentLabelsResponse {
 
 export function getAgentLabels(): AgentLabelsResponse {
   const order = [
+    'prerequisites',
     'context',
     'research',
     'analytics',
@@ -619,6 +620,7 @@ export function getAgentLabels(): AgentLabelsResponse {
   ];
 
   const labels: Record<string, string> = {
+    prerequisites: 'Checando pré-requisitos e disponibilidade do gerador',
     context: 'Coletando contexto do seu negócio',
     research: 'Pesquisando tendências e datas comemorativas',
     analytics: 'Analisando melhores formatos e horários',
