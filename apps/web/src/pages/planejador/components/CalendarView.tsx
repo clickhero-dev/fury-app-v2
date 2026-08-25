@@ -315,6 +315,9 @@ export function CalendarView() {
 
   const events = useMemo(() => posts.map((post) => postToEvent(post)), [posts]);
 
+  // Force FullCalendar to re-render events when selection changes
+  const eventRenderKey = selectedIds.size;
+
   const legend = [
     { label: 'Agendado / Publicado', className: 'bg-brand' },
     { label: 'Ação pendente', className: 'bg-accent' },
@@ -529,6 +532,7 @@ export function CalendarView() {
             )}
             themeSystem="standard"
             noEventsText="Nenhuma publicação agendada"
+            key={eventRenderKey}
           />
         </div>
 
