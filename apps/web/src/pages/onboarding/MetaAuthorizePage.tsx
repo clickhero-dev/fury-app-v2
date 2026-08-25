@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { AdySymbol } from '@/components/AdySymbol';
 import { Loader2 } from 'lucide-react';
 
 export function MetaAuthorizePage() {
+  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<'subscription_expired' | 'trial_expired' | 'server_error' | 'other' | null>(null);
 
   useEffect(() => {
     api
@@ -17,8 +20,24 @@ export function MetaAuthorizePage() {
         window.location.href = authUrl;
       })
       .catch((err) => {
+        const status = err?.response?.status;
+        const code = err?.response?.data?.error?.code;
+
         console.error('[MetaAuthorizePage] failed to get auth URL:', err);
-        setError('Não foi possível iniciar a conexão com o Meta. Tente novamente.');
+
+        if (status === 403 && code === 'SUBSCRIPTION_EXPIRED') {
+          setError('Sua assinatura expirou. Renove seu plano para continuar.');
+          setErrorType('subscription_expired');
+        } else if (status === 403 && code === 'TRIAL_EXPIRED') {
+          setError('Seu período de teste expirou. Entre em contato com o suporte.');
+          setErrorType('trial_expired');
+        } else if (status === 500) {
+          setError('Erro no servidor. Tente novamente em alguns momentos.');
+          setErrorType('server_error');
+        } else {
+          setError('Não foi possível conectar com Meta. Tente novamente.');
+          setErrorType('other');
+        }
       });
   }, []);
 
@@ -42,10 +61,19 @@ export function MetaAuthorizePage() {
 
           <div className="mt-10 rounded-2xl border border-white/10 bg-admin-surface p-7 text-center shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)] space-y-4">
             <p className="text-sm font-medium text-admin-danger">{error}</p>
-            <div>
+            <div className="flex flex-col gap-3 pt-2">
+              {errorType === 'subscription_expired' && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/billing')}
+                  className="text-sm font-semibold text-admin-bg bg-admin-petrol hover:opacity-90 px-4 py-2.5 rounded-lg transition-opacity"
+                >
+                  Renovar Plano
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => window.history.back()}
+                onClick={() => navigate('/dashboard')}
                 className="text-sm font-medium text-admin-petrol hover:underline"
               >
                 Voltar

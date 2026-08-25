@@ -146,4 +146,39 @@ describe('checkSubscriptionActive middleware', () => {
 
     expect(next).toHaveBeenCalledWith();
   });
+
+  it('superadmin passa mesmo com subscription cancelled (isento de verificação)', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'cancelled', trialEndsAt: null, currentPeriodEnd: null });
+    const req = createMockRequest({ user: { userId: 'user-1', tenantId: 'tenant-1', email: 'test@fury.test', role: 'superadmin' } });
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(mockFindFirst).not.toHaveBeenCalled(); // Não faz query, passa direto
+  });
+
+  it('admin passa mesmo com subscription cancelled (isento de verificação)', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'cancelled', trialEndsAt: null, currentPeriodEnd: null });
+    const req = createMockRequest({ user: { userId: 'user-1', tenantId: 'tenant-1', email: 'test@fury.test', role: 'admin' } });
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(mockFindFirst).not.toHaveBeenCalled(); // Não faz query, passa direto
+  });
+
+  it('member é bloqueado com subscription cancelled', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'cancelled', trialEndsAt: null, currentPeriodEnd: null });
+    const req = createMockRequest({ user: { userId: 'user-1', tenantId: 'tenant-1', email: 'test@fury.test', role: 'member' } });
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    const err = (next as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(err.statusCode).toBe(403);
+    expect(err.code).toBe('SUBSCRIPTION_EXPIRED');
+  });
 });
