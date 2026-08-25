@@ -12,6 +12,11 @@ import { enqueuePlanGeneration } from '../../workers/planner.worker.js';
 import { snapshotToJobStatus } from '../../agents/job-status-adapter.js';
 
 export async function startPlanGeneration(tenantId: string): Promise<JobStatus> {
+  // Gate de créditos ANTES de qualquer etapa do pipeline: se não há saldo,
+  // para por aqui e devolve 402 ao front — sem criar job, sem enfileirar,
+  // sem queimar créditos nas chamadas de LLM dos agentes iniciais.
+  await openrouterService.assertCreditsAvailable();
+
   // Lock: rejeita se tenant já tiver um job ativo (running/pending)
   const existing = await plannerStore.findActiveByLockKey(tenantId, 'planner-generate');
   if (existing) throw new AppError(409, 'CONFLICT', 'Já existe um planejamento em andamento');

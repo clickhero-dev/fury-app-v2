@@ -2,6 +2,7 @@ import { PostgresCheckpointStore } from './services/stateMachine/postgres-checkp
 import { WorkflowEngine } from './services/stateMachine/workflow.engine.js';
 import { registerWorkflow, getWorkflow } from './services/stateMachine/workflow-registry.js';
 import { plannerWorkflow, type PlannerWorkflowInput } from './agents/orchestrator.js';
+import { openrouterService } from './services/llms/openrouter.service.js';
 
 export const plannerStore = new PostgresCheckpointStore();
 
@@ -14,6 +15,10 @@ function getPlannerEngine(): WorkflowEngine<PlannerWorkflowInput> {
 
 /** Executa (ou retoma) o workflow do planejador para um job. */
 export async function runPlannerWorkflow(jobId: string, tenantId: string): Promise<void> {
+  // Rede de segurança p/ caminhos que não passam por startPlanGeneration
+  // (fallback inline e recovery): para antes de qualquer stage gastar LLM.
+  await openrouterService.assertCreditsAvailable();
+
   const engine = getPlannerEngine();
   const snapshot = await plannerStore.load(jobId);
   const resume = !!(snapshot && snapshot.status === 'running' && snapshot.stages.length > 0);
