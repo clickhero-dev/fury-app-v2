@@ -10,13 +10,11 @@ export function initPosthog() {
     autocapture: true,
     capture_pageview: true,
     capture_pageleave: true,
-    heatmaps: true,
     session_recording: {
       recordCrossOriginIframes: false,
       maskInputOptions: { password: true, number: true },
       maskTextSelector: '[data-ph-no-capture], input[type="password"], input[type="number"]',
     },
-    mask_all_inputs: true,
     person_profiles: 'identified_only',
   });
 }
