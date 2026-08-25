@@ -172,9 +172,11 @@ export function Subscription() {
               <h2 className="text-xl font-bold text-text-primary">
                 {subscription.plan?.name ?? 'Básico'}
               </h2>
+              {/* Preço oculto temporariamente
               <p className="text-text-secondary text-sm mt-1">
                 {subscription.plan ? formatCurrency(subscription.plan.priceCents) + ' por mês' : 'R$ 50 por mês'}
               </p>
+              */}
             </div>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}
