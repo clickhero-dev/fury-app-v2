@@ -19,6 +19,79 @@ export type ChatMessage = {
   content: string | ChatContentPart[];
 };
 
+// ─── Estado de créditos OpenRouter ───────────────────────────────────────────
+// A API guarda em memória (com TTL) o estado do saldo para checá-lo ANTES de
+// chamar o OpenRouter e devolver erro apropriado (402) ao frontend, em vez de
+// falhar com retries genéricos quando o saldo acaba.
+export type CreditState = {
+  hasCredits: boolean;
+  credits: number | null; // saldo restante em USD; null = desconhecido
+  checkedAt: string | null;
+  isFreeTier?: boolean;
+};
+
+// Mínimo para considerar que há créditos (cobre uma geração barata)
+const CREDIT_MIN_BALANCE = 0.05;
+// TTL do cache do saldo — evita bater no /auth/key a cada chamada
+const CREDIT_CHECK_TTL_MS = 60_000;
+// Mensagem client-safe: não expõe custos/saldo (o Fury assume o custo da criação)
+const INSUFFICIENT_CREDITS_MESSAGE =
+  'Estamos impossibilitados de gerar imagens no momento. Por favor, contate o suporte.';
+
+let creditCache: { expiresAt: number; state: CreditState } | null = null;
+
+/** Extrai o saldo restante (USD) de qualquer shape que o OpenRouter retorne. */
+function parseRemainingCredits(body: { data?: Record<string, unknown> }): number | null {
+  const d = body?.data ?? {};
+  if (typeof d.limit === 'number' && typeof d.usage === 'number') {
+    return Math.max(0, d.limit - d.usage);
+  }
+  if (typeof d.credits === 'number') return Math.max(0, d.credits);
+  if (typeof d.total_credits === 'number' && typeof d.total_usage === 'number') {
+    return Math.max(0, d.total_credits - d.total_usage);
+  }
+  return null;
+}
+
+async function fetchCreditStateFromOpenRouter(): Promise<CreditState> {
+  const apiKey = getClient();
+  let res: Response;
+  try {
+    res = await fetch(`${OPENROUTER_BASE}/auth/key`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+  } catch {
+    // Se o check falhar, fail-open: não bloqueia a geração por indisponibilidade
+    return { hasCredits: true, credits: null, checkedAt: null };
+  }
+  if (!res.ok) {
+    // Não-autorizado/erro no check também é fail-open
+    return { hasCredits: true, credits: null, checkedAt: null };
+  }
+  const body = await res.json() as { data?: Record<string, unknown> };
+  const credits = parseRemainingCredits(body);
+  const isFreeTier = (body?.data?.is_free_tier as boolean | undefined) === true;
+  const hasCredits = credits !== null && credits > CREDIT_MIN_BALANCE && !isFreeTier;
+  return { hasCredits, credits, checkedAt: new Date().toISOString(), isFreeTier };
+}
+
+/** Detecta erro de créditos insuficientes no corpo de resposta do OpenRouter. */
+function isInsufficientCreditsError(body: string): boolean {
+  if (!body) return false;
+  try {
+    const json = JSON.parse(body) as { error?: { code?: number; message?: string } };
+    return json?.error?.code === 402 || /insufficient credits/i.test(json?.error?.message ?? '');
+  } catch {
+    return /insufficient credits/i.test(body);
+  }
+}
+
+function assertCreditsOrThrow(state: CreditState): void {
+  if (state.credits !== null && !state.hasCredits) {
+    throw new AppError(402, 'OPENROUTER_INSUFFICIENT_CREDITS', INSUFFICIENT_CREDITS_MESSAGE);
+  }
+}
+
 export const openrouterService = {
   async chat(
     messages: ChatMessage[],
@@ -44,6 +117,29 @@ export const openrouterService = {
     return data.choices?.[0]?.message?.content ?? '';
   },
 
+  /** Estado atual do saldo OpenRouter, com cache em memória (TTL). */
+  async getCreditState(force = false): Promise<CreditState> {
+    if (!force && creditCache && creditCache.expiresAt > Date.now()) return creditCache.state;
+    const state = await fetchCreditStateFromOpenRouter();
+    creditCache = { expiresAt: Date.now() + CREDIT_CHECK_TTL_MS, state };
+    return state;
+  },
+
+  /** Reset do cache de créditos (útil em testes e pós-recarga de saldo). */
+  clearCreditCache(): void {
+    creditCache = null;
+  },
+
+  /**
+   * Garante QUE há saldo antes de uma geração. Lança AppError 402
+   * (OPENROUTER_INSUFFICIENT_CREDITS) quando o saldo está zerado; fail-open
+   * quando o saldo é desconhecido (não bloqueia por indisponibilidade).
+   */
+  async assertCreditsAvailable(): Promise<void> {
+    const state = await openrouterService.getCreditState();
+    assertCreditsOrThrow(state);
+  },
+
   async generateImage(options: {
     model: string;
     prompt: string;
@@ -66,6 +162,9 @@ export const openrouterService = {
     });
     if (!response.ok) {
       const err = await response.text();
+      if (isInsufficientCreditsError(err)) {
+        throw new AppError(402, 'OPENROUTER_INSUFFICIENT_CREDITS', INSUFFICIENT_CREDITS_MESSAGE);
+      }
       throw new AppError(502, 'OPENROUTER_IMAGE_ERROR', `OpenRouter image error: ${err}`);
     }
     const data = (await response.json()) as any;

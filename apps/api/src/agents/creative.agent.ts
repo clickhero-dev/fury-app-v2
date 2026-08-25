@@ -16,6 +16,10 @@ const ASPECT_BY_TYPE: Record<string, string> = {
 };
 
 export async function creativeAgent(ctx: AgentContext, planner: PlannerOutput): Promise<CreativeOutput> {
+  // Checa créditos UMA vez antes de gastar retries gerando imagens; se não há
+  // saldo, o frontend recebe um 402 claro em vez de falhas genéricas por post.
+  await openrouterService.assertCreditsAvailable();
+
   const postsDesc = planner.posts.map(p => `Dia ${p.dayIndex} — ${p.postType} — "${p.title}"`).join('\n');
   const prompt = `Crie prompts de imagem IA estilo FLUX para:
 Empresa: ${ctx.tenant.name}

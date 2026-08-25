@@ -57,6 +57,11 @@ export async function imageGenerationAgent(
     })
     .filter(p => p.prompt);
 
+  // Ao usar OpenRouter, checa créditos uma vez antes de gerar as imagens.
+  if (process.env.OPENROUTER_API_KEY) {
+    await openrouterService.assertCreditsAvailable();
+  }
+
   const results = await Promise.all(
     postsWithPrompts.map(post =>
       generateAndValidateImage(ctx, post.prompt!, post.postType, post.dayIndex, ctx.tenantId)

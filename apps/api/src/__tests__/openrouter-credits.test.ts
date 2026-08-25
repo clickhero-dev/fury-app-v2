@@ -42,7 +42,7 @@ describe('openrouterService.getCreditState', () => {
     const state = await openrouterService.getCreditState();
 
     expect(state.hasCredits).toBe(false);
-    expect(state.credits).toBe(0.01);
+    expect(state.credits).toBeCloseTo(0.01, 2);
   });
 
   it('trata free tier sem saldo como sem créditos', async () => {
@@ -98,12 +98,13 @@ describe('openrouterService.assertCreditsAvailable', () => {
     vi.restoreAllMocks();
   });
 
-  it('lança AppError 402 OPENROUTER_INSUFFICIENT_CREDITS quando não há créditos', async () => {
+  it('lança AppError 402 OpenRouter client-safe quando não há créditos (sem vazar saldo)', async () => {
     mockFetchForAuthKey({ data: { usage: 9.99, limit: 10, is_free_tier: false } });
 
     await expect(openrouterService.assertCreditsAvailable()).rejects.toMatchObject({
       statusCode: 402,
       code: 'OPENROUTER_INSUFFICIENT_CREDITS',
+      message: 'Estamos impossibilitados de gerar imagens no momento. Por favor, contate o suporte.',
     });
   });
 
@@ -123,7 +124,7 @@ describe('openrouterService.generateImage — créditos insuficientes', () => {
     vi.restoreAllMocks();
   });
 
-  it('lança OpenRouter error 402 amigável em vez de 502 genérico quando resposta tem Insufficient credits', async () => {
+  it('lança 402 client-safe quando resposta tem Insufficient credits (em vez de 502 genérico)', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: RequestInfo | URL) => {
       const u = typeof url === 'string' ? url : url.toString();
       if (u === `${OPENROUTER_BASE}/images`) {
@@ -138,6 +139,7 @@ describe('openrouterService.generateImage — créditos insuficientes', () => {
       .rejects.toMatchObject({
         statusCode: 402,
         code: 'OPENROUTER_INSUFFICIENT_CREDITS',
+        message: 'Estamos impossibilitados de gerar imagens no momento. Por favor, contate o suporte.',
       });
   });
 
