@@ -30,10 +30,21 @@ import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
 import { recoverInterruptedPlannerWorkflows } from './planner-workflow-runner.js';
 import { runApiStartupWorkflow } from './workflows/api-startup-runner.js';
+import { flushAnalytics, captureServerException } from './lib/analytics.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Error tracking de erros não capturados pelo Express (nível de processo)
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  captureServerException(err, { code: 'UNCAUGHT_EXCEPTION' });
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+  captureServerException(reason, { code: 'UNHANDLED_REJECTION' });
+});
 
 // Necessário para req.ip refletir o IP real atrás de proxy reverso (nginx, load balancer)
 app.set('trust proxy', 1);
@@ -276,6 +287,7 @@ app.use((req, res) => {
         await closePublishDueQueue();
         await closeRedisConnection();
         await closeRedis();
+        await flushAnalytics();
         console.log('Server closed');
         process.exit(0);
       });

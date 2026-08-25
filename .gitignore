@@ -184,3 +184,8 @@ fury-api-log.txt
 gen-token.mjs   
 fury-api-log.txt
 gen-token.mjs
+
+
+.venv/
+# Added by code-review-graph
+.code-review-graph/

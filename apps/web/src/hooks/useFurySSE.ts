@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { captureException } from '@/lib/posthog';
 
 /** Score atualizado de uma campanha específica, recebido via SSE. */
 export interface FuryScoreUpdate {
@@ -57,7 +58,10 @@ export function useFurySSE() {
     esRef.current = es;
 
     es.addEventListener('open', () => setIsConnected(true));
-    es.addEventListener('error', () => setIsConnected(false));
+    es.addEventListener('error', () => {
+      setIsConnected(false);
+      captureException(new Error('SSE connection error'), { source: 'useFurySSE' });
+    });
 
     es.addEventListener('message', (event: MessageEvent) => {
       try {

@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { useLogout } from '@/hooks/useLogout';
 import { AdySymbol } from '@/components/AdySymbol';
 import { SidebarUserCard } from './SidebarUserCard';
+import { captureEvent } from '@/lib/posthog';
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -75,7 +76,10 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             <Link
               key={to}
               to={to}
-              onClick={onMobileClose}
+              onClick={() => {
+                onMobileClose?.();
+                captureEvent('nav_click', { to, label });
+              }}
               title={collapsed ? label : undefined}
               className={`flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm transition-all ${
                 collapsed ? 'justify-center' : ''
@@ -104,6 +108,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         <button
           onClick={() => {
             onMobileClose?.();
+            captureEvent('logout');
             logout();
           }}
           title={collapsed ? 'Sair' : undefined}
@@ -116,7 +121,10 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         {/* Botão Recolher Barra */}
         <div className="hidden md:flex justify-center pt-1">
           <button
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={() => {
+              setCollapsed(!collapsed);
+              captureEvent('sidebar_toggle_collapse', { collapsed: !collapsed });
+            }}
             className="p-1 rounded-md text-text-tertiary hover:bg-sidebar-hover hover:text-text-primary transition-colors"
           >
             <ChevronLeft

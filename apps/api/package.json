@@ -51,6 +51,7 @@
     "nodemailer": "^9.0.3",
     "openai": "^6.37.0",
     "postgres": "^3.4.9",
+    "posthog-node": "^5.51.1",
     "sharp": "^0.33.5",
     "swagger-ui-express": "^5.0.1",
     "zod": "^3.22.4"

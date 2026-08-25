@@ -2,6 +2,7 @@ import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axio
 import { queryClient } from './query-client';
 import { store } from '../store';
 import { setTokens } from '../store/slices/authSlice';
+import { captureException } from './posthog';
 
 const BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -62,6 +63,17 @@ api.interceptors.response.use(
     const status = err.response?.status;
     const code = err.response?.data?.error?.code;
     const originalConfig = err.config;
+
+    // Error tracking: reporta falhas de API (exceto 401 de refresh que já é fluxo normal)
+    const isAuthRefresh = (originalConfig?.url ?? '').includes('/auth/refresh');
+    if (!(status === 401 && (code === 'TOKEN_EXPIRED' || isAuthRefresh))) {
+      captureException(err, {
+        method: originalConfig?.method,
+        url: originalConfig?.url,
+        status,
+        code,
+      });
+    }
 
     // Tenta refresh apenas em 401 TOKEN_EXPIRED e apenas uma vez por requisição
     if (status === 401 && code === 'TOKEN_EXPIRED' && originalConfig && !originalConfig._retry) {

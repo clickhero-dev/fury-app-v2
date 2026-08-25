@@ -6,6 +6,7 @@ preferWorkspacePackages: true
 allowBuilds:
   '@scarf/scarf': false
   bcrypt: true
+  core-js: false
   esbuild: true
   msgpackr-extract: true
   sharp: true

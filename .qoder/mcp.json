@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "/home/diogo/fury-app-v2/.venv/bin/python3",
+      "args": [
+        "-m",
+        "code_review_graph",
+        "serve"
+      ],
+      "cwd": "/home/diogo/fury-app-v2",
+      "type": "stdio"
+    }
+  }
+}

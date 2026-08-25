@@ -3,12 +3,14 @@ import { useAppDispatch } from '../store/hooks';
 import { login as loginAction } from '../store/slices/authSlice';
 import type { LoginRequest, LoginResponse } from '../types/auth';
 import api from '../lib/api';
+import { captureEvent } from '../lib/posthog';
 
 export function useLogin() {
   const dispatch = useAppDispatch();
 
   return useMutation({
     mutationFn: async (data: LoginRequest): Promise<LoginResponse> => {
+      captureEvent('login_iniciado');
       const response = await api.post<{ success: boolean; data: LoginResponse; timestamp: string }>(
         '/auth/login',
         data
@@ -27,7 +29,11 @@ export function useLogin() {
         tenantId: result.user.tenantId ?? '',
       }));
 
+      captureEvent('login_sucesso');
       return result;
+    },
+    onError: (error) => {
+      captureEvent('login_falha', { message: error instanceof Error ? error.message : undefined });
     },
   });
 }

@@ -29,6 +29,7 @@
     "clsx": "^2.1.1",
     "esbuild": "0.28.0",
     "lucide-react": "^1.14.0",
+    "posthog-js": "^1.418.14",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-hook-form": "^7.77.0",
