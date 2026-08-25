@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { captureException } from '@/lib/posthog';
 
 /** Evento recebido via SSE do FURY Engine. */
 export interface FuryFeedEvent {
@@ -148,6 +149,7 @@ export function useFuryLiveFeed() {
 
     const handleError = () => {
       console.warn('[SSE] EventSource error - will attempt to reconnect');
+      captureException(new Error('SSE connection error'), { source: 'useFuryLiveFeed' });
       try {
         eventSource.close();
       } catch (e) {

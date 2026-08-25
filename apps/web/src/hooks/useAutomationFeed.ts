@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { captureException } from '@/lib/posthog';
 
 /** Item do feed de automações executadas pelo FURY Engine. */
 export interface AutomationFeedItem {
@@ -67,6 +68,7 @@ export function useAutomationFeed() {
     const handleError = () => {
       setIsConnected(false);
       console.warn('SSE connection error, will retry automatically');
+      captureException(new Error('SSE connection error'), { source: 'useAutomationFeed' });
     };
 
     eventSource.addEventListener('message', handleMessage);

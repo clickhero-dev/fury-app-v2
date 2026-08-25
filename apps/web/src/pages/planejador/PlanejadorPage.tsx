@@ -7,6 +7,7 @@ import { GeneratingState } from './components/GeneratingState';
 import { IdleStatus } from './components/IdleStatus';
 import type { PrerequisiteCheck } from './components/IdleStatus';
 import type { JobStatus, ViewState } from './types';
+import { captureEvent } from '@/lib/posthog';
 
 interface AgentLabelsResponse {
   order: string[];
@@ -85,6 +86,7 @@ export function PlanejadorPage() {
 
   const generateMutation = useMutation({
     mutationFn: async () => {
+      captureEvent('gerar_plano_iniciado');
       const { data } = await api.post('/planner/generate');
       return data.data as JobStatus;
     },
@@ -94,10 +96,12 @@ export function PlanejadorPage() {
       setView('generating');
       setErrorMsg(null);
       setRecovered(false);
+      captureEvent('gerar_plano_sucesso', { jobId: job.id });
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.message || err?.message || 'Erro ao iniciar geração';
       setErrorMsg(msg);
+      captureEvent('gerar_plano_falha', { message: msg });
     },
   });
 

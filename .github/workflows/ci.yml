@@ -8,6 +8,8 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     services:
       postgres:
         image: postgres:16
@@ -47,3 +49,19 @@ jobs:
       - run: npm run test:unit
         env:
           TEST_DATABASE_URL: postgresql://fury:fury_local@localhost:5432/fury_test
+
+      - name: Run coverage
+        run: npm run test:coverage:ci
+        env:
+          TEST_DATABASE_URL: postgresql://fury:fury_local@localhost:5432/fury_test
+
+      - name: Generate coverage badge
+        run: npm run coverage:badge
+
+      - name: Publish coverage badge to badges branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f coverage/badge.svg
+          git commit -m "chore(ci): update coverage badge [skip ci]" || echo "no changes"
+          git push origin HEAD:badges --force

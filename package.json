@@ -21,6 +21,8 @@
     "test:prod": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:ci": "vitest run --coverage --exclude \"**/auth.test.ts\" --exclude \"**/automation.test.ts\" --exclude \"**/campaigns.test.ts\" --exclude \"**/metrics.test.ts\" --exclude \"**/multitenancy.test.ts\" --exclude \"**/request-logger.test.ts\" --exclude \"**/seed-login.test.ts\" --exclude \"**/studio-assets.test.ts\" --exclude \"**/studio.test.ts\" --exclude \"**/studio-copy.test.ts\" --exclude \"**/landing-page.test.ts\"",
+    "coverage:badge": "node scripts/coverage-badge.mjs",
     "test:unit": "vitest run apps/api/src/__tests__/billing-subscription.test.ts apps/api/src/__tests__/campaigns-create.unit.test.ts apps/api/src/__tests__/campaigns-service.test.ts apps/api/src/__tests__/date-sao-paulo.test.ts apps/api/src/__tests__/jwt.test.ts apps/api/src/__tests__/meta-conversion-events.test.ts apps/api/src/__tests__/meta-insights-parser.test.ts apps/api/src/__tests__/metrics-formatter.test.ts apps/api/src/__tests__/rate-limit.test.ts apps/api/src/__tests__/sanitize-log-data.test.ts apps/api/src/__tests__/sse.test.ts apps/api/src/__tests__/studio-copy-simple.test.ts apps/api/src/__tests__/studio-copy-validate.test.ts apps/api/src/__tests__/planner-create-post.test.ts apps/api/src/__tests__/planner-get-calendar.test.ts apps/api/src/__tests__/planner-move-post.test.ts apps/api/src/__tests__/planner-calendar-integration.test.ts",
     "qa:audit": "bash scripts/coverage-audit.sh",
     "security:audit": "bash scripts/security-audit.sh",
