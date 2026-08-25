@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,23 +20,6 @@ export function ForgotPasswordPage() {
   const [error, setError] = useState<string>('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [successEmail, setSuccessEmail] = useState<string>('');
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('ady-theme');
-
-    if (savedTheme === 'escuro' || savedTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else if (savedTheme === 'claro' || savedTheme === 'light') {
-      document.documentElement.classList.remove('dark');
-    } else {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (prefersDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    }
-  }, []);
 
   const {
     register,

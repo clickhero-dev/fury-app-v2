@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -33,24 +33,6 @@ export function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [resendCountdown, setResendCountdown] = useState<number>(0);
-
-  // 🔄 DETECÇÃO DO MODO DO NAVEGADOR / SISTEMA
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('ady-theme');
-
-    if (savedTheme === 'escuro' || savedTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else if (savedTheme === 'claro' || savedTheme === 'light') {
-      document.documentElement.classList.remove('dark');
-    } else {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (prefersDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    }
-  }, []);
 
   const {
     register,

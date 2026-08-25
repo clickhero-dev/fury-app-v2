@@ -1,26 +1,7 @@
-import { useEffect } from 'react';
 import { AlertTriangle, Mail, ArrowRight } from 'lucide-react';
 import { AdySymbol } from '@/components/AdySymbol';
 
 export function AssinaturaVencida() {
-  // Garantir sincronização/limpeza inicial de tema se necessário
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('ady-theme');
-
-    if (savedTheme === 'escuro' || savedTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else if (savedTheme === 'claro' || savedTheme === 'light') {
-      document.documentElement.classList.remove('dark');
-    } else {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (prefersDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    }
-  }, []);
-
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-[#f3f6f8] px-5 py-16 text-slate-900 transition-colors duration-300 overflow-hidden">
       

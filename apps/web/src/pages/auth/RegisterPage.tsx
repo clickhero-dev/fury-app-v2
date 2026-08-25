@@ -41,21 +41,7 @@ export function RegisterPage() {
       }
     }
 
-    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('ady-theme');
-
-    if (savedTheme === 'escuro' || savedTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else if (savedTheme === 'claro' || savedTheme === 'light') {
-      document.documentElement.classList.remove('dark');
-    } else {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (prefersDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    }
-  }, [navigate]);
+    }, [navigate]);
 
   const buttonHover =
     'transition-all duration-200 hover:border-[#1E88A8]/50 hover:bg-white dark:hover:bg-[#1a1b17] [&:hover:not(:disabled)]:shadow-md [&:active:not(:disabled)]:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed';

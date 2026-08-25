@@ -60,21 +60,7 @@ export function LoginPage() {
       }
     }
 
-    const savedTheme = localStorage.getItem('theme') || localStorage.getItem('ady-theme');
-
-    if (savedTheme === 'escuro' || savedTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else if (savedTheme === 'claro' || savedTheme === 'light') {
-      document.documentElement.classList.remove('dark');
-    } else {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (prefersDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    }
-  }, []);
+    }, []);
 
   const {
     register,

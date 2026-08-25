@@ -12,6 +12,26 @@ export interface AuthState {
   theme: 'light' | 'dark';
 }
 
+function getInitialTheme(): 'light' | 'dark' {
+  // Fonte única: fury-theme. Fallbacks legados ('theme' do antigo Context, 'ady-theme').
+  const stored =
+    localStorage.getItem('fury-theme') ??
+    localStorage.getItem('theme') ??
+    localStorage.getItem('ady-theme');
+
+  if (stored === 'dark' || stored === 'escuro') return 'dark';
+  if (stored === 'light' || stored === 'claro') return 'light';
+
+  // Sem escolha salva (primeiro acesso ou 'system'): segue a preferência do SO
+  let prefersDark = false;
+  try {
+    prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  } catch {
+    // matchMedia indisponível: mantém claro
+  }
+  return prefersDark ? 'dark' : 'light';
+}
+
 function hydrate(): AuthState {
   try {
     const user = JSON.parse(localStorage.getItem('user') ?? '{}');
@@ -24,7 +44,7 @@ function hydrate(): AuthState {
       metaId: null,
       plan: null,
       planExpiration: null,
-      theme: localStorage.getItem('fury-theme') === 'dark' ? 'dark' : 'light',
+      theme: getInitialTheme(),
     };
   } catch {
     return {
@@ -36,7 +56,7 @@ function hydrate(): AuthState {
       metaId: null,
       plan: null,
       planExpiration: null,
-      theme: 'light',
+      theme: getInitialTheme(),
     };
   }
 }
