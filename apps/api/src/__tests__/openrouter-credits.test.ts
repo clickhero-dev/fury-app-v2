@@ -83,6 +83,35 @@ describe('openrouterService.getCreditState', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
+
+  it('extrai saldo do shape data.credits', async () => {
+    mockFetchForAuthKey({ data: { credits: 1.5 } });
+
+    const state = await openrouterService.getCreditState();
+
+    expect(state.credits).toBeCloseTo(1.5, 2);
+    expect(state.hasCredits).toBe(true);
+  });
+
+  it('extrai saldo do shape total_credits - total_usage', async () => {
+    mockFetchForAuthKey({ data: { total_credits: 5, total_usage: 2 } });
+
+    const state = await openrouterService.getCreditState();
+
+    expect(state.credits).toBeCloseTo(3, 2);
+    expect(state.hasCredits).toBe(true);
+  });
+
+  it('fail-open quando o fetch de saldo LANÇA erro de rede', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw new TypeError('network down');
+    });
+
+    const state = await openrouterService.getCreditState();
+
+    expect(state.hasCredits).toBe(true);
+    expect(state.credits).toBeNull();
+  });
 });
 
 describe('openrouterService.assertCreditsAvailable', () => {
@@ -148,6 +177,38 @@ describe('openrouterService.generateImage — créditos insuficientes', () => {
       const u = typeof url === 'string' ? url : url.toString();
       if (u === `${OPENROUTER_BASE}/images`) {
         return new Response(JSON.stringify({ error: { message: 'Bad gateway', code: 502 } }), { status: 502 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    await expect(openrouterService.generateImage({ model: 'black-forest-labs/flux.2-klein-4b', prompt: 'test' }))
+      .rejects.toMatchObject({
+        statusCode: 502,
+        code: 'OPENROUTER_IMAGE_ERROR',
+      });
+  });
+
+  it('mapeia 402 mesmo quando o corpo da resposta não é JSON (mensagem Insufficient credits)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: RequestInfo | URL) => {
+      const u = typeof url === 'string' ? url : url.toString();
+      if (u === `${OPENROUTER_BASE}/images`) {
+        return new Response('Insufficient credits. Add more.', { status: 402 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    await expect(openrouterService.generateImage({ model: 'black-forest-labs/flux.2-klein-4b', prompt: 'test' }))
+      .rejects.toMatchObject({
+        statusCode: 402,
+        code: 'OPENROUTER_INSUFFICIENT_CREDITS',
+      });
+  });
+
+  it('mantém 502 para corpo vazio (isInsufficientCreditsError guard de body vazio)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: RequestInfo | URL) => {
+      const u = typeof url === 'string' ? url : url.toString();
+      if (u === `${OPENROUTER_BASE}/images`) {
+        return new Response('', { status: 502 });
       }
       return new Response('not found', { status: 404 });
     });
