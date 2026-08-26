@@ -66,7 +66,7 @@ function brandDescription(ctx: PlannerContext): string {
  * nicho da empresa usando o conhecimento do modelo (sem busca externa).
  */
 export async function researchImportantDates(context: PlannerContext): Promise<ImportantDate[]> {
-  const agent = createBasicAgent(RESEARCH_SYSTEM_PROMPT, 'deepseek/deepseek-chat-v4-flash', datesSchema);
+  const agent = createBasicAgent(RESEARCH_SYSTEM_PROMPT, 'deepseek/deepseek-v4-flash', datesSchema);
   const result = await agent.invoke({ messages: [{ role: 'human', content: brandDescription(context) }] });
 
   const structured = (result as { structuredResponse?: { dates?: ImportantDate[] } }).structuredResponse;
@@ -82,7 +82,7 @@ export async function generateContentPrompts(
   context: PlannerContext,
   dates: ImportantDate[],
 ): Promise<PlannerPrompt[]> {
-  const agent = createBasicAgent(PROMPTS_SYSTEM_PROMPT, 'deepseek/deepseek-chat-v4-flash', postsSchema);
+  const agent = createBasicAgent(PROMPTS_SYSTEM_PROMPT, 'deepseek/deepseek-v4-flash', postsSchema);
   const user = [
     brandDescription(context),
     '',

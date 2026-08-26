@@ -13,7 +13,7 @@ export type CreateOpenRouterAgentParams = {
 export function createOpenRouterAgent({
   tools = [],
   systemPrompt = "You are a helpful assistant",
-  model = "deepseek/deepseek-chat-v4-flash",
+  model = "deepseek/deepseek-v4-flash",
   temperature = 0,
   responseFormat,
 }: CreateOpenRouterAgentParams = {}) {
@@ -28,7 +28,7 @@ export function createOpenRouterAgent({
 
 export function createBasicAgent(
   systemPrompt: string,
-  model = "deepseek/deepseek-chat-v4-flash",
+  model = "deepseek/deepseek-v4-flash",
   responseFormat?: CreateOpenRouterAgentParams["responseFormat"]
 ) {
   return createOpenRouterAgent({
