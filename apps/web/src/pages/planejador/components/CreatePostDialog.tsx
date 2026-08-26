@@ -1,8 +1,9 @@
 import { useState, useRef, type DragEvent } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import { LayoutGrid, Image, Sparkles, Film, Upload, Trash2, X, Plus } from 'lucide-react';
+import { LayoutGrid, Image, Sparkles, Film, Upload, Trash2, X, Plus, FolderOpen, Image as ImageIcon, Loader2, Check } from 'lucide-react';
 import api from '@/lib/api';
+import type { StudioAsset } from '@/types/studio';
 
 interface Props {
   mode: 'schedule' | 'now';
@@ -24,6 +25,11 @@ const TYPE_OPTIONS = [
 
 const MAX_CAROUSEL_IMAGES = 5;
 
+const MEDIA_SOURCE_OPTIONS = [
+  { value: 'upload', label: 'Enviar mídia', icon: Upload, desc: 'Carregar do seu dispositivo' },
+  { value: 'library', label: 'Biblioteca do Estúdio', icon: FolderOpen, desc: 'Usar imagem já gerada' },
+] as const;
+
 export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, preselectedDate, onError }: Props) {
   const [caption, setCaption] = useState('');
   const [postType, setPostType] = useState('image');
@@ -35,8 +41,22 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   const [carouselPreviews, setCarouselPreviews] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [showSchedule, setShowSchedule] = useState(mode === 'schedule' || !!preselectedDate);
+  const [mediaSource, setMediaSource] = useState<'upload' | 'library'>('upload');
+  const [selectedLibraryAsset, setSelectedLibraryAsset] = useState<StudioAsset | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const carouselInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch studio assets for library picker
+  const { data: studioAssetsData, isLoading: assetsLoading } = useQuery({
+    queryKey: ['studio/assets'],
+    queryFn: async () => {
+      const response = await api.get('/studio/assets');
+      return response.data.assets as StudioAsset[];
+    },
+    retry: 1,
+  });
+
+  const libraryImages = studioAssetsData?.filter(a => a.type === 'image' && a.url && a.complianceStatus === 'approved') ?? [];
 
   // Fase 8: Prioriza preselectedDate (novo) sobre preselectedDay (legado)
   const getEffectiveDate = (): string => {
@@ -103,31 +123,37 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
       let imageUrl: string | undefined;
       let imageUrls: string[] | undefined;
 
-      // Upload single image/video
-      if (mediaFile) {
-        const formData = new FormData();
-        formData.append('file', mediaFile);
-        const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        imageUrl = uploadRes.data.url;
-      }
-      // Fase 8: Enviar `date` (novo formato) ao invés de `dayIndex` (legado)
-      // API aceita ambos (z.union), mas novo formato é preferido
-
-      // Upload carousel images
-      if (postType === 'carousel' && carouselFiles.length > 0) {
-        const uploadedUrls: string[] = [];
-        for (const file of carouselFiles) {
+      // Handle library selection
+      if (mediaSource === 'library' && selectedLibraryAsset?.url) {
+        imageUrl = selectedLibraryAsset.url;
+      } else {
+        // Upload single image/video
+        if (mediaFile) {
           const formData = new FormData();
-          formData.append('file', file);
+          formData.append('file', mediaFile);
           const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
           });
-          uploadedUrls.push(uploadRes.data.url);
+          imageUrl = uploadRes.data.url;
         }
-        imageUrls = uploadedUrls.length > 0 ? uploadedUrls : undefined;
+        // Fase 8: Enviar `date` (novo formato) ao invés de `dayIndex` (legado)
+        // API aceita ambos (z.union), mas novo formato é preferido
+
+        // Upload carousel images
+        if (postType === 'carousel' && carouselFiles.length > 0) {
+          const uploadedUrls: string[] = [];
+          for (const file of carouselFiles) {
+            const formData = new FormData();
+            formData.append('file', file);
+            const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            uploadedUrls.push(uploadRes.data.url);
+          }
+          imageUrls = uploadedUrls.length > 0 ? uploadedUrls : undefined;
+        }
       }
+
       await api.post('/planner/posts', {
         caption,
         postType,
@@ -170,7 +196,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
 
   const canCreate = caption.trim() && !mutation.isPending && (
     (postType === 'carousel' && carouselFiles.length > 0) ||
-    (postType !== 'carousel' && mediaFile)
+    (postType !== 'carousel' && (mediaFile || (mediaSource === 'library' && selectedLibraryAsset)))
   );
 
   return (
@@ -192,99 +218,186 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
             <label className="block text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2">
               Mídia <span className="text-error">*</span>
             </label>
-            {postType === 'carousel' ? (
-              // Carousel: multiple images
-              <div>
-                {carouselPreviews.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    {carouselPreviews.map((preview, idx) => {
-                      return (
-                        <div key={idx} className="relative group rounded-xl overflow-hidden border border-border bg-surface-secondary aspect-square">
-                          <img src={preview} alt={`Carousel ${idx + 1}`} className="w-full h-full object-cover" />
-                          <button
-                            onClick={() => removeCarouselFile(idx)}
-                            className="absolute top-1 right-1 p-1 rounded bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
+
+            {/* Media source selector: Upload vs Library */}
+            <div className="flex gap-2 mb-3">
+              {MEDIA_SOURCE_OPTIONS.map(opt => {
+                const Icon = opt.icon;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      setMediaSource(opt.value);
+                      if (opt.value === 'upload') {
+                        setSelectedLibraryAsset(null);
+                      }
+                    }}
+                    className={clsx(
+                      'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border transition-all text-sm font-medium',
+                      mediaSource === opt.value
+                        ? 'border-accent bg-accent/10 text-accent shadow-[0_0_12px_rgba(234,88,12,0.15)]'
+                        : 'border-border hover:border-text-tertiary text-text-secondary hover:text-text-primary',
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{opt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {mediaSource === 'upload' ? (
+              // Upload mode
+              <>
+                {postType === 'carousel' ? (
+                  // Carousel: multiple images
+                  <div>
+                    {carouselPreviews.length > 0 && (
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        {carouselPreviews.map((preview, idx) => {
+                          return (
+                            <div key={idx} className="relative group rounded-xl overflow-hidden border border-border bg-surface-secondary aspect-square">
+                              <img src={preview} alt={`Carousel ${idx + 1}`} className="w-full h-full object-cover" />
+                              <button
+                                onClick={() => removeCarouselFile(idx)}
+                                className="absolute top-1 right-1 p-1 rounded bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {carouselFiles.length < MAX_CAROUSEL_IMAGES && (
+                      <div
+                        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                        onDragLeave={() => setDragOver(false)}
+                        onDrop={handleCarouselDrop}
+                        onClick={() => carouselInputRef.current?.click()}
+                        className={clsx(
+                          'flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-all',
+                          dragOver
+                            ? 'border-accent bg-accent/10'
+                            : 'border-border hover:border-text-tertiary bg-surface-secondary',
+                        )}
+                      >
+                        <Plus className="h-8 w-8 text-text-tertiary mb-2" />
+                        <p className="text-sm text-text-secondary font-medium">Adicionar imagem ({carouselFiles.length}/{MAX_CAROUSEL_IMAGES})</p>
+                        <p className="text-xs text-text-tertiary mt-1">PNG, JPG, WebP</p>
+                      </div>
+                    )}
+                    <input
+                      ref={carouselInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      multiple
+                      onChange={e => e.target.files && handleCarouselFiles(Array.from(e.target.files))}
+                      className="hidden"
+                    />
+                  </div>
+                ) : (
+                  // Single image/video
+                  <div>
+                    {mediaPreview ? (
+                      <div className="relative group rounded-xl overflow-hidden border border-border bg-surface-secondary">
+                        {mediaFile?.type.startsWith('video/') ? (
+                          <video src={mediaPreview} controls className="w-full aspect-square object-cover" />
+                        ) : (
+                          <img src={mediaPreview} alt="Preview" className="w-full aspect-square object-cover" />
+                        )}
+                        <button
+                          onClick={() => { setMediaFile(null); setMediaPreview(null); }}
+                          className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
+                          <p className="text-xs text-white font-medium truncate">{mediaFile?.name}</p>
+                          <p className="text-[10px] text-white/70">{(mediaFile!.size / 1024 / 1024).toFixed(1)} MB</p>
                         </div>
+                      </div>
+                    ) : (
+                      <div
+                        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                        onDragLeave={() => setDragOver(false)}
+                        onDrop={handleDrop}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={clsx(
+                          'flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-all',
+                          dragOver
+                            ? 'border-accent bg-accent/10 scale-[1.02]'
+                            : 'border-border hover:border-text-tertiary bg-surface-secondary',
+                        )}
+                      >
+                        <Upload className="h-8 w-8 text-text-tertiary mb-2" />
+                        <p className="text-sm text-text-secondary font-medium">Arraste ou clique</p>
+                        <p className="text-xs text-text-tertiary mt-1">PNG, JPG, WebP, MP4</p>
+                      </div>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
+                      onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
+                      className="hidden"
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              // Library mode
+              <div>
+                {assetsLoading ? (
+                  <div className="flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed bg-surface-secondary">
+                    <Loader2 className="h-8 w-8 animate-spin text-brand mb-2" />
+                    <p className="text-sm text-text-secondary font-medium">Carregando biblioteca...</p>
+                  </div>
+                ) : libraryImages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed bg-surface-secondary text-center px-4">
+                    <ImageIcon className="h-10 w-10 text-text-tertiary mb-2" />
+                    <p className="text-sm text-text-secondary font-medium">Nenhuma imagem na biblioteca</p>
+                    <p className="text-xs text-text-tertiary mt-1">Crie imagens no Estúdio ou mude para "Enviar mídia"</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                    {libraryImages.map((asset) => {
+                      const imageUrl = asset.url?.startsWith('http') ? asset.url : `${api.defaults.baseURL?.replace(/\/api$/, '')}${asset.url}`;
+                      return (
+                        <button
+                          key={asset.id}
+                          type="button"
+                          onClick={() => setSelectedLibraryAsset(selectedLibraryAsset?.id === asset.id ? null : asset)}
+                          className={clsx(
+                            'relative aspect-square rounded-xl overflow-hidden border-2 transition-all',
+                            selectedLibraryAsset?.id === asset.id
+                              ? 'border-accent ring-2 ring-accent/30'
+                              : 'border-transparent hover:border-brand/50',
+                          )}
+                        >
+                          <img
+                            src={imageUrl}
+                            alt={asset.name || 'Asset do Estúdio'}
+                            className="w-full h-full object-cover"
+                          />
+                          {selectedLibraryAsset?.id === asset.id && (
+                            <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                              <div className="bg-accent rounded-full p-1.5">
+                                <Check className="h-5 w-5 text-white" />
+                              </div>
+                            </div>
+                          )}
+                        </button>
                       );
                     })}
                   </div>
                 )}
-                {carouselFiles.length < MAX_CAROUSEL_IMAGES && (
-                  <div
-                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                    onDragLeave={() => setDragOver(false)}
-                    onDrop={handleCarouselDrop}
-                    onClick={() => carouselInputRef.current?.click()}
-                    className={clsx(
-                      'flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-all',
-                      dragOver
-                        ? 'border-accent bg-accent/10'
-                        : 'border-border hover:border-text-tertiary bg-surface-secondary',
-                    )}
-                  >
-                    <Plus className="h-8 w-8 text-text-tertiary mb-2" />
-                    <p className="text-sm text-text-secondary font-medium">Adicionar imagem ({carouselFiles.length}/{MAX_CAROUSEL_IMAGES})</p>
-                    <p className="text-xs text-text-tertiary mt-1">PNG, JPG, WebP</p>
-                  </div>
+                {selectedLibraryAsset && (
+                  <p className="mt-2 text-xs text-text-tertiary text-center">
+                    Selecionado: {selectedLibraryAsset.name || 'Imagem do Estúdio'}
+                  </p>
                 )}
-                <input
-                  ref={carouselInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  multiple
-                  onChange={e => e.target.files && handleCarouselFiles(Array.from(e.target.files))}
-                  className="hidden"
-                />
-              </div>
-            ) : (
-              // Single image/video
-              <div>
-                {mediaPreview ? (
-                  <div className="relative group rounded-xl overflow-hidden border border-border bg-surface-secondary">
-                    {mediaFile?.type.startsWith('video/') ? (
-                      <video src={mediaPreview} controls className="w-full aspect-square object-cover" />
-                    ) : (
-                      <img src={mediaPreview} alt="Preview" className="w-full aspect-square object-cover" />
-                    )}
-                    <button
-                      onClick={() => { setMediaFile(null); setMediaPreview(null); }}
-                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
-                      <p className="text-xs text-white font-medium truncate">{mediaFile?.name}</p>
-                      <p className="text-[10px] text-white/70">{(mediaFile!.size / 1024 / 1024).toFixed(1)} MB</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                    onDragLeave={() => setDragOver(false)}
-                    onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={clsx(
-                      'flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-all',
-                      dragOver
-                        ? 'border-accent bg-accent/10 scale-[1.02]'
-                        : 'border-border hover:border-text-tertiary bg-surface-secondary',
-                    )}
-                  >
-                    <Upload className="h-8 w-8 text-text-tertiary mb-2" />
-                    <p className="text-sm text-text-secondary font-medium">Arraste ou clique</p>
-                    <p className="text-xs text-text-tertiary mt-1">PNG, JPG, WebP, MP4</p>
-                  </div>
-                )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
-                  onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
-                  className="hidden"
-                />
               </div>
             )}
           </div>

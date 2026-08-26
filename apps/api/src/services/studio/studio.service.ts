@@ -10,6 +10,7 @@ import { uploadAsset } from '../storage/storage.service.js';
 import { openrouterService } from '../llms/openrouter.service.js';
 import { generateId } from '../../agents/utils.js';
 import type { PlannerPrompt } from '../../agents/types.js';
+import { checkAndCompletePlannerJob } from '../planner/planner-studio.service.js';
 
 const CHAR_LIMITS = {
   headline: 40,
@@ -57,11 +58,27 @@ async function persistStudioImage(input: StudioGenerationJobData): Promise<Gener
     })
     .returning();
 
+  // Enfileira compliance check com retry
   const complianceQueue = await getComplianceQueue();
-  await complianceQueue.add('compliance-check', { creativeAssetId: asset.id, tenantId: input.tenantId }, {
-    removeOnComplete: 1000,
-    removeOnFail: 5000,
-  });
+  let complianceEnqueued = false;
+  let retries = 3;
+  while (!complianceEnqueued && retries > 0) {
+    try {
+      await complianceQueue.add('compliance-check', { creativeAssetId: asset.id, tenantId: input.tenantId }, {
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+      });
+      complianceEnqueued = true;
+    } catch (err) {
+      retries--;
+      if (retries === 0) {
+        // Rollback: deletar creativeAsset criado se compliance queue falhar definitivamente
+        await db.delete(creativeAssets).where(eq(creativeAssets.id, asset.id));
+        throw err;
+      }
+      await new Promise(r => setTimeout(r, 1000 * (4 - retries))); // backoff: 1s, 2s, 3s
+    }
+  }
 
   return {
     creativeAssetId: asset.id,
@@ -183,16 +200,82 @@ export function aspectForPlannerPostType(postType: PlannerPrompt['postType']): s
   return postType === 'reel' || postType === 'stories' ? '9:16' : '1:1';
 }
 
+const VALID_POST_TYPES = ['image', 'carousel', 'reel', 'stories'] as const;
+const VALID_PLATFORMS = ['instagram', 'facebook', 'both'] as const;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Normaliza um post do planner antes do insert no calendário.
+ * Garante data YYYY-MM-DD válida (fallback: amanhã UTC), enums válidos e
+ * arrays/hashes corretos — o insert em socialPosts NUNCA quebra por shape.
+ */
+export function normalizePlannerPost(post: PlannerPrompt): PlannerPrompt {
+  const date =
+    ISO_DATE_RE.test(post.date) && !Number.isNaN(new Date(`${post.date}T00:00:00Z`).getTime())
+      ? post.date
+      : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const postType = VALID_POST_TYPES.includes(post.postType as (typeof VALID_POST_TYPES)[number])
+    ? post.postType
+    : 'image';
+
+  const platform = VALID_PLATFORMS.includes(post.platform as (typeof VALID_PLATFORMS)[number])
+    ? post.platform
+    : 'instagram';
+
+  const hashtags = Array.isArray(post.hashtags) ? post.hashtags.filter((h): h is string => typeof h === 'string') : [];
+
+  return {
+    date,
+    title: typeof post.title === 'string' ? post.title : '',
+    caption: typeof post.caption === 'string' ? post.caption : '',
+    cta: typeof post.cta === 'string' ? post.cta : '',
+    hashtags,
+    imagePrompt: typeof post.imagePrompt === 'string' ? post.imagePrompt : '',
+    postType,
+    platform,
+  };
+}
+
 /**
  * Etapa 2.5 do fluxo: gera a imagem real via OpenRouter/FLUX, persiste no R2 e
  * grava o social_post no calendário. Chamado pelo worker studio (modo planner)
  * quando a imagem é concluída.
+ * IDEMPOTENTE: verifica se socialPost já existe para (planId, date, postType) antes de criar.
  */
 export async function processPlannerImageJob(input: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
-  const post = input.post;
+  const rawPost = input.post;
   const planId = input.planId;
-  if (!post || !planId) {
+  if (!rawPost || !planId) {
     throw new AppError(400, 'PLANNER_IMAGE_MISSING_DATA', 'Job de imagem do planner sem post/planId.');
+  }
+
+  // Normaliza data/enums antes de qualquer query/insert (defensivo).
+  const post = normalizePlannerPost(rawPost);
+
+  // IDEMPOTÊNCIA: Verificar se socialPost já foi criado para este post
+  const existingPost = await db.query.socialPosts.findFirst({
+    where: and(
+      eq(socialPosts.planId, planId),
+      eq(socialPosts.tenantId, input.tenantId),
+      eq(socialPosts.calendarDate, post.date),
+      eq(socialPosts.postType, post.postType),
+    ),
+  });
+
+  if (existingPost) {
+    // Job já processado com sucesso - retornar resultado existente
+    const existingAsset = await db.query.creativeAssets.findFirst({
+      where: and(
+        eq(creativeAssets.tenantId, input.tenantId),
+        eq(creativeAssets.url, existingPost.imageUrl ?? ''),
+      ),
+    });
+    return {
+      creativeAssetId: existingAsset?.id ?? '',
+      imageUrl: existingPost.imageUrl ?? '',
+      status: 'pending_compliance' as const,
+    };
   }
 
   const base64 = await openrouterService.generateImage({
@@ -206,6 +289,39 @@ export async function processPlannerImageJob(input: StudioGenerationJobData): Pr
   const fileName = `planner/${input.tenantId}/${planId}/${post.date}-${generateId()}.png`;
   const imageUrl = await uploadAsset(buffer, fileName, 'image/png');
 
+  // 1) Cria o creativeAsset para aparecer na biblioteca do estúdio
+  const [creativeAsset] = await db.insert(creativeAssets)
+    .values({
+      tenantId: input.tenantId,
+      type: 'image',
+      url: imageUrl,
+      complianceStatus: 'pending_compliance',
+    })
+    .returning();
+
+  // Enfileira compliance check com retry
+  const complianceQueue = await getComplianceQueue();
+  let complianceEnqueued = false;
+  let retries = 3;
+  while (!complianceEnqueued && retries > 0) {
+    try {
+      await complianceQueue.add('compliance-check', { creativeAssetId: creativeAsset.id, tenantId: input.tenantId }, {
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+      });
+      complianceEnqueued = true;
+    } catch (err) {
+      retries--;
+      if (retries === 0) {
+        // Rollback: deletar creativeAsset criado se compliance queue falhar definitivamente
+        await db.delete(creativeAssets).where(eq(creativeAssets.id, creativeAsset.id));
+        throw err;
+      }
+      await new Promise(r => setTimeout(r, 1000 * (4 - retries))); // backoff: 1s, 2s, 3s
+    }
+  }
+
+  // 2) Grava o social_post no calendário referenciando o creativeAsset
   const [saved] = await db.insert(socialPosts)
     .values({
       tenantId: input.tenantId,
@@ -225,8 +341,11 @@ export async function processPlannerImageJob(input: StudioGenerationJobData): Pr
     })
     .returning();
 
+  // Verificar se todos os posts do plano foram criados e completar o job do planner
+  await checkAndCompletePlannerJob(planId, input.tenantId, 8); // 8 posts esperados por padrão
+
   return {
-    creativeAssetId: String(saved.id),
+    creativeAssetId: String(creativeAsset.id),
     imageUrl,
     status: 'pending_compliance' as const,
   };

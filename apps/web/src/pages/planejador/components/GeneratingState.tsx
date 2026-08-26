@@ -15,7 +15,6 @@ interface GeneratingStateProps {
 const FALLBACK_ORDER = [
   'prerequisites',
   'context',
-  'research',
   'planner',
   'image-generation',
   'save',
@@ -24,7 +23,6 @@ const FALLBACK_ORDER = [
 const FALLBACK_LABELS: Record<string, string> = {
   prerequisites: 'Checando pré-requisitos e disponibilidade do gerador',
   context: 'Coletando contexto da sua empresa',
-  research: 'Levantando datas importantes para o seu negócio',
   planner: 'Criando os posts do calendário',
   'image-generation': 'Gerando as imagens dos posts',
   save: 'Salvando no calendário',
@@ -33,7 +31,6 @@ const FALLBACK_LABELS: Record<string, string> = {
 const STAGE_TO_AGENT_KEY: Record<string, string> = {
   'Prerequisites Agent': 'prerequisites',
   'Context Agent': 'context',
-  'Research Agent': 'research',
   'Planner Agent': 'planner',
   'Image Generation Agent': 'image-generation',
   'Salvar plano': 'save',

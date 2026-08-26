@@ -1,6 +1,6 @@
 export type StageStatus = 'PENDING' | 'RUNNING' | 'COMMITTED' | 'FAILED' | 'COMPLETED';
 
-export type WorkflowStatus = 'pending' | 'running' | 'done' | 'error';
+export type WorkflowStatus = 'pending' | 'running' | 'awaiting_images' | 'done' | 'error';
 
 export type ArtifactMap = Record<string, unknown>;
 

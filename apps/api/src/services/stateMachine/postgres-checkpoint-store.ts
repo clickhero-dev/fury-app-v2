@@ -115,4 +115,19 @@ export class PostgresCheckpointStore implements CheckpointStore {
     if (!row) return null;
     return toSnapshot(row as unknown as WorkflowJobRow);
   }
+
+  async findByPlanId(planId: string): Promise<WorkflowSnapshot | null> {
+    const row = await db.query.workflowJobs.findFirst({
+      where: eq(workflowJobs.planId, planId),
+      orderBy: [desc(workflowJobs.createdAt)],
+    });
+    if (!row) return null;
+    return toSnapshot(row as unknown as WorkflowJobRow);
+  }
+
+  async renewLock(jobId: string): Promise<void> {
+    await db.update(workflowJobs)
+      .set({ updatedAt: new Date() })
+      .where(eq(workflowJobs.id, jobId));
+  }
 }

@@ -7,7 +7,7 @@ import { parseAgentJSON } from '../../agents/utils.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { createInstagramMedia, getMediaContainerStatus, publishInstagramMedia, getUserFacebookPages } from '../../lib/meta-api.js';
 import { decryptMetaToken } from '../../utils/crypto.js';
-import { plannerStore } from '../../planner-workflow-runner.js';
+import { plannerStore } from '../../planner-store.js';
 import { enqueuePlanGeneration } from '../../workers/planner.worker.js';
 import { snapshotToJobStatus } from '../../agents/job-status-adapter.js';
 
@@ -638,7 +638,6 @@ export function getAgentLabels(): AgentLabelsResponse {
   const order = [
     'prerequisites',
     'context',
-    'research',
     'planner',
     'image-generation',
     'save',
@@ -647,7 +646,6 @@ export function getAgentLabels(): AgentLabelsResponse {
   const labels: Record<string, string> = {
     prerequisites: 'Checando pré-requisitos e disponibilidade do gerador',
     context: 'Coletando contexto da sua empresa',
-    research: 'Levantando datas importantes para o seu negócio',
     planner: 'Criando os posts do calendário',
     'image-generation': 'Gerando as imagens dos posts',
     save: 'Salvando no calendário',

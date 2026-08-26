@@ -5,7 +5,6 @@ import type { AgentStep, JobStatus } from '../agents/types.js';
 export const STAGE_TO_AGENT: Record<string, string> = {
   prerequisites: 'Prerequisites Agent',
   context: 'Context Agent',
-  research: 'Research Agent',
   planner: 'Planner Agent',
   'image-generation': 'Image Generation Agent',
   save: 'Salvar plano',
@@ -14,7 +13,6 @@ export const STAGE_TO_AGENT: Record<string, string> = {
 export const STAGE_ORDER = [
   'prerequisites',
   'context',
-  'research',
   'planner',
   'image-generation',
   'save',
@@ -44,7 +42,7 @@ export function snapshotToJobStatus(snapshot: WorkflowSnapshot): JobStatus {
   return {
     id: snapshot.id,
     tenantId: snapshot.tenantId,
-    status: snapshot.status,
+    status: snapshot.status === 'awaiting_images' ? 'generating' : snapshot.status,
     currentAgent: STAGE_TO_AGENT[snapshot.currentStage ?? ''] ?? 'Pipeline',
     agentProgress: steps,
     planId: snapshot.planId,

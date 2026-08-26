@@ -15,7 +15,7 @@ export interface AgentStep {
 export interface JobStatus {
   id: string;
   tenantId: string;
-  status: 'pending' | 'running' | 'generating' | 'done' | 'error';
+  status: 'pending' | 'running' | 'generating' | 'awaiting_images' | 'done' | 'error';
   currentAgent: string;
   agentProgress: AgentStep[];
   planId?: string;
@@ -44,17 +44,18 @@ export interface PlannerContext {
   city?: string;
 }
 
-/** Data importante/relevante para a cidade e/ou nicho. */
-export interface ImportantDate {
-  date: string; // ISO 'YYYY-MM-DD'
-  name: string;
-  reason?: string;
+/** Item de conteúdo retornado pela IA (shape achatado — sem datas/enums). */
+export interface PlannerContentItem {
+  title: string;
+  descricao: string;
+  prompt: string;
 }
 
 /**
- * Prompt de post estruturado produzido pelo agente langchain.
- * Carrega toda a informação do post + o prompt de geração de imagem,
- * e é consumido pela fila studio-generate-image (modo planner).
+ * Prompt de post estruturado produzido pelo planejador.
+ * Data/postType/platform/cta/hashtags são derivados no código (determinísticos);
+ * o conteúdo (title/caption/imagePrompt) vem da IA.
+ * É consumido pela fila studio-generate-image (modo planner).
  */
 export interface PlannerPrompt {
   date: string; // ISO 'YYYY-MM-DD' → calendar_date
@@ -68,5 +69,5 @@ export interface PlannerPrompt {
 }
 
 export interface PlannerPromptsOutput {
-  posts: PlannerPrompt[];
+  posts: PlannerContentItem[];
 }

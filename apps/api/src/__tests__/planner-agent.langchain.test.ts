@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { researchImportantDates, generateContentPrompts } from '../agents/planner.agent.js';
+import {
+  buildContentDates,
+  generateContentPrompts,
+  deriveCta,
+  deriveHashtags,
+} from '../agents/planner.agent.js';
 
 const mockInvoke = vi.fn();
 vi.mock('../agents/base.agent.js', () => ({
@@ -14,78 +19,143 @@ const context = {
   city: 'São Paulo',
 };
 
-describe('planner.agent langchain', () => {
+const FROM = new Date('2026-09-01T12:00:00Z');
+const FROM_DAY = '2026-09-01';
+
+describe('buildContentDates — espaçamento puro, determinístico', () => {
+  it('gera exatamente N datas no futuro, ordenadas e em formato YYYY-MM-DD', () => {
+    const dates = buildContentDates(8, FROM);
+    expect(dates).toHaveLength(8);
+    for (let i = 0; i < dates.length; i++) {
+      expect(dates[i].date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(dates[i].date > FROM_DAY).toBe(true);
+      if (i > 0) expect(dates[i].date > dates[i - 1].date).toBe(true);
+    }
+  });
+
+  it('é determinístico para o mesmo from', () => {
+    expect(buildContentDates(8, FROM)).toEqual(buildContentDates(8, FROM));
+  });
+
+  it('nomeia cada item de forma estável (Conteúdo #i)', () => {
+    const dates = buildContentDates(3, FROM);
+    expect(dates.map((d) => d.name)).toEqual(['Conteúdo #1', 'Conteúdo #2', 'Conteúdo #3']);
+  });
+});
+
+describe('generateContentPrompts — resposta achatada {title, descricao, prompt}', () => {
+  const dates = buildContentDates(3, FROM);
+
   beforeEach(() => {
     mockInvoke.mockReset();
   });
 
-  it('researchImportantDates retorna datas do structuredResponse', async () => {
+  it('gera PlannerPrompt[] com zip de datas/tipos/cta/hashtags a partir de resposta achatada', async () => {
     mockInvoke.mockResolvedValueOnce({
       structuredResponse: {
-        dates: [
-          { date: '2026-09-07', name: 'Independência do Brasil', reason: 'feriado nacional' },
-          { date: '2026-09-12', name: 'Dia do Pão', reason: 'nicho' },
+        posts: [
+          { title: 'Post A', descricao: 'legenda A', prompt: 'imagem A' },
+          { title: 'Post B', descricao: 'legenda B', prompt: 'imagem B' },
+          { title: 'Post C', descricao: 'legenda C', prompt: 'imagem C' },
         ],
       },
       messages: [],
     });
 
-    const dates = await researchImportantDates(context);
-    expect(dates).toHaveLength(2);
-    expect(dates[0]).toMatchObject({ date: '2026-09-07', name: 'Independência do Brasil' });
+    const posts = await generateContentPrompts(context, dates);
+    expect(posts).toHaveLength(3);
+    expect(posts[0]).toMatchObject({
+      date: dates[0].date,
+      title: 'Post A',
+      caption: 'legenda A',
+      imagePrompt: 'imagem A',
+      postType: 'image',
+      platform: 'instagram',
+    });
+    expect(posts[1].postType).toBe('stories'); // alterna feed/stories
+    expect(posts[2].postType).toBe('image');
+    expect(posts[0].cta).toBeTruthy();
+    expect(posts[0].hashtags.length).toBeGreaterThan(0);
   });
 
-  it('researchImportantDates faz fallback parseando a mensagem quando não há structuredResponse', async () => {
+  it('faz fallback parseando content em string com markdown quando não há structuredResponse', async () => {
     mockInvoke.mockResolvedValueOnce({
-      messages: [{ role: 'ai', content: '```json {"dates":[{"date":"2026-10-12","name":"Dia das Crianças"}]} ```' }],
+      messages: [{ role: 'ai', content: '```json {"posts":[{"title":"P","descricao":"D","prompt":"I"}]} ```' }],
     });
 
-    const dates = await researchImportantDates(context);
-    expect(dates).toHaveLength(1);
-    expect(dates[0].name).toBe('Dia das Crianças');
+    const posts = await generateContentPrompts(context, dates);
+    expect(posts).toHaveLength(3); // 1 válido + 2 fallback
+    expect(posts[0].title).toBe('P');
+    expect(posts[0].date).toBe(dates[0].date);
   });
 
-  it('researchImportantDates retorna [] para resposta sem dates', async () => {
-    mockInvoke.mockResolvedValueOnce({ structuredResponse: { dates: null } });
-    const dates = await researchImportantDates(context);
-    expect(dates).toEqual([]);
+  it('extrai conteúdo quando content é um ARRAY de blocos de texto (bug de estruturação da resposta)', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      messages: [{ role: 'ai', content: [{ type: 'text', text: '{"posts":[{"title":"Array","descricao":"D","prompt":"I"}]}' }] }],
+    });
+
+    const posts = await generateContentPrompts(context, dates);
+    expect(posts).toHaveLength(3);
+    expect(posts[0].title).toBe('Array');
   });
 
-  it('generateContentPrompts retorna exatamente 8 posts e inclui as datas no prompt', async () => {
-    const posts = Array.from({ length: 10 }, (_, i) => ({
-      date: '2026-09-0' + ((i % 9) + 1),
-      title: `Post ${i}`,
-      caption: 'legenda',
-      cta: 'compre',
-      hashtags: ['#pade'],
-      imagePrompt: 'imagem de pão',
-      postType: 'image' as const,
-      platform: 'instagram' as const,
-    }));
+  it('filtra itens inválidos (campo ausente/vazio) e preenche com fallback — nada vaza pro banco', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      structuredResponse: {
+        posts: [
+          { title: 'Ok', descricao: 'D', prompt: 'I' },
+          { title: 'Faltando campos' },
+          { title: '', descricao: 'D', prompt: 'I' },
+        ],
+      },
+      messages: [],
+    });
 
-    mockInvoke.mockResolvedValueOnce({ structuredResponse: { posts }, messages: [] });
-
-    const result = await generateContentPrompts(context, [{ date: '2026-09-07', name: 'feriado' }]);
-    expect(result).toHaveLength(8);
-
-    const callArg = (mockInvoke.mock.calls[0][0] as { messages: { content: string }[] });
-    expect(callArg.messages[0].content).toContain('2026-09-07');
-    expect(callArg.messages[0].content).toContain('Padaria Central');
+    const posts = await generateContentPrompts(context, dates);
+    expect(posts).toHaveLength(3);
+    expect(posts[0].title).toBe('Ok');
+    expect(posts[1].title).not.toBe('Faltando campos');
+    expect(posts[2].title).not.toBe('');
+    expect(posts.every((p) => p.title.length > 0 && p.caption.length > 0 && p.imagePrompt.length > 0)).toBe(true);
   });
 
-  it('generateContentPrompts limita a 8 mesmo se o modelo retornar mais', async () => {
-    const posts = Array.from({ length: 12 }, (_, i) => ({
-      date: '2026-10-01',
-      title: `p${i}`,
-      caption: 'c',
-      cta: 'cta',
-      hashtags: [],
-      imagePrompt: 'img',
-      postType: 'image' as const,
-      platform: 'both' as const,
-    }));
-    mockInvoke.mockResolvedValueOnce({ structuredResponse: { posts }, messages: [] });
-    const result = await generateContentPrompts(context, []);
-    expect(result).toHaveLength(8);
+  it('preenche itens faltantes com fallback determinístico — nunca retorna vazio', async () => {
+    mockInvoke.mockResolvedValueOnce({ structuredResponse: { posts: [] }, messages: [] });
+
+    const posts = await generateContentPrompts(context, dates); // 3 datas
+    expect(posts).toHaveLength(3);
+    expect(posts[0].title).toBeTruthy();
+    expect(posts[0].imagePrompt).toContain('pão artesanal');
+  });
+
+  it('limita ao número de datas mesmo se o modelo retornar mais', async () => {
+    const many = Array.from({ length: 10 }, (_, i) => ({ title: `p${i}`, descricao: 'c', prompt: 'img' }));
+    mockInvoke.mockResolvedValueOnce({ structuredResponse: { posts: many }, messages: [] });
+
+    const posts = await generateContentPrompts(context, dates);
+    expect(posts).toHaveLength(3);
+  });
+});
+
+describe('deriveCta / deriveHashtags — helpers determinísticos', () => {
+  it('deriveCta é determinístico e não vazio', () => {
+    expect(deriveCta(context, 0)).toBe(deriveCta(context, 0));
+    expect(deriveCta(context, 0).length).toBeGreaterThan(0);
+  });
+
+  it('deriveCta prioriza o objetivo do negócio quando reconhecível', () => {
+    expect(deriveCta({ ...context, goals: { objective: 'quero vender mais' } }, 0)).toContain('Compre');
+  });
+
+  it('deriveHashtags normaliza nicho/cidade/nome em hashtags sem espaço/acento', () => {
+    const tags = deriveHashtags(context);
+    expect(tags).toContain('#panificacao');
+    expect(tags).toContain('#saopaulo');
+    expect(tags).toContain('#padariacentral');
+    expect(tags.length).toBeGreaterThan(0);
+  });
+
+  it('deriveHashtags tem fallback quando contexto é mínimo', () => {
+    expect(deriveHashtags({ tenantId: 't1', businessName: '' }).length).toBeGreaterThan(0);
   });
 });

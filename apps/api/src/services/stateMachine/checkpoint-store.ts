@@ -33,6 +33,12 @@ export interface CheckpointStore {
 
   /** Busca job ativo (running/pending) por lock key — usado para lock de concorrência. */
   findActiveByLockKey(lockKey: string, workflow: string): Promise<WorkflowSnapshot | null>;
+
+  /** Busca job por planId — usado para completar job quando todas as imagens terminam. */
+  findByPlanId(planId: string): Promise<WorkflowSnapshot | null>;
+
+  /** Renova o timestamp updatedAt do job (heartbeat) para evitar expiração por stale timeout. */
+  renewLock(jobId: string): Promise<void>;
 }
 
 /** Implementação de referência em memória — útil para testes unitários. */
@@ -99,5 +105,19 @@ export class InMemoryCheckpointStore implements CheckpointStore {
       (r) => r.lockKey === lockKey && r.workflow === workflow && (r.status === 'running' || r.status === 'pending'),
     );
     return row ? structuredClone(row) : null;
+  }
+
+  async findByPlanId(planId: string): Promise<WorkflowSnapshot | null> {
+    const row = Array.from(this.rows.values())
+      .filter((r) => r.planId === planId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    return row ? structuredClone(row) : null;
+  }
+
+  async renewLock(jobId: string): Promise<void> {
+    const row = this.rows.get(jobId);
+    if (row) {
+      row.updatedAt = new Date().toISOString();
+    }
   }
 }
