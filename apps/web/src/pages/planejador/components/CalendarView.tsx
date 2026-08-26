@@ -40,7 +40,7 @@ import { Button } from '@/components/ui/button';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import api from '@/lib/api';
 import type { Post } from '../types';
-import { postToEvent, extractEventDropData, getPostFromEvent } from './calendarAdapter';
+import { postToEvent, extractEventDropData, getPostFromEvent, resolveEventClickAction } from './calendarAdapter';
 
 // ===== Types =====
 
@@ -206,25 +206,24 @@ export function CalendarView() {
       const post = getPostFromEvent(info.event);
       if (!post) return;
 
-      // Ctrl/Cmd+Click abre o painel lateral; clique normal alterna seleção
+      // Clique normal abre o painel de detalhes (modal lateral com as
+      // informações do post). Ctrl/Cmd+Clique alterna a multisseleção, que
+      // exibe a barra de ações em lote (Agendar/Desprogramar/Excluir).
       const isModifierClick = info.jsEvent.ctrlKey || info.jsEvent.metaKey;
 
-      if (isModifierClick) {
-        setSelectedPost(post as CalendarPost);
+      if (resolveEventClickAction(isModifierClick) === 'toggle-selection') {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(post.id)) next.delete(post.id);
+          else next.add(post.id);
+          return next;
+        });
         return;
       }
 
-      if (selectedIds.has(post.id)) {
-        const next = new Set(selectedIds);
-        next.delete(post.id);
-        setSelectedIds(next);
-      } else {
-        const next = new Set(selectedIds);
-        next.add(post.id);
-        setSelectedIds(next);
-      }
+      setSelectedPost(post as CalendarPost);
     },
-    [selectedIds],
+    [],
   );
 
   const handleDateClick = useCallback((info: { dateStr: string }) => {
@@ -299,6 +298,7 @@ export function CalendarView() {
     onSuccess: () => {
       const count = selectedIds.size;
       clearSelection();
+      setSelectedPost(null);
       setShowDeleteConfirm(false);
       showToast(count > 1 ? `${count} posts excluídos com sucesso!` : 'Post excluído com sucesso!');
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
@@ -546,6 +546,13 @@ export function CalendarView() {
               setSelectedPost(updated as CalendarPost);
               showToast('Post atualizado!');
               queryClient.invalidateQueries({ queryKey: ['calendar'] });
+            }}
+            onRequestDelete={(post) => {
+              // Exclui um post específico a partir do painel, reutilizando o
+              // fluxo de confirmação + DELETE /planner/posts/bulk (já testado).
+              setSelectedIds(new Set([post.id]));
+              setSelectedPost(null);
+              setShowDeleteConfirm(true);
             }}
           />
         )}

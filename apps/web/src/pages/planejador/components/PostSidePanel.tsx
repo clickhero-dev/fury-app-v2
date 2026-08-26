@@ -10,6 +10,7 @@ interface PostSidePanelProps {
   onClose: () => void;
   onUpdate: (post: Post) => void;
   onDuplicate?: (post: Post) => void;
+  onRequestDelete?: (post: Post) => void;
 }
 
 const postIcons: Record<string, typeof LayoutGrid> = {
@@ -81,7 +82,7 @@ function DiffField({ label, before, after }: { label: string; before?: string; a
   );
 }
 
-export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSidePanelProps) {
+export function PostSidePanel({ post, onClose, onUpdate, onDuplicate, onRequestDelete }: PostSidePanelProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiEditor, setShowAiEditor] = useState(false);
@@ -639,6 +640,15 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
                 </button>
               </div>
             </div>
+          )}
+          {/* Excluir post (apenas posts futuros agendados) */}
+          {!pendingEdit && !isPastOrPublished && onRequestDelete && (
+            <button
+              onClick={() => onRequestDelete(post)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-error/20 bg-error/10 hover:bg-error/20 text-error font-medium rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            >
+              <Trash2 className="w-4 h-4" /> Excluir post
+            </button>
           )}
         </div>
       </div>
