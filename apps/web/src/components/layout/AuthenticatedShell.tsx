@@ -4,8 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from '../Sidebar';
 import api from '../../lib/api';
 import { useSubscription } from '../../hooks/useBilling';
-import { useAppDispatch } from '../../store/hooks';
-import { setMetaId, setPlan } from '../../store/slices/authSlice';
+import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { setMetaId, setPlan, selectIsPlanExpired } from '../../store/slices/authSlice';
+import {
+  computeSubscriptionState,
+  shouldRedirectToExpired,
+} from './subscriptionGuard';
 
 /**
  * Contexto disponível para rotas filhas via `useOutletContext`.
@@ -87,38 +91,12 @@ export function AuthenticatedShell() {
     isFetched: subFetched,
   } = useSubscription();
 
-  const isExpired = useMemo(() => {
-    if (!subscription) return true;
+  const reduxPlanExpired = useAppSelector(selectIsPlanExpired);
 
-    if (subscription.isNonExpirable) {
-      if (['cancelled', 'inactive'].includes(subscription.status)) {
-        return true;
-      }
-      return false;
-    }
-
-    const now = new Date();
-
-    if (['cancelled', 'inactive', 'past_due'].includes(subscription.status)) {
-      return true;
-    }
-    if (
-      subscription.status === 'trial' &&
-      subscription.trialEndsAt &&
-      now > new Date(subscription.trialEndsAt)
-    ) {
-      return true;
-    }
-    if (
-      subscription.status === 'active' &&
-      subscription.currentPeriodEnd &&
-      now > new Date(subscription.currentPeriodEnd)
-    ) {
-      return true;
-    }
-
-    return false;
-  }, [subscription]);
+  const subscriptionState = useMemo(
+    () => computeSubscriptionState(subscription),
+    [subscription]
+  );
 
   const subscriptionChecked = !subLoading && subFetched;
 
@@ -130,7 +108,17 @@ export function AuthenticatedShell() {
     }
   }, [subscription, subscriptionChecked, dispatch]);
 
-  if (subscriptionChecked && shouldCheckSubscription && isExpired) {
+  // Redireciona para /assinatura-vencida apenas com evidência confiável.
+  // O Redux (valor persistido de um fetch bem-sucedido) prevalece: se ainda aponta data
+  // futura, o usuário é considerado válido mesmo que a chamada atual tenha falhado (500 etc),
+  // evitando exibir "assinatura vencida" para quem tem assinatura válida.
+  const redirectToExpired = shouldRedirectToExpired({
+    subscriptionChecked,
+    state: subscriptionState,
+    reduxPlanExpired,
+  });
+
+  if (shouldCheckSubscription && redirectToExpired) {
     return <Navigate to="/assinatura-vencida" replace />;
   }
 
