@@ -13,47 +13,29 @@ interface GeneratingStateProps {
 
 // Fallback hardcoded para compatibilidade caso a API falhe
 const FALLBACK_ORDER = [
+  'prerequisites',
   'context',
   'research',
-  'analytics',
-  'strategy',
   'planner',
-  'copywriter',
-  'creative',
   'image-generation',
-  'quality',
-  'scheduler',
-  'branding',
   'save',
 ];
 
 const FALLBACK_LABELS: Record<string, string> = {
-  context: 'Coletando contexto do seu negócio',
-  research: 'Pesquisando tendências e datas comemorativas',
-  analytics: 'Analisando melhores formatos e horários',
-  strategy: 'Definindo estratégia e pilares de conteúdo',
-  planner: 'Montando calendário de posts',
-  copywriter: 'Escrevendo legendas e CTAs',
-  creative: 'Criando prompts de imagem',
-  'image-generation': 'Gerando imagens dos posts',
-  quality: 'Validando qualidade do conteúdo',
-  scheduler: 'Programando melhores horários de publicação',
-  branding: 'Verificando compliance da marca',
-  save: 'Salvando plano no banco',
+  prerequisites: 'Checando pré-requisitos e disponibilidade do gerador',
+  context: 'Coletando contexto da sua empresa',
+  research: 'Levantando datas importantes para o seu negócio',
+  planner: 'Criando os posts do calendário',
+  'image-generation': 'Gerando as imagens dos posts',
+  save: 'Salvando no calendário',
 };
 
 const STAGE_TO_AGENT_KEY: Record<string, string> = {
+  'Prerequisites Agent': 'prerequisites',
   'Context Agent': 'context',
   'Research Agent': 'research',
-  'Analytics Agent': 'analytics',
-  'Strategy Agent': 'strategy',
   'Planner Agent': 'planner',
-  'Copywriter Agent': 'copywriter',
-  'Creative Agent': 'creative',
   'Image Generation Agent': 'image-generation',
-  'Quality Agent': 'quality',
-  'Scheduler Agent': 'scheduler',
-  'Branding Agent': 'branding',
   'Salvar plano': 'save',
 };
 

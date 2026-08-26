@@ -77,6 +77,6 @@ describe('snapshotToJobStatus', () => {
     expect(status.currentAgent).toBe('Planner Agent');
     expect(status.agentProgress.find((s) => s.name === 'Context Agent')?.status).toBe('completed');
     expect(status.agentProgress.find((s) => s.name === 'Planner Agent')?.status).toBe('running');
-    expect(status.agentProgress.find((s) => s.name === 'Branding Agent')?.status).toBe('pending');
+    expect(status.agentProgress.find((s) => s.name === 'Salvar plano')?.status).toBe('pending');
   });
 });

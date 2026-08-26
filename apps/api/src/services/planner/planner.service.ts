@@ -1,6 +1,6 @@
 import { db, campaignPlans, socialPosts, metaConnections, clientGoals, brandKits } from '@fury/db';
 import { eq, and, desc, gt, gte, lt, not, inArray, isNull, or, lte, sql } from 'drizzle-orm';
-import { generateId } from '../../agents/orchestrator.js';
+import { generateId } from '../../agents/utils.js';
 import { openrouterService } from '../llms/openrouter.service.js';
 import type { JobStatus } from '../../agents/types.js';
 import { parseAgentJSON } from '../../agents/utils.js';
@@ -11,6 +11,25 @@ import { plannerStore } from '../../planner-workflow-runner.js';
 import { enqueuePlanGeneration } from '../../workers/planner.worker.js';
 import { snapshotToJobStatus } from '../../agents/job-status-adapter.js';
 
+// Job de planejamento em andamento com mais de 15min é considerado "stale":
+// o fluxo limpa os dados do banco e permite gerar novamente.
+const PLANNER_JOB_STALE_MS = 15 * 60 * 1000;
+
+function formatWaitSeconds(seconds: number): string {
+  if (seconds >= 60) {
+    const min = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return s > 0 ? `${min}min e ${s}s` : `${min}min`;
+  }
+  return `${seconds}s`;
+}
+
+/** Remove os dados de planejamento (posts e planos) do tenant — usado no reset de job stale. */
+async function clearTenantPlannerData(tenantId: string): Promise<void> {
+  await db.delete(socialPosts).where(eq(socialPosts.tenantId, tenantId));
+  await db.delete(campaignPlans).where(eq(campaignPlans.tenantId, tenantId));
+}
+
 export async function startPlanGeneration(tenantId: string): Promise<JobStatus> {
   // Gate de créditos ANTES de qualquer etapa do pipeline: se não há saldo,
   // para por aqui e devolve 402 ao front — sem criar job, sem enfileirar,
@@ -19,7 +38,20 @@ export async function startPlanGeneration(tenantId: string): Promise<JobStatus> 
 
   // Lock: rejeita se tenant já tiver um job ativo (running/pending)
   const existing = await plannerStore.findActiveByLockKey(tenantId, 'planner-generate');
-  if (existing) throw new AppError(409, 'CONFLICT', 'Já existe um planejamento em andamento');
+  if (existing) {
+    const elapsed = Date.now() - new Date(existing.updatedAt).getTime();
+    if (elapsed < PLANNER_JOB_STALE_MS) {
+      const waitSec = Math.max(1, Math.ceil((PLANNER_JOB_STALE_MS - elapsed) / 1000));
+      throw new AppError(
+        409,
+        'PLANNER_JOB_IN_PROGRESS',
+        `Já existe um planejamento em andamento. Aguarde ${formatWaitSeconds(waitSec)} antes de tentar novamente.`,
+      );
+    }
+    // Job stale (> 15min): limpa os dados do tenant e libera o lock para regerar.
+    await clearTenantPlannerData(tenantId);
+    await plannerStore.save(existing.id, { status: 'error' });
+  }
 
   const id = generateId();
   await plannerStore.create({
@@ -607,32 +639,18 @@ export function getAgentLabels(): AgentLabelsResponse {
     'prerequisites',
     'context',
     'research',
-    'analytics',
-    'strategy',
     'planner',
-    'copywriter',
-    'creative',
     'image-generation',
-    'quality',
-    'scheduler',
-    'branding',
     'save',
   ];
 
   const labels: Record<string, string> = {
     prerequisites: 'Checando pré-requisitos e disponibilidade do gerador',
-    context: 'Coletando contexto do seu negócio',
-    research: 'Pesquisando tendências e datas comemorativas',
-    analytics: 'Analisando melhores formatos e horários',
-    strategy: 'Definindo estratégia e pilares de conteúdo',
-    planner: 'Montando calendário de posts',
-    copywriter: 'Escrevendo legendas e CTAs',
-    creative: 'Criando prompts de imagem',
-    'image-generation': 'Gerando imagens dos posts',
-    quality: 'Validando qualidade do conteúdo',
-    scheduler: 'Programando melhores horários de publicação',
-    branding: 'Verificando compliance da marca',
-    save: 'Salvando plano no banco',
+    context: 'Coletando contexto da sua empresa',
+    research: 'Levantando datas importantes para o seu negócio',
+    planner: 'Criando os posts do calendário',
+    'image-generation': 'Gerando as imagens dos posts',
+    save: 'Salvando no calendário',
   };
 
   return { order, labels };

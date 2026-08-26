@@ -1,48 +1,99 @@
-import { openrouterService } from '../services/llms/openrouter.service.js';
-import type { AgentContext, ResearchOutput, StrategyOutput, PlannerOutput } from './types.js';
+import { z } from 'zod';
+import { createBasicAgent } from './base.agent.js';
 import { parseAgentJSON } from './utils.js';
+import type { PlannerContext, ImportantDate, PlannerPrompt, PlannerPromptsOutput } from './types.js';
 
-export async function plannerAgent(
-  ctx: AgentContext,
-  research: ResearchOutput,
-  strategy: StrategyOutput,
-  currentDate: string
-): Promise<PlannerOutput> {
-  const pillars = strategy.contentPillars.map(p => `${p.name} (${p.ratio}%)`).join(', ');
+// ─── Schemas zod de saída estruturada do langchain (responseFormat) ──────────
+const importantDateSchema = z.object({
+  date: z.string().describe('Data no formato YYYY-MM-DD'),
+  name: z.string().describe('Nome da data comemorativa/relevante'),
+  reason: z.string().optional().describe('Por que é relevante para cidade/nicho'),
+});
+const datesSchema = z.object({ dates: z.array(importantDateSchema) });
 
-  // Calcula d+1 (amanhã) baseado na currentDate
-  const current = new Date(currentDate);
-  const tomorrow = new Date(current);
-  tomorrow.setDate(current.getDate() + 1);
-  const startDay = tomorrow.getDate();
-  const startMonth = tomorrow.getMonth() + 1;
-  const startYear = tomorrow.getFullYear();
+const promptSchema = z.object({
+  date: z.string().describe('Data do post no formato YYYY-MM-DD'),
+  title: z.string().describe('Título curto do post'),
+  caption: z.string().describe('Legenda completa em português'),
+  cta: z.string().describe('Chamada para ação'),
+  hashtags: z.array(z.string()).describe('Lista de hashtags'),
+  imagePrompt: z.string().describe('Prompt detalhado para gerar a imagem do post'),
+  postType: z.enum(['image', 'carousel', 'reel', 'stories']),
+  platform: z.enum(['instagram', 'facebook', 'both']),
+});
+const postsSchema = z.object({ posts: z.array(promptSchema) });
 
-  // Calcula último dia do mês do startDay
-  const lastDayOfMonth = new Date(startYear, startMonth, 0).getDate();
+// ─── System prompts ──────────────────────────────────────────────────────────
+const RESEARCH_SYSTEM_PROMPT = `Você é um especialista em datas comemorativas e datas relevantes do Brasil.
+Dado o nicho e a cidade de uma empresa, liste datas importantes e relevantes para criar conteúdo de redes sociais.
+Inclua feriados nacionais, datas comemorativas, datas sazonais do nicho e datas locais da cidade quando fizer sentido.
+Responda APENAS em JSON válido no formato: {"dates":[{"date":"YYYY-MM-DD","name":"...","reason":"..."}]}.
+Gere pelo menos 8 datas, todas dentro dos próximos 60 dias, em ordem cronológica.`;
 
-  const pillarsStr = strategy.contentPillars.map(p => `${p.name} (${p.ratio}%)`).join(', ');
+const PROMPTS_SYSTEM_PROMPT = `Você é o planejador de conteúdo de redes sociais de um negócio local.
+Receba o contexto da empresa (nome, tom, cor, produtos, nicho, cidade) e uma lista de datas relevantes.
+Crie EXATAMENTE 8 posts estruturados, distribuídos nas próximas semanas, priorizando as datas relevantes fornecidas.
+Se houver menos de 8 datas relevantes, complete com conteúdo evergreen do nicho.
+Cada post deve ter um prompt de imagem detalhado (cena, composição, cores da marca, estilo), legenda em português, CTA e hashtags.
+Responda APENAS em JSON válido no formato: {"posts":[{"date":"YYYY-MM-DD","title":"...","caption":"...","cta":"...","hashtags":["..."],"imagePrompt":"...","postType":"image|carousel|reel|stories","platform":"instagram|facebook|both"}]}
+Retorne exatamente 8 posts.`;
 
-  const prompt = `Crie calendario de posts para:
-Empresa: ${ctx.tenant.name}
-Objetivo: ${strategy.objective}
-Pilares: ${pillarsStr}
-Datas comemorativas: ${research.holidays.map(h => `${h.name} (dia ${h.day})`).join(', ')}
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function lastAssistantText<T extends { messages?: unknown[] }>(result: T): string {
+  const messages = result.messages ?? [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i] as { content?: unknown; role?: string; _getType?: () => string };
+    if (m && typeof m.content === 'string') {
+      const type = m._getType?.() ?? m.role;
+      if (type === 'ai' || type === 'assistant' || type === 'human') return m.content;
+    }
+  }
+  return '';
+}
 
-REGRAS CRÍTICAS:
-1. O planejamento deve começar NO DIA ${startDay}/${startMonth}/${startYear} (d+1 de hoje) - NÃO CRIE POSTS PARA DIAS PASSADOS
-2. dayIndex deve ser entre ${startDay} e ${lastDayOfMonth} (dias restantes do mês)
-3. Máximo 30% de posts sales. Alternar formatos (reel, carousel, image, stories).
-4. Total de posts: 16. Resumo com contagens por tipo.
+function brandDescription(ctx: PlannerContext): string {
+  const tone = ctx.brandKit?.voiceTone || 'amigável';
+  const color = ctx.brandKit?.primaryColor || 'não definida';
+  const niche = ctx.goals?.niche || ctx.goals?.mainProduct || 'não definido';
+  const city = ctx.city || 'nacional';
+  return `Empresa: ${ctx.businessName}. Tom de voz: ${tone}. Cor principal: ${color}. ` +
+    `Nicho/produto: ${niche}. Cidade: ${city}. Objetivo: ${ctx.goals?.objective || 'engajamento'}.`;
+}
 
-JSON: {"totalPosts":16,"summary":{"reelsCount":8,"carouselCount":4,"imageCount":4,"storiesCount":4},"posts":[{"dayIndex":${startDay},"postType":"reel","platform":"instagram","title":"Titulo","contentPillar":"Produto","category":"engagement"}]}`;
+// ─── Agentes langchain ───────────────────────────────────────────────────────
+/**
+ * Etapa 2.2 do fluxo: levanta datas importantes/relevantes para a cidade e/ou
+ * nicho da empresa usando o conhecimento do modelo (sem busca externa).
+ */
+export async function researchImportantDates(context: PlannerContext): Promise<ImportantDate[]> {
+  const agent = createBasicAgent(RESEARCH_SYSTEM_PROMPT, 'deepseek/deepseek-chat-v4-flash', datesSchema);
+  const result = await agent.invoke({ messages: [{ role: 'human', content: brandDescription(context) }] });
 
-  const raw = await openrouterService.chat(
-    [
-      { role: 'system', content: 'Planejador editorial. JSON válido apenas.' },
-      { role: 'user', content: prompt }
-    ],
-    { temperature: 0.8, max_tokens: 3000, response_format: { type: 'json_object' } },
-  );
-  return parseAgentJSON<PlannerOutput>(raw);
+  const structured = (result as { structuredResponse?: { dates?: ImportantDate[] } }).structuredResponse;
+  const parsed = structured ?? parseAgentJSON<{ dates: ImportantDate[] }>(lastAssistantText(result));
+  return Array.isArray(parsed?.dates) ? parsed.dates.slice(0, 15) : [];
+}
+
+/**
+ * Etapa 2.3 do fluxo: gera os 8 prompts de conteúdo estruturados (data, imagem,
+ * legenda, CTA, hashtags) com base no contexto da empresa e nas datas.
+ */
+export async function generateContentPrompts(
+  context: PlannerContext,
+  dates: ImportantDate[],
+): Promise<PlannerPrompt[]> {
+  const agent = createBasicAgent(PROMPTS_SYSTEM_PROMPT, 'deepseek/deepseek-chat-v4-flash', postsSchema);
+  const user = [
+    brandDescription(context),
+    '',
+    'Datas relevantes disponíveis:',
+    JSON.stringify(dates.map((d) => ({ date: d.date, name: d.name }))),
+  ].join('\n');
+
+  const result = await agent.invoke({ messages: [{ role: 'human', content: user }] });
+  const structured = (result as { structuredResponse?: PlannerPromptsOutput }).structuredResponse;
+  const parsed = structured ?? parseAgentJSON<PlannerPromptsOutput>(lastAssistantText(result));
+  const posts = Array.isArray(parsed?.posts) ? parsed.posts : [];
+  // Garante no máximo 8, sempre com data válida e melhor formato de imagem possível.
+  return posts.slice(0, 8);
 }

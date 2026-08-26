@@ -15,6 +15,11 @@ vi.mock('../services/planner/planner.service.js', () => ({
   bulkSchedulePosts: (...args: any[]) => bulkSchedulePosts(...args),
 }));
 
+// O controller chama o gate de créditos no generatePlan; mocka para não tocar a rede.
+vi.mock('../services/llms/openrouter.service.js', () => ({
+  openrouterService: { assertCreditsAvailable: vi.fn().mockResolvedValue(undefined) },
+}));
+
 import { generatePlan, getJob, handleBulkDelete, handleBulkSchedule } from '../controllers/planner.controller.js';
 
 function mockRes() {

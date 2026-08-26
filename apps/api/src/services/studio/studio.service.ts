@@ -1,11 +1,15 @@
 import { and, count, desc, eq, inArray, or, type SQL } from 'drizzle-orm';
 import OpenAI from 'openai';
-import { db, creativeAssets, metaConnections } from '@fury/db';
+import { db, creativeAssets, metaConnections, socialPosts } from '@fury/db';
 import { AppError } from '../../middleware/errorHandler.js';
 import { getComplianceQueue } from '../../lib/queue.js';
 import { uploadAdImage } from '../../lib/meta-api.js';
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { saveTemporaryStudioImage } from '../../lib/temp-storage.js';
+import { uploadAsset } from '../storage/storage.service.js';
+import { openrouterService } from '../llms/openrouter.service.js';
+import { generateId } from '../../agents/utils.js';
+import type { PlannerPrompt } from '../../agents/types.js';
 
 const CHAR_LIMITS = {
   headline: 40,
@@ -15,11 +19,17 @@ const CHAR_LIMITS = {
 } as const;
 export type StudioGenerationJobData = {
   tenantId: string;
-  briefing: string;
-  format: 'feed' | 'stories' | 'banner';
-  style: 'fotografico' | 'ilustracao' | 'minimalista';
-  adAccountId: string;
-  publicBaseUrl: string;
+  briefing?: string;
+  format?: 'feed' | 'stories' | 'banner';
+  style?: 'fotografico' | 'ilustracao' | 'minimalista';
+  adAccountId?: string;
+  publicBaseUrl?: string;
+  // Modo planner (fluxo do planejador de conteúdo) — quando presente, o worker
+  // gera a imagem real e grava o social_post no calendário.
+  mode?: 'planner';
+  planId?: string;
+  post?: PlannerPrompt;
+  logoUrl?: string;
 };
 
 export type GenerateStudioImageResult = {
@@ -35,7 +45,7 @@ function normalizePublicBaseUrl(publicBaseUrl: string) {
 
 async function persistStudioImage(input: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
   const { fileName } = await saveTemporaryStudioImage(STUDIO_PLACEHOLDER_PNG);
-  const imageUrl = `${normalizePublicBaseUrl(input.publicBaseUrl)}/studio-assets/${fileName}`;
+  const imageUrl = `${normalizePublicBaseUrl(input.publicBaseUrl ?? '')}/studio-assets/${fileName}`;
 
   const [asset] = await db
     .insert(creativeAssets)
@@ -165,7 +175,67 @@ export async function requestStudioImageGeneration(input: StudioGenerationJobDat
   } as any;
 }
 
+// ─── Modo planner (planejador de conteúdo) ─────────────────────────────────────
+const PLANNER_IMAGE_MODEL = process.env.PLANNER_IMAGE_MODEL ?? 'black-forest-labs/flux.2-klein-4b';
+
+/** Aspect ratio (FLUX-compatível) por tipo de post do planner. */
+export function aspectForPlannerPostType(postType: PlannerPrompt['postType']): string {
+  return postType === 'reel' || postType === 'stories' ? '9:16' : '1:1';
+}
+
+/**
+ * Etapa 2.5 do fluxo: gera a imagem real via OpenRouter/FLUX, persiste no R2 e
+ * grava o social_post no calendário. Chamado pelo worker studio (modo planner)
+ * quando a imagem é concluída.
+ */
+export async function processPlannerImageJob(input: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
+  const post = input.post;
+  const planId = input.planId;
+  if (!post || !planId) {
+    throw new AppError(400, 'PLANNER_IMAGE_MISSING_DATA', 'Job de imagem do planner sem post/planId.');
+  }
+
+  const base64 = await openrouterService.generateImage({
+    model: PLANNER_IMAGE_MODEL,
+    prompt: post.imagePrompt,
+    aspect_ratio: aspectForPlannerPostType(post.postType),
+    logoUrl: input.logoUrl,
+  });
+
+  const buffer = Buffer.from(base64.split(',')[1] ?? base64, 'base64');
+  const fileName = `planner/${input.tenantId}/${planId}/${post.date}-${generateId()}.png`;
+  const imageUrl = await uploadAsset(buffer, fileName, 'image/png');
+
+  const [saved] = await db.insert(socialPosts)
+    .values({
+      tenantId: input.tenantId,
+      planId,
+      platform: post.platform === 'both' ? 'instagram' : post.platform,
+      postType: post.postType,
+      title: post.title,
+      caption: post.caption,
+      cta: post.cta,
+      hashtags: post.hashtags,
+      imagePrompt: post.imagePrompt,
+      imageUrl,
+      dayIndex: new Date(`${post.date}T00:00:00Z`).getUTCDate(),
+      calendarDate: post.date,
+      scheduledAt: new Date(`${post.date}T12:00:00Z`),
+      status: 'draft',
+    })
+    .returning();
+
+  return {
+    creativeAssetId: String(saved.id),
+    imageUrl,
+    status: 'pending_compliance' as const,
+  };
+}
+
 export async function processStudioGenerationJob(input: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
+  if (input?.mode === 'planner') {
+    return processPlannerImageJob(input);
+  }
   if (!input) {
     return { message: 'Job de imagem processado' } as any;
   }
@@ -180,11 +250,12 @@ export const studioService = {
   generateCopy,
   requestStudioImageGeneration,
   processStudioGenerationJob,
+  processPlannerImageJob,
 };
 
 const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-const IMAGE_FETCH_TIMEOUT_MS = 30000;
+const IMAGE_FETCH_TIMEOUT_MS = 90000;
 
 export async function uploadCreativeAssetToMeta(params: {
   tenantId: string;
