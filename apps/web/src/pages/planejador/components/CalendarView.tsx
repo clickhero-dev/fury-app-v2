@@ -315,8 +315,11 @@ export function CalendarView() {
 
   const events = useMemo(() => posts.map((post) => postToEvent(post)), [posts]);
 
-  // Force FullCalendar to re-render events when selection changes
-  const eventRenderKey = selectedIds.size;
+  // NOTE: do NOT force a remount of FullCalendar on selection change (e.g.
+  // key={selectedIds.size}). That wipes the multi-select state and hides the
+  // bulk toolbar (Agendar/Excluir) when selecting a 2nd+ post. The @fullcalendar/react
+  // wrapper already resetOptions() on prop change, propagating the new eventContent
+  // (selection ring) without a remount.
 
   const legend = [
     { label: 'Agendado / Publicado', className: 'bg-brand' },
@@ -532,7 +535,6 @@ export function CalendarView() {
             )}
             themeSystem="standard"
             noEventsText="Nenhuma publicação agendada"
-            key={eventRenderKey}
           />
         </div>
 
