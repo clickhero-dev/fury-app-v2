@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X, Copy, Check, LayoutGrid, Image, Sparkles, Film, Upload, Trash2, RotateCcw, Plus } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useMutation } from '@tanstack/react-query';
@@ -328,12 +329,22 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate, onRequestD
   const mediaContent = renderMediaContent();
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
+    <DialogPrimitive.Root
+      open
+      onOpenChange={(open) => {
+        if (!open) handleClose();
+      }}
+    >
+      <DialogPrimitive.Portal>
+        {/* Scrim */}
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
 
-      {/* Panel */}
-      <div className="relative w-full max-w-lg bg-surface border-l border-border h-full overflow-y-auto">
+        {/* Panel lateral */}
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          aria-label="Detalhes do post"
+          className="fixed inset-y-0 right-0 z-50 w-full max-w-lg h-full overflow-y-auto bg-surface border-l border-border shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right"
+        >
         {/* Header */}
         <div className="sticky top-0 bg-surface border-b border-border px-6 py-4 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">
@@ -651,7 +662,8 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate, onRequestD
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

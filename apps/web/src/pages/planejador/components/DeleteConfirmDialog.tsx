@@ -1,4 +1,12 @@
 import { clsx } from 'clsx';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 interface Props {
   count: number;
@@ -9,28 +17,42 @@ interface Props {
 
 export function DeleteConfirmDialog({ count, onConfirm, onClose, loading }: Props) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-surface border border-border rounded-2xl p-6 w-full max-w-sm shadow-lg" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-text-primary mb-2">
-          Excluir {count} post{count > 1 ? 's' : ''}?
-        </h3>
-        <p className="text-sm text-text-secondary mb-4">Esta ação não pode ser desfeita.</p>
-        <div className="flex gap-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl bg-surface-secondary hover:bg-border text-text-primary text-sm font-medium transition-colors">
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        // Fecha por Escape / clique no overlay / botão X. Bloqueado enquanto
+        // a exclusão está em andamento para evitar fechamento duplo.
+        if (!open && !loading) onClose();
+      }}
+    >
+      <DialogContent className="max-w-sm">
+        <DialogHeader className="text-left">
+          <DialogTitle>
+            Excluir {count} post{count > 1 ? 's' : ''}?
+          </DialogTitle>
+          <DialogDescription>Esta ação não pode ser desfeita.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-surface-secondary hover:bg-border text-text-primary text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+          >
             Cancelar
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             disabled={loading}
             className={clsx(
-              'px-4 py-2 rounded-xl text-white text-sm font-medium transition-colors',
+              'px-4 py-2 rounded-xl text-white text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
               loading ? 'bg-error/60 cursor-not-allowed' : 'bg-error hover:bg-error/80',
             )}
           >
             {loading ? 'Excluindo...' : 'Excluir'}
           </button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
