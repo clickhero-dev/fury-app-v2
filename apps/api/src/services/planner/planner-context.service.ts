@@ -1,6 +1,5 @@
-import { eq } from 'drizzle-orm';
-import { db, tenants, brandKits, clientGoals, businessProfileSettings, users } from '@fury/db';
 import type { PlannerContext } from '../../agents/types.js';
+import { PlannerRepository } from '../../repository/planner.repository.js';
 
 /**
  * Etapa 2.1 do fluxo: consolida o contexto da empresa (tom, cor, logo, nicho,
@@ -8,13 +7,12 @@ import type { PlannerContext } from '../../agents/types.js';
  * e usuários (audience_defaults.city como fallback).
  */
 export async function loadPlannerContext(tenantId: string): Promise<PlannerContext> {
-  const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
-  const brand = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, tenantId) });
-  const goals = await db.query.clientGoals.findFirst({ where: eq(clientGoals.tenantId, tenantId) });
-  const profile = await db.query.businessProfileSettings.findFirst({
-    where: eq(businessProfileSettings.tenantId, tenantId),
-  });
-  const user = await db.query.users.findFirst({ where: eq(users.tenantId, tenantId) });
+  const repo = new PlannerRepository(tenantId);
+  const tenant = await repo.findTenant();
+  const brand = await repo.findBrandKit();
+  const goals = await repo.findClientGoal();
+  const profile = await repo.findBusinessProfile();
+  const user = await repo.findUserByTenant();
 
   const profileAddress = (profile?.address ?? {}) as { city?: string };
   const audience = (user?.audienceDefaults ?? {}) as { city?: string };

@@ -2,8 +2,7 @@ import { getStudioQueue } from '../../lib/queue.js';
 import type { PlannerPrompt } from '../../agents/types.js';
 import type { StudioGenerationJobData } from '../studio/studio.service.js';
 import { plannerStore } from '../../planner-store.js';
-import { db, socialPosts } from '@fury/db';
-import { eq, and, count } from 'drizzle-orm';
+import { PlannerRepository } from '../../repository/planner.repository.js';
 
 export interface EnqueuePlannerImageJobsParams {
   tenantId: string;
@@ -19,12 +18,8 @@ export interface EnqueuePlannerImageJobsParams {
  * depender de um valor fixo (ex: 8) que não reflita o plano real.
  */
 export async function checkAndCompletePlannerJob(planId: string, tenantId: string, expectedCount?: number): Promise<void> {
-  const [result] = await db
-    .select({ total: count() })
-    .from(socialPosts)
-    .where(and(eq(socialPosts.planId, planId), eq(socialPosts.tenantId, tenantId)));
-
-  const createdCount = Number((result as any)?.total ?? 0);
+  const repo = new PlannerRepository(tenantId);
+  const createdCount = await repo.countPostsByPlan(planId);
 
   // Prioridade: artifact do job > parâmetro (caller) > fallback 8
   let expected = expectedCount;
@@ -84,11 +79,8 @@ export async function enqueueMissingPlannerPosts(params: {
   posts: PlannerPrompt[];
   logoUrl?: string;
 }): Promise<number> {
-  const existing = await db.query.socialPosts.findMany({
-    where: and(eq(socialPosts.planId, params.planId), eq(socialPosts.tenantId, params.tenantId)),
-    columns: { calendarDate: true, postType: true },
-  });
-  const existingKeys = new Set(existing.map((e) => `${e.calendarDate}:${e.postType}`));
+  const repo = new PlannerRepository(params.tenantId);
+  const existingKeys = new Set(await repo.listPostKeysByPlan(params.planId));
   const missing = params.posts.filter((p) => !existingKeys.has(`${p.date}:${p.postType}`));
 
   if (missing.length > 0) {
