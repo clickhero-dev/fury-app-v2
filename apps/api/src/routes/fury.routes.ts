@@ -1,10 +1,9 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { and, desc, eq, inArray } from 'drizzle-orm';
-import { db, performanceRules, performanceScores, ruleExecutions, furyConfig } from '@fury/db';
+import { AppError } from '../middleware/errorHandler.js';
+import { FuryEngineRepository } from '../repository/fury-engine.repository.js';
 import { authMiddleware, authSSEMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
-import { AppError } from '../middleware/errorHandler.js';
 import { registerSSEClient, emitToTenant } from '../lib/sse.js';
 
 const router = Router();
@@ -50,12 +49,7 @@ const updateConfigSchema = z.object({
 router.get('/config', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tenantId } = req.tenant!;
-    let config = await db.query.furyConfig.findFirst({
-      where: eq(furyConfig.tenantId, tenantId),
-    });
-    if (!config) {
-      [config] = await db.insert(furyConfig).values({ tenantId }).returning();
-    }
+    const config = await new FuryEngineRepository(tenantId).findOrCreateFuryConfig();
     res.json({ success: true, data: config, timestamp: new Date().toISOString() });
   } catch (error) {
     next(error);
@@ -67,22 +61,13 @@ router.patch('/config', async (req: Request, res: Response, next: NextFunction) 
     const { tenantId } = req.tenant!;
     const payload = updateConfigSchema.parse(req.body);
 
-    const updates: Partial<typeof furyConfig.$inferInsert> = { updatedAt: new Date() };
+    const updates: Record<string, any> = { updatedAt: new Date() };
     if (payload.targetRoas !== undefined) updates.targetRoas = payload.targetRoas.toString();
     if (payload.targetCpa !== undefined) updates.targetCpa = payload.targetCpa.toString();
     if (payload.targetCtr !== undefined) updates.targetCtr = payload.targetCtr.toString();
     if (payload.targetBudgetUtilization !== undefined) updates.targetBudgetUtilization = payload.targetBudgetUtilization.toString();
 
-    const existing = await db.query.furyConfig.findFirst({
-      where: eq(furyConfig.tenantId, tenantId),
-    });
-
-    let result;
-    if (existing) {
-      [result] = await db.update(furyConfig).set(updates).where(eq(furyConfig.tenantId, tenantId)).returning();
-    } else {
-      [result] = await db.insert(furyConfig).values({ tenantId, ...updates }).returning();
-    }
+    const result = await new FuryEngineRepository(tenantId).upsertFuryConfig(updates);
 
     res.json({ success: true, data: result, timestamp: new Date().toISOString() });
   } catch (error) {
@@ -109,10 +94,7 @@ const updateRuleSchema = createRuleSchema.partial();
 router.get('/rules', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tenantId } = req.tenant!;
-    const rules = await db.query.performanceRules.findMany({
-      where: eq(performanceRules.tenantId, tenantId),
-      orderBy: [desc(performanceRules.createdAt)],
-    });
+    const rules = await new FuryEngineRepository(tenantId).listPerformanceRules();
     res.json({ success: true, data: rules, timestamp: new Date().toISOString() });
   } catch (error) {
     next(error);
@@ -124,8 +106,7 @@ router.post('/rules', async (req: Request, res: Response, next: NextFunction) =>
     const { tenantId } = req.tenant!;
     const payload = createRuleSchema.parse(req.body);
 
-    const [created] = await db.insert(performanceRules).values({
-      tenantId,
+    const created = await new FuryEngineRepository(tenantId).createPerformanceRule({
       name: payload.name,
       conditionField: payload.conditionField,
       conditionOperator: payload.conditionOperator,
@@ -133,7 +114,7 @@ router.post('/rules', async (req: Request, res: Response, next: NextFunction) =>
       action: payload.action,
       actionValue: payload.actionValue?.toString(),
       isActive: payload.isActive,
-    }).returning();
+    });
 
     emitToTenant(tenantId, 'rule_created', created);
 
@@ -149,12 +130,11 @@ router.patch('/rules/:id', async (req: Request, res: Response, next: NextFunctio
     const { id } = req.params;
     const payload = updateRuleSchema.parse(req.body);
 
-    const existing = await db.query.performanceRules.findFirst({
-      where: and(eq(performanceRules.id, id), eq(performanceRules.tenantId, tenantId)),
-    });
+    const repo = new FuryEngineRepository(tenantId);
+    const existing = await repo.findPerformanceRuleById(id);
     if (!existing) throw new AppError(404, 'NOT_FOUND', 'Rule not found');
 
-    const updates: Partial<typeof performanceRules.$inferInsert> = {};
+    const updates: Record<string, any> = {};
     if (payload.name !== undefined) updates.name = payload.name;
     if (payload.conditionField !== undefined) updates.conditionField = payload.conditionField;
     if (payload.conditionOperator !== undefined) updates.conditionOperator = payload.conditionOperator;
@@ -163,7 +143,7 @@ router.patch('/rules/:id', async (req: Request, res: Response, next: NextFunctio
     if (payload.actionValue !== undefined) updates.actionValue = payload.actionValue.toString();
     if (payload.isActive !== undefined) updates.isActive = payload.isActive;
 
-    const [updated] = await db.update(performanceRules).set(updates).where(eq(performanceRules.id, id)).returning();
+    const updated = await repo.updatePerformanceRule(id, updates);
 
     emitToTenant(tenantId, 'rule_updated', updated);
 
@@ -178,12 +158,11 @@ router.delete('/rules/:id', async (req: Request, res: Response, next: NextFuncti
     const { tenantId } = req.tenant!;
     const { id } = req.params;
 
-    const existing = await db.query.performanceRules.findFirst({
-      where: and(eq(performanceRules.id, id), eq(performanceRules.tenantId, tenantId)),
-    });
+    const repo = new FuryEngineRepository(tenantId);
+    const existing = await repo.findPerformanceRuleById(id);
     if (!existing) throw new AppError(404, 'NOT_FOUND', 'Rule not found');
 
-    await db.delete(performanceRules).where(eq(performanceRules.id, id));
+    await repo.deletePerformanceRule(id);
 
     emitToTenant(tenantId, 'rule_deleted', { id });
 
@@ -200,13 +179,7 @@ router.get('/scores', async (req: Request, res: Response, next: NextFunction) =>
     const { tenantId } = req.tenant!;
     const { campaignId } = req.query;
 
-    const scores = await db.query.performanceScores.findMany({
-      where: campaignId
-        ? and(eq(performanceScores.tenantId, tenantId), eq(performanceScores.campaignId, String(campaignId)))
-        : eq(performanceScores.tenantId, tenantId),
-      orderBy: [desc(performanceScores.computedAt)],
-      limit: 100,
-    });
+    const scores = await new FuryEngineRepository(tenantId).listPerformanceScores(campaignId ? String(campaignId) : undefined);
 
     res.json({ success: true, data: scores, timestamp: new Date().toISOString() });
   } catch (error) {
@@ -221,24 +194,15 @@ router.get('/history', async (req: Request, res: Response, next: NextFunction) =
     const { tenantId } = req.tenant!;
     const { campaignId, ruleId } = req.query;
 
-    const tenantRules = await db.query.performanceRules.findMany({
-      where: eq(performanceRules.tenantId, tenantId),
-    });
-    const tenantRuleIds = tenantRules.map((r: typeof tenantRules[number]) => r.id);
+    const repo = new FuryEngineRepository(tenantId);
+    const tenantRules = await repo.listPerformanceRules();
+    const tenantRuleIds = tenantRules.map((r) => r.id);
 
     if (tenantRuleIds.length === 0) {
       return res.json({ success: true, data: [], timestamp: new Date().toISOString() });
     }
 
-    const executions = await db.query.ruleExecutions.findMany({
-      where: and(
-        inArray(ruleExecutions.ruleId, tenantRuleIds),
-        ...(ruleId ? [eq(ruleExecutions.ruleId, String(ruleId))] : []),
-        ...(campaignId ? [eq(ruleExecutions.campaignId, String(campaignId))] : []),
-      ),
-      orderBy: [desc(ruleExecutions.triggeredAt)],
-      limit: 100,
-    });
+    const executions = await repo.listRuleExecutions(tenantRuleIds, ruleId ? String(ruleId) : undefined, campaignId ? String(campaignId) : undefined);
 
     return res.json({ success: true, data: executions, timestamp: new Date().toISOString() });
   } catch (error) {

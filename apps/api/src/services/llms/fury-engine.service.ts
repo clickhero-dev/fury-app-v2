@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { and, eq, gte } from 'drizzle-orm';
-import { db, clientGoals, campaigns, furyInsights, performanceRules, performanceScores, ruleExecutions, furyConfig } from '@fury/db';
 import { AppError } from '../../middleware/errorHandler.js';
+import { FuryEngineRepository } from '../../repository/fury-engine.repository.js';
+import { CampaignRepository } from '../../repository/campaign.repository.js';
 
 export type CampaignMetrics = {
   spend?: number;
@@ -95,9 +95,7 @@ Sem texto adicional fora do JSON.`,
 
 export async function furyAnalyze(tenantId: string) {
   // 1. Buscar metas reais
-  const goals = await db.query.clientGoals.findFirst({
-    where: eq(clientGoals.tenantId, tenantId),
-  });
+  const goals = await new FuryEngineRepository(tenantId).findClientGoal();
 
   if (!goals) {
     throw new AppError(400, 'GOALS_NOT_CONFIGURED', 'Configure suas metas antes de analisar');
@@ -107,12 +105,7 @@ export async function furyAnalyze(tenantId: string) {
   const monthlyBudget = parseMoneyJson(goals.monthlyBudget);
 
   // 2. Buscar campanhas dos últimos 7 dias
-  const recentCampaigns = await db.query.campaigns.findMany({
-    where: and(
-      eq(campaigns.tenantId, tenantId),
-      gte(campaigns.lastSyncedAt, subDays(new Date(), 7))
-    ),
-  });
+  const recentCampaigns = await new CampaignRepository(tenantId).findRecentCampaignsSince(subDays(new Date(), 7));
 
   // 3. Calcular performance real
   const activeCampaigns = recentCampaigns.filter((c) => c.status === 'active');
@@ -131,13 +124,7 @@ export async function furyAnalyze(tenantId: string) {
   const worstPerformer = sortedByRoas[sortedByRoas.length - 1];
 
   // 4. Buscar insights anteriores para evitar repetição
-  const previousInsights = await db.query.furyInsights.findMany({
-    where: and(
-      eq(furyInsights.tenantId, tenantId),
-      gte(furyInsights.createdAt, subDays(new Date(), 3))
-    ),
-    limit: 5,
-  });
+  const previousInsights = await new CampaignRepository(tenantId).findInsightsSince(subDays(new Date(), 3), 5);
   const previousTypes = previousInsights.map((i) => i.suggestionType);
 
   // 5. Montar prompt e chamar Claude
@@ -183,8 +170,7 @@ ${previousTypes.length > 0 ? `NÃO repita estes tipos de insight já usados: ${p
   if (activeCampaigns.length > 0 && topPerformer) {
     for (const insight of rawInsights) {
       try {
-        await db.insert(furyInsights).values({
-          tenantId,
+        await new CampaignRepository(tenantId).insertFuryInsight({
           campaignId: topPerformer.id,
           suggestionType: insight.type,
           suggestionData: {
@@ -274,7 +260,7 @@ export function getGrade(score: number): 'A' | 'B' | 'C' | 'D' | 'F' {
 
 // ==================== Rule Evaluation ====================
 
-type RuleCondition = typeof performanceRules.$inferSelect;
+type RuleCondition = Record<string, any>;
 
 function evaluateCondition(field: string, operator: string, threshold: number, metrics: CampaignMetrics): boolean {
   const value = metrics[field as keyof CampaignMetrics] ?? 0;
@@ -285,12 +271,7 @@ function evaluateCondition(field: string, operator: string, threshold: number, m
 }
 
 export async function evaluateRules(tenantId: string, campaignId: string, metrics: CampaignMetrics): Promise<void> {
-  const rules = await db.query.performanceRules.findMany({
-    where: and(
-      eq(performanceRules.tenantId, tenantId),
-      eq(performanceRules.isActive, true)
-    ),
-  });
+  const rules = await new FuryEngineRepository(tenantId).findActiveRules();
 
   for (const rule of rules) {
     const threshold = parseFloat(rule.conditionValue.toString());
@@ -300,7 +281,7 @@ export async function evaluateRules(tenantId: string, campaignId: string, metric
 
     const actionValue = rule.actionValue ? parseFloat(rule.actionValue.toString()) : null;
 
-    await db.insert(ruleExecutions).values({
+    await new FuryEngineRepository(tenantId).createRuleExecution({
       ruleId: rule.id,
       campaignId,
       actionTaken: rule.action,
@@ -320,9 +301,7 @@ export async function evaluateRules(tenantId: string, campaignId: string, metric
 // ==================== Score Persistence ====================
 
 export async function computeAndSaveScore(tenantId: string, campaignId: string, metrics: CampaignMetrics): Promise<{ score: number; grade: 'A' | 'B' | 'C' | 'D' | 'F' }> {
-  const configRow = await db.query.furyConfig.findFirst({
-    where: eq(furyConfig.tenantId, tenantId),
-  });
+  const configRow = await new FuryEngineRepository(tenantId).findFuryConfigByTenant();
 
   const config: ScoreConfig = configRow
     ? {
@@ -336,8 +315,7 @@ export async function computeAndSaveScore(tenantId: string, campaignId: string, 
   const score = calculateScore(metrics, config);
   const grade = getGrade(score);
 
-  await db.insert(performanceScores).values({
-    tenantId,
+  await new FuryEngineRepository(tenantId).createPerformanceScore({
     campaignId,
     score,
     grade,

@@ -7,7 +7,7 @@ import {
   creativeAssets,
   automationRules,
 } from '@fury/db';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type Campaign = typeof campaigns.$inferSelect;
@@ -56,6 +56,21 @@ export class CampaignRepository extends TenantScopedRepository {
     });
     const all = await this.db.query.campaigns.findMany({ where: and(...filters) });
     return { items, total: all.length };
+  }
+
+  /** Campanhas sincronizadas a partir de uma data (análise de performance). */
+  async findRecentCampaignsSince(since: Date) {
+    return this.db.query.campaigns.findMany({
+      where: and(eq(campaigns.tenantId, this.tenantId), gte(campaigns.lastSyncedAt, since)),
+    });
+  }
+
+  /** Insights anteriores a partir de uma data, para evitar repetição. */
+  async findInsightsSince(since: Date, limit = 5) {
+    return this.db.query.furyInsights.findMany({
+      where: and(eq(furyInsights.tenantId, this.tenantId), gte(furyInsights.createdAt, since)),
+      limit,
+    });
   }
 
   async createCampaign(data: Partial<Campaign>): Promise<Campaign> {
