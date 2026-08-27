@@ -1,6 +1,5 @@
-import { eq } from 'drizzle-orm';
-import { db, automationRules } from '@fury/db';
 import { AppError } from '../../middleware/errorHandler.js';
+import { AutomationRepository } from '../../repository/automation.repository.js';
 
 export async function createAutomationRule(args: {
   tenantId: string;
@@ -15,27 +14,21 @@ export async function createAutomationRule(args: {
     throw new AppError(400, 'INVALID_THRESHOLD', 'Threshold cannot be negative');
   }
 
-  const [rule] = await db
-    .insert(automationRules)
-    .values({
-      tenantId: args.tenantId,
-      name: args.name,
-      description: args.description,
-      trigger: args.trigger,
-      ruleType: args.trigger,
-      threshold: args.threshold.toString(),
-      action: args.action,
-      isActive: args.enabled ?? true,
-    })
-    .returning();
+  const rule = await new AutomationRepository(args.tenantId).createAutomationRule({
+    name: args.name,
+    description: args.description,
+    trigger: args.trigger,
+    ruleType: args.trigger,
+    threshold: args.threshold.toString(),
+    action: args.action,
+    isActive: args.enabled ?? true,
+  });
 
   return rule;
 }
 
 export async function getAutomationRules(tenantId: string) {
-  const rules = await db.query.automationRules.findMany({
-    where: eq(automationRules.tenantId, tenantId),
-  });
+  const rules = await new AutomationRepository(tenantId).listAutomationRules();
 
   return rules.map((rule) => ({
     ...rule,

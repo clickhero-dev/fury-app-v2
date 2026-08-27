@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { and, eq } from 'drizzle-orm';
-import { db, metaConnections } from '../../lib/db.js';
+import { MetaRepository } from '../../repository/meta.repository.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import {
   exchangeCodeForToken,
@@ -210,10 +209,8 @@ export async function handleMetaOAuthCallback(
   const encryptedToken = encryptToken(longLivedToken.access_token);
   const tokenExpiresAt = getTokenExpiration(longLivedToken.expires_in);
 
-  const existing = await db.query.metaConnections.findFirst({
-    where: eq(metaConnections.tenantId, tenantId),
-    orderBy: (table, { desc }) => [desc(table.createdAt)],
-  });
+  const repo = new MetaRepository(tenantId);
+  const existing = await repo.findLatestMetaConnection();
 
   const resolvedReturnUrl = returnUrl ?? RETURN_URLS[context];
 
@@ -225,32 +222,26 @@ export async function handleMetaOAuthCallback(
 
   if (existing) {
     oldSelectedAdAccountId = existing.selectedAdAccountId;
-    await db
-      .update(metaConnections)
-      .set({
-        metaUserId,
-        accessToken: encryptedToken,
-        tokenExpiresAt,
-        adAccounts: [],
-        // ponytail: não limpamos selectedAdAccountId aqui — deixamos a lógica
-        // após o refresh decidir: mantém a anterior se ainda existir, ou pega a
-        // primeira disponível. Assim o usuário não precisa re-selecionar a conta
-        // toda vez que reconecta o Meta.
-        updatedAt: new Date(),
-      })
-      .where(eq(metaConnections.id, existing.id));
+    await repo.patchMetaConnection(existing.id, {
+      metaUserId,
+      accessToken: encryptedToken,
+      tokenExpiresAt,
+      adAccounts: [],
+      // ponytail: não limpamos selectedAdAccountId aqui — deixamos a lógica
+      // após o refresh decidir: mantém a anterior se ainda existir, ou pega a
+      // primeira disponível. Assim o usuário não precisa re-selecionar a conta
+      // toda vez que reconecta o Meta.
+      updatedAt: new Date(),
+    });
     connectionId = existing.id;
   } else {
-    const [inserted] = await db
-      .insert(metaConnections)
-      .values({
-        tenantId,
-        metaUserId,
-        accessToken: encryptedToken,
-        tokenExpiresAt,
-        adAccounts: [],
-      })
-      .returning({ id: metaConnections.id });
+    const inserted = await repo.createMetaConnection({
+      tenantId,
+      metaUserId,
+      accessToken: encryptedToken,
+      tokenExpiresAt,
+      adAccounts: [],
+    });
     connectionId = inserted.id;
   }
 
@@ -274,10 +265,7 @@ export async function handleMetaOAuthCallback(
           ? oldSelectedAdAccountId
           : adAccounts[0].id;
 
-      await db
-        .update(metaConnections)
-        .set({ adAccounts, selectedAdAccountId, updatedAt: new Date() })
-        .where(eq(metaConnections.id, connectionId));
+      await repo.patchMetaConnection(connectionId, { adAccounts, selectedAdAccountId, updatedAt: new Date() });
       await addSyncJob({ tenantId, metaUserId, adAccounts });
     }
   } catch (error) {
@@ -289,10 +277,7 @@ export async function handleMetaOAuthCallback(
 
 /** Recupera o access token descriptografado da conexao Meta mais recente do tenant. */
 async function getTenantAccessToken(tenantId: string): Promise<string> {
-  const connection = await db.query.metaConnections.findFirst({
-    where: eq(metaConnections.tenantId, tenantId),
-    orderBy: (table, { desc }) => [desc(table.createdAt)],
-  });
+  const connection = await new MetaRepository(tenantId).findLatestMetaConnection();
 
   if (!connection) {
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
@@ -310,10 +295,7 @@ export interface TenantAssetSelection {
 
 /** Retorna a selecao de ativos persistida do tenant, ou null se ainda nao houver conexao. */
 export async function getTenantAssetSelection(tenantId: string): Promise<TenantAssetSelection | null> {
-  const connection = await db.query.metaConnections.findFirst({
-    where: eq(metaConnections.tenantId, tenantId),
-    orderBy: (table, { desc }) => [desc(table.createdAt)],
-  });
+  const connection = await new MetaRepository(tenantId).findLatestMetaConnection();
 
   if (!connection) return null;
 
@@ -330,10 +312,8 @@ export async function saveTenantAssetSelection(
   tenantId: string,
   selection: TenantAssetSelection,
 ): Promise<void> {
-  const connection = await db.query.metaConnections.findFirst({
-    where: eq(metaConnections.tenantId, tenantId),
-    orderBy: (table, { desc }) => [desc(table.createdAt)],
-  });
+  const repo = new MetaRepository(tenantId);
+  const connection = await repo.findLatestMetaConnection();
 
   if (!connection) {
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
@@ -349,17 +329,14 @@ export async function saveTenantAssetSelection(
       ? connection.selectedAdAccountId
       : selection.adAccountIds[0] ?? connection.selectedAdAccountId;
 
-  await db
-    .update(metaConnections)
-    .set({
+  await repo.patchMetaConnection(connection.id, {
       selectedBusinessIds: selection.businessIds,
       selectedPageIds: selection.pageIds,
       selectedAdAccountIds: selection.adAccountIds,
       selectedWhatsappNumberIds: selection.whatsappNumberIds,
       selectedAdAccountId,
       updatedAt: new Date(),
-    })
-    .where(eq(metaConnections.id, connection.id));
+    });
 }
 
 /** Lista as Business Managers do tenant (/me/businesses). */
@@ -538,10 +515,7 @@ export interface ResolvedTenantAssetSelection {
  * no Wizard de Campanha (que nao deve pedir nova selecao ao usuario).
  */
 export async function getResolvedTenantAssetSelection(tenantId: string): Promise<ResolvedTenantAssetSelection> {
-  const connection = await db.query.metaConnections.findFirst({
-    where: eq(metaConnections.tenantId, tenantId),
-    orderBy: (table, { desc }) => [desc(table.createdAt)],
-  });
+  const connection = await new MetaRepository(tenantId).findLatestMetaConnection();
 
   if (!connection) {
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
@@ -604,10 +578,7 @@ export async function getTenantMetaConnections(tenantId: string): Promise<Stored
   // obsoletas (ex.: de reconexoes anteriores), cujo tokenExpiresAt pode estar
   // vencido, fazendo a UI exibir um card "Pausado" permanente que nao reflete
   // a conexao realmente em uso.
-  const connection = await db.query.metaConnections.findFirst({
-    where: eq(metaConnections.tenantId, tenantId),
-    orderBy: (table, { desc }) => [desc(table.createdAt)],
-  });
+  const connection = await new MetaRepository(tenantId).findLatestMetaConnection();
 
   if (!connection) {
     return [];
@@ -635,15 +606,14 @@ export async function getTenantMetaConnections(tenantId: string): Promise<Stored
 }
 
 export async function deleteTenantMetaConnection(tenantId: string, connectionId: string): Promise<void> {
-  const existing = await db.query.metaConnections.findFirst({
-    where: and(eq(metaConnections.id, connectionId), eq(metaConnections.tenantId, tenantId)),
-  });
+  const repo = new MetaRepository(tenantId);
+  const existing = await repo.findMetaConnectionById(connectionId);
 
   if (!existing) {
     throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Conexao Meta nao encontrada para este tenant.');
   }
 
-  await db.delete(metaConnections).where(eq(metaConnections.id, connectionId));
+  await repo.deleteMetaConnection(connectionId);
 }
 
 export async function selectAdAccount(
@@ -651,9 +621,8 @@ export async function selectAdAccount(
   connectionId: string,
   adAccountId: string,
 ): Promise<string> {
-  const connection = await db.query.metaConnections.findFirst({
-    where: and(eq(metaConnections.id, connectionId), eq(metaConnections.tenantId, tenantId)),
-  });
+  const repo = new MetaRepository(tenantId);
+  const connection = await repo.findMetaConnectionById(connectionId);
 
   if (!connection) {
     throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Conexao Meta nao encontrada para este tenant.');
@@ -665,10 +634,7 @@ export async function selectAdAccount(
     throw new AppError(400, 'AD_ACCOUNT_NOT_FOUND', 'Conta de anuncios nao pertence a esta conexao.');
   }
 
-  await db
-    .update(metaConnections)
-    .set({ selectedAdAccountId: adAccountId })
-    .where(eq(metaConnections.id, connectionId));
+  await repo.patchMetaConnection(connectionId, { selectedAdAccountId: adAccountId });
 
   return adAccountId;
 }

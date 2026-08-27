@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
-import { db, creativeAssets } from '@fury/db';
 import { sanitizeTypos } from '../../utils/sanitize-typos.js';
+import { StudioRepository } from '../../repository/studio.repository.js';
 
 type AdCopyInput = {
   objective?: string;
@@ -63,6 +63,7 @@ async function runTextComplianceCheck(text: string) {
 }
 
 export async function generateAdCopy(input: AdCopyInput, tenantId: string) {
+  const repo = new StudioRepository(tenantId);
   const qty = Math.min(Math.max(input.quantity ?? 3, 3), 5);
 
   if (!process.env.OPENAI_API_KEY) {
@@ -77,7 +78,7 @@ export async function generateAdCopy(input: AdCopyInput, tenantId: string) {
     for (const v of mocked) {
       const payload = JSON.stringify({ headline: v.headline, primary_text: v.primary_text, cta: v.cta, reasoning: v.reasoning });
       const dataUrl = `data:application/json;base64,${Buffer.from(payload).toString('base64')}`;
-      const [row] = await db.insert(creativeAssets).values({ tenantId, type: 'copy', url: dataUrl, complianceStatus: 'approved' }).returning();
+      const row = await repo.createAsset({ tenantId, type: 'copy', url: dataUrl, complianceStatus: 'approved' });
       results.push({ id: row.id, headline: v.headline, primary_text: v.primary_text, cta: v.cta, compliance_status: 'approved' });
     }
     return { variations: results };
@@ -129,13 +130,13 @@ export async function generateAdCopy(input: AdCopyInput, tenantId: string) {
     const payload = JSON.stringify({ headline: v.headline, primary_text: v.primary_text, cta: v.cta, reasoning: v.reasoning });
     const dataUrl = `data:application/json;base64,${Buffer.from(payload).toString('base64')}`;
 
-    const [row] = await db.insert(creativeAssets).values({
+    const row = await repo.createAsset({
       tenantId,
       type: 'copy',
       url: dataUrl,
       complianceStatus: status as any,
       complianceNotes: notes,
-    }).returning();
+    });
 
     results.push({ id: row.id, headline: v.headline, primary_text: v.primary_text, cta: v.cta, compliance_status: status });
   }

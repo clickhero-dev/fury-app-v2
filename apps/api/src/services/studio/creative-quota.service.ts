@@ -1,35 +1,21 @@
-import { and, eq, sql } from 'drizzle-orm';
-import { db, creativeAssets, subscriptions, plans } from '@fury/db';
 import { AppError } from '../../middleware/errorHandler.js';
+import { SubscriptionRepository } from '../../repository/subscription.repository.js';
+import { StudioRepository } from '../../repository/studio.repository.js';
 
-type PlanLimits = {
-  creativesPerMonth?: number | null;
-  modificationsPerCreative?: number | null;
-};
-
-function readLimits(rawLimits: unknown): PlanLimits {
-  return (rawLimits as PlanLimits | null) ?? {};
-}
+/**
+ * Quota de criativos e modificações do tenant.
+ * Acesso ao banco delegado a SubscriptionRepository (cota/plano) e
+ * StudioRepository (leitura da linhagem de creativeAssets) — domínios com
+ * dono único. Services podem usar múltiplos repos (ADR-0001).
+ */
 
 /**
  * Consome uma unidade da cota mensal de criativos novos do tenant, de forma
- * atômica (UPDATE condicional — duas requisições concorrentes serializam
- * pelo lock de linha do Postgres, sem furar o limite).
- *
- * Sem assinatura ou cota null = sem limite (este serviço só restringe
- * quem já tem uma assinatura com creativesPerMonth definido).
+ * atômica (UPDATE condicional).
  */
 export async function consumeCreativeQuota(tenantId: string): Promise<void> {
-  const sub = await db.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, tenantId) });
-  if (!sub || sub.creativesRemaining === null) return;
-
-  const updated = await db
-    .update(subscriptions)
-    .set({ creativesRemaining: sql`${subscriptions.creativesRemaining} - 1`, updatedAt: new Date() })
-    .where(and(eq(subscriptions.id, sub.id), sql`${subscriptions.creativesRemaining} > 0`))
-    .returning({ id: subscriptions.id });
-
-  if (updated.length === 0) {
+  const consumed = await new SubscriptionRepository(tenantId).consumeCreativeQuota();
+  if (!consumed) {
     throw new AppError(
       403,
       'CREATIVE_QUOTA_EXCEEDED',
@@ -41,12 +27,7 @@ export async function consumeCreativeQuota(tenantId: string): Promise<void> {
 /** Estorna uma unidade da cota mensal (usar quando a geração falha após o consumo). */
 export async function refundCreativeQuota(tenantId: string): Promise<void> {
   try {
-    const sub = await db.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, tenantId) });
-    if (!sub || sub.creativesRemaining === null) return;
-    await db
-      .update(subscriptions)
-      .set({ creativesRemaining: sql`${subscriptions.creativesRemaining} + 1`, updatedAt: new Date() })
-      .where(eq(subscriptions.id, sub.id));
+    await new SubscriptionRepository(tenantId).refundCreativeQuota();
   } catch (err) {
     console.error('[creative-quota] refundCreativeQuota falhou:', err);
   }
@@ -54,9 +35,7 @@ export async function refundCreativeQuota(tenantId: string): Promise<void> {
 
 /** Resolve o id do criativo raiz da linhagem (o próprio id, se já for a raiz). */
 export async function resolveRootAssetId(tenantId: string, assetId: string): Promise<string> {
-  const asset = await db.query.creativeAssets.findFirst({
-    where: and(eq(creativeAssets.id, assetId), eq(creativeAssets.tenantId, tenantId)),
-  });
+  const asset = await new StudioRepository(tenantId).findAssetById(assetId);
   if (!asset) throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo não encontrado.');
   return asset.rootAssetId ?? asset.id;
 }
@@ -66,16 +45,8 @@ export async function resolveRootAssetId(tenantId: string, assetId: string): Pro
  * Mesma técnica de UPDATE condicional atômico do consumeCreativeQuota.
  */
 export async function consumeModificationQuota(rootAssetId: string): Promise<void> {
-  const root = await db.query.creativeAssets.findFirst({ where: eq(creativeAssets.id, rootAssetId) });
-  if (!root || root.modificationsRemaining === null) return;
-
-  const updated = await db
-    .update(creativeAssets)
-    .set({ modificationsRemaining: sql`${creativeAssets.modificationsRemaining} - 1` })
-    .where(and(eq(creativeAssets.id, rootAssetId), sql`${creativeAssets.modificationsRemaining} > 0`))
-    .returning({ id: creativeAssets.id });
-
-  if (updated.length === 0) {
+  const consumed = await new SubscriptionRepository('').consumeModificationQuota(rootAssetId);
+  if (!consumed) {
     throw new AppError(
       403,
       'MODIFICATION_QUOTA_EXCEEDED',
@@ -87,12 +58,7 @@ export async function consumeModificationQuota(rootAssetId: string): Promise<voi
 /** Estorna uma unidade da cota de modificações (usar quando a edição falha após o consumo). */
 export async function refundModificationQuota(rootAssetId: string): Promise<void> {
   try {
-    const root = await db.query.creativeAssets.findFirst({ where: eq(creativeAssets.id, rootAssetId) });
-    if (!root || root.modificationsRemaining === null) return;
-    await db
-      .update(creativeAssets)
-      .set({ modificationsRemaining: sql`${creativeAssets.modificationsRemaining} + 1` })
-      .where(eq(creativeAssets.id, rootAssetId));
+    await new SubscriptionRepository('').refundModificationQuota(rootAssetId);
   } catch (err) {
     console.error('[creative-quota] refundModificationQuota falhou:', err);
   }
@@ -100,23 +66,14 @@ export async function refundModificationQuota(rootAssetId: string): Promise<void
 
 /** Teto de modificações do plano vigente do tenant — usado para "congelar" no criativo ao criá-lo. */
 export async function getModificationsPerCreativeLimit(tenantId: string): Promise<number | null> {
-  const sub = await db.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, tenantId) });
-  if (!sub) return null;
-  const plan = await db.query.plans.findFirst({ where: eq(plans.id, sub.planId) });
-  return readLimits(plan?.limits).modificationsPerCreative ?? null;
+  return new SubscriptionRepository(tenantId).getModificationsPerCreativeLimit();
 }
 
 /** Snapshot de cota de criativos do tenant, para exibir na UI (biblioteca do Estúdio). */
 export async function getCreativeQuotaSnapshot(
   tenantId: string,
 ): Promise<{ creativesRemaining: number | null; creativesLimit: number | null }> {
-  const sub = await db.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, tenantId) });
-  if (!sub) return { creativesRemaining: null, creativesLimit: null };
-  const plan = await db.query.plans.findFirst({ where: eq(plans.id, sub.planId) });
-  return {
-    creativesRemaining: sub.creativesRemaining,
-    creativesLimit: readLimits(plan?.limits).creativesPerMonth ?? null,
-  };
+  return new SubscriptionRepository(tenantId).getCreativeQuotaSnapshot();
 }
 
 /** Cota de modificações restante do criativo raiz — para exibir na tela de detalhes. */
@@ -125,6 +82,6 @@ export async function getModificationsRemainingForAsset(
   assetId: string,
 ): Promise<number | null> {
   const rootId = await resolveRootAssetId(tenantId, assetId);
-  const root = await db.query.creativeAssets.findFirst({ where: eq(creativeAssets.id, rootId) });
+  const root = await new StudioRepository(tenantId).findAssetById(rootId);
   return root?.modificationsRemaining ?? null;
 }
