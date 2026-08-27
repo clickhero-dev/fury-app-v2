@@ -3,10 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { db, creativeAssets } from '@fury/db';
-import { eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
+import { StudioRepository } from '../repository/studio.repository.js';
 import { openrouterService } from '../services/llms/openrouter.service.js';
 import { saveTemporaryStudioImage, studioAssetsDir } from '../lib/temp-storage.js';
 import { uploadAsset } from '../services/storage/storage.service.js';
@@ -56,7 +55,6 @@ const generateVideoSchema = z.object({
 });
 
 // ─── Brand context helper ────────────────────────────────────────
-import { tenants, brandKits } from '@fury/db';
 
 const VOICE_TONE_LABELS: Record<string, string> = {
   professional: 'Profissional',
@@ -72,8 +70,9 @@ async function getBrandContext(tenantId: string): Promise<{
   secondaryColor?: string;
   voiceTone?: string;
 }> {
-  const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
-  const brandKit = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, tenantId) });
+  const repo = new StudioRepository(tenantId);
+  const tenant = await repo.findTenant();
+  const brandKit = await repo.findBrandKit();
 
   return {
     businessName: tenant?.name ?? 'Meu Negócio',
@@ -219,9 +218,7 @@ router.post('/generate-image', authMiddleware, tenantMiddleware, async (req: Req
 
       const imageUrl = await uploadImageToStorage(base64Image);
       const modificationsRemaining = await getModificationsPerCreativeLimit(tenantId);
-      const [asset] = await db
-        .insert(creativeAssets)
-        .values({
+      const asset = await new StudioRepository(tenantId).createAsset({
           tenantId,
           type: 'image',
           url: imageUrl,
@@ -234,8 +231,7 @@ router.post('/generate-image', authMiddleware, tenantMiddleware, async (req: Req
             source: 'openrouter-quick-create',
             brand: { businessName: brand.businessName, primaryColor: brand.primaryColor },
           }),
-        })
-        .returning();
+        });
 
       res.json({
         type: 'image' as const,
@@ -273,9 +269,7 @@ router.post('/generate-video', authMiddleware, tenantMiddleware, async (req: Req
 
     const brand = await getBrandContext(tenantId);
     const storedVideoUrl = await uploadVideoToStorage(videoUrl);
-    const [asset] = await db
-      .insert(creativeAssets)
-      .values({
+    const asset = await new StudioRepository(tenantId).createAsset({
         tenantId,
         type: 'video',
         url: storedVideoUrl,
@@ -288,8 +282,7 @@ router.post('/generate-video', authMiddleware, tenantMiddleware, async (req: Req
           source: 'openrouter-quick-create',
           brand: { businessName: brand.businessName, primaryColor: brand.primaryColor },
         }),
-      })
-      .returning();
+      });
 
     res.json({
       type: 'video' as const,
@@ -319,9 +312,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
     const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.APP_URL || `https://${req.get('host')}`;
 
     // Look up original asset
-    const asset = await db.query.creativeAssets.findFirst({
-      where: eq(creativeAssets.id, body.assetId),
-    });
+    const asset = await new StudioRepository(tenantId).findAssetById(body.assetId);
     if (!asset || asset.tenantId !== tenantId) {
       return res.status(404).json({ error: 'Asset não encontrado' });
     }
@@ -377,7 +368,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
       });
       const storedVideoUrl = await uploadVideoToStorage(rawVideoUrl);
 
-      const [newAsset] = await db.insert(creativeAssets).values({
+      const newAsset = await new StudioRepository(tenantId).createAsset({
         tenantId,
         type: 'video',
         url: storedVideoUrl,
@@ -390,7 +381,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
           originalAssetId: body.assetId,
           feedback: body.feedback,
         }),
-      }).returning();
+      });
 
       return res.json({
         type: 'video' as const,
@@ -408,7 +399,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
     });
 
     const imageUrl = await uploadImageToStorage(base64Image);
-    const [newAsset] = await db.insert(creativeAssets).values({
+    const newAsset = await new StudioRepository(tenantId).createAsset({
       tenantId,
       type: 'image',
       url: imageUrl,
@@ -421,7 +412,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
         originalAssetId: body.assetId,
         feedback: body.feedback,
       }),
-    }).returning();
+    });
 
     res.json({
       type: 'image' as const,
@@ -439,7 +430,7 @@ router.post('/regenerate', authMiddleware, tenantMiddleware, async (req: Request
 // ponytail: multer diskStorage — mask vai direto pro disco, zero heap
 import multer from 'multer';
 import { tmpdir } from 'node:os';
-import { unlink } from 'node:fs/promises';
+import { readFile, unlink } from 'node:fs/promises';
 
 const maskUpload = multer({
   storage: multer.diskStorage({
@@ -458,9 +449,7 @@ router.post('/regenerate-ad', authMiddleware, tenantMiddleware, maskUpload.singl
     }
     const tenantId = (req as any).tenant?.tenantId as string;
 
-    const asset = await db.query.creativeAssets.findFirst({
-      where: eq(creativeAssets.id, assetId),
-    });
+    const asset = await new StudioRepository(tenantId).findAssetById(assetId);
     if (!asset || asset.tenantId !== tenantId) {
       return res.status(404).json({ error: 'Asset não encontrado' });
     }
@@ -471,35 +460,33 @@ router.post('/regenerate-ad', authMiddleware, tenantMiddleware, maskUpload.singl
     let imageUrl: string;
     let source = 'openrouter-edit-image';
     try {
+      // Regeneração via OpenRouter apenas (sem OpenAI). A máscara, se enviada,
+      // é passada como segunda imagem para edição por região no modelo Gemini.
+      let maskImageUrl: string | undefined;
       if (maskFile?.path) {
         try {
-          imageUrl = await openrouterService.inpaintImage({
-            imageUrl: asset.url,
-            maskPath: maskFile.path,
-            prompt: feedback,
-          });
-          source = 'openrouter-inpaint';
+          const mime = maskFile.mimetype.includes('png') ? 'image/png' : 'image/jpeg';
+          const buf = await readFile(maskFile.path);
+          maskImageUrl = `data:${mime};base64,${buf.toString('base64')}`;
+          source = 'openrouter-edit-image-mask';
         } catch (e) {
-          console.error('[regenerate-ad] inpaint failed, falling back to editImage:', (e as Error).message);
-          imageUrl = await openrouterService.editImage({
-            imageUrl: asset.url,
-            instructions: feedback,
-          });
-          source = 'openrouter-edit-image-fallback';
+          console.warn('[regenerate-ad] falha ao ler máscara, regenerando sem ela:', (e as Error).message);
         }
-      } else {
-        imageUrl = await openrouterService.editImage({
-          imageUrl: asset.url,
-          instructions: feedback,
-        });
       }
+      imageUrl = await openrouterService.editImage({
+        imageUrl: asset.url,
+        instructions: feedback,
+        ...(maskImageUrl ? { maskImageUrl } : {}),
+      });
     } catch (error) {
       await refundModificationQuota(rootAssetId);
       throw error;
+    } finally {
+      if (maskFile?.path) await unlink(maskFile.path).catch(() => {});
     }
 
-    const root = await db.query.creativeAssets.findFirst({ where: eq(creativeAssets.id, rootAssetId) });
-    const [newAsset] = await db.insert(creativeAssets).values({
+    const root = await new StudioRepository(tenantId).findAssetById(rootAssetId);
+    const newAsset = await new StudioRepository(tenantId).createAsset({
       tenantId,
       type: 'image',
       url: imageUrl,
@@ -511,7 +498,7 @@ router.post('/regenerate-ad', authMiddleware, tenantMiddleware, maskUpload.singl
         originalAssetId: assetId,
         feedback,
       }),
-    }).returning();
+    });
 
     res.json({
       type: 'image' as const,
