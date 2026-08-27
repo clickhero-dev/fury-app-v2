@@ -1,5 +1,3 @@
-import { eq } from 'drizzle-orm';
-import { db, metaConnections } from '../../lib/db.js';
 import {
   getInstagramAccountInsights,
   getInstagramMedia,
@@ -9,6 +7,7 @@ import {
 } from '../../lib/meta-api.js';
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { AppError } from '../../middleware/errorHandler.js';
+import { MetaRepository } from '../../repository/meta.repository.js';
 import { getResolvedTenantAssetSelection } from './meta.service.js';
 
 export type InstagramRankingObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';
@@ -61,10 +60,7 @@ export async function getInstagramDashboardInsights(
   dateFrom: string,
   dateTo: string
 ): Promise<InstagramDashboardInsights | null> {
-  const metaConn = await db.query.metaConnections.findFirst({
-    where: eq(metaConnections.tenantId, tenantId),
-    orderBy: (table, { desc }) => [desc(table.createdAt)],
-  });
+  const metaConn = await new MetaRepository(tenantId).findLatestMetaConnection();
 
   if (!metaConn) {
     return null;
@@ -114,10 +110,7 @@ export async function getRankedInstagramPosts(
   objective: InstagramRankingObjective,
   instagramUserId?: string
 ): Promise<RankedInstagramPost[]> {
-  const metaConn = await db.query.metaConnections.findFirst({
-    where: eq(metaConnections.tenantId, tenantId),
-    orderBy: (table, { desc }) => [desc(table.createdAt)],
-  });
+  const metaConn = await new MetaRepository(tenantId).findLatestMetaConnection();
 
   if (!metaConn) {
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');

@@ -1,6 +1,5 @@
-import { db, metaConnections } from '../db.js';
-import { eq } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler.js';
+import { MetaRepository } from '../../repository/meta.repository.js';
 import { getMetaInsights, metaApiCall, type MetaInsightsData } from '../meta-api.js';
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { IMetricsProvider } from './metrics.provider.js';
@@ -36,10 +35,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     adAccountId?: string;
     timeIncrement?: number;
   }): Promise<MetaInsightsData[]> {
-    const connection = await db.query.metaConnections.findFirst({
-      where: eq(metaConnections.tenantId, params.tenantId),
-      orderBy: (table, { desc }) => [desc(table.createdAt)],
-    });
+    const connection = await new MetaRepository(params.tenantId).findLatestMetaConnection();
 
     if (!connection) {
       throw new AppError(
@@ -73,10 +69,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
   }
 
   private async getConnectionAndAccount(tenantId: string): Promise<{ accessToken: string; adAccountId: string }> {
-    const connection = await db.query.metaConnections.findFirst({
-      where: eq(metaConnections.tenantId, tenantId),
-      orderBy: (table, { desc }) => [desc(table.createdAt)],
-    });
+    const connection = await new MetaRepository(tenantId).findLatestMetaConnection();
 
     if (!connection) {
       throw new AppError(
@@ -240,10 +233,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     };
   }> {
     try {
-      const connection = await db.query.metaConnections.findFirst({
-        where: eq(metaConnections.tenantId, tenantId),
-        orderBy: (table, { desc }) => [desc(table.createdAt)],
-      });
+      const connection = await new MetaRepository(tenantId).findLatestMetaConnection();
 
       if (!connection) {
         throw new AppError(
@@ -379,10 +369,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     endDate: string
   ): Promise<CampaignInsightsResponse> {
     try {
-      const connection = await db.query.metaConnections.findFirst({
-        where: eq(metaConnections.tenantId, tenantId),
-        orderBy: (table, { desc }) => [desc(table.createdAt)],
-      });
+      const connection = await new MetaRepository(tenantId).findLatestMetaConnection();
 
       if (!connection) {
         throw new AppError(
@@ -460,10 +447,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
 
   async getCampaignAdsets(tenantId: string, campaignId: string): Promise<AdsetResponse[]> {
     try {
-      const connection = await db.query.metaConnections.findFirst({
-        where: eq(metaConnections.tenantId, tenantId),
-        orderBy: (table, { desc }) => [desc(table.createdAt)],
-      });
+      const connection = await new MetaRepository(tenantId).findLatestMetaConnection();
 
       if (!connection) {
         throw new AppError(
