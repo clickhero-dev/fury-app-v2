@@ -6,6 +6,7 @@ import {
 } from '../../utils/meta-insights-parser.js';
 import { roundToDecimals } from '../../utils/metrics-formatter.js';
 import { AppError } from '../../middleware/errorHandler.js';
+import { CampaignRepository } from '../../repository/campaign.repository.js';
 import { invalidateCampaignsCache } from '../../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../../lib/locations-cache.js';
 import { getResolvedTenantAssetSelection } from '../meta/meta.service.js';
@@ -820,9 +821,7 @@ export class CampaignsService {
       let lpSlug = args.tenantId;
       if (args.objective === 'whatsapp_conv') {
         try {
-          const { db, tenants } = await import('@fury/db');
-          const { eq } = await import('drizzle-orm');
-          const t = await db.query.tenants.findFirst({ where: eq(tenants.id, args.tenantId) });
+          const t = await new CampaignRepository(args.tenantId).findTenant();
           if (t?.slug) lpSlug = t.slug;
         } catch { /* fallback ao tenantId */ }
       }

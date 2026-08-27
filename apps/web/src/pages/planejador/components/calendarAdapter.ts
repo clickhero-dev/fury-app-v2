@@ -84,3 +84,18 @@ export function extractEventDropData(event: EventDropArg['event']): {
 export function getPostFromEvent(event: EventApi): Post | undefined {
   return event.extendedProps?.post;
 }
+
+export type EventClickAction = 'open-detail' | 'toggle-selection';
+
+/**
+ * Decide o comportamento de um clique em um evento do calendário.
+ *
+ * - Clique normal  -> abre o painel de detalhes do post (modal lateral).
+ * - Ctrl/Cmd+Clique -> alterna a multisseleção, exibindo a barra de ações
+ *   em lote (Agendar/Desprogramar/Excluir).
+ *
+ * Extraído como função pura para ser testável isoladamente.
+ */
+export function resolveEventClickAction(isModifierClick: boolean): EventClickAction {
+  return isModifierClick ? 'toggle-selection' : 'open-detail';
+}

@@ -5,8 +5,6 @@ import fs from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import OpenAI from 'openai';
-import { eq } from 'drizzle-orm';
-import { db, creativeAssets, tenants, clientGoals, brandKits } from '@fury/db';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import * as studioController from '../controllers/studio.controller.js';
@@ -21,6 +19,7 @@ import type { CreativeLayout } from '@fury/shared';
 import { CREATIVE_LAYOUT_LABELS, CREATIVE_LAYOUT_FUNNEL_STAGE } from '@fury/shared';
 import { studioAssetsDir } from '../lib/temp-storage.js';
 import { uploadAsset } from '../services/storage/storage.service.js';
+import { StudioRepository } from '../repository/studio.repository.js';
 
 console.log('=== STUDIO studioAssetsDir:', studioAssetsDir);
 
@@ -303,8 +302,9 @@ async function savePNG(buffer: Buffer): Promise<{ fileName: string; filePath: st
 }
 
 async function getTenantContext(tenantId: string): Promise<{ businessName: string; objective: string }> {
-  const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
-  const goal = await db.query.clientGoals.findFirst({ where: eq(clientGoals.tenantId, tenantId) });
+  const repo = new StudioRepository(tenantId);
+  const tenant = await repo.findTenant();
+  const goal = await repo.findClientGoal();
   return {
     businessName: tenant?.name ?? 'Meu Negócio',
     objective: goal?.objective ?? 'gerar leads',
@@ -319,7 +319,7 @@ const VOICE_TONE_LABELS: Record<string, string> = {
 };
 
 async function getBrandKitContext(tenantId: string): Promise<{ tone?: string; colors?: BrandColors }> {
-  const brandKit = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, tenantId) });
+  const brandKit = await new StudioRepository(tenantId).findBrandKit();
   if (!brandKit) return {};
 
   return {
@@ -429,13 +429,13 @@ async function runGenerate(
 
   const metadata = JSON.stringify({ ...creativeData, context, layoutSelection });
 
-  const [asset] = await db.insert(creativeAssets).values({
+  const asset = await new StudioRepository(tenantId).createAsset({
     tenantId,
     type: 'image',
     url: imageUrl,
     complianceStatus: 'pending_compliance',
     complianceNotes: metadata,
-  }).returning();
+  });
 
   return {
     assetId: asset.id,
@@ -530,9 +530,7 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
     const tenantId = (req as any).tenant?.tenantId as string;
     const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.APP_URL || `https://${req.get('host')}`;
 
-    const asset = await db.query.creativeAssets.findFirst({
-      where: eq(creativeAssets.id, assetId),
-    });
+    const asset = await new StudioRepository(tenantId).findAssetById(assetId);
 
     if (!asset || asset.tenantId !== tenantId) {
       return res.status(404).json({ error: 'Asset não encontrado' });
@@ -660,13 +658,13 @@ router.post('/creative/regenerate', authMiddleware, tenantMiddleware, async (req
 
     const metadata = JSON.stringify({ ...creativeData, context: savedContext, feedback });
 
-    const [newAsset] = await db.insert(creativeAssets).values({
+    const newAsset = await new StudioRepository(tenantId).createAsset({
       tenantId,
       type: 'image',
       url: imageUrl,
       complianceStatus: 'pending_compliance',
       complianceNotes: metadata,
-    }).returning();
+    });
 
     return res.status(201).json({
       assetId: newAsset.id,

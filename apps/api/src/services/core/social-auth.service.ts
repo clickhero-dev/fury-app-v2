@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { db as dbInstance, users, tenants, type Database } from '../../lib/db.js';
 import { AppError } from '../../middleware/errorHandler.js';
+import { AuthRepository } from '../../repository/auth.repository.js';
 import { generateAccessToken, generateRefreshToken } from '../../lib/jwt.js';
 import { exchangeCodeForToken } from '../../lib/google-oauth.js';
 import type { UserDTO } from '../../lib/shared.js';
@@ -40,7 +41,7 @@ async function ensureUniqueSlug(baseSlug: string): Promise<string> {
   let slug = baseSlug;
   let counter = 1;
   while (true) {
-    const existing = await db.query.tenants.findFirst({ where: eq(tenants.slug, slug) });
+    const existing = await new AuthRepository('').findTenantBySlug(slug);
     if (!existing) return slug;
     slug = `${baseSlug}-${counter}`;
     counter++;
@@ -142,9 +143,7 @@ export async function handleGoogleSocialLogin(
   const name = userInfo.name || null;
 
   // 1. Busca por googleId (login social existente)
-  let user = await database.query.users.findFirst({
-    where: eq(users.googleId, googleId),
-  });
+  let user = await new AuthRepository('').findUserByGoogleId(googleId);
 
   if (user) {
     const accessToken = generateAccessToken({ userId: user.id, tenantId: user.tenantId, email: user.email, role: user.role });
@@ -155,10 +154,10 @@ export async function handleGoogleSocialLogin(
   }
 
   // 2. Busca por email (usuario com senha — vincula Google)
-  user = await database.query.users.findFirst({ where: eq(users.email, email) });
+  user = await new AuthRepository('').findUserByEmail(email);
 
   if (user) {
-    await database.update(users).set({ googleId, emailVerified: true }).where(eq(users.id, user.id));
+    await new AuthRepository('').patchUser(user.id, { googleId, emailVerified: true });
     const accessToken = generateAccessToken({ userId: user.id, tenantId: user.tenantId, email: user.email, role: user.role });
     const refreshToken = generateRefreshToken(user.id);
     await storeRefreshTokenHash(user.id, refreshToken);

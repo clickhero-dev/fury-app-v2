@@ -1,7 +1,6 @@
 import { type Request, type Response, type NextFunction } from 'express';
-import { eq } from 'drizzle-orm';
-import { db, subscriptions, plans } from '@fury/db';
 import { AppError } from './errorHandler.js';
+import { SubscriptionRepository } from '../repository/subscription.repository.js';
 
 export type PlanFeature =
   | 'studio'
@@ -19,17 +18,13 @@ export function checkPlanFeature(feature: PlanFeature) {
       const tenantId = req.tenant?.tenantId ?? req.user?.tenantId;
       if (!tenantId) return next(new AppError(401, 'UNAUTHORIZED', 'Tenant not found'));
 
-      const sub = await db.query.subscriptions.findFirst({
-        where: eq(subscriptions.tenantId, tenantId),
-      });
+      const sub = await new SubscriptionRepository(tenantId).findSubscription();
 
       if (!sub || sub.status === 'cancelled' || sub.status === 'inactive') {
         return next(new AppError(403, 'NO_ACTIVE_SUBSCRIPTION', 'Assinatura ativa necessária'));
       }
 
-      const plan = await db.query.plans.findFirst({
-        where: eq(plans.id, sub.planId),
-      });
+      const plan = await new SubscriptionRepository(tenantId).findPlanById(sub.planId);
 
       if (!plan) return next(new AppError(403, 'PLAN_NOT_FOUND', 'Plano não encontrado'));
 

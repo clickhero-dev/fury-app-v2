@@ -13,6 +13,7 @@ import dashboardRoutes from "./dashboard.routes.js";
 import formsRoutes from "./forms.routes.js";
 import openrouterRoutes from "./openrouter.routes.js";
 import observabilityRoutes from "./observability.routes.js";
+import bullBoardRoutes from "./bull-board.routes.js";
 
 import furyRoutes from "./fury.routes.js";
 import goalsRoutes from "./goals.routes.js";
@@ -60,6 +61,7 @@ router.use(
   observabilityRoutes,
 );
 router.use("/admin", superadminRoutes);
+router.use("/admin/queues", bullBoardRoutes);
 router.use("/planner", ...AUTH_TENANT_SUB, plannerRoutes); // NOVO
 
 export default router;

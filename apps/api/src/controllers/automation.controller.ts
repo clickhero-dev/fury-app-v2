@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { db, automationRules, furyInsights } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
+import { AutomationRepository } from '../repository/automation.repository.js';
 import { getAutomationRules } from '../services/automation/automation.service.js';
 import { emitToTenant, registerSSEClient, removeSSEClient } from '../lib/sse.js';
 
@@ -38,55 +37,43 @@ export async function createRuleHandler(
     const ruleName = payload.name || payload.ruleType || 'Automation Rule';
     const ruleTrigger = payload.trigger || payload.ruleType || 'metric_threshold';
 
-    const existing = await db.query.automationRules.findFirst({
-      where: and(
-        eq(automationRules.tenantId, req.tenant.tenantId),
-        eq(automationRules.name, ruleName),
-      ),
-    });
+    const repo = new AutomationRepository(req.tenant.tenantId);
+    const existing = await repo.findAutomationRuleByName(ruleName);
 
     if (existing) {
-      const updated = await db
-        .update(automationRules)
-        .set({
-          name: ruleName,
-          trigger: ruleTrigger,
-          isActive: payload.isActive ?? payload.enabled ?? true,
-          threshold: threshold.toString(),
-          action: payload.action,
-          description: payload.description,
-        })
-        .where(eq(automationRules.id, existing.id))
-        .returning();
-
-      emitToTenant(req.tenant.tenantId, 'rule_updated', updated[0]);
-
-      return res.status(200).json({
-        success: true,
-        data: updated[0],
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    const created = await db
-      .insert(automationRules)
-      .values({
-        tenantId: req.tenant.tenantId,
+      const updated = await repo.updateAutomationRule(existing.id, {
         name: ruleName,
         trigger: ruleTrigger,
-        ruleType: payload.ruleType || ruleTrigger,
         isActive: payload.isActive ?? payload.enabled ?? true,
         threshold: threshold.toString(),
         action: payload.action,
         description: payload.description,
-      })
-      .returning();
+      });
 
-    emitToTenant(req.tenant.tenantId, 'rule_created', created[0]);
+      emitToTenant(req.tenant.tenantId, 'rule_updated', updated);
+
+      return res.status(200).json({
+        success: true,
+        data: updated,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const created = await repo.createAutomationRule({
+      name: ruleName,
+      trigger: ruleTrigger,
+      ruleType: payload.ruleType || ruleTrigger,
+      isActive: payload.isActive ?? payload.enabled ?? true,
+      threshold: threshold.toString(),
+      action: payload.action,
+      description: payload.description,
+    });
+
+    emitToTenant(req.tenant.tenantId, 'rule_created', created);
 
     return res.status(201).json({
       success: true,
-      data: created[0],
+      data: created,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -136,12 +123,8 @@ export async function deleteRuleHandler(
 
     const params = deleteRuleSchema.parse(req.params);
 
-    const existing = await db.query.automationRules.findFirst({
-      where: and(
-        eq(automationRules.id, params.id),
-        eq(automationRules.tenantId, req.tenant.tenantId),
-      ),
-    });
+    const repo = new AutomationRepository(req.tenant.tenantId);
+    const existing = await repo.findAutomationRuleById(params.id);
 
     if (!existing) {
       throw new AppError(
@@ -151,7 +134,7 @@ export async function deleteRuleHandler(
       );
     }
 
-    await db.delete(automationRules).where(eq(automationRules.id, params.id));
+    await repo.deleteAutomationRule(params.id);
 
     emitToTenant(req.tenant.tenantId, 'rule_deleted', {
       id: params.id,
@@ -181,14 +164,7 @@ export async function getTakedownsHandler(
       );
     }
 
-    const takedowns = await db.query.furyInsights.findMany({
-      where: and(
-        eq(furyInsights.tenantId, req.tenant.tenantId),
-        eq(furyInsights.suggestionType, 'smart_takedown'),
-      ),
-      orderBy: (table) => [desc(table.createdAt)],
-      limit: 20,
-    });
+    const takedowns = await new AutomationRepository(req.tenant.tenantId).listSmartTakedowns();
 
     return res.status(200).json({
       success: true,

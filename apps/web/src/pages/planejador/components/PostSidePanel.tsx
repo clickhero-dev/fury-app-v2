@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X, Copy, Check, LayoutGrid, Image, Sparkles, Film, Upload, Trash2, RotateCcw, Plus } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useMutation } from '@tanstack/react-query';
@@ -10,6 +11,7 @@ interface PostSidePanelProps {
   onClose: () => void;
   onUpdate: (post: Post) => void;
   onDuplicate?: (post: Post) => void;
+  onRequestDelete?: (post: Post) => void;
 }
 
 const postIcons: Record<string, typeof LayoutGrid> = {
@@ -81,7 +83,7 @@ function DiffField({ label, before, after }: { label: string; before?: string; a
   );
 }
 
-export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSidePanelProps) {
+export function PostSidePanel({ post, onClose, onUpdate, onDuplicate, onRequestDelete }: PostSidePanelProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiEditor, setShowAiEditor] = useState(false);
@@ -327,12 +329,22 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
   const mediaContent = renderMediaContent();
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
+    <DialogPrimitive.Root
+      open
+      onOpenChange={(open) => {
+        if (!open) handleClose();
+      }}
+    >
+      <DialogPrimitive.Portal>
+        {/* Scrim */}
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
 
-      {/* Panel */}
-      <div className="relative w-full max-w-lg bg-surface border-l border-border h-full overflow-y-auto">
+        {/* Panel lateral */}
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          aria-label="Detalhes do post"
+          className="fixed inset-y-0 right-0 z-50 w-full max-w-lg h-full overflow-y-auto bg-surface border-l border-border shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right"
+        >
         {/* Header */}
         <div className="sticky top-0 bg-surface border-b border-border px-6 py-4 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">
@@ -640,8 +652,18 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate }: PostSide
               </div>
             </div>
           )}
+          {/* Excluir post (apenas posts futuros agendados) */}
+          {!pendingEdit && !isPastOrPublished && onRequestDelete && (
+            <button
+              onClick={() => onRequestDelete(post)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-error/20 bg-error/10 hover:bg-error/20 text-error font-medium rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            >
+              <Trash2 className="w-4 h-4" /> Excluir post
+            </button>
+          )}
         </div>
-      </div>
-    </div>
+      </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

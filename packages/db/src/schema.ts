@@ -599,7 +599,7 @@ export const socialPostsRelations = relations(socialPosts, ({ one }) => ({
 
 // ===== State machine / Workflow jobs =====
 
-export const workflowStatusEnum = pgEnum('workflow_status', ['pending', 'running', 'done', 'error']);
+export const workflowStatusEnum = pgEnum('workflow_status', ['pending', 'running', 'awaiting_images', 'done', 'error']);
 
 export const workflowJobs = pgTable(
   'workflow_jobs',

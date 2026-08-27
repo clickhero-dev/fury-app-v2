@@ -1,11 +1,16 @@
-import { and, count, desc, eq, inArray, or, type SQL } from 'drizzle-orm';
 import OpenAI from 'openai';
-import { db, creativeAssets, metaConnections } from '@fury/db';
 import { AppError } from '../../middleware/errorHandler.js';
 import { getComplianceQueue } from '../../lib/queue.js';
 import { uploadAdImage } from '../../lib/meta-api.js';
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { saveTemporaryStudioImage } from '../../lib/temp-storage.js';
+import { uploadAsset } from '../storage/storage.service.js';
+import { openrouterService } from '../llms/openrouter.service.js';
+import { generateId } from '../../agents/utils.js';
+import type { PlannerPrompt } from '../../agents/types.js';
+import { checkAndCompletePlannerJob } from '../planner/planner-studio.service.js';
+import { StudioRepository } from '../../repository/studio.repository.js';
+import { PlannerRepository } from '../../repository/planner.repository.js';
 
 const CHAR_LIMITS = {
   headline: 40,
@@ -15,11 +20,17 @@ const CHAR_LIMITS = {
 } as const;
 export type StudioGenerationJobData = {
   tenantId: string;
-  briefing: string;
-  format: 'feed' | 'stories' | 'banner';
-  style: 'fotografico' | 'ilustracao' | 'minimalista';
-  adAccountId: string;
-  publicBaseUrl: string;
+  briefing?: string;
+  format?: 'feed' | 'stories' | 'banner';
+  style?: 'fotografico' | 'ilustracao' | 'minimalista';
+  adAccountId?: string;
+  publicBaseUrl?: string;
+  // Modo planner (fluxo do planejador de conteúdo) — quando presente, o worker
+  // gera a imagem real e grava o social_post no calendário.
+  mode?: 'planner';
+  planId?: string;
+  post?: PlannerPrompt;
+  logoUrl?: string;
 };
 
 export type GenerateStudioImageResult = {
@@ -35,23 +46,37 @@ function normalizePublicBaseUrl(publicBaseUrl: string) {
 
 async function persistStudioImage(input: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
   const { fileName } = await saveTemporaryStudioImage(STUDIO_PLACEHOLDER_PNG);
-  const imageUrl = `${normalizePublicBaseUrl(input.publicBaseUrl)}/studio-assets/${fileName}`;
+  const imageUrl = `${normalizePublicBaseUrl(input.publicBaseUrl ?? '')}/studio-assets/${fileName}`;
 
-  const [asset] = await db
-    .insert(creativeAssets)
-    .values({
-      tenantId: input.tenantId,
-      type: 'image',
-      url: imageUrl,
-      complianceStatus: 'pending_compliance',
-    })
-    .returning();
-
-  const complianceQueue = await getComplianceQueue();
-  await complianceQueue.add('compliance-check', { creativeAssetId: asset.id, tenantId: input.tenantId }, {
-    removeOnComplete: 1000,
-    removeOnFail: 5000,
+  const repo = new StudioRepository(input.tenantId);
+  const asset = await repo.createAsset({
+    tenantId: input.tenantId,
+    type: 'image',
+    url: imageUrl,
+    complianceStatus: 'pending_compliance',
   });
+
+  // Enfileira compliance check com retry
+  const complianceQueue = await getComplianceQueue();
+  let complianceEnqueued = false;
+  let retries = 3;
+  while (!complianceEnqueued && retries > 0) {
+    try {
+      await complianceQueue.add('compliance-check', { creativeAssetId: asset.id, tenantId: input.tenantId }, {
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+      });
+      complianceEnqueued = true;
+    } catch (err) {
+      retries--;
+      if (retries === 0) {
+        // Rollback: deletar creativeAsset criado se compliance queue falhar definitivamente
+        await repo.deleteAsset(asset.id);
+        throw err;
+      }
+      await new Promise(r => setTimeout(r, 1000 * (4 - retries))); // backoff: 1s, 2s, 3s
+    }
+  }
 
   return {
     creativeAssetId: asset.id,
@@ -165,7 +190,155 @@ export async function requestStudioImageGeneration(input: StudioGenerationJobDat
   } as any;
 }
 
+// ─── Modo planner (planejador de conteúdo) ─────────────────────────────────────
+const PLANNER_IMAGE_MODEL = process.env.PLANNER_IMAGE_MODEL ?? 'black-forest-labs/flux.2-klein-4b';
+
+/** Aspect ratio (FLUX-compatível) por tipo de post do planner. */
+export function aspectForPlannerPostType(postType: PlannerPrompt['postType']): string {
+  return postType === 'reel' || postType === 'stories' ? '9:16' : '1:1';
+}
+
+const VALID_POST_TYPES = ['image', 'carousel', 'reel', 'stories'] as const;
+const VALID_PLATFORMS = ['instagram', 'facebook', 'both'] as const;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Normaliza um post do planner antes do insert no calendário.
+ * Garante data YYYY-MM-DD válida (fallback: amanhã UTC), enums válidos e
+ * arrays/hashes corretos — o insert em socialPosts NUNCA quebra por shape.
+ */
+export function normalizePlannerPost(post: PlannerPrompt): PlannerPrompt {
+  const date =
+    ISO_DATE_RE.test(post.date) && !Number.isNaN(new Date(`${post.date}T00:00:00Z`).getTime())
+      ? post.date
+      : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const postType = VALID_POST_TYPES.includes(post.postType as (typeof VALID_POST_TYPES)[number])
+    ? post.postType
+    : 'image';
+
+  const platform = VALID_PLATFORMS.includes(post.platform as (typeof VALID_PLATFORMS)[number])
+    ? post.platform
+    : 'instagram';
+
+  const hashtags = Array.isArray(post.hashtags) ? post.hashtags.filter((h): h is string => typeof h === 'string') : [];
+
+  return {
+    date,
+    title: typeof post.title === 'string' ? post.title : '',
+    caption: typeof post.caption === 'string' ? post.caption : '',
+    cta: typeof post.cta === 'string' ? post.cta : '',
+    hashtags,
+    imagePrompt: typeof post.imagePrompt === 'string' ? post.imagePrompt : '',
+    postType,
+    platform,
+  };
+}
+
+/**
+ * Etapa 2.5 do fluxo: gera a imagem real via OpenRouter/FLUX, persiste no R2 e
+ * grava o social_post no calendário. Chamado pelo worker studio (modo planner)
+ * quando a imagem é concluída.
+ * IDEMPOTENTE: verifica se socialPost já existe para (planId, date, postType) antes de criar.
+ */
+export async function processPlannerImageJob(input: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
+  const rawPost = input.post;
+  const planId = input.planId;
+  if (!rawPost || !planId) {
+    throw new AppError(400, 'PLANNER_IMAGE_MISSING_DATA', 'Job de imagem do planner sem post/planId.');
+  }
+
+  // Normaliza data/enums antes de qualquer query/insert (defensivo).
+  const post = normalizePlannerPost(rawPost);
+  const repo = new StudioRepository(input.tenantId);
+  const plannerRepo = new PlannerRepository(input.tenantId);
+
+  // IDEMPOTÊNCIA: Verificar se socialPost já foi criado para este post
+  const existingPost = await plannerRepo.findPostByPlanDateType(planId, post.date, post.postType);
+
+  if (existingPost) {
+    // Job já processado com sucesso - retornar resultado existente
+    const existingAsset = await repo.findAssetByUrl(existingPost.imageUrl ?? '');
+    return {
+      creativeAssetId: existingAsset?.id ?? '',
+      imageUrl: existingPost.imageUrl ?? '',
+      status: 'pending_compliance' as const,
+    };
+  }
+
+  const base64 = await openrouterService.generateImage({
+    model: PLANNER_IMAGE_MODEL,
+    prompt: post.imagePrompt,
+    aspect_ratio: aspectForPlannerPostType(post.postType),
+    logoUrl: input.logoUrl,
+  });
+
+  const buffer = Buffer.from(base64.split(',')[1] ?? base64, 'base64');
+  const fileName = `planner/${input.tenantId}/${planId}/${post.date}-${generateId()}.png`;
+  const imageUrl = await uploadAsset(buffer, fileName, 'image/png');
+
+  // 1) Cria o creativeAsset para aparecer na biblioteca do estúdio
+  const creativeAsset = await repo.createAsset({
+    tenantId: input.tenantId,
+    type: 'image',
+    url: imageUrl,
+    complianceStatus: 'pending_compliance',
+  });
+
+  // Enfileira compliance check com retry
+  const complianceQueue = await getComplianceQueue();
+  let complianceEnqueued = false;
+  let retries = 3;
+  while (!complianceEnqueued && retries > 0) {
+    try {
+      await complianceQueue.add('compliance-check', { creativeAssetId: creativeAsset.id, tenantId: input.tenantId }, {
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+      });
+      complianceEnqueued = true;
+    } catch (err) {
+      retries--;
+      if (retries === 0) {
+        // Rollback: deletar creativeAsset criado se compliance queue falhar definitivamente
+        await repo.deleteAsset(creativeAsset.id);
+        throw err;
+      }
+      await new Promise(r => setTimeout(r, 1000 * (4 - retries))); // backoff: 1s, 2s, 3s
+    }
+  }
+
+  // 2) Grava o social_post no calendário referenciando o creativeAsset
+  await plannerRepo.createPost({
+    tenantId: input.tenantId,
+    planId,
+    platform: post.platform === 'both' ? 'instagram' : post.platform,
+    postType: post.postType,
+    title: post.title,
+    caption: post.caption,
+    cta: post.cta,
+    hashtags: post.hashtags,
+    imagePrompt: post.imagePrompt,
+    imageUrl,
+    dayIndex: new Date(`${post.date}T00:00:00Z`).getUTCDate(),
+    calendarDate: post.date,
+    scheduledAt: new Date(`${post.date}T12:00:00Z`),
+    status: 'draft',
+  });
+
+  // Verificar se todos os posts do plano foram criados e completar o job do planner
+  await checkAndCompletePlannerJob(planId, input.tenantId, 8); // 8 posts esperados por padrão
+
+  return {
+    creativeAssetId: String(creativeAsset.id),
+    imageUrl,
+    status: 'pending_compliance' as const,
+  };
+}
+
 export async function processStudioGenerationJob(input: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
+  if (input?.mode === 'planner') {
+    return processPlannerImageJob(input);
+  }
   if (!input) {
     return { message: 'Job de imagem processado' } as any;
   }
@@ -180,33 +353,26 @@ export const studioService = {
   generateCopy,
   requestStudioImageGeneration,
   processStudioGenerationJob,
+  processPlannerImageJob,
 };
 
 const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-const IMAGE_FETCH_TIMEOUT_MS = 30000;
+const IMAGE_FETCH_TIMEOUT_MS = 90000;
 
 export async function uploadCreativeAssetToMeta(params: {
   tenantId: string;
   creativeAssetId: string;
   adAccountId: string;
 }): Promise<{ metaAssetId: string }> {
-  const asset = await db.query.creativeAssets.findFirst({
-    where: eq(creativeAssets.id, params.creativeAssetId),
-  });
+  const repo = new StudioRepository(params.tenantId);
+  const asset = await repo.findAssetById(params.creativeAssetId);
 
   if (!asset) {
     throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
   }
 
-  if (asset.tenantId !== params.tenantId) {
-    throw new AppError(403, 'FORBIDDEN', 'Este asset nao pertence ao seu tenant.');
-  }
-
-  const metaConn = await db.query.metaConnections.findFirst({
-    where: eq(metaConnections.tenantId, params.tenantId),
-    orderBy: (table, { desc }) => [desc(table.createdAt)],
-  });
+  const metaConn = await repo.findLatestMetaConnection();
 
   if (!metaConn) {
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
@@ -274,24 +440,20 @@ export async function uploadCreativeAssetToMeta(params: {
     throw err;
   }
 
-  await db
-    .update(creativeAssets)
-    .set({ metaAssetId, complianceStatus: 'approved' })
-    .where(eq(creativeAssets.id, params.creativeAssetId));
+  await repo.patchAsset(params.creativeAssetId, { metaAssetId, complianceStatus: 'approved' });
 
   return { metaAssetId };
 }
 
 export async function deleteStudioAsset(params: { tenantId: string; assetId: string }): Promise<void> {
-  const asset = await db.query.creativeAssets.findFirst({
-    where: and(eq(creativeAssets.id, params.assetId), eq(creativeAssets.tenantId, params.tenantId)),
-  });
+  const repo = new StudioRepository(params.tenantId);
+  const asset = await repo.findAssetById(params.assetId);
 
   if (!asset) {
     throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
   }
 
-  await db.delete(creativeAssets).where(eq(creativeAssets.id, params.assetId));
+  await repo.deleteAsset(params.assetId);
 }
 
 export type StudioAssetListItem = {
@@ -346,52 +508,11 @@ export async function listStudioAssetsForTenant(params: {
   page: number;
   totalPages: number;
 }> {
-  const { tenantId, type, status, page, limit } = params;
-  const offset = (page - 1) * limit;
+  const { type, status, page, limit } = params;
+  const repo = new StudioRepository(params.tenantId);
+  const { rows, total, modificationsRemainingByRootId } = await repo.listAssets({ type, status, page, limit });
 
-  const clauses: SQL[] = [eq(creativeAssets.tenantId, tenantId)];
-  if (type) {
-    clauses.push(eq(creativeAssets.type, type));
-  }
-  if (status === 'pending') {
-    clauses.push(
-      or(
-        eq(creativeAssets.complianceStatus, 'pending'),
-        eq(creativeAssets.complianceStatus, 'pending_compliance'),
-      )!,
-    );
-  } else if (status) {
-    clauses.push(eq(creativeAssets.complianceStatus, status));
-  }
-
-  const whereClause = and(...clauses);
-
-  const [countRow] = await db
-    .select({ total: count() })
-    .from(creativeAssets)
-    .where(whereClause);
-
-  const rows = await db.query.creativeAssets.findMany({
-    where: whereClause,
-    orderBy: [desc(creativeAssets.createdAt)],
-    limit,
-    offset,
-  });
-
-  const total = Number((countRow as any)?.total ?? 0);
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-
-  // modificationsRemaining só é significativo na linha raiz da linhagem —
-  // resolve em lote pra não fazer N+1 (uma query pros ids raiz distintos
-  // desta página).
-  const rootIds = Array.from(new Set(rows.map((r: any) => r.rootAssetId ?? r.id)));
-  const rootRows = rootIds.length
-    ? await db.query.creativeAssets.findMany({
-        where: inArray(creativeAssets.id, rootIds),
-        columns: { id: true, modificationsRemaining: true },
-      })
-    : [];
-  const modificationsRemainingByRootId = new Map(rootRows.map((r) => [r.id, r.modificationsRemaining]));
 
   return {
     assets: rows.map((r: any) => ({

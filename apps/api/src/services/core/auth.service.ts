@@ -2,12 +2,13 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { db } from '../../lib/db.js';
 import { tenants, users } from '../../lib/db.js';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { getRedis } from '../../lib/redis.js';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../../lib/jwt.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { sendWelcomeEmail, sendOtpEmail, sendPasswordResetConfirmation } from '../email/email.service.js';
 import type { UserDTO } from '../../lib/shared.js';
+import { AuthRepository } from '../../repository/auth.repository.js';
 
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 
@@ -34,9 +35,7 @@ async function ensureUniqueSlug(baseSlug: string): Promise<string> {
   let counter = 1;
 
   while (true) {
-    const existing = await db.query.tenants.findFirst({
-      where: eq(tenants.slug, slug),
-    });
+    const existing = await new AuthRepository('').findTenantBySlug(slug);
 
     if (!existing) {
       return slug;
@@ -99,9 +98,7 @@ export async function register(data: {
   companyName: string;
 }): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
   // Check if email already exists
-  const existingUser = await db.query.users.findFirst({
-    where: eq(users.email, data.email),
-  });
+  const existingUser = await new AuthRepository('').findUserByEmail(data.email);
 
   if (existingUser) {
     throw new AppError(409, 'EMAIL_EXISTS', 'Email already registered');
@@ -163,9 +160,7 @@ export async function login(data: {
   email: string;
   password: string;
 }): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.email, data.email),
-  });
+  const user = await new AuthRepository('').findUserByEmail(data.email);
 
   if (!user) {
     throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
@@ -255,18 +250,13 @@ export async function logout(userId: string): Promise<void> {
 }
 
 export async function getMe(userId: string): Promise<UserDTO & { tenantName: string; tenantSlug: string; tenantCodigo: string; businessContext: string | null }> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-  });
+  const user = await new AuthRepository('').findUserById(userId);
 
   if (!user) {
     throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
   }
 
-  const tenant = await db.query.tenants.findFirst({
-    where: eq(tenants.id, user.tenantId),
-  });
-
+  const tenant = await new AuthRepository(user.tenantId).findTenant();
   return { ...userToDTO(user), tenantName: tenant?.name ?? '', tenantSlug: tenant?.slug ?? '', tenantCodigo: tenant?.codigo ?? '', businessContext: tenant?.businessContext ?? null };
 }
 
@@ -274,9 +264,7 @@ export async function updateMe(
   userId: string,
   data: { name?: string; tenantName?: string; notificationPrefs?: UserDTO['notificationPrefs']; audienceDefaults?: Record<string, unknown>; businessContext?: string },
 ): Promise<UserDTO & { tenantName: string; tenantSlug: string; tenantCodigo: string; businessContext: string | null }> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-  });
+  const user = await new AuthRepository('').findUserById(userId);
 
   if (!user) {
     throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
@@ -288,24 +276,22 @@ export async function updateMe(
   if (data.audienceDefaults !== undefined) userUpdates.audienceDefaults = data.audienceDefaults;
 
   if (Object.keys(userUpdates).length > 0) {
-    await db.update(users).set(userUpdates).where(eq(users.id, userId));
+    await new AuthRepository('').patchUser(userId, userUpdates);
   }
 
   if (data.tenantName !== undefined) {
-    await db.update(tenants).set({ name: data.tenantName }).where(eq(tenants.id, user.tenantId));
+    await new AuthRepository(user.tenantId).patchTenant(user.tenantId, { name: data.tenantName });
   }
 
   if (data.businessContext !== undefined) {
-    await db.update(tenants).set({ businessContext: data.businessContext || null }).where(eq(tenants.id, user.tenantId));
+    await new AuthRepository(user.tenantId).patchTenant(user.tenantId, { businessContext: data.businessContext || null });
   }
 
   return getMe(userId);
 }
 
 export async function verifyEmail(email: string, otp: string): Promise<UserDTO> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.email, email),
-  });
+  const user = await new AuthRepository('').findUserByEmail(email);
 
   if (!user) {
     throw new AppError(400, 'INVALID_OR_EXPIRED_OTP', 'Código inválido ou expirado');
@@ -321,14 +307,11 @@ export async function verifyEmail(email: string, otp: string): Promise<UserDTO> 
     throw new AppError(400, 'INVALID_OR_EXPIRED_OTP', 'Código inválido ou expirado');
   }
 
-  await db
-    .update(users)
-    .set({
+  await new AuthRepository('').patchUser(user.id, {
       emailVerified: true,
       otpCode: null,
       otpExpiresAt: null,
-    })
-    .where(eq(users.id, user.id));
+    });
 
   try {
     await sendWelcomeEmail(user.email, user.name || 'Usuário');
@@ -337,9 +320,7 @@ export async function verifyEmail(email: string, otp: string): Promise<UserDTO> 
     console.error(`[verifyEmail] Failed to send welcome email to ${user.email}:`, errorMessage);
   }
 
-  const updatedUser = await db.query.users.findFirst({
-    where: eq(users.id, user.id),
-  });
+  const updatedUser = await new AuthRepository('').findUserById(user.id);
 
   if (!updatedUser) {
     throw new AppError(500, 'USER_NOT_FOUND', 'Usuário não encontrado');
@@ -353,21 +334,16 @@ function generateSecureOtp(): string {
 }
 
 export async function forgotPassword(email: string): Promise<void> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.email, email),
-  });
+  const user = await new AuthRepository('').findUserByEmail(email);
 
   if (user) {
     const otp = generateSecureOtp();
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    await db
-      .update(users)
-      .set({
-        otpCode: otp,
-        otpExpiresAt,
-      })
-      .where(eq(users.id, user.id));
+    await new AuthRepository('').patchUser(user.id, {
+      otpCode: otp,
+      otpExpiresAt,
+    });
 
     sendOtpEmail(user.email, otp).catch((error) => {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -377,9 +353,7 @@ export async function forgotPassword(email: string): Promise<void> {
 }
 
 export async function resetPassword(email: string, otp: string, newPassword: string): Promise<UserDTO> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.email, email),
-  });
+  const user = await new AuthRepository('').findUserByEmail(email);
 
   if (!user) {
     throw new AppError(400, 'INVALID_OR_EXPIRED_OTP', 'Código inválido ou expirado');
@@ -397,16 +371,13 @@ export async function resetPassword(email: string, otp: string, newPassword: str
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
 
-  await db
-    .update(users)
-    .set({
-      passwordHash,
-      otpCode: null,
-      otpExpiresAt: null,
-      resetToken: null,
-      resetTokenExpiresAt: null,
-    })
-    .where(eq(users.id, user.id));
+  await new AuthRepository('').patchUser(user.id, {
+    passwordHash,
+    otpCode: null,
+    otpExpiresAt: null,
+    resetToken: null,
+    resetTokenExpiresAt: null,
+  });
 
   await revokeRefreshToken(user.id);
 
@@ -415,9 +386,7 @@ export async function resetPassword(email: string, otp: string, newPassword: str
     console.error(`[resetPassword] Failed to send password reset confirmation to ${user.email}:`, errorMessage);
   });
 
-  const updatedUser = await db.query.users.findFirst({
-    where: eq(users.id, user.id),
-  });
+  const updatedUser = await new AuthRepository('').findUserById(user.id);
 
   if (!updatedUser) {
     throw new AppError(500, 'USER_NOT_FOUND', 'Usuário não encontrado');
@@ -431,9 +400,7 @@ export async function changePassword(
   currentPassword: string,
   newPassword: string,
 ): Promise<void> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-  });
+  const user = await new AuthRepository('').findUserById(userId);
 
   if (!user) {
     throw new AppError(401, 'USER_NOT_FOUND', 'Usuário não encontrado');
@@ -449,5 +416,5 @@ export async function changePassword(
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+  await new AuthRepository('').patchUser(userId, { passwordHash });
 }

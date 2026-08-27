@@ -17,6 +17,7 @@ export async function startStudioGenerationWorker(): Promise<void> {
       connection: {
         url: redisUrl,
       },
+      concurrency: 6,
     }
   );
 

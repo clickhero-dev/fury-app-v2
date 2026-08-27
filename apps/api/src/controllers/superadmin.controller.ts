@@ -13,6 +13,7 @@ import {
   clientGoals,
 } from "@fury/db";
 import { AppError } from "../middleware/errorHandler.js";
+import { SuperAdminRepository } from "../repository/superadmin.repository.js";
 
 const createUserSchema = z.object({
   tenantId: z.string().uuid(),
@@ -131,32 +132,23 @@ export async function listTenants(
   next: NextFunction,
 ) {
   try {
-    const allTenants = await db.query.tenants.findMany({
-      orderBy: [desc(tenants.createdAt)],
-    });
+    const repo = new SuperAdminRepository("");
+    const allTenants = await repo.listTenants();
 
     const data = await Promise.all(
       allTenants.map(async (t) => {
-        const [userCount] = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(users)
-          .where(eq(users.tenantId, t.id));
+        const userCount = await repo.countUsersByTenant(t.id);
 
-        const sub = await db.query.subscriptions.findFirst({
-          where: eq(subscriptions.tenantId, t.id),
-          orderBy: [desc(subscriptions.createdAt)],
-        });
+        const sub = await repo.findLatestSubscriptionByTenant(t.id);
 
         let plan = null;
         if (sub) {
-          plan = await db.query.plans.findFirst({
-            where: eq(plans.id, sub.planId),
-          });
+          plan = await repo.findPlanById(sub.planId);
         }
 
         return {
           ...t,
-          userCount: Number(userCount?.count ?? 0),
+          userCount,
           subscription: sub ? { ...sub, plan } : null,
         };
       }),
@@ -174,40 +166,25 @@ export async function getTenant(
   next: NextFunction,
 ) {
   try {
-    const tenant = await db.query.tenants.findFirst({
-      where: eq(tenants.id, req.params.id),
-    });
+    const repo = new SuperAdminRepository("");
+    const tenant = await repo.getTenantById(req.params.id);
     if (!tenant)
       throw new AppError(404, "TENANT_NOT_FOUND", "Tenant não encontrado");
 
-    const tenantUsers = await db.query.users.findMany({
-      where: eq(users.tenantId, tenant.id),
-      orderBy: [desc(users.createdAt)],
-    });
+    const tenantUsers = await repo.listUsersByTenant(tenant.id);
 
-    const sub = await db.query.subscriptions.findFirst({
-      where: eq(subscriptions.tenantId, tenant.id),
-      orderBy: [desc(subscriptions.createdAt)],
-    });
+    const sub = await repo.findLatestSubscriptionByTenant(tenant.id);
 
     let plan = null;
     if (sub) {
-      plan = await db.query.plans.findFirst({
-        where: eq(plans.id, sub.planId),
-      });
+      plan = await repo.findPlanById(sub.planId);
     }
 
-    const config = await db.query.furyConfig.findFirst({
-      where: eq(furyConfig.tenantId, tenant.id),
-    });
+    const config = await repo.findFuryConfig(tenant.id);
 
-    const brandKit = await db.query.brandKits.findFirst({
-      where: eq(brandKits.tenantId, tenant.id),
-    });
+    const brandKit = await repo.findBrandKitByTenant(tenant.id);
 
-    const goals = await db.query.clientGoals.findFirst({
-      where: eq(clientGoals.tenantId, tenant.id),
-    });
+    const goals = await repo.findClientGoalByTenant(tenant.id);
 
     // Find the owner user (for audience defaults)
     const owner = tenantUsers.find((u) => u.role === "owner") ?? tenantUsers[0];
@@ -243,13 +220,12 @@ export async function deleteTenant(
   next: NextFunction,
 ) {
   try {
-    const tenant = await db.query.tenants.findFirst({
-      where: eq(tenants.id, req.params.id),
-    });
+    const repo = new SuperAdminRepository("");
+    const tenant = await repo.getTenantById(req.params.id);
     if (!tenant)
       throw new AppError(404, "TENANT_NOT_FOUND", "Tenant não encontrado");
 
-    await db.delete(tenants).where(eq(tenants.id, req.params.id));
+    await repo.deleteTenant(req.params.id);
 
     res.json({
       success: true,
@@ -269,25 +245,21 @@ export async function createUser(
   next: NextFunction,
 ) {
   try {
+    const repo = new SuperAdminRepository("");
     const body = createUserSchema.parse(req.body);
 
-    const existing = await db.query.users.findFirst({
-      where: eq(users.email, body.email),
-    });
+    const existing = await repo.findUserByEmail(body.email);
     if (existing)
       throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
 
     const passwordHash = await bcrypt.hash(body.password, 10);
-    const [user] = await db
-      .insert(users)
-      .values({
-        tenantId: body.tenantId,
-        name: body.name,
-        email: body.email,
-        passwordHash,
-        role: body.role,
-      })
-      .returning();
+    const user = await repo.createUser({
+      tenantId: body.tenantId,
+      name: body.name,
+      email: body.email,
+      passwordHash,
+      role: body.role,
+    });
 
     const { passwordHash: _, ...safe } = user;
 
@@ -313,14 +285,11 @@ export async function setupTenant(
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/(^-|-$)/g, "");
 
-    const existingSlug = await db.query.tenants.findFirst({
-      where: eq(tenants.slug, slug),
-    });
+    const repo = new SuperAdminRepository("");
+    const existingSlug = await repo.findTenantBySlug(slug);
     if (existingSlug) throw new AppError(409, "SLUG_EXISTS", "Slug já existe");
 
-    const existingEmail = await db.query.users.findFirst({
-      where: eq(users.email, body.userEmail),
-    });
+    const existingEmail = await repo.findUserByEmail(body.userEmail);
     if (existingEmail)
       throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
 
@@ -362,9 +331,7 @@ export async function checkEmail(
   next: NextFunction,
 ) {
   try {
-    const user = await db.query.users.findFirst({
-      where: eq(users.email, req.params.email),
-    });
+    const user = await new SuperAdminRepository("").findUserByEmail(req.params.email);
     res.json({ success: true, data: { exists: !!user } });
   } catch (err) {
     next(err);
@@ -377,11 +344,10 @@ export async function updateUser(
   next: NextFunction,
 ) {
   try {
+    const repo = new SuperAdminRepository("");
     const body = updateUserSchema.parse(req.body);
 
-    const existing = await db.query.users.findFirst({
-      where: eq(users.id, req.params.id),
-    });
+    const existing = await repo.findUserById(req.params.id);
     if (!existing)
       throw new AppError(404, "USER_NOT_FOUND", "Usuário não encontrado");
 
@@ -393,7 +359,7 @@ export async function updateUser(
       updates.audienceDefaults = body.audienceDefaults;
 
     if (Object.keys(updates).length > 0) {
-      await db.update(users).set(updates).where(eq(users.id, req.params.id));
+      await repo.updateUser(req.params.id, updates);
     }
 
     res.json({
@@ -412,13 +378,12 @@ export async function deleteUser(
   next: NextFunction,
 ) {
   try {
-    const existing = await db.query.users.findFirst({
-      where: eq(users.id, req.params.id),
-    });
+    const repo = new SuperAdminRepository("");
+    const existing = await repo.findUserById(req.params.id);
     if (!existing)
       throw new AppError(404, "USER_NOT_FOUND", "Usuário não encontrado");
 
-    await db.delete(users).where(eq(users.id, req.params.id));
+    await repo.deleteUser(req.params.id);
 
     res.json({
       success: true,
@@ -438,12 +403,10 @@ export async function updateSubscription(
   next: NextFunction,
 ) {
   try {
+    const repo = new SuperAdminRepository("");
     const body = updateSubscriptionSchema.parse(req.body);
 
-    const sub = await db.query.subscriptions.findFirst({
-      where: eq(subscriptions.tenantId, req.params.tenantId),
-      orderBy: [desc(subscriptions.createdAt)],
-    });
+    const sub = await repo.findLatestSubscriptionByTenant(req.params.tenantId);
 
     const now = new Date();
 
@@ -451,9 +414,7 @@ export async function updateSubscription(
       // Create subscription if none exists
       const planId =
         body.planId ??
-        (await db.query.plans.findFirst({
-          columns: { id: true },
-        }))?.id;
+        (await repo.getFirstPlan())?.id;
       if (!planId)
         throw new AppError(400, "PLAN_REQUIRED", "Informe um plano ou crie um antes");
 
@@ -466,11 +427,11 @@ export async function updateSubscription(
           ? new Date(body.currentPeriodEnd)
           : undefined;
 
-      const chosenPlan = await db.query.plans.findFirst({ where: eq(plans.id, planId) });
+      const chosenPlan = await repo.findPlanById(planId);
       const creativesRemaining =
         (chosenPlan?.limits as { creativesPerMonth?: number | null } | null)?.creativesPerMonth ?? null;
 
-      await db.insert(subscriptions).values({
+      await repo.createSubscription({
         tenantId: req.params.tenantId,
         planId,
         status: body.status ?? "trial",
@@ -504,17 +465,14 @@ export async function updateSubscription(
       }
 
       const effectivePlanId = (updates.planId as string | undefined) ?? sub.planId;
-      const effectivePlan = await db.query.plans.findFirst({ where: eq(plans.id, effectivePlanId) });
+      const effectivePlan = await repo.findPlanById(effectivePlanId);
       updates.creativesRemaining =
         (effectivePlan?.limits as { creativesPerMonth?: number | null } | null)?.creativesPerMonth ?? null;
 
       updates.updatedAt = now;
 
       if (Object.keys(updates).length >= 1) {
-        await db
-          .update(subscriptions)
-          .set(updates)
-          .where(eq(subscriptions.id, sub.id));
+        await repo.updateSubscription(sub.id, updates);
       }
     }
 
@@ -536,11 +494,10 @@ export async function updateFuryConfig(
   next: NextFunction,
 ) {
   try {
+    const repo = new SuperAdminRepository("");
     const body = updateFuryConfigSchema.parse(req.body);
 
-    const existing = await db.query.furyConfig.findFirst({
-      where: eq(furyConfig.tenantId, req.params.tenantId),
-    });
+    const existing = await repo.findFuryConfig(req.params.tenantId);
 
     const values: Record<string, unknown> = { updatedAt: new Date() };
     if (body.targetRoas !== undefined) values.targetRoas = body.targetRoas;
@@ -550,15 +507,12 @@ export async function updateFuryConfig(
       values.targetBudgetUtilization = body.targetBudgetUtilization;
 
     if (existing) {
-      await db
-        .update(furyConfig)
-        .set(values)
-        .where(eq(furyConfig.id, existing.id));
+      await repo.updateFuryConfig(req.params.tenantId, values);
     } else {
-      await db.insert(furyConfig).values({
+      await repo.createFuryConfig({
         tenantId: req.params.tenantId,
         ...values,
-      } as unknown as typeof furyConfig.$inferInsert);
+      });
     }
 
     res.json({
@@ -579,9 +533,7 @@ export async function getBrandKit(
   next: NextFunction,
 ) {
   try {
-    const bk = await db.query.brandKits.findFirst({
-      where: eq(brandKits.tenantId, req.params.tenantId),
-    });
+    const bk = await new SuperAdminRepository("").findBrandKitByTenant(req.params.tenantId);
 
     res.json({ success: true, data: bk, timestamp: new Date().toISOString() });
   } catch (err) {
@@ -595,10 +547,9 @@ export async function upsertBrandKit(
   next: NextFunction,
 ) {
   try {
+    const repo = new SuperAdminRepository("");
     const body = updateBrandKitSchema.parse(req.body);
-    const existing = await db.query.brandKits.findFirst({
-      where: eq(brandKits.tenantId, req.params.tenantId),
-    });
+    const existing = await repo.findBrandKitByTenant(req.params.tenantId);
 
     const values: Record<string, unknown> = { updatedAt: new Date() };
     if (body.logo_url !== undefined) values.logoUrl = body.logo_url;
@@ -610,15 +561,12 @@ export async function upsertBrandKit(
     if (body.photo_urls !== undefined) values.photoUrls = body.photo_urls;
 
     if (existing) {
-      await db
-        .update(brandKits)
-        .set(values)
-        .where(eq(brandKits.id, existing.id));
+      await repo.updateBrandKit(req.params.tenantId, values);
     } else {
-      await db.insert(brandKits).values({
+      await repo.createBrandKit({
         tenantId: req.params.tenantId,
         ...values,
-      } as unknown as typeof brandKits.$inferInsert);
+      });
     }
 
     res.json({
@@ -639,12 +587,11 @@ export async function upsertGoals(
   next: NextFunction,
 ) {
   try {
+    const repo = new SuperAdminRepository("");
     const body = upsertGoalsSchema.parse(req.body);
     const tenantId = req.params.tenantId;
 
-    const existing = await db.query.clientGoals.findFirst({
-      where: eq(clientGoals.tenantId, tenantId),
-    });
+    const existing = await repo.findClientGoalByTenant(tenantId);
 
     const values = {
       objective: body.objective,
@@ -656,15 +603,12 @@ export async function upsertGoals(
     };
 
     if (existing) {
-      await db
-        .update(clientGoals)
-        .set(values)
-        .where(eq(clientGoals.id, existing.id));
+      await repo.updateClientGoal(tenantId, values);
     } else {
-      await db.insert(clientGoals).values({
+      await repo.createClientGoal({
         tenantId,
         ...values,
-      } as unknown as typeof clientGoals.$inferInsert);
+      });
     }
 
     res.json({
@@ -687,10 +631,10 @@ export async function updateAudience(
   try {
     const tenantId = req.params.tenantId;
 
+    const repo = new SuperAdminRepository("");
+
     // Find the owner user of this tenant
-    const owner = await db.query.users.findFirst({
-      where: eq(users.tenantId, tenantId),
-    });
+    const owner = (await repo.listUsersByTenant(tenantId))[0] ?? null;
     if (!owner)
       throw new AppError(
         404,
@@ -701,16 +645,10 @@ export async function updateAudience(
     const { businessContext, ...audienceOnly } = req.body;
     const body = updateUserSchema.shape.audienceDefaults.parse(audienceOnly);
 
-    await db
-      .update(users)
-      .set({ audienceDefaults: body })
-      .where(eq(users.id, owner.id));
+    await repo.updateUserAudienceDefaults(owner.id, body);
 
     if (businessContext !== undefined) {
-      await db
-        .update(tenants)
-        .set({ businessContext })
-        .where(eq(tenants.id, tenantId));
+      await repo.updateTenant(tenantId, { businessContext });
     }
 
     res.json({
@@ -731,18 +669,10 @@ export async function listPlans(
   next: NextFunction,
 ) {
   try {
-    const allPlans = await db.query.plans.findMany({
-      orderBy: [plans.priceCents],
-    });
+    const repo = new SuperAdminRepository("");
+    const allPlans = await repo.listPlans();
 
-    // ponytail: 2 queries (plans + group-by counts) instead of N+1
-    const counts = await db
-      .select({
-        planId: subscriptions.planId,
-        count: sql<number>`count(*)::int`.mapWith(Number),
-      })
-      .from(subscriptions)
-      .groupBy(subscriptions.planId);
+    const counts = await repo.listSubscriberCountsByPlan();
 
     const countMap = new Map(counts.map((c) => [c.planId, c.count]));
 
@@ -768,7 +698,7 @@ export async function createPlan(
 ) {
   try {
     const body = createPlanSchema.parse(req.body);
-    const [plan] = await db.insert(plans).values(body).returning();
+    const plan = await new SuperAdminRepository("").createPlan(body);
     res
       .status(201)
       .json({ success: true, data: plan, timestamp: new Date().toISOString() });
@@ -783,14 +713,13 @@ export async function updatePlan(
   next: NextFunction,
 ) {
   try {
+    const repo = new SuperAdminRepository("");
     const body = updatePlanSchema.parse(req.body);
-    const existing = await db.query.plans.findFirst({
-      where: eq(plans.id, req.params.id),
-    });
+    const existing = await repo.findPlanById(req.params.id);
     if (!existing)
       throw new AppError(404, "PLAN_NOT_FOUND", "Plano não encontrado");
 
-    await db.update(plans).set(body).where(eq(plans.id, req.params.id));
+    await repo.updatePlan(req.params.id, body);
     res.json({
       success: true,
       data: null,
@@ -807,22 +736,16 @@ export async function deletePlan(
   next: NextFunction,
 ) {
   try {
+    const repo = new SuperAdminRepository("");
     const { id } = req.params;
     const migrateTo = typeof req.query.migrateTo === "string" ? req.query.migrateTo : undefined;
 
-    const plan = await db.query.plans.findFirst({
-      where: eq(plans.id, id),
-    });
+    const plan = await repo.findPlanById(id);
     if (!plan)
       throw new AppError(404, "PLAN_NOT_FOUND", "Plano não encontrado");
 
     // Count subscribers
-    const [result] = await db
-      .select({ count: sql<number>`count(*)::int`.mapWith(Number) })
-      .from(subscriptions)
-      .where(eq(subscriptions.planId, id));
-
-    const subscriberCount = result?.count ?? 0;
+    const subscriberCount = await repo.countSubscriptionsByPlan(id);
 
     if (subscriberCount > 0) {
       if (!migrateTo) {
@@ -835,19 +758,14 @@ export async function deletePlan(
       }
 
       // ponytail: verify target exists before migrating
-      const targetPlan = await db.query.plans.findFirst({
-        where: eq(plans.id, migrateTo),
-      });
+      const targetPlan = await repo.findPlanById(migrateTo);
       if (!targetPlan)
         throw new AppError(404, "TARGET_PLAN_NOT_FOUND", "Plano de destino não encontrado");
 
-      await db
-        .update(subscriptions)
-        .set({ planId: migrateTo, updatedAt: new Date() })
-        .where(eq(subscriptions.planId, id));
+      await repo.migratePlanSubscriptions(id, migrateTo);
     }
 
-    await db.delete(plans).where(eq(plans.id, id));
+    await repo.deletePlan(id);
 
     res.json({
       success: true,
@@ -872,39 +790,8 @@ export async function listUsers(
     const offset = (page - 1) * limit;
     const search = (req.query.search as string)?.trim() || null;
 
-    const where = search
-      ? or(
-          ilike(users.name, `%${search}%`),
-          ilike(users.email, `%${search}%`),
-          ilike(tenants.name, `%${search}%`),
-        )
-      : undefined;
-
-    const [countResult] = await db
-      .select({ total: sql<number>`count(*)` })
-      .from(users)
-      .leftJoin(tenants, eq(users.tenantId, tenants.id))
-      .where(where);
-
-    const total = Number(countResult?.total ?? 0);
+    const { rows, total } = await new SuperAdminRepository("").paginateUsersAdmin(search ?? '', limit, offset);
     const pages = Math.ceil(total / limit);
-
-    const rows = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        email: users.email,
-        role: users.role,
-        tenantId: users.tenantId,
-        createdAt: users.createdAt,
-        tenantName: tenants.name,
-      })
-      .from(users)
-      .leftJoin(tenants, eq(users.tenantId, tenants.id))
-      .where(where)
-      .orderBy(desc(users.createdAt))
-      .limit(limit)
-      .offset(offset);
 
     res.json({
       success: true,
@@ -925,16 +812,11 @@ export async function listTenantCampaigns(
 ) {
   try {
     const { tenantId } = req.params;
+    const repo = new SuperAdminRepository("");
 
-    const campaigns = await db.query.campaigns.findMany({
-      where: eq(sql`tenant_id`, tenantId),
-      orderBy: [desc(sql`created_at`)],
-    });
+    const campaigns = await repo.findCampaignsByTenant(tenantId);
 
-    const creativeAssetsList = await db.query.creativeAssets.findMany({
-      where: eq(sql`tenant_id`, tenantId),
-      orderBy: [desc(sql`created_at`)],
-    });
+    const creativeAssetsList = await repo.findCreativeAssetsByTenant(tenantId);
 
     res.json({
       success: true,

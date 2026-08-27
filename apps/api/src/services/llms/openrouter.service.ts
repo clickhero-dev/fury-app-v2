@@ -1,5 +1,4 @@
 import { AppError } from '../../middleware/errorHandler.js';
-import OpenAI from 'openai';
 import { persistOpenRouterImageResponse } from '../../lib/openrouter-image-response.js';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
@@ -337,10 +336,12 @@ export const openrouterService = {
     });
   },
 
-  // ponytail: edição precisa via modelo multimodal (Gemini Nano Banana 2)
+  // ponytail: regeneração via OpenRouter — edição multimodal de imagem (Google Gemini).
+  // Máscara (data URL) opcional como segunda imagem para edição por região.
   async editImage(options: {
     imageUrl: string;
     instructions: string;
+    maskImageUrl?: string;
   }): Promise<string> {
     const apiKey = getClient();
     const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
@@ -352,7 +353,16 @@ export const openrouterService = {
           role: 'user',
           content: [
             { type: 'image_url', image_url: { url: options.imageUrl } },
-            { type: 'text', text: `Edite esta imagem com a seguinte instrução: ${options.instructions}. Preserve rigorosamente todo o resto da imagem. Altere APENAS o que foi pedido.` },
+            ...(options.maskImageUrl ? [{
+              type: 'image_url',
+              image_url: { url: options.maskImageUrl },
+            }, {
+              type: 'text',
+              text: `Edite esta imagem usando a máscara fornecida (região branca) com a instrução: ${options.instructions}. Altere APENAS a região da máscara. Preserve rigorosamente o restante da imagem.`,
+            }] : [{
+              type: 'text',
+              text: `Edite esta imagem com a seguinte instrução: ${options.instructions}. Preserve rigorosamente todo o resto da imagem. Altere APENAS o que foi pedido.`,
+            }]),
           ],
         }],
       }),
@@ -366,58 +376,6 @@ export const openrouterService = {
       return await persistOpenRouterImageResponse(response);
     } catch (err) {
       throw new AppError(502, 'IMAGE_EDIT_EMPTY', (err as Error).message || 'Modelo não retornou imagem editada.');
-    }
-  },
-
-  // ponytail: DALL-E 2 inpainting — lê img+mask do disco com sharp stream, zero heap
-  async inpaintImage(options: {
-    imageUrl: string;
-    maskPath: string;
-    prompt: string;
-  }): Promise<string> {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new AppError(500, 'OPENAI_API_KEY_MISSING', 'OPENAI_API_KEY não configurada.');
-
-    const openai = new OpenAI({ apiKey });
-
-    // ponytail: download original to temp file, sharp streams from disk
-    const { default: sharp } = await import('sharp');
-    const { join } = await import('node:path');
-    const { writeFile, unlink } = await import('node:fs/promises');
-    const { tmpdir } = await import('node:os');
-
-    const imgTmpPath = join(tmpdir(), `inpaint-img-${Date.now()}.png`);
-    const imgResp = await fetch(options.imageUrl);
-    if (!imgResp.ok) throw new AppError(502, 'IMAGE_DOWNLOAD_FAILED', 'Falha ao baixar imagem original.');
-    await writeFile(imgTmpPath, Buffer.from(await imgResp.arrayBuffer()));
-
-    try {
-      // ponytail: sharp streams disk→disk, only 1024×1024 buffer in native memory
-      const imgResizedPath = join(tmpdir(), `inpaint-resized-${Date.now()}.png`);
-      const maskResizedPath = join(tmpdir(), `inpaint-mask-${Date.now()}.png`);
-
-      await sharp(imgTmpPath).resize(1024, 1024, { fit: 'fill' }).png().toFile(imgResizedPath);
-      await sharp(options.maskPath).resize(1024, 1024, { fit: 'fill' }).png().toFile(maskResizedPath);
-
-      const { createReadStream } = await import('node:fs');
-      const response = await openai.images.edit({
-        image: createReadStream(imgResizedPath) as any,
-        mask: createReadStream(maskResizedPath) as any,
-        prompt: options.prompt,
-        n: 1,
-        size: '1024x1024',
-      });
-
-      await unlink(imgResizedPath).catch(() => {});
-      await unlink(maskResizedPath).catch(() => {});
-
-      const resultUrl = response.data?.[0]?.url;
-      const resultB64 = response.data?.[0]?.b64_json;
-      if (resultUrl) return resultUrl;
-      if (resultB64) return `data:image/png;base64,${resultB64}`;
-      throw new AppError(502, 'INPAINT_FAILED', 'OpenAI não retornou imagem editada.');
-    } finally {
-      await unlink(imgTmpPath).catch(() => {});
     }
   },
 };

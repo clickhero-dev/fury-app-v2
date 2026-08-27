@@ -2,25 +2,20 @@ import type { WorkflowSnapshot } from '../services/stateMachine/types.js';
 import type { AgentStep, JobStatus } from '../agents/types.js';
 
 /** Mapeia stageId → nome de agente exibido no frontend. */
-const STAGE_TO_AGENT: Record<string, string> = {
+export const STAGE_TO_AGENT: Record<string, string> = {
   prerequisites: 'Prerequisites Agent',
   context: 'Context Agent',
-  research: 'Research Agent',
-  analytics: 'Analytics Agent',
-  strategy: 'Strategy Agent',
   planner: 'Planner Agent',
-  copywriter: 'Copywriter Agent',
-  creative: 'Creative Agent',
   'image-generation': 'Image Generation Agent',
-  quality: 'Quality Agent',
-  scheduler: 'Scheduler Agent',
-  branding: 'Branding Agent',
   save: 'Salvar plano',
 };
 
-const STAGE_ORDER = [
-  'prerequisites', 'context', 'research', 'analytics', 'strategy', 'planner',
-  'copywriter', 'creative', 'image-generation', 'quality', 'scheduler', 'branding', 'save',
+export const STAGE_ORDER = [
+  'prerequisites',
+  'context',
+  'planner',
+  'image-generation',
+  'save',
 ];
 
 /** Converte um snapshot do workflow em JobStatus (contrato do frontend). */
@@ -44,14 +39,10 @@ export function snapshotToJobStatus(snapshot: WorkflowSnapshot): JobStatus {
     };
   });
 
-  const currentTrace = snapshot.currentStage
-    ? snapshot.stages.find((t) => t.stageId === snapshot.currentStage)
-    : undefined;
-
   return {
     id: snapshot.id,
     tenantId: snapshot.tenantId,
-    status: snapshot.status,
+    status: snapshot.status === 'awaiting_images' ? 'generating' : snapshot.status,
     currentAgent: STAGE_TO_AGENT[snapshot.currentStage ?? ''] ?? 'Pipeline',
     agentProgress: steps,
     planId: snapshot.planId,

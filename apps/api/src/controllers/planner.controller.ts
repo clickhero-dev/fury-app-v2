@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { AppError } from '../middleware/errorHandler.js';
 import { uploadAsset } from '../services/storage/storage.service.js';
+import { openrouterService } from '../services/llms/openrouter.service.js';
 import {
   startPlanGeneration,
   getJobProgress,
@@ -26,6 +27,9 @@ import {
 
 export async function generatePlan(req: Request, res: Response, next: NextFunction) {
   try {
+    // checa se tem créditos disponíveis antes de iniciar o workflow (evita gastar LLM se não tiver créditos)
+    await openrouterService.assertCreditsAvailable();
+
     const tenantId = req.tenant!.tenantId;
     const jobStatus = await startPlanGeneration(tenantId);
     res.json({ success: true, data: jobStatus });

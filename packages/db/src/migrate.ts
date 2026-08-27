@@ -111,7 +111,13 @@ const STEPS: MigrationStep[] = [
     },
   },
   { tag: '0031_migrate_carousel_images' },
-  { tag: '0030_workflow_jobs' },
+  {
+    tag: '0030_workflow_jobs',
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "workflow_status" ADD VALUE IF NOT EXISTS 'awaiting_images'`);
+      console.log('    + added awaiting_images to workflow_status');
+    },
+  },
   { tag: '0011_fr8_publish_retry',
     afterHook: async (client) => {
       await client.unsafe(`ALTER TYPE "post_status" ADD VALUE IF NOT EXISTS 'failed'`);

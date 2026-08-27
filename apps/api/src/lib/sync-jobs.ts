@@ -1,10 +1,9 @@
 import { randomUUID } from 'crypto';
-import { and, eq } from 'drizzle-orm';
-import { db, metaConnections } from './db.js';
 import type { MetaAdAccount } from './meta-api.js';
 import { getUserAdAccounts } from './meta-api.js';
 import { decryptMetaToken } from '../utils/crypto.js';
 import { getRedis, waitForRedisReady } from './redis.js';
+import { MetaRepository } from '../repository/meta.repository.js';
 
 export interface AddSyncJobParams {
   tenantId: string;
@@ -49,12 +48,8 @@ function getRequiredEnv(name: string): string {
 }
 
 async function processSyncJob(job: SyncJobRecord): Promise<void> {
-  const connection = await db.query.metaConnections.findFirst({
-    where: and(
-      eq(metaConnections.tenantId, job.tenantId),
-      eq(metaConnections.metaUserId, job.metaUserId)
-    ),
-  });
+  const repo = new MetaRepository(job.tenantId);
+  const connection = await repo.findMetaConnectionByMetaUserId(job.metaUserId);
 
   if (!connection) {
     console.warn('Meta sync job skipped: connection not found', {
@@ -68,12 +63,7 @@ async function processSyncJob(job: SyncJobRecord): Promise<void> {
   const accessToken = decryptMetaToken(connection.accessToken);
   const { accounts: refreshedAdAccounts } = await getUserAdAccounts(accessToken);
 
-  await db
-    .update(metaConnections)
-    .set({
-      adAccounts: refreshedAdAccounts,
-    })
-    .where(eq(metaConnections.id, connection.id));
+  await repo.patchMetaConnection(connection.id, { adAccounts: refreshedAdAccounts });
 
   console.info('Meta sync job processed', {
     id: job.id,

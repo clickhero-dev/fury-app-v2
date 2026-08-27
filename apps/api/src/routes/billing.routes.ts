@@ -1,10 +1,9 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { and, desc, eq, inArray } from 'drizzle-orm';
-import { db, plans, subscriptions, invoices } from '@fury/db';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { SubscriptionRepository } from '../repository/subscription.repository.js';
 import {
   createCustomer,
   updateCustomer,
@@ -22,10 +21,7 @@ const router = Router();
 
 router.get('/plans', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const activePlans = await db.query.plans.findMany({
-      where: eq(plans.isActive, true),
-      orderBy: [plans.priceCents],
-    });
+    const activePlans = await new SubscriptionRepository('').listActivePlans();
     res.json({ success: true, data: activePlans, timestamp: new Date().toISOString() });
   } catch (err) {
     next(err);
@@ -54,21 +50,18 @@ router.post('/webhook', async (req: Request, res: Response, next: NextFunction) 
 
     // Find subscription by asaas_subscription_id
     if (event.payment.subscription) {
-      const sub = await db.query.subscriptions.findFirst({
-        where: eq(subscriptions.asaasSubscriptionId, event.payment.subscription),
-      });
+      const repo = new SubscriptionRepository('');
+      const sub = await repo.findSubscriptionByAsaasId(event.payment.subscription);
 
       if (sub) {
         // Upsert invoice
-        const existingInvoice = await db.query.invoices.findFirst({
-          where: eq(invoices.asaasPaymentId, payment.id),
-        });
+        const existingInvoice = await repo.findInvoiceByPaymentId(payment.id);
 
         const isPaid = payment.status === 'RECEIVED' || payment.status === 'CONFIRMED';
         const isOverdue = payment.status === 'OVERDUE';
 
         if (!existingInvoice) {
-          await db.insert(invoices).values({
+          await repo.createInvoice({
             tenantId: sub.tenantId,
             subscriptionId: sub.id,
             asaasPaymentId: payment.id,
@@ -77,30 +70,18 @@ router.post('/webhook', async (req: Request, res: Response, next: NextFunction) 
             paidAt: isPaid ? new Date() : undefined,
           });
         } else if (isPaid && existingInvoice.status !== 'paid') {
-          await db
-            .update(invoices)
-            .set({ status: 'paid', paidAt: new Date() })
-            .where(eq(invoices.id, existingInvoice.id));
+          await repo.patchInvoice(existingInvoice.id, { status: 'paid', paidAt: new Date() });
         } else if (isOverdue) {
-          await db
-            .update(invoices)
-            .set({ status: 'overdue' })
-            .where(eq(invoices.id, existingInvoice.id));
+          await repo.patchInvoice(existingInvoice.id, { status: 'overdue' });
         }
 
         // Update subscription status
         if (isPaid && sub.status !== 'active') {
           const nextPeriod = new Date();
           nextPeriod.setMonth(nextPeriod.getMonth() + 1);
-          await db
-            .update(subscriptions)
-            .set({ status: 'active', currentPeriodEnd: nextPeriod, updatedAt: new Date() })
-            .where(eq(subscriptions.id, sub.id));
+          await repo.patchSubscription(sub.id, { status: 'active', currentPeriodEnd: nextPeriod });
         } else if (isOverdue) {
-          await db
-            .update(subscriptions)
-            .set({ status: 'past_due', updatedAt: new Date() })
-            .where(eq(subscriptions.id, sub.id));
+          await repo.patchSubscription(sub.id, { status: 'past_due' });
         }
       }
     }
@@ -134,15 +115,11 @@ router.post('/subscribe', async (req: Request, res: Response, next: NextFunction
     const payload = subscribeSchema.parse(req.body);
 
     // Check plan exists
-    const plan = await db.query.plans.findFirst({
-      where: and(eq(plans.id, payload.planId), eq(plans.isActive, true)),
-    });
+    const plan = await new SubscriptionRepository('').findPlanById(payload.planId, true);
     if (!plan) throw new AppError(404, 'PLAN_NOT_FOUND', 'Plano não encontrado');
 
     // Check existing subscription — if expired, block new subscription
-    const existing = await db.query.subscriptions.findFirst({
-      where: eq(subscriptions.tenantId, tenantId),
-    });
+    const existing = await new SubscriptionRepository(tenantId).findSubscription();
     if (existing) {
       const now = new Date();
       const isExpired =
@@ -192,17 +169,14 @@ router.post('/subscribe', async (req: Request, res: Response, next: NextFunction
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + 7);
 
-    const [sub] = await db
-      .insert(subscriptions)
-      .values({
-        tenantId,
-        planId: plan.id,
-        asaasSubscriptionId: asaasSub.id,
-        asaasCustomerId: asaasCustomer.id,
-        status: 'trial',
-        trialEndsAt: trialEnd,
-      })
-      .returning();
+    const sub = await new SubscriptionRepository(tenantId).createSubscription({
+      tenantId,
+      planId: plan.id,
+      asaasSubscriptionId: asaasSub.id,
+      asaasCustomerId: asaasCustomer.id,
+      status: 'trial',
+      trialEndsAt: trialEnd,
+    });
 
     res.status(201).json({ success: true, data: sub, timestamp: new Date().toISOString() });
   } catch (err) {
@@ -213,13 +187,11 @@ router.post('/subscribe', async (req: Request, res: Response, next: NextFunction
 router.get('/subscription', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tenantId } = req.tenant!;
+    const repo = new SubscriptionRepository(tenantId);
 
     let sub;
     try {
-      sub = await db.query.subscriptions.findFirst({
-        where: eq(subscriptions.tenantId, tenantId),
-        orderBy: [desc(subscriptions.createdAt)],
-      });
+      sub = await repo.findSubscription();
     } catch (dbErr: any) {
       // Table may not exist (migration not applied) or DB error — treat as no subscription
       console.error('[billing] subscriptions query failed:', dbErr?.message ?? dbErr);
@@ -232,17 +204,13 @@ router.get('/subscription', async (req: Request, res: Response, next: NextFuncti
     let recentInvoices: unknown[] = [];
 
     try {
-      plan = await db.query.plans.findFirst({ where: eq(plans.id, sub.planId) });
+      plan = await repo.findPlanById(sub.planId);
     } catch (dbErr: any) {
       console.error('[billing] plans query failed:', dbErr?.message ?? dbErr);
     }
 
     try {
-      recentInvoices = await db.query.invoices.findMany({
-        where: eq(invoices.subscriptionId, sub.id),
-        orderBy: [desc(invoices.createdAt)],
-        limit: 12,
-      });
+      recentInvoices = await repo.findRecentInvoicesBySubscription(sub.id);
     } catch (dbErr: any) {
       console.error('[billing] invoices query failed:', dbErr?.message ?? dbErr);
     }
@@ -261,11 +229,7 @@ router.get('/invoices', async (req: Request, res: Response, next: NextFunction) 
   try {
     const { tenantId } = req.tenant!;
 
-    const tenantInvoices = await db.query.invoices.findMany({
-      where: eq(invoices.tenantId, tenantId),
-      orderBy: [desc(invoices.createdAt)],
-      limit: 12,
-    });
+    const tenantInvoices = await new SubscriptionRepository(tenantId).findInvoicesByTenant();
 
     const isProduction = process.env.ASAAS_ENV === 'production';
     const asaasInvoiceBaseUrl = isProduction
@@ -294,22 +258,14 @@ router.delete('/subscription', async (req: Request, res: Response, next: NextFun
   try {
     const { tenantId } = req.tenant!;
 
-    const sub = await db.query.subscriptions.findFirst({
-      where: and(
-        eq(subscriptions.tenantId, tenantId),
-        inArray(subscriptions.status, ['active', 'trial'])
-      ),
-    });
+    const sub = await new SubscriptionRepository(tenantId).findActiveSubscription();
     if (!sub) throw new AppError(404, 'SUBSCRIPTION_NOT_FOUND', 'Assinatura ativa não encontrada');
 
     if (sub.asaasSubscriptionId) {
       await cancelSubscription(sub.asaasSubscriptionId);
     }
 
-    await db
-      .update(subscriptions)
-      .set({ status: 'cancelled', updatedAt: new Date() })
-      .where(eq(subscriptions.id, sub.id));
+    await new SubscriptionRepository(tenantId).patchSubscription(sub.id, { status: 'cancelled' });
 
     res.json({ success: true, data: null, timestamp: new Date().toISOString() });
   } catch (err) {

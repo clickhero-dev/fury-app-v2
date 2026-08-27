@@ -21,7 +21,11 @@ export function getPlannerQueue(): Queue<PlannerJobData> {
 
 export async function enqueuePlanGeneration(jobId: string, tenantId: string): Promise<void> {
   const queue = getPlannerQueue();
+  const today = new Date().toISOString().split('T')[0];
+  const deduplicationId = `planner-${tenantId}-${today}`;
+  
   await queue.add('generate', { jobId, tenantId }, {
+    jobId: deduplicationId,
     removeOnComplete: 100,
     removeOnFail: 500,
     attempts: 3,

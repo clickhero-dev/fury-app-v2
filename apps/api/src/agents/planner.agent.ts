@@ -1,48 +1,195 @@
-import { openrouterService } from '../services/llms/openrouter.service.js';
-import type { AgentContext, ResearchOutput, StrategyOutput, PlannerOutput } from './types.js';
+import { z } from 'zod';
+import { createBasicAgent } from './base.agent.js';
 import { parseAgentJSON } from './utils.js';
+import type { PlannerContext, PlannerPrompt, PlannerContentItem } from './types.js';
 
-export async function plannerAgent(
-  ctx: AgentContext,
-  research: ResearchOutput,
-  strategy: StrategyOutput,
-  currentDate: string
-): Promise<PlannerOutput> {
-  const pillars = strategy.contentPillars.map(p => `${p.name} (${p.ratio}%)`).join(', ');
+// ─── Schema zod de saída (shape achatado: só conteúdo, sem datas/enums) ───────
+// A IA NÃO decide datas, postType, platform, cta ou hashtags — esses campos são
+// derivados no código (buildContentDates/deriveCta/deriveHashtags) para evitar
+// estruturação frágil de resposta e erro de parse entre fases.
+const contentItemSchema = z.object({
+  title: z.string().describe('Título curto do post'),
+  descricao: z.string().describe('Legenda completa em português'),
+  prompt: z.string().describe('Prompt detalhado para gerar a imagem do post'),
+});
+const contentSchema = z.object({ posts: z.array(contentItemSchema) });
 
-  // Calcula d+1 (amanhã) baseado na currentDate
-  const current = new Date(currentDate);
-  const tomorrow = new Date(current);
-  tomorrow.setDate(current.getDate() + 1);
-  const startDay = tomorrow.getDate();
-  const startMonth = tomorrow.getMonth() + 1;
-  const startYear = tomorrow.getFullYear();
+const PROMPTS_SYSTEM_PROMPT = (count: number) =>
+  `Você é o planejador de conteúdo de redes sociais de um negócio local.
+Receba o contexto da empresa (nome, tom, cor, produtos, nicho, cidade) e uma lista de datas já definidas.
+Para CADA data fornecida, crie UM item de conteúdo com:
+- title: título curto e chamativo do post
+- descricao: legenda completa em português brasileiro, engajadora e com o tom da marca
+- prompt: descrição detalhada da imagem (cena, composição, cores da marca, estilo)
+Responda APENAS em JSON válido no formato: {"posts":[{"title":"...","descricao":"...","prompt":"..."}]}
+Retorne exatamente ${count} itens, um para cada data, na mesma ordem das datas fornecidas.`;
 
-  // Calcula último dia do mês do startDay
-  const lastDayOfMonth = new Date(startYear, startMonth, 0).getDate();
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function brandDescription(ctx: PlannerContext): string {
+  const tone = ctx.brandKit?.voiceTone || 'amigável';
+  const color = ctx.brandKit?.primaryColor || 'não definida';
+  const niche = ctx.goals?.niche || ctx.goals?.mainProduct || 'não definido';
+  const city = ctx.city || 'nacional';
+  return `Empresa: ${ctx.businessName}. Tom de voz: ${tone}. Cor principal: ${color}. ` +
+    `Nicho/produto: ${niche}. Cidade: ${city}. Objetivo: ${ctx.goals?.objective || 'engajamento'}.`;
+}
 
-  const pillarsStr = strategy.contentPillars.map(p => `${p.name} (${p.ratio}%)`).join(', ');
+/** Extrai texto de uma mensagem da IA, lidando com content string OU array de blocos. */
+function extractTextFromContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (block && typeof block === 'object') {
+        const b = block as { type?: string; text?: unknown };
+        if (b.type === 'text' && typeof b.text === 'string' && b.text.trim().length > 0) return b.text;
+      }
+    }
+  }
+  return '';
+}
 
-  const prompt = `Crie calendario de posts para:
-Empresa: ${ctx.tenant.name}
-Objetivo: ${strategy.objective}
-Pilares: ${pillarsStr}
-Datas comemorativas: ${research.holidays.map(h => `${h.name} (dia ${h.day})`).join(', ')}
+function lastAssistantText<T extends { messages?: unknown[] }>(result: T): string {
+  const messages = result.messages ?? [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i] as { content?: unknown; role?: string; _getType?: () => string };
+    if (!m) continue;
+    const type = m._getType?.() ?? m.role;
+    if (type !== 'ai' && type !== 'assistant' && type !== 'human') continue;
+    const text = extractTextFromContent(m.content);
+    if (text.trim().length > 0) return text;
+  }
+  return '';
+}
 
-REGRAS CRÍTICAS:
-1. O planejamento deve começar NO DIA ${startDay}/${startMonth}/${startYear} (d+1 de hoje) - NÃO CRIE POSTS PARA DIAS PASSADOS
-2. dayIndex deve ser entre ${startDay} e ${lastDayOfMonth} (dias restantes do mês)
-3. Máximo 30% de posts sales. Alternar formatos (reel, carousel, image, stories).
-4. Total de posts: 16. Resumo com contagens por tipo.
+// ─── Datas (espaçamento puro, determinístico — sem LLM) ───────────────────────
+export interface ContentDate {
+  date: string; // ISO 'YYYY-MM-DD'
+  name: string;
+}
 
-JSON: {"totalPosts":16,"summary":{"reelsCount":8,"carouselCount":4,"imageCount":4,"storiesCount":4},"posts":[{"dayIndex":${startDay},"postType":"reel","platform":"instagram","title":"Titulo","contentPillar":"Produto","category":"engagement"}]}`;
+/**
+ * Gera N datas futuras a partir de `from` (default: hoje), espaçadas de forma
+ * variada (2/3 dias) para não cair sempre no mesmo dia da semana, pulando domingos.
+ * 100% determinístico — a decisão de datas NUNCA é delegada à IA.
+ */
+export function buildContentDates(count = 8, from = new Date()): ContentDate[] {
+  const dates: ContentDate[] = [];
+  const cursor = new Date(from);
+  // Começa amanhã (UTC) para nunca cair no dia corrente.
+  cursor.setUTCDate(cursor.getUTCDate() + 1);
+  cursor.setUTCHours(0, 0, 0, 0);
 
-  const raw = await openrouterService.chat(
-    [
-      { role: 'system', content: 'Planejador editorial. JSON válido apenas.' },
-      { role: 'user', content: prompt }
-    ],
-    { temperature: 0.8, max_tokens: 3000, response_format: { type: 'json_object' } },
+  let step = 0;
+  while (dates.length < count && step < count * 10) {
+    if (cursor.getUTCDay() !== 0) {
+      dates.push({ date: cursor.toISOString().split('T')[0], name: `Conteúdo #${dates.length + 1}` });
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + (step % 2 === 0 ? 3 : 2));
+    step++;
+  }
+  return dates;
+}
+
+// ─── CTA / hashtags (derivados no código, determinísticos) ────────────────────
+const DEFAULT_CTAS = ['Saiba mais', 'Encomende agora', 'Garanta o seu', 'Aproveite a oportunidade', 'Fale conosco'];
+
+/** Deriva o CTA a partir do objetivo do negócio (ou rotativo determinístico). */
+export function deriveCta(ctx: PlannerContext, index = 0): string {
+  const objective = (ctx.goals?.objective ?? '').toLowerCase();
+  if (objective.includes('venda') || objective.includes('vender') || objective.includes('convers')) return 'Compre agora';
+  if (objective.includes('cliente') || objective.includes('lead') || objective.includes('contato') || objective.includes('whats')) return 'Fale conosco';
+  if (objective.includes('visita') || objective.includes('loja') || objective.includes('presen')) return 'Visite nossa loja';
+  if (objective.includes('seguidor') || objective.includes('engajamento') || objective.includes('instagram')) return 'Siga e ative as notificações';
+  const i = ((index % DEFAULT_CTAS.length) + DEFAULT_CTAS.length) % DEFAULT_CTAS.length;
+  return DEFAULT_CTAS[i];
+}
+
+function slugifyTag(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+/** Deriva hashtags de nicho/cidade/nome do negócio, normalizadas (sem espaço/acento). */
+export function deriveHashtags(ctx: PlannerContext): string[] {
+  const sources = [ctx.goals?.niche, ctx.city, ctx.businessName];
+  const tags = sources
+    .filter((s): s is string => Boolean(s && s.trim().length > 0))
+    .map((s) => `#${slugifyTag(s)}`)
+    .filter((t) => t.length > 1);
+  return tags.length > 0 ? tags : ['#conteudo'];
+}
+
+// ─── Geração de conteúdo (uma chamada LLM, shape achatado) ────────────────────
+function isValidContentItem(item: unknown): item is PlannerContentItem {
+  if (!item || typeof item !== 'object') return false;
+  const o = item as Record<string, unknown>;
+  return (
+    typeof o.title === 'string' && o.title.trim().length > 0 &&
+    typeof o.descricao === 'string' && o.descricao.trim().length > 0 &&
+    typeof o.prompt === 'string' && o.prompt.trim().length > 0
   );
-  return parseAgentJSON<PlannerOutput>(raw);
+}
+
+/** Fallback determinístico (evergreen) — garante que o fluxo nunca trava por resposta vazia da IA. */
+function fallbackContentItem(ctx: PlannerContext, index: number): PlannerContentItem {
+  const product = ctx.goals?.mainProduct || ctx.goals?.niche || ctx.businessName || 'seu negócio';
+  const city = ctx.city || 'sua cidade';
+  const color = ctx.brandKit?.primaryColor || 'neutras';
+  const tone = ctx.brandKit?.voiceTone || 'acolhedor';
+  return {
+    title: `Destaque de ${product}`,
+    descricao: `Conheça ${product} na ${city}. Qualidade e atendimento que fazem a diferença no seu dia a dia. Venha conferir!`,
+    prompt: `Imagem profissional de ${product} em ambiente real, cores da marca ${color}, iluminação natural, estilo ${tone} e convidativo.`,
+  };
+}
+
+/**
+ * Etapa de conteúdo do fluxo: recebe as datas já definidas pelo código e pede à IA
+ * apenas o conteúdo de cada post ({title, descricao, prompt} — shape achatado).
+ * O código faz o zip com data/postType/platform/cta/hashtags, filtra itens inválidos
+ * e preenche gaps com fallback determinístico. Retorna SEMPRE dates.length posts.
+ */
+export async function generateContentPrompts(context: PlannerContext, dates: ContentDate[]): Promise<PlannerPrompt[]> {
+  const count = dates.length;
+  if (count === 0) return [];
+
+  const agent = createBasicAgent(PROMPTS_SYSTEM_PROMPT(count), 'deepseek/deepseek-v4-flash', contentSchema);
+  const user = [
+    brandDescription(context),
+    '',
+    'Datas já definidas (uma por post, na ordem):',
+    JSON.stringify(dates.map((d) => ({ date: d.date, name: d.name }))),
+  ].join('\n');
+
+  const result = await agent.invoke({ messages: [{ role: 'human', content: user }] });
+
+  let items: PlannerContentItem[] = [];
+  const structured = (result as { structuredResponse?: { posts?: unknown[] } }).structuredResponse;
+  if (Array.isArray(structured?.posts)) {
+    items = structured.posts.filter(isValidContentItem);
+  } else {
+    try {
+      const parsed = parseAgentJSON<{ posts?: unknown[] }>(lastAssistantText(result));
+      items = (Array.isArray(parsed?.posts) ? parsed.posts : []).filter(isValidContentItem);
+    } catch {
+      items = [];
+    }
+  }
+
+  return dates.map((d, i) => {
+    const content = items[i] ?? fallbackContentItem(context, i);
+    return {
+      date: d.date,
+      title: content.title.trim(),
+      caption: content.descricao.trim(),
+      cta: deriveCta(context, i),
+      hashtags: deriveHashtags(context),
+      imagePrompt: content.prompt.trim(),
+      postType: i % 2 === 0 ? 'image' : 'stories',
+      platform: 'instagram',
+    };
+  });
 }
