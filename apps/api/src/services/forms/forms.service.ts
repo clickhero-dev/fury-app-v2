@@ -1,7 +1,5 @@
-import { db } from '@fury/db';
-import { formSubmissions } from '@fury/db/schema';
-import { eq, and } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler.js';
+import { FormsRepository } from '../../repository/forms.repository.js';
 import type { FormSubmissionStatus } from '../../schemas/forms.schema.js';
 
 export async function startFormSubmission(
@@ -9,110 +7,64 @@ export async function startFormSubmission(
   userId: string,
   formType: string
 ) {
-  const submission = await db
-    .insert(formSubmissions)
-    .values({
-      tenantId,
-      userId,
-      formType,
-      status: 'PENDING',
-    })
-    .returning();
+  const submission = await new FormsRepository(tenantId).createFormSubmission({
+    userId,
+    formType,
+    status: 'PENDING' as FormSubmissionStatus,
+  });
 
-  if (!submission || submission.length === 0) {
+  if (!submission) {
     throw new AppError(500, 'INTERNAL_ERROR', 'Failed to create form submission');
   }
 
-  return submission[0];
+  return submission;
 }
 
-export async function completeFormSubmission(formSubmissionId: string, tenantId: string) {
-  const existing = await db.query.formSubmissions.findFirst({
-    where: and(
-      eq(formSubmissions.id, formSubmissionId),
-      eq(formSubmissions.tenantId, tenantId)
-    ),
-  });
+async function findAndPatch(
+  formSubmissionId: string,
+  tenantId: string,
+  patch: Parameters<FormsRepository['patchFormSubmission']>[1],
+) {
+  const repo = new FormsRepository(tenantId);
+  const existing = await repo.findFormSubmission(formSubmissionId);
 
   if (!existing) {
     throw new AppError(404, 'NOT_FOUND', 'Form submission not found');
   }
 
-  const updated = await db
-    .update(formSubmissions)
-    .set({
-      status: 'COMPLETED',
-      updatedAt: new Date(),
-    })
-    .where(eq(formSubmissions.id, formSubmissionId))
-    .returning();
+  const updated = await repo.patchFormSubmission(formSubmissionId, patch);
 
-  if (!updated || updated.length === 0) {
+  if (!updated) {
     throw new AppError(500, 'INTERNAL_ERROR', 'Failed to update form submission');
   }
 
-  return updated[0];
+  return updated;
+}
+
+export async function completeFormSubmission(formSubmissionId: string, tenantId: string) {
+  return findAndPatch(formSubmissionId, tenantId, {
+    status: 'COMPLETED',
+    updatedAt: new Date(),
+  });
 }
 
 export async function errorFormSubmission(
   formSubmissionId: string,
   tenantId: string
 ) {
-  const existing = await db.query.formSubmissions.findFirst({
-    where: and(
-      eq(formSubmissions.id, formSubmissionId),
-      eq(formSubmissions.tenantId, tenantId)
-    ),
+  return findAndPatch(formSubmissionId, tenantId, {
+    status: 'ERROR',
+    updatedAt: new Date(),
   });
-
-  if (!existing) {
-    throw new AppError(404, 'NOT_FOUND', 'Form submission not found');
-  }
-
-  const updated = await db
-    .update(formSubmissions)
-    .set({
-      status: 'ERROR',
-      updatedAt: new Date(),
-    })
-    .where(eq(formSubmissions.id, formSubmissionId))
-    .returning();
-
-  if (!updated || updated.length === 0) {
-    throw new AppError(500, 'INTERNAL_ERROR', 'Failed to update form submission');
-  }
-
-  return updated[0];
 }
 
 export async function abandonedFormSubmission(
   formSubmissionId: string,
   tenantId: string
 ) {
-  const existing = await db.query.formSubmissions.findFirst({
-    where: and(
-      eq(formSubmissions.id, formSubmissionId),
-      eq(formSubmissions.tenantId, tenantId)
-    ),
+  return findAndPatch(formSubmissionId, tenantId, {
+    status: 'ABANDONED',
+    abandonedAt: new Date(),
+    updatedAt: new Date(),
   });
-
-  if (!existing) {
-    throw new AppError(404, 'NOT_FOUND', 'Form submission not found');
-  }
-
-  const updated = await db
-    .update(formSubmissions)
-    .set({
-      status: 'ABANDONED',
-      abandonedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(formSubmissions.id, formSubmissionId))
-    .returning();
-
-  if (!updated || updated.length === 0) {
-    throw new AppError(500, 'INTERNAL_ERROR', 'Failed to update form submission');
-  }
-
-  return updated[0];
 }
