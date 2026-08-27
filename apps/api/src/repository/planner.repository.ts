@@ -34,14 +34,6 @@ export class PlannerRepository extends TenantScopedRepository {
     });
   }
 
-  /** Conexão Meta mais recente — usada ao resolver a conta Instagram. */
-  async findLatestMetaConnection() {
-    return this.db.query.metaConnections.findFirst({
-      where: eq(metaConnections.tenantId, this.tenantId),
-      orderBy: (table, { desc }) => [desc(table.createdAt)],
-    });
-  }
-
   // ── Planos de campanha ─────────────────────────────────────────────
 
   async getPlanById(planId: string) {
@@ -87,6 +79,18 @@ export class PlannerRepository extends TenantScopedRepository {
   async findPostById(postId: string) {
     return this.db.query.socialPosts.findFirst({
       where: and(eq(socialPosts.id, postId), eq(socialPosts.tenantId, this.tenantId)),
+    });
+  }
+
+  /** Post de um plano pela chave (planId, calendarDate, postType) — idempotência do fluxo planner→studio. */
+  async findPostByPlanDateType(planId: string, calendarDate: string, postType: string) {
+    return this.db.query.socialPosts.findFirst({
+      where: and(
+        eq(socialPosts.planId, planId),
+        eq(socialPosts.tenantId, this.tenantId),
+        eq(socialPosts.calendarDate, calendarDate),
+        eq(socialPosts.postType, postType as any),
+      ),
     });
   }
 

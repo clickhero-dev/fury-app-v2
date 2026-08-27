@@ -1,12 +1,11 @@
 import OpenAI from 'openai';
-import { and, eq } from 'drizzle-orm';
-import { db, creativeAssets, metaConnections, brandKits } from '@fury/db';
 import { AppError } from '../../middleware/errorHandler.js';
 import { createAdCreativeFromCopy, uploadAdImage } from '../../lib/meta-api.js';
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { saveTemporaryStudioImage } from '../../lib/temp-storage.js';
 import { getComplianceQueue } from '../../lib/queue.js';
 import { openrouterService } from '../llms/openrouter.service.js';
+import { StudioRepository } from '../../repository/studio.repository.js';
 
 export type StudioImageGenerationResult = {
   creativeAssetId: string;
@@ -208,10 +207,11 @@ async function persistGeneratedImage(params: {
   publicBaseUrl: string;
 }): Promise<StudioImageGenerationResult> {
   const enhancedPrompt = await enhancePromptForImage(params.prompt);
+  const repo = new StudioRepository(params.tenantId);
 
   let sourceUrl: string;
   if (process.env.OPENROUTER_API_KEY) {
-    const brandKit = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, params.tenantId) });
+    const brandKit = await repo.findBrandKit();
     sourceUrl = await openrouterService.generateImage({
       model: 'black-forest-labs/flux.2-klein-4b',
       prompt: enhancedPrompt,
@@ -235,16 +235,13 @@ async function persistGeneratedImage(params: {
 
   const generatedAt = new Date().toISOString();
 
-  const [asset] = await db
-    .insert(creativeAssets)
-    .values({
-      tenantId: params.tenantId,
-      type: 'image',
-      url: imageUrl,
-      complianceStatus: 'pending_compliance',
-      complianceNotes: JSON.stringify({ prompt: params.prompt, generatedAt }),
-    })
-    .returning();
+  const asset = await repo.createAsset({
+    tenantId: params.tenantId,
+    type: 'image',
+    url: imageUrl,
+    complianceStatus: 'pending_compliance',
+    complianceNotes: JSON.stringify({ prompt: params.prompt, generatedAt }),
+  });
 
   const complianceQueue = await getComplianceQueue();
   await complianceQueue.add(
@@ -291,9 +288,7 @@ export async function getStudioAssetById(params: {
   tenantId: string;
   assetId: string;
 }): Promise<StudioComplianceStatusResult> {
-  const asset = await db.query.creativeAssets.findFirst({
-    where: and(eq(creativeAssets.id, params.assetId), eq(creativeAssets.tenantId, params.tenantId)),
-  });
+  const asset = await new StudioRepository(params.tenantId).findAssetById(params.assetId);
 
   if (!asset) {
     throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
@@ -320,9 +315,8 @@ export async function publishStudioAssetToMeta(params: {
   assetId: string;
   adAccountId?: string;
 }): Promise<{ hash: string; imageUrl: string; metaAssetId: string; adsManagerUrl: string }> {
-  const asset = await db.query.creativeAssets.findFirst({
-    where: and(eq(creativeAssets.id, params.assetId), eq(creativeAssets.tenantId, params.tenantId)),
-  });
+  const repo = new StudioRepository(params.tenantId);
+  const asset = await repo.findAssetById(params.assetId);
 
   if (!asset) {
     throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
@@ -332,10 +326,7 @@ export async function publishStudioAssetToMeta(params: {
     throw new AppError(409, 'ASSET_NOT_APPROVED', 'O asset precisa estar aprovado no compliance antes da publicacao.');
   }
 
-  const connection = await db.query.metaConnections.findFirst({
-    where: eq(metaConnections.tenantId, params.tenantId),
-    orderBy: (table, { desc }) => [desc(table.createdAt)],
-  });
+  const connection = await repo.findLatestMetaConnection();
 
   if (!connection) {
     throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
@@ -371,10 +362,7 @@ export async function publishStudioAssetToMeta(params: {
       linkUrl,
     });
 
-    await db
-      .update(creativeAssets)
-      .set({ metaAssetId: creativeId, complianceStatus: 'approved' })
-      .where(eq(creativeAssets.id, asset.id));
+    await repo.patchAsset(asset.id, { metaAssetId: creativeId, complianceStatus: 'approved' });
 
     const adsManagerUrl = `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${selectedAdAccountId}&cid=${creativeId}`;
 
@@ -410,10 +398,7 @@ export async function publishStudioAssetToMeta(params: {
     accessToken,
   });
 
-  await db
-    .update(creativeAssets)
-    .set({ metaAssetId: hash, complianceStatus: 'approved' })
-    .where(eq(creativeAssets.id, asset.id));
+  await repo.patchAsset(asset.id, { metaAssetId: hash, complianceStatus: 'approved' });
 
   const adsManagerUrl = `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${selectedAdAccountId}&cid=${hash}`;
 

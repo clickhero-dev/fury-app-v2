@@ -54,4 +54,12 @@ export abstract class TenantScopedRepository {
       where: eq(metaConnections.tenantId, this.tenantId),
     });
   }
+
+  /** Conexão Meta mais recente do tenant (por createdAt desc). Reuso: planner, studio. */
+  async findLatestMetaConnection() {
+    return this.db.query.metaConnections.findFirst({
+      where: eq(metaConnections.tenantId, this.tenantId),
+      orderBy: (table, { desc }) => [desc(table.createdAt)],
+    });
+  }
 }

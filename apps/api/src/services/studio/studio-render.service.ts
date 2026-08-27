@@ -1,7 +1,7 @@
 import sharp from 'sharp';
-import { db, creativeAssets } from '@fury/db';
 import { AppError } from '../../middleware/errorHandler.js';
 import { getComplianceQueue } from '../../lib/queue.js';
+import { StudioRepository } from '../../repository/studio.repository.js';
 
 export type RenderCreativeInput = {
   tenantId: string;
@@ -109,21 +109,19 @@ export async function renderCreative(input: RenderCreativeInput): Promise<Render
 
   const dataUrl = `data:image/jpeg;base64,${finalBuffer.toString('base64')}`;
 
-  const [asset] = await db
-    .insert(creativeAssets)
-    .values({
-      tenantId,
-      type: 'image',
-      url: dataUrl,
-      complianceStatus: 'pending_compliance',
-      complianceNotes: JSON.stringify({
-        headline,
-        cta,
-        brandColor: color,
-        generatedAt: new Date().toISOString(),
-      }),
-    })
-    .returning();
+  const repo = new StudioRepository(tenantId);
+  const asset = await repo.createAsset({
+    tenantId,
+    type: 'image',
+    url: dataUrl,
+    complianceStatus: 'pending_compliance',
+    complianceNotes: JSON.stringify({
+      headline,
+      cta,
+      brandColor: color,
+      generatedAt: new Date().toISOString(),
+    }),
+  });
 
   const complianceQueue = await getComplianceQueue();
   await complianceQueue.add(
