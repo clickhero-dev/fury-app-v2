@@ -22,6 +22,7 @@ import {
 } from '../../lib/google-api.js';
 import { encryptToken, decryptToken } from '../../utils/crypto.js';
 import { uploadAsset, deleteAsset } from '../storage/storage.service.js';
+import { GoogleRepository } from '../../repository/google.repository.js';
 
 const db = dbInstance;
 
@@ -345,24 +346,19 @@ export async function handleGoogleOAuthCallback(
     );
   }
 
-  const existing = await db.query.googleConnections.findFirst({
-    where: eq(googleConnections.tenantId, tenantId),
-  });
+  const repo = new GoogleRepository(tenantId);
+  const existing = await repo.findGoogleConnection();
 
   if (existing) {
-    await db
-      .update(googleConnections)
-      .set({
-        googleUserId,
-        accessToken,
-        refreshToken,
-        tokenExpiresAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(googleConnections.id, existing.id));
+    await repo.patchGoogleConnection(existing.id, {
+      googleUserId,
+      accessToken,
+      refreshToken,
+      tokenExpiresAt,
+      updatedAt: new Date(),
+    });
   } else {
-    await db.insert(googleConnections).values({
-      tenantId,
+    await repo.createGoogleConnection({
       googleUserId,
       accessToken,
       refreshToken,
@@ -375,9 +371,7 @@ export async function handleGoogleOAuthCallback(
 
 /** Retorna a conexão Google atual do tenant (sem tokens), ou null. */
 export async function getGoogleConnection(tenantId: string): Promise<GoogleConnectionPublic | null> {
-  const connection = await db.query.googleConnections.findFirst({
-    where: eq(googleConnections.tenantId, tenantId),
-  });
+  const connection = await new GoogleRepository(tenantId).findGoogleConnection();
 
   if (!connection) {
     return null;
@@ -398,9 +392,8 @@ export async function disconnectGoogleConnection(
   connectionId: string,
   tenantId: string,
 ): Promise<{ id: string; disconnected: boolean }> {
-  const connection = await db.query.googleConnections.findFirst({
-    where: and(eq(googleConnections.id, connectionId), eq(googleConnections.tenantId, tenantId)),
-  });
+  const repo = new GoogleRepository(tenantId);
+  const connection = await repo.findGoogleConnectionById(connectionId);
 
   if (!connection) {
     throw new AppError(404, GOOGLE_ERROR_CODES.NOT_FOUND, 'Conexão não encontrada.');
@@ -408,15 +401,13 @@ export async function disconnectGoogleConnection(
 
   const accessToken = decryptToken(connection.accessToken);
   await revokeGoogleToken(accessToken);
-  await db.delete(googleConnections).where(eq(googleConnections.id, connectionId));
+  await repo.deleteGoogleConnection(connectionId);
 
   return { id: connectionId, disconnected: true };
 }
 
 async function getTenantConnection(tenantId: string, database: Database = dbInstance) {
-  const connection = await database.query.googleConnections.findFirst({
-    where: eq(googleConnections.tenantId, tenantId),
-  });
+  const connection = await new GoogleRepository(tenantId).findGoogleConnection();
 
   if (!connection) {
     throw new AppError(
@@ -439,15 +430,12 @@ function createClientForConnection(connection: {
     refreshToken: decryptToken(connection.refreshToken),
     tokenExpiresAt: connection.tokenExpiresAt,
     onTokenRefreshed: async ({ accessToken, refreshToken, tokenExpiresAt }) => {
-      await db
-        .update(googleConnections)
-        .set({
-          accessToken: encryptToken(accessToken),
-          refreshToken: refreshToken ? encryptToken(refreshToken) : connection.refreshToken,
-          tokenExpiresAt,
-          updatedAt: new Date(),
-        })
-        .where(eq(googleConnections.id, connection.id));
+      await new GoogleRepository('').patchGoogleConnection(connection.id, {
+        accessToken: encryptToken(accessToken),
+        refreshToken: refreshToken ? encryptToken(refreshToken) : connection.refreshToken,
+        tokenExpiresAt,
+        updatedAt: new Date(),
+      });
     },
   });
 }
@@ -472,14 +460,11 @@ export async function getGoogleAccounts(
 
   if (selectedAccountId) {
     const selected = accounts.find((a) => a.accountId === selectedAccountId);
-    await db
-      .update(googleConnections)
-      .set({
-        accountId: selectedAccountId,
-        accountName: selected?.accountName ?? null,
-        updatedAt: new Date(),
-      })
-      .where(eq(googleConnections.id, connection.id));
+    await new GoogleRepository(tenantId).patchGoogleConnection(connection.id, {
+      accountId: selectedAccountId,
+      accountName: selected?.accountName ?? null,
+      updatedAt: new Date(),
+    });
   }
 
   return { accounts, selectedAccountId };
@@ -554,12 +539,9 @@ function mapGbpMatch(match: GbpLocationMatch, searchTitle: string): GoogleLookup
  */
 export async function lookupGoogleProfile(tenantId: string): Promise<GoogleLookupResult> {
   const connection = await getTenantConnection(tenantId);
-  const settings = (await db.query.businessProfileSettings.findFirst({
-    where: eq(businessProfileSettings.tenantId, tenantId),
-  })) ?? null;
-  const tenant = (await db.query.tenants.findFirst({
-    where: eq(tenants.id, tenantId),
-  })) ?? null;
+  const repo = new GoogleRepository(tenantId);
+  const settings = (await repo.findBusinessProfile()) ?? null;
+  const tenant = (await repo.findTenant()) ?? null;
 
   const searchLocation = buildSearchLocation(settings, tenant);
   const searchTitle = searchLocation.title ?? '';
@@ -614,9 +596,7 @@ async function resolveCategoryDisplayName(
   tenantId: string,
   database: Database,
 ): Promise<string | null> {
-  const connection = await database.query.googleConnections.findFirst({
-    where: eq(googleConnections.tenantId, tenantId),
-  });
+  const connection = await new GoogleRepository(tenantId).findGoogleConnection();
 
   let client: GoogleApiClient | null = null;
   if (connection) {
@@ -649,13 +629,10 @@ export async function getGoogleSettings(
   tenantId: string,
   database: Database = dbInstance,
 ): Promise<GoogleSettings> {
+  const repo = new GoogleRepository(tenantId);
   const [settings, tenant] = await Promise.all([
-    database.query.businessProfileSettings.findFirst({
-      where: eq(businessProfileSettings.tenantId, tenantId),
-    }),
-    database.query.tenants.findFirst({
-      where: eq(tenants.id, tenantId),
-    }),
+    repo.findBusinessProfile(),
+    repo.findTenant(),
   ]);
 
   if (settings) {
@@ -736,28 +713,9 @@ export async function updateGoogleSettings(
     updatedAt: new Date(),
   };
 
-  const existing = await database.query.businessProfileSettings.findFirst({
-    where: eq(businessProfileSettings.tenantId, tenantId),
-  });
-
-  if (existing) {
-    await database
-      .update(businessProfileSettings)
-      .set(payload)
-      .where(eq(businessProfileSettings.tenantId, tenantId));
-    return { id: existing.id, name: payload.name, categoryDisplayName };
-  }
-
-  const inserted = await database
-    .insert(businessProfileSettings)
-    .values({ ...payload, tenantId, createdAt: new Date() })
-    .returning({ id: businessProfileSettings.id, name: businessProfileSettings.name });
-
-  return {
-    id: inserted[0]?.id ?? '',
-    name: inserted[0]?.name ?? payload.name,
-    categoryDisplayName,
-  };
+  const repo = new GoogleRepository(tenantId);
+  const id = await repo.upsertBusinessProfile(payload);
+  return { id, name: payload.name, categoryDisplayName };
 }
 
 /** Autocomplete de categorias do catálogo oficial da GBP (FR-012) com cache em memória. */
@@ -810,14 +768,9 @@ export async function createProfile(
   googleApi?: GoogleApiClient,
 ): Promise<GoogleProfileCreateResult> {
   const connection = await getTenantConnection(tenantId, database);
-  const settings =
-    (await database.query.businessProfileSettings.findFirst({
-      where: eq(businessProfileSettings.tenantId, tenantId),
-    })) ?? null;
-  const tenant =
-    (await database.query.tenants.findFirst({
-      where: eq(tenants.id, tenantId),
-    })) ?? null;
+  const repo = new GoogleRepository(tenantId);
+  const settings = (await repo.findBusinessProfile()) ?? null;
+  const tenant = (await repo.findTenant()) ?? null;
 
   if (!settings || !settingsAreComplete(settings, tenant)) {
     throw new AppError(
@@ -889,29 +842,24 @@ export async function createProfile(
 
   const gbpLocationId = createdLocation.name ?? '';
 
-  const inserted = await database
-    .insert(googleBusinessProfiles)
-    .values({
-      tenantId,
-      connectionId: connection.id,
-      gbpLocationId,
-      name: settings.name,
-      address: settings.address,
-      phone: settings.phone,
-      email: settings.email ?? '',
-      website: settings.website ?? '',
-      categoryId: settings.categoryId || null,
-      categoryDisplayName: null,
-      hours: settings.hours ?? null,
-      verificationState: 'UNVERIFIED',
-      syncStatus: 'awaiting_verification',
-    })
-    .returning({ id: googleBusinessProfiles.id, name: googleBusinessProfiles.name });
-
-  await database.insert(googleSyncLogs).values({
-    tenantId,
+  const inserted = await repo.createBusinessProfile({
     connectionId: connection.id,
-    profileId: inserted[0]?.id,
+    gbpLocationId,
+    name: settings.name,
+    address: settings.address,
+    phone: settings.phone,
+    email: settings.email ?? '',
+    website: settings.website ?? '',
+    categoryId: settings.categoryId || null,
+    categoryDisplayName: null,
+    hours: settings.hours ?? null,
+    verificationState: 'UNVERIFIED',
+    syncStatus: 'awaiting_verification',
+  });
+
+  await repo.createSyncLog({
+    connectionId: connection.id,
+    profileId: inserted.id,
     operation: 'create',
     status: 'success',
     message: 'Perfil criado. Aguardando verificação.',
@@ -919,9 +867,9 @@ export async function createProfile(
   });
 
   return {
-    id: inserted[0]?.id ?? '',
+    id: inserted.id,
     gbpLocationId,
-    name: inserted[0]?.name ?? settings.name,
+    name: inserted.name ?? settings.name,
     syncStatus: 'awaiting_verification',
     verificationState: 'UNVERIFIED',
     created: true,
@@ -929,10 +877,8 @@ export async function createProfile(
   };
 }
 
-async function getProfileConnection(profileId: string, tenantId: string, database: Database) {
-  const profile = await database.query.googleBusinessProfiles.findFirst({
-    where: and(eq(googleBusinessProfiles.id, profileId), eq(googleBusinessProfiles.tenantId, tenantId)),
-  });
+async function getProfileConnection(profileId: string, tenantId: string, _database: Database) {
+  const profile = await new GoogleRepository(tenantId).getBusinessProfile(profileId);
   if (!profile) {
     throw new AppError(404, GOOGLE_ERROR_CODES.NOT_FOUND, 'Perfil não encontrado.');
   }
@@ -948,7 +894,11 @@ export async function getVerification(
   database: Database = dbInstance,
   googleApi?: GoogleApiClient,
 ): Promise<GoogleVerificationResult> {
-  const profile = await getProfileConnection(profileId, tenantId, database);
+  const repo = new GoogleRepository(tenantId);
+  const profile = await repo.getBusinessProfile(profileId);
+  if (!profile) {
+    throw new AppError(404, GOOGLE_ERROR_CODES.NOT_FOUND, 'Perfil não encontrado.');
+  }
 
   if (profile.verificationState === 'VERIFIED') {
     return {
@@ -958,9 +908,7 @@ export async function getVerification(
     };
   }
 
-  const connection = await database.query.googleConnections.findFirst({
-    where: eq(googleConnections.id, profile.connectionId),
-  });
+  const connection = await repo.findGoogleConnectionByRawId(profile.connectionId);
   if (!connection) {
     throw new AppError(
       404,
@@ -1010,9 +958,7 @@ export async function completeVerification(
     };
   }
 
-  const connection = await database.query.googleConnections.findFirst({
-    where: eq(googleConnections.id, profile.connectionId),
-  });
+  const connection = await new GoogleRepository(tenantId).findGoogleConnectionByRawId(profile.connectionId);
   if (!connection) {
     throw new AppError(
       404,
@@ -1026,18 +972,13 @@ export async function completeVerification(
   const gbpLocation = await client.getLocation(profile.gbpLocationId);
 
   if (gbpLocation.verification?.state === 'VERIFIED') {
-    await database
-      .update(googleBusinessProfiles)
-      .set({
-        verificationState: 'VERIFIED',
-        syncStatus: 'verified',
-        lastSyncedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(googleBusinessProfiles.id, profile.id));
-
-    await database.insert(googleSyncLogs).values({
-      tenantId,
+    await new GoogleRepository(tenantId).patchBusinessProfile(profile.id, {
+      verificationState: 'VERIFIED',
+      syncStatus: 'verified',
+      lastSyncedAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await new GoogleRepository(tenantId).createSyncLog({
       connectionId: connection.id,
       profileId: profile.id,
       operation: 'verify',
@@ -1209,9 +1150,7 @@ export async function getProfile(
 ): Promise<GoogleProfileResult> {
   const profile = await getProfileConnection(profileId, tenantId, database);
 
-  const connection = await database.query.googleConnections.findFirst({
-    where: eq(googleConnections.id, profile.connectionId),
-  });
+  const connection = await new GoogleRepository(tenantId).findGoogleConnectionByRawId(profile.connectionId);
   if (!connection) {
     throw new AppError(
       404,
@@ -1223,13 +1162,10 @@ export async function getProfile(
   const client = googleApi ?? createClientForConnection(connection);
   const gbpLocation = await client.getLocation(profile.gbpLocationId);
 
-  await database
-    .update(googleBusinessProfiles)
-    .set({
-      lastSyncedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(googleBusinessProfiles.id, profile.id));
+  await new GoogleRepository(tenantId).patchBusinessProfile(profile.id, {
+    lastSyncedAt: new Date(),
+    updatedAt: new Date(),
+  });
 
   return mapGbpLocationToProfile(profile, gbpLocation);
 }
@@ -1247,9 +1183,7 @@ export async function updateProfile(
   const profile = await getProfileConnection(profileId, tenantId, database);
 
   if (!hasActualChanges(profile, data)) {
-    const connection = await database.query.googleConnections.findFirst({
-      where: eq(googleConnections.id, profile.connectionId),
-    });
+    const connection = await new GoogleRepository(tenantId).findGoogleConnectionByRawId(profile.connectionId);
     if (!connection) {
       throw new AppError(
         404,
@@ -1262,9 +1196,7 @@ export async function updateProfile(
   return mapGbpLocationToProfile(profile, gbpLocation, 'synced');
 }
 
-  const connection = await database.query.googleConnections.findFirst({
-    where: eq(googleConnections.id, profile.connectionId),
-  });
+  const connection = await new GoogleRepository(tenantId).findGoogleConnectionByRawId(profile.connectionId);
   if (!connection) {
     throw new AppError(
       404,
@@ -1280,17 +1212,12 @@ export async function updateProfile(
   try {
     const updatedLocation = await client.patchLocation(profile.gbpLocationId, patchPayload, fieldMask);
 
-    await database
-      .update(googleBusinessProfiles)
-      .set({
-        syncStatus: 'synced' as any,
-        lastSyncedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(googleBusinessProfiles.id, profile.id));
-
-    await database.insert(googleSyncLogs).values({
-      tenantId,
+    await new GoogleRepository(tenantId).patchBusinessProfile(profile.id, {
+      syncStatus: 'synced' as any,
+      lastSyncedAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await new GoogleRepository(tenantId).createSyncLog({
       connectionId: connection.id,
       profileId: profile.id,
       operation: 'update',
@@ -1301,14 +1228,11 @@ export async function updateProfile(
 
     return mapGbpLocationToProfile(profile, updatedLocation, 'synced');
   } catch (error) {
-    await database
-      .update(googleBusinessProfiles)
-      .set({
-        syncStatus: 'error',
-        lastError: error instanceof Error ? error.message : 'Erro desconhecido',
-        updatedAt: new Date(),
-      })
-      .where(eq(googleBusinessProfiles.id, profile.id));
+    await new GoogleRepository(tenantId).patchBusinessProfile(profile.id, {
+      syncStatus: 'error',
+      lastError: error instanceof Error ? error.message : 'Erro desconhecido',
+      updatedAt: new Date(),
+    });
 
     const reason = error instanceof Error ? error.message : 'Erro desconhecido da API do Google.';
     throw new AppError(
@@ -1331,9 +1255,7 @@ export async function syncProfile(
 ): Promise<GoogleProfileResult> {
   const profile = await getProfileConnection(profileId, tenantId, database);
 
-  const connection = await database.query.googleConnections.findFirst({
-    where: eq(googleConnections.id, profile.connectionId),
-  });
+  const connection = await new GoogleRepository(tenantId).findGoogleConnectionByRawId(profile.connectionId);
   if (!connection) {
     throw new AppError(
       404,
@@ -1345,17 +1267,13 @@ export async function syncProfile(
   const client = googleApi ?? createClientForConnection(connection);
   const gbpLocation = await client.getLocation(profile.gbpLocationId);
 
-  await database
-    .update(googleBusinessProfiles)
-    .set({
-      syncStatus: 'synced' as any,
-      lastSyncedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(googleBusinessProfiles.id, profile.id));
-
-  await database.insert(googleSyncLogs).values({
-    tenantId,
+  const repo = new GoogleRepository(tenantId);
+  await repo.patchBusinessProfile(profile.id, {
+    syncStatus: 'synced' as any,
+    lastSyncedAt: new Date(),
+    updatedAt: new Date(),
+  });
+  await repo.createSyncLog({
     connectionId: connection.id,
     profileId: profile.id,
     operation: 'sync',
@@ -1377,11 +1295,7 @@ export async function getSyncLogs(
 ): Promise<GoogleSyncLogsResult> {
   const profile = await getProfileConnection(profileId, tenantId, database);
 
-  const logs = await database.query.googleSyncLogs.findMany({
-    where: eq(googleSyncLogs.profileId, profile.id),
-    orderBy: (googleSyncLogs, { desc }) => [desc(googleSyncLogs.createdAt)],
-    limit,
-  });
+  const logs = await new GoogleRepository(tenantId).listSyncLogs(profile.id, limit);
 
   return {
     logs: logs.map((log) => ({
@@ -1417,16 +1331,9 @@ export async function addPhoto(
   const currentPhotos = (profile.photos as string[]) ?? [];
   const updatedPhotos = [...currentPhotos, photoUrl];
 
-  await database
-    .update(googleBusinessProfiles)
-    .set({
-      photos: updatedPhotos,
-      updatedAt: new Date(),
-    })
-    .where(eq(googleBusinessProfiles.id, profile.id));
-
-  await database.insert(googleSyncLogs).values({
-    tenantId,
+  const repo = new GoogleRepository(tenantId);
+  await repo.patchBusinessProfile(profile.id, { photos: updatedPhotos, updatedAt: new Date() });
+  await repo.createSyncLog({
     connectionId: profile.connectionId,
     profileId: profile.id,
     operation: 'update',
@@ -1453,13 +1360,7 @@ export async function removePhoto(
 
   await deleteAsset(photoUrl);
 
-  await database
-    .update(googleBusinessProfiles)
-    .set({
-      photos: updatedPhotos,
-      updatedAt: new Date(),
-    })
-    .where(eq(googleBusinessProfiles.id, profile.id));
+  await new GoogleRepository(tenantId).patchBusinessProfile(profile.id, { photos: updatedPhotos, updatedAt: new Date() });
 
   return { photos: updatedPhotos, associatedManually: true };
 }
