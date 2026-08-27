@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
-import { db, budgetOptimizations } from '@fury/db';
 import { AppError } from '../middleware/errorHandler.js';
+import { SubscriptionRepository } from '../repository/subscription.repository.js';
 import {
   optimizeBudget,
   saveSuggestions,
@@ -57,22 +56,19 @@ export async function triggerOptimizationHandler(
     );
 
     // Persist to database
-    const dbRecord = await db
-      .insert(budgetOptimizations)
-      .values({
-        tenantId,
-        totalBudget: totalBudget.toString(),
-        adjustments: suggestions as any,
-        mode: config.mode || 'suggestion',
-        status: config.mode === 'auto' ? 'applied' : 'pending',
-        appliedAt: config.mode === 'auto' ? new Date() : undefined,
-      })
-      .returning();
+    const dbRecord = await new SubscriptionRepository(tenantId).createBudgetOptimization({
+      tenantId,
+      totalBudget: totalBudget.toString(),
+      adjustments: suggestions as any,
+      mode: config.mode || 'suggestion',
+      status: config.mode === 'auto' ? 'applied' : 'pending',
+      appliedAt: config.mode === 'auto' ? new Date() : undefined,
+    });
 
     res.status(201).json({
       success: true,
       data: {
-        optimizationId: dbRecord[0]?.id,
+        optimizationId: dbRecord?.id,
         totalBudget,
         mode: config.mode,
         suggestionsCount: stored.length,
