@@ -19,6 +19,7 @@ import {
   searchMetaInterests,
 } from '../services/campaigns/campaigns.service.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { CampaignRepository } from '../repository/campaign.repository.js';
 import {
   getCampaignsCache,
   setCampaignsCache,
@@ -890,8 +891,9 @@ export async function suggestTextHandler(req: Request, res: Response, next: Next
       throw new AppError(400, 'INVALID_IMAGE_URL', 'URL de imagem não permitida.');
     }
 
-    const brandKit = await db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, tenantId) });
-    const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
+    const repo = new CampaignRepository(tenantId);
+    const brandKit = await repo.findBrandKit();
+    const tenant = await repo.findTenant();
 
     const promptText = `Você é copywriter especialista em Meta Ads. Observe a imagem do anúncio anexada e, com base no que ela mostra (produto, oferta, estilo visual) e nos dados da marca abaixo, gere UM título (headline) e UM texto principal (primary_text) para um anúncio no Facebook/Instagram.
 
