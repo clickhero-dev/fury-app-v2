@@ -1,5 +1,4 @@
-import { and, eq, lt, desc, or } from 'drizzle-orm';
-import { db, workflowJobs } from '@fury/db';
+import { WorkflowJobRepository } from '../../repository/workflow-job.repository.js';
 import type { CheckpointStore } from './checkpoint-store.js';
 import type { ArtifactMap, StageTrace, WorkflowSnapshot, WorkflowStatus } from './types.js';
 
@@ -42,7 +41,7 @@ function toSnapshot(row: WorkflowJobRow): WorkflowSnapshot {
  */
 export class PostgresCheckpointStore implements CheckpointStore {
   async create(input: { id: string; tenantId: string; workflow: string; lockKey: string }): Promise<void> {
-    await db.insert(workflowJobs).values({
+    await new WorkflowJobRepository('').createWorkflowJob({
       id: input.id,
       tenantId: input.tenantId,
       workflow: input.workflow,
@@ -52,9 +51,7 @@ export class PostgresCheckpointStore implements CheckpointStore {
   }
 
   async load(jobId: string): Promise<WorkflowSnapshot | null> {
-    const row = await db.query.workflowJobs.findFirst({
-      where: eq(workflowJobs.id, jobId),
-    });
+    const row = await new WorkflowJobRepository('').getWorkflowJob(jobId);
     if (!row) return null;
     return toSnapshot(row as unknown as WorkflowJobRow);
   }
@@ -67,17 +64,15 @@ export class PostgresCheckpointStore implements CheckpointStore {
     planId?: string;
     error?: string;
   }): Promise<void> {
-    await db.update(workflowJobs)
-      .set({
-        status: patch.status,
-        currentStage: patch.currentStage ?? null,
-        stages: patch.stages ?? undefined,
-        artifacts: patch.artifacts ?? undefined,
-        planId: patch.planId ?? null,
-        error: patch.error ?? null,
-        updatedAt: new Date(),
-      })
-      .where(eq(workflowJobs.id, jobId));
+    await new WorkflowJobRepository('').patchWorkflowJob(jobId, {
+      status: patch.status,
+      currentStage: patch.currentStage ?? null,
+      stages: patch.stages ?? undefined,
+      artifacts: patch.artifacts ?? undefined,
+      planId: patch.planId ?? null,
+      error: patch.error ?? null,
+      updatedAt: new Date(),
+    });
   }
 
   async markFailed(jobId: string, stageId: string, error: string): Promise<void> {
@@ -89,45 +84,23 @@ export class PostgresCheckpointStore implements CheckpointStore {
   }
 
   async listRecoverable(opts?: { workflow?: string; sinceMs?: number }): Promise<WorkflowSnapshot[]> {
-    const cutoff = opts?.sinceMs ? new Date(Date.now() - opts.sinceMs) : new Date(0);
-    const conditions = [
-      or(eq(workflowJobs.status, 'running'), eq(workflowJobs.status, 'pending')),
-      lt(workflowJobs.updatedAt, cutoff),
-    ];
-    if (opts?.workflow) conditions.push(eq(workflowJobs.workflow, opts.workflow));
-
-    const rows = await db.query.workflowJobs.findMany({
-      where: and(...conditions),
-      orderBy: [desc(workflowJobs.createdAt)],
-    });
-
+    const rows = await new WorkflowJobRepository('').listRecoverableWorkflowJobs(opts);
     return (rows as unknown as WorkflowJobRow[]).map(toSnapshot);
   }
 
   async findActiveByLockKey(lockKey: string, workflow: string): Promise<WorkflowSnapshot | null> {
-    const row = await db.query.workflowJobs.findFirst({
-      where: and(
-        eq(workflowJobs.lockKey, lockKey),
-        eq(workflowJobs.workflow, workflow),
-        or(eq(workflowJobs.status, 'running'), eq(workflowJobs.status, 'pending')),
-      ),
-    });
+    const row = await new WorkflowJobRepository('').findActiveWorkflowJobByLockKey(lockKey, workflow);
     if (!row) return null;
     return toSnapshot(row as unknown as WorkflowJobRow);
   }
 
   async findByPlanId(planId: string): Promise<WorkflowSnapshot | null> {
-    const row = await db.query.workflowJobs.findFirst({
-      where: eq(workflowJobs.planId, planId),
-      orderBy: [desc(workflowJobs.createdAt)],
-    });
+    const row = await new WorkflowJobRepository('').findWorkflowJobByPlanId(planId);
     if (!row) return null;
     return toSnapshot(row as unknown as WorkflowJobRow);
   }
 
   async renewLock(jobId: string): Promise<void> {
-    await db.update(workflowJobs)
-      .set({ updatedAt: new Date() })
-      .where(eq(workflowJobs.id, jobId));
+    await new WorkflowJobRepository('').renewWorkflowJobLock(jobId);
   }
 }
