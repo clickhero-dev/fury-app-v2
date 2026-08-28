@@ -1145,6 +1145,27 @@ export class GoogleService {
   }
 
   /**
+   * Avalia a qualidade/recência do perfil GBP real do tenant (pré-envio).
+   * Busca a location no Google via conexão do perfil e devolve o relatório.
+   */
+  async assessProfile(profileId: string, tenantId: string): Promise<GoogleQualityReport> {
+    const profile = await this.getProfileConnection(profileId, tenantId);
+
+    const connection = await this.repo(tenantId).findGoogleConnectionByRawId(profile.connectionId);
+    if (!connection) {
+      throw new AppError(
+        404,
+        GOOGLE_ERROR_CODES.NOT_FOUND,
+        'Nenhuma conexão Google encontrada. Conecte sua conta Google para continuar.'
+      );
+    }
+
+    const client = this.createClientForConnection(connection);
+    const gbpLocation = await client.getLocation(profile.gbpLocationId);
+    return this.assessGoogleProfileQuality(gbpLocation);
+  }
+
+  /**
    * Retorna o status de verificação do perfil e os métodos elegíveis (US2).
    */
   async getVerification(
