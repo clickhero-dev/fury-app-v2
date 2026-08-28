@@ -26,6 +26,7 @@ export function useLogin() {
         refreshToken: result.refreshToken,
         name: result.user.name ?? null,
         email: result.user.email,
+        role: result.user.role ?? null,
         tenantId: result.user.tenantId ?? '',
       }));
 

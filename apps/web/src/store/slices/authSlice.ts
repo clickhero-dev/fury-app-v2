@@ -10,6 +10,7 @@ export interface AuthState {
   refreshToken: string | null;
   name: string | null;
   email: string | null;
+  role: string | null;
   tenantId: string | null;
   metaId: string | null;
   plan: string | null;
@@ -45,6 +46,7 @@ function hydrate(): AuthState {
       refreshToken: localStorage.getItem('refreshToken'),
       name: user.name ?? null,
       email: user.email ?? null,
+      role: user.role ?? null,
       tenantId: user.tenantId ?? null,
       metaId: null,
       plan: localStorage.getItem(PLAN_KEY),
@@ -57,6 +59,7 @@ function hydrate(): AuthState {
       refreshToken: null,
       name: null,
       email: null,
+      role: null,
       tenantId: null,
       metaId: null,
       plan: localStorage.getItem(PLAN_KEY),
@@ -79,6 +82,7 @@ const authSlice = createSlice({
         refreshToken: string;
         name: string | null;
         email: string;
+        role: string | null;
         tenantId: string;
       }>
     ) {
@@ -86,6 +90,7 @@ const authSlice = createSlice({
       state.refreshToken = action.payload.refreshToken;
       state.name = action.payload.name;
       state.email = action.payload.email;
+      state.role = action.payload.role;
       state.tenantId = action.payload.tenantId;
     },
     setTokens(state, action: PayloadAction<{ token: string; refreshToken: string }>) {
@@ -123,6 +128,7 @@ const authSlice = createSlice({
       state.refreshToken = null;
       state.name = null;
       state.email = null;
+      state.role = null;
       state.tenantId = null;
       state.metaId = null;
       state.plan = null;
@@ -149,6 +155,7 @@ export const selectRefreshToken = (state: { auth: AuthState }) => state.auth.ref
 export const selectIsAuthenticated = (state: { auth: AuthState }) => !!state.auth.token;
 export const selectName = (state: { auth: AuthState }) => state.auth.name;
 export const selectEmail = (state: { auth: AuthState }) => state.auth.email;
+export const selectUserRole = (state: { auth: AuthState }) => state.auth.role;
 export const selectTenantId = (state: { auth: AuthState }) => state.auth.tenantId;
 export const selectMetaId = (state: { auth: AuthState }) => state.auth.metaId;
 export const selectPlan = (state: { auth: AuthState }) => state.auth.plan;

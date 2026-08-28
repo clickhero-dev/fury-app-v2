@@ -85,6 +85,34 @@ describe('authSlice — persistência do plano', () => {
   });
 });
 
+describe('authSlice — role (isenção admin)', () => {
+  it('login persiste role e selectUserRole o retorna', async () => {
+    const { login, reducer, selectUserRole } = await importSlice();
+    const state = reducer(
+      undefined,
+      login({ token: 't', refreshToken: 'r', name: 'Ana', email: 'a@b.com', role: 'admin', tenantId: 't1' })
+    );
+
+    expect(state.role).toBe('admin');
+    expect(selectUserRole({ auth: state })).toBe('admin');
+  });
+
+  it('hydrate recupera role do usuário persistido (sobrevive a reload)', async () => {
+    installDomGlobals({ user: JSON.stringify({ name: 'Ana', email: 'a@b.com', role: 'admin', tenantId: 't1' }) });
+    const { reducer, selectUserRole } = await importSlice();
+    const state = reducer(undefined, { type: '@@init' });
+
+    expect(selectUserRole({ auth: state })).toBe('admin');
+  });
+
+  it('usuário sem role não é admin', async () => {
+    const { reducer, selectUserRole } = await importSlice();
+    const state = reducer(undefined, { type: '@@init' });
+
+    expect(selectUserRole({ auth: state })).toBeNull();
+  });
+});
+
 describe('authSlice — selectIsPlanExpired', () => {
   it('retorna false para data futura válida', async () => {
     const { reducer, selectIsPlanExpired } = await importSlice();

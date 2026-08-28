@@ -39,12 +39,8 @@ export function useSubscription() {
   return useQuery({
     queryKey: ['billing', 'subscription'],
     queryFn: async (): Promise<Subscription | null> => {
-      try {
-        const res = await api.get<BillingApiResponse<Subscription | null>>('/billing/subscription');
-        return res.data.data;
-      } catch {
-        return null;
-      }
+      const res = await api.get<BillingApiResponse<Subscription | null>>('/billing/subscription');
+      return res.data.data;
     },
     staleTime: 60 * 1000,
     placeholderData: keepPreviousData,
