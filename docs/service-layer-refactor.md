@@ -1,8 +1,8 @@
 # Planejamento & Guia — Refatoração da Camada de Service
 
 **Repositório:** `clickhero-dev/fury-app-v2` · **Camada:** `apps/api/src`
-**Status:** planejamento (branch `dev`, após merge #142) · **Base:** ADR-0001 (camada de repository)
-**Objetivo secundário do ADR-0001:** separar **router** de **service** e converter **services em classes** com injeção de dependências.
+**Status:** Fases 0–7 ✅ concluídas · **Em curso:** refactor profundo de DI (injeção de repos/externos nas classes da Fase 6)
+**Base:** ADR-0001 (camada de repository) · **Depende do:** `docs/service-layer-map.md` e `docs/service-layer-EXECUTION.md`.
 
 ---
 

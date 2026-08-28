@@ -1,11 +1,34 @@
 # Guia de Execução — Refatoração da Camada de Service
 
-**Branch:** `feat/service-layer-planning` (planejamento) → **implementação em outra branch.**
-**Público:** desenvolvedor que vai implementar a refatoração **sozinho**, sem depender de contexto
-adicional. **Leia primeiro:** `docs/service-layer-refactor.md` (guia/contrato) e `docs/service-layer-map.md` (mapa).
+**Branch:** `feat/service-layer-planning` (planejamento **e** implementação — conforme decisão do usuário).
+**Público:** desenvolvedor que vai implementar/continuar a refatoração, **sozinho**, sem depender de
+contexto adicional. **Leia primero:** `docs/service-layer-refactor.md` (guia/contrato) e
+`docs/service-layer-map.md` (mapa).
 
 > Este arquivo é o **"como executar"**: setup, definição de pronto (DoD), e quebra de tarefas
 > por fase com especificações concretas (arquivos, assinaturas, DI, critérios de aceite).
+
+## ✅ STATUS (atualizado — Fases 0–7 concluídas)
+
+| Fase | Status |
+|---|---|
+| 0/1 Fundação + Goals | ✅ `GoalService` + `GoalController` + `di.ts` |
+| 2 BrandKit | ✅ `BrandKitService` |
+| 3 FuryEngine | ✅ `FuryEngineService` |
+| 4 Studio + OpenRouter | ✅ `StudioService` + `OpenRouterStudioService` |
+| 5 Billing | ✅ `BillingService` |
+| 6 Classes (Meta/Google/Planner/Auth/Forms/Automation) | ✅ classes + singletons (`di.ts`) |
+| 7 Observability | ✅ `ObservabilityService` |
+
+**Verificação:** `pnpm run build` exit 0 · `vitest` **131/131** · `tsc --noEmit` exit 0.
+
+> ### ▶ Continuação — Refactor profundo de DI
+> As classes da Fase 6 (`MetaService`, `GoogleService`, `PlannerService`, `AuthService`,
+> `SocialAuthService`) promovem as funções de módulo a **métodos**, mas ainda criam
+> repositório/externos **inside** (ex.: `new MetaRepository(tenantId)` + import direto de `meta-api`).
+> O passo seguinte é **injetar no construtor** (`repoFactory` + serviços externos) e trocar os
+> `new Repo(tenantId)` internos por `this.repo(tenantId)`, dominado pelo mesmo padrão já provado
+> em `GoalService`/`BrandKitService`/`FuryEngineService`/`BillingService` (classes da Fases 0–5).
 
 ---
 
