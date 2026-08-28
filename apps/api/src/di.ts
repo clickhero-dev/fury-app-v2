@@ -15,6 +15,9 @@ import { BillingService } from './services/billing/billing.service.js';
 import { BillingController } from './controllers/billing.controller.js';
 import { ObservabilityService } from './services/observability/observability.service.js';
 import { ObservabilityController } from './controllers/observability.controller.js';
+import { FormsService } from './services/forms/forms.service.js';
+import { FormsController } from './controllers/forms.controller.js';
+import { AutomationService } from './services/automation/automation.service.js';
 
 /**
  * Composition root (DI) da API.
@@ -35,6 +38,8 @@ export const openRouterStudioService = new OpenRouterStudioService();
 export const studioService = new StudioService();
 export const billingService = new BillingService();
 export const observabilityService = new ObservabilityService();
+export const formsService = new FormsService();
+export const automationService = new AutomationService();
 
 export const controllers = {
   goal: new GoalController(goalService),
@@ -44,6 +49,7 @@ export const controllers = {
   studio: new CreativeStudioController(studioService),
   billing: new BillingController(billingService),
   observability: new ObservabilityController(observabilityService),
+  forms: new FormsController(formsService),
 };
 
 export { metricsProvider };

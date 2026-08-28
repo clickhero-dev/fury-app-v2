@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
 import { AutomationRepository } from '../repository/automation.repository.js';
-import { getAutomationRules } from '../services/automation/automation.service.js';
+import { automationService } from '../di.js';
 import { emitToTenant, registerSSEClient, removeSSEClient } from '../lib/sse.js';
 
 const createRuleSchema = z.object({ name: z.string().min(1, 'Name is required').optional(), description: z.string().optional(), trigger: z.string().min(1, 'Trigger is required').optional(), ruleType: z.string().min(1, 'Rule type is required').optional(), isActive: z.boolean().optional().default(true), enabled: z.boolean().optional().default(true), threshold: z.coerce .number({ invalid_type_error: 'Threshold must be a number', }) .min(0, 'Threshold must be greater than or equal to 0'), action: z .enum([ 'pause', 'notify', 'reduce_budget', 'pause_campaign', ]) .optional() .default('pause') .transform((v) => (v === 'pause_campaign' ? 'pause' : v)), });
@@ -95,7 +95,7 @@ export async function getRulesHandler(
       );
     }
 
-    const rules = await getAutomationRules(req.tenant.tenantId);
+    const rules = await automationService.getAutomationRules(req.tenant.tenantId);
 
     return res.status(200).json({
       success: true,
