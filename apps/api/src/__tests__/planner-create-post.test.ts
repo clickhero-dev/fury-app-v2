@@ -4,6 +4,9 @@ import { ZodError } from 'zod';
 const createManualPost = vi.fn();
 vi.mock('../services/planner/planner.service.js', () => ({
   createManualPost: (...args: any[]) => createManualPost(...args),
+  plannerService: {
+    createManualPost: (...args: any[]) => createManualPost(...args),
+  },
 }));
 
 vi.mock('../services/storage/storage.service.js', () => ({

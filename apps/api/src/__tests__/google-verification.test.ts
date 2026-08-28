@@ -48,7 +48,7 @@ vi.mock('../lib/google-api.js', () => ({
   createGoogleApiClient: mockCreateGoogleApiClient,
 }));
 
-import { getVerification, completeVerification } from '../services/google/google.service.js';
+import { googleService } from '../services/google/google.service.js';
 
 function makeConnection(tenantId: string, overrides: Record<string, unknown> = {}) {
   return {
@@ -104,7 +104,7 @@ function resetMocks() {
   dbMock.query.googleConnections.findFirst.mockResolvedValue(makeConnection('tenant-A'));
   dbMock.query.googleBusinessProfiles.findFirst.mockResolvedValue(makeProfile('tenant-A'));
   dbMock.update.mockReturnValue({
-    set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
+    set: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([]) }) }),
   });
   dbMock.insert.mockImplementation(() => {
     const valuesResult = Object.assign(Promise.resolve(undefined), {
@@ -124,7 +124,7 @@ describe('getVerification — fetchVerificationOptions', () => {
       { verificationMethod: 'EMAIL', announcement: 'Verificar por email' },
     ]);
 
-    const result = await getVerification('profile-1', 'tenant-A');
+    const result = await googleService.getVerification('profile-1', 'tenant-A');
 
     expect(mockFetchVerificationOptions).toHaveBeenCalledWith('accounts/123456/locations/789');
     expect(result.verificationState).toBe('UNVERIFIED');
@@ -142,7 +142,7 @@ describe('getVerification — fetchVerificationOptions', () => {
       { verificationMethod: 'PHONE', announcement: 'Verificar por telefone' },
     ]);
 
-    const result = await getVerification('profile-1', 'tenant-A');
+    const result = await googleService.getVerification('profile-1', 'tenant-A');
 
     expect(result.options).toEqual([{ method: 'PHONE', description: 'Verificar por telefone' }]);
   });
@@ -152,7 +152,7 @@ describe('getVerification — fetchVerificationOptions', () => {
       makeProfile('tenant-A', { verificationState: 'VERIFIED', syncStatus: 'verified' })
     );
 
-    const result = await getVerification('profile-1', 'tenant-A');
+    const result = await googleService.getVerification('profile-1', 'tenant-A');
 
     expect(mockFetchVerificationOptions).not.toHaveBeenCalled();
     expect(result).toMatchObject({ verificationState: 'VERIFIED' });
@@ -161,7 +161,7 @@ describe('getVerification — fetchVerificationOptions', () => {
   it('404 NOT_FOUND para perfil de outro tenant', async () => {
     dbMock.query.googleBusinessProfiles.findFirst.mockResolvedValue(null);
 
-    await expect(getVerification('profile-outro', 'tenant-B')).rejects.toMatchObject({
+    await expect(googleService.getVerification('profile-outro', 'tenant-B')).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
     });
@@ -175,7 +175,7 @@ describe('completeVerification — PIN por PHONE/EMAIL', () => {
     mockVerifyLocation.mockResolvedValue({ status: 'PENDING' });
     mockGetLocation.mockResolvedValue({ verification: { state: 'UNVERIFIED' } });
 
-    const result = await completeVerification('profile-1', 'tenant-A', 'PHONE');
+    const result = await googleService.completeVerification('profile-1', 'tenant-A', 'PHONE');
 
     expect(mockVerifyLocation).toHaveBeenCalledTimes(1);
     expect(mockVerifyLocation).toHaveBeenCalledWith('accounts/123456/locations/789', 'PHONE');
@@ -186,14 +186,14 @@ describe('completeVerification — PIN por PHONE/EMAIL', () => {
     mockVerifyLocation.mockResolvedValue({ status: 'PENDING' });
     mockGetLocation.mockResolvedValue({ verification: { state: 'UNVERIFIED' } });
 
-    const result = await completeVerification('profile-1', 'tenant-A', 'EMAIL');
+    const result = await googleService.completeVerification('profile-1', 'tenant-A', 'EMAIL');
 
     expect(mockVerifyLocation).toHaveBeenCalledWith('accounts/123456/locations/789', 'EMAIL');
     expect(result.awaitingPin).toBe(true);
   });
 
   it('orienta por cartão postal quando method é POSTAL (não envia PIN)', async () => {
-    const result = await completeVerification('profile-1', 'tenant-A', 'POSTAL');
+    const result = await googleService.completeVerification('profile-1', 'tenant-A', 'POSTAL');
 
     expect(mockVerifyLocation).not.toHaveBeenCalled();
     expect(result.verificationState).toBe('UNVERIFIED');
@@ -205,7 +205,7 @@ describe('completeVerification — PIN por PHONE/EMAIL', () => {
     mockVerifyLocation.mockResolvedValue({ status: 'PENDING' });
     mockGetLocation.mockResolvedValue({ verification: { state: 'VERIFIED' } });
 
-    const result = await completeVerification('profile-1', 'tenant-A', 'EMAIL');
+    const result = await googleService.completeVerification('profile-1', 'tenant-A', 'EMAIL');
 
     expect(result).toEqual({ verificationState: 'VERIFIED', syncStatus: 'verified' });
 
@@ -217,7 +217,7 @@ describe('completeVerification — PIN por PHONE/EMAIL', () => {
   it('404 NOT_FOUND para perfil de outro tenant', async () => {
     dbMock.query.googleBusinessProfiles.findFirst.mockResolvedValue(null);
 
-    await expect(completeVerification('profile-outro', 'tenant-B', 'PHONE')).rejects.toMatchObject({
+    await expect(googleService.completeVerification('profile-outro', 'tenant-B', 'PHONE')).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
     });
