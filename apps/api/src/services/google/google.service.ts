@@ -72,6 +72,8 @@ export interface GoogleLookupMatch {
   verificationState: string;
   claimed: boolean;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  /** Relatório de qualidade/recência derivado da location completa do match (pré-envio). Null quando o match não traz location. */
+  quality?: GoogleQualityReport | null;
 }
 
 export interface GoogleLookupResult {
@@ -829,7 +831,10 @@ export class GoogleService {
       pageSize: 5,
     });
 
-    const normalized = matches.map((match) => mapGbpMatch(match, searchTitle));
+    const normalized = matches.map((match) => ({
+      ...mapGbpMatch(match, searchTitle),
+      quality: match.location ? this.assessGoogleProfileQuality(match.location) : null,
+    }));
     const found = normalized.some((match) => match.claimed && match.verificationState === 'VERIFIED');
 
     return {
