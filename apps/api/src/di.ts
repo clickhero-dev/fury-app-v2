@@ -13,6 +13,8 @@ import { StudioService } from './services/studio/creative-studio.service.js';
 import { CreativeStudioController } from './controllers/creative-studio.controller.js';
 import { BillingService } from './services/billing/billing.service.js';
 import { BillingController } from './controllers/billing.controller.js';
+import { ObservabilityService } from './services/observability/observability.service.js';
+import { ObservabilityController } from './controllers/observability.controller.js';
 
 /**
  * Composition root (DI) da API.
@@ -32,6 +34,7 @@ export const furyEngineService = new FuryEngineService();
 export const openRouterStudioService = new OpenRouterStudioService();
 export const studioService = new StudioService();
 export const billingService = new BillingService();
+export const observabilityService = new ObservabilityService();
 
 export const controllers = {
   goal: new GoalController(goalService),
@@ -40,6 +43,7 @@ export const controllers = {
   openrouter: new OpenRouterController(openRouterStudioService),
   studio: new CreativeStudioController(studioService),
   billing: new BillingController(billingService),
+  observability: new ObservabilityController(observabilityService),
 };
 
 export { metricsProvider };
