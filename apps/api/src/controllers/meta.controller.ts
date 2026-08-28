@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
 import type { MetaService } from '../services/meta/meta.service.js';
+import { emailService } from '../services/email/email.service.js';
+import { sendToTenant } from '../services/email/notify.js';
 
 const callbackQuerySchema = z.object({
   code: z.string().min(1, 'Code OAuth ausente'),
@@ -51,7 +53,10 @@ export class MetaController {
     try {
       const query = callbackQuerySchema.parse(req.query);
 
-      const { returnUrl } = await this.metaService.handleMetaOAuthCallback(query.code, query.state);
+      const { tenantId, returnUrl } = await this.metaService.handleMetaOAuthCallback(query.code, query.state);
+
+      // Email transacional: conta Meta conectada (fire-and-forget, não bloqueia o redirect)
+      await sendToTenant(tenantId, undefined, (to) => emailService.sendAccountConnected(to, 'Meta'));
 
       res.redirect(`${frontendUrl}${returnUrl}`);
     } catch (error) {
@@ -263,6 +268,12 @@ export class MetaController {
       }
       const params = connectionIdSchema.parse(req.params);
       await this.metaService.deleteTenantMetaConnection(req.tenant.tenantId, params.id);
+
+      // Email transacional: conta Meta desconectada (fire-and-forget)
+      await sendToTenant(req.tenant.tenantId, req.user?.email, (to) =>
+        emailService.sendAccountDisconnected(to, 'Meta'),
+      );
+
       res.status(200).json({
         success: true,
         data: null,

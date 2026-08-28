@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AppError } from '../middleware/errorHandler.js';
 import type { GoogleService } from '../services/google/google.service.js';
+import { emailService } from '../services/email/email.service.js';
+import { sendToTenant } from '../services/email/notify.js';
 import {
   contextQuerySchema,
   oauthCallbackQuerySchema,
@@ -117,6 +119,10 @@ export class GoogleController {
       }
       const params = connectionIdParamsSchema.parse(req.params);
       const data = await this.googleService.disconnectGoogleConnection(params.id, req.tenant.tenantId);
+
+      // Email transacional: Google Meu Negócio desvinculado (fire-and-forget)
+      await sendToTenant(req.tenant.tenantId, req.user?.email, (to) => emailService.sendGmbUnlinked(to));
+
       res.status(200).json({
         success: true,
         data,
@@ -215,6 +221,10 @@ export class GoogleController {
         throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
       }
       const data = await this.googleService.createProfile(req.tenant.tenantId);
+
+      // Email transacional: Google Meu Negócio vinculado (fire-and-forget)
+      await sendToTenant(req.tenant.tenantId, req.user?.email, (to) => emailService.sendGmbLinked(to, data.name));
+
       res.status(201).json({
         success: true,
         data,

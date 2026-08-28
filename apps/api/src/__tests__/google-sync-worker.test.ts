@@ -93,7 +93,15 @@ vi.mock('../lib/google-api.js', () => ({
 }));
 
 vi.mock('../services/email/email.service.js', () => ({
-  emailService: { sendEmail: vi.fn().mockResolvedValue(undefined) },
+  emailService: {
+    sendEmail: vi.fn().mockResolvedValue(undefined),
+    sendGmbProfileVerified: vi.fn().mockResolvedValue(undefined),
+    sendAccountConnected: vi.fn().mockResolvedValue(undefined),
+    sendAccountDisconnected: vi.fn().mockResolvedValue(undefined),
+    sendGmbLinked: vi.fn().mockResolvedValue(undefined),
+    sendGmbUnlinked: vi.fn().mockResolvedValue(undefined),
+    sendCampaignPublished: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 import { startGoogleSyncWorker, stopGoogleSyncWorker, processSyncJob } from '../workers/google-sync.worker.js';
@@ -227,12 +235,7 @@ describe('processSyncJob — transição awaiting_verification → verified', ()
 
     await processSyncJob();
 
-    expect(emailService.sendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: 'contato@empresa.com.br',
-        subject: expect.stringContaining('verificad'),
-      })
-    );
+    expect(emailService.sendGmbProfileVerified).toHaveBeenCalledWith('contato@empresa.com.br', expect.any(String));
   });
 
   it('não envia email quando o perfil permanece não verificado', async () => {
@@ -247,7 +250,7 @@ describe('processSyncJob — transição awaiting_verification → verified', ()
 
     await processSyncJob();
 
-    expect(emailService.sendEmail).not.toHaveBeenCalled();
+    expect(emailService.sendGmbProfileVerified).not.toHaveBeenCalled();
   });
 
   it('escreve sync log com status success ao sincronizar', async () => {

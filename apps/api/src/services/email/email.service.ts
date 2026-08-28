@@ -1,5 +1,15 @@
 import * as nodemailer from 'nodemailer';
-import { otpEmailTemplate, welcomeEmailTemplate, passwordResetConfirmationTemplate } from './email-templates.js';
+import {
+  otpEmailTemplate,
+  welcomeEmailTemplate,
+  passwordResetConfirmationTemplate,
+  accountConnectedEmailTemplate,
+  accountDisconnectedEmailTemplate,
+  gmbLinkedEmailTemplate,
+  gmbUnlinkedEmailTemplate,
+  campaignPublishedEmailTemplate,
+  gmbProfileVerifiedEmailTemplate,
+} from './email-templates.js';
 
 type EmailTransporter = ReturnType<typeof nodemailer.createTransport>;
 
@@ -85,6 +95,54 @@ export class EmailService {
       to,
       subject: 'Sua senha foi redefinida - Ady',
       html: passwordResetConfirmationTemplate(),
+    });
+  }
+
+  sendAccountConnected(to: string, platform: string): Promise<void> {
+    return this.sendEmail({
+      to,
+      subject: `Conta ${platform} conectada`,
+      html: accountConnectedEmailTemplate(platform),
+    });
+  }
+
+  sendAccountDisconnected(to: string, platform: string): Promise<void> {
+    return this.sendEmail({
+      to,
+      subject: `Conta ${platform} desconectada`,
+      html: accountDisconnectedEmailTemplate(platform),
+    });
+  }
+
+  sendGmbLinked(to: string, businessName: string): Promise<void> {
+    return this.sendEmail({
+      to,
+      subject: 'Seu negócio agora aparece no Google',
+      html: gmbLinkedEmailTemplate(businessName),
+    });
+  }
+
+  sendGmbUnlinked(to: string): Promise<void> {
+    return this.sendEmail({
+      to,
+      subject: 'Seu perfil do Google foi desvinculado',
+      html: gmbUnlinkedEmailTemplate(),
+    });
+  }
+
+  sendCampaignPublished(to: string, campaignName: string): Promise<void> {
+    return this.sendEmail({
+      to,
+      subject: 'Sua campanha está no ar! 🎉',
+      html: campaignPublishedEmailTemplate(campaignName),
+    });
+  }
+
+  sendGmbProfileVerified(to: string, businessName: string): Promise<void> {
+    return this.sendEmail({
+      to,
+      subject: 'Seu perfil foi verificado no Google',
+      html: gmbProfileVerifiedEmailTemplate(businessName),
     });
   }
 }

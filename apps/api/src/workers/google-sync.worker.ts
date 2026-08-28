@@ -67,11 +67,7 @@ export async function processSyncJob(): Promise<void> {
         });
 
         if (profile.email) {
-          await emailService.sendEmail({
-            to: profile.email,
-            subject: 'Seu perfil foi verificado no Google Meu Negócio',
-            html: `<p>Olá!</p><p>Seu perfil <strong>${profile.name}</strong> foi verificado no Google Meu Negócio. Ele já está visível para clientes.</p>`,
-          });
+          await emailService.sendGmbProfileVerified(profile.email, profile.name);
         }
       } else {
         await dbInstance

@@ -96,6 +96,41 @@ function eyebrow(text: string): string {
   `;
 }
 
+function heading(text: string): string {
+  return `
+    <h2 style="margin: 0 0 16px 0; font-size: 20px; line-height: 1.4; font-weight: 700; font-family: ${FONT}; color: ${TEXT}; text-align: center;">
+      ${text}
+    </h2>
+  `;
+}
+
+function statusBadge(label: string, color: string): string {
+  return `
+    <table role="presentation" style="border-collapse: collapse; margin: 0 auto 24px auto;">
+      <tr>
+        <td style="background-color: ${color}22; color: ${color}; border: 1px solid ${color}55; border-radius: 999px; padding: 6px 16px; font-size: 11px; font-weight: 700; font-family: ${FONT}; text-transform: uppercase; letter-spacing: 0.14em; text-align: center; white-space: nowrap;">
+          ${label}
+        </td>
+      </tr>
+    </table>
+  `;
+}
+
+function checkList(items: string[]): string {
+  const rows = items
+    .map(
+      (item) => `
+        <tr>
+          <td style="padding: 5px 0; font-size: 13px; line-height: 1.6; color: ${TEXT_MUTED}; font-family: ${FONT};">
+            ${item}
+          </td>
+        </tr>
+      `
+    )
+    .join('');
+  return `<table role="presentation" style="border-collapse: collapse; margin: 0 0 20px 0; width: 100%;">${rows}</table>`;
+}
+
 function bodyText(text: string, align: 'left' | 'center' = 'left'): string {
   return `
     <p style="margin: 0 0 18px 0; font-size: 14px; line-height: 1.75; color: ${TEXT_MUTED}; font-family: ${FONT}; text-align: ${align};">
@@ -177,6 +212,101 @@ export function passwordResetConfirmationTemplate(): string {
     ${ctaButton(loginUrl, 'Fazer Login')}
 
     ${bodyText('Se você não realizou esta alteração e acha que sua conta pode estar em risco, entre em contato com a nossa equipe imediatamente.')}
+  `;
+
+  return getBaseTemplate(content);
+}
+
+export function accountConnectedEmailTemplate(platform: string): string {
+  const integrationsUrl = `${process.env.APP_URL || 'https://app.clickhero.com'}/configuracoes/integracoes`;
+
+  const content = `
+    ${eyebrow('Nova Conexão')}
+    ${heading(`Sua conta ${platform} está conectada`)}
+    ${statusBadge('Conectada', BRAND)}
+    ${bodyText(`O Ady agora tem acesso às suas <strong style="color: ${TEXT};">contas e páginas ${platform}</strong>. Você já pode planejar, publicar e acompanhar suas campanhas direto pela aplicação.`)}
+    ${ctaButton(integrationsUrl, 'Ir para as integrações')}
+    ${bodyText('Ficou com alguma dúvida? Nossa equipe está aqui para ajudar.')}
+  `;
+
+  return getBaseTemplate(content);
+}
+
+export function accountDisconnectedEmailTemplate(platform: string): string {
+  const integrationsUrl = `${process.env.APP_URL || 'https://app.clickhero.com'}/configuracoes/integracoes`;
+
+  const content = `
+    ${eyebrow('Aviso')}
+    ${heading(`Sua conta ${platform} foi desconectada`)}
+    ${statusBadge('Desconectada', '#da3633')}
+    ${bodyText(`Removemos o acesso do Ady à sua conta ${platform}. Se foi você, fique tranquilo — reconecte quando quiser. Se não foi você, recomendamos revisar a segurança da sua conta.`)}
+    ${ctaButton(integrationsUrl, 'Reconectar conta ' + platform)}
+    ${bodyText('Precisa de ajuda? Estamos por aqui.')}
+  `;
+
+  return getBaseTemplate(content);
+}
+
+export function gmbLinkedEmailTemplate(businessName: string): string {
+  const dashboardUrl = `${process.env.APP_URL || 'https://app.clickhero.com'}/configuracoes/google`;
+
+  const content = `
+    ${eyebrow('Nova Conexão')}
+    ${heading('Seu negócio agora aparece no Google')}
+    ${statusBadge('Vinculado', BRAND)}
+    ${bodyText(`Vinculamos o perfil <strong style="color: ${TEXT};">${businessName}</strong> do Google Meu Negócio. Agora o Ady acompanha a presença do seu negócio nas buscas e ajuda a mantê-la em dia.`)}
+    ${ctaButton(dashboardUrl, 'Ver minha ficha')}
+    ${bodyText('Dúvidas? Nossa equipe está à disposição.')}
+  `;
+
+  return getBaseTemplate(content);
+}
+
+export function gmbUnlinkedEmailTemplate(): string {
+  const dashboardUrl = `${process.env.APP_URL || 'https://app.clickhero.com'}/configuracoes/google`;
+
+  const content = `
+    ${eyebrow('Aviso')}
+    ${heading('Seu perfil do Google foi desvinculado')}
+    ${statusBadge('Desvinculado', '#da3633')}
+    ${bodyText('Removemos o vínculo com o Google Meu Negócio. Se foi você, reconecte quando quiser. Se não foi, recomendamos revisar a segurança da sua conta Google.')}
+    ${ctaButton(dashboardUrl, 'Reconectar Google')}
+    ${bodyText('Precisa de ajuda? Estamos por aqui.')}
+  `;
+
+  return getBaseTemplate(content);
+}
+
+export function campaignPublishedEmailTemplate(campaignName: string): string {
+  const dashboardUrl = `${process.env.APP_URL || 'https://app.clickhero.com'}/dashboard`;
+
+  const content = `
+    ${eyebrow('Impulsionamento no Ar')}
+    ${heading('Sua campanha está no ar!')}
+    ${statusBadge('Publicada', '#2ea043')}
+    ${checkList([
+      `🚀 Campanha <strong style="color: ${TEXT};">${campaignName}</strong> criada`,
+      '🎯 Público e orçamento configurados',
+      '✅ Publicada no Gerenciador de Anúncios',
+    ])}
+    ${bodyText('Sua campanha foi publicada com sucesso. Acompanhe os resultados pelo painel e ajuste a estratégia quando quiser.')}
+    ${ctaButton(dashboardUrl, 'Acompanhar no painel')}
+    ${bodyText('Boa campanha! Nossa equipe segue por perto.')}
+  `;
+
+  return getBaseTemplate(content);
+}
+
+export function gmbProfileVerifiedEmailTemplate(businessName: string): string {
+  const dashboardUrl = `${process.env.APP_URL || 'https://app.clickhero.com'}/configuracoes/google`;
+
+  const content = `
+    ${eyebrow('Boas Notícias')}
+    ${heading(`Seu perfil ${businessName} foi verificado`)}
+    ${statusBadge('Verificado', '#2ea043')}
+    ${bodyText('Seu perfil do Google Meu Negócio foi verificado e já está visível para os seus clientes nas buscas.')}
+    ${ctaButton(dashboardUrl, 'Ver minha ficha')}
+    ${bodyText('Continue por aqui para manter sua ficha sempre em dia.')}
   `;
 
   return getBaseTemplate(content);

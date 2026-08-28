@@ -4,6 +4,8 @@ import { AppError } from '../middleware/errorHandler.js';
 import { StudioPublishingService } from '../services/studio/studio-publishing.service.js';
 import { db, brandKits } from '@fury/db';
 import { eq } from 'drizzle-orm';
+import { emailService } from '../services/email/email.service.js';
+import { sendToTenant } from '../services/email/notify.js';
 
 const generateImageSchema = z
   .object({
@@ -135,6 +137,11 @@ export class StudioPublishingController {
         adAccountId: body.adAccountId,
       });
 
+      // Email transacional: campanha publicada via Estúdio (fire-and-forget)
+      await sendToTenant(tenantId, req.user?.email, (to) =>
+        emailService.sendCampaignPublished(to, 'Publicação no Gerenciador de Anúncios'),
+      );
+
       res.status(200).json({
         hash: result.hash,
         imageUrl: result.imageUrl,
@@ -205,6 +212,11 @@ export class StudioPublishingController {
         assetId: body.creativeAssetId,
         adAccountId: body.adAccountId,
       });
+
+      // Email transacional: campanha publicada via Estúdio (fire-and-forget)
+      await sendToTenant(tenantId, req.user?.email, (to) =>
+        emailService.sendCampaignPublished(to, 'Publicação no Gerenciador de Anúncios'),
+      );
 
       res.status(200).json({ success: true, metaAssetId: result.metaAssetId, hash: result.hash });
     } catch (error) {
