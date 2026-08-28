@@ -8,7 +8,7 @@ import {
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { MetaRepository } from '../../repository/meta.repository.js';
-import { metaService } from './meta.service.js';
+import { MetaService, metaService } from './meta.service.js';
 
 export type InstagramRankingObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';
 
@@ -24,11 +24,14 @@ export interface RankedInstagramPost {
   recommended: boolean;
 }
 
-function computeScore(objective: InstagramRankingObjective, post: {
-  likeCount: number;
-  commentsCount: number;
-  insights: InstagramMediaInsights;
-}): number {
+function computeScore(
+  objective: InstagramRankingObjective,
+  post: {
+    likeCount: number;
+    commentsCount: number;
+    insights: InstagramMediaInsights;
+  }
+): number {
   const { likeCount, commentsCount, insights } = post;
 
   if (objective === 'visits') {
@@ -49,157 +52,222 @@ export interface InstagramDashboardInsights {
   period: { from: string; to: string };
 }
 
-/**
- * Busca metricas organicas (comentarios, salvamentos e variacao de seguidores)
- * para o card de engajamento do Dashboard. Retorna `null` (sem lancar erro)
- * quando o tenant nao tem conexao Meta ou nao tem conta do Instagram Business
- * vinculada, para que o frontend exiba o estado vazio.
- */
-export async function getInstagramDashboardInsights(
-  tenantId: string,
-  dateFrom: string,
-  dateTo: string
-): Promise<InstagramDashboardInsights | null> {
-  const metaConn = await new MetaRepository(tenantId).findLatestMetaConnection();
+/** Dependências externas (portas) injetadas no `InstagramService`. */
+export interface InstagramServiceDeps {
+  metaApi: {
+    getInstagramAccountInsights: typeof getInstagramAccountInsights;
+    getInstagramMedia: typeof getInstagramMedia;
+    getInstagramMediaInsights: typeof getInstagramMediaInsights;
+    getUserFacebookPages: typeof getUserFacebookPages;
+  };
+  metaService: MetaService;
+}
 
-  if (!metaConn) {
-    return null;
+/**
+ * InstagramService — classe pura de domínio com DI no construtor
+ * (repoFactory + externos meta-api e metaService para resolução de ativos).
+ */
+export class InstagramService {
+  constructor(
+    private readonly repoFactory: (tenantId: string) => MetaRepository = (tenantId) => new MetaRepository(tenantId),
+    private readonly deps: InstagramServiceDeps = {
+      metaApi: {
+        getInstagramAccountInsights,
+        getInstagramMedia,
+        getInstagramMediaInsights,
+        getUserFacebookPages,
+      },
+      metaService,
+    }
+  ) {}
+
+  private repo(tenantId: string): MetaRepository {
+    return this.repoFactory(tenantId);
   }
 
-  const accessToken = decryptMetaToken(metaConn.accessToken);
+  /**
+   * Busca metricas organicas (comentarios, salvamentos e variacao de seguidores)
+   * para o card de engajamento do Dashboard. Retorna `null` (sem lancar erro)
+   * quando o tenant nao tem conexao Meta ou nao tem conta do Instagram Business
+   * vinculada, para que o frontend exiba o estado vazio.
+   */
+  async getDashboardInsights(
+    tenantId: string,
+    dateFrom: string,
+    dateTo: string
+  ): Promise<InstagramDashboardInsights | null> {
+    const metaConn = await this.repo(tenantId).findLatestMetaConnection();
 
-  try {
-    const assetSelection = await metaService.getResolvedTenantAssetSelection(tenantId);
-    let selectedPage = assetSelection.pages.find((page) => page.instagramUserId);
+    if (!metaConn) {
+      return null;
+    }
 
-    // ponytail: se a página selecionada não tem Instagram, busca em TODAS as
-    // páginas do usuário. O usuário pode ter selecionado uma página sem
-    // Instagram Business, mas ter o Instagram conectado em outra página.
-    if (!selectedPage?.instagramUserId) {
-      const allPages = await getUserFacebookPages(accessToken, { includeWhatsApp: false });
-      const fallback = allPages.find((page) => page.instagramUserId);
-      console.log(
-        `[Instagram] tenant=${tenantId} selectedPage sem Instagram (IDs: ${assetSelection.pages.map(p => p.pageId).join(',')}), ` +
-        `fallback: ${fallback ? `page=${fallback.pageId} igUserId=${fallback.instagramUserId}` : 'nenhuma página com Instagram'}`
+    const accessToken = decryptMetaToken(metaConn.accessToken);
+
+    try {
+      const assetSelection = await this.deps.metaService.getResolvedTenantAssetSelection(tenantId);
+      let selectedPage = assetSelection.pages.find((page) => page.instagramUserId);
+
+      // ponytail: se a página selecionada não tem Instagram, busca em TODAS as
+      // páginas do usuário. O usuário pode ter selecionado uma página sem
+      // Instagram Business, mas ter o Instagram conectado em outra página.
+      if (!selectedPage?.instagramUserId) {
+        const allPages = await this.deps.metaApi.getUserFacebookPages(accessToken, { includeWhatsApp: false });
+        const fallback = allPages.find((page) => page.instagramUserId);
+        console.log(
+          `[Instagram] tenant=${tenantId} selectedPage sem Instagram (IDs: ${assetSelection.pages.map((p) => p.pageId).join(',')}), ` +
+            `fallback: ${fallback ? `page=${fallback.pageId} igUserId=${fallback.instagramUserId}` : 'nenhuma página com Instagram'}`
+        );
+        selectedPage = fallback;
+      }
+
+      if (!selectedPage?.instagramUserId) {
+        return null;
+      }
+
+      const insights = await this.deps.metaApi.getInstagramAccountInsights(
+        selectedPage.instagramUserId,
+        accessToken,
+        dateFrom,
+        dateTo
       );
-      selectedPage = fallback;
+
+      return {
+        comments: insights.comments,
+        saves: insights.saves,
+        followers: insights.followerChange,
+        period: { from: dateFrom, to: dateTo },
+      };
+    } catch (err) {
+      if (err instanceof AppError && err.code === 'INSTAGRAM_ACCOUNT_NOT_FOUND') {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  async getRankedPosts(
+    tenantId: string,
+    objective: InstagramRankingObjective,
+    instagramUserId?: string
+  ): Promise<RankedInstagramPost[]> {
+    const metaConn = await this.repo(tenantId).findLatestMetaConnection();
+
+    if (!metaConn) {
+      throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
     }
 
-    if (!selectedPage?.instagramUserId) {
-      return null;
-    }
+    const accessToken = decryptMetaToken(metaConn.accessToken);
 
-    const insights = await getInstagramAccountInsights(selectedPage.instagramUserId, accessToken, dateFrom, dateTo);
+    try {
+      // Resolve o igUserId a partir das Paginas selecionadas pelo tenant (nunca
+      // "a primeira conta do Instagram do usuario Meta"), evitando vazar posts
+      // de outra conta/negocio que o mesmo usuario Meta tambem administra.
+      const assetSelection = await this.deps.metaService.getResolvedTenantAssetSelection(tenantId);
+      const tenantIgUserIds = assetSelection.pages
+        .map((page) => page.instagramUserId)
+        .filter((id): id is string => Boolean(id));
 
-    return {
-      comments: insights.comments,
-      saves: insights.saves,
-      followers: insights.followerChange,
-      period: { from: dateFrom, to: dateTo },
-    };
-  } catch (err) {
-    if (err instanceof AppError && err.code === 'INSTAGRAM_ACCOUNT_NOT_FOUND') {
-      return null;
+      const igUserId =
+        instagramUserId && tenantIgUserIds.includes(instagramUserId) ? instagramUserId : tenantIgUserIds[0];
+
+      if (!igUserId) {
+        throw new AppError(
+          404,
+          'INSTAGRAM_ACCOUNT_NOT_FOUND',
+          'Nenhuma conta do Instagram Business vinculada as Paginas selecionadas.'
+        );
+      }
+
+      const media = await this.deps.metaApi.getInstagramMedia(igUserId, accessToken);
+
+      // Filtra apenas tipos de midia com imagem exibivel (imagens diretas e
+      // albuns de carrossel). Videos/Reels nao tem `media_url` estatica e a
+      // thumbnail usada como fallback nao representa o post real.
+      const imageMedia = media.filter(
+        (item) => item.media_type === 'IMAGE' || item.media_type === 'CAROUSEL_ALBUM'
+      );
+
+      const posts = await Promise.all(
+        imageMedia.map(async (item) => {
+          const insights = await this.deps.metaApi.getInstagramMediaInsights(
+            item.id,
+            accessToken,
+            item.media_product_type
+          );
+          const likeCount = item.like_count ?? 0;
+          const commentsCount = item.comments_count ?? 0;
+
+          // Videos/Reels nao tem `media_url` exibivel diretamente (arquivo de video);
+          // usar a thumbnail como imagem de preview.
+          const displayUrl =
+            item.media_type === 'VIDEO' ? (item.thumbnail_url ?? item.media_url) : (item.media_url ?? item.thumbnail_url);
+
+          return {
+            id: item.id,
+            caption: item.caption,
+            media_url: displayUrl,
+            timestamp: item.timestamp,
+            like_count: likeCount,
+            comments_count: commentsCount,
+            insights,
+            score: computeScore(objective, { likeCount, commentsCount, insights }),
+            recommended: false,
+          };
+        })
+      );
+
+      posts.sort((a, b) => b.score - a.score);
+      if (posts[0]) {
+        posts[0].recommended = true;
+      }
+
+      return posts;
+    } catch (err) {
+      if (err instanceof AppError) {
+        throw err;
+      }
+
+      const metaCode = (err as any).metaCode;
+      const metaType = (err as any).metaType;
+      console.error('[Instagram] getRankedPosts error:', {
+        metaCode,
+        metaType,
+        message: (err as Error).message,
+      });
+
+      if (metaCode === 190) {
+        throw new AppError(
+          401,
+          'META_TOKEN_EXPIRED',
+          'Token Meta expirado. Reconecte sua conta em Configurações > Integrações'
+        );
+      }
+
+      if (metaType === 'OAuthException' && (metaCode === 200 || metaCode === 10)) {
+        throw new AppError(
+          403,
+          'META_PERMISSION_DENIED',
+          'Permissão do Instagram ausente. Reconecte sua conta em Configurações > Integrações.'
+        );
+      }
+
+      throw new AppError(502, 'INSTAGRAM_API_ERROR', 'Erro ao buscar posts do Instagram. Tente novamente.');
     }
-    throw err;
   }
 }
 
-export async function getRankedInstagramPosts(
+export const instagramService = new InstagramService();
+
+/**
+ * Aliases de módulo que delegam ao singleton `instagramService`, preservando
+ * consumidores que importam as funções como alias de módulo (dashboard.controller).
+ */
+export const getInstagramDashboardInsights = (tenantId: string, dateFrom: string, dateTo: string) =>
+  instagramService.getDashboardInsights(tenantId, dateFrom, dateTo);
+
+export const getRankedInstagramPosts = (
   tenantId: string,
   objective: InstagramRankingObjective,
   instagramUserId?: string
-): Promise<RankedInstagramPost[]> {
-  const metaConn = await new MetaRepository(tenantId).findLatestMetaConnection();
-
-  if (!metaConn) {
-    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
-  }
-
-  const accessToken = decryptMetaToken(metaConn.accessToken);
-
-  try {
-    // Resolve o igUserId a partir das Paginas selecionadas pelo tenant (nunca
-    // "a primeira conta do Instagram do usuario Meta"), evitando vazar posts
-    // de outra conta/negocio que o mesmo usuario Meta tambem administra.
-    const assetSelection = await metaService.getResolvedTenantAssetSelection(tenantId);
-    const tenantIgUserIds = assetSelection.pages
-      .map((page) => page.instagramUserId)
-      .filter((id): id is string => Boolean(id));
-
-    const igUserId =
-      instagramUserId && tenantIgUserIds.includes(instagramUserId) ? instagramUserId : tenantIgUserIds[0];
-
-    if (!igUserId) {
-      throw new AppError(
-        404,
-        'INSTAGRAM_ACCOUNT_NOT_FOUND',
-        'Nenhuma conta do Instagram Business vinculada as Paginas selecionadas.'
-      );
-    }
-
-    const media = await getInstagramMedia(igUserId, accessToken);
-
-    // Filtra apenas tipos de midia com imagem exibivel (imagens diretas e
-    // albuns de carrossel). Videos/Reels nao tem `media_url` estatica e a
-    // thumbnail usada como fallback nao representa o post real.
-    const imageMedia = media.filter((item) => item.media_type === 'IMAGE' || item.media_type === 'CAROUSEL_ALBUM');
-
-    const posts = await Promise.all(
-      imageMedia.map(async (item) => {
-        const insights = await getInstagramMediaInsights(item.id, accessToken, item.media_product_type);
-        const likeCount = item.like_count ?? 0;
-        const commentsCount = item.comments_count ?? 0;
-
-        // Videos/Reels nao tem `media_url` exibivel diretamente (arquivo de video);
-        // usar a thumbnail como imagem de preview.
-        const displayUrl = item.media_type === 'VIDEO' ? (item.thumbnail_url ?? item.media_url) : (item.media_url ?? item.thumbnail_url);
-
-        return {
-          id: item.id,
-          caption: item.caption,
-          media_url: displayUrl,
-          timestamp: item.timestamp,
-          like_count: likeCount,
-          comments_count: commentsCount,
-          insights,
-          score: computeScore(objective, { likeCount, commentsCount, insights }),
-          recommended: false,
-        };
-      })
-    );
-
-    posts.sort((a, b) => b.score - a.score);
-    if (posts[0]) {
-      posts[0].recommended = true;
-    }
-
-    return posts;
-  } catch (err) {
-    if (err instanceof AppError) {
-      throw err;
-    }
-
-    const metaCode = (err as any).metaCode;
-    const metaType = (err as any).metaType;
-    console.error('[Instagram] getRankedInstagramPosts error:', {
-      metaCode,
-      metaType,
-      message: (err as Error).message,
-    });
-
-    if (metaCode === 190) {
-      throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
-    }
-
-    if (metaType === 'OAuthException' && (metaCode === 200 || metaCode === 10)) {
-      throw new AppError(
-        403,
-        'META_PERMISSION_DENIED',
-        'Permissão do Instagram ausente. Reconecte sua conta em Configurações > Integrações.'
-      );
-    }
-
-    throw new AppError(502, 'INSTAGRAM_API_ERROR', 'Erro ao buscar posts do Instagram. Tente novamente.');
-  }
-}
+) => instagramService.getRankedPosts(tenantId, objective, instagramUserId);

@@ -18,6 +18,24 @@ import { ObservabilityController } from './controllers/observability.controller.
 import { FormsService } from './services/forms/forms.service.js';
 import { FormsController } from './controllers/forms.controller.js';
 import { AutomationService } from './services/automation/automation.service.js';
+import { AutomationController } from './controllers/automation.controller.js';
+import { AuthService } from './services/core/auth.service.js';
+import { SocialAuthService } from './services/core/social-auth.service.js';
+import { AuthController } from './controllers/auth.controller.js';
+import { MetricsService } from './services/campaigns/metrics.service.js';
+import { MetricsController } from './controllers/metrics.controller.js';
+import { GoogleService, googleService } from './services/google/google.service.js';
+import { GoogleController } from './controllers/google.controller.js';
+import { MetaService, metaService } from './services/meta/meta.service.js';
+import { MetaController } from './controllers/meta.controller.js';
+import { instagramService } from './services/meta/instagram.service.js';
+import { InstagramController } from './controllers/instagram.controller.js';
+import { getInstagramDashboardInsights } from './services/meta/instagram.service.js';
+import { plannerService } from './services/planner/planner.service.js';
+import { PlannerController } from './controllers/planner.controller.js';
+import { DashboardController } from './controllers/dashboard.controller.js';
+import { BudgetOptimizerService } from './services/campaigns/budget-optimizer.service.js';
+import { BudgetController } from './controllers/budget.controller.js';
 
 /**
  * Composition root (DI) da API.
@@ -40,6 +58,10 @@ export const billingService = new BillingService();
 export const observabilityService = new ObservabilityService();
 export const formsService = new FormsService();
 export const automationService = new AutomationService();
+export const authService = new AuthService();
+export const socialAuthService = new SocialAuthService();
+export const metricsService = new MetricsService(metricsProvider);
+export const budgetOptimizerService = new BudgetOptimizerService();
 
 export const controllers = {
   goal: new GoalController(goalService),
@@ -50,6 +72,15 @@ export const controllers = {
   billing: new BillingController(billingService),
   observability: new ObservabilityController(observabilityService),
   forms: new FormsController(formsService),
+  metrics: new MetricsController(metricsService),
+  auth: new AuthController(authService, socialAuthService),
+  automation: new AutomationController(automationService),
+  google: new GoogleController(googleService),
+  meta: new MetaController(metaService),
+  instagram: new InstagramController(instagramService, metaService),
+  planner: new PlannerController(plannerService),
+  dashboard: new DashboardController(getInstagramDashboardInsights),
+  budget: new BudgetController(budgetOptimizerService),
 };
 
 export { metricsProvider };

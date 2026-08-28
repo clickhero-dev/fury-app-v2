@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import * as googleController from '../controllers/google.controller.js';
+import { controllers } from '../di.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 
@@ -18,34 +18,34 @@ const photoUpload = multer({
 
 const router = Router();
 
-router.get('/auth/url', authMiddleware, googleController.getAuthUrl);
-router.get('/auth/callback', googleController.authCallback);
-router.get('/connections', authMiddleware, tenantMiddleware, googleController.getConnection);
-router.delete('/connections/:id', authMiddleware, tenantMiddleware, googleController.disconnectConnection);
-router.get('/accounts', authMiddleware, tenantMiddleware, googleController.getAccounts);
-router.get('/lookup', authMiddleware, tenantMiddleware, googleController.lookup);
-router.get('/categories', authMiddleware, tenantMiddleware, googleController.getCategories);
-router.get('/settings', authMiddleware, tenantMiddleware, googleController.getSettings);
-router.put('/settings', authMiddleware, tenantMiddleware, googleController.updateSettings);
-router.post('/profiles', authMiddleware, tenantMiddleware, googleController.createProfile);
-router.get('/profiles/:id/verification', authMiddleware, tenantMiddleware, googleController.getVerification);
+router.get('/auth/url', authMiddleware, controllers.google.getAuthUrl);
+router.get('/auth/callback', controllers.google.authCallback);
+router.get('/connections', authMiddleware, tenantMiddleware, controllers.google.getConnection);
+router.delete('/connections/:id', authMiddleware, tenantMiddleware, controllers.google.disconnectConnection);
+router.get('/accounts', authMiddleware, tenantMiddleware, controllers.google.getAccounts);
+router.get('/lookup', authMiddleware, tenantMiddleware, controllers.google.lookup);
+router.get('/categories', authMiddleware, tenantMiddleware, controllers.google.getCategories);
+router.get('/settings', authMiddleware, tenantMiddleware, controllers.google.getSettings);
+router.put('/settings', authMiddleware, tenantMiddleware, controllers.google.updateSettings);
+router.post('/profiles', authMiddleware, tenantMiddleware, controllers.google.createProfile);
+router.get('/profiles/:id/verification', authMiddleware, tenantMiddleware, controllers.google.getVerification);
 router.post(
   '/profiles/:id/verification/complete',
   authMiddleware,
   tenantMiddleware,
-  googleController.completeVerification
+  controllers.google.completeVerification
 );
-router.get('/profiles/:id', authMiddleware, tenantMiddleware, googleController.getProfile);
-router.patch('/profiles/:id', authMiddleware, tenantMiddleware, googleController.updateProfile);
-router.post('/profiles/:id/sync', authMiddleware, tenantMiddleware, googleController.syncProfile);
-router.get('/profiles/:id/sync-logs', authMiddleware, tenantMiddleware, googleController.getSyncLogs);
+router.get('/profiles/:id', authMiddleware, tenantMiddleware, controllers.google.getProfile);
+router.patch('/profiles/:id', authMiddleware, tenantMiddleware, controllers.google.updateProfile);
+router.post('/profiles/:id/sync', authMiddleware, tenantMiddleware, controllers.google.syncProfile);
+router.get('/profiles/:id/sync-logs', authMiddleware, tenantMiddleware, controllers.google.getSyncLogs);
 router.post(
   '/profiles/:id/photos',
   authMiddleware,
   tenantMiddleware,
   photoUpload.single('photo'),
-  googleController.uploadPhoto
+  controllers.google.uploadPhoto
 );
-router.delete('/profiles/:id/photos', authMiddleware, tenantMiddleware, googleController.deletePhoto);
+router.delete('/profiles/:id/photos', authMiddleware, tenantMiddleware, controllers.google.deletePhoto);
 
 export default router;
