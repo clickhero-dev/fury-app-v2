@@ -11,6 +11,9 @@ RUN pnpm i --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
+ARG VITE_POSTHOG_KEY
+ENV VITE_POSTHOG_KEY=$VITE_POSTHOG_KEY
+
 COPY . .
 RUN pnpm run build
 
