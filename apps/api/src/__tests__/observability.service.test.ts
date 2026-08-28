@@ -1,4 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('../../lib/redis.js', () => {
+  const make = () => ({
+    get: vi.fn(async () => null),
+    set: vi.fn(async () => 'OK'),
+    setex: vi.fn(async () => 'OK'),
+    expire: vi.fn(async () => 1),
+    del: vi.fn(async () => 1),
+    mget: vi.fn(async () => [null]),
+    keys: vi.fn(async () => []),
+    client: null as any,
+  });
+  return { getRedis: () => make() };
+});
+
 import { ObservabilityService } from '../services/observability/observability.service.js';
 
 const db: any = { execute: vi.fn() };
@@ -21,7 +36,7 @@ describe('ObservabilityService', () => {
     await expect(svc.getKpi('NAO_EXISTE')).resolves.toBeNull();
   });
 
-  it('getKpi executa a query e devolve rows', async () => {
+  it('getKpi executa a query e devolve rows (cache miss → db.execute)', async () => {
     const out = await svc.getKpi('B1_campaigns_by_status');
     expect(out).not.toBeNull();
     expect(db.execute).toHaveBeenCalled();
