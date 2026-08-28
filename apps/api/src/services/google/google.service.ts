@@ -1364,3 +1364,32 @@ export async function removePhoto(
 
   return { photos: updatedPhotos, associatedManually: true };
 }
+
+/**
+ * GoogleService — classe com o corpo de negócio de Google.
+ * Promove as funções de módulo a métodos; singleton (googleService) usado
+ * pelos controllers via composition root (DI) — Fase 6.
+ */
+export class GoogleService {
+  generateGoogleAuthUrl = generateGoogleAuthUrl;
+  handleGoogleOAuthCallback = handleGoogleOAuthCallback;
+  getGoogleConnection = getGoogleConnection;
+  disconnectGoogleConnection = disconnectGoogleConnection;
+  getGoogleAccounts = getGoogleAccounts;
+  lookupGoogleProfile = lookupGoogleProfile;
+  getGoogleApiClient = getGoogleApiClient;
+  getGoogleSettings = getGoogleSettings;
+  updateGoogleSettings = updateGoogleSettings;
+  getGoogleCategories = getGoogleCategories;
+  createProfile = createProfile;
+  getVerification = getVerification;
+  completeVerification = completeVerification;
+  getProfile = getProfile;
+  updateProfile = updateProfile;
+  syncProfile = syncProfile;
+  getSyncLogs = getSyncLogs;
+  addPhoto = addPhoto;
+  removePhoto = removePhoto;
+}
+
+export const googleService = new GoogleService();

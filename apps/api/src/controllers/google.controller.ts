@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../middleware/errorHandler.js';
-import * as googleService from '../services/google/google.service.js';
+import { googleService } from '../services/google/google.service.js';
 import {
   contextQuerySchema,
   oauthCallbackQuerySchema,
