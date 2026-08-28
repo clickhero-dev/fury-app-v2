@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import { join } from 'path';
-import OpenAI from 'openai';
 import { StudioRepository } from '../../repository/studio.repository.js';
 import { deepseekService } from '../llms/deepseek.service.js';
 import { studioCopyService } from '../studio/studio-copy.service.js';
@@ -27,7 +26,6 @@ type Llm = Pick<typeof deepseekService, 'chat'>;
 interface StudioDeps {
   llm: Llm;
   storage: { uploadAsset: typeof uploadAsset };
-  openai: OpenAI;
   copy: { generateAdCopy: typeof studioCopyService.generateAdCopy };
 }
 
@@ -128,11 +126,10 @@ export class StudioService {
   constructor(
     private repoFactory: StudioRepoF = (t) => new StudioRepository(t),
     private deps: StudioDeps = {
-      llm: deepseekService,
-      storage: { uploadAsset },
-      openai: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
-      copy: { generateAdCopy: studioCopyService.generateAdCopy },
-    },
+          llm: deepseekService,
+          storage: { uploadAsset },
+          copy: { generateAdCopy: studioCopyService.generateAdCopy },
+        },
   ) {}
 
   private repo(tenantId: string): StudioRepository {
@@ -163,18 +160,16 @@ export class StudioService {
   }
 
   async generateCopyLegacy(body: any, type: CopyType, quantidade: number) {
-    if (!process.env.OPENAI_API_KEY) return { variacoes: getMockVariations(body, quantidade) };
+    if (!process.env.OPENROUTER_API_KEY) return { variacoes: getMockVariations(body, quantidade) };
     const systemPrompt = `Você é um especialista em copywriting para anúncios digitais no Facebook e Instagram. Gere variações de copy persuasivas, claras e em português brasileiro. Respeite RIGOROSAMENTE os limites de caracteres especificados. Responda APENAS em JSON válido sem texto adicional.`;
     const userPrompt = `Produto: ${body.produto}\nPúblico: ${body.publico}\nObjetivo: ${body.objetivo}\nTom: ${body.tom}\n\nGere ${quantidade} variações de ${type} em português, limite máximo ${COPY_LIMITS[type] ?? 300} caracteres.\n\nRetorne APENAS:\n{"variacoes": [{"texto": "..."}]}`;
-    const chatResponse = await this.deps.openai.chat.completions.create({
-      model: 'gpt-4o',
-      max_tokens: 1000,
-      messages: [
+    const text = await this.deps.llm.chat(
+      [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-    });
-    const text = chatResponse.choices[0]?.message?.content ?? '';
+      { temperature: 0.7, max_tokens: 1000 },
+    );
     const cleaned = text.replace(/```json|```/g, '').trim();
     let parsed: any;
     try {
