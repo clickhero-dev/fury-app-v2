@@ -14,6 +14,42 @@ function formatVerificationState(state: string): string {
   return 'Não verificado';
 }
 
+const QUALITY_LABEL: Record<string, { label: string; className: string }> = {
+  EXCELLENT: { label: 'Excelente', className: 'text-success bg-success/10' },
+  GOOD: { label: 'Bom', className: 'text-brand bg-brand/10' },
+  FAIR: { label: 'Regular', className: 'text-warning bg-warning/10' },
+  POOR: { label: 'Precisa de atenção', className: 'text-error bg-error/10' },
+};
+
+function QualityBadge({ quality }: { quality: NonNullable<GoogleLookupResult['matches'][0]['quality']> }) {
+  const style = QUALITY_LABEL[quality.grade] ?? QUALITY_LABEL.POOR;
+  return (
+    <div className="mt-2 space-y-2 rounded-xl border border-border bg-surface p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${style.className}`}>
+          {style.label}
+        </span>
+        <span className="text-[11px] text-text-tertiary">
+          {quality.score}/100
+          {quality.outdated === true && ' · desatualizado'}
+          {quality.outdated === null && ' · sem data de atualização'}
+        </span>
+      </div>
+      <ul className="space-y-1">
+        {quality.warnings.map((w) => (
+          <li key={w} className="flex items-start gap-1.5 text-[11px] text-text-secondary">
+            <span className="mt-0.5 text-text-tertiary">•</span>
+            {w}
+          </li>
+        ))}
+        {quality.missingFields.length === 0 && quality.warnings.length === 0 && (
+          <li className="text-[11px] text-text-tertiary">Perfil completo e atualizado no Google.</li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
 function MatchList({ matches }: { matches: GoogleLookupResult['matches'] }) {
   return (
     <div className="space-y-3">
@@ -47,6 +83,7 @@ function MatchList({ matches }: { matches: GoogleLookupResult['matches'] }) {
             {formatVerificationState(match.verificationState)}
             {match.claimed ? ' · vinculado à sua conta' : ''}
           </span>
+          {match.quality && <QualityBadge quality={match.quality} />}
         </div>
       ))}
     </div>

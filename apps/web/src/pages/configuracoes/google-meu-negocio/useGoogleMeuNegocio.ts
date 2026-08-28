@@ -9,6 +9,7 @@ import type {
   GoogleCompleteVerificationInput,
   GoogleCompleteVerificationResult,
   GoogleBusinessProfile,
+  GoogleQualityReport,
   GoogleSyncLogsResult,
   GooglePhotoUploadResult,
 } from '@/types/google';
@@ -18,6 +19,8 @@ export const googleVerificationKey = (profileId: string | null) =>
   ['google-verification', profileId] as const;
 export const googleProfileKey = (profileId: string | null) =>
   ['google-profile', profileId] as const;
+export const googleQualityKey = (profileId: string | null) =>
+  ['google-profile-quality', profileId] as const;
 export const googleSyncLogsKey = (profileId: string | null) =>
   ['google-sync-logs', profileId] as const;
 
@@ -73,8 +76,10 @@ export function useGoogleAccounts(enabled: boolean) {
 export function useGoogleConnect() {
   return useMutation({
     mutationFn: async (context: 'onboarding' | 'settings' = 'settings') => {
+      // frontendUrl = origin do ambiente atual (localhost/HMG/prod) para o
+      // callback redirecionar de volta ao MESMO ambiente após o OAuth.
       const response = await api.get<GoogleApiResponse<{ authUrl: string }>>('/google/auth/url', {
-        params: { context },
+        params: { context, frontendUrl: window.location.origin },
       });
       return response.data.data.authUrl;
     },
@@ -158,6 +163,21 @@ export function useGoogleProfile(profileId: string | null, enabled: boolean) {
     queryFn: async () => {
       const response = await api.get<GoogleApiResponse<GoogleBusinessProfile | null>>(
         `/google/profiles/${profileId}`
+      );
+      return response.data.data;
+    },
+    enabled: enabled && !!profileId,
+    retry: false,
+  });
+}
+
+/** Retorna o relatório de qualidade/recência do perfil GBP (pré-envio). */
+export function useGoogleProfileQuality(profileId: string | null, enabled: boolean) {
+  return useQuery<GoogleQualityReport | null>({
+    queryKey: googleQualityKey(profileId),
+    queryFn: async () => {
+      const response = await api.get<GoogleApiResponse<GoogleQualityReport | null>>(
+        `/google/profiles/${profileId}/quality`
       );
       return response.data.data;
     },

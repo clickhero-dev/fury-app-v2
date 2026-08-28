@@ -1,7 +1,12 @@
 import { useNavigate } from 'react-router-dom';
-import { Building2, ChevronRight, RefreshCw, LogOut } from 'lucide-react';
+import { Building2, ChevronRight, RefreshCw, LogOut, Settings2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useGoogleConnection, useGoogleConnect, useGoogleDisconnect } from './google-meu-negocio/useGoogleMeuNegocio';
+import {
+  useGoogleConnection,
+  useGoogleConnect,
+  useGoogleDisconnect,
+  useGoogleLookup,
+} from './google-meu-negocio/useGoogleMeuNegocio';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 
@@ -11,12 +16,14 @@ const BUTTON_HOVER = 'transition-all duration-200 hover:scale-[1.02] active:scal
 export function GoogleIntegrationCard() {
   const navigate = useNavigate();
   const { data: connection, isLoading } = useGoogleConnection();
+  const { data: lookup, isLoading: lookupLoading } = useGoogleLookup(!!connection);
   const connectMutation = useGoogleConnect();
   const disconnectMutation = useGoogleDisconnect();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const connected = !!connection;
   const tokenValid = connected && new Date(connection.tokenExpiresAt) > new Date();
+  const profileExists = lookup?.found === true || (lookup?.matches?.length ?? 0) > 0;
 
   if (isLoading) {
     return (
@@ -91,17 +98,36 @@ export function GoogleIntegrationCard() {
 
         {connected ? (
           <>
-            <button
-              type="button"
-              onClick={() => navigate('/configuracoes/google-meu-negocio')}
-              className={cn(
-                'flex flex-1 items-center justify-center gap-2 rounded-full bg-[#17708A] py-2 text-xs font-semibold text-white cursor-pointer',
-                BUTTON_HOVER
-              )}
-            >
-              Gerenciar
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
+            {profileExists ? (
+              <a
+                href="/configuracoes/google-meu-negocio"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate('/configuracoes/google-meu-negocio');
+                }}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-2 rounded-full bg-[#17708A] py-2 text-xs font-semibold text-white cursor-pointer',
+                  BUTTON_HOVER
+                )}
+              >
+                Ver como está meu Google Meu Negócio
+                <ChevronRight className="h-3.5 w-3.5" />
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate('/configuracoes/google-meu-negocio')}
+                disabled={lookupLoading}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-2 rounded-full bg-[#17708A] py-2 text-xs font-semibold text-white cursor-pointer',
+                  BUTTON_HOVER,
+                  lookupLoading && 'opacity-50'
+                )}
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+                {lookupLoading ? 'Verificando...' : 'Configurar agora'}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setConfirmOpen(true)}

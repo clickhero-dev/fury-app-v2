@@ -47,6 +47,7 @@ export interface GbpLocation {
     placeId?: string;
     mapsUri?: string;
     canOperateGoogleMyBusiness?: boolean;
+    updateTime?: string;
   };
   verification?: { state?: string };
   profile?: { totalReviewCount?: number };

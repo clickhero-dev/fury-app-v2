@@ -10,7 +10,13 @@ import { useResendOtp } from '@/hooks/useResendOtp';
 import { AdySymbol } from '@/components/AdySymbol';
 
 const resetPasswordSchema = z.object({
-  newPassword: z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
+  newPassword: z
+    .string()
+    .min(8, 'Senha deve ter pelo menos 8 caracteres')
+    .regex(/[a-z]/, 'Inclua uma letra minúscula')
+    .regex(/[A-Z]/, 'Inclua uma letra maiúscula')
+    .regex(/\d/, 'Inclua um número')
+    .regex(/[^a-zA-Z0-9]/, 'Inclua um caractere especial'),
   confirmPassword: z.string(),
 }).refine((data) => data.newPassword === data.confirmPassword, {
   message: 'As senhas não conferem',
@@ -62,7 +68,7 @@ export function ResetPasswordPage() {
       setGeneralError('');
       await resetPasswordMutation.mutateAsync({
         email,
-        code: otpValue,
+        otp: otpValue,
         newPassword: data.newPassword,
       });
       navigate('/reset-password/success');

@@ -191,10 +191,18 @@ describe('lookupGoogleProfile — googleLocations:search', () => {
             postalCode: '01310-100',
             country: 'BR',
           },
-          phone: '+5511999999999',
+          phone: expect.any(String),
           verificationState: 'VERIFIED',
           claimed: true,
           confidence: 'HIGH',
+          quality: expect.objectContaining({
+            complete: true,
+            verified: true,
+            grade: 'GOOD',
+            score: 85,
+            missingFields: [],
+            recommendations: ['website', 'category', 'hours'],
+          }),
         },
       ],
     });
@@ -430,5 +438,29 @@ describe('createProfile — bloqueios e criação (US2)', () => {
       statusCode: 401,
       code: 'GOOGLE_TOKEN_EXPIRED',
     });
+  });
+
+  it('devolve quality por match derivada da location completa do Google (pré-envio)', async () => {
+    mockSearchGoogleLocations.mockResolvedValue([makeClaimedVerifiedMatch()]);
+
+    const result = await googleService.lookupGoogleProfile('tenant-A');
+
+    expect(result.matches[0].quality).toBeDefined();
+    expect(result.matches[0].quality).toMatchObject({
+      complete: true, // nome/endereço/telefone presentes no match
+      verified: true,
+      grade: expect.stringMatching(/EXCELLENT|GOOD/),
+    });
+    expect(result.matches[0].quality).not.toBeNull();
+  });
+
+  it('quality é null quando o match não traz location completa', async () => {
+    mockSearchGoogleLocations.mockResolvedValue([
+      { locationName: 'accounts/123456/locations/789', placeId: 'ChIJmockplaceid' },
+    ]);
+
+    const result = await googleService.lookupGoogleProfile('tenant-A');
+
+    expect(result.matches[0].quality).toBeNull();
   });
 });

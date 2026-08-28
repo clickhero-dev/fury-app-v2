@@ -10,12 +10,13 @@ import {
   generateRefreshToken,
   verifyRefreshToken,
 } from '../../lib/jwt.js';
-import { sendWelcomeEmail, sendOtpEmail, sendPasswordResetConfirmation } from '../email/email.service.js';
+import { emailService, type EmailService } from '../email/email.service.js';
 import type { UserDTO } from '../../lib/shared.js';
 import { AuthRepository } from '../../repository/auth.repository.js';
 
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
+const RESET_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 // ── helpers puros (sem dependência de repo) ──────────────────────────
 function generateSlug(companyName: string): string {
@@ -83,10 +84,14 @@ export class AuthService {
     private readonly repoFactory: (tenantId: string) => AuthRepository = (t) => new AuthRepository(t),
     private readonly deps: {
       jwt: { generateAccessToken: typeof generateAccessToken; generateRefreshToken: typeof generateRefreshToken; verifyRefreshToken: typeof verifyRefreshToken };
-      email: { sendWelcomeEmail: typeof sendWelcomeEmail; sendOtpEmail: typeof sendOtpEmail; sendPasswordResetConfirmation: typeof sendPasswordResetConfirmation };
+      email: { sendWelcomeEmail: EmailService['sendWelcomeEmail']; sendOtpEmail: EmailService['sendOtpEmail']; sendPasswordResetConfirmation: EmailService['sendPasswordResetConfirmation'] };
     } = {
       jwt: { generateAccessToken, generateRefreshToken, verifyRefreshToken },
-      email: { sendWelcomeEmail, sendOtpEmail, sendPasswordResetConfirmation },
+      email: {
+        sendWelcomeEmail: emailService.sendWelcomeEmail.bind(emailService),
+        sendOtpEmail: emailService.sendOtpEmail.bind(emailService),
+        sendPasswordResetConfirmation: emailService.sendPasswordResetConfirmation.bind(emailService),
+      },
     },
   ) {}
 
@@ -242,10 +247,10 @@ export class AuthService {
   async forgotPassword(email: string): Promise<void> {
     const user = await this.repo('').findUserByEmail(email);
     if (user) {
-      const otp = generateSecureOtp();
-      const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
-      await this.repo('').patchUser(user.id, { otpCode: otp, otpExpiresAt });
-      this.deps.email.sendOtpEmail(user.email, otp).catch((error: any) => {
+      const resetCode = generateSecureOtp();
+      const resetTokenExpiresAt = new Date(Date.now() + RESET_CODE_TTL_MS);
+      await this.repo('').patchUser(user.id, { resetToken: resetCode, resetTokenExpiresAt });
+      this.deps.email.sendOtpEmail(user.email, resetCode).catch((error: any) => {
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`[forgotPassword] Failed to send OTP email to ${user.email}:`, errorMessage);
       });
@@ -256,11 +261,12 @@ export class AuthService {
     const user = await this.repo('').findUserByEmail(email);
     if (!user) throw new AppError(400, 'INVALID_OR_EXPIRED_OTP', 'Código inválido ou expirado');
 
-    const isOtpValid = user.otpCode === otp && user.otpExpiresAt !== null && user.otpExpiresAt > new Date();
-    if (!isOtpValid) throw new AppError(400, 'INVALID_OR_EXPIRED_OTP', 'Código inválido ou expirado');
+    const isCodeValid = user.resetToken === otp && user.resetTokenExpiresAt !== null && user.resetTokenExpiresAt > new Date();
+    if (!isCodeValid) throw new AppError(400, 'INVALID_OR_EXPIRED_OTP', 'Código inválido ou expirado');
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await this.repo('').patchUser(user.id, { passwordHash, otpCode: null, otpExpiresAt: null, resetToken: null, resetTokenExpiresAt: null });
+    // Atomicidade: troca a senha e invalida o código no mesmo UPDATE
+    await this.repo('').patchUser(user.id, { passwordHash, resetToken: null, resetTokenExpiresAt: null });
     await revokeRefreshToken(user.id);
 
     this.deps.email.sendPasswordResetConfirmation(user.email).catch((error: any) => {

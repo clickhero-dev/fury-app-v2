@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import { AppError } from '../middleware/errorHandler.js';
 import type { GoogleService } from '../services/google/google.service.js';
+import { emailService } from '../services/email/email.service.js';
+import { sendToTenant } from '../services/email/notify.js';
 import {
   contextQuerySchema,
   oauthCallbackQuerySchema,
@@ -23,8 +26,12 @@ export class GoogleController {
       if (!req.user?.tenantId) {
         throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no token JWT.');
       }
-      const { context } = contextQuerySchema.parse(req.query);
-      const authUrl = this.googleService.generateGoogleAuthUrl(req.user.tenantId, context);
+      const { context, frontendUrl } = contextQuerySchema.parse(req.query);
+      // Origin do frontend que iniciou o fluxo: query explícita OU header Origin
+      // do browser (fallback). O redirect pós-OAuth volta ao MESMO ambiente,
+      // sem depender de FRONTEND_URL (multi-ambiente isolado).
+      const origin = frontendUrl ?? (req.headers.origin as string | undefined);
+      const authUrl = this.googleService.generateGoogleAuthUrl(req.user.tenantId, context, origin);
       res.status(200).json({
         success: true,
         data: { authUrl },
@@ -36,25 +43,45 @@ export class GoogleController {
   };
 
   authCallback = async (req: Request, res: Response, next: NextFunction) => {
-    const frontendUrl = process.env.FRONTEND_URL;
+    const fallbackFrontendUrl = process.env.FRONTEND_URL;
 
-    if (!frontendUrl) {
+    if (!fallbackFrontendUrl) {
       throw new AppError(500, 'SERVER_ERROR', 'URL do frontend nao encontrada');
     }
+
+    /**
+     * Origem para onde redirecionar: prefere o frontendUrl embutido no state
+     * (origin de quem iniciou o OAuth — localhost/HMG/prod) e cai no
+     * FRONTEND_URL quando ausente. Evita jogar usuários de um ambiente
+     * para outro (ex.: localhost → HMG).
+     */
+    const resolveTarget = (state?: string): string => {
+      if (state) {
+        try {
+          const decoded = jwt.decode(state) as { frontendUrl?: string } | null;
+          if (decoded?.frontendUrl) {
+            return decoded.frontendUrl;
+          }
+        } catch {
+          // state ilegível → usa o fallback
+        }
+      }
+      return fallbackFrontendUrl;
+    };
 
     try {
       const errorParam = req.query.error as string | undefined;
       if (errorParam) {
         // Usuário recusou o consentimento (access_denied) ou o Google rejeitou a requisição.
-        res.redirect(`${frontendUrl}${GOOGLE_MEU_NEGOCIO_PATH}?error=oauth_cancelled`);
+        res.redirect(`${resolveTarget(req.query.state as string | undefined)}${GOOGLE_MEU_NEGOCIO_PATH}?error=oauth_cancelled`);
         return;
       }
 
       const query = oauthCallbackQuerySchema.parse(req.query);
 
-      const { returnUrl } = await this.googleService.handleGoogleOAuthCallback(query.code, query.state);
+      const { returnUrl, frontendUrl } = await this.googleService.handleGoogleOAuthCallback(query.code, query.state);
 
-      res.redirect(`${frontendUrl}${returnUrl}`);
+      res.redirect(`${frontendUrl ?? resolveTarget() }${returnUrl}`);
     } catch (error) {
       const code = error instanceof AppError ? error.code : undefined;
       const errorParam =
@@ -65,7 +92,7 @@ export class GoogleController {
             : 'oauth_cancelled';
 
       console.error('[Google OAuth Callback] ERRO:', error);
-      res.redirect(`${frontendUrl}${GOOGLE_MEU_NEGOCIO_PATH}?error=${errorParam}`);
+      res.redirect(`${resolveTarget(req.query.state as string | undefined)}${GOOGLE_MEU_NEGOCIO_PATH}?error=${errorParam}`);
     }
   };
 
@@ -92,6 +119,10 @@ export class GoogleController {
       }
       const params = connectionIdParamsSchema.parse(req.params);
       const data = await this.googleService.disconnectGoogleConnection(params.id, req.tenant.tenantId);
+
+      // Email transacional: Google Meu Negócio desvinculado (fire-and-forget)
+      await sendToTenant(req.tenant.tenantId, req.user?.email, (to) => emailService.sendGmbUnlinked(to));
+
       res.status(200).json({
         success: true,
         data,
@@ -190,6 +221,10 @@ export class GoogleController {
         throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
       }
       const data = await this.googleService.createProfile(req.tenant.tenantId);
+
+      // Email transacional: Google Meu Negócio vinculado (fire-and-forget)
+      await sendToTenant(req.tenant.tenantId, req.user?.email, (to) => emailService.sendGmbLinked(to, data.name));
+
       res.status(201).json({
         success: true,
         data,
@@ -242,6 +277,24 @@ export class GoogleController {
       }
       const { id } = profileIdParamsSchema.parse(req.params);
       const data = await this.googleService.getProfile(id, req.tenant.tenantId);
+      res.status(200).json({
+        success: true,
+        data,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Avalia a qualidade/recência do perfil GBP (pré-envio). */
+  getProfileQuality = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const { id } = profileIdParamsSchema.parse(req.params);
+      const data = await this.googleService.assessProfile(id, req.tenant.tenantId);
       res.status(200).json({
         success: true,
         data,

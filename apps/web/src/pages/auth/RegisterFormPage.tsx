@@ -14,7 +14,13 @@ import { AdySymbol } from '@/components/AdySymbol';
 const registerSchema = z.object({
   name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
   email: z.string().email('Email inválido'),
-  password: z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
+  password: z
+    .string()
+    .min(8, 'Senha deve ter pelo menos 8 caracteres')
+    .regex(/[a-z]/, 'Inclua uma letra minúscula')
+    .regex(/[A-Z]/, 'Inclua uma letra maiúscula')
+    .regex(/\d/, 'Inclua um número')
+    .regex(/[^a-zA-Z0-9]/, 'Inclua um caractere especial'),
   companyName: z.string().min(2, 'Nome da empresa é obrigatório'),
 });
 

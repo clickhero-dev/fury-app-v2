@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import type { ForgotPasswordRequest, ForgotPasswordResponse } from '../types/auth';
-import { mockForgotPassword } from '../lib/api/auth.mock';
+import api from '../lib/api';
 
 /**
  * Hook para solicitar recuperação de senha via email.
@@ -25,8 +25,11 @@ import { mockForgotPassword } from '../lib/api/auth.mock';
 export function useForgotPassword() {
   return useMutation({
     mutationFn: async (data: ForgotPasswordRequest): Promise<ForgotPasswordResponse> => {
-      // TODO: Substituir por api.post('/auth/forgot-password', data) quando backend estiver pronto
-      return mockForgotPassword(data);
+      const response = await api.post<{ success: boolean; data: ForgotPasswordResponse; timestamp: string }>(
+        '/auth/forgot-password',
+        data,
+      );
+      return response.data.data;
     },
   });
 }

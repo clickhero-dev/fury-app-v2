@@ -1,13 +1,12 @@
 import { useMutation } from '@tanstack/react-query';
 import type { ResetPasswordRequest, ResetPasswordResponse } from '../types/auth';
-import { mockResetPassword } from '../lib/api/auth.mock';
+import api from '../lib/api';
 
 /**
  * Hook para redefinir a senha via código OTP.
  *
- * Valida o código OTP e define a nova senha. O email é necessário para
- * identificar a sessão de recuperação (na prática, seria um token gerado
- * no backend durante o forgot-password).
+ * Valida o código OTP (campo `otp`) e define a nova senha. O email é necessário
+ * para identificar a sessão de recuperação.
  *
  * @returns Mutation do React Query para disparo da redefinição
  *
@@ -15,7 +14,7 @@ import { mockResetPassword } from '../lib/api/auth.mock';
  * const { mutate: resetPassword, isPending } = useResetPassword();
  *
  * resetPassword(
- *   { email: 'user@example.com', code: '123456', newPassword: 'newpass123' },
+ *   { email: 'user@example.com', otp: '123456', newPassword: 'NovaSenha1!' },
  *   {
  *     onSuccess: () => {
  *       navigate('/reset-password/success');
@@ -26,8 +25,11 @@ import { mockResetPassword } from '../lib/api/auth.mock';
 export function useResetPassword() {
   return useMutation({
     mutationFn: async (data: ResetPasswordRequest): Promise<ResetPasswordResponse> => {
-      // TODO: Substituir por api.post('/auth/reset-password', data) quando backend estiver pronto
-      return mockResetPassword(data);
+      const response = await api.post<{ success: boolean; data: ResetPasswordResponse; timestamp: string }>(
+        '/auth/reset-password',
+        data,
+      );
+      return response.data.data;
     },
   });
 }

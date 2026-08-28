@@ -61,7 +61,7 @@ export interface ForgotPasswordResponse {
 /** Payload enviado para redefinição de senha via OTP. */
 export interface ResetPasswordRequest {
   email: string;
-  code: string;
+  otp: string;
   newPassword: string;
 }
 

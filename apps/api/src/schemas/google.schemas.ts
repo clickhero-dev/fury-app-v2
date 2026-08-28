@@ -63,6 +63,9 @@ export const profileIdParamsSchema = z.object({
 
 export const contextQuerySchema = z.object({
   context: z.enum(['onboarding', 'settings']).default('settings'),
+  // Origin de onde o OAuth está sendo iniciado (ex.: http://localhost:5173).
+  // Embutido no state e usado no redirect pós-callback (multi-ambiente).
+  frontendUrl: z.string().url('frontendUrl inválida').optional(),
 });
 
 export const oauthCallbackQuerySchema = z.object({
