@@ -4,26 +4,7 @@ import { randomUUID } from 'crypto';
 import { AppError } from '../middleware/errorHandler.js';
 import { uploadAsset } from '../services/storage/storage.service.js';
 import { openrouterService } from '../services/llms/openrouter.service.js';
-import {
-  startPlanGeneration,
-  getJobProgress,
-  getPlanById,
-  getLatestPlanByTenant,
-  getPrerequisites,
-  confirmPlan,
-  revalidatePlan,
-  editPostWithAI,
-  updatePostFields,
-  getCalendarPosts,
-  getCalendarPostsByDateRange,
-  bulkSchedulePosts,
-  bulkDeletePosts,
-  createManualPost,
-  movePostDay,
-  movePostDate,
-  publishDuePosts,
-  getAgentLabels,
-} from '../services/planner/planner.service.js';
+import { plannerService } from '../services/planner/planner.service.js';
 
 export async function generatePlan(req: Request, res: Response, next: NextFunction) {
   try {
@@ -31,7 +12,7 @@ export async function generatePlan(req: Request, res: Response, next: NextFuncti
     await openrouterService.assertCreditsAvailable();
 
     const tenantId = req.tenant!.tenantId;
-    const jobStatus = await startPlanGeneration(tenantId);
+    const jobStatus = await plannerService.startPlanGeneration(tenantId);
     res.json({ success: true, data: jobStatus });
   } catch (err) { next(err); }
 }
@@ -39,7 +20,7 @@ export async function generatePlan(req: Request, res: Response, next: NextFuncti
 export async function getJob(req: Request, res: Response, next: NextFunction) {
   try {
     const { jobId } = req.params;
-    const job = await getJobProgress(jobId);
+    const job = await plannerService.getJobProgress(jobId);
     if (!job || job.tenantId !== req.tenant!.tenantId) {
       throw new AppError(404, 'NOT_FOUND', 'Job não encontrado');
     }
@@ -50,7 +31,7 @@ export async function getJob(req: Request, res: Response, next: NextFunction) {
 export async function getPlan(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenant!.tenantId;
-    const plan = await getPlanById(req.params.planId, tenantId);
+    const plan = await plannerService.getPlanById(req.params.planId, tenantId);
     if (!plan) throw new AppError(404, 'NOT_FOUND', 'Plano não encontrado');
     res.json({ success: true, data: plan });
   } catch (err) { next(err); }
@@ -59,7 +40,7 @@ export async function getPlan(req: Request, res: Response, next: NextFunction) {
 export async function getLatestPlan(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenant!.tenantId;
-    const plan = await getLatestPlanByTenant(tenantId);
+    const plan = await plannerService.getLatestPlanByTenant(tenantId);
     res.json({ success: true, data: plan ?? null });
   } catch (err) { next(err); }
 }
@@ -67,7 +48,7 @@ export async function getLatestPlan(req: Request, res: Response, next: NextFunct
 export async function handleGetPrerequisites(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenant!.tenantId;
-    const checks = await getPrerequisites(tenantId);
+    const checks = await plannerService.getPrerequisites(tenantId);
     res.json({ success: true, data: checks });
   } catch (err) { next(err); }
 }
@@ -76,7 +57,7 @@ export async function handleConfirm(req: Request, res: Response, next: NextFunct
   try {
     const tenantId = req.tenant!.tenantId;
     const { planId } = z.object({ planId: z.string().uuid() }).parse(req.body);
-    const plan = await confirmPlan(planId, tenantId);
+    const plan = await plannerService.confirmPlan(planId, tenantId);
     res.json({ success: true, data: plan });
   } catch (err) { next(err); }
 }
@@ -85,7 +66,7 @@ export async function handleRevalidate(req: Request, res: Response, next: NextFu
   try {
     const tenantId = req.tenant!.tenantId;
     const { planId, ...updates } = req.body;
-    const plan = await revalidatePlan(planId, tenantId, updates);
+    const plan = await plannerService.revalidatePlan(planId, tenantId, updates);
     res.json({ success: true, data: plan });
   } catch (err) { next(err); }
 }
@@ -108,8 +89,8 @@ export async function handleEditPost(req: Request, res: Response, next: NextFunc
     const tenantId = req.tenant!.tenantId;
     const postId = req.params.postId;
     const updated = 'prompt' in body
-      ? await editPostWithAI(postId, tenantId, body.prompt)
-      : await updatePostFields(postId, tenantId, body);
+      ? await plannerService.editPostWithAI(postId, tenantId, body.prompt)
+      : await plannerService.updatePostFields(postId, tenantId, body);
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 }
@@ -128,7 +109,7 @@ export async function handleGetCalendar(req: Request, res: Response, next: NextF
     });
 
     const query = querySchema.parse(req.query);
-    const posts = await getCalendarPostsByDateRange(tenantId, query.startDate, query.endDate);
+    const posts = await plannerService.getCalendarPostsByDateRange(tenantId, query.startDate, query.endDate);
 
     res.json({ success: true, data: { posts, startDate: query.startDate, endDate: query.endDate } });
   } catch (err) { next(err); }
@@ -141,7 +122,7 @@ export async function handleBulkSchedule(req: Request, res: Response, next: Next
       postIds: z.array(z.string().uuid()).min(1).max(100),
       scheduledAt: z.string().datetime().nullable(),
     }).parse(req.body);
-    const updated = await bulkSchedulePosts(tenantId, postIds, scheduledAt);
+    const updated = await plannerService.bulkSchedulePosts(tenantId, postIds, scheduledAt);
     res.json({ success: true, data: { count: updated.length } });
   } catch (err) { next(err); }
 }
@@ -153,7 +134,7 @@ export async function handleBulkDelete(req: Request, res: Response, next: NextFu
       postIds: z.array(z.string().uuid()).min(1).max(100),
     }).parse(req.body);
     console.log(`[handleBulkDelete] tenant ${tenantId}: ${postIds.length} postIds`, postIds);
-    const deleted = await bulkDeletePosts(tenantId, postIds);
+    const deleted = await plannerService.bulkDeletePosts(tenantId, postIds);
     res.json({ success: true, data: { count: deleted.length } });
   } catch (err) {
     console.error('[handleBulkDelete] ERROR:', err);
@@ -186,7 +167,7 @@ export async function handleCreatePost(req: Request, res: Response, next: NextFu
     );
 
     const body = bodySchema.parse(req.body);
-    const post = await createManualPost(tenantId, body as any);
+    const post = await plannerService.createManualPost(tenantId, body as any);
     res.json({ success: true, data: post });
   } catch (err) { next(err); }
 }
@@ -208,9 +189,9 @@ export async function handleMovePost(req: Request, res: Response, next: NextFunc
 
     let updated;
     if ('date' in body) {
-      updated = await movePostDate(tenantId, postId, body.date, body.scheduledAt);
+      updated = await plannerService.movePostDate(tenantId, postId, body.date, body.scheduledAt);
     } else {
-      updated = await movePostDay(tenantId, postId, body.dayIndex);
+      updated = await plannerService.movePostDay(tenantId, postId, body.dayIndex);
     }
 
     res.json({ success: true, data: updated });
@@ -225,14 +206,14 @@ export async function handlePublishDue(req: Request, res: Response, next: NextFu
       const allTenants = await db.query.tenants.findMany();
       let total = 0;
       for (const t of allTenants) {
-        const result = await publishDuePosts(t.id);
+        const result = await plannerService.publishDuePosts(t.id);
         total += result.published;
       }
       res.json({ success: true, data: { published: total } });
       return;
     }
     // User (com auth): publica só do tenant logado
-    const result = await publishDuePosts(req.tenant.tenantId);
+    const result = await plannerService.publishDuePosts(req.tenant.tenantId);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -256,7 +237,7 @@ export async function handleUploadMedia(req: Request, res: Response, next: NextF
 
 export async function handleGetAgentLabels(req: Request, res: Response, next: NextFunction) {
   try {
-    const labels = getAgentLabels();
+    const labels = plannerService.getAgentLabels();
     res.json({ success: true, data: labels });
   } catch (err) { next(err); }
 }

@@ -536,3 +536,34 @@ export function getAgentLabels(): AgentLabelsResponse {
 
   return { order, labels };
 }
+
+/**
+ * PlannerService — classe com o corpo de negócio do Planner.
+ * Promove as funções de módulo a métodos; singleton (plannerService) usado
+ * pelo controller via composition root (DI) — Fase 6.
+ * O worker (publish-due.worker) segue usando as funções de módulo (fora de escopo).
+ */
+export class PlannerService {
+  startPlanGeneration = startPlanGeneration;
+  getJobProgress = getJobProgress;
+  getPlanById = getPlanById;
+  getLatestPlanByTenant = getLatestPlanByTenant;
+  getPrerequisites = getPrerequisites;
+  confirmPlan = confirmPlan;
+  revalidatePlan = revalidatePlan;
+  editPostWithAI = editPostWithAI;
+  updatePostFields = updatePostFields;
+  getCalendarPostsByDateRange = getCalendarPostsByDateRange;
+  getCalendarPosts = getCalendarPosts;
+  bulkSchedulePosts = bulkSchedulePosts;
+  bulkDeletePosts = bulkDeletePosts;
+  createManualPost = createManualPost;
+  movePostDay = movePostDay;
+  movePostDate = movePostDate;
+  resolveInstagramAccount = resolveInstagramAccount;
+  publishSinglePost = publishSinglePost;
+  publishDuePosts = publishDuePosts;
+  getAgentLabels = getAgentLabels;
+}
+
+export const plannerService = new PlannerService();
