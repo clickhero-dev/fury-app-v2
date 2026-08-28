@@ -57,7 +57,7 @@ describe('AuthController.register', () => {
       user: { id: 'u1', email: 'a@b.com', role: 'owner', tenantId: 't1' },
       tokens: { accessToken: 'at', refreshToken: 'rt' },
     });
-    const req = mockReq({ body: { name: 'Ana', email: 'a@b.com', password: '12345678', companyName: 'ACME' } });
+    const req = mockReq({ body: { name: 'Ana', email: 'a@b.com', password: 'SenhaForte1!', companyName: 'ACME' } });
     const res = mockRes();
     const next = vi.fn();
 
@@ -224,5 +224,66 @@ describe('AuthController.changePassword', () => {
 
     expect(authService.changePassword).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+  });
+
+  it('nova senha com 8+ mas sem maiúscula/número/especial → ZodError (política forte)', async () => {
+    const req = mockReq({ user: { userId: 'u1' }, body: { currentPassword: 'ok', newPassword: 'abcdefgh' } });
+    const res = mockRes();
+    const next = vi.fn();
+
+    await ctrl.changePassword(req, res, next);
+
+    expect(authService.changePassword).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+  });
+});
+
+describe('AuthController.resetPassword', () => {
+  it('happy path → 200 com user mapeado', async () => {
+    authService.resetPassword.mockResolvedValue({ id: 'u1', email: 'a@b.com', name: 'Ana', tenantId: 't1' });
+    const req = mockReq({ body: { email: 'a@b.com', otp: '123456', newPassword: 'SenhaForte1!' } });
+    const res = mockRes();
+    const next = vi.fn();
+
+    await ctrl.resetPassword(req, res, next);
+
+    expect(authService.resetPassword).toHaveBeenCalledWith('a@b.com', '123456', 'SenhaForte1!');
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('otp não-numérico → ZodError', async () => {
+    const req = mockReq({ body: { email: 'a@b.com', otp: 'abc123', newPassword: 'SenhaForte1!' } });
+    const res = mockRes();
+    const next = vi.fn();
+
+    await ctrl.resetPassword(req, res, next);
+
+    expect(authService.resetPassword).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+  });
+
+  it('nova senha fraca (8+ sem maiúscula/número/especial) → ZodError', async () => {
+    const req = mockReq({ body: { email: 'a@b.com', otp: '123456', newPassword: 'abcdefgh' } });
+    const res = mockRes();
+    const next = vi.fn();
+
+    await ctrl.resetPassword(req, res, next);
+
+    expect(authService.resetPassword).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+  });
+
+  it('rate-limit bloqueado → 429 sem chamar service', async () => {
+    const { checkResetPasswordRateLimit } = await import('../middleware/rate-limit.middleware.js');
+    (checkResetPasswordRateLimit as any).mockResolvedValueOnce({ allowed: false, remaining: 0 });
+    const req = mockReq({ body: { email: 'a@b.com', otp: '123456', newPassword: 'SenhaForte1!' } });
+    const res = mockRes();
+    const next = vi.fn();
+
+    await ctrl.resetPassword(req, res, next);
+
+    expect(authService.resetPassword).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(429);
   });
 });
