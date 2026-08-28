@@ -37,9 +37,12 @@ interface SendEmailOptions {
 
 export async function sendEmail(options: SendEmailOptions): Promise<void> {
   const transport = getTransporter();
-  
-  // O Resend em contas gratuitas exige o uso deste remetente padrão para testes
-  const from = 'onboarding@resend.dev';
+
+  // Remetente em um domínio verificado no Resend (clickhero.com.br).
+  // O remetente padrão 'onboarding@resend.dev' é de teste e só permite enviar
+  // para o email do dono da conta — para qualquer outro destinatário é preciso
+  // enviar de um endereço no domínio verificado.
+  const from = process.env.RESEND_FROM_EMAIL || 'no-reply@clickhero.com.br';
 
   try {
     await transport.sendMail({
