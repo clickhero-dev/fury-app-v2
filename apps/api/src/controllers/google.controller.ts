@@ -25,7 +25,11 @@ export class GoogleController {
         throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no token JWT.');
       }
       const { context, frontendUrl } = contextQuerySchema.parse(req.query);
-      const authUrl = this.googleService.generateGoogleAuthUrl(req.user.tenantId, context, frontendUrl);
+      // Origin do frontend que iniciou o fluxo: query explícita OU header Origin
+      // do browser (fallback). O redirect pós-OAuth volta ao MESMO ambiente,
+      // sem depender de FRONTEND_URL (multi-ambiente isolado).
+      const origin = frontendUrl ?? (req.headers.origin as string | undefined);
+      const authUrl = this.googleService.generateGoogleAuthUrl(req.user.tenantId, context, origin);
       res.status(200).json({
         success: true,
         data: { authUrl },

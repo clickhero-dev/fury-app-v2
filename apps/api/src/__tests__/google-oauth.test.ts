@@ -156,7 +156,30 @@ describe('Google OAuth — state JWT', () => {
     expect(decoded.frontendUrl).toBe('http://localhost:5173');
   });
 
-  it('não embute frontendUrl fora da allowlist (anti open-redirect)', () => {
+  it('embute QUALQUER origin http(s) sem depender de ALLOWED_FRONTEND_ORIGINS nem de FRONTEND_URL (multi-ambiente isolado)', () => {
+    delete process.env.ALLOWED_FRONTEND_ORIGINS;
+    process.env.FRONTEND_URL = 'https://clickhero-fury-web.u7pe19.easypanel.host';
+
+    // Cenário do bug: usuário em localhost (origin ≠ FRONTEND_URL do .env),
+    // env aponta HMG — o origin do REQUEST (localhost) precisa vencer.
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'http://localhost:5173');
+    const state = new URL(authUrl).searchParams.get('state') ?? '';
+    const decoded = jwt.decode(state) as { frontendUrl?: string };
+
+    expect(decoded.frontendUrl).toBe('http://localhost:5173');
+  });
+
+  it('não embute frontendUrl malformado (não-http) mesmo sem allowlist', () => {
+    delete process.env.ALLOWED_FRONTEND_ORIGINS;
+
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'javascript:alert(1)');
+    const state = new URL(authUrl).searchParams.get('state') ?? '';
+    const decoded = jwt.decode(state) as { frontendUrl?: string };
+
+    expect(decoded.frontendUrl).toBeUndefined();
+  });
+
+  it('allowlist explícita (sem *) ainda restringe (hardening opcional)', () => {
     process.env.ALLOWED_FRONTEND_ORIGINS = 'https://clickhero-fury-web.u7pe19.easypanel.host';
 
     const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'https://evil.example.com');
@@ -164,19 +187,6 @@ describe('Google OAuth — state JWT', () => {
     const decoded = jwt.decode(state) as { frontendUrl?: string };
 
     expect(decoded.frontendUrl).toBeUndefined();
-  });
-
-  it('sem ALLOWED_FRONTEND_ORIGINS, FRONTEND_URL é a única origem permitida', () => {
-    delete process.env.ALLOWED_FRONTEND_ORIGINS;
-
-    const ok = googleService.generateGoogleAuthUrl('tenant-1', 'settings', FRONTEND_URL);
-    const bad = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'http://localhost:9999');
-
-    const okState = jwt.decode(new URL(ok).searchParams.get('state') ?? '') as { frontendUrl?: string };
-    const badState = jwt.decode(new URL(bad).searchParams.get('state') ?? '') as { frontendUrl?: string };
-
-    expect(okState.frontendUrl).toBe(FRONTEND_URL);
-    expect(badState.frontendUrl).toBeUndefined();
   });
 
   it('ALLOWED_FRONTEND_ORIGINS=* aceita qualquer origin (multi-ambiente dev)', () => {

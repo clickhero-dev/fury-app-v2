@@ -15,7 +15,7 @@ describe('GoogleController', () => {
 
   it('happy: getAuthUrl retorna authUrl do tenant autenticado', async () => {
     googleService.generateGoogleAuthUrl.mockReturnValue('https://accounts.google.com/o/oauth2/v2/auth?x=1');
-    const req = { user: { tenantId: 't-1' }, query: { context: 'onboarding' } } as any;
+    const req = { user: { tenantId: 't-1' }, query: { context: 'onboarding' }, headers: {} } as any;
     const res = mockRes();
     const next = vi.fn();
 
@@ -62,6 +62,23 @@ describe('GoogleController — mapeamento do erro 401 de auth', () => {
     const googleService = { generateGoogleAuthUrl: vi.fn(() => 'https://accounts.google.com/x') } as any;
     const controller = new GoogleController(googleService);
     const req = { user: { tenantId: 't-1' }, query: { context: 'settings', frontendUrl: 'http://localhost:5173' } } as any;
+    const res = mockRes();
+    const next = vi.fn();
+
+    await controller.getAuthUrl(req, res, next);
+
+    expect(googleService.generateGoogleAuthUrl).toHaveBeenCalledWith('t-1', 'settings', 'http://localhost:5173');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('deriva o origin do header Origin quando o query não traz frontendUrl (browser real)', async () => {
+    const googleService = { generateGoogleAuthUrl: vi.fn(() => 'https://accounts.google.com/x') } as any;
+    const controller = new GoogleController(googleService);
+    const req = {
+      user: { tenantId: 't-1' },
+      query: { context: 'settings' },
+      headers: { origin: 'http://localhost:5173' },
+    } as any;
     const res = mockRes();
     const next = vi.fn();
 

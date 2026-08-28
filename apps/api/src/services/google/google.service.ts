@@ -1,9 +1,5 @@
-import jwt from 'jsonwebtoken';
 import {
   db as dbInstance,
-  googleBusinessProfiles,
-  businessProfileSettings,
-  tenants,
   type Database,
 } from '../../lib/db.js';
 import { AppError } from '../../middleware/errorHandler.js';
@@ -11,587 +7,72 @@ import { GOOGLE_ERROR_CODES, settingsSchema } from '../../schemas/google.schemas
 import { exchangeCodeForToken, getGoogleOAuthConfig, revokeGoogleToken } from '../../lib/google-oauth.js';
 import {
   createGoogleApiClient,
-  type GbpCategory,
   type GbpLocation,
   type GbpLocationMatch,
-  type GbpOpenPeriod,
   type GoogleApiClient,
 } from '../../lib/google-api.js';
 import { encryptToken, decryptToken } from '../../utils/crypto.js';
 import { uploadAsset, deleteAsset } from '../storage/storage.service.js';
 import { GoogleRepository } from '../../repository/google.repository.js';
 
-const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
-// openid/email/profile são necessários para o Google devolver o `id_token`
-// (sub do usuário) na troca do code — sem eles o userinfo responde 401/403.
-const GOOGLE_OAUTH_SCOPE =
-  'openid email https://www.googleapis.com/auth/business.manage';
-const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
+// Módulos de domínio extraídos (refatoração de modularização) — barrels do
+// Google Meu Negócio. O service continua sendo o ponto de composição (DI).
+import {
+  GOOGLE_AUTH_URL,
+  GOOGLE_OAUTH_SCOPE,
+  RETURN_URLS,
+  signOAuthState,
+  verifyOAuthState,
+  isAllowedFrontendOrigin,
+  getTokenExpiration,
+  resolveGoogleUserId,
+} from './google.oauth.js';
+import { assessGoogleProfileQuality } from './google.quality.js';
+import {
+  EMPTY_ADDRESS,
+  VERIFICATION_INSTRUCTIONS,
+  POSTAL_VERIFICATION_INSTRUCTIONS,
+  mapBusinessHoursToPeriods,
+  buildGbpLocationFromSettings,
+  mapGbpCategory,
+  buildSearchLocation,
+  mapGbpMatch,
+  settingsAreComplete,
+  mapGbpLocationToProfile,
+  buildFieldMask,
+  buildGbpPatchPayload,
+  hasActualChanges,
+} from './google.mappers.js';
+import type {
+  OAuthContext,
+  GoogleAccount,
+  GoogleCategory,
+  GoogleConnectionPublic,
+  GoogleLookupResult,
+  GoogleSettings,
+  GoogleSettingsUpsertResult,
+  GoogleProfileCreateResult,
+  GoogleVerificationResult,
+  GoogleCompleteVerificationResult,
+  GoogleProfileResult,
+  GoogleSyncLogsResult,
+  GooglePhotoUploadResult,
+  GoogleServiceDeps,
+} from './google.types.js';
+import type { GoogleQualityReport } from './google.quality.js';
 
-export type OAuthContext = 'onboarding' | 'settings';
+// ── Barrel público ────────────────────────────────────────────────────────────
+// Preserva os imports existentes (controllers, di.ts e testes) que referenciavam
+// tipos/funções de google.service.js — continua tudo exportável daqui.
+export * from './google.types.js';
+export type { GoogleQualityReport, GoogleQualityGrade } from './google.quality.js';
+export { getAllowedFrontendOrigins } from './google.oauth.js';
+export { assessGoogleProfileQuality } from './google.quality.js';
 
-interface OAuthStatePayload {
-  tenantId: string;
-  context: OAuthContext;
-  frontendUrl?: string;
-}
-
-interface GoogleTokenResponse {
-  access_token: string;
-  refresh_token?: string;
-  expires_in: number;
-  id_token?: string;
-}
-
-const RETURN_URLS: Record<OAuthContext, string> = {
-  onboarding: '/onboarding/conectar-google?connected=true',
-  settings: '/configuracoes/google-meu-negocio?connected=true',
-};
-
-export interface GoogleConnectionPublic {
-  id: string;
-  googleUserId: string;
-  accountId: string | null;
-  accountName: string | null;
-  tokenExpiresAt: string;
-  connected: boolean;
-}
-
-export interface GoogleAccount {
-  accountId: string;
-  accountName: string;
-}
-
-export interface GoogleLookupMatch {
-  gbpLocationId: string;
-  name: string;
-  address: {
-    street: string;
-    city: string;
-    state: string;
-    postalCode: string;
-    country: string;
-  };
-  phone: string;
-  verificationState: string;
-  claimed: boolean;
-  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
-  /** Relatório de qualidade/recência derivado da location completa do match (pré-envio). Null quando o match não traz location. */
-  quality?: GoogleQualityReport | null;
-}
-
-export interface GoogleLookupResult {
-  found: boolean;
-  matches: GoogleLookupMatch[];
-  duplicateAlert: boolean;
-}
-
-export interface GoogleAddress {
-  street: string;
-  city: string;
-  state: string;
-  postalCode: string;
-  country: string;
-}
-
-export interface GoogleBusinessHours {
-  [day: string]: { open: string; close: string }[] | undefined;
-}
-
-export interface GoogleSettings {
-  name: string;
-  address: GoogleAddress;
-  phone: string;
-  email: string;
-  website: string;
-  categoryId: string | null;
-  categoryDisplayName?: string | null;
-  hours: GoogleBusinessHours | null;
-  prefilledFrom?: string[];
-}
-
-export interface GoogleCategory {
-  categoryId: string;
-  displayName: string;
-  parentId: string | null;
-}
-
-export interface GoogleSettingsUpsertResult {
-  id: string;
-  name: string;
-  categoryDisplayName: string | null;
-}
-
-const EMPTY_ADDRESS: GoogleAddress = { street: '', city: '', state: '', postalCode: '', country: 'BR' };
-
-export interface GoogleProfileCreateResult {
-  id: string;
-  gbpLocationId: string;
-  name: string;
-  syncStatus: 'awaiting_verification';
-  verificationState: 'UNVERIFIED';
-  created: true;
-  verificationInstructions: string;
-}
-
-export interface GoogleVerificationOption {
-  method: 'POSTAL' | 'PHONE' | 'EMAIL';
-  description: string;
-}
-
-export interface GoogleVerificationResult {
-  verificationState: 'UNVERIFIED' | 'VERIFIED';
-  options: GoogleVerificationOption[];
-  instructions: string;
-}
-
-export type GoogleCompleteVerificationResult =
-  | { verificationState: 'UNVERIFIED'; awaitingPin: true }
-  | { verificationState: 'VERIFIED'; syncStatus: 'verified' }
-  | { verificationState: 'UNVERIFIED'; postalGuidance: true; instructions: string };
-
-const VERIFICATION_INSTRUCTIONS =
-  'A Google enviou uma verificação para o seu negócio. Acompanhe o status pelo painel do Google Meu Negócio e conclua os passos solicitados para confirmar que o negócio é seu.';
-
-const POSTAL_VERIFICATION_INSTRUCTIONS =
-  'A verificação por cartão postal envia uma carta com um código para o endereço comercial do seu negócio. Quando receber, siga as instruções do cartão e insira o código no Google Meu Negócio.';
-
-const DAY_OF_WEEK_MAP: Record<string, string> = {
-  monday: 'MONDAY',
-  tuesday: 'TUESDAY',
-  wednesday: 'WEDNESDAY',
-  thursday: 'THURSDAY',
-  friday: 'FRIDAY',
-  saturday: 'SATURDAY',
-  sunday: 'SUNDAY',
-};
-
-function parseGbpTime(time: string): { hours: number; minutes: number } {
-  const [hours, minutes] = time.split(':').map(Number);
-  return { hours: hours || 0, minutes: minutes || 0 };
-}
-
-function mapBusinessHoursToPeriods(hours: GoogleBusinessHours): GbpOpenPeriod[] {
-  const periods: GbpOpenPeriod[] = [];
-  for (const [day, ranges] of Object.entries(hours)) {
-    const openDay = DAY_OF_WEEK_MAP[day.toLowerCase()];
-    if (!openDay || !ranges || ranges.length === 0) continue;
-    for (const range of ranges) {
-      periods.push({
-        openDay,
-        openTime: parseGbpTime(range.open),
-        closeDay: openDay,
-        closeTime: parseGbpTime(range.close),
-      });
-    }
-  }
-  return periods;
-}
-
-function buildGbpLocationFromSettings(
-  settings: typeof businessProfileSettings.$inferSelect,
-): Partial<GbpLocation> {
-  const address = settings.address as Partial<GoogleAddress> | null;
-  const location: Partial<GbpLocation> = {
-    title: settings.name,
-    phoneNumbers: { primaryPhone: settings.phone },
-  };
-
-  if (address && (address.street || address.city)) {
-    location.address = {
-      addressLines: address.street ? [address.street] : undefined,
-      locality: address.city || undefined,
-      administrativeArea: address.state || undefined,
-      postalCode: address.postalCode || undefined,
-      regionCode: address.country || 'BR',
-      languageCode: 'pt-BR',
-    };
-  }
-
-  if (settings.email) {
-    location.emailAddress = settings.email;
-  }
-  if (settings.website) {
-    location.websiteUri = settings.website;
-  }
-  if (settings.categoryId) {
-    location.categories = [{ categoryId: settings.categoryId }];
-  }
-  const hours = settings.hours as GoogleBusinessHours | null;
-  if (hours) {
-    const periods = mapBusinessHoursToPeriods(hours);
-    if (periods.length > 0) {
-      location.openInfo = { periods };
-    }
-  }
-
-  return location;
-}
+export type { OAuthContext, GoogleServiceDeps };
 
 const CATEGORIES_CACHE_TTL_MS = 60_000;
 const categoriesCache = new Map<string, { expiresAt: number; categories: GoogleCategory[] }>();
-
-function mapGbpCategory(category: GbpCategory): GoogleCategory {
-  return {
-    categoryId: category.categoryId,
-    displayName: category.displayName ?? '',
-    parentId: category.parentId ?? null,
-  };
-}
-
-function getRequiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new AppError(500, GOOGLE_ERROR_CODES.MISSING_ENV, `Variavel de ambiente obrigatoria ausente: ${name}`);
-  }
-  return value;
-}
-
-function signOAuthState(payload: OAuthStatePayload): string {
-  const secret = getRequiredEnv('JWT_SECRET');
-  return jwt.sign(payload, secret, { expiresIn: '10m' });
-}
-
-/**
- * Origens de frontend aceitas para o redirect pós-OAuth.
- * Configurável via ALLOWED_FRONTEND_ORIGINS (vírgula-separada); `*` libera
- * qualquer origem (útil em dev multi-ambiente); quando ausente, apenas
- * FRONTEND_URL é permitida.
- */
-export function getAllowedFrontendOrigins(): string[] {
-  if (process.env.ALLOWED_FRONTEND_ORIGINS?.trim() === '*') {
-    return ['*'];
-  }
-  const explicit = process.env.ALLOWED_FRONTEND_ORIGINS
-    ?.split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
-  const defaultOrigin = process.env.FRONTEND_URL;
-  const combined = [...(explicit ?? []), ...(defaultOrigin ? [defaultOrigin] : [])];
-  return [...new Set(combined)];
-}
-
-function isAllowedFrontendOrigin(origin: string): boolean {
-  const allowed = getAllowedFrontendOrigins();
-  return allowed.includes('*') || allowed.includes(origin);
-}
-
-function verifyOAuthState(state: string): OAuthStatePayload {
-  try {
-    const secret = getRequiredEnv('JWT_SECRET');
-    return jwt.verify(state, secret) as OAuthStatePayload;
-  } catch {
-    throw new AppError(401, GOOGLE_ERROR_CODES.INVALID_OAUTH_STATE, 'State OAuth invalido ou expirado.');
-  }
-}
-
-function getTokenExpiration(expiresIn: number): Date | null {
-  if (!expiresIn || expiresIn <= 0) {
-    return null;
-  }
-  return new Date(Date.now() + expiresIn * 1000);
-}
-
-async function resolveGoogleUserId(tokenResponse: GoogleTokenResponse): Promise<string> {
-  if (tokenResponse.id_token) {
-    const decoded = jwt.decode(tokenResponse.id_token) as { sub?: string } | null;
-    if (decoded?.sub) {
-      return decoded.sub;
-    }
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(GOOGLE_USERINFO_URL, {
-      headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-      signal: AbortSignal.timeout(15_000),
-    });
-  } catch {
-    throw new AppError(
-      502,
-      GOOGLE_ERROR_CODES.GOOGLE_TOKEN_EXCHANGE_FAILED,
-      'Falha ao identificar o usuário Google após a autenticação.'
-    );
-  }
-
-  if (!response.ok) {
-    // 401/403 do userinfo = token sem escopo openid (o Google não devolveu
-    // id_token). Diagnóstico explícito para o erro reportado em produção.
-    const reason = response.status === 401 || response.status === 403 ? 'SCOPE_INSUFFICIENT' : 'USERINFO_FAILED';
-    throw new AppError(
-      502,
-      GOOGLE_ERROR_CODES.GOOGLE_TOKEN_EXCHANGE_FAILED,
-      'Falha ao identificar o usuário Google após a autenticação.',
-      { reason, status: response.status }
-    );
-  }
-
-  const payload = (await response.json()) as { sub?: string };
-  if (!payload.sub) {
-    throw new AppError(
-      502,
-      GOOGLE_ERROR_CODES.GOOGLE_TOKEN_EXCHANGE_FAILED,
-      'Falha ao identificar o usuário Google após a autenticação.'
-    );
-  }
-  return payload.sub;
-}
-
-function buildSearchLocation(
-  settings: typeof businessProfileSettings.$inferSelect | null,
-  tenant: typeof tenants.$inferSelect | null,
-): Partial<GbpLocation> {
-  const location: Partial<GbpLocation> = {};
-  const name = settings?.name || tenant?.name;
-  if (name) {
-    location.title = name;
-  }
-
-  const address = settings?.address as { street?: string; city?: string; state?: string; postalCode?: string; country?: string } | null;
-  if (address && (address.street || address.city || address.postalCode)) {
-    location.address = {
-      addressLines: address.street ? [address.street] : undefined,
-      locality: address.city || undefined,
-      administrativeArea: address.state || undefined,
-      postalCode: address.postalCode || undefined,
-      regionCode: address.country || 'BR',
-      languageCode: 'pt-BR',
-    };
-  }
-
-  if (settings?.phone) {
-    location.phoneNumbers = { primaryPhone: settings.phone };
-  }
-
-  return location;
-}
-
-function getMatchConfidence(match: GbpLocationMatch, searchTitle: string): 'HIGH' | 'MEDIUM' | 'LOW' {
-  const location = match.location ?? {};
-  const name = location.title ?? match.locationName ?? '';
-  if (name && searchTitle && name.toLowerCase().includes(searchTitle.toLowerCase())) {
-    return 'HIGH';
-  }
-  if (match.placeId || location.address) {
-    return 'MEDIUM';
-  }
-  return 'LOW';
-}
-
-function mapGbpMatch(match: GbpLocationMatch, searchTitle: string): GoogleLookupMatch {
-  const location = match.location ?? {};
-  const address = location.address ?? {};
-  const gbpLocationId = location.name ?? match.locationName ?? '';
-
-  return {
-    gbpLocationId,
-    name: location.title ?? match.locationName ?? '',
-    address: {
-      street: address.addressLines?.join(', ') ?? '',
-      city: address.locality ?? '',
-      state: address.administrativeArea ?? '',
-      postalCode: address.postalCode ?? '',
-      country: address.regionCode ?? '',
-    },
-    phone: location.phoneNumbers?.primaryPhone ?? '',
-    verificationState: location.verification?.state ?? 'UNVERIFIED',
-    claimed: location.metadata?.canOperateGoogleMyBusiness === true,
-    confidence: getMatchConfidence(match, searchTitle),
-  };
-}
-
-function settingsAreComplete(
-  settings: typeof businessProfileSettings.$inferSelect | null,
-  tenant: typeof tenants.$inferSelect | null,
-): boolean {
-  const name = settings?.name ?? tenant?.name ?? '';
-  const address = settings?.address as Partial<GoogleAddress> | null;
-  const hasAddress = Boolean(address?.street?.trim() || address?.city?.trim());
-  const phone = settings?.phone ?? '';
-  return Boolean(name.trim()) && hasAddress && Boolean(phone.trim());
-}
-
-export interface GoogleProfileResult {
-  id: string;
-  gbpLocationId: string;
-  name: string;
-  address: GoogleAddress;
-  phone: string;
-  email: string;
-  website: string;
-  categoryId: string | null;
-  categoryDisplayName: string | null;
-  hours: GoogleBusinessHours | null;
-  photos: string[];
-  verificationState: 'UNVERIFIED' | 'VERIFIED';
-  syncStatus: 'not_connected' | 'connected' | 'no_profile' | 'awaiting_verification' | 'verified' | 'syncing' | 'synced' | 'error';
-  lastSyncedAt: string | null;
-}
-
-export interface GoogleSyncLogEntry {
-  id: string;
-  operation: string;
-  status: string;
-  message: string | null;
-  createdAt: string;
-}
-
-export interface GoogleSyncLogsResult {
-  logs: GoogleSyncLogEntry[];
-}
-
-function mapGbpLocationToProfile(
-  profile: typeof googleBusinessProfiles.$inferSelect,
-  gbpLocation: GbpLocation,
-  overrideSyncStatus?: GoogleProfileResult['syncStatus'],
-): GoogleProfileResult {
-  const address = gbpLocation.address ?? {};
-  const phoneNumbers = gbpLocation.phoneNumbers ?? {};
-
-  return {
-    id: profile.id,
-    gbpLocationId: profile.gbpLocationId,
-    name: gbpLocation.title ?? profile.name,
-    address: {
-      street: address.addressLines?.join(', ') ?? '',
-      city: address.locality ?? '',
-      state: address.administrativeArea ?? '',
-      postalCode: address.postalCode ?? '',
-      country: address.regionCode ?? 'BR',
-    },
-    phone: phoneNumbers.primaryPhone ?? profile.phone ?? '',
-    email: gbpLocation.emailAddress ?? profile.email ?? '',
-    website: gbpLocation.websiteUri ?? profile.website ?? '',
-    categoryId: gbpLocation.categories?.[0]?.categoryId ?? profile.categoryId,
-    categoryDisplayName: gbpLocation.categories?.[0]?.displayName ?? profile.categoryDisplayName,
-    hours: profile.hours as GoogleBusinessHours | null,
-    photos: (profile.photos as string[]) ?? [],
-    verificationState: (gbpLocation.verification?.state ?? profile.verificationState) as 'UNVERIFIED' | 'VERIFIED',
-    syncStatus: overrideSyncStatus ?? (profile.syncStatus as GoogleProfileResult['syncStatus']),
-    lastSyncedAt: profile.lastSyncedAt?.toISOString() ?? null,
-  };
-}
-
-const FIELD_MASK_MAP: Record<string, string> = {
-  name: 'title',
-  phone: 'phoneNumbers',
-  email: 'emailAddress',
-  website: 'websiteUri',
-  categoryId: 'categories',
-  hours: 'openInfo',
-  address: 'address',
-};
-
-function buildFieldMask(updates: Partial<GbpLocation>): string[] {
-  const mask: string[] = [];
-  for (const key of Object.keys(updates)) {
-    const gbpField = FIELD_MASK_MAP[key];
-    if (gbpField) {
-      mask.push(gbpField);
-    }
-  }
-  return mask;
-}
-
-function buildGbpPatchPayload(data: Record<string, unknown>): Partial<GbpLocation> {
-  const payload: Partial<GbpLocation> = {};
-
-  if (data.name !== undefined) {
-    payload.title = data.name as string;
-  }
-  if (data.phone !== undefined) {
-    payload.phoneNumbers = { primaryPhone: data.phone as string };
-  }
-  if (data.email !== undefined) {
-    payload.emailAddress = data.email as string;
-  }
-  if (data.website !== undefined) {
-    payload.websiteUri = data.website as string;
-  }
-  if (data.categoryId !== undefined) {
-    payload.categories = data.categoryId ? [{ categoryId: data.categoryId as string }] : undefined;
-  }
-  if (data.hours !== undefined) {
-    const hours = data.hours as GoogleBusinessHours | null;
-    if (hours) {
-      payload.openInfo = { periods: mapBusinessHoursToPeriods(hours) };
-    }
-  }
-  if (data.address !== undefined) {
-    const addr = data.address as Partial<GoogleAddress>;
-    payload.address = {
-      addressLines: addr.street ? [addr.street] : undefined,
-      locality: addr.city || undefined,
-      administrativeArea: addr.state || undefined,
-      postalCode: addr.postalCode || undefined,
-      regionCode: addr.country || 'BR',
-      languageCode: 'pt-BR',
-    };
-  }
-
-  return payload;
-}
-
-function hasActualChanges(
-  profile: typeof googleBusinessProfiles.$inferSelect,
-  data: Record<string, unknown>,
-): boolean {
-  if (data.name && data.name !== profile.name) return true;
-  if (data.phone && data.phone !== profile.phone) return true;
-  if (data.email && data.email !== (profile.email ?? '')) return true;
-  if (data.website && data.website !== (profile.website ?? '')) return true;
-  if (data.categoryId && data.categoryId !== (profile.categoryId ?? '')) return true;
-  if (data.hours && JSON.stringify(data.hours) !== JSON.stringify(profile.hours)) return true;
-  if (data.address) {
-    const currentAddr = profile.address as Partial<GoogleAddress> | null;
-    const newAddr = data.address as Partial<GoogleAddress>;
-    if (
-      newAddr.street !== (currentAddr?.street ?? '') ||
-      newAddr.city !== (currentAddr?.city ?? '') ||
-      newAddr.state !== (currentAddr?.state ?? '') ||
-      newAddr.postalCode !== (currentAddr?.postalCode ?? '') ||
-      newAddr.country !== (currentAddr?.country ?? 'BR')
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Dependências externas injetadas no GoogleService (OAuth, GBP API e storage).
- * Permite mockar tudo no teste sem tocar em lib/db, HTTP ou R2.
- */
-export interface GoogleServiceDeps {
-  oauth: {
-    exchangeCodeForToken: typeof exchangeCodeForToken;
-    getGoogleOAuthConfig: typeof getGoogleOAuthConfig;
-    revokeGoogleToken: typeof revokeGoogleToken;
-  };
-  api: {
-    createGoogleApiClient: typeof createGoogleApiClient;
-  };
-  storage: {
-    uploadAsset: typeof uploadAsset;
-    deleteAsset: typeof deleteAsset;
-  };
-}
-
-export interface GoogleQualityReport {
-  score: number; // 0-100
-  grade: GoogleQualityGrade;
-  complete: boolean; // todos os obrigatórios presentes
-  verified: boolean; // verification.state === 'VERIFIED'
-  outdated: boolean | null; // true >180d sem update; null sem timestamp
-  lastUpdated: string | null; // metadata.updateTime (ISO) ou null
-  missingFields: string[]; // obrigatórios: 'name' | 'address' | 'phone'
-  recommendations: string[]; // recomendados: 'website' | 'category' | 'hours'
-  warnings: string[]; // PT-BR, agrupados por problema
-}
-
-export type GoogleQualityGrade = 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR';
-
-const QUALITY_OUTDATED_THRESHOLD_MS = 180 * 24 * 60 * 60 * 1000;
 
 /**
  * GoogleService — classe pura de domínio com DI no construtor (repoFactory + externos).
@@ -617,64 +98,7 @@ export class GoogleService {
    * Usada no pré-envio (lookup) e no endpoint de qualidade do perfil.
    */
   assessGoogleProfileQuality(location: GbpLocation, now: Date = new Date()): GoogleQualityReport {
-    const address = location.address ?? {};
-    const hasStreet = Boolean(address.addressLines?.some((line) => line.trim()));
-    const hasCity = Boolean(address.locality?.trim());
-    const hasAddress = hasStreet || hasCity; // país/CEP sozinho NÃO satisfaz
-    const hasPhone = Boolean(location.phoneNumbers?.primaryPhone?.trim());
-    const hasName = Boolean(location.title?.trim());
-
-    const missingFields: string[] = [];
-    if (!hasName) missingFields.push('name');
-    if (!hasAddress) missingFields.push('address');
-    if (!hasPhone) missingFields.push('phone');
-
-    const recommendations: string[] = [];
-    if (!location.websiteUri?.trim()) recommendations.push('website');
-    if (!location.categories?.length) recommendations.push('category');
-    if (!location.openInfo?.periods?.length) recommendations.push('hours');
-
-    let score = 100;
-    score -= missingFields.length * 25; // -25 por obrigatório ausente
-    score -= recommendations.length * 5; // -5 por recomendação ausente
-
-    const verified = location.verification?.state === 'VERIFIED';
-    if (!verified) score -= 10;
-
-    const updateTime = location.metadata?.updateTime;
-    const nowMs = now.getTime();
-    let outdated: boolean | null = null;
-    if (updateTime) {
-      const updatedMs = new Date(updateTime).getTime();
-      outdated = Number.isFinite(updatedMs) && nowMs - updatedMs > QUALITY_OUTDATED_THRESHOLD_MS;
-      if (outdated) score -= 10; // penalidade única de recência
-    }
-
-    const scoreFloor = Math.max(0, Math.min(100, score));
-    const grade: GoogleQualityGrade =
-      scoreFloor >= 90 ? 'EXCELLENT' : scoreFloor >= 75 ? 'GOOD' : scoreFloor >= 50 ? 'FAIR' : 'POOR';
-
-    const warnings: string[] = [];
-    if (missingFields.includes('name')) warnings.push('Informe o nome do seu negócio.');
-    if (missingFields.includes('phone')) warnings.push('Informe o telefone do seu negócio.');
-    if (missingFields.includes('address'))
-      warnings.push('Informe o endereço do seu negócio (rua e cidade).');
-    if (outdated)
-      warnings.push('Seu perfil está desatualizado. Atualize os dados para melhorar a visibilidade no Google.');
-    if (missingFields.length === 0 && recommendations.length > 0)
-      warnings.push('Complete o perfil com site, categoria e horário de funcionamento para melhorar sua visibilidade.');
-
-    return {
-      score: scoreFloor,
-      grade,
-      complete: missingFields.length === 0,
-      verified,
-      outdated,
-      lastUpdated: updateTime ?? null,
-      missingFields,
-      recommendations,
-      warnings,
-    };
+    return assessGoogleProfileQuality(location, now);
   }
 
   /**
@@ -955,13 +379,13 @@ export class GoogleService {
     if (settings) {
       const result: GoogleSettings = {
         name: settings.name,
-        address: { ...EMPTY_ADDRESS, ...(settings.address as Partial<GoogleAddress> | null) },
+        address: { ...EMPTY_ADDRESS, ...(settings.address as Partial<{ street: string; city: string; state: string; postalCode: string; country: string }> | null) },
         phone: settings.phone,
         email: settings.email ?? '',
         website: settings.website ?? '',
         categoryId: settings.categoryId || null,
         categoryDisplayName: null,
-        hours: (settings.hours as GoogleBusinessHours | null) ?? null,
+        hours: (settings.hours as GoogleSettings['hours']) ?? null,
         prefilledFrom: [],
       };
       if (settings.categoryId) {
@@ -1539,11 +963,6 @@ export class GoogleService {
 
     return { photos: updatedPhotos, associatedManually: true };
   }
-}
-
-export interface GooglePhotoUploadResult {
-  photos: string[];
-  associatedManually: true;
 }
 
 export const googleService = new GoogleService();
