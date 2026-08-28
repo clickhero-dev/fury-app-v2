@@ -108,7 +108,7 @@ export function RegisterFormPage() {
         {/* 🌌 GRID DE FUNDO */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+          className="pointer-events-none absolute inset-0 opacity-[0.08] dark:opacity-[0.05]"
           style={{
             backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
             backgroundSize: '24px 24px',
@@ -161,7 +161,7 @@ export function RegisterFormPage() {
               type="button"
               disabled={verifyMutation.isPending || otpValue.length !== 6}
               onClick={() => handleVerifyOtp(otpValue)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88A8] py-3 text-sm font-semibold text-white shadow-md shadow-[#1E88A8]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#17708A] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#17708A] py-3 text-sm font-semibold text-white shadow-md shadow-[#17708A]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#145E74] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {verifyMutation.isPending ? (
                 <>
@@ -183,7 +183,7 @@ export function RegisterFormPage() {
                   type="button"
                   onClick={handleResendOtp}
                   disabled={resendMutation.isPending}
-                  className="w-full text-sm font-semibold text-center text-[#1E88A8] hover:text-[#17708A] hover:underline transition-all"
+                  className="w-full text-sm font-semibold text-center text-[#17708A] dark:text-[#1E88A8] dark:hover:text-[#17708A] hover:underline transition-all"
                 >
                   {resendMutation.isPending ? 'Reenviando...' : 'Reenviar código'}
                 </button>
@@ -215,7 +215,7 @@ export function RegisterFormPage() {
       {/* 🌌 GRID DE FUNDO */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+        className="pointer-events-none absolute inset-0 opacity-[0.08] dark:opacity-[0.05]"
         style={{
           backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
           backgroundSize: '24px 24px',
@@ -333,7 +333,7 @@ export function RegisterFormPage() {
           <button
             type="submit"
             disabled={registerMutation.isPending}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88A8] py-3 text-sm font-semibold text-white shadow-md shadow-[#1E88A8]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#17708A] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed !mt-6"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#17708A] py-3 text-sm font-semibold text-white shadow-md shadow-[#17708A]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#145E74] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed !mt-6"
           >
             {registerMutation.isPending ? (
               <>
@@ -347,7 +347,7 @@ export function RegisterFormPage() {
 
           {/* Link para voltar à escolha */}
           <p className="text-center text-sm text-slate-600 dark:text-zinc-400">
-            <Link to="/cadastro" className="font-semibold text-[#1E88A8] hover:underline transition-colors">
+            <Link to="/cadastro" className="font-semibold text-[#17708A] dark:text-[#1E88A8] underline underline-offset-2 transition-colors">
               Voltar
             </Link>
           </p>

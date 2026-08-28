@@ -91,7 +91,7 @@ export function LoginPage() {
       {/* 🌌 GRID DE FUNDO */}
       <div 
         aria-hidden 
-        className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+        className="pointer-events-none absolute inset-0 opacity-[0.08] dark:opacity-[0.05]"
         style={{
           backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
           backgroundSize: '24px 24px'
@@ -141,7 +141,7 @@ export function LoginPage() {
               <span className="text-sm font-medium text-slate-700 dark:text-zinc-300">Senha</span>
               <Link
                 to="/forgot-password"
-                className="text-xs font-medium text-[#1E88A8] hover:text-[#17708A] hover:underline transition-colors"
+                className="text-xs font-medium text-[#17708A] dark:text-[#1E88A8] dark:hover:text-[#17708A] hover:underline transition-colors"
               >
                 Esqueci a senha
               </Link>
@@ -171,7 +171,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={loginMutation.isPending}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88A8] py-3 text-sm font-semibold text-white shadow-md shadow-[#1E88A8]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#17708A] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99] disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#17708A] py-3 text-sm font-semibold text-white shadow-md shadow-[#17708A]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#145E74] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99] disabled:opacity-60"
           >
             {loginMutation.isPending ? (
               <>
@@ -214,7 +214,7 @@ export function LoginPage() {
 
           <p className="text-center text-sm text-slate-600 dark:text-zinc-400">
             Não tem conta?{' '}
-            <Link to="/cadastro" className="font-semibold text-[#1E88A8] hover:underline transition-colors">
+            <Link to="/cadastro" className="font-semibold text-[#17708A] dark:text-[#1E88A8] underline underline-offset-2 transition-colors">
               Criar conta gratuita
             </Link>
           </p>
@@ -227,7 +227,7 @@ export function LoginPage() {
             href="https://www.clickhero.com.br/"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-[#f97316] hover:text-[#ea580c] hover:underline transition-colors"
+            className="font-semibold text-[#f97316] hover:text-[#ea580c] underline underline-offset-2 transition-colors"
           >
             Click Hero
           </a>

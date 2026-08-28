@@ -1,5 +1,5 @@
 /**
- * Barrel de exportações dos componentes da aplicação FURY.
+ * Barrel de exportações dos componentes da aplicação ady.
  *
  * Centraliza todos os imports de componentes para simplificar o uso:
  * `import { Button, MetricCard, PageHeader } from '@/components'`
@@ -7,7 +7,7 @@
  *
  * Organizado em três grupos:
  * - **UI:** componentes base do design system (Button, Card, Input, Dialog)
- * - **Layout:** componentes estruturais de página (AuthLayout, AppLayout, Sidebar)
+ * - **Layout:** componentes estruturais de página (AppLayout, Sidebar)
  * - **Feature:** componentes de funcionalidade específica da plataforma
  */
 
@@ -25,7 +25,6 @@ export {
 } from './ui/dialog';
 
 // Layout Components — estrutura de páginas
-export { AuthLayout } from './AuthLayout';
 export { AppLayout } from './layout/AppLayout';
 export { Sidebar } from './Sidebar';
 
@@ -41,5 +40,4 @@ export { EmptyState } from './EmptyState';
 export { InsightCard } from './InsightCard';
 export { ProgressGoal } from './ProgressGoal';
 export { FuryRuleDialog } from './FuryRuleDialog';
-export { FuryLiveFeed } from './FuryLiveFeed';
 export { ErrorBoundary } from './ErrorBoundary';

@@ -11,7 +11,7 @@ export function ResetPasswordSuccessPage() {
       {/* 🌌 GRID DE FUNDO */}
       <div 
         aria-hidden 
-        className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+        className="pointer-events-none absolute inset-0 opacity-[0.08] dark:opacity-[0.05]"
         style={{
           backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
           backgroundSize: '24px 24px'
@@ -63,7 +63,7 @@ export function ResetPasswordSuccessPage() {
             <button
               type="button"
               onClick={() => navigate('/login')}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88A8] py-3 text-sm font-semibold text-white shadow-md shadow-[#1E88A8]/20 transition-all duration-200 hover:!bg-[#17708A] hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99]"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#17708A] py-3 text-sm font-semibold text-white shadow-md shadow-[#17708A]/20 transition-all duration-200 hover:!bg-[#145E74] hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99]"
             >
               Ir para login
             </button>

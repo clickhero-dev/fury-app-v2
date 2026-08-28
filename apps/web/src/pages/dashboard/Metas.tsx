@@ -76,7 +76,7 @@ function ComparisonRow({
       <div className="flex items-center justify-between text-sm">
         <span className="font-medium text-slate-500 dark:text-[#9A9D96]">{label}</span>
         <div className="flex items-center gap-3">
-          <span className={cn('font-bold', isGood ? 'text-[#1E88A8]' : 'text-[#da3633]')}>
+          <span className={cn('font-bold', isGood ? 'text-[#17708A] dark:text-[#1E88A8]' : 'text-[#da3633]')}>
             {currentLabel}
           </span>
           <span className="text-xs text-slate-400 dark:text-[#8A8D86]">/ meta {targetLabel}</span>
@@ -169,7 +169,7 @@ export function Metas() {
           actions={
             <button
               onClick={() => navigate('/configuracoes?tab=metas')}
-              className="inline-flex items-center justify-center rounded-full border border-slate-200 dark:border-[#262824] bg-slate-100 dark:bg-[#1F211D] px-4 py-2 text-xs font-semibold text-slate-800 dark:text-[#ECEDEF] transition-all hover:border-[#1E88A8] hover:text-[#1E88A8]"
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 dark:border-[#262824] bg-slate-100 dark:bg-[#1F211D] px-4 py-2 text-xs font-semibold text-slate-800 dark:text-[#ECEDEF] transition-all hover:border-[#1E88A8] hover:text-[#17708A] dark:hover:text-[#1E88A8]"
             >
               Editar metas
             </button>
@@ -191,7 +191,7 @@ export function Metas() {
                 <button
                   type="button"
                   onClick={() => navigate('/configuracoes?tab=metas')}
-                  className="flex items-center gap-1 text-xs font-medium text-[#1E88A8] hover:underline cursor-pointer"
+                  className="flex items-center gap-1 text-xs font-medium text-[#17708A] dark:text-[#1E88A8] hover:underline cursor-pointer"
                 >
                   Definir metas <ArrowRight className="size-3" />
                 </button>
@@ -241,7 +241,7 @@ export function Metas() {
                 <span
                   className={cn(
                     'text-base font-bold',
-                    (progress?.current?.roas ?? 0) >= 2 ? 'text-[#1E88A8]' : 'text-[#da3633]'
+                    (progress?.current?.roas ?? 0) >= 2 ? 'text-[#17708A] dark:text-[#1E88A8]' : 'text-[#da3633]'
                   )}
                 >
                   {(progress?.current?.roas ?? 0).toFixed(1)}x
@@ -274,7 +274,7 @@ export function Metas() {
             <div>
               <h3 className="font-semibold text-slate-900 dark:text-[#ECEDEF]">Projeção do mês</h3>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-[#9A9D96]">
-                Baseado no ritmo atual — <span className="font-medium text-[#1E88A8]">{daysRemaining} dias restantes</span> no mês
+                Baseado no ritmo atual — <span className="font-medium text-[#17708A] dark:text-[#1E88A8]">{daysRemaining} dias restantes</span> no mês
               </p>
             </div>
           </div>
@@ -313,7 +313,7 @@ function GoalRow({ label, value, highlight }: { label: string; value: string; hi
       <span
         className={cn(
           'text-sm font-semibold text-right',
-          highlight ? 'text-[#1E88A8]' : 'text-slate-900 dark:text-[#ECEDEF]'
+          highlight ? 'text-[#17708A] dark:text-[#1E88A8]' : 'text-slate-900 dark:text-[#ECEDEF]'
         )}
       >
         {value}

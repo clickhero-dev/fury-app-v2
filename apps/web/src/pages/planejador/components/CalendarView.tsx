@@ -428,7 +428,7 @@ export function CalendarView() {
             <Button
   variant="spark"
   size="sm"
-  className="text-slate-900 dark:text-white hover:text-slate-900 dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+  className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
   onClick={() => {
     setPreselectedDay(null);
     setCreateMode('schedule');

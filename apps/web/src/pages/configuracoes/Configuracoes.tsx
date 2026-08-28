@@ -386,7 +386,7 @@ export function Configuracoes() {
                     type="button"
                     disabled={updateMeMutation.isPending}
                     onClick={() => updateMeMutation.mutate({ name, tenantName })}
-                    className={`rounded-full bg-brand px-5 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50 cursor-pointer`}
+                    className={`rounded-full bg-[#17708A] px-5 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50 cursor-pointer`}
                   >
                     {updateMeMutation.isPending ? 'Salvando...' : 'Salvar alterações'}
                   </button>

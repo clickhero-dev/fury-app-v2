@@ -117,7 +117,7 @@ export function RegisterPage() {
           <button
             type="button"
             onClick={() => navigate('/cadastro/formulario')}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88A8] py-3 text-sm font-semibold text-white shadow-md shadow-[#1E88A8]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#17708A] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99]"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#17708A] py-3 text-sm font-semibold text-white shadow-md shadow-[#17708A]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#145E74] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99]"
           >
             <Loader2 className="size-4 hidden" />
             Cadastrar
@@ -133,7 +133,7 @@ export function RegisterPage() {
           {/* Link para Login */}
           <p className="text-center text-sm text-slate-600 dark:text-zinc-400">
             Já tem conta?{' '}
-            <Link to="/login" className="font-semibold text-[#1E88A8] hover:underline transition-colors">
+            <Link to="/login" className="font-semibold text-[#17708A] dark:text-[#1E88A8] underline underline-offset-2 transition-colors">
               Entrar aqui
             </Link>
           </p>
