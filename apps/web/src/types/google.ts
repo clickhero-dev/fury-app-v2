@@ -7,6 +7,21 @@ export interface GoogleAddress {
   country: string;
 }
 
+/** Avaliação de qualidade/recência do perfil GBP (pré-envio). */
+export type GoogleQualityGrade = 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR';
+
+export interface GoogleQualityReport {
+  score: number; // 0-100
+  grade: GoogleQualityGrade;
+  complete: boolean;
+  verified: boolean;
+  outdated: boolean | null;
+  lastUpdated: string | null;
+  missingFields: string[]; // obrigatórios: 'name' | 'address' | 'phone'
+  recommendations: string[]; // recomendados: 'website' | 'category' | 'hours'
+  warnings: string[]; // PT-BR
+}
+
 /** Conexão OAuth com o Google salva no banco (tokens nunca chegam ao cliente). */
 export interface GoogleConnection {
   id: string;
@@ -37,6 +52,7 @@ export interface GoogleLookupMatch {
   verificationState: string;
   claimed: boolean;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  quality?: GoogleQualityReport | null;
 }
 
 /** Resultado da verificação de perfil existente (FR-002/FR-011). */

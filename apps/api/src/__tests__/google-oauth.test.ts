@@ -7,7 +7,7 @@
  * redirecionamento do callback para o frontend com ?connected=true.
  * Mocks no nível de lib/db — sem dependência de HTTP real.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import express from 'express';
@@ -83,8 +83,19 @@ function resetMocks() {
   mockGetGoogleOAuthConfig.mockReturnValue(OAUTH_CONFIG);
   mockExchangeCodeForToken.mockResolvedValue(makeTokenResponse());
   dbMock.query.googleConnections.findFirst.mockResolvedValue(null);
-  dbMock.insert.mockReturnValue({ values: vi.fn().mockResolvedValue(undefined) });
-  dbMock.update.mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }) });
+  // Shape known-good: repos chamam .insert().values().returning() e
+  // .update().set().where().returning() (pitfall fury-api-testing).
+  dbMock.insert.mockImplementation(() => {
+    const valuesResult = Object.assign(Promise.resolve(undefined), {
+      returning: vi.fn().mockResolvedValue([{ id: 'conn-1', tenantId: 'tenant-1' }]),
+    });
+    return { values: vi.fn().mockReturnValue(valuesResult) };
+  });
+  dbMock.update.mockImplementation(() => ({
+    set: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'conn-1' }]) }),
+    }),
+  }));
   dbMock.delete.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
 }
 
@@ -105,7 +116,9 @@ describe('Google OAuth — state JWT', () => {
     expect(parsed.searchParams.get('client_id')).toBe(OAUTH_CONFIG.clientId);
     expect(parsed.searchParams.get('redirect_uri')).toBe(OAUTH_CONFIG.redirectUri);
     expect(parsed.searchParams.get('response_type')).toBe('code');
-    expect(parsed.searchParams.get('scope')).toBe('https://www.googleapis.com/auth/business.manage');
+    expect(parsed.searchParams.get('scope')).toBe(
+      'openid email https://www.googleapis.com/auth/business.manage'
+    );
     expect(parsed.searchParams.get('access_type')).toBe('offline');
     expect(parsed.searchParams.get('prompt')).toBe('consent');
 
@@ -132,6 +145,70 @@ describe('Google OAuth — state JWT', () => {
       code: 'INVALID_OAUTH_STATE',
     });
   });
+
+  it('embute frontendUrl (origin) no state quando informado e permitido', () => {
+    process.env.ALLOWED_FRONTEND_ORIGINS = 'http://localhost:5173,https://clickhero-fury-web.u7pe19.easypanel.host';
+
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'http://localhost:5173');
+    const state = new URL(authUrl).searchParams.get('state') ?? '';
+    const decoded = jwt.decode(state) as { frontendUrl?: string };
+
+    expect(decoded.frontendUrl).toBe('http://localhost:5173');
+  });
+
+  it('embute QUALQUER origin http(s) sem depender de ALLOWED_FRONTEND_ORIGINS nem de FRONTEND_URL (multi-ambiente isolado)', () => {
+    delete process.env.ALLOWED_FRONTEND_ORIGINS;
+    process.env.FRONTEND_URL = 'https://clickhero-fury-web.u7pe19.easypanel.host';
+
+    // Cenário do bug: usuário em localhost (origin ≠ FRONTEND_URL do .env),
+    // env aponta HMG — o origin do REQUEST (localhost) precisa vencer.
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'http://localhost:5173');
+    const state = new URL(authUrl).searchParams.get('state') ?? '';
+    const decoded = jwt.decode(state) as { frontendUrl?: string };
+
+    expect(decoded.frontendUrl).toBe('http://localhost:5173');
+  });
+
+  it('não embute frontendUrl malformado (não-http) mesmo sem allowlist', () => {
+    delete process.env.ALLOWED_FRONTEND_ORIGINS;
+
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'javascript:alert(1)');
+    const state = new URL(authUrl).searchParams.get('state') ?? '';
+    const decoded = jwt.decode(state) as { frontendUrl?: string };
+
+    expect(decoded.frontendUrl).toBeUndefined();
+  });
+
+  it('allowlist explícita (sem *) ainda restringe (hardening opcional)', () => {
+    process.env.ALLOWED_FRONTEND_ORIGINS = 'https://clickhero-fury-web.u7pe19.easypanel.host';
+
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'https://evil.example.com');
+    const state = new URL(authUrl).searchParams.get('state') ?? '';
+    const decoded = jwt.decode(state) as { frontendUrl?: string };
+
+    expect(decoded.frontendUrl).toBeUndefined();
+  });
+
+  it('ALLOWED_FRONTEND_ORIGINS=* aceita qualquer origin (multi-ambiente dev)', () => {
+    process.env.ALLOWED_FRONTEND_ORIGINS = '*';
+
+    const anyOrigin = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'http://localhost:9999');
+    const anyState = jwt.decode(new URL(anyOrigin).searchParams.get('state') ?? '') as { frontendUrl?: string };
+
+    expect(anyState.frontendUrl).toBe('http://localhost:9999');
+  });
+
+  it('URL de autorização inclui openid/email/profile para o Google devolver id_token (identifica o usuário)', () => {
+    process.env.ALLOWED_FRONTEND_ORIGINS = '*';
+
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings');
+    const parsed = new URL(authUrl);
+    const scope = parsed.searchParams.get('scope') ?? '';
+
+    expect(scope).toContain('openid');
+    expect(scope).toContain('email');
+    expect(scope).toContain('https://www.googleapis.com/auth/business.manage');
+  });
 });
 
 describe('Google OAuth — criptografia AES-256-GCM em repouso', () => {
@@ -150,6 +227,47 @@ describe('Google OAuth — criptografia AES-256-GCM em repouso', () => {
 
   it('decryptToken rejeita payloads malformados', () => {
     expect(() => decryptToken('payload-sem-formato')).toThrow();
+  });
+});
+
+describe('Google OAuth — identificação do usuário (resolveGoogleUserId)', () => {
+  beforeEach(resetMocks);
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('usa o sub do id_token quando o Google devolve id_token (fluxo openid)', async () => {
+    // Sem o scope openid o Google NÃO devolve id_token — este teste garante que,
+    // com ele, o sub é extraído direto do token (sem chamada ao userinfo).
+    const state = new URL(
+      googleService.generateGoogleAuthUrl('tenant-1', 'settings')
+    ).searchParams.get('state') as string;
+
+    const result = await googleService.handleGoogleOAuthCallback('code-valid', state);
+
+    expect(result.tenantId).toBe('tenant-1');
+    const inserted = dbMock.insert.mock.results[0].value.values.mock.calls[0][0] as { googleUserId?: string };
+    expect(inserted.googleUserId).toBe('google-user-123');
+  });
+
+  it('mapeia 401 do userinfo (escopo insuficiente) para 502 com details SCOPE_INSUFFICIENT', async () => {
+    // Cenário do bug reportado: sem openid o userinfo responde 401/403.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }) as Response)
+    );
+    const tokenResponse = makeTokenResponse({ id_token: undefined });
+    mockExchangeCodeForToken.mockResolvedValue(tokenResponse);
+    const state = new URL(
+      googleService.generateGoogleAuthUrl('tenant-1', 'settings')
+    ).searchParams.get('state') as string;
+
+    await expect(googleService.handleGoogleOAuthCallback('code-valid', state)).rejects.toMatchObject({
+      statusCode: 502,
+      code: 'GOOGLE_TOKEN_EXCHANGE_FAILED',
+      details: { reason: 'SCOPE_INSUFFICIENT' },
+    });
   });
 });
 
@@ -217,6 +335,35 @@ describe('Google OAuth — callback HTTP (rota pública)', () => {
     expect(response.status).toBe(302);
     expect(response.headers.location).toBe(
       `${FRONTEND_URL}/configuracoes/google-meu-negocio?connected=true`
+    );
+  });
+
+  it('redireciona para a ORIGEM do state quando o callback chega com frontendUrl embutido (multi-ambiente)', async () => {
+    // Cenário do bug: FRONTEND_URL fixo aponta HMG, mas quem iniciou o OAuth foi o localhost
+    process.env.FRONTEND_URL = 'https://clickhero-fury-web.u7pe19.easypanel.host';
+    process.env.ALLOWED_FRONTEND_ORIGINS =
+      'http://localhost:5173,https://clickhero-fury-web.u7pe19.easypanel.host';
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'http://localhost:5173');
+    const state = new URL(authUrl).searchParams.get('state') ?? '';
+    const app = buildTestApp();
+
+    const response = await request(app).get('/api/google/auth/callback').query({ code: 'code-valid', state });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe('http://localhost:5173/configuracoes/google-meu-negocio?connected=true');
+  });
+
+  it('sem frontendUrl no state, redireciona para FRONTEND_URL (fallback)', async () => {
+    process.env.FRONTEND_URL = 'https://clickhero-fury-web.u7pe19.easypanel.host';
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings');
+    const state = new URL(authUrl).searchParams.get('state') ?? '';
+    const app = buildTestApp();
+
+    const response = await request(app).get('/api/google/auth/callback').query({ code: 'code-valid', state });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe(
+      'https://clickhero-fury-web.u7pe19.easypanel.host/configuracoes/google-meu-negocio?connected=true'
     );
   });
 
