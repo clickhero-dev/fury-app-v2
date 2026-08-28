@@ -3,7 +3,6 @@ import fs from 'fs';
 import { join } from 'path';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
-import * as studioController from '../controllers/studio.controller.js';
 import { studioAssetsDir } from '../lib/temp-storage.js';
 import { controllers } from '../di.js';
 
@@ -31,15 +30,15 @@ router.get('/storage-check', async (_req: any, res: any) => {
   });
 });
 
-// Assets + geração de imagem única (sta_controller existente).
-router.get('/assets', authMiddleware, tenantMiddleware, studioController.listAssets);
-router.delete('/assets/:assetId', authMiddleware, tenantMiddleware, studioController.deleteAsset);
-router.get('/assets/:assetId', authMiddleware, tenantMiddleware, studioController.getAsset);
-router.get('/assets/:assetId/compliance-status', authMiddleware, tenantMiddleware, studioController.getComplianceStatus);
-router.post('/generate-image', authMiddleware, tenantMiddleware, studioController.generateImage);
-router.post('/render-creative', authMiddleware, tenantMiddleware, studioController.renderCreative);
-router.post('/publish/:assetId', authMiddleware, tenantMiddleware, studioController.publishAsset);
-router.post('/upload-to-meta', authMiddleware, tenantMiddleware, studioController.uploadToMeta);
+// Assets + geração de imagem única (StudiopublishingController via DI).
+router.get('/assets', authMiddleware, tenantMiddleware, controllers.studioPublishing.listAssets);
+router.delete('/assets/:assetId', authMiddleware, tenantMiddleware, controllers.studioPublishing.deleteAsset);
+router.get('/assets/:assetId', authMiddleware, tenantMiddleware, controllers.studioPublishing.getAsset);
+router.get('/assets/:assetId/compliance-status', authMiddleware, tenantMiddleware, controllers.studioPublishing.getComplianceStatus);
+router.post('/generate-image', authMiddleware, tenantMiddleware, controllers.studioPublishing.generateImage);
+router.post('/render-creative', authMiddleware, tenantMiddleware, controllers.studioPublishing.renderCreative);
+router.post('/publish/:assetId', authMiddleware, tenantMiddleware, controllers.studioPublishing.publishAsset);
+router.post('/upload-to-meta', authMiddleware, tenantMiddleware, controllers.studioPublishing.uploadToMeta);
 
 // Pipeline criativo (classe StudioService via DI).
 router.post('/generate-copy', authMiddleware, tenantMiddleware, controllers.studio.generateCopy);

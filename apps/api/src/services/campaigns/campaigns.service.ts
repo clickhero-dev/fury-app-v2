@@ -938,6 +938,9 @@ const defaultService = new CampaignsService(
   }
 );
 
+/** Singleton do service (composition root). Controllers/DI importam este, não `new CampaignsService()` direto. */
+export const campaignsService = defaultService;
+
 export const createCampaign = (args: Parameters<CampaignsService['createCampaign']>[0]) => defaultService.createCampaign(args);
 export const pauseCampaign = (args: Parameters<CampaignsService['pauseCampaign']>[0]) => defaultService.pauseCampaign(args);
 export const resumeCampaign = (args: Parameters<CampaignsService['resumeCampaign']>[0]) => defaultService.resumeCampaign(args);

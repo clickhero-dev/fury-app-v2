@@ -10,7 +10,9 @@ import { FuryController } from './controllers/fury.controller.js';
 import { OpenRouterStudioService } from './services/openrouter/openrouter-studio.service.js';
 import { OpenRouterController } from './controllers/openrouter.controller.js';
 import { StudioService } from './services/studio/creative-studio.service.js';
+import { StudioPublishingService } from './services/studio/studio-publishing.service.js';
 import { CreativeStudioController } from './controllers/creative-studio.controller.js';
+import { StudioPublishingController } from './controllers/studio-publishing.controller.js';
 import { BillingService } from './services/billing/billing.service.js';
 import { BillingController } from './controllers/billing.controller.js';
 import { ObservabilityService } from './services/observability/observability.service.js';
@@ -36,6 +38,11 @@ import { PlannerController } from './controllers/planner.controller.js';
 import { DashboardController } from './controllers/dashboard.controller.js';
 import { BudgetOptimizerService } from './services/campaigns/budget-optimizer.service.js';
 import { BudgetController } from './controllers/budget.controller.js';
+import { campaignsService } from './services/campaigns/campaigns.service.js';
+import { CampaignRepository } from './repository/campaign.repository.js';
+import { CampaignsController } from './controllers/campaigns.controller.js';
+import { SuperAdminRepository } from './repository/superadmin.repository.js';
+import { SuperAdminController } from './controllers/superadmin.controller.js';
 
 /**
  * Composition root (DI) da API.
@@ -54,6 +61,7 @@ export const brandKitService = new BrandKitService();
 export const furyEngineService = new FuryEngineService();
 export const openRouterStudioService = new OpenRouterStudioService();
 export const studioService = new StudioService();
+export const studioPublishingService = new StudioPublishingService();
 export const billingService = new BillingService();
 export const observabilityService = new ObservabilityService();
 export const formsService = new FormsService();
@@ -63,12 +71,16 @@ export const socialAuthService = new SocialAuthService();
 export const metricsService = new MetricsService(metricsProvider);
 export const budgetOptimizerService = new BudgetOptimizerService();
 
+// SuperAdmin (GLOBAL) — único repositório/controller não escopado por tenant.
+export const superAdminRepository = new SuperAdminRepository("");
+
 export const controllers = {
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),
   fury: new FuryController(furyEngineService),
   openrouter: new OpenRouterController(openRouterStudioService),
   studio: new CreativeStudioController(studioService),
+  studioPublishing: new StudioPublishingController(studioPublishingService),
   billing: new BillingController(billingService),
   observability: new ObservabilityController(observabilityService),
   forms: new FormsController(formsService),
@@ -81,6 +93,11 @@ export const controllers = {
   planner: new PlannerController(plannerService),
   dashboard: new DashboardController(getInstagramDashboardInsights),
   budget: new BudgetController(budgetOptimizerService),
+  superadmin: new SuperAdminController(superAdminRepository),
+  campaigns: new CampaignsController(
+    campaignsService,
+    (tenantId: string) => new CampaignRepository(tenantId),
+  ),
 };
 
 export { metricsProvider };

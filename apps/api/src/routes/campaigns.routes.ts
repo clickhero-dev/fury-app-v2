@@ -1,24 +1,8 @@
 import { Router } from 'express';
 import multer from 'multer';
-import {
-  createCampaignHandler,
-  pauseCampaignHandler,
-  resumeCampaignHandler,
-  updateBudgetHandler,
-  getCampaignHandler,
-  getCampaignsHandler,
-  updateCampaignHandler,
-  updateCampaignStatusHandler,
-  softDeleteCampaignHandler,
-  getCampaignInsightsHandler,
-  createWizardCampaignHandler,
-  mcpLogWizardHandler,
-  searchMetaLocationsHandler,
-  uploadWizardCreativeHandler,
-  createWizardCampaignDiagHandler,
-  searchMetaInterestsHandler,
-  suggestTextHandler
-} from '../controllers/campaigns.controller.js';
+import { controllers } from '../di.js';
+
+const campaigns = controllers.campaigns;
 
 const router = Router();
 
@@ -35,25 +19,25 @@ const creativeUpload = multer({
 });
 
 // Static and collection routes first
-router.get('/', getCampaignsHandler);
-router.post('/create', createCampaignHandler);
-router.post('/create-wizard', createWizardCampaignHandler);
-router.post('/mcp-log', mcpLogWizardHandler);
-router.get('/create-wizard-diag', createWizardCampaignDiagHandler);
-router.post('/upload-creative', creativeUpload.single('file'), uploadWizardCreativeHandler);
+router.get('/', campaigns.getCampaigns);
+router.post('/create', campaigns.createCampaign);
+router.post('/create-wizard', campaigns.createWizardCampaign);
+router.post('/mcp-log', campaigns.mcpLogWizard);
+router.get('/create-wizard-diag', campaigns.createWizardCampaignDiag);
+router.post('/upload-creative', creativeUpload.single('file'), campaigns.uploadWizardCreative);
 // Note: /meta-locations and /meta-interests are defined in index.ts with custom middleware
-router.post('/suggest-text', suggestTextHandler);
+router.post('/suggest-text', campaigns.suggestText);
 
 // Specific sub-resource routes before generic /:id to avoid Express matching /:id first
-router.patch('/:id/pause', pauseCampaignHandler);
-router.patch('/:id/resume', resumeCampaignHandler);
-router.patch('/:id/status', updateCampaignStatusHandler);
-router.patch('/:id/budget', updateBudgetHandler);
-router.get('/:id/insights', getCampaignInsightsHandler);
+router.patch('/:id/pause', campaigns.pauseCampaign);
+router.patch('/:id/resume', campaigns.resumeCampaign);
+router.patch('/:id/status', campaigns.updateCampaignStatus);
+router.patch('/:id/budget', campaigns.updateBudget);
+router.get('/:id/insights', campaigns.getCampaignInsights);
 
 // Generic /:id routes last
-router.get('/:id', getCampaignHandler);
-router.patch('/:id', updateCampaignHandler);
-router.delete('/:id', softDeleteCampaignHandler);
+router.get('/:id', campaigns.getCampaign);
+router.patch('/:id', campaigns.updateCampaign);
+router.delete('/:id', campaigns.softDeleteCampaign);
 
 export default router;

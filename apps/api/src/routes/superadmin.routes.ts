@@ -1,5 +1,5 @@
 import { Router } from "express";
-import * as superadminController from "../controllers/superadmin.controller.js";
+import { controllers } from "../di.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { superadminMiddleware } from "../middleware/superadmin.middleware.js";
 
@@ -9,58 +9,58 @@ const router = Router();
 router.use(authMiddleware, superadminMiddleware);
 
 // Tenants
-router.get("/tenants", superadminController.listTenants);
-router.get("/tenants/:id", superadminController.getTenant);
-router.delete("/tenants/:id", superadminController.deleteTenant);
+router.get("/tenants", controllers.superadmin.listTenants);
+router.get("/tenants/:id", controllers.superadmin.getTenant);
+router.delete("/tenants/:id", controllers.superadmin.deleteTenant);
 
 // Users
-router.get("/users", superadminController.listUsers);
-router.post("/users", superadminController.createUser);
-router.get("/users/check-email/:email", superadminController.checkEmail);
-router.patch("/users/:id", superadminController.updateUser);
-router.delete("/users/:id", superadminController.deleteUser);
+router.get("/users", controllers.superadmin.listUsers);
+router.post("/users", controllers.superadmin.createUser);
+router.get("/users/check-email/:email", controllers.superadmin.checkEmail);
+router.patch("/users/:id", controllers.superadmin.updateUser);
+router.delete("/users/:id", controllers.superadmin.deleteUser);
 
 // Setup tenant + user
-router.post("/setup-tenant", superadminController.setupTenant);
+router.post("/setup-tenant", controllers.superadmin.setupTenant);
 
 // Subscription
 router.patch(
   "/tenants/:tenantId/subscription",
-  superadminController.updateSubscription,
+  controllers.superadmin.updateSubscription,
 );
 
 // Fury Config (Benchmarks)
 router.patch(
   "/tenants/:tenantId/fury-config",
-  superadminController.updateFuryConfig,
+  controllers.superadmin.updateFuryConfig,
 );
 
 // Brand Kit
-router.get("/tenants/:tenantId/brand-kit", superadminController.getBrandKit);
+router.get("/tenants/:tenantId/brand-kit", controllers.superadmin.getBrandKit);
 router.patch(
   "/tenants/:tenantId/brand-kit",
-  superadminController.upsertBrandKit,
+  controllers.superadmin.upsertBrandKit,
 );
 
 // Campaigns
 router.get(
   "/tenants/:tenantId/campaigns",
-  superadminController.listTenantCampaigns,
+  controllers.superadmin.listTenantCampaigns,
 );
 
 // Goals
-router.put("/tenants/:tenantId/goals", superadminController.upsertGoals);
+router.put("/tenants/:tenantId/goals", controllers.superadmin.upsertGoals);
 
 // Audience
 router.patch(
   "/tenants/:tenantId/audience",
-  superadminController.updateAudience,
+  controllers.superadmin.updateAudience,
 );
 
 // Plans
-router.get("/plans", superadminController.listPlans);
-router.post("/plans", superadminController.createPlan);
-router.patch("/plans/:id", superadminController.updatePlan);
-router.delete("/plans/:id", superadminController.deletePlan);
+router.get("/plans", controllers.superadmin.listPlans);
+router.post("/plans", controllers.superadmin.createPlan);
+router.patch("/plans/:id", controllers.superadmin.updatePlan);
+router.delete("/plans/:id", controllers.superadmin.deletePlan);
 
 export default router;
