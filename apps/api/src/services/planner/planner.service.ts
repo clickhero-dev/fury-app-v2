@@ -61,7 +61,17 @@ export class PlannerService {
     private readonly repoFactory: (tenantId: string) => PlannerRepository = (t) => new PlannerRepository(t),
     private readonly deps: {
       openrouter: typeof openrouterService;
-    } = { openrouter: openrouterService },
+      createInstagramMedia: typeof createInstagramMedia;
+      getMediaContainerStatus: typeof getMediaContainerStatus;
+      publishInstagramMedia: typeof publishInstagramMedia;
+      getUserFacebookPages: typeof getUserFacebookPages;
+    } = {
+      openrouter: openrouterService,
+      createInstagramMedia,
+      getMediaContainerStatus,
+      publishInstagramMedia,
+      getUserFacebookPages,
+    },
   ) {}
 
   private repo(t: string): PlannerRepository {
@@ -410,7 +420,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
 
     const accessToken = decryptMetaToken(conn.accessToken);
     const selectedPageIds: string[] = (conn.selectedPageIds as any[]) || [];
-    const pages = await getUserFacebookPages(accessToken);
+    const pages = await this.deps.getUserFacebookPages(accessToken);
 
     console.log(`[resolveInstagram] tenant ${tenantId}: Facebook retornou ${pages.length} páginas:`,
       JSON.stringify(pages.map(p => ({ pageId: p.pageId, name: p.name, hasInstagram: p.hasInstagram, instagramUserId: p.instagramUserId }))));
@@ -452,7 +462,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
     }
 
     // 1. Criar media container
-    const containerId = await createInstagramMedia(igUserId, accessToken, {
+    const containerId = await this.deps.createInstagramMedia(igUserId, accessToken, {
       [isReel ? 'videoUrl' : 'imageUrl']: mediaUrl,
       caption: post.caption || undefined,
       mediaType: isReel ? 'REELS' : undefined,
@@ -463,7 +473,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
       const pollDelays = [3_000, 6_000, 12_000];
       for (let i = 0; i < pollDelays.length; i++) {
         await new Promise((r) => setTimeout(r, pollDelays[i]));
-        const status = await getMediaContainerStatus(containerId, accessToken);
+        const status = await this.deps.getMediaContainerStatus(containerId, accessToken);
         if (status === 'FINISHED') break;
         if (i === pollDelays.length - 1) {
           throw new Error(`Video container ${containerId} still IN_PROGRESS after ${pollDelays.length} polls`);
@@ -472,7 +482,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
     }
 
     // 3. Publicar
-    const mediaId = await publishInstagramMedia(igUserId, accessToken, containerId);
+    const mediaId = await this.deps.publishInstagramMedia(igUserId, accessToken, containerId);
     return { mediaId };
   }
 
