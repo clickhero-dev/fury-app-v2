@@ -51,6 +51,7 @@ export function LoginPage() {
           refreshToken: data.refreshToken,
           name: data.user.name,
           email: data.user.email,
+          role: data.user.role ?? null,
           tenantId: data.user.tenantId,
         }));
         navigate('/dashboard');
@@ -199,6 +200,7 @@ export function LoginPage() {
                 refreshToken: data.refreshToken,
                 name: data.user.name,
                 email: data.user.email,
+                role: data.user.role ?? null,
                 tenantId: data.user.tenantId,
               }));
               navigate('/dashboard');

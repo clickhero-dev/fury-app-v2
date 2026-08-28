@@ -5,7 +5,7 @@ import { Sidebar } from '../Sidebar';
 import api from '../../lib/api';
 import { useSubscription } from '../../hooks/useBilling';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { setMetaId, setPlan, selectIsPlanExpired } from '../../store/slices/authSlice';
+import { setMetaId, setPlan, selectIsPlanExpired, selectUserRole } from '../../store/slices/authSlice';
 import {
   computeSubscriptionState,
   shouldRedirectToExpired,
@@ -89,9 +89,13 @@ export function AuthenticatedShell() {
     data: subscription,
     isLoading: subLoading,
     isFetched: subFetched,
+    isError: subError,
   } = useSubscription();
 
   const reduxPlanExpired = useAppSelector(selectIsPlanExpired);
+  const userRole = useAppSelector(selectUserRole);
+  // Admin/superadmin isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
+  const isAdmin = userRole === 'superadmin' || userRole === 'admin';
 
   const subscriptionState = useMemo(
     () => computeSubscriptionState(subscription),
@@ -100,25 +104,29 @@ export function AuthenticatedShell() {
 
   const subscriptionChecked = !subLoading && subFetched;
 
+  // Persiste o plano (ou sua ausência) no Redux apenas quando o fetch de assinatura
+  // resolveu e NÃO foi erro — assim registra o estado real sem sobrescrever um valor
+  // válido quando a API falha (500 etc).
   useEffect(() => {
-    if (subscription && subscriptionChecked) {
-      const planName = subscription.plan?.name ?? null;
-      const expiration = subscription.trialEndsAt ?? subscription.currentPeriodEnd ?? null;
+    if (subscriptionChecked && !subError) {
+      const planName = subscription?.plan?.name ?? null;
+      const expiration = subscription?.trialEndsAt ?? subscription?.currentPeriodEnd ?? null;
       dispatch(setPlan({ plan: planName, planExpiration: expiration }));
     }
-  }, [subscription, subscriptionChecked, dispatch]);
+  }, [subscription, subscriptionChecked, subError, dispatch]);
 
-  // Redireciona para /assinatura-vencida apenas com evidência confiável.
-  // O Redux (valor persistido de um fetch bem-sucedido) prevalece: se ainda aponta data
-  // futura, o usuário é considerado válido mesmo que a chamada atual tenha falhado (500 etc),
-  // evitando exibir "assinatura vencida" para quem tem assinatura válida.
+  // Redireciona para /assinatura-vencida apenas com evidência confiável, e NUNCA para
+  // admin/superadmin (isenção do backend). O Redux (valor persistido de um fetch
+  // bem-sucedido) prevalece: se ainda aponta data futura, o usuário é considerado válido
+  // mesmo que a chamada atual tenha falhado (500 etc), evitando exibir "assinatura vencida"
+  // para quem tem assinatura válida.
   const redirectToExpired = shouldRedirectToExpired({
     subscriptionChecked,
     state: subscriptionState,
     reduxPlanExpired,
   });
 
-  if (shouldCheckSubscription && redirectToExpired) {
+  if (shouldCheckSubscription && !isAdmin && redirectToExpired) {
     return <Navigate to="/assinatura-vencida" replace />;
   }
 

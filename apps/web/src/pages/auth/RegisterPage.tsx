@@ -28,6 +28,7 @@ export function RegisterPage() {
           refreshToken: data.refreshToken,
           name: data.user.name,
           email: data.user.email,
+          role: data.user.role ?? null,
           tenantId: data.user.tenantId,
         }));
         if (data.isNewUser) {
@@ -96,6 +97,7 @@ export function RegisterPage() {
                 refreshToken: data.refreshToken,
                 name: data.user.name,
                 email: data.user.email,
+                role: data.user.role ?? null,
                 tenantId: data.user.tenantId,
               }));
               if (data.isNewUser) {
