@@ -1,8 +1,8 @@
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
-import * as authService from '../services/core/auth.service.js';
-import * as socialAuthService from '../services/core/social-auth.service.js';
+import type { AuthService } from '../services/core/auth.service.js';
+import type { SocialAuthService } from '../services/core/social-auth.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { checkEmailVerificationRateLimit, checkForgotPasswordRateLimit, checkResetPasswordRateLimit } from '../middleware/rate-limit.middleware.js';
 
@@ -60,243 +60,6 @@ const changePasswordSchema = z.object({
   newPassword: z.string().min(8).max(255),
 });
 
-export async function register(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = registerSchema.parse(req.body);
-    const result = await authService.register(body);
-
-    res.status(201).json({
-      success: true,
-      data: {
-        user: {
-          id: result.user.id,
-          email: result.user.email,
-          role: result.user.role,
-          tenantId: result.user.tenantId,
-        },
-      },
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function login(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = loginSchema.parse(req.body);
-    const result = await authService.login(body);
-
-    res.status(200).json({
-      success: true,
-      data: {
-        token: result.tokens.accessToken,
-        refreshToken: result.tokens.refreshToken,
-        user: {
-          id: result.user.id,
-          email: result.user.email,
-          role: result.user.role,
-          tenantId: result.user.tenantId,
-        },
-      },
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function refresh(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = refreshSchema.parse(req.body);
-    const result = await authService.refresh(body);
-
-    res.status(200).json({
-      success: true,
-      data: result,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function logout(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.user) {
-      throw new Error('User not found in request');
-    }
-
-    await authService.logout(req.user.userId);
-
-    res.status(200).json({
-      success: true,
-      data: null,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function getMe(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.user) {
-      throw new Error('User not found in request');
-    }
-
-    const user = await authService.getMe(req.user.userId);
-
-    res.status(200).json({
-      success: true,
-      data: user,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function updateMe(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.user) {
-      throw new Error('User not found in request');
-    }
-
-    const body = updateMeSchema.parse(req.body);
-    const user = await authService.updateMe(req.user.userId, body);
-
-    res.status(200).json({
-      success: true,
-      data: user,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function changePassword(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.user) {
-      throw new Error('User not found in request');
-    }
-
-    const body = changePasswordSchema.parse(req.body);
-    await authService.changePassword(req.user.userId, body.currentPassword, body.newPassword);
-
-    res.status(200).json({
-      success: true,
-      data: null,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function verifyEmail(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = verifyEmailSchema.parse(req.body);
-
-    const { allowed, remaining } = await checkEmailVerificationRateLimit(body.email);
-
-    if (!allowed) {
-      return res.status(429).json({
-        success: false,
-        error: {
-          code: 'TOO_MANY_ATTEMPTS',
-          message: 'Muitas tentativas de verificação. Tente novamente em 15 minutos.',
-        },
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    const user = await authService.verifyEmail(body.email, body.otp);
-
-    res.status(200).json({
-      success: true,
-      data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          tenantId: user.tenantId,
-        },
-      },
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function forgotPassword(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = forgotPasswordSchema.parse(req.body);
-
-    const { allowed } = await checkForgotPasswordRateLimit(body.email);
-
-    if (!allowed) {
-      return res.status(429).json({
-        success: false,
-        error: {
-          code: 'TOO_MANY_ATTEMPTS',
-          message: 'Muitas tentativas de redefinição. Tente novamente em 15 minutos.',
-        },
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    await authService.forgotPassword(body.email);
-
-    res.status(200).json({
-      success: true,
-      data: null,
-      message: 'Se o email existe em nossa base, você receberá instruções para redefinir sua senha.',
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function resetPassword(req: Request, res: Response, next: NextFunction) {
-  try {
-    const body = resetPasswordSchema.parse(req.body);
-
-    const { allowed } = await checkResetPasswordRateLimit(body.email);
-
-    if (!allowed) {
-      return res.status(429).json({
-        success: false,
-        error: {
-          code: 'TOO_MANY_ATTEMPTS',
-          message: 'Muitas tentativas de redefinição. Tente novamente em 15 minutos.',
-        },
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    const user = await authService.resetPassword(body.email, body.otp, body.newPassword);
-
-    res.status(200).json({
-      success: true,
-      data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          tenantId: user.tenantId,
-        },
-      },
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
 function getSocialRedirectUri(req?: Request): string {
   // Derive from the actual request host so it works in local/HMG/prod without
   // a per-environment env var. Falls back to the env var if set, then localhost.
@@ -333,52 +96,40 @@ function verifySocialState(state: string): SocialStatePayload {
   }
 }
 
-export async function googleSocialUrl(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { getGoogleOAuthConfig } = await import('../lib/google-oauth.js');
-    const { clientId } = getGoogleOAuthConfig();
-    const redirectUri = getSocialRedirectUri(req);
+/** Controller de autenticação — glue HTTP fino. Recebe os services no construtor (injeção). */
+export class AuthController {
+  constructor(
+    private authService: AuthService,
+    private socialAuthService: SocialAuthService,
+  ) {}
 
-    // Accept frontend URL from query or header — enables multi-env without hardcoding
-    const frontendOrigin = (req.query.origin as string)
-      || req.get('origin')
-      || req.get('referer')
-      || 'http://localhost:5173';
-    const state = signSocialState(frontendOrigin);
+  register = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = registerSchema.parse(req.body);
+      const result = await this.authService.register(body);
 
-    const authUrl = socialAuthService.generateSocialLoginUrl(redirectUri, clientId, state);
-    res.status(200).json({
-      success: true,
-      data: { authUrl },
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function googleSocialCallback(req: Request, res: Response, next: NextFunction) {
-  const redirectUri = getSocialRedirectUri(req);
-
-  try {
-    const errorParam = req.query.error as string | undefined;
-    const stateParam = req.query.state as string | undefined;
-    const verifiedState = stateParam ? verifySocialState(stateParam) : undefined;
-    const frontendUrl = getSocialFrontendUrl(verifiedState);
-
-    if (errorParam) {
-      res.redirect(`${frontendUrl}/login?error=oauth_cancelled`);
-      return;
+      res.status(201).json({
+        success: true,
+        data: {
+          user: {
+            id: result.user.id,
+            email: result.user.email,
+            role: result.user.role,
+            tenantId: result.user.tenantId,
+          },
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
     }
+  };
 
-    const code = req.query.code as string | undefined;
-    if (!code) {
-      const { code: bodyCode } = (req.body || {}) as { code?: string };
-      if (!bodyCode) {
-        const { AppError } = await import('../middleware/errorHandler.js');
-        throw new AppError(400, 'MISSING_CODE', 'Code obrigatorio para login social.');
-      }
-      const result = await socialAuthService.handleGoogleSocialLogin(bodyCode, redirectUri);
+  login = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = loginSchema.parse(req.body);
+      const result = await this.authService.login(body);
+
       res.status(200).json({
         success: true,
         data: {
@@ -387,41 +138,298 @@ export async function googleSocialCallback(req: Request, res: Response, next: Ne
           user: {
             id: result.user.id,
             email: result.user.email,
-            name: result.user.name,
             role: result.user.role,
             tenantId: result.user.tenantId,
           },
-          isNewUser: result.isNewUser,
         },
         timestamp: new Date().toISOString(),
       });
-      return;
+    } catch (error) {
+      next(error);
     }
+  };
 
-    const result = await socialAuthService.handleGoogleSocialLogin(code, redirectUri);
-    const tokenData = encodeURIComponent(JSON.stringify({
-      token: result.tokens.accessToken,
-      refreshToken: result.tokens.refreshToken,
-      user: {
-        id: result.user.id,
-        email: result.user.email,
-        name: result.user.name,
-        role: result.user.role,
-        tenantId: result.user.tenantId,
-      },
-      isNewUser: result.isNewUser,
-    }));
-    const redirectPath = result.isNewUser ? '/cadastro' : '/login';
-    res.redirect(`${frontendUrl}${redirectPath}?social_login=${tokenData}`);
-  } catch (error) {
-    const { AppError } = await import('../middleware/errorHandler.js');
-    const message = error instanceof AppError ? error.message : 'Erro ao fazer login com Google';
-    const stateParam = req.query.state as string | undefined;
-    const verifiedState = stateParam ? verifySocialState(stateParam) : undefined;
-    const frontendUrl = getSocialFrontendUrl(verifiedState);
-    if (req.method === 'POST') {
-      return res.status(401).json({ success: false, error: { code: 'SOCIAL_LOGIN_FAILED', message } });
+  refresh = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = refreshSchema.parse(req.body);
+      const result = await this.authService.refresh(body);
+
+      res.status(200).json({
+        success: true,
+        data: result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
     }
-    res.redirect(`${frontendUrl}/login?error=social_login_failed`);
-  }
+  };
+
+  logout = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new Error('User not found in request');
+      }
+
+      await this.authService.logout(req.user.userId);
+
+      res.status(200).json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getMe = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new Error('User not found in request');
+      }
+
+      const user = await this.authService.getMe(req.user.userId);
+
+      res.status(200).json({
+        success: true,
+        data: user,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateMe = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new Error('User not found in request');
+      }
+
+      const body = updateMeSchema.parse(req.body);
+      const user = await this.authService.updateMe(req.user.userId, body);
+
+      res.status(200).json({
+        success: true,
+        data: user,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  changePassword = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new Error('User not found in request');
+      }
+
+      const body = changePasswordSchema.parse(req.body);
+      await this.authService.changePassword(req.user.userId, body.currentPassword, body.newPassword);
+
+      res.status(200).json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  verifyEmail = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = verifyEmailSchema.parse(req.body);
+
+      const { allowed, remaining } = await checkEmailVerificationRateLimit(body.email);
+
+      if (!allowed) {
+        return res.status(429).json({
+          success: false,
+          error: {
+            code: 'TOO_MANY_ATTEMPTS',
+            message: 'Muitas tentativas de verificação. Tente novamente em 15 minutos.',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const user = await this.authService.verifyEmail(body.email, body.otp);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            tenantId: user.tenantId,
+          },
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = forgotPasswordSchema.parse(req.body);
+
+      const { allowed } = await checkForgotPasswordRateLimit(body.email);
+
+      if (!allowed) {
+        return res.status(429).json({
+          success: false,
+          error: {
+            code: 'TOO_MANY_ATTEMPTS',
+            message: 'Muitas tentativas de redefinição. Tente novamente em 15 minutos.',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      await this.authService.forgotPassword(body.email);
+
+      res.status(200).json({
+        success: true,
+        data: null,
+        message: 'Se o email existe em nossa base, você receberá instruções para redefinir sua senha.',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  resetPassword = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = resetPasswordSchema.parse(req.body);
+
+      const { allowed } = await checkResetPasswordRateLimit(body.email);
+
+      if (!allowed) {
+        return res.status(429).json({
+          success: false,
+          error: {
+            code: 'TOO_MANY_ATTEMPTS',
+            message: 'Muitas tentativas de redefinição. Tente novamente em 15 minutos.',
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const user = await this.authService.resetPassword(body.email, body.otp, body.newPassword);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            tenantId: user.tenantId,
+          },
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  googleSocialUrl = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { getGoogleOAuthConfig } = await import('../lib/google-oauth.js');
+      const { clientId } = getGoogleOAuthConfig();
+      const redirectUri = getSocialRedirectUri(req);
+
+      // Accept frontend URL from query or header — enables multi-env without hardcoding
+      const frontendOrigin = (req.query.origin as string)
+        || req.get('origin')
+        || req.get('referer')
+        || 'http://localhost:5173';
+      const state = signSocialState(frontendOrigin);
+
+      const authUrl = this.socialAuthService.generateSocialLoginUrl(redirectUri, clientId, state);
+      res.status(200).json({
+        success: true,
+        data: { authUrl },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  googleSocialCallback = async (req: Request, res: Response, next: NextFunction) => {
+    const redirectUri = getSocialRedirectUri(req);
+
+    try {
+      const errorParam = req.query.error as string | undefined;
+      const stateParam = req.query.state as string | undefined;
+      const verifiedState = stateParam ? verifySocialState(stateParam) : undefined;
+      const frontendUrl = getSocialFrontendUrl(verifiedState);
+
+      if (errorParam) {
+        res.redirect(`${frontendUrl}/login?error=oauth_cancelled`);
+        return;
+      }
+
+      const code = req.query.code as string | undefined;
+      if (!code) {
+        const { code: bodyCode } = (req.body || {}) as { code?: string };
+        if (!bodyCode) {
+          const { AppError } = await import('../middleware/errorHandler.js');
+          throw new AppError(400, 'MISSING_CODE', 'Code obrigatorio para login social.');
+        }
+        const result = await this.socialAuthService.handleGoogleSocialLogin(bodyCode, redirectUri);
+        res.status(200).json({
+          success: true,
+          data: {
+            token: result.tokens.accessToken,
+            refreshToken: result.tokens.refreshToken,
+            user: {
+              id: result.user.id,
+              email: result.user.email,
+              name: result.user.name,
+              role: result.user.role,
+              tenantId: result.user.tenantId,
+            },
+            isNewUser: result.isNewUser,
+          },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      const result = await this.socialAuthService.handleGoogleSocialLogin(code, redirectUri);
+      const tokenData = encodeURIComponent(JSON.stringify({
+        token: result.tokens.accessToken,
+        refreshToken: result.tokens.refreshToken,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name,
+          role: result.user.role,
+          tenantId: result.user.tenantId,
+        },
+        isNewUser: result.isNewUser,
+      }));
+      const redirectPath = result.isNewUser ? '/cadastro' : '/login';
+      res.redirect(`${frontendUrl}${redirectPath}?social_login=${tokenData}`);
+    } catch (error) {
+      const { AppError } = await import('../middleware/errorHandler.js');
+      const message = error instanceof AppError ? error.message : 'Erro ao fazer login com Google';
+      const stateParam = req.query.state as string | undefined;
+      const verifiedState = stateParam ? verifySocialState(stateParam) : undefined;
+      const frontendUrl = getSocialFrontendUrl(verifiedState);
+      if (req.method === 'POST') {
+        return res.status(401).json({ success: false, error: { code: 'SOCIAL_LOGIN_FAILED', message } });
+      }
+      res.redirect(`${frontendUrl}/login?error=social_login_failed`);
+    }
+  };
 }

@@ -47,12 +47,7 @@ vi.mock('../lib/google-api.js', () => ({
   createGoogleApiClient: mockCreateGoogleApiClient,
 }));
 
-import {
-  getProfile,
-  updateProfile,
-  syncProfile,
-  getSyncLogs,
-} from '../services/google/google.service.js';
+import { googleService } from '../services/google/google.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 function makeConnection(tenantId: string, overrides: Record<string, unknown> = {}) {
@@ -149,7 +144,7 @@ describe('getProfile — espelho GBP (US3)', () => {
       profile: { totalReviewCount: 25 },
     });
 
-    const result = await getProfile('profile-1', 'tenant-A');
+    const result = await googleService.getProfile('profile-1', 'tenant-A');
 
     expect(mockGetLocation).toHaveBeenCalledWith('accounts/123456/locations/789');
     expect(result.name).toBe('Minha Empresa Ltda Atualizada');
@@ -162,7 +157,7 @@ describe('getProfile — espelho GBP (US3)', () => {
   it('404 NOT_FOUND para perfil de outro tenant', async () => {
     dbMock.query.googleBusinessProfiles.findFirst.mockResolvedValue(null);
 
-    await expect(getProfile('profile-outro', 'tenant-B')).rejects.toMatchObject({
+    await expect(googleService.getProfile('profile-outro', 'tenant-B')).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
     });
@@ -176,7 +171,7 @@ describe('getProfile — espelho GBP (US3)', () => {
       verification: { state: 'VERIFIED' },
     });
 
-    await getProfile('profile-1', 'tenant-A');
+    await googleService.getProfile('profile-1', 'tenant-A');
 
     const setValues = dbMock.update.mock.results[0]?.value.set.mock.calls[0]?.[0] ?? {};
     expect(setValues.lastSyncedAt).toBeDefined();
@@ -194,7 +189,7 @@ describe('updateProfile — PATCH com field mask (US3)', () => {
       verification: { state: 'VERIFIED' },
     });
 
-    const result = await updateProfile('profile-1', 'tenant-A', {
+    const result = await googleService.updateProfile('profile-1', 'tenant-A', {
       name: 'Padaria Estrela',
       phone: '+5511977777777',
     });
@@ -226,7 +221,7 @@ describe('updateProfile — PATCH com field mask (US3)', () => {
       verification: { state: 'VERIFIED' },
     });
 
-    const result = await updateProfile('profile-1', 'tenant-A', {
+    const result = await googleService.updateProfile('profile-1', 'tenant-A', {
       hours: {
         monday: [{ open: '07:00', close: '19:00' }],
       },
@@ -245,7 +240,7 @@ describe('updateProfile — PATCH com field mask (US3)', () => {
     );
 
     await expect(
-      updateProfile('profile-1', 'tenant-A', {
+      googleService.updateProfile('profile-1', 'tenant-A', {
         address: { street: '', city: '', state: '', postalCode: '', country: 'BR' },
       })
     ).rejects.toMatchObject({
@@ -260,7 +255,7 @@ describe('updateProfile — PATCH com field mask (US3)', () => {
     dbMock.query.googleBusinessProfiles.findFirst.mockResolvedValue(null);
 
     await expect(
-      updateProfile('profile-outro', 'tenant-B', { name: 'Tentativa' })
+      googleService.updateProfile('profile-outro', 'tenant-B', { name: 'Tentativa' })
     ).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
@@ -274,7 +269,7 @@ describe('updateProfile — PATCH com field mask (US3)', () => {
       verification: { state: 'VERIFIED' },
     });
 
-    const result = await updateProfile('profile-1', 'tenant-A', {
+    const result = await googleService.updateProfile('profile-1', 'tenant-A', {
       name: 'Minha Empresa Ltda',
     });
 
@@ -296,7 +291,7 @@ describe('syncProfile — sync imediato (US3)', () => {
       profile: { totalReviewCount: 30 },
     });
 
-    const result = await syncProfile('profile-1', 'tenant-A');
+    const result = await googleService.syncProfile('profile-1', 'tenant-A');
 
     expect(mockGetLocation).toHaveBeenCalledWith('accounts/123456/locations/789');
     expect(result.syncStatus).toBe('verified');
@@ -306,7 +301,7 @@ describe('syncProfile — sync imediato (US3)', () => {
   it('404 NOT_FOUND para perfil de outro tenant', async () => {
     dbMock.query.googleBusinessProfiles.findFirst.mockResolvedValue(null);
 
-    await expect(syncProfile('profile-outro', 'tenant-B')).rejects.toMatchObject({
+    await expect(googleService.syncProfile('profile-outro', 'tenant-B')).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
     });
@@ -320,7 +315,7 @@ describe('syncProfile — sync imediato (US3)', () => {
       verification: { state: 'VERIFIED' },
     });
 
-    await syncProfile('profile-1', 'tenant-A');
+    await googleService.syncProfile('profile-1', 'tenant-A');
 
     expect(dbMock.insert).toHaveBeenCalled();
   });
@@ -347,7 +342,7 @@ describe('getSyncLogs — histórico de operações (US3)', () => {
       },
     ]);
 
-    const result = await getSyncLogs('profile-1', 'tenant-A');
+    const result = await googleService.getSyncLogs('profile-1', 'tenant-A');
 
     expect(result.logs).toHaveLength(2);
     expect(result.logs[0].operation).toBe('create');
@@ -357,7 +352,7 @@ describe('getSyncLogs — histórico de operações (US3)', () => {
   it('404 NOT_FOUND para perfil de outro tenant', async () => {
     dbMock.query.googleBusinessProfiles.findFirst.mockResolvedValue(null);
 
-    await expect(getSyncLogs('profile-outro', 'tenant-B')).rejects.toMatchObject({
+    await expect(googleService.getSyncLogs('profile-outro', 'tenant-B')).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
     });

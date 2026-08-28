@@ -50,7 +50,7 @@ vi.mock('../lib/google-oauth.js', () => ({
   revokeGoogleToken: mockRevokeGoogleToken,
 }));
 
-import { generateGoogleAuthUrl, handleGoogleOAuthCallback, disconnectGoogleConnection } from '../services/google/google.service.js';
+import { googleService } from '../services/google/google.service.js';
 import { encryptToken, decryptToken } from '../utils/crypto.js';
 import { AppError } from '../middleware/errorHandler.js';
 import googleRoutes from '../routes/google.routes.js';
@@ -98,7 +98,7 @@ describe('Google OAuth — state JWT', () => {
   beforeEach(resetMocks);
 
   it('gera URL de autorização com escopo business.manage, access_type=offline e state', () => {
-    const authUrl = generateGoogleAuthUrl('tenant-1', 'settings');
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings');
     const parsed = new URL(authUrl);
 
     expect(parsed.origin).toBe('https://accounts.google.com');
@@ -116,7 +116,7 @@ describe('Google OAuth — state JWT', () => {
   });
 
   it('state JWT expira em 10 minutos', () => {
-    const authUrl = generateGoogleAuthUrl('tenant-1', 'settings');
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings');
     const state = new URL(authUrl).searchParams.get('state') ?? '';
     const decoded = jwt.decode(state) as { iat?: number; exp?: number };
 
@@ -127,7 +127,7 @@ describe('Google OAuth — state JWT', () => {
   });
 
   it('rejeita INVALID_OAUTH_STATE quando o state é inválido ou expirado', async () => {
-    await expect(handleGoogleOAuthCallback('code-valid', 'state-invalido')).rejects.toMatchObject({
+    await expect(googleService.handleGoogleOAuthCallback('code-valid', 'state-invalido')).rejects.toMatchObject({
       statusCode: 401,
       code: 'INVALID_OAUTH_STATE',
     });
@@ -157,10 +157,10 @@ describe('Google OAuth — handleGoogleOAuthCallback (upsert 1-por-tenant)', () 
   beforeEach(resetMocks);
 
   it('insere conexão quando não existe para o tenant', async () => {
-    const authUrl = generateGoogleAuthUrl('tenant-1', 'settings');
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings');
     const state = new URL(authUrl).searchParams.get('state') ?? '';
 
-    const result = await handleGoogleOAuthCallback('code-valid', state);
+    const result = await googleService.handleGoogleOAuthCallback('code-valid', state);
 
     expect(mockExchangeCodeForToken).toHaveBeenCalledWith('code-valid');
     expect(dbMock.query.googleConnections.findFirst).toHaveBeenCalled();
@@ -189,10 +189,10 @@ describe('Google OAuth — handleGoogleOAuthCallback (upsert 1-por-tenant)', () 
       tokenExpiresAt: new Date(Date.now() + 1000),
     });
 
-    const authUrl = generateGoogleAuthUrl('tenant-1', 'settings');
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings');
     const state = new URL(authUrl).searchParams.get('state') ?? '';
 
-    const result = await handleGoogleOAuthCallback('code-valid', state);
+    const result = await googleService.handleGoogleOAuthCallback('code-valid', state);
 
     expect(dbMock.insert).not.toHaveBeenCalled();
     expect(dbMock.update).toHaveBeenCalledTimes(1);
@@ -208,7 +208,7 @@ describe('Google OAuth — callback HTTP (rota pública)', () => {
   beforeEach(resetMocks);
 
   it('redireciona para o frontend com ?connected=true', async () => {
-    const authUrl = generateGoogleAuthUrl('tenant-1', 'settings');
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings');
     const state = new URL(authUrl).searchParams.get('state') ?? '';
     const app = buildTestApp();
 
@@ -238,7 +238,7 @@ describe('Google OAuth — callback HTTP (rota pública)', () => {
       new AppError(502, 'GOOGLE_TOKEN_EXCHANGE_FAILED', 'Falha na troca do code por token no Google.')
     );
 
-    const authUrl = generateGoogleAuthUrl('tenant-1', 'settings');
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings');
     const state = new URL(authUrl).searchParams.get('state') ?? '';
     const app = buildTestApp();
 
@@ -265,7 +265,7 @@ describe('Google OAuth — callback HTTP (rota pública)', () => {
 
   it('redireciona com ?error=oauth_cancelled em falhas inesperadas', async () => {
     mockExchangeCodeForToken.mockRejectedValue(new Error('network boom'));
-    const authUrl = generateGoogleAuthUrl('tenant-1', 'settings');
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings');
     const state = new URL(authUrl).searchParams.get('state') ?? '';
     const app = buildTestApp();
 
@@ -291,7 +291,7 @@ describe('Google OAuth — revogação na desconexão', () => {
       tokenExpiresAt: new Date(Date.now() + 3600_000),
     });
 
-    const result = await disconnectGoogleConnection('conn-1', 'tenant-1');
+    const result = await googleService.disconnectGoogleConnection('conn-1', 'tenant-1');
 
     expect(mockRevokeGoogleToken).toHaveBeenCalledWith('ya29.revogavel');
     expect(dbMock.delete).toHaveBeenCalledTimes(1);
@@ -301,7 +301,7 @@ describe('Google OAuth — revogação na desconexão', () => {
   it('404 NOT_FOUND para conexão de outro tenant', async () => {
     dbMock.query.googleConnections.findFirst.mockResolvedValue(null);
 
-    await expect(disconnectGoogleConnection('conn-de-outro', 'tenant-1')).rejects.toMatchObject({
+    await expect(googleService.disconnectGoogleConnection('conn-de-outro', 'tenant-1')).rejects.toMatchObject({
       statusCode: 404,
       code: 'NOT_FOUND',
     });

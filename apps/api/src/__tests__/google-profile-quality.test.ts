@@ -6,7 +6,8 @@
  * Sem DB e sem HTTP — só a função pura.
  */
 import { describe, it, expect } from 'vitest';
-import { assessGoogleProfileQuality, type GoogleQualityReport } from '../services/google/google.service.js';
+import { googleService } from '../services/google/google.service.js';
+import type { GoogleQualityReport } from '../services/google/google.service.js';
 import type { GbpLocation } from '../lib/google-api.js';
 
 const NOW = new Date('2026-08-26T12:00:00Z');
@@ -38,7 +39,7 @@ function completeLocation(): GbpLocation {
 
 describe('assessGoogleProfileQuality', () => {
   it('classifica como EXCELLENT um perfil completo, verificado e recente', () => {
-    const report: GoogleQualityReport = assessGoogleProfileQuality(completeLocation(), NOW);
+    const report: GoogleQualityReport = googleService.assessGoogleProfileQuality(completeLocation(), NOW);
 
     expect(report.grade).toBe('EXCELLENT');
     expect(report.score).toBeGreaterThanOrEqual(90);
@@ -49,7 +50,7 @@ describe('assessGoogleProfileQuality', () => {
   });
 
   it('marca como incompleto quando faltam campos obrigatórios e gera warnings em PT-BR', () => {
-    const report = assessGoogleProfileQuality(
+    const report = googleService.assessGoogleProfileQuality(
       {
         name: 'accounts/1/locations/abc',
         title: 'Padaria do Bairro',
@@ -72,7 +73,7 @@ describe('assessGoogleProfileQuality', () => {
     loc.categories = undefined;
     loc.openInfo = undefined;
 
-    const report = assessGoogleProfileQuality(loc, NOW);
+    const report = googleService.assessGoogleProfileQuality(loc, NOW);
 
     expect(report.complete).toBe(true); // obrigatórios presentes
     expect(report.missingFields).toEqual([]);
@@ -83,7 +84,7 @@ describe('assessGoogleProfileQuality', () => {
     const loc = completeLocation();
     (loc.metadata as Record<string, unknown>).updateTime = daysAgo(400);
 
-    const report = assessGoogleProfileQuality(loc, NOW);
+    const report = googleService.assessGoogleProfileQuality(loc, NOW);
 
     expect(report.outdated).toBe(true);
     expect(report.lastUpdated).toBe(daysAgo(400));
@@ -94,7 +95,7 @@ describe('assessGoogleProfileQuality', () => {
     const loc = completeLocation();
     loc.metadata = { placeId: 'ChIJxxx' };
 
-    const report = assessGoogleProfileQuality(loc, NOW);
+    const report = googleService.assessGoogleProfileQuality(loc, NOW);
 
     expect(report.outdated).toBeNull();
     expect(report.lastUpdated).toBeNull();
@@ -102,7 +103,7 @@ describe('assessGoogleProfileQuality', () => {
 
   it('não cobra penalidade de recência em perfil desatualizado que já está POOR/baixo', () => {
     // perfil sem nenhum campo obrigatório: score fica no piso (baixo)
-    const report = assessGoogleProfileQuality({}, NOW);
+    const report = googleService.assessGoogleProfileQuality({}, NOW);
 
     expect(report.score).toBeLessThan(50);
     expect(report.grade).toBe('POOR');

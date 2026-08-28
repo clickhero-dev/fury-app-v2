@@ -8,11 +8,13 @@ const {
   mockSubFindFirst,
   mockPlanFindFirst,
   mockInsert,
+  mockInsertReturn,
   mockUpdate,
 } = vi.hoisted(() => ({
   mockSubFindFirst: vi.fn(),
   mockPlanFindFirst: vi.fn(),
   mockInsert: vi.fn(),
+  mockInsertReturn: vi.fn(() => []),
   mockUpdate: vi.fn(),
 }));
 
@@ -22,9 +24,19 @@ vi.mock("@fury/db", () => ({
       subscriptions: { findFirst: mockSubFindFirst },
       plans: { findFirst: mockPlanFindFirst },
     },
-    insert: vi.fn(() => ({ values: mockInsert })),
+    insert: vi.fn(() => ({
+      values: (data: unknown) => {
+        mockInsert(data);
+        return { returning: mockInsertReturn };
+      },
+    })),
     update: vi.fn(() => ({
-      set: vi.fn(() => ({ where: mockUpdate })),
+      set: vi.fn(() => ({
+        where: (cond: unknown) => {
+          mockUpdate(cond);
+          return { returning: () => [] as any[] };
+        },
+      })),
     })),
   },
   subscriptions: {},
@@ -38,8 +50,11 @@ vi.mock("@fury/db", () => ({
   clientGoals: {},
 }));
 
-import { updateSubscription } from "../controllers/superadmin.controller.js";
+import { SuperAdminController } from "../controllers/superadmin.controller.js";
+import { SuperAdminRepository } from "../repository/superadmin.repository.js";
 import type { Request, Response, NextFunction } from "express";
+
+const controller = new SuperAdminController(new SuperAdminRepository(""));
 
 function mockReq(overrides: Record<string, unknown> = {}): Request {
   return {
@@ -61,7 +76,12 @@ function mockNext(): NextFunction {
 
 describe("updateSubscription (superadmin)", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockSubFindFirst.mockReset();
+    mockPlanFindFirst.mockReset();
+    mockInsert.mockReset();
+    mockInsertReturn.mockReset();
+    mockInsertReturn.mockImplementation(() => []);
+    mockUpdate.mockReset();
   });
 
   it("cria subscription quando nenhuma existe (trial)", async () => {
@@ -78,7 +98,7 @@ describe("updateSubscription (superadmin)", () => {
     const res = mockRes();
     const next = mockNext();
 
-    await updateSubscription(req, res, next);
+    await controller.updateSubscription(req, res, next);
 
     expect(mockSubFindFirst).toHaveBeenCalledTimes(1);
     // 2 chamadas: 1 para escolher um plano fallback (nenhum veio no body),
@@ -110,7 +130,7 @@ describe("updateSubscription (superadmin)", () => {
     const res = mockRes();
     const next = mockNext();
 
-    await updateSubscription(req, res, next);
+    await controller.updateSubscription(req, res, next);
 
     expect(mockInsert).toHaveBeenCalledTimes(1);
     const inserted = mockInsert.mock.calls[0][0];
@@ -132,7 +152,7 @@ describe("updateSubscription (superadmin)", () => {
     const res = mockRes();
     const next = mockNext();
 
-    await updateSubscription(req, res, next);
+    await controller.updateSubscription(req, res, next);
 
     // Não busca plano fallback (planId já veio no body), mas ainda busca
     // o plano escolhido 1x para ler os limits e definir creativesRemaining.
@@ -149,7 +169,7 @@ describe("updateSubscription (superadmin)", () => {
     const res = mockRes();
     const next = mockNext();
 
-    await updateSubscription(req, res, next);
+    await controller.updateSubscription(req, res, next);
 
     const err = (next as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(err.statusCode).toBe(400);
@@ -165,7 +185,7 @@ describe("updateSubscription (superadmin)", () => {
     const res = mockRes();
     const next = mockNext();
 
-    await updateSubscription(req, res, next);
+    await controller.updateSubscription(req, res, next);
 
     expect(mockInsert).not.toHaveBeenCalled();
     expect(mockUpdate).toHaveBeenCalledTimes(1);
@@ -181,7 +201,7 @@ describe("updateSubscription (superadmin)", () => {
     const res = mockRes();
     const next = mockNext();
 
-    await updateSubscription(req, res, next);
+    await controller.updateSubscription(req, res, next);
 
     expect(mockInsert).not.toHaveBeenCalled();
     expect(mockUpdate).toHaveBeenCalledTimes(1);
@@ -192,7 +212,7 @@ describe("updateSubscription (superadmin)", () => {
     const res = mockRes();
     const next = mockNext();
 
-    await updateSubscription(req, res, next);
+    await controller.updateSubscription(req, res, next);
 
     const err = (next as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(err).toBeDefined();

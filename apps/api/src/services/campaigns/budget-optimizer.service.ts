@@ -925,3 +925,44 @@ async function simulateMetaBudgetApiCall(
 function generateSuggestionId(): string {
   return `sug_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 }
+
+/**
+ * BudgetOptimizerService — façade de classe sobre as funções de módulo.
+ *
+ * Singleton registrado no composition root (di.ts) e injetado no BudgetController.
+ * As funções de módulo (acima) continuam exportadas e são usadas diretamente
+ * pelo worker (budget-optimizer.worker) — não são removidas.
+ */
+export class BudgetOptimizerService {
+  async optimizeBudget(tenantId: string, totalBudget: number): Promise<BudgetSuggestion[]> {
+    return optimizeBudget(tenantId, totalBudget);
+  }
+
+  async saveSuggestions(
+    tenantId: string,
+    suggestions: BudgetSuggestion[],
+    mode: BudgetMode,
+  ): Promise<StoredSuggestion[]> {
+    return saveSuggestions(tenantId, suggestions, mode);
+  }
+
+  getSuggestions(tenantId: string, status?: SuggestionStatus): StoredSuggestion[] {
+    return getSuggestions(tenantId, status);
+  }
+
+  async applySuggestions(tenantId: string, suggestionIds: string[]): Promise<StoredSuggestion[]> {
+    return applySuggestions(tenantId, suggestionIds);
+  }
+
+  rejectSuggestions(tenantId: string, suggestionIds: string[]): StoredSuggestion[] {
+    return rejectSuggestions(tenantId, suggestionIds);
+  }
+
+  getBudgetConfig(tenantId: string): BudgetConfig {
+    return getBudgetConfig(tenantId);
+  }
+
+  updateBudgetConfig(tenantId: string, config: Partial<BudgetConfig>): BudgetConfig {
+    return updateBudgetConfig(tenantId, config);
+  }
+}

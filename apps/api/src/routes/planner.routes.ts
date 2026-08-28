@@ -2,25 +2,9 @@ import { Router } from 'express';
 import multer from 'multer';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
-import {
-  generatePlan,
-  getJob,
-  getPlan,
-  getLatestPlan,
-  handleGetPrerequisites,
-  handleConfirm,
-  handleRevalidate,
-  handleEditPost,
-  handleGetCalendar,
-  handleBulkSchedule,
-  handleBulkDelete,
-  handleCreatePost,
-  handleMovePost,
-  handlePublishDue,
-  handleUploadMedia,
-  handleGetAgentLabels,
-} from '../controllers/planner.controller.js';
+import { controllers } from '../di.js';
 
+const planner = controllers.planner;
 
 const router: Router = Router();
 
@@ -36,28 +20,28 @@ const mediaUpload = multer({
 
 router.use(authMiddleware);
 
-router.post('/generate', tenantMiddleware, generatePlan);
-router.get('/jobs/:jobId', tenantMiddleware, getJob);
-router.get('/plans/latest', tenantMiddleware, getLatestPlan);
-router.get('/plans/:planId', tenantMiddleware, getPlan);
-router.get('/prerequisites', tenantMiddleware, handleGetPrerequisites);
-router.post('/plans/confirm', tenantMiddleware, handleConfirm);
-router.post('/plans/revalidate', tenantMiddleware, handleRevalidate);
-router.patch('/posts/:postId', tenantMiddleware, handleEditPost);
+router.post('/generate', tenantMiddleware, planner.generatePlan);
+router.get('/jobs/:jobId', tenantMiddleware, planner.getJob);
+router.get('/plans/latest', tenantMiddleware, planner.getLatestPlan);
+router.get('/plans/:planId', tenantMiddleware, planner.getPlan);
+router.get('/prerequisites', tenantMiddleware, planner.handleGetPrerequisites);
+router.post('/plans/confirm', tenantMiddleware, planner.handleConfirm);
+router.post('/plans/revalidate', tenantMiddleware, planner.handleRevalidate);
+router.patch('/posts/:postId', tenantMiddleware, planner.handleEditPost);
 
 // Calendário Editorial
-router.get('/calendar', tenantMiddleware, handleGetCalendar);
-router.patch('/posts/bulk-schedule', tenantMiddleware, handleBulkSchedule);
-router.delete('/posts/bulk', tenantMiddleware, handleBulkDelete);
-router.post('/posts', tenantMiddleware, handleCreatePost);
-router.post('/posts/upload', tenantMiddleware, mediaUpload.single('file'), handleUploadMedia);
-router.patch('/posts/:postId/move', tenantMiddleware, handleMovePost);
-router.post('/posts/publish-due', tenantMiddleware, handlePublishDue);
+router.get('/calendar', tenantMiddleware, planner.handleGetCalendar);
+router.patch('/posts/bulk-schedule', tenantMiddleware, planner.handleBulkSchedule);
+router.delete('/posts/bulk', tenantMiddleware, planner.handleBulkDelete);
+router.post('/posts', tenantMiddleware, planner.handleCreatePost);
+router.post('/posts/upload', tenantMiddleware, mediaUpload.single('file'), planner.handleUploadMedia);
+router.patch('/posts/:postId/move', tenantMiddleware, planner.handleMovePost);
+router.post('/posts/publish-due', tenantMiddleware, planner.handlePublishDue);
 
 // Cron: publish-due sem auth (usa API key)
-router.post('/cron/publish-due', handlePublishDue);
+router.post('/cron/publish-due', planner.handlePublishDue);
 
 // Agent labels (public endpoint para o frontend consumir)
-router.get('/agent-labels', handleGetAgentLabels);
+router.get('/agent-labels', planner.handleGetAgentLabels);
 
 export default router;
