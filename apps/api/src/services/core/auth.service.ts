@@ -10,7 +10,7 @@ import {
   generateRefreshToken,
   verifyRefreshToken,
 } from '../../lib/jwt.js';
-import { sendWelcomeEmail, sendOtpEmail, sendPasswordResetConfirmation } from '../email/email.service.js';
+import { emailService, type EmailService } from '../email/email.service.js';
 import type { UserDTO } from '../../lib/shared.js';
 import { AuthRepository } from '../../repository/auth.repository.js';
 
@@ -84,10 +84,14 @@ export class AuthService {
     private readonly repoFactory: (tenantId: string) => AuthRepository = (t) => new AuthRepository(t),
     private readonly deps: {
       jwt: { generateAccessToken: typeof generateAccessToken; generateRefreshToken: typeof generateRefreshToken; verifyRefreshToken: typeof verifyRefreshToken };
-      email: { sendWelcomeEmail: typeof sendWelcomeEmail; sendOtpEmail: typeof sendOtpEmail; sendPasswordResetConfirmation: typeof sendPasswordResetConfirmation };
+      email: { sendWelcomeEmail: EmailService['sendWelcomeEmail']; sendOtpEmail: EmailService['sendOtpEmail']; sendPasswordResetConfirmation: EmailService['sendPasswordResetConfirmation'] };
     } = {
       jwt: { generateAccessToken, generateRefreshToken, verifyRefreshToken },
-      email: { sendWelcomeEmail, sendOtpEmail, sendPasswordResetConfirmation },
+      email: {
+        sendWelcomeEmail: emailService.sendWelcomeEmail.bind(emailService),
+        sendOtpEmail: emailService.sendOtpEmail.bind(emailService),
+        sendPasswordResetConfirmation: emailService.sendPasswordResetConfirmation.bind(emailService),
+      },
     },
   ) {}
 

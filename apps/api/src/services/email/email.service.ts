@@ -3,87 +3,90 @@ import { otpEmailTemplate, welcomeEmailTemplate, passwordResetConfirmationTempla
 
 type EmailTransporter = ReturnType<typeof nodemailer.createTransport>;
 
-let transporter: EmailTransporter | null = null;
-
-function getTransporter(): EmailTransporter {
-  if (transporter) {
-    return transporter;
-  }
-
-  // Configurações oficiais do SMTP do Resend
-  const smtpHost = 'smtp.resend.com';
-  const smtpPort = 465; 
-  const smtpUser = 'resend'; // O usuário para o SMTP do Resend é sempre fixo como 'resend'
-  const smtpPass = process.env.RESEND_API_KEY || ''; // Utiliza a chave enviada pelo sênior
-
-  transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: true, // true para a porta segura 465
-    auth: {
-      user: smtpUser,
-      pass: smtpPass,
-    },
-  });
-
-  return transporter;
-}
-
 interface SendEmailOptions {
   to: string;
   subject: string;
   html: string;
 }
 
-export async function sendEmail(options: SendEmailOptions): Promise<void> {
-  const transport = getTransporter();
+const DEFAULT_FROM = 'no-reply@clickhero.com.br';
 
-  // Remetente em um domínio verificado no Resend (clickhero.com.br).
-  // O remetente padrão 'onboarding@resend.dev' é de teste e só permite enviar
-  // para o email do dono da conta — para qualquer outro destinatário é preciso
-  // enviar de um endereço no domínio verificado.
-  const from = process.env.RESEND_FROM_EMAIL || 'no-reply@clickhero.com.br';
+/**
+ * EmailService — camada de infraestrutura (envio de email via Resend SMTP).
+ * Instanciado como singleton em `emailService`. DI: AuthService injeta seus
+ * métodos no construtor.
+ */
+export class EmailService {
+  private transporter: EmailTransporter | null = null;
 
-  try {
-    await transport.sendMail({
-      from,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
+  private getTransporter(): EmailTransporter {
+    if (this.transporter) {
+      return this.transporter;
+    }
+
+    // SMTP oficial do Resend (mesma RESEND_API_KEY usada na API HTTP).
+    const smtpHost = 'smtp.resend.com';
+    const smtpPass = process.env.RESEND_API_KEY || '';
+
+    this.transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: 465,
+      secure: true,
+      auth: {
+        user: 'resend',
+        pass: smtpPass,
+      },
     });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`Failed to send email to ${options.to}:`, errorMessage);
-    throw error;
+
+    return this.transporter;
+  }
+
+  async sendEmail(options: SendEmailOptions): Promise<void> {
+    const transport = this.getTransporter();
+
+    // Remetente em um domínio verificado no Resend (clickhero.com.br).
+    // O remetente padrão 'onboarding@resend.dev' é de teste e só permite enviar
+    // para o email do dono da conta — para qualquer outro destinatário é preciso
+    // enviar de um endereço no domínio verificado.
+    const from = process.env.RESEND_FROM_EMAIL || DEFAULT_FROM;
+
+    try {
+      await transport.sendMail({
+        from,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Failed to send email to ${options.to}:`, errorMessage);
+      throw error;
+    }
+  }
+
+  sendOtpEmail(to: string, otp: string): Promise<void> {
+    return this.sendEmail({
+      to,
+      subject: 'Seu código de verificação Ady',
+      html: otpEmailTemplate(otp),
+    });
+  }
+
+  sendWelcomeEmail(to: string, name: string): Promise<void> {
+    return this.sendEmail({
+      to,
+      subject: 'Bem-vindo ao Ady!',
+      html: welcomeEmailTemplate(name),
+    });
+  }
+
+  sendPasswordResetConfirmation(to: string): Promise<void> {
+    return this.sendEmail({
+      to,
+      subject: 'Sua senha foi redefinida - Ady',
+      html: passwordResetConfirmationTemplate(),
+    });
   }
 }
 
-export async function sendOtpEmail(to: string, otp: string): Promise<void> {
-  const html = otpEmailTemplate(otp);
-
-  await sendEmail({
-    to,
-    subject: 'Seu código de verificação FURY',
-    html,
-  });
-}
-
-export async function sendWelcomeEmail(to: string, name: string): Promise<void> {
-  const html = welcomeEmailTemplate(name);
-
-  await sendEmail({
-    to,
-    subject: 'Bem-vindo ao FURY!',
-    html,
-  });
-}
-
-export async function sendPasswordResetConfirmation(to: string): Promise<void> {
-  const html = passwordResetConfirmationTemplate();
-
-  await sendEmail({
-    to,
-    subject: 'Sua senha foi redefinida - FURY',
-    html,
-  });
-}
+export const emailService = new EmailService();

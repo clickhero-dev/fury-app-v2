@@ -93,11 +93,11 @@ vi.mock('../lib/google-api.js', () => ({
 }));
 
 vi.mock('../services/email/email.service.js', () => ({
-  sendEmail: vi.fn().mockResolvedValue(undefined),
+  emailService: { sendEmail: vi.fn().mockResolvedValue(undefined) },
 }));
 
 import { startGoogleSyncWorker, stopGoogleSyncWorker, processSyncJob } from '../workers/google-sync.worker.js';
-import { sendEmail } from '../services/email/email.service.js';
+import { emailService } from '../services/email/email.service.js';
 
 function makeConnection(tenantId: string) {
   return {
@@ -227,7 +227,7 @@ describe('processSyncJob — transição awaiting_verification → verified', ()
 
     await processSyncJob();
 
-    expect(sendEmail).toHaveBeenCalledWith(
+    expect(emailService.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'contato@empresa.com.br',
         subject: expect.stringContaining('verificad'),
@@ -247,7 +247,7 @@ describe('processSyncJob — transição awaiting_verification → verified', ()
 
     await processSyncJob();
 
-    expect(sendEmail).not.toHaveBeenCalled();
+    expect(emailService.sendEmail).not.toHaveBeenCalled();
   });
 
   it('escreve sync log com status success ao sincronizar', async () => {
