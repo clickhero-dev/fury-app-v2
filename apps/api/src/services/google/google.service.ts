@@ -22,7 +22,10 @@ import { uploadAsset, deleteAsset } from '../storage/storage.service.js';
 import { GoogleRepository } from '../../repository/google.repository.js';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
-const GOOGLE_OAUTH_SCOPE = 'https://www.googleapis.com/auth/business.manage';
+// openid/email/profile são necessários para o Google devolver o `id_token`
+// (sub do usuário) na troca do code — sem eles o userinfo responde 401/403.
+const GOOGLE_OAUTH_SCOPE =
+  'openid email https://www.googleapis.com/auth/business.manage';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
 export type OAuthContext = 'onboarding' | 'settings';
@@ -251,10 +254,14 @@ function signOAuthState(payload: OAuthStatePayload): string {
 
 /**
  * Origens de frontend aceitas para o redirect pós-OAuth.
- * Configurável via ALLOWED_FRONTEND_ORIGINS (vírgula-separada); quando ausente,
- * apenas FRONTEND_URL é permitida.
+ * Configurável via ALLOWED_FRONTEND_ORIGINS (vírgula-separada); `*` libera
+ * qualquer origem (útil em dev multi-ambiente); quando ausente, apenas
+ * FRONTEND_URL é permitida.
  */
-function getAllowedFrontendOrigins(): string[] {
+export function getAllowedFrontendOrigins(): string[] {
+  if (process.env.ALLOWED_FRONTEND_ORIGINS?.trim() === '*') {
+    return ['*'];
+  }
   const explicit = process.env.ALLOWED_FRONTEND_ORIGINS
     ?.split(',')
     .map((o) => o.trim())
@@ -265,7 +272,8 @@ function getAllowedFrontendOrigins(): string[] {
 }
 
 function isAllowedFrontendOrigin(origin: string): boolean {
-  return getAllowedFrontendOrigins().includes(origin);
+  const allowed = getAllowedFrontendOrigins();
+  return allowed.includes('*') || allowed.includes(origin);
 }
 
 function verifyOAuthState(state: string): OAuthStatePayload {
@@ -307,10 +315,14 @@ async function resolveGoogleUserId(tokenResponse: GoogleTokenResponse): Promise<
   }
 
   if (!response.ok) {
+    // 401/403 do userinfo = token sem escopo openid (o Google não devolveu
+    // id_token). Diagnóstico explícito para o erro reportado em produção.
+    const reason = response.status === 401 || response.status === 403 ? 'SCOPE_INSUFFICIENT' : 'USERINFO_FAILED';
     throw new AppError(
       502,
       GOOGLE_ERROR_CODES.GOOGLE_TOKEN_EXCHANGE_FAILED,
-      'Falha ao identificar o usuário Google após a autenticação.'
+      'Falha ao identificar o usuário Google após a autenticação.',
+      { reason, status: response.status }
     );
   }
 

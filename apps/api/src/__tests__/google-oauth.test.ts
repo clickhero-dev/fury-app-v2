@@ -7,7 +7,7 @@
  * redirecionamento do callback para o frontend com ?connected=true.
  * Mocks no nível de lib/db — sem dependência de HTTP real.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import express from 'express';
@@ -116,7 +116,9 @@ describe('Google OAuth — state JWT', () => {
     expect(parsed.searchParams.get('client_id')).toBe(OAUTH_CONFIG.clientId);
     expect(parsed.searchParams.get('redirect_uri')).toBe(OAUTH_CONFIG.redirectUri);
     expect(parsed.searchParams.get('response_type')).toBe('code');
-    expect(parsed.searchParams.get('scope')).toBe('https://www.googleapis.com/auth/business.manage');
+    expect(parsed.searchParams.get('scope')).toBe(
+      'openid email https://www.googleapis.com/auth/business.manage'
+    );
     expect(parsed.searchParams.get('access_type')).toBe('offline');
     expect(parsed.searchParams.get('prompt')).toBe('consent');
 
@@ -176,6 +178,27 @@ describe('Google OAuth — state JWT', () => {
     expect(okState.frontendUrl).toBe(FRONTEND_URL);
     expect(badState.frontendUrl).toBeUndefined();
   });
+
+  it('ALLOWED_FRONTEND_ORIGINS=* aceita qualquer origin (multi-ambiente dev)', () => {
+    process.env.ALLOWED_FRONTEND_ORIGINS = '*';
+
+    const anyOrigin = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'http://localhost:9999');
+    const anyState = jwt.decode(new URL(anyOrigin).searchParams.get('state') ?? '') as { frontendUrl?: string };
+
+    expect(anyState.frontendUrl).toBe('http://localhost:9999');
+  });
+
+  it('URL de autorização inclui openid/email/profile para o Google devolver id_token (identifica o usuário)', () => {
+    process.env.ALLOWED_FRONTEND_ORIGINS = '*';
+
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings');
+    const parsed = new URL(authUrl);
+    const scope = parsed.searchParams.get('scope') ?? '';
+
+    expect(scope).toContain('openid');
+    expect(scope).toContain('email');
+    expect(scope).toContain('https://www.googleapis.com/auth/business.manage');
+  });
 });
 
 describe('Google OAuth — criptografia AES-256-GCM em repouso', () => {
@@ -194,6 +217,47 @@ describe('Google OAuth — criptografia AES-256-GCM em repouso', () => {
 
   it('decryptToken rejeita payloads malformados', () => {
     expect(() => decryptToken('payload-sem-formato')).toThrow();
+  });
+});
+
+describe('Google OAuth — identificação do usuário (resolveGoogleUserId)', () => {
+  beforeEach(resetMocks);
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('usa o sub do id_token quando o Google devolve id_token (fluxo openid)', async () => {
+    // Sem o scope openid o Google NÃO devolve id_token — este teste garante que,
+    // com ele, o sub é extraído direto do token (sem chamada ao userinfo).
+    const state = new URL(
+      googleService.generateGoogleAuthUrl('tenant-1', 'settings')
+    ).searchParams.get('state') as string;
+
+    const result = await googleService.handleGoogleOAuthCallback('code-valid', state);
+
+    expect(result.tenantId).toBe('tenant-1');
+    const inserted = dbMock.insert.mock.results[0].value.values.mock.calls[0][0] as { googleUserId?: string };
+    expect(inserted.googleUserId).toBe('google-user-123');
+  });
+
+  it('mapeia 401 do userinfo (escopo insuficiente) para 502 com details SCOPE_INSUFFICIENT', async () => {
+    // Cenário do bug reportado: sem openid o userinfo responde 401/403.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }) as Response)
+    );
+    const tokenResponse = makeTokenResponse({ id_token: undefined });
+    mockExchangeCodeForToken.mockResolvedValue(tokenResponse);
+    const state = new URL(
+      googleService.generateGoogleAuthUrl('tenant-1', 'settings')
+    ).searchParams.get('state') as string;
+
+    await expect(googleService.handleGoogleOAuthCallback('code-valid', state)).rejects.toMatchObject({
+      statusCode: 502,
+      code: 'GOOGLE_TOKEN_EXCHANGE_FAILED',
+      details: { reason: 'SCOPE_INSUFFICIENT' },
+    });
   });
 });
 

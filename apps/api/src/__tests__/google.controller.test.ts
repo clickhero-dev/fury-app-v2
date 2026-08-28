@@ -56,3 +56,18 @@ describe('GoogleController', () => {
     expect(res.json).not.toHaveBeenCalled();
   });
 });
+
+describe('GoogleController — mapeamento do erro 401 de auth', () => {
+  it('repassa frontendUrl do query para gerar a URL de autorização', async () => {
+    const googleService = { generateGoogleAuthUrl: vi.fn(() => 'https://accounts.google.com/x') } as any;
+    const controller = new GoogleController(googleService);
+    const req = { user: { tenantId: 't-1' }, query: { context: 'settings', frontendUrl: 'http://localhost:5173' } } as any;
+    const res = mockRes();
+    const next = vi.fn();
+
+    await controller.getAuthUrl(req, res, next);
+
+    expect(googleService.generateGoogleAuthUrl).toHaveBeenCalledWith('t-1', 'settings', 'http://localhost:5173');
+    expect(next).not.toHaveBeenCalled();
+  });
+});
