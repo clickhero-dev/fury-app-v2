@@ -36,6 +36,7 @@ router.post(
   controllers.google.completeVerification
 );
 router.get('/profiles/:id', authMiddleware, tenantMiddleware, controllers.google.getProfile);
+router.get('/profiles/:id/quality', authMiddleware, tenantMiddleware, controllers.google.getProfileQuality);
 router.patch('/profiles/:id', authMiddleware, tenantMiddleware, controllers.google.updateProfile);
 router.post('/profiles/:id/sync', authMiddleware, tenantMiddleware, controllers.google.syncProfile);
 router.get('/profiles/:id/sync-logs', authMiddleware, tenantMiddleware, controllers.google.getSyncLogs);

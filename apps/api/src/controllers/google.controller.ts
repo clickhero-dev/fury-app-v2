@@ -252,6 +252,24 @@ export class GoogleController {
     }
   };
 
+  /** Avalia a qualidade/recência do perfil GBP (pré-envio). */
+  getProfileQuality = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const { id } = profileIdParamsSchema.parse(req.params);
+      const data = await this.googleService.assessProfile(id, req.tenant.tenantId);
+      res.status(200).json({
+        success: true,
+        data,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   updateProfile = async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.tenant?.tenantId) {
