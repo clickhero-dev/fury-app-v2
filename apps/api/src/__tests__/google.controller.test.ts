@@ -21,7 +21,7 @@ describe('GoogleController', () => {
 
     await controller.getAuthUrl(req, res, next);
 
-    expect(googleService.generateGoogleAuthUrl).toHaveBeenCalledWith('t-1', 'onboarding');
+    expect(googleService.generateGoogleAuthUrl).toHaveBeenCalledWith('t-1', 'onboarding', undefined);
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(

@@ -83,8 +83,19 @@ function resetMocks() {
   mockGetGoogleOAuthConfig.mockReturnValue(OAUTH_CONFIG);
   mockExchangeCodeForToken.mockResolvedValue(makeTokenResponse());
   dbMock.query.googleConnections.findFirst.mockResolvedValue(null);
-  dbMock.insert.mockReturnValue({ values: vi.fn().mockResolvedValue(undefined) });
-  dbMock.update.mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }) });
+  // Shape known-good: repos chamam .insert().values().returning() e
+  // .update().set().where().returning() (pitfall fury-api-testing).
+  dbMock.insert.mockImplementation(() => {
+    const valuesResult = Object.assign(Promise.resolve(undefined), {
+      returning: vi.fn().mockResolvedValue([{ id: 'conn-1', tenantId: 'tenant-1' }]),
+    });
+    return { values: vi.fn().mockReturnValue(valuesResult) };
+  });
+  dbMock.update.mockImplementation(() => ({
+    set: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'conn-1' }]) }),
+    }),
+  }));
   dbMock.delete.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
 }
 
@@ -131,6 +142,39 @@ describe('Google OAuth — state JWT', () => {
       statusCode: 401,
       code: 'INVALID_OAUTH_STATE',
     });
+  });
+
+  it('embute frontendUrl (origin) no state quando informado e permitido', () => {
+    process.env.ALLOWED_FRONTEND_ORIGINS = 'http://localhost:5173,https://clickhero-fury-web.u7pe19.easypanel.host';
+
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'http://localhost:5173');
+    const state = new URL(authUrl).searchParams.get('state') ?? '';
+    const decoded = jwt.decode(state) as { frontendUrl?: string };
+
+    expect(decoded.frontendUrl).toBe('http://localhost:5173');
+  });
+
+  it('não embute frontendUrl fora da allowlist (anti open-redirect)', () => {
+    process.env.ALLOWED_FRONTEND_ORIGINS = 'https://clickhero-fury-web.u7pe19.easypanel.host';
+
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'https://evil.example.com');
+    const state = new URL(authUrl).searchParams.get('state') ?? '';
+    const decoded = jwt.decode(state) as { frontendUrl?: string };
+
+    expect(decoded.frontendUrl).toBeUndefined();
+  });
+
+  it('sem ALLOWED_FRONTEND_ORIGINS, FRONTEND_URL é a única origem permitida', () => {
+    delete process.env.ALLOWED_FRONTEND_ORIGINS;
+
+    const ok = googleService.generateGoogleAuthUrl('tenant-1', 'settings', FRONTEND_URL);
+    const bad = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'http://localhost:9999');
+
+    const okState = jwt.decode(new URL(ok).searchParams.get('state') ?? '') as { frontendUrl?: string };
+    const badState = jwt.decode(new URL(bad).searchParams.get('state') ?? '') as { frontendUrl?: string };
+
+    expect(okState.frontendUrl).toBe(FRONTEND_URL);
+    expect(badState.frontendUrl).toBeUndefined();
   });
 });
 
@@ -217,6 +261,35 @@ describe('Google OAuth — callback HTTP (rota pública)', () => {
     expect(response.status).toBe(302);
     expect(response.headers.location).toBe(
       `${FRONTEND_URL}/configuracoes/google-meu-negocio?connected=true`
+    );
+  });
+
+  it('redireciona para a ORIGEM do state quando o callback chega com frontendUrl embutido (multi-ambiente)', async () => {
+    // Cenário do bug: FRONTEND_URL fixo aponta HMG, mas quem iniciou o OAuth foi o localhost
+    process.env.FRONTEND_URL = 'https://clickhero-fury-web.u7pe19.easypanel.host';
+    process.env.ALLOWED_FRONTEND_ORIGINS =
+      'http://localhost:5173,https://clickhero-fury-web.u7pe19.easypanel.host';
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings', 'http://localhost:5173');
+    const state = new URL(authUrl).searchParams.get('state') ?? '';
+    const app = buildTestApp();
+
+    const response = await request(app).get('/api/google/auth/callback').query({ code: 'code-valid', state });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe('http://localhost:5173/configuracoes/google-meu-negocio?connected=true');
+  });
+
+  it('sem frontendUrl no state, redireciona para FRONTEND_URL (fallback)', async () => {
+    process.env.FRONTEND_URL = 'https://clickhero-fury-web.u7pe19.easypanel.host';
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'settings');
+    const state = new URL(authUrl).searchParams.get('state') ?? '';
+    const app = buildTestApp();
+
+    const response = await request(app).get('/api/google/auth/callback').query({ code: 'code-valid', state });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe(
+      'https://clickhero-fury-web.u7pe19.easypanel.host/configuracoes/google-meu-negocio?connected=true'
     );
   });
 

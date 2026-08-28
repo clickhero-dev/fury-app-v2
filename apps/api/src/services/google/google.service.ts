@@ -30,6 +30,7 @@ export type OAuthContext = 'onboarding' | 'settings';
 interface OAuthStatePayload {
   tenantId: string;
   context: OAuthContext;
+  frontendUrl?: string;
 }
 
 interface GoogleTokenResponse {
@@ -246,6 +247,25 @@ function getRequiredEnv(name: string): string {
 function signOAuthState(payload: OAuthStatePayload): string {
   const secret = getRequiredEnv('JWT_SECRET');
   return jwt.sign(payload, secret, { expiresIn: '10m' });
+}
+
+/**
+ * Origens de frontend aceitas para o redirect pós-OAuth.
+ * Configurável via ALLOWED_FRONTEND_ORIGINS (vírgula-separada); quando ausente,
+ * apenas FRONTEND_URL é permitida.
+ */
+function getAllowedFrontendOrigins(): string[] {
+  const explicit = process.env.ALLOWED_FRONTEND_ORIGINS
+    ?.split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  const defaultOrigin = process.env.FRONTEND_URL;
+  const combined = [...(explicit ?? []), ...(defaultOrigin ? [defaultOrigin] : [])];
+  return [...new Set(combined)];
+}
+
+function isAllowedFrontendOrigin(origin: string): boolean {
+  return getAllowedFrontendOrigins().includes(origin);
 }
 
 function verifyOAuthState(state: string): OAuthStatePayload {
@@ -645,10 +665,19 @@ export class GoogleService {
     };
   }
 
-  /** Gera a URL de autorização OAuth do Google com o state assinado (10m). */
-  generateGoogleAuthUrl(tenantId: string, context: OAuthContext = 'settings'): string {
+  /**
+   * Gera a URL de autorização OAuth do Google com o state assinado (10m).
+   * `frontendUrl` (origin de onde o usuário iniciou o fluxo) é embutida no state
+   * quando está na allowlist configurável (ALLOWED_FRONTEND_ORIGINS), para o
+   * callback redirecionar de volta ao ambiente correto (localhost/HMG/prod).
+   */
+  generateGoogleAuthUrl(tenantId: string, context: OAuthContext = 'settings', frontendUrl?: string): string {
     const { clientId, redirectUri } = this.deps.oauth.getGoogleOAuthConfig();
-    const state = signOAuthState({ tenantId, context });
+    const state = signOAuthState({
+      tenantId,
+      context,
+      frontendUrl: frontendUrl && isAllowedFrontendOrigin(frontendUrl) ? frontendUrl : undefined,
+    });
 
     const authUrl = new URL(GOOGLE_AUTH_URL);
     authUrl.searchParams.set('client_id', clientId);
@@ -666,8 +695,9 @@ export class GoogleService {
   async handleGoogleOAuthCallback(
     code: string,
     state: string,
-  ): Promise<{ tenantId: string; context: OAuthContext; returnUrl: string }> {
-    const { tenantId, context } = verifyOAuthState(state);
+  ): Promise<{ tenantId: string; context: OAuthContext; returnUrl: string; frontendUrl?: string }> {
+    const verified = verifyOAuthState(state);
+    const { tenantId, context, frontendUrl } = verified;
     const tokenResponse = await this.deps.oauth.exchangeCodeForToken(code);
 
     const googleUserId = await resolveGoogleUserId(tokenResponse);
@@ -703,7 +733,7 @@ export class GoogleService {
       });
     }
 
-    return { tenantId, context, returnUrl: RETURN_URLS[context] };
+    return { tenantId, context, returnUrl: RETURN_URLS[context], frontendUrl };
   }
 
   /** Retorna a conexão Google atual do tenant (sem tokens), ou null. */

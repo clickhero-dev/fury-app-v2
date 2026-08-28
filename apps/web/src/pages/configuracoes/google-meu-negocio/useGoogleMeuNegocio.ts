@@ -76,8 +76,10 @@ export function useGoogleAccounts(enabled: boolean) {
 export function useGoogleConnect() {
   return useMutation({
     mutationFn: async (context: 'onboarding' | 'settings' = 'settings') => {
+      // frontendUrl = origin do ambiente atual (localhost/HMG/prod) para o
+      // callback redirecionar de volta ao MESMO ambiente após o OAuth.
       const response = await api.get<GoogleApiResponse<{ authUrl: string }>>('/google/auth/url', {
-        params: { context },
+        params: { context, frontendUrl: window.location.origin },
       });
       return response.data.data.authUrl;
     },

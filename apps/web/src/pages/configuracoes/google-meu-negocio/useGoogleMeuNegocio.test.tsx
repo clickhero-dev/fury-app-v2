@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
-import { useGoogleProfileQuality } from './useGoogleMeuNegocio';
+import { useGoogleConnect, useGoogleProfileQuality } from './useGoogleMeuNegocio';
 import type { GoogleQualityReport } from '@/types/google';
 
 const mockApiGet = vi.hoisted(() => vi.fn());
@@ -61,5 +61,24 @@ describe('useGoogleProfileQuality', () => {
     await waitFor(() => expect(result.current.isFetching).toBe(false));
     expect(mockApiGet).not.toHaveBeenCalled();
     expect(result.current.data).toBeUndefined();
+  });
+});
+
+describe('useGoogleConnect — origin do frontend', () => {
+  beforeEach(() => {
+    mockApiGet.mockReset();
+  });
+
+  it('envia frontendUrl = window.location.origin para o /auth/url (multi-ambiente)', async () => {
+    mockApiGet.mockResolvedValue({ data: { success: true, data: { authUrl: 'https://accounts.google.com/o/oauth2/v2/auth?x=1' } } });
+
+    const { result } = renderHook(() => useGoogleConnect(), { wrapper: makeWrapper() });
+    result.current.mutate('settings');
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockApiGet).toHaveBeenCalledWith('/google/auth/url', {
+      params: { context: 'settings', frontendUrl: window.location.origin },
+    });
   });
 });
