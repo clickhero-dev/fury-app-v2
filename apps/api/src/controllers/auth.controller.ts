@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
-import * as authService from '../services/core/auth.service.js';
-import * as socialAuthService from '../services/core/social-auth.service.js';
+import { authService } from '../services/core/auth.service.js';
+import { socialAuthService } from '../services/core/social-auth.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { checkEmailVerificationRateLimit, checkForgotPasswordRateLimit, checkResetPasswordRateLimit } from '../middleware/rate-limit.middleware.js';
 

@@ -418,3 +418,23 @@ export async function changePassword(
   const passwordHash = await bcrypt.hash(newPassword, 10);
   await new AuthRepository('').patchUser(userId, { passwordHash });
 }
+
+/**
+ * AuthService — classe com o corpo de negócio de Auth.
+ * Promove as funções de módulo a métodos; singleton (authService) usado
+ * pelo controller via composition root (DI) — Fase 6.
+ */
+export class AuthService {
+  register = register;
+  login = login;
+  refresh = refresh;
+  logout = logout;
+  getMe = getMe;
+  updateMe = updateMe;
+  verifyEmail = verifyEmail;
+  forgotPassword = forgotPassword;
+  resetPassword = resetPassword;
+  changePassword = changePassword;
+}
+
+export const authService = new AuthService();

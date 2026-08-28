@@ -200,3 +200,15 @@ export async function handleGoogleSocialLogin(
 export async function socialLogout(userId: string): Promise<void> {
   await revokeRefreshToken(userId);
 }
+
+/**
+ * SocialAuthService — classe com o corpo de negócio de social auth.
+ * Singleton (socialAuthService) usado pelo controller via DI — Fase 6.
+ */
+export class SocialAuthService {
+  generateSocialLoginUrl = generateSocialLoginUrl;
+  handleGoogleSocialLogin = handleGoogleSocialLogin;
+  socialLogout = socialLogout;
+}
+
+export const socialAuthService = new SocialAuthService();
