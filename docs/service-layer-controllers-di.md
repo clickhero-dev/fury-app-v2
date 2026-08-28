@@ -1,8 +1,9 @@
 # Plano — Consistência da Arquitetura (controllers no DI)
+**Status:** ✅ **CONCLUÍDO** (Fases A+B+C mergeados; todos os 20 controllers são classes no `di.ts`).
 
 **Branch:** `feat/service-layer-planning` · **Objetivo:** todo controller é **classe** no **`di.ts`**, recebendo **services-classe** via construtor. Rotas finas. Meta do ADR-0001 (objetivo secundário, agora fechando o ciclo controllers).
 
-## Estado atual (inventário — 20 controllers)
+## Estado atual (inventário — 20 controllers) — ✅ todos convertidos
 
 | Tipo | Controllers | No `di.ts`? |
 |---|---|---|
