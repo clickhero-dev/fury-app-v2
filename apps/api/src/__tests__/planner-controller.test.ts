@@ -13,6 +13,15 @@ vi.mock('../services/planner/planner.service.js', () => ({
   revalidatePlan: vi.fn(),
   bulkDeletePosts: (...args: any[]) => bulkDeletePosts(...args),
   bulkSchedulePosts: (...args: any[]) => bulkSchedulePosts(...args),
+  plannerService: {
+    startPlanGeneration: (...args: any[]) => startPlanGeneration(...args),
+    getJobProgress: (jid: string) => getJobProgress(jid),
+    getPlanById: vi.fn(),
+    confirmPlan: vi.fn(),
+    revalidatePlan: vi.fn(),
+    bulkDeletePosts: (...args: any[]) => bulkDeletePosts(...args),
+    bulkSchedulePosts: (...args: any[]) => bulkSchedulePosts(...args),
+  },
 }));
 
 // O controller chama o gate de créditos no generatePlan; mocka para não tocar a rede.

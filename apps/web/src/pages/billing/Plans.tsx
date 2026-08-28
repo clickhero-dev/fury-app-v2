@@ -211,7 +211,7 @@ function SubscribeDialog({ plan, open, onOpenChange, defaultName, defaultEmail }
               variant="primary"
               size="sm"
               disabled={subscribe.isPending}
-              className="bg-[#1E88A8] hover:bg-[#1E88A8]/80 text-white cursor-pointer"
+              className="bg-[#17708A] hover:bg-[#17708A]/80 text-white cursor-pointer"
             >
               {subscribe.isPending ? (
                 <span className="flex items-center gap-2">
@@ -251,7 +251,7 @@ function PlanCard({ plan, isCurrentPlan, onSubscribe }: PlanCardProps) {
       {display.badge && (
         <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
           <span
-            className="inline-flex items-center gap-1 rounded-full px-3.5 py-1 text-xs font-bold text-white shadow-md bg-[#1E88A8]"
+            className="inline-flex items-center gap-1 rounded-full px-3.5 py-1 text-xs font-bold text-white shadow-md bg-[#17708A]"
           >
             <Star className="w-3 h-3 fill-current" />
             {display.badge}
@@ -261,14 +261,14 @@ function PlanCard({ plan, isCurrentPlan, onSubscribe }: PlanCardProps) {
 
       <div className="flex items-center gap-3 mb-5">
         <div
-          className="flex items-center justify-center w-10 h-10 rounded-xl text-white bg-[#1E88A8]/10 text-[#1E88A8]"
+          className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#1E88A8]/10 text-[#1E88A8]"
         >
           {display.icon}
         </div>
         <div>
           <h3 className="text-lg font-bold text-text-primary">{plan.name}</h3>
           {isCurrentPlan && (
-            <span className="inline-flex items-center rounded-full bg-[#1E88A8]/10 px-2 py-0.5 text-[10px] font-semibold text-[#1E88A8]">
+            <span className="inline-flex items-center rounded-full bg-[#1E88A8]/10 px-2 py-0.5 text-[10px] font-semibold text-[#2A9BC0]">
               Seu plano atual
             </span>
           )}
@@ -298,7 +298,7 @@ function PlanCard({ plan, isCurrentPlan, onSubscribe }: PlanCardProps) {
         size="md"
         className={`w-full cursor-pointer ${
           display.highlight
-            ? 'bg-[#1E88A8] hover:bg-[#1E88A8]/80 text-white border-transparent'
+            ? 'bg-[#17708A] hover:bg-[#17708A]/80 text-white border-transparent'
             : 'border-white/10 text-text-primary hover:bg-white/5'
         }`}
         disabled={isCurrentPlan}
@@ -326,7 +326,7 @@ export function Plans() {
     <AppLayout>
       <div className="max-w-5xl mx-auto space-y-8">
         <PageHeader
-          title="Planos FURY"
+          title="Planos ady"
           description="Escolha o plano ideal para escalar suas campanhas"
         />
 
@@ -356,7 +356,7 @@ export function Plans() {
               ))}
             </div>
 
-            <p className="text-center text-xs text-text-secondary/60 pt-2">
+            <p className="text-center text-xs text-text-secondary pt-2">
               Pagamento processado com segurança via Asaas. Aceita PIX, Boleto e Cartão de Crédito.
             </p>
           </div>

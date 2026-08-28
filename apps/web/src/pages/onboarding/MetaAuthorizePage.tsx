@@ -46,16 +46,13 @@ export function MetaAuthorizePage() {
       <div className="relative flex min-h-screen items-center justify-center bg-admin-bg px-5 py-16 text-admin-text">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background: 'radial-gradient(120% 90% at 50% -10%, rgba(30,136,168,0.16), transparent 70%)',
-          }}
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(150%_120%_at_50%_-10%,rgba(23,112,138,0.07),transparent_100%)] dark:bg-[radial-gradient(120%_90%_at_50%_-10%,rgba(30,136,168,0.16),transparent_70%)]"
         />
 
         <div className="relative w-full max-w-[400px]">
           <div className="flex flex-col items-center text-center">
             <AdySymbol size={52} />
-            <h1 className="mt-5 text-4xl font-medium !text-[#ECEDEF]">ady</h1>
+            <h1 className="mt-5 text-4xl font-medium text-admin-text">ady</h1>
             <p className="!mt-6 text-sm text-admin-text-muted">Seu gestor de tráfego com IA</p>
           </div>
 
@@ -94,17 +91,14 @@ export function MetaAuthorizePage() {
       {/* Fundo Iluminado */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: 'radial-gradient(120% 90% at 50% -10%, rgba(30,136,168,0.16), transparent 70%)',
-        }}
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(150%_120%_at_50%_-10%,rgba(23,112,138,0.07),transparent_100%)] dark:bg-[radial-gradient(120%_90%_at_50%_-10%,rgba(30,136,168,0.16),transparent_70%)]"
       />
 
       <div className="relative w-full max-w-[400px]">
         {/* Cabeçalho */}
         <div className="flex flex-col items-center text-center">
           <AdySymbol size={52} />
-          <h1 className="mt-5 text-4xl font-medium !text-[#ECEDEF]">ady</h1>
+          <h1 className="mt-5 text-4xl font-medium text-admin-text">ady</h1>
           <p className="!mt-6 text-sm text-admin-text-muted">Seu gestor de tráfego com IA</p>
         </div>
 
@@ -119,7 +113,7 @@ export function MetaAuthorizePage() {
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-xl font-semibold !text-[#ECEDEF]">Conectando ao Meta</h2>
+            <h2 className="text-xl font-semibold text-admin-text">Conectando ao Meta</h2>
             <div className="flex items-center justify-center gap-2 pt-2 text-admin-petrol">
               <Loader2 className="size-4 animate-spin" />
               <p className="text-sm font-medium">Redirecionando para o Meta...</p>

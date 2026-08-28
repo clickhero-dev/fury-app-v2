@@ -35,7 +35,7 @@ const statusStyles: Record<Milestone['status'], { dot: string; badge: string; la
     dot: 'bg-[#CF6F03] animate-pulse',
     badge: 'bg-[#CF6F03]/15 text-[#f0a44a] border border-[#CF6F03]/40',
     label: 'Em andamento',
-    ring: 'bg-[#CF6F03] text-white',
+    ring: 'bg-[#B55F02] text-white',
     title: 'text-[#f0a44a]',
   },
   planned: {
@@ -85,7 +85,7 @@ function MilestoneRow({ ms, index }: { ms: Milestone; index: number }) {
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className={`text-[11px] font-bold tracking-widest uppercase ${s.title}`}>{ms.period}</span>
                 {ms.current && ms.status === 'active' && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest bg-[#CF6F03] text-white px-2 py-0.5 rounded-full">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest bg-[#B55F02] text-white px-2 py-0.5 rounded-full">
                     <Sparkles className="h-3 w-3" /> Nós estamos aqui
                   </span>
                 )}

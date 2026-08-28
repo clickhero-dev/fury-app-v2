@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
-import { AutomationRepository } from '../repository/automation.repository.js';
-import { getAutomationRules } from '../services/automation/automation.service.js';
+import { AutomationService } from '../services/automation/automation.service.js';
 import { emitToTenant, registerSSEClient, removeSSEClient } from '../lib/sse.js';
 
 const createRuleSchema = z.object({ name: z.string().min(1, 'Name is required').optional(), description: z.string().optional(), trigger: z.string().min(1, 'Trigger is required').optional(), ruleType: z.string().min(1, 'Rule type is required').optional(), isActive: z.boolean().optional().default(true), enabled: z.boolean().optional().default(true), threshold: z.coerce .number({ invalid_type_error: 'Threshold must be a number', }) .min(0, 'Threshold must be greater than or equal to 0'), action: z .enum([ 'pause', 'notify', 'reduce_budget', 'pause_campaign', ]) .optional() .default('pause') .transform((v) => (v === 'pause_campaign' ? 'pause' : v)), });
@@ -18,296 +17,199 @@ const budgetSmartSchema = z.object({
   adAccountId: z.string().min(1, 'Ad account ID is required'),
 });
 
-export async function createRuleHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(
-        401,
-        'UNAUTHORIZED',
-        'Tenant not found in request context',
-      );
-    }
+/** Controller de automação — glue HTTP fino. Recebe o service no construtor (injeção). */
+export class AutomationController {
+  constructor(private automationService: AutomationService) {}
 
-    const payload = createRuleSchema.parse(req.body);
-    const threshold = payload.threshold;
-    const ruleName = payload.name || payload.ruleType || 'Automation Rule';
-    const ruleTrigger = payload.trigger || payload.ruleType || 'metric_threshold';
+  createRuleHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(
+          401,
+          'UNAUTHORIZED',
+          'Tenant not found in request context',
+        );
+      }
 
-    const repo = new AutomationRepository(req.tenant.tenantId);
-    const existing = await repo.findAutomationRuleByName(ruleName);
+      const payload = createRuleSchema.parse(req.body);
+      const threshold = payload.threshold;
+      const ruleName = payload.name || payload.ruleType || 'Automation Rule';
+      const ruleTrigger = payload.trigger || payload.ruleType || 'metric_threshold';
 
-    if (existing) {
-      const updated = await repo.updateAutomationRule(existing.id, {
+      const { rule, created } = await this.automationService.upsertAutomationRule({
+        tenantId: req.tenant.tenantId,
         name: ruleName,
         trigger: ruleTrigger,
+        ruleType: payload.ruleType,
         isActive: payload.isActive ?? payload.enabled ?? true,
-        threshold: threshold.toString(),
+        threshold,
         action: payload.action,
         description: payload.description,
       });
 
-      emitToTenant(req.tenant.tenantId, 'rule_updated', updated);
+      emitToTenant(req.tenant.tenantId, created ? 'rule_created' : 'rule_updated', rule);
 
-      return res.status(200).json({
+      return res.status(created ? 201 : 200).json({
         success: true,
-        data: updated,
+        data: rule,
         timestamp: new Date().toISOString(),
       });
+    } catch (error) {
+      next(error);
     }
+  };
 
-    const created = await repo.createAutomationRule({
-      name: ruleName,
-      trigger: ruleTrigger,
-      ruleType: payload.ruleType || ruleTrigger,
-      isActive: payload.isActive ?? payload.enabled ?? true,
-      threshold: threshold.toString(),
-      action: payload.action,
-      description: payload.description,
-    });
-
-    emitToTenant(req.tenant.tenantId, 'rule_created', created);
-
-    return res.status(201).json({
-      success: true,
-      data: created,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function getRulesHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(
-        401,
-        'UNAUTHORIZED',
-        'Tenant not found in request context',
-      );
-    }
-
-    const rules = await getAutomationRules(req.tenant.tenantId);
-
-    return res.status(200).json({
-      success: true,
-      data: rules,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function deleteRuleHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(
-        401,
-        'UNAUTHORIZED',
-        'Tenant not found in request context',
-      );
-    }
-
-    const params = deleteRuleSchema.parse(req.params);
-
-    const repo = new AutomationRepository(req.tenant.tenantId);
-    const existing = await repo.findAutomationRuleById(params.id);
-
-    if (!existing) {
-      throw new AppError(
-        403,
-        'FORBIDDEN',
-        'Rule not found or does not belong to this tenant',
-      );
-    }
-
-    await repo.deleteAutomationRule(params.id);
-
-    emitToTenant(req.tenant.tenantId, 'rule_deleted', {
-      id: params.id,
-    });
-
-    return res.status(200).json({
-      success: true,
-      data: null,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function getTakedownsHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(
-        401,
-        'UNAUTHORIZED',
-        'Tenant not found in request context',
-      );
-    }
-
-    const takedowns = await new AutomationRepository(req.tenant.tenantId).listSmartTakedowns();
-
-    return res.status(200).json({
-      success: true,
-      data: takedowns,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function getSSEFeedHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(
-        401,
-        'UNAUTHORIZED',
-        'Tenant not found in request context',
-      );
-    }
-
-    const tenantId = req.tenant.tenantId;
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-
-    registerSSEClient(tenantId, res);
-
-    const pingInterval = setInterval(() => {
-      if (!res.writableEnded) {
-        res.write(': ping\n\n');
+  getRulesHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(
+          401,
+          'UNAUTHORIZED',
+          'Tenant not found in request context',
+        );
       }
-    }, 30000);
 
-    res.on('close', () => {
-      clearInterval(pingInterval);
-      removeSSEClient(tenantId, res);
-    });
-  } catch (error) {
-    next(error);
-  }
-}
+      const rules = await this.automationService.getAutomationRules(req.tenant.tenantId);
 
-export async function budgetSmartHandler(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(
-        401,
-        'UNAUTHORIZED',
-        'Tenant not found in request context',
-      );
-    }
-
-    const payload = budgetSmartSchema.parse(req.body);
-
-    const monthlyBudget = payload.monthlyBudget;
-
-    const campaigns = [
-      {
-        id: '1',
-        name: 'Campanha Leads',
-        budget: 500,
-        metrics: { roas: 4.5 },
-      },
-      {
-        id: '2',
-        name: 'Campanha Conversão',
-        budget: 300,
-        metrics: { roas: 2.8 },
-      },
-    ];
-
-    if (!campaigns.length) {
       return res.status(200).json({
         success: true,
-        data: {
-          monthlyBudget,
-          distribution: [],
-          previsao: {
-            leadsEstimados: Math.round(monthlyBudget / 50),
-            vendasEstimadas: Math.round(monthlyBudget / 150),
-            roasEsperado: 3.2,
-            resumo: `Com R$${monthlyBudget}/mês, estimamos ${Math.round(
-              monthlyBudget / 50,
-            )} leads a um CPA médio de R$50.`,
-          },
-        },
+        data: rules,
+        timestamp: new Date().toISOString(),
       });
+    } catch (error) {
+      next(error);
     }
+  };
 
-    const sortedCampaigns = campaigns.sort(
-      (a, b) => b.metrics.roas - a.metrics.roas,
-    );
+  deleteRuleHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(
+          401,
+          'UNAUTHORIZED',
+          'Tenant not found in request context',
+        );
+      }
 
-    const totalRoas = sortedCampaigns.reduce(
-      (acc, campaign) => acc + campaign.metrics.roas,
-      0,
-    );
+      const params = deleteRuleSchema.parse(req.params);
 
-    const distribution = sortedCampaigns.map((campaign) => {
-      const percentage = campaign.metrics.roas / totalRoas;
+      await this.automationService.deleteAutomationRuleById(req.tenant.tenantId, params.id);
 
-      return {
-        campaignId: campaign.id,
-        campaignName: campaign.name,
-        currentBudget: campaign.budget,
-        suggestedBudget: Math.round(monthlyBudget * percentage),
-        roas: campaign.metrics.roas,
-      };
-    });
+      emitToTenant(req.tenant.tenantId, 'rule_deleted', {
+        id: params.id,
+      });
 
-    const response = {
-      monthlyBudget,
-      distribution,
-      previsao: {
-        leadsEstimados: Math.round(monthlyBudget / 45),
-        vendasEstimadas: Math.round(monthlyBudget / 160),
-        roasEsperado: 3.8,
-        resumo: `Com R$${monthlyBudget}/mês, a distribuição inteligente prioriza campanhas com maior ROAS, aumentando potencial de conversão e retorno.`,
-      },
-      diasRestantes: new Date(
-        new Date().getFullYear(),
-        new Date().getMonth() + 1,
-        0,
-      ).getDate() - new Date().getDate(),
-    };
+      return res.status(200).json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 
-    res.status(200).json({
-      success: true,
-      data: response,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
+  getTakedownsHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(
+          401,
+          'UNAUTHORIZED',
+          'Tenant not found in request context',
+        );
+      }
+
+      const takedowns = await this.automationService.getSmartTakedowns(req.tenant.tenantId);
+
+      return res.status(200).json({
+        success: true,
+        data: takedowns,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getSSEFeedHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(
+          401,
+          'UNAUTHORIZED',
+          'Tenant not found in request context',
+        );
+      }
+
+      const tenantId = req.tenant.tenantId;
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      registerSSEClient(tenantId, res);
+
+      const pingInterval = setInterval(() => {
+        if (!res.writableEnded) {
+          res.write(': ping\n\n');
+        }
+      }, 30000);
+
+      res.on('close', () => {
+        clearInterval(pingInterval);
+        removeSSEClient(tenantId, res);
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  budgetSmartHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(
+          401,
+          'UNAUTHORIZED',
+          'Tenant not found in request context',
+        );
+      }
+
+      const payload = budgetSmartSchema.parse(req.body);
+
+      const data = this.automationService.getBudgetSmart(payload.monthlyBudget);
+
+      res.status(200).json({
+        success: true,
+        data,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }

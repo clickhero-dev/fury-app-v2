@@ -364,7 +364,7 @@ export function MetasPage() {
                     variant="outline"
                     onClick={handleBack}
                     disabled={isSaving}
-                    className="flex items-center gap-1.5 border-white/10 bg-transparent text-admin-text hover:bg-white/5 hover:text-white"
+                    className="flex items-center gap-1.5 border-white/10 bg-transparent text-admin-text hover:bg-[#1E88A8]/10 dark:hover:bg-white/5 dark:hover:text-white"
                   >
                     <ChevronLeft className="w-4 h-4" />
                     {step === 3 ? 'Voltar e editar' : 'Voltar'}
@@ -375,7 +375,7 @@ export function MetasPage() {
                       <Button
                       type="button"
                       onClick={handleNext}
-                      className="flex-1 flex items-center justify-center gap-1.5 bg-admin-petrol text-admin-bg font-semibold hover:bg-admin-petrol/80 dark:hover:bg-admin-petrol/80 disabled:bg-white/10 disabled:text-white/30 disabled:border disabled:border-white/10 disabled:cursor-not-allowed disabled:opacity-100 transition-all cursor-pointer"
+                      className="ady-btn flex-1 flex items-center justify-center gap-1.5 bg-admin-petrol text-white font-semibold hover:bg-admin-petrol/80 dark:hover:bg-admin-petrol/80 disabled:bg-white/10 disabled:text-white/30 disabled:border disabled:border-white/10 disabled:cursor-not-allowed disabled:opacity-100 transition-all cursor-pointer"
                     >
                       Próximo
                       <ChevronRight className="w-4 h-4" />
@@ -385,7 +385,7 @@ export function MetasPage() {
                     type="button"
                     onClick={handleSubmit(onSubmit)}
                     disabled={isSaving}
-                    className="flex-1 flex items-center justify-center gap-2 bg-admin-petrol text-admin-bg font-semibold hover:opacity-90"
+                    className="ady-btn flex-1 flex items-center justify-center gap-2 bg-admin-petrol text-white font-semibold hover:opacity-90"
                   >
                     {isSaving ? (
                       <>

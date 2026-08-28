@@ -28,8 +28,8 @@ export function ConfiguracoesTabsNav({ activeTab }: { activeTab: ConfiguracoesTa
             className={cn(
               'flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors duration-200',
               isActive
-                ? 'border-[#1E88A8] !text-[#1E88A8] font-semibold'
-                : 'border-transparent text-slate-600 hover:!text-[#1E88A8] dark:text-[#9BA1A6] dark:hover:!text-[#1E88A8] hover:border-[#1E88A8]/30'
+                ? 'border-[#1E88A8] !text-[#17708A] dark:!text-[#1E88A8] font-semibold'
+                : 'border-transparent text-slate-600 hover:!text-[#17708A] dark:text-[#9BA1A6] dark:hover:!text-[#1E88A8] hover:border-[#1E88A8]/30'
             )}
           >
             {label}

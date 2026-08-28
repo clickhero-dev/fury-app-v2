@@ -78,7 +78,7 @@ function ConnectionCard({
             className={cn(
               'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium',
               tokenValid
-                ? 'bg-brand/10 text-brand'
+                ? 'bg-brand/10 text-[#17708A] dark:text-[#2A9BC0]'
                 : 'bg-warning/10 text-warning'
             )}
           >
@@ -93,18 +93,22 @@ function ConnectionCard({
         </div>
 
         {/* Quantidade de Contas de Anúncios */}
-        <div className="pt-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+        <div className="pt-2 text-xs font-semibold uppercase tracking-wider text-text-secondary">
           Contas de Anúncios ({totalAccounts})
         </div>
 
         {/* Seleção de Conta Ativa para métricas */}
         {activeAdAccounts.length > 0 && (
           <div className="space-y-1.5 pt-1">
-            <label className="block text-xs font-medium text-text-tertiary">
+            <label
+              htmlFor={`ad-account-select-${connection.id}`}
+              className="block text-xs font-medium text-text-tertiary"
+            >
               Conta ativa para métricas
             </label>
             <div className="relative">
               <select
+                id={`ad-account-select-${connection.id}`}
                 value={connection.selectedAdAccountId ?? activeAdAccounts[0]?.id ?? ''}
                 onChange={(e) => onSelectAccount(connection.id, e.target.value)}
                 disabled={isSelectingAccount}
@@ -137,7 +141,7 @@ function ConnectionCard({
             type="button"
             onClick={onReconnect}
             disabled={isReconnecting}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-full bg-brand py-2 text-xs font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50 cursor-pointer`}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-full bg-[#17708A] py-2 text-xs font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50 cursor-pointer`}
           >
             <RefreshCw className={cn('h-3.5 w-3.5', isReconnecting && 'animate-spin')} />
             {isReconnecting ? 'Reconectando...' : 'Reconectar'}
@@ -148,7 +152,7 @@ function ConnectionCard({
           onClick={() => onDisconnect(connection.id)}
           disabled={isDeleting}
           className={cn(
-            'flex flex-1 items-center justify-center gap-2 rounded-full border border-error/40 px-4 py-2 text-xs font-semibold text-error transition-all hover:bg-error/10 hover:border-error cursor-pointer',
+            'flex flex-1 items-center justify-center gap-2 rounded-full border border-error/40 px-4 py-2 text-xs font-semibold text-error dark:text-[#e8534f] transition-all hover:bg-error/10 hover:border-error cursor-pointer',
             isDeleting && 'opacity-50 cursor-not-allowed'
           )}
         >
@@ -322,7 +326,7 @@ export function IntegracoesContent() {
             type="button"
             onClick={() => connectMutation.mutate()}
             disabled={connectMutation.isPending}
-            className={`inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50 cursor-pointer`}
+            className={`inline-flex items-center gap-2 rounded-full bg-[#17708A] px-4 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50 cursor-pointer`}
           >
             <Plus className="h-3.5 w-3.5" />
             {connectMutation.isPending ? 'Carregando...' : 'Conectar conta'}
@@ -340,7 +344,7 @@ export function IntegracoesContent() {
             type="button"
             onClick={() => connectMutation.mutate()}
             disabled={connectMutation.isPending}
-            className="shrink-0 rounded-full bg-brand px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-brand/90 disabled:opacity-50 cursor-pointer"
+            className="shrink-0 rounded-full bg-[#17708A] px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-[#17708A]/90 disabled:opacity-50 cursor-pointer"
           >
             {connectMutation.isPending ? 'Reconectando...' : 'Reconectar'}
           </button>
@@ -370,7 +374,7 @@ export function IntegracoesContent() {
             type="button"
             onClick={() => connectMutation.mutate()}
             disabled={connectMutation.isPending}
-            className={`mt-2 rounded-full bg-brand px-5 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50 cursor-pointer`}
+            className={`mt-2 rounded-full bg-[#17708A] px-5 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50 cursor-pointer`}
           >
             Conectar conta Meta
           </button>
@@ -404,7 +408,7 @@ export function IntegracoesContent() {
 
       {/* Google Meu Negócio */}
       <div className="space-y-4">
-        <div className="pt-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+        <div className="pt-2 text-xs font-semibold uppercase tracking-wider text-text-secondary">
           Google Meu Negócio
         </div>
         <GoogleIntegrationCard />

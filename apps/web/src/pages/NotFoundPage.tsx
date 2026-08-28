@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 /**
  * Página 404 — rota não encontrada.
  *
- * Exibe uma ilustração SVG com a identidade FURY (laranja #e8631a),
+ * Exibe uma ilustração SVG com a identidade ady (marca + petróleo/faísca),
  * suporte a light/dark mode, e botão de retorno ao início.
  *
  * Funciona como catch-all no router.tsx (path: '*').
@@ -11,7 +11,7 @@ import { Link } from 'react-router-dom';
 export function NotFoundPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-8">
-      {/* Ilustração: "4" + círculo FURY + "4" com efeito de radar */}
+      {/* Ilustração: "4" + círculo ady + "4" com efeito de radar */}
       <div className="relative mb-10 select-none">
         <svg
           width="280"
@@ -100,26 +100,15 @@ export function NotFoundPage() {
             opacity="0.2"
           />
 
-          {/* "F" central (como o favicon) */}
-          <rect
-            x="122"
-            y="72"
-            width="36"
-            height="36"
-            rx="8"
-            fill="var(--color-accent)"
-          />
-          <text
-            x="140"
-            y="97"
-            textAnchor="middle"
-            fontSize="26"
-            fontWeight="700"
-            fontFamily="system-ui, -apple-system, sans-serif"
-            fill="white"
-          >
-            F
-          </text>
+          {/* Marca "ady" central — geometria igual à de AdySymbol.tsx */}
+          <svg x="122" y="72" width="36" height="36" viewBox="0 0 32 32" fill="none" role="img" aria-label="ady">
+            <g stroke="var(--color-admin-petrol)" strokeWidth="4.2" strokeLinecap="round">
+              <path d="M6.6 28 15.9 10.4" />
+              <path d="M25.4 28 16.1 10.4" />
+              <path d="M11.4 21.6h9.2" strokeWidth="3.3" />
+            </g>
+            <circle cx="16" cy="3.9" r="2" fill="var(--color-accent)" />
+          </svg>
 
           {/* Segundo "4" */}
           <text
@@ -185,7 +174,7 @@ export function NotFoundPage() {
       {/* Botão de volta */}
       <Link
         to="/"
-        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent text-white font-medium text-sm
+        className="gradient-spark inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white font-medium text-sm
                    hover:brightness-110 active:brightness-95 transition-all duration-200
                    shadow-lg shadow-accent/25 hover:shadow-xl hover:shadow-accent/30"
       >
@@ -210,7 +199,7 @@ export function NotFoundPage() {
 
       {/* Footer discreto */}
       <p className="mt-12 text-xs text-text-tertiary">
-        <span className="text-accent/60 font-medium">FURY</span> — erro 404
+        <span className="text-[#B55F02] dark:text-accent font-medium">ady</span> — erro 404
       </p>
     </div>
   );
