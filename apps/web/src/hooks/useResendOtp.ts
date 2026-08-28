@@ -1,32 +1,27 @@
 import { useMutation } from '@tanstack/react-query';
-import { mockResendOtp } from '../lib/api/auth.mock';
+import api from '../lib/api';
 
 /**
- * Hook para reenviar o código OTP para o email do usuário.
+ * Hook para reenviar o código de recuperação de senha para o email.
  *
- * Dispara uma nova tentativa de envio do código de verificação
- * sem fazer verificação imediata.
+ * Reusa o endpoint `POST /auth/forgot-password` (idempotente): regenera o código,
+ * reenvia o email e respeita o rate-limit. Não é preciso um endpoint `/resend-otp`.
  *
- * @param identifier - userId (registro) ou email (recuperação de senha)
- *   Reutilizado em ambos os fluxos; na prática, qualquer string que identifique
- *   o usuário é compatível.
+ * @param email - email da conta que está recuperando a senha
  *
  * @returns Mutation do React Query para disparo do reenvio
  *
  * @example
- * // Em RegisterPage (com userId)
  * const { mutate: resend, isPending } = useResendOtp();
- * resend(userId);
- *
- * // Em ResetPasswordPage (com email como identificador)
- * const { mutate: resend, isPending } = useResendOtp();
- * resend(email);
+ * resend('user@example.com');
  */
 export function useResendOtp() {
   return useMutation({
     mutationFn: async (identifier: string): Promise<{ success: boolean }> => {
-      // TODO: Substituir por api.post('/auth/resend-otp', { userId: identifier }) quando backend estiver pronto
-      return mockResendOtp(identifier);
+      await api.post<{ success: boolean; timestamp: string }>('/auth/forgot-password', {
+        email: identifier,
+      });
+      return { success: true };
     },
   });
 }

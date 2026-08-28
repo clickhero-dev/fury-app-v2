@@ -99,7 +99,7 @@ export async function mockForgotPassword(data: ForgotPasswordRequest): Promise<F
 export async function mockResetPassword(data: ResetPasswordRequest): Promise<ResetPasswordResponse> {
   return new Promise((resolve, reject) => {
     setTimeout(() => {
-      if (data.code === '000000') {
+      if (data.otp === '000000') {
         reject(new Error('Código inválido'));
       } else {
         resolve({ success: true });
