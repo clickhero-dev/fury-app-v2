@@ -43,7 +43,7 @@ export function GoogleLoginButton({ label = 'Continuar com Google', onSuccess, o
       type="button"
       onClick={handleClick}
       disabled={loading}
-      className="flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-[#181915] py-3 text-sm font-medium text-slate-700 dark:text-zinc-300 shadow-sm transition-all duration-200 hover:border-[#1E88A8]/50 hover:bg-white dark:hover:bg-[#1a1b17] [&:hover:not(:disabled)]:shadow-md [&:active:not(:disabled)]:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
+      className="ady-btn flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-[#181915] py-3 text-sm font-medium text-slate-700 dark:text-zinc-300 shadow-sm transition-all duration-200 hover:border-[#1E88A8]/50 hover:bg-white dark:hover:bg-[#1a1b17] [&:hover:not(:disabled)]:shadow-md [&:active:not(:disabled)]:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
     >
       {loading ? (
         <Loader2 className="size-5 animate-spin text-[#1E88A8]" />

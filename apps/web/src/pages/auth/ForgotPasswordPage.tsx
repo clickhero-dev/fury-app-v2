@@ -58,7 +58,7 @@ export function ForgotPasswordPage() {
           {/* Grid de Fundo */}
           <div 
             aria-hidden 
-            className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+            className="pointer-events-none absolute inset-0 opacity-[0.08] dark:opacity-[0.05]"
             style={{
               backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
               backgroundSize: '24px 24px'
@@ -102,7 +102,7 @@ export function ForgotPasswordPage() {
               <button
                 type="button"
                 onClick={handleContinue}
-                className="w-full rounded-xl bg-[#1E88A8] py-3 text-sm font-semibold text-white shadow-md shadow-[#1E88A8]/20 transition-all hover:bg-[#17708A] hover:-translate-y-0.5 active:scale-[0.99]"
+                className="w-full rounded-xl bg-[#17708A] py-3 text-sm font-semibold text-white shadow-md shadow-[#17708A]/20 transition-all hover:bg-[#145E74] hover:-translate-y-0.5 active:scale-[0.99]"
               >
                 Continuar
               </button>
@@ -125,7 +125,7 @@ export function ForgotPasswordPage() {
     <div className="relative flex min-h-screen items-center justify-center bg-[#f3f6f8] dark:bg-[#0c0d0a] px-5 py-16 text-slate-900 dark:text-white transition-colors duration-300 overflow-hidden">
       <div 
         aria-hidden 
-        className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+        className="pointer-events-none absolute inset-0 opacity-[0.08] dark:opacity-[0.05]"
         style={{
           backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
           backgroundSize: '24px 24px'
@@ -176,7 +176,7 @@ export function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={forgotPasswordMutation.isPending || !isValid}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88A8] py-3 text-sm font-semibold text-white shadow-md shadow-[#1E88A8]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#17708A] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#17708A] py-3 text-sm font-semibold text-white shadow-md shadow-[#17708A]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#145E74] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {forgotPasswordMutation.isPending ? (
               <>
@@ -196,7 +196,7 @@ export function ForgotPasswordPage() {
 
           <p className="text-center text-sm text-slate-600 dark:text-zinc-400">
             Lembrou a senha?{' '}
-            <Link to="/" className="font-semibold text-[#1E88A8] hover:underline transition-colors">
+            <Link to="/" className="font-semibold text-[#17708A] dark:text-[#1E88A8] underline underline-offset-2 transition-colors">
               Entrar
             </Link>
           </p>

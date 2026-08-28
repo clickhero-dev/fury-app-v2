@@ -83,13 +83,13 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                 collapsed ? 'justify-center' : ''
               } ${
                 isActive
-                  ? 'bg-sidebar-active text-brand font-semibold shadow-xs'
+                  ? 'bg-sidebar-active text-[#17708A] dark:text-[#2A9BC0] font-semibold shadow-xs'
                   : 'text-text-secondary hover:bg-sidebar-hover hover:text-text-primary font-medium'
               }`}
             >
               <Icon
                 className={`size-[18px] shrink-0 ${
-                  isActive ? 'text-brand' : 'text-text-tertiary'
+                  isActive ? 'text-[#17708A] dark:text-[#2A9BC0]' : 'text-text-tertiary'
                 }`}
               />
               {!collapsed && <span className="truncate">{label}</span>}
@@ -123,6 +123,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               setCollapsed(!collapsed);
               captureEvent('sidebar_toggle_collapse', { collapsed: !collapsed });
             }}
+            aria-label={collapsed ? 'Expandir barra lateral' : 'Recolher barra lateral'}
             className="p-1 rounded-md text-text-tertiary hover:bg-sidebar-hover hover:text-text-primary transition-colors"
           >
             <ChevronLeft

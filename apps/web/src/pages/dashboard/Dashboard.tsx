@@ -48,8 +48,12 @@ const C = {
   danger: '#da3633',
 } as const;
 
+// Casca de card do Painel: claro/escuro já embutidos, autocontida — basta usar `${SURFACE}`
+// num card novo que ele já nasce correto nos dois temas. ady-decor escapa do bloco CSS
+// genérico (index.css) que senão forçaria fundo/texto de modo claro aqui por cima do dark:.
+// O conteúdo DE DENTRO do card (texto, ícones, etc.) ainda precisa do próprio par dark:/claro.
 const SURFACE =
-  'rounded-2xl border border-[#262824] bg-[#161814] shadow-[0_1px_2px_rgba(0,0,0,0.4),0_18px_40px_-24px_rgba(0,0,0,0.7)]';
+  'ady-decor rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_18px_40px_-24px_rgba(15,23,42,0.12)] dark:border-[#262824] dark:bg-[#161814] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4),0_18px_40px_-24px_rgba(0,0,0,0.7)]';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -108,23 +112,23 @@ function statusFromProgress(progressPercent: number): 'on_track' | 'at_risk' | '
 
 function MetaBanner() {
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-[#CF6F03]/30 bg-[#CF6F03]/[0.07] p-5 sm:flex-row sm:items-center">
-      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#CF6F03]/15 text-[#CF6F03]">
+    <div className="ady-decor flex flex-col gap-4 rounded-2xl border border-[#CF6F03]/30 bg-[#CF6F03]/[0.07] p-5 sm:flex-row sm:items-center">
+      <span className="ady-decor grid size-10 shrink-0 place-items-center rounded-full bg-[#CF6F03]/15 text-[#CF6F03]">
         <Radio className="size-[18px]" />
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-[#ECEDEF]">
+        <p className="text-sm font-semibold text-text-primary">
           Conecte sua conta Meta Ads para ver seus dados reais
         </p>
-        <p className="mt-1 text-sm text-[#9A9D96]">
+        <p className="mt-1 text-sm text-text-secondary">
           Os valores abaixo refletem apenas as metas configuradas — sem métricas reais ainda.
         </p>
       </div>
 
       <Link
         to="/integracoes"
-        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#CF6F03]/40 px-4 py-2 text-sm font-semibold text-[#CF6F03] transition-colors hover:bg-[#CF6F03]/10"
+        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#CF6F03]/40 px-4 py-2 text-sm font-semibold text-[#9A4F02] dark:text-[#E08A2E] transition-colors hover:bg-[#CF6F03]/10"
       >
         Conectar agora <ArrowRight className="size-3.5" />
       </Link>
@@ -154,13 +158,13 @@ function HeroStrip({
   const cfg = STATUS_CONFIG[statusKey] ?? NO_DATA_CFG;
 
   return (
-    <section className={`${SURFACE} p-6 border border-slate-200 bg-white dark:border-[#262824] dark:bg-[#161814]`}>
+    <section className={`${SURFACE} p-6`}>
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-5 sm:flex sm:flex-wrap sm:justify-between">
         <div className="flex min-w-0 items-center gap-6">
           
           {/* Círculo com formato mantido em 100% arredondado nos dois modos */}
           <div 
-          className="icon-meta-circle flex h-20 w-20 shrink-0 items-center justify-center border border-[#1E88A8]/40 bg-[#1E88A8]/10 text-xl font-bold tabular-nums text-[#1E88A8] dark:bg-[#1E88A8]/20"
+          className="icon-meta-circle flex h-20 w-20 shrink-0 items-center justify-center border border-[#1E88A8]/40 bg-[#1E88A8]/10 text-xl font-bold tabular-nums text-[#17708A] dark:text-[#1E88A8] dark:bg-[#1E88A8]/20"
           style={{ borderRadius: '50%' }}
         >
             {pct}%
@@ -186,7 +190,7 @@ function HeroStrip({
 
             <Link
               to="/configuracoes?tab=metas"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-[#1E88A8] transition-colors hover:underline"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[#17708A] dark:text-[#2A9BC0] transition-colors hover:underline"
             >
               Configurar metas <ArrowRight className="size-3" />
             </Link>
@@ -208,7 +212,7 @@ function HeroStrip({
           <span>{daysRemaining} dias restantes</span>
 
           {/* Badge de Status adaptável */}
-          <span className="rounded-full border border-[#1E88A8]/30 bg-[#1E88A8]/15 px-3 py-1 text-xs font-semibold text-[#1E88A8]">
+          <span className="ady-decor rounded-full border border-[#1E88A8]/30 bg-[#1E88A8]/15 px-3 py-1 text-xs font-semibold text-[#0F4C5C] dark:text-[#2A9BC0]">
             {cfg.label}
           </span>
         </div>
@@ -272,8 +276,8 @@ function MetricCard({
   return (
     <div className={`${SURFACE} p-5`}>
       <div className="flex items-center gap-2.5">
-        <Icon className="size-[18px] shrink-0 text-[#1E88A8]" />
-        <p className="min-w-0 truncate text-sm text-[#9A9D96]">{label}</p>
+        <Icon className="size-[18px] shrink-0 text-[#17708A] dark:text-[#1E88A8]" />
+        <p className="min-w-0 truncate text-sm text-slate-600 dark:text-[#9A9D96]">{label}</p>
         {tooltip && (
           <TooltipProvider>
             <UiTooltip>
@@ -281,12 +285,12 @@ function MetricCard({
                 <button
                   type="button"
                   aria-label={`Sobre ${label}`}
-                  className="text-[#8A8D86] transition-colors hover:text-[#ECEDEF]"
+                  className="text-slate-400 transition-colors hover:text-slate-800 dark:text-[#8A8D86] dark:hover:text-[#ECEDEF]"
                 >
                   <Info className="size-3.5" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent className="max-w-[220px] border-[#262824] bg-[#1F211D] text-xs text-[#ECEDEF]">
+              <TooltipContent className="max-w-[220px] text-xs">
                 {tooltip}
               </TooltipContent>
             </UiTooltip>
@@ -294,21 +298,21 @@ function MetricCard({
         )}
       </div>
 
-      <p className="mt-4 text-3xl font-semibold tabular-nums text-[#ECEDEF]">{value}</p>
+      <p className="mt-4 text-3xl font-semibold tabular-nums text-slate-900 dark:text-[#ECEDEF]">{value}</p>
 
       {showProgress ? (
         <div className="mt-3 space-y-2">
           {isNoGoals ? (
             <Link
               to="/configuracoes"
-              className="inline-flex items-center gap-1 text-xs font-medium text-[#1E88A8] hover:underline"
+              className="inline-flex items-center gap-1 text-xs font-medium text-[#17708A] dark:text-[#2A9BC0] hover:underline"
             >
               Defina uma meta <ArrowRight className="size-3" />
             </Link>
           ) : progressLabel ? (
-            <p className="text-xs text-[#9A9D96]">{progressLabel}</p>
+            <p className="text-xs text-slate-600 dark:text-[#9A9D96]">{progressLabel}</p>
           ) : null}
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#1F211D]">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-[#1F211D]">
             <div
               className="h-full rounded-full transition-[width] duration-500"
               style={{ width: `${Math.max(barWidth, 2)}%`, backgroundColor: barColor }}
@@ -330,7 +334,7 @@ function MetricCard({
           </ResponsiveContainer>
         </div>
       ) : (
-        <p className="mt-1 text-xs text-[#8A8D86]">
+        <p className="mt-1 text-xs text-slate-500 dark:text-[#8A8D86]">
           {hasRealData ? 'No período' : 'Aguardando dados'}
         </p>
       )}
@@ -367,23 +371,24 @@ function WeeklyChart({
 
   return (
     <section className={`${SURFACE} p-6`}>
-      <h2 className="text-xl font-semibold text-[#ECEDEF]">Desempenho da semana</h2>
-      <p className="mt-1 text-sm text-[#9A9D96]">Pessoas alcançadas nos últimos 7 dias</p>
+      <h2 className="text-xl font-semibold text-slate-900 dark:text-[#ECEDEF]">Desempenho da semana</h2>
+      <p className="mt-1 text-sm text-slate-600 dark:text-[#9A9D96]">Pessoas alcançadas nos últimos 7 dias</p>
 
       <div className="relative mt-6 h-56">
+        <div aria-hidden={isEmpty} className="h-full w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(236,237,239,0.08)" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-light)" vertical={false} />
             <XAxis
               dataKey="date"
               tickFormatter={isEmpty && !hasIdealLine ? (v) => String(v) : fmt}
-              tick={{ fontSize: 11, fill: C.muted }}
+              tick={{ fontSize: 11, fill: 'var(--color-text-tertiary)' }}
               tickLine={false}
               axisLine={false}
               interval="preserveStartEnd"
             />
             <YAxis
-              tick={{ fontSize: 11, fill: C.muted }}
+              tick={{ fontSize: 11, fill: 'var(--color-text-tertiary)' }}
               tickLine={false}
               axisLine={false}
               width={44}
@@ -391,13 +396,13 @@ function WeeklyChart({
             {!isEmpty && (
               <Tooltip
                 contentStyle={{
-                  backgroundColor: C.cardAlt,
-                  border: `1px solid ${C.border}`,
+                  backgroundColor: 'var(--color-surface-secondary)',
+                  border: '1px solid var(--color-border-light)',
                   borderRadius: 12,
                   fontSize: 12,
-                  color: C.text,
+                  color: 'var(--color-text-primary)',
                 }}
-                labelStyle={{ color: C.muted }}
+                labelStyle={{ color: 'var(--color-text-tertiary)' }}
                 formatter={(val: number, name: string) => [
                   `${Number(val).toLocaleString('pt-BR')} pessoas`,
                   name === 'ideal' ? 'Projeção ideal' : 'Realizado',
@@ -425,10 +430,11 @@ function WeeklyChart({
             )}
           </LineChart>
         </ResponsiveContainer>
+        </div>
 
         {isEmpty && (
-          <div className="absolute inset-0 grid place-items-center rounded-lg border border-dashed border-[#262824] bg-[#161814]/70">
-            <p className="rounded-full bg-[#1F211D] px-4 py-1.5 text-xs text-[#9A9D96]">
+          <div className="absolute inset-0 grid place-items-center rounded-lg border border-dashed border-slate-200 bg-white/70 dark:border-[#262824] dark:bg-[#161814]/70">
+            <p className="rounded-full bg-slate-100 px-4 py-1.5 text-xs text-slate-600 dark:bg-[#1F211D] dark:text-[#9A9D96]">
               Aguardando dados da sua conta de anúncios
             </p>
           </div>
@@ -436,7 +442,7 @@ function WeeklyChart({
       </div>
 
       {hasIdealLine && (
-        <div className="mt-5 flex flex-wrap items-center gap-5 text-xs text-[#9A9D96]">
+        <div className="mt-5 flex flex-wrap items-center gap-5 text-xs text-slate-600 dark:text-[#9A9D96]">
           <span className="inline-flex items-center gap-2">
             <span className="h-0.5 w-5 rounded-full bg-[#1E88A8]" />
             Realizado
@@ -474,23 +480,23 @@ function ActiveCampaignsTable({ campaigns }: { campaigns: ActiveCampaign[] }) {
     <section className={`${SURFACE} p-6`}>
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
         <div className="min-w-0">
-          <h2 className="text-xl font-semibold text-[#ECEDEF]">Campanhas ativas</h2>
-          <p className="mt-1 text-sm text-[#9A9D96]">Ordenadas por resultado</p>
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-[#ECEDEF]">Campanhas ativas</h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-[#9A9D96]">Ordenadas por resultado</p>
         </div>
         <Link
           to="/campanhas"
-          className="shrink-0 text-sm font-medium text-[#1E88A8] hover:underline"
+          className="shrink-0 text-sm font-medium text-[#17708A] dark:text-[#2A9BC0] hover:underline"
         >
           Ver todas
         </Link>
       </div>
 
       {sorted.length === 0 ? (
-        <div className="mt-6 flex flex-col items-center gap-2 rounded-lg border border-dashed border-[#262824] px-6 py-12 text-center">
-          <p className="text-sm text-[#9A9D96]">Nenhuma campanha ativa agora</p>
+        <div className="mt-6 flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 dark:border-[#262824] px-6 py-12 text-center">
+          <p className="text-sm text-slate-600 dark:text-[#9A9D96]">Nenhuma campanha ativa agora</p>
           <Link
             to="/campanhas"
-            className="text-sm font-medium text-[#1E88A8] hover:underline"
+            className="text-sm font-medium text-[#17708A] dark:text-[#2A9BC0] hover:underline"
           >
             Criar campanha
           </Link>
@@ -499,7 +505,7 @@ function ActiveCampaignsTable({ campaigns }: { campaigns: ActiveCampaign[] }) {
         <div className="mt-6 overflow-x-auto">
           <table className="w-full min-w-[560px] border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[#262824] text-left text-xs font-semibold uppercase tracking-[0.12em] text-[#8A8D86]">
+              <tr className="border-b border-slate-200 dark:border-[#262824] text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-[#8A8D86]">
                 <th className="pb-3 pr-4 font-semibold">Campanha</th>
                 <th className="pb-3 pr-4 text-right font-semibold">Investido</th>
                 <th className="pb-3 pr-4 text-right font-semibold">Pessoas</th>
@@ -512,25 +518,25 @@ function ActiveCampaignsTable({ campaigns }: { campaigns: ActiveCampaign[] }) {
                 return (
                   <tr
                     key={c.id}
-                    className="border-b border-[#262824]/70 transition-colors last:border-0 hover:bg-[#1F211D]/60"
+                    className="border-b border-slate-100 dark:border-[#262824]/70 transition-colors last:border-0 hover:bg-slate-50 dark:hover:bg-[#1F211D]/60"
                   >
                     <td className="py-3.5 pr-4">
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="truncate font-medium text-[#ECEDEF]">{c.name}</span>
+                        <span className="truncate font-medium text-slate-900 dark:text-[#ECEDEF]">{c.name}</span>
                         {isTop && (
-                          <span className="shrink-0 rounded-full bg-[#CF6F03]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#CF6F03]">
+                          <span className="shrink-0 rounded-full bg-[#CF6F03]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#9A4F02] dark:text-[#E08A2E]">
                             Top
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="py-3.5 pr-4 text-right tabular-nums text-[#9A9D96]">
+                    <td className="py-3.5 pr-4 text-right tabular-nums text-slate-600 dark:text-[#9A9D96]">
                       {fmtBRL(c.metrics.spend)}
                     </td>
-                    <td className="py-3.5 pr-4 text-right tabular-nums text-[#ECEDEF]">
+                    <td className="py-3.5 pr-4 text-right tabular-nums text-slate-900 dark:text-[#ECEDEF]">
                       {fmtInt(c.metrics.conversions)}
                     </td>
-                    <td className="py-3.5 text-right tabular-nums text-[#9A9D96]">
+                    <td className="py-3.5 text-right tabular-nums text-slate-600 dark:text-[#9A9D96]">
                       {fmtBRL(c.metrics.cpa)}
                     </td>
                   </tr>
@@ -565,8 +571,8 @@ function InstagramMetricCard({
   return (
     <div className={`${SURFACE} p-5`}>
       <div className="flex items-center gap-2.5">
-        <Icon className="size-[18px] shrink-0 text-[#1E88A8]" />
-        <p className="min-w-0 truncate text-sm text-[#9A9D96]">{label}</p>
+        <Icon className="size-[18px] shrink-0 text-[#17708A] dark:text-[#1E88A8]" />
+        <p className="min-w-0 truncate text-sm text-slate-600 dark:text-[#9A9D96]">{label}</p>
       </div>
       <div className="mt-4">{children}</div>
     </div>
@@ -576,19 +582,19 @@ function InstagramMetricCard({
 function FollowersValue({ value }: { value: number }) {
   if (value > 0) {
     return (
-      <p className="text-3xl font-semibold tabular-nums text-[#1E88A8]">
+      <p className="text-3xl font-semibold tabular-nums text-[#17708A] dark:text-[#1E88A8]">
         +{value.toLocaleString('pt-BR')}
       </p>
     );
   }
   if (value < 0) {
     return (
-      <p className="text-3xl font-semibold tabular-nums text-[#da3633]">
+      <p className="text-3xl font-semibold tabular-nums text-[#da3633] dark:text-[#e8534f]">
         {value.toLocaleString('pt-BR')}
       </p>
     );
   }
-  return <p className="text-3xl font-semibold tabular-nums text-[#ECEDEF]">0</p>;
+  return <p className="text-3xl font-semibold tabular-nums text-slate-900 dark:text-[#ECEDEF]">0</p>;
 }
 
 function InstagramEngagementSection({
@@ -626,10 +632,10 @@ function InstagramEngagementSection({
         <div
           className={`${SURFACE} flex flex-col items-center justify-center gap-2 px-6 py-14 text-center`}
         >
-          <p className="text-sm text-[#9A9D96]">Conecte seu Instagram para ver as métricas</p>
+          <p className="text-sm text-slate-600 dark:text-[#9A9D96]">Conecte seu Instagram para ver as métricas</p>
           <Link
             to="/integracoes"
-            className="inline-flex items-center gap-1 text-sm font-medium text-[#1E88A8] hover:underline"
+            className="inline-flex items-center gap-1 text-sm font-medium text-[#17708A] dark:text-[#2A9BC0] hover:underline"
           >
             Ir para integrações <ArrowRight className="size-3.5" />
           </Link>
@@ -637,12 +643,12 @@ function InstagramEngagementSection({
       ) : (
         <div className="grid gap-4 sm:grid-cols-3">
           <InstagramMetricCard icon={MessageCircle} label="Comentários">
-            <p className="text-3xl font-semibold tabular-nums text-[#ECEDEF]">
+            <p className="text-3xl font-semibold tabular-nums text-slate-900 dark:text-[#ECEDEF]">
               {(data?.comments ?? 0).toLocaleString('pt-BR')}
             </p>
           </InstagramMetricCard>
           <InstagramMetricCard icon={Bookmark} label="Salvamentos">
-            <p className="text-3xl font-semibold tabular-nums text-[#ECEDEF]">
+            <p className="text-3xl font-semibold tabular-nums text-slate-900 dark:text-[#ECEDEF]">
               {(data?.saves ?? 0).toLocaleString('pt-BR')}
             </p>
           </InstagramMetricCard>
@@ -783,14 +789,14 @@ export function Dashboard() {
     return (
       <AppLayout>
         <div className="mx-auto w-full max-w-5xl space-y-10 px-6 py-10 sm:px-10 lg:py-14">
-          <div className="h-9 w-48 animate-pulse rounded-lg bg-[#1F211D]" />
-          <div className="h-28 animate-pulse rounded-2xl bg-[#1F211D]" />
+          <div className="h-9 w-48 animate-pulse rounded-lg bg-gray-200 dark:bg-[#1F211D]" />
+          <div className="h-28 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
           <div className="grid gap-4 sm:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-32 animate-pulse rounded-2xl bg-[#1F211D]" />
+              <div key={i} className="h-32 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
             ))}
           </div>
-          <div className="h-72 animate-pulse rounded-2xl bg-[#1F211D]" />
+          <div className="h-72 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
         </div>
       </AppLayout>
     );

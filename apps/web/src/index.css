@@ -324,7 +324,7 @@ html:not(.dark) {
   body,
   #root,
   .bg-background,
-  main {
+  main:not(.ady-decor) {
     background-color: #EBEEF0 !important;
   }
 
@@ -345,23 +345,30 @@ html:not(.dark) {
   aside .bg-sidebar-active,
   aside [class*="bg-sidebar-active"] {
     background-color: #e4edf0 !important;
-    color: #1e88a8 !important;
+    color: #17708a !important;
     border: none !important;
   }
 
   /* Cards do Painel, Admin e Form de Login (Excluindo os elementos do Planejador IA) */
-  main [class*="bg-["]:not(.gradient-teal):not(.gradient-spark):not([class*="bg-primary-foreground"]),
-  main [class*="bg-zinc"],
-  main [class*="bg-slate"],
-  main [class*="bg-neutral"],
-  main [class*="bg-stone"],
-  main [class*="bg-black"],
-  main .bg-surface,
+  main [class*="bg-["]:not(.gradient-teal):not(.gradient-spark):not([class*="bg-primary-foreground"]):not(.ady-btn):not(.ady-card):not(.icon-meta-circle):not(.ady-decor):not(.ady-decor *),
+  main [class*="bg-zinc"]:not(.ady-decor *),
+  main [class*="bg-slate"]:not(.ady-decor *),
+  main [class*="bg-neutral"]:not(.ady-decor *),
+  main [class*="bg-stone"]:not(.ady-decor *),
+  main [class*="bg-black"]:not(.ady-decor *),
+  main .bg-surface:not(.ady-card):not(.ady-decor):not(.ady-decor *),
   form {
     background-color: #ffffff !important;
     border: 1px solid #e2e8f0 !important;
     box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04) !important;
     border-radius: 1rem !important;
+  }
+
+  /* Exceção: PeriodSelector não recebe border-radius forçado */
+  main [class*="bg-["].filter-pill {
+    border-radius: auto !important;
+    box-shadow: none !important;
+    border: inherit !important;
   }
 
   /* Inputs dentro do Formulário */
@@ -372,15 +379,14 @@ html:not(.dark) {
   }
 
   /* Correção de Botões Secundários */
-  main button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-calendar-shell button),
-  .flex button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-calendar-shell button) {
+  main button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-calendar-shell button):not(.ady-btn):not(.filter-pill),
+  .flex button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-calendar-shell button):not(.ady-btn):not(.filter-pill) {
     border: 1px solid #e2e8f0 !important;
-    border-radius: 0.75rem !important;
     color: #475569 !important;
   }
 
-  main button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):hover,
-  .flex button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):hover {
+  main button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-btn):not(.filter-pill):hover,
+  .flex button:not([type="submit"]):not(.bg-brand):not(.gradient-spark):not(.ady-btn):not(.filter-pill):hover {
     background-color: #f1f5f9 !important;
     color: #0f172a !important;
   }
@@ -412,15 +418,27 @@ html:not(.dark) {
     color: #ffffff !important;
   }
 
-  /* Botão Laranja "Gerar Planejamento" */
+  /* Botão Laranja "Gerar Planejamento" - Isolamento visual completo */
   .gradient-spark {
     background-image: var(--gradient-spark) !important;
     color: #ffffff !important;
     border: none !important;
   }
 
-  .gradient-spark * {
+  /* Força branco em TODOS os elementos dentro do botão */
+  .gradient-spark,
+  .gradient-spark *,
+  .gradient-spark button,
+  .gradient-spark span,
+  .gradient-spark p,
+  .gradient-spark svg {
     color: #ffffff !important;
+  }
+
+  /* Garante branco para ícones também */
+  .gradient-spark svg,
+  .gradient-spark [class*="lucide"] {
+    stroke: #ffffff !important;
   }
 
   /* Badges do topo "PLANEJADOR IA" e Círculos (1, 2, 3) */
@@ -437,18 +455,46 @@ html:not(.dark) {
   }
 
   /* Tipografia Genérica do App e do Admin */
-  h1:not(.gradient-teal h1),
-  h2:not(.gradient-teal h2),
-  h3:not(.gradient-teal h3),
-  h4 {
+  h1:not(.ady-decor *):not(.gradient-teal h1):not(.gradient-spark h1),
+  h2:not(.ady-decor *):not(.gradient-teal h2):not(.gradient-spark h2),
+  h3:not(.ady-decor *):not(.gradient-teal h3):not(.gradient-spark h3),
+  h4:not(.ady-decor *) {
     color: #0f172a !important;
   }
-/* Por isto: */
-p:not(.gradient-teal p):not(.gradient-spark p),
-span:not(.gradient-teal span):not(.gradient-spark span):not(.bg-accent *):not(.bg-accent),
-label,
-.text-muted-foreground {
+
+  h1.gradient-teal,
+  h2.gradient-teal,
+  h3.gradient-teal,
+  .gradient-teal h1,
+  .gradient-teal h2,
+  .gradient-teal h3,
+  .gradient-spark h1,
+  .gradient-spark h2,
+  .gradient-spark h3 {
+    color: #ffffff !important;
+  }
+
+/* Tipografia em modo claro: padrão cinza, exceto em contextos especiais */
+p:not(.ady-decor *):not(.gradient-spark p):not(.gradient-teal p),
+span:not(.cta-label):not(.ady-decor *):not(.gradient-spark span):not(.gradient-teal span),
+label:not(.ady-decor *),
+.text-muted-foreground:not(.ady-decor *) {
   color: #475569 !important;
+}
+
+/* Exceções explícitas para contextos especiais */
+.gradient-teal p,
+.gradient-teal span {
+  color: #ffffff !important;
+}
+
+.gradient-spark p,
+.gradient-spark span {
+  color: #ffffff !important;
+}
+
+.bg-accent * {
+  color: #1e88a8 !important;
 }
 
   /* Destaque "Click Hero" Laranja sempre preservado */
@@ -463,11 +509,20 @@ label,
 
 /* Correções pontuais já existentes */
 html:not(.dark) .icon-meta-circle.icon-meta-circle {
-  border-radius: 9999px !important;
+  border-radius: 1rem !important;
 }
 
 html:not(.dark) .progress-fill-bar.progress-fill-bar {
   background-color: #1E88A8 !important;
+}
+
+/* PeriodSelector inativo não fica branco no hover (ambos os temas) */
+button.filter-pill:not(.filter-pill-active):hover {
+  color: #0f172a !important;
+}
+
+.dark button.filter-pill:not(.filter-pill-active):hover {
+  color: #8E939D !important;
 }
 
 html:not(.dark) button.filter-pill-active.filter-pill-active.filter-pill-active {
@@ -498,15 +553,17 @@ html:not(.dark) button.chip-active.chip-active.chip-active:hover {
 }
 
 /* FORÇAR O FUNDO CLARO NAS TELAS DE AUTENTICAÇÃO E ADMIN */
+/* :not(:has([role="dialog"])) — não pintar o wrapper de portal que o Radix Dialog usa pra
+   renderizar modais fora da árvore da página (senão o fundo do modal "engole" o overlay/backdrop) */
 html:not(.dark) body,
 html:not(.dark) #root,
-html:not(.dark) body > div,
-html:not(.dark) #root > div {
+html:not(.dark) body > div:not(:has([role="dialog"])),
+html:not(.dark) #root > div:not(:has([role="dialog"])) {
   background-color: #f1f5f9 !important;
 }
 
-html:not(.dark) h1,
-html:not(.dark) h2,
-html:not(.dark) h3 {
+html:not(.dark) h1:not(.ady-decor *):not(.gradient-teal *),
+html:not(.dark) h2:not(.ady-decor *):not(.gradient-teal *),
+html:not(.dark) h3:not(.ady-decor *):not(.gradient-teal *) {
   color: #0f172a !important;
 }

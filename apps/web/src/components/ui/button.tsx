@@ -16,35 +16,36 @@ export function Button({
   return (
     <button
       className={cn(
-        'font-semibold rounded-full transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed relative inline-flex items-center justify-center cursor-pointer',
-        
-        // Primary: Azul/Turquesa (#1E88A8) com texto escuro
+        'ady-btn font-semibold rounded-full transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed relative inline-flex items-center justify-center cursor-pointer',
+
+        // Primary: Petróleo com texto branco — autocontido, mesma aparência nos dois temas
+        // 17708A (não 1E88A8): branco sobre 1E88A8 mede ~4.1:1, abaixo do AA (4.5:1) — medido via accesslint
         variant === 'primary' &&
-          'bg-[#1E88A8] text-[#0C0D0A] hover:bg-[#1E88A8]/90 hover:scale-[1.02] active:scale-[0.98] shadow-sm',
-        
-        // Default: Fundo escuro leve com borda
+          'bg-[#17708A] text-white hover:bg-[#17708A]/90 hover:scale-[1.02] active:scale-[0.98] shadow-sm',
+
+        // Default: Superfície secundária com borda — usa tokens (bg-surface-secondary/border-border-light/text-text-primary), resolve certo nos dois temas
         variant === 'default' &&
-          'bg-[#1A1B17] text-[#ECEDEF] border border-[#262824] hover:bg-[#1F211D] hover:border-[#1E88A8]/50 active:bg-[#161814]',
-        
-        // Outline: Borda sutil com texto azul
+          'bg-surface-secondary text-text-primary border border-border-light hover:border-brand/50 hover:brightness-95 dark:hover:brightness-125 active:brightness-90',
+
+        // Outline: Borda petróleo com texto petróleo (17708A no claro / 1E88A8 no escuro — regra AA do guia de marca)
         variant === 'outline' &&
-          'border border-[#1E88A8] text-[#1E88A8] hover:bg-[#1E88A8]/10 active:bg-[#1E88A8]/20',
-        
-        // Ghost: Sem borda, hover suave
+          'border border-[#1E88A8] text-[#17708A] dark:text-[#1E88A8] hover:bg-[#1E88A8]/10 active:bg-[#1E88A8]/20',
+
+        // Ghost: Sem borda, texto terciário (token), hover com superfície secundária
         variant === 'ghost' &&
-          'text-[#9BA1A6] hover:text-[#ECEDEF] hover:bg-[#1A1B17]',
-        
-        // Destructive: Vermelho sutil
+          'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary',
+
+        // Destructive: Vermelho sólido com texto branco — autocontido
         variant === 'destructive' &&
           'bg-[#E5534B] text-white hover:bg-[#E5534B]/90 active:bg-[#E5534B]/80',
 
-        // Spark: Laranja vibrante com texto branco (para chamadas de ação)
+        // Spark: Faísca da marca — B55F02 (não CF6F03): branco sobre CF6F03 mede 3.54:1, abaixo do AA
         variant === 'spark' &&
-          'bg-[#F97316] text-white hover:bg-[#F97316]/90 hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg',
+          'bg-[#B55F02] text-white hover:bg-[#B55F02]/90 hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg',
 
-        // Soft: Fundo suave com texto colorido (para ações secundárias)
+        // Soft: Fundo suave com texto petróleo (mesma regra de contraste da outline)
         variant === 'soft' &&
-          'bg-[#1E88A8]/10 text-[#1E88A8] hover:bg-[#1E88A8]/20 active:bg-[#1E88A8]/30 border border-[#1E88A8]/20',
+          'bg-[#1E88A8]/10 text-[#17708A] dark:text-[#1E88A8] hover:bg-[#1E88A8]/20 active:bg-[#1E88A8]/30 border border-[#1E88A8]/20',
 
         // Tamanhos
         size === 'sm' && 'px-4 py-2 text-xs',

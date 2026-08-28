@@ -89,20 +89,17 @@ export function ConectarMetaPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-admin-bg text-admin-text">
-      {/* Fundo Iluminado */}
+      {/* Fundo Iluminado — bem mais discreto no claro (a mesma proporção de opacidade do escuro cria uma linha visível contra fundo claro, que não aparece contra fundo escuro) */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: 'radial-gradient(120% 90% at 50% -10%, rgba(30,136,168,0.16), transparent 70%)',
-        }}
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(150%_120%_at_50%_-10%,rgba(23,112,138,0.07),transparent_100%)] dark:bg-[radial-gradient(120%_90%_at_50%_-10%,rgba(30,136,168,0.16),transparent_70%)]"
       />
 
       {/* Header */}
       <header className="relative z-10 flex items-center justify-center border-b border-white/10 py-5">
         <div className="flex items-center gap-2">
           <AdySymbol size={28} />
-          <span className="text-xl font-medium !text-[#ECEDEF]">ady</span>
+          <span className="text-xl font-medium text-admin-text">ady</span>
         </div>
       </header>
 
@@ -112,8 +109,8 @@ export function ConectarMetaPage() {
       </div>
 
       {/* Content */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-5 pt-4 pb-16">
-        <div className="w-full max-w-[480px]">
+      <main className="ady-decor relative z-10 flex-1 flex flex-col items-center justify-start px-5 pt-4 pb-16">
+        <div className="relative w-full max-w-[480px]">
           {isConnected ? (
             /* ── Passo 2: conta conectada ── */
             <div className="flex flex-col items-center text-center gap-6 rounded-2xl border border-white/10 bg-admin-surface p-8 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)]">
@@ -125,7 +122,7 @@ export function ConectarMetaPage() {
               </div>
 
               <div className="space-y-2">
-                <h1 className="text-2xl font-semibold !text-[#ECEDEF]">
+                <h1 className="text-2xl font-semibold text-admin-text">
                   Ótimo! Conta conectada 🎉
                 </h1>
                 <p className="text-sm text-admin-text-muted leading-relaxed">
@@ -148,7 +145,7 @@ export function ConectarMetaPage() {
               <MetaIcon />
 
               <div className="space-y-2">
-                <h1 className="text-2xl font-semibold !text-[#ECEDEF]">
+                <h1 className="text-2xl font-semibold text-admin-text">
                   Conecte sua conta de anúncios
                 </h1>
                 <p className="text-sm text-admin-text-muted leading-relaxed">

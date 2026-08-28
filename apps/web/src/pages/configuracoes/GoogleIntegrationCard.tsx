@@ -79,7 +79,7 @@ export function GoogleIntegrationCard() {
             onClick={() => connectMutation.mutate('settings')}
             disabled={connectMutation.isPending}
             className={cn(
-              'flex flex-1 items-center justify-center gap-2 rounded-full bg-brand py-2 text-xs font-semibold text-white cursor-pointer',
+              'flex flex-1 items-center justify-center gap-2 rounded-full bg-[#17708A] py-2 text-xs font-semibold text-white cursor-pointer',
               BUTTON_HOVER,
               connectMutation.isPending && 'opacity-50'
             )}
@@ -95,7 +95,7 @@ export function GoogleIntegrationCard() {
               type="button"
               onClick={() => navigate('/configuracoes/google-meu-negocio')}
               className={cn(
-                'flex flex-1 items-center justify-center gap-2 rounded-full bg-brand py-2 text-xs font-semibold text-white cursor-pointer',
+                'flex flex-1 items-center justify-center gap-2 rounded-full bg-[#17708A] py-2 text-xs font-semibold text-white cursor-pointer',
                 BUTTON_HOVER
               )}
             >
@@ -120,7 +120,7 @@ export function GoogleIntegrationCard() {
             onClick={() => connectMutation.mutate('settings')}
             disabled={connectMutation.isPending}
             className={cn(
-              'flex flex-1 items-center justify-center gap-2 rounded-full bg-brand py-2 text-xs font-semibold text-white cursor-pointer',
+              'flex flex-1 items-center justify-center gap-2 rounded-full bg-[#17708A] py-2 text-xs font-semibold text-white cursor-pointer',
               BUTTON_HOVER,
               connectMutation.isPending && 'opacity-50'
             )}
