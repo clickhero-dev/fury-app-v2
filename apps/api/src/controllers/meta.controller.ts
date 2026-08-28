@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
-import * as metaService from '../services/meta/meta.service.js';
+import { metaService } from '../services/meta/meta.service.js';
 
 const callbackQuerySchema = z.object({
   code: z.string().min(1, 'Code OAuth ausente'),

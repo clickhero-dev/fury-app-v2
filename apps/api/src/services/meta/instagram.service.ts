@@ -8,7 +8,7 @@ import {
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { MetaRepository } from '../../repository/meta.repository.js';
-import { getResolvedTenantAssetSelection } from './meta.service.js';
+import { metaService } from './meta.service.js';
 
 export type InstagramRankingObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';
 
@@ -69,7 +69,7 @@ export async function getInstagramDashboardInsights(
   const accessToken = decryptMetaToken(metaConn.accessToken);
 
   try {
-    const assetSelection = await getResolvedTenantAssetSelection(tenantId);
+    const assetSelection = await metaService.getResolvedTenantAssetSelection(tenantId);
     let selectedPage = assetSelection.pages.find((page) => page.instagramUserId);
 
     // ponytail: se a página selecionada não tem Instagram, busca em TODAS as
@@ -122,7 +122,7 @@ export async function getRankedInstagramPosts(
     // Resolve o igUserId a partir das Paginas selecionadas pelo tenant (nunca
     // "a primeira conta do Instagram do usuario Meta"), evitando vazar posts
     // de outra conta/negocio que o mesmo usuario Meta tambem administra.
-    const assetSelection = await getResolvedTenantAssetSelection(tenantId);
+    const assetSelection = await metaService.getResolvedTenantAssetSelection(tenantId);
     const tenantIgUserIds = assetSelection.pages
       .map((page) => page.instagramUserId)
       .filter((id): id is string => Boolean(id));

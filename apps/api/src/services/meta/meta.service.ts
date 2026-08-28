@@ -638,3 +638,29 @@ export async function selectAdAccount(
 
   return adAccountId;
 }
+
+/**
+ * MetaService — classe com o corpo de negócio de Meta.
+ * Promove as funções de módulo a métodos; o singleton (metaService) é usado
+ * pelos controllers via composition root (DI) — Fase 6.
+ */
+export class MetaService {
+  generateMetaAuthUrl = generateMetaAuthUrl;
+  handleMetaOAuthCallback = handleMetaOAuthCallback;
+  getTenantAssetSelection = getTenantAssetSelection;
+  saveTenantAssetSelection = saveTenantAssetSelection;
+  getTenantBusinesses = getTenantBusinesses;
+  getTenantPagesByBusiness = getTenantPagesByBusiness;
+  getTenantAdAccountsByBusiness = getTenantAdAccountsByBusiness;
+  getTenantWhatsappNumbers = getTenantWhatsappNumbers;
+  getTenantWhatsappByPages = getTenantWhatsappByPages;
+  getTenantMetaScopes = getTenantMetaScopes;
+  getTenantFacebookPages = getTenantFacebookPages;
+  getTenantPageWhatsappNumbers = getTenantPageWhatsappNumbers;
+  getResolvedTenantAssetSelection = getResolvedTenantAssetSelection;
+  getTenantMetaConnections = getTenantMetaConnections;
+  deleteTenantMetaConnection = deleteTenantMetaConnection;
+  selectAdAccount = selectAdAccount;
+}
+
+export const metaService = new MetaService();
