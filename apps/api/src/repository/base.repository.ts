@@ -34,6 +34,27 @@ export abstract class TenantScopedRepository {
     return this.db.query.brandKits.findFirst({ where: eq(brandKits.tenantId, this.tenantId) });
   }
 
+  /** Upsert brandKit do tenant (insert onConflictDoUpdate por tenantId). */
+  async upsertTenantBrandKit(values: Partial<typeof brandKits.$inferInsert>) {
+    const [row] = await this.db
+      .insert(brandKits)
+      .values({ tenantId: this.tenantId, ...values } as any)
+      .onConflictDoUpdate({
+        target: brandKits.tenantId,
+        set: { ...values, updatedAt: new Date() } as any,
+      })
+      .returning();
+    return row;
+  }
+
+  /** Atualiza brandKit do tenant (indiferente se não existir). */
+  async updateTenantBrandKit(values: Partial<typeof brandKits.$inferInsert>) {
+    await this.db
+      .update(brandKits)
+      .set(values as any)
+      .where(eq(brandKits.tenantId, this.tenantId));
+  }
+
   async findClientGoal() {
     return this.db.query.clientGoals.findFirst({ where: eq(clientGoals.tenantId, this.tenantId) });
   }

@@ -3,6 +3,8 @@ import { MockMetricsProvider } from './lib/providers/mock-metrics.provider.js';
 import type { IMetricsProvider } from './lib/providers/metrics.provider.js';
 import { GoalService } from './services/goals/goal.service.js';
 import { GoalController } from './controllers/goal.controller.js';
+import { BrandKitService } from './services/brand-kit/brand-kit.service.js';
+import { BrandKitController } from './controllers/brand-kit.controller.js';
 
 /**
  * Composition root (DI) da API.
@@ -17,9 +19,11 @@ const metricsProvider: IMetricsProvider =
     : new DatabaseMetricsProvider();
 
 export const goalService = new GoalService(metricsProvider);
+export const brandKitService = new BrandKitService();
 
 export const controllers = {
   goal: new GoalController(goalService),
+  brandKit: new BrandKitController(brandKitService),
 };
 
 export { metricsProvider };
