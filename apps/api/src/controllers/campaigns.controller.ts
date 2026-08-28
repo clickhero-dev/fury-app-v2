@@ -11,6 +11,8 @@ import {
   invalidateCampaignsCache,
 } from '../lib/campaigns-cache.js';
 import { openrouterService, type ChatMessage } from '../services/llms/openrouter.service.js';
+import { emailService } from '../services/email/email.service.js';
+import { sendToTenant } from '../services/email/notify.js';
 
 const createCampaignSchema = z.object({
   name: z.string().min(3, 'Campaign name must be at least 3 characters'),
@@ -648,6 +650,12 @@ export class CampaignsController {
       });
 
       if (timedOut) return;
+
+      // Email transacional: campanha publicada pela aplicação (fire-and-forget)
+      const campaignName =
+        (result as any)?.campaign?.name ?? (result as any)?.campaignName ?? (result as any)?.name ?? 'sua campanha';
+      await sendToTenant(tenantId, req.user?.email, (to) => emailService.sendCampaignPublished(to, campaignName));
+
       res.status(201).json(result);
     } catch (err) {
       if (timedOut) return;

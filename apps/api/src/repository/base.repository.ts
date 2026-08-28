@@ -95,6 +95,14 @@ export abstract class TenantScopedRepository {
     return this.db.query.users.findFirst({ where: eq(users.tenantId, this.tenantId) });
   }
 
+  /** Emails dos usuários do tenant (dono/equipe). Usado em notificações transacionais. */
+  async findUserEmailsByTenant(): Promise<string[]> {
+    const rows = await this.db.query.users.findMany({ where: eq(users.tenantId, this.tenantId) });
+    return rows
+      .map((row) => row.email)
+      .filter((email): email is string => Boolean(email));
+  }
+
   /** Conexão Meta atual do tenant (qualquer estado). */
   async findMetaConnection() {
     return this.db.query.metaConnections.findFirst({

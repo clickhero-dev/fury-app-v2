@@ -5,6 +5,7 @@ import type { AuthService } from '../services/core/auth.service.js';
 import type { SocialAuthService } from '../services/core/social-auth.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { checkEmailVerificationRateLimit, checkForgotPasswordRateLimit, checkResetPasswordRateLimit } from '../middleware/rate-limit.middleware.js';
+import { passwordSchema } from '../lib/shared.js';
 
 const updateMeSchema = z.object({
   name: z.string().min(1).max(255).optional(),
@@ -27,7 +28,7 @@ const updateMeSchema = z.object({
 const registerSchema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email(),
-  password: z.string().min(8).max(255),
+  password: passwordSchema,
   companyName: z.string().min(1).max(255),
 });
 
@@ -52,12 +53,12 @@ const forgotPasswordSchema = z.object({
 const resetPasswordSchema = z.object({
   email: z.string().email(),
   otp: z.string().length(6).regex(/^\d+$/, 'OTP must contain only digits'),
-  newPassword: z.string().min(8).max(255),
+  newPassword: passwordSchema,
 });
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8).max(255),
+  newPassword: passwordSchema,
 });
 
 function getSocialRedirectUri(req?: Request): string {

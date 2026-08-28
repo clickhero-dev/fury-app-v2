@@ -8,7 +8,7 @@ import {
 } from '../lib/db.js';
 import { createGoogleApiClient } from '../lib/google-api.js';
 import { decryptToken } from '../utils/crypto.js';
-import { sendEmail } from '../services/email/email.service.js';
+import { emailService } from '../services/email/email.service.js';
 
 const GOOGLE_SYNC_QUEUE_NAME = 'google-sync';
 
@@ -67,11 +67,7 @@ export async function processSyncJob(): Promise<void> {
         });
 
         if (profile.email) {
-          await sendEmail({
-            to: profile.email,
-            subject: 'Seu perfil foi verificado no Google Meu Negócio',
-            html: `<p>Olá!</p><p>Seu perfil <strong>${profile.name}</strong> foi verificado no Google Meu Negócio. Ele já está visível para clientes.</p>`,
-          });
+          await emailService.sendGmbProfileVerified(profile.email, profile.name);
         }
       } else {
         await dbInstance
