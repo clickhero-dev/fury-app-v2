@@ -319,12 +319,14 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         const spendReais = centavosToReais(Math.round(spend * 100));
         const impressions = parseInt(insight.impressions || '0', 10);
         const clicks = parseInt(insight.clicks || '0', 10);
-        const objective = meta?.objective ?? null;
 
+        // Conversões calculadas com o MESMO critério do /metrics/summary
+        // (getSummary → normalizeInsights, sem objective-aware). Assim a soma
+        // das conversões das campanhas (ACTIVE+PAUSED) desta listagem reproduz
+        // o resumo exibido no dashboard — os totais das duas telas batem.
         const { roas, cpa, conversions } = extractCampaignMetricsFromInsight(
           insight,
-          spendReais,
-          objective
+          spendReais
         );
 
         campaigns.push({
