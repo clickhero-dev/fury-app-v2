@@ -6,7 +6,6 @@ import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Badge, type BadgeVariant } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { EmptyState } from '@/components/EmptyState';
 import {
   Dialog,
   DialogContent,
@@ -88,7 +87,12 @@ function daysRemaining(dateStr: string | null): number | null {
 
 export function Subscription() {
   const { data: subscription, isLoading } = useSubscription();
-  const { data: invoices, isLoading: isInvoicesLoading } = useInvoices();
+  const {
+    data: invoices,
+    isLoading: isInvoicesLoading,
+    isError: isInvoicesError,
+    refetch: refetchInvoices,
+  } = useInvoices();
   const cancelSubscription = useCancelSubscription();
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelError, setCancelError] = useState('');
@@ -211,23 +215,36 @@ export function Subscription() {
           )}
         </div>
 
-        {/* Histórico de Faturas */}
-        <div className="rounded-2xl border border-white/10 bg-[#161814] p-6 sm:p-8 space-y-6">
-          <h3 className="text-base font-bold text-text-primary">Histórico de faturas</h3>
-
-          {isInvoicesLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-5 h-5 animate-spin text-[#1E88A8]" />
+        {/* Histórico de Faturas — condicionado aos dados reais de faturamento */}
+        {isInvoicesLoading ? (
+          <div role="status" aria-label="Carregando faturas" className="flex items-center justify-center py-12">
+            <Loader2 className="w-5 h-5 animate-spin text-[#1E88A8]" />
+          </div>
+        ) : isInvoicesError ? (
+          <div className="rounded-2xl border border-error/20 bg-error/5 p-6 sm:p-8 text-center">
+            <div className="w-10 h-10 rounded-xl bg-error/10 flex items-center justify-center mx-auto mb-3">
+              <AlertTriangle className="w-5 h-5 text-error" />
             </div>
-          ) : !invoices || invoices.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-white/10 bg-[#1A1B17]/50 p-8">
-              <EmptyState
-                icon={<Receipt className="w-6 h-6 text-[#1E88A8]" />}
-                title="Nenhuma fatura ainda"
-                description="Suas faturas aparecem aqui assim que forem geradas."
-              />
+            <p className="text-sm font-semibold text-text-primary mb-1">Não foi possível carregar as faturas</p>
+            <p className="text-sm text-text-secondary mb-4">Tente novamente em instantes.</p>
+            <button
+              type="button"
+              onClick={() => refetchInvoices()}
+              className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium border border-border text-text-primary hover:bg-surface-secondary transition-colors cursor-pointer"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        ) : !invoices || invoices.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-[#1A1B17]/50 p-8">
+            <div className="flex items-center justify-center gap-3 text-text-secondary">
+              <Receipt className="w-5 h-5 text-[#1E88A8]" />
+              <p className="text-sm">Nenhuma fatura gerada ainda.</p>
             </div>
-          ) : (
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-white/10 bg-[#161814] p-6 sm:p-8 space-y-6">
+            <h3 className="text-base font-bold text-text-primary">Histórico de faturas</h3>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -269,8 +286,8 @@ export function Subscription() {
                 </TableBody>
               </Table>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Modal de Cancelamento */}
