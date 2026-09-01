@@ -44,10 +44,6 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function formatCents(cents: number): string {
-  return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
 function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
   return (
     <div
@@ -567,15 +563,9 @@ export function Configuracoes() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-text-tertiary">Próxima Cobrança</span>
+                        <span className="text-xs font-semibold text-text-tertiary">Vencimento do Plano</span>
                         <span className="text-xs font-bold text-text-primary">
                           {formatDate(subscription.currentPeriodEnd)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-text-tertiary">Valor Mensal</span>
-                        <span className="text-xs font-bold text-text-primary">
-                          {subscription.plan ? formatCents(subscription.plan.priceCents) : '—'}
                         </span>
                       </div>
                     </div>
