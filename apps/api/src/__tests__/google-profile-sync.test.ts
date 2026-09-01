@@ -111,7 +111,9 @@ function resetMocks() {
   dbMock.query.googleConnections.findFirst.mockResolvedValue(makeConnection('tenant-A'));
   dbMock.query.googleBusinessProfiles.findFirst.mockResolvedValue(makeProfile('tenant-A'));
   dbMock.update.mockReturnValue({
-    set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
+    set: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([makeProfile('tenant-A')]) }),
+    }),
   });
   dbMock.insert.mockImplementation((values: Record<string, unknown>) => {
     const valuesResult = Object.assign(Promise.resolve(undefined), {
