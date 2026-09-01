@@ -74,10 +74,10 @@ importers:
         specifier: ^3.1064.0
         version: 3.1116.0
       '@bull-board/api':
-        specifier: ^9.4.0
+        specifier: ~9.4.0
         version: 9.4.0(@bull-board/ui@9.4.0(bullmq@5.81.3(supports-color@7.2.0)))(bullmq@5.81.3(supports-color@7.2.0))
       '@bull-board/express':
-        specifier: ^9.4.0
+        specifier: ~9.4.0
         version: 9.4.0(bullmq@5.81.3(supports-color@7.2.0))(supports-color@7.2.0)
       '@fury/db':
         specifier: '*'

@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StudioPublishingController } from '../controllers/studio-publishing.controller.js';
 import type { StudioPublishingService } from '../services/studio/studio-publishing.service.js';
 
+// Isola o controller das notificações transacionais de email (que tocam o banco
+// via AuthRepository) — o teste valida só o comportamento do controller.
+vi.mock('../services/email/notify.js', () => ({
+  sendToTenant: vi.fn().mockResolvedValue(undefined),
+}));
+
 function mockRes() {
   return { status: vi.fn().mockReturnThis(), json: vi.fn() } as any;
 }

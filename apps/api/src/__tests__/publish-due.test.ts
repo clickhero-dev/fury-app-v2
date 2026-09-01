@@ -4,11 +4,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const createInstagramMedia = vi.fn();
 const getMediaContainerStatus = vi.fn();
 const publishInstagramMedia = vi.fn();
+const getUserFacebookPages = vi.fn();
 
 vi.mock('../lib/meta-api.js', () => ({
   createInstagramMedia: (...args: any[]) => createInstagramMedia(...args),
   getMediaContainerStatus: (...args: any[]) => getMediaContainerStatus(...args),
   publishInstagramMedia: (...args: any[]) => publishInstagramMedia(...args),
+  getUserFacebookPages: (...args: any[]) => getUserFacebookPages(...args),
 }));
 
 import { publishSinglePost } from '../services/planner/planner.service.js';
