@@ -37,6 +37,20 @@ export class StudioRepository extends TenantScopedRepository {
     await this.db.delete(creativeAssets).where(and(eq(creativeAssets.id, id), eq(creativeAssets.tenantId, this.tenantId)));
   }
 
+  async deleteAssetAndChildren(id: string): Promise<void> {
+    // Deleta filhos (que apontam para este asset como rootAssetId) primeiro,
+    // depois deleta o próprio asset. A FK rootAssetId não tem ON DELETE CASCADE.
+    await this.db.delete(creativeAssets).where(
+      and(
+        eq(creativeAssets.rootAssetId, id),
+        eq(creativeAssets.tenantId, this.tenantId),
+      ),
+    );
+    await this.db.delete(creativeAssets).where(
+      and(eq(creativeAssets.id, id), eq(creativeAssets.tenantId, this.tenantId)),
+    );
+  }
+
   async patchAsset(id: string, data: Partial<CreativeAsset>) {
     const [row] = await this.db
       .update(creativeAssets)
