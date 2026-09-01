@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { StudioRepository } from '../../repository/studio.repository.js';
 import { openrouterService } from '../llms/openrouter.service.js';
-import { saveTemporaryStudioImage, studioAssetsDir } from '../../lib/temp-storage.js';
+import { saveTemporaryStudioImage, ensureStudioAssetsDir, studioAssetsDir } from '../../lib/temp-storage.js';
 import { uploadAsset } from '../storage/storage.service.js';
 import {
   consumeCreativeQuota,
@@ -48,6 +48,7 @@ async function uploadImageToStorage(base64DataUrl: string): Promise<string> {
     if (match) {
       const ext = match[1].includes('jpeg') ? 'jpg' : match[1].includes('webp') ? 'webp' : 'png';
       const fileName = `${randomUUID()}.${ext}`;
+      await ensureStudioAssetsDir();
       await writeFile(join(studioAssetsDir, fileName), Buffer.from(match[2], 'base64'));
       return `https://${process.env.DOMAIN || 'clickhero-fury-api.u7pe19.easypanel.host'}/studio-assets/${fileName}`;
     }
