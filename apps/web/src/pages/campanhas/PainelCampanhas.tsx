@@ -25,8 +25,8 @@ import { type Period, getPeriodDates, formatPeriodLabel } from '@/lib/period-uti
 type FilterType = 'todos' | 'ativo' | 'pausado' | 'finalizado';
 
 const STATUS_OPTIONS: Array<{ value: FilterType; label: string }> = [
-  { value: 'ativo', label: 'Ativas' },
   { value: 'todos', label: 'Todos os status' },
+  { value: 'ativo', label: 'Ativas' },
   { value: 'pausado', label: 'Pausadas' },
   { value: 'finalizado', label: 'Finalizadas' },
 ];
@@ -42,7 +42,7 @@ const StatusBadgeAdapter = ({ status }: { status: CampaignData['status'] }) => {
 const PAGE_SIZE = 10;
 
 export function PainelCampanhas() {
-  const [filter, setFilter] = useState<FilterType>('ativo');
+  const [filter, setFilter] = useState<FilterType>('todos');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [campaignToPause, setCampaignToPause] = useState<CampaignData | null>(null);
@@ -103,7 +103,15 @@ export function PainelCampanhas() {
   };
 
   const filteredCampaigns = useMemo(() => {
-    let res = filter === 'todos' ? campaigns : campaigns.filter((c) => c.status === filter);
+    let res;
+    if (filter === 'todos') {
+      // Padrão: mesmas campanhas que o dashboard soma ("Clientes alcançados" =
+      // ACTIVE + PAUSED, exclui ARCHIVED/finalizadas). Assim o "Total Clientes"
+      // (soma das linhas) reproduz o resumo do dashboard por construção.
+      res = campaigns.filter((c) => c.status !== 'finalizado');
+    } else {
+      res = campaigns.filter((c) => c.status === filter);
+    }
     const q = search.trim().toLowerCase();
     if (q) res = res.filter((c) => c.name.toLowerCase().includes(q));
     return res;
@@ -114,6 +122,10 @@ export function PainelCampanhas() {
 
   const summary = useMemo(() => {
     if (filteredCampaigns.length === 0) return null;
+    // "Total Clientes" = soma das conversões das linhas de campanha exibidas
+    // (ACTIVE+PAUSED do período). Com o backend calculando conversões pelo mesmo
+    // critério do /metrics/summary, essa soma reproduz o "Clientes alcançados"
+    // do dashboard — total da tela de campanhas bate com o dashboard.
     const totalInvestido = filteredCampaigns.reduce((sum, c) => sum + c.investido, 0);
     const totalConversoes = filteredCampaigns.reduce((sum, c) => sum + (c.conversoes ?? 0), 0);
     return { totalInvestido, totalConversoes };

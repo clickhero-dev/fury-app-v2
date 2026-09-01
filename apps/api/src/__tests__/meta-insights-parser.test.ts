@@ -93,4 +93,36 @@ describe('meta-insights-parser', () => {
       expect(result.roas).toBeNull();
     });
   });
+
+  // CRITÉRIO DE ACEITE: "total de clientes em /campanhas deve representar a
+  // soma de clientes das linhas da campanha". O getCampaigns agora calcula a
+  // conversão de cada linha SEM objective-aware, com o MESMO critério que o
+  // /metrics/summary (getSummary → normalizeInsights). Isso garante que a soma
+  // das conversões das linhas = "Clientes alcançados" do dashboard.
+  describe('linha de campanha bate com o resumo do dashboard', () => {
+    it('extractCampaignMetricsFromInsight sem objective usa o mesmo fallback do summary', () => {
+      // Sem objective (como o getSummary), o fallback genérico prioriza tráfego.
+      const insight = {
+        actions: [
+          { action_type: 'link_click', value: '95' },
+          { action_type: 'landing_page_view', value: '90' },
+          { action_type: 'lead', value: '8' },
+        ],
+        unique_actions: undefined,
+        purchase_roas: undefined,
+        cost_per_action_type: undefined,
+        action_values: [],
+      };
+
+      // getSummary (parseConversionsFromActions sem objective) conta o primeiro
+      // evento válido da família fallback (landing_page_view vem antes de
+      // link_click na ordem de prioridade TRAFFIC).
+      const summaryConversions = parseConversionsFromActions(insight.actions, undefined);
+      // Linha de campanha (extractCampaignMetricsFromInsight sem objective).
+      const lineConversions = extractCampaignMetricsFromInsight(insight, 100).conversions;
+
+      expect(summaryConversions).toBe(90);
+      expect(lineConversions).toBe(summaryConversions);
+    });
+  });
 });

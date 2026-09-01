@@ -436,7 +436,7 @@ export function EstudioHome() {
                 {progressMessage || 'O ady está criando sua imagem...'}
               </h2>
               <p className="mt-2 text-sm text-text-tertiary">
-                A geração com IA e a renderização podem levar até 15 segundos
+                A geração com IA e a renderização podem levar de 1 a 2 minutos
               </p>
             </div>
             <div className="flex flex-col gap-1.5 text-xs text-text-tertiary">
