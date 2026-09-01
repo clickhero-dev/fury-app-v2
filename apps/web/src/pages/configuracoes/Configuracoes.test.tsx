@@ -68,12 +68,12 @@ function mockApi(overrides: { subscription?: SubscriptionType | null; me?: boole
   });
 }
 
-function makeWrapper() {
+function makeWrapper(initialEntry = '/configuracoes?tab=faturamento') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return ({ children }: { children: ReactNode }) => (
     <Provider store={store}>
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/configuracoes?tab=faturamento']}>{children}</MemoryRouter>
+        <MemoryRouter initialEntries={[initialEntry]}>{children}</MemoryRouter>
       </QueryClientProvider>
     </Provider>
   );
@@ -129,5 +129,25 @@ describe('Configuracoes — aba Faturamento', () => {
     expect(screen.getByRole('button', { name: /ver planos/i })).toBeInTheDocument();
     expect(screen.queryByText('Próxima Cobrança')).not.toBeInTheDocument();
     expect(screen.queryByText('Valor Mensal')).not.toBeInTheDocument();
+  });
+});
+
+describe('Configuracoes — aba Segurança', () => {
+  beforeEach(() => {
+    mockApiGet.mockReset();
+  });
+
+  it('não exibe a seção "Sessões Ativas" (dados fake removidos)', async () => {
+    mockApi();
+
+    render(<Configuracoes />, { wrapper: makeWrapper('/configuracoes?tab=seguranca') });
+
+    // A aba segurança continua disponível e exibindo a opção de alterar senha
+    expect(await screen.findByText('Alterar Senha')).toBeInTheDocument();
+
+    // A seção de sessões fake não deve existir
+    expect(screen.queryByText('Sessões Ativas')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sessão Atual')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Windows Chrome/i)).not.toBeInTheDocument();
   });
 });

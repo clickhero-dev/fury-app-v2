@@ -411,20 +411,6 @@ export function Configuracoes() {
                   </button>
                 </div>
               </div>
-
-              <div className="border-t border-border pt-6">
-                <h3 className="text-base font-semibold text-text-primary mb-4">Sessões Ativas</h3>
-                <div className="p-4 border border-border rounded-xl bg-surface-secondary flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-text-primary">Sessão Atual</p>
-                    <p className="text-xs text-text-tertiary">Windows Chrome - Último acesso: agora</p>
-                  </div>
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
-                    <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-                    Ativa
-                  </span>
-                </div>
-              </div>
             </div>
 
             <Dialog open={passwordOpen} onOpenChange={setPasswordOpen}>

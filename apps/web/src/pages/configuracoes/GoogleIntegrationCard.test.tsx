@@ -117,4 +117,24 @@ describe('GoogleIntegrationCard — ação contextual do Google Meu Negócio', (
     expect(await screen.findByRole('button', { name: /Conectar Google/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Ver como está meu Google Meu Negócio/i })).not.toBeInTheDocument();
   });
+
+  it('exibe o badge "Conectado" quando há conexão ativa', async () => {
+    mockApiGet
+      .mockResolvedValueOnce({ data: { success: true, data: CONNECTION } }) // /google/connections
+      .mockResolvedValueOnce({ data: { success: true, data: LOOKUP_FOUND } }); // /google/lookup
+
+    render(<GoogleIntegrationCard />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText('Conectado')).toBeInTheDocument();
+    expect(screen.queryByText('Não conectado')).not.toBeInTheDocument();
+  });
+
+  it('exibe o badge "Não conectado" quando não há conexão', async () => {
+    mockApiGet.mockResolvedValueOnce({ data: { success: true, data: null } });
+
+    render(<GoogleIntegrationCard />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText('Não conectado')).toBeInTheDocument();
+    expect(screen.queryByText('Conectado')).not.toBeInTheDocument();
+  });
 });
