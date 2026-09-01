@@ -111,7 +111,7 @@ export function InstagramPostsTab({ value, onChange, objective, instagramUserId 
   const reconnectMutation = useMutation({
     mutationFn: async () => {
       const response = await api.get<MetaAuthUrlResponse>('/meta/auth/url', {
-        params: { context: 'settings' },
+        params: { context: 'settings', frontendUrl: window.location.origin },
       });
       return response.data.data.authUrl;
     },
