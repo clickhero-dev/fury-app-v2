@@ -38,14 +38,14 @@ export class StudioRepository extends TenantScopedRepository {
   }
 
   async deleteAssetAndChildren(id: string): Promise<void> {
-    // Deleta filhos (que apontam para este asset como rootAssetId) primeiro,
-    // depois deleta o próprio asset. A FK rootAssetId não tem ON DELETE CASCADE.
-    await this.db.delete(creativeAssets).where(
-      and(
-        eq(creativeAssets.rootAssetId, id),
-        eq(creativeAssets.tenantId, this.tenantId),
-      ),
-    );
+    // Desvincula os filhos (rootAssetId -> null) antes de deletar o pai,
+    // para evitar violação de FK (rootAssetId references creativeAssets.id
+    // sem ON DELETE SET NULL). Cada versão vive independentemente.
+    await this.db
+      .update(creativeAssets)
+      .set({ rootAssetId: null })
+      .where(and(eq(creativeAssets.rootAssetId, id), eq(creativeAssets.tenantId, this.tenantId)));
+
     await this.db.delete(creativeAssets).where(
       and(eq(creativeAssets.id, id), eq(creativeAssets.tenantId, this.tenantId)),
     );
