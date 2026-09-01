@@ -1,12 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, CreditCard, Calendar, AlertTriangle, CheckCircle2, Clock, XCircle, Receipt, ExternalLink } from 'lucide-react';
+import { Loader2, CreditCard, Calendar, AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Badge, type BadgeVariant } from '@/components/ui/badge';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { EmptyState } from '@/components/EmptyState';
 import {
   Dialog,
   DialogContent,
@@ -15,8 +12,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { useSubscription, useCancelSubscription, useInvoices } from '@/hooks/useBilling';
-import type { SubscriptionStatus, InvoiceHistoryItem } from '@/types/billing';
+import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
+import type { SubscriptionStatus } from '@/types/billing';
 
 const STATUS_CONFIG: Record<SubscriptionStatus, {
   label: string;
@@ -56,21 +53,6 @@ const STATUS_CONFIG: Record<SubscriptionStatus, {
   },
 };
 
-const INVOICE_STATUS_CONFIG: Record<InvoiceHistoryItem['status'], { label: string; variant: BadgeVariant }> = {
-  paid: { label: 'Pago', variant: 'success' },
-  pending: { label: 'Pendente', variant: 'warning' },
-  overdue: { label: 'Vencido', variant: 'error' },
-  cancelled: { label: 'Cancelado', variant: 'default' },
-};
-
-function formatCurrency(cents: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 0,
-  }).format(cents / 100);
-}
-
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   return new Date(dateStr).toLocaleDateString('pt-BR', {
@@ -88,7 +70,6 @@ function daysRemaining(dateStr: string | null): number | null {
 
 export function Subscription() {
   const { data: subscription, isLoading } = useSubscription();
-  const { data: invoices, isLoading: isInvoicesLoading } = useInvoices();
   const cancelSubscription = useCancelSubscription();
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelError, setCancelError] = useState('');
@@ -207,67 +188,6 @@ export function Subscription() {
               >
                 Cancelar assinatura
               </button>
-            </div>
-          )}
-        </div>
-
-        {/* Histórico de Faturas */}
-        <div className="rounded-2xl border border-white/10 bg-[#161814] p-6 sm:p-8 space-y-6">
-          <h3 className="text-base font-bold text-text-primary">Histórico de faturas</h3>
-
-          {isInvoicesLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-5 h-5 animate-spin text-[#1E88A8]" />
-            </div>
-          ) : !invoices || invoices.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-white/10 bg-[#1A1B17]/50 p-8">
-              <EmptyState
-                icon={<Receipt className="w-6 h-6 text-[#1E88A8]" />}
-                title="Nenhuma fatura ainda"
-                description="Suas faturas aparecem aqui assim que forem geradas."
-              />
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-white/5 hover:bg-transparent">
-                    <TableHead className="text-text-secondary">Data</TableHead>
-                    <TableHead className="text-text-secondary">Valor (R$)</TableHead>
-                    <TableHead className="text-text-secondary">Status</TableHead>
-                    <TableHead className="text-right text-text-secondary">Ação</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invoices.map((invoice) => {
-                    const invoiceStatus = INVOICE_STATUS_CONFIG[invoice.status];
-                    return (
-                      <TableRow key={invoice.id} className="border-white/5 hover:bg-white/[0.02]">
-                        <TableCell className="text-text-primary">{formatDate(invoice.paidAt ?? invoice.createdAt)}</TableCell>
-                        <TableCell className="text-text-primary">{formatCurrency(invoice.amountCents)}</TableCell>
-                        <TableCell>
-                          <Badge variant={invoiceStatus.variant}>{invoiceStatus.label}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {invoice.invoiceUrl ? (
-                            <a
-                              href={invoice.invoiceUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-sm font-medium text-[#1E88A8] hover:underline"
-                            >
-                              Ver fatura
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          ) : (
-                            <span className="text-sm text-text-secondary">—</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
             </div>
           )}
         </div>
