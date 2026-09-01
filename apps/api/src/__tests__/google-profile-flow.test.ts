@@ -122,7 +122,12 @@ describe('Fluxo completo — criar perfil quando não existe (US2)', () => {
     expect(settingsRes.status).toBe(200);
     expect(settingsRes.body.success).toBe(true);
 
-    // 2) Cria o perfil (auto-seleciona a conta GBP)
+    // 2) Lista contas → auto-seleciona a primeira e persiste na conexão
+    //    (a seleção de conta é pré-requisito p/ criação automática)
+    const accountsRes = await request(app).get('/api/google/accounts').set(auth);
+    expect(accountsRes.status).toBe(200);
+
+    // 3) Cria o perfil usando a conta já selecionada
     const createRes = await request(app).post('/api/google/profiles').set(auth);
     expect(createRes.status).toBe(201);
     expect(createRes.body.data).toMatchObject({
@@ -134,13 +139,13 @@ describe('Fluxo completo — criar perfil quando não existe (US2)', () => {
     });
     const profileId = createRes.body.data.id;
 
-    // 3) O perfil fica gerencicável (GET /profiles/:id retorna dados do GBP)
+    // 4) O perfil fica gerencicável (GET /profiles/:id retorna dados do GBP)
     const getRes = await request(app).get(`/api/google/profiles/${profileId}`).set(auth);
     expect(getRes.status).toBe(200);
     expect(getRes.body.data.name).toBe('Velora Studio');
     expect(getRes.body.data.address).toMatchObject({ city: 'São Paulo', country: 'BR' });
 
-    // 4) Validação real no banco: conexão ganhou a conta selecionada
+    // 5) Validação real no banco: conexão ganhou a conta selecionada
     const [conn] = await db
       .select()
       .from(googleConnections)
@@ -148,7 +153,7 @@ describe('Fluxo completo — criar perfil quando não existe (US2)', () => {
     expect(conn.accountId).toBe('accounts/123456');
     expect(conn.accountName).toBe('Velora Studio');
 
-    // 5) O perfil espelho + sync log foram persistidos de verdade
+    // 6) O perfil espelho + sync log foram persistidos de verdade
     const [profile] = await db
       .select()
       .from(googleBusinessProfiles)
