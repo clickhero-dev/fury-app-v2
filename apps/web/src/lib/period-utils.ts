@@ -43,8 +43,13 @@ export function getPeriodDates(period: Period): { startDate: string; endDate: st
     const firstOfLastMonth = { year: lastOfLastMonth.year, month: lastOfLastMonth.month, day: 1 };
     return { startDate: formatYMD(firstOfLastMonth), endDate: formatYMD(lastOfLastMonth) };
   }
-  // this_month: do dia 1 do mês atual até ontem
-  return { startDate: formatYMD({ year: now.year, month: now.month, day: 1 }), endDate: yesterday };
+  // this_month: do dia 1 do mês atual até ontem.
+  // No dia 1º do mês, "ontem" cai no mês anterior e inverte o intervalo
+  // (start > end), zerando métricas e travando a barra de progresso — usa o
+  // próprio dia 1 como fim nesse caso.
+  const monthStart = formatYMD({ year: now.year, month: now.month, day: 1 });
+  const thisMonthEnd = yesterday >= monthStart ? yesterday : monthStart;
+  return { startDate: monthStart, endDate: thisMonthEnd };
 }
 
 /**

@@ -7,7 +7,7 @@ export function checkSubscriptionActive(
   _res: Response,
   next: NextFunction
 ) {
-  (async () => {
+  return (async () => {
     try {
       // Superadmin and admin are exempt from plan checks
       // - Superadmin: System-level access (always exempt)
