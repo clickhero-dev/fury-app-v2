@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
@@ -9,13 +9,14 @@ import { store } from '@/store';
 import type { Subscription as SubscriptionType } from '@/types/billing';
 
 const mockApiGet = vi.hoisted(() => vi.fn());
+const mockApiPatch = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api', () => ({
   default: {
     get: mockApiGet,
     post: vi.fn(),
     put: vi.fn(),
-    patch: vi.fn(),
+    patch: mockApiPatch,
     delete: vi.fn(),
   },
 }));
@@ -149,5 +150,46 @@ describe('Configuracoes — aba Segurança', () => {
     expect(screen.queryByText('Sessões Ativas')).not.toBeInTheDocument();
     expect(screen.queryByText('Sessão Atual')).not.toBeInTheDocument();
     expect(screen.queryByText(/Windows Chrome/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('Configuracoes — Página de destino (aba Geral)', () => {
+  beforeEach(() => {
+    mockApiGet.mockReset();
+    mockApiPatch.mockReset();
+  });
+
+  it('exibe o link da landing page derivado do tenantSlug, consistente com Visualizar', async () => {
+    mockApi();
+
+    render(<Configuracoes />, { wrapper: makeWrapper('/configuracoes?tab=geral') });
+
+    // O input de destino mostra /l/<slug>
+    const linkInput = (await screen.findByDisplayValue(/\/l\//)) as HTMLInputElement;
+    expect(linkInput.value).toBe(`${window.location.host}/l/fury`);
+
+    // O botão Visualizar aponta para o mesmo slug
+    const viewLink = screen.getByRole('link', { name: /visualizar/i }) as HTMLAnchorElement;
+    expect(viewLink.href).toBe(`${window.location.origin}/l/fury`);
+  });
+
+  it('mostra a mensagem do servidor quando o slug do novo nome já existe (409 SLUG_EXISTS)', async () => {
+    mockApi();
+    mockApiPatch.mockRejectedValue({
+      response: {
+        status: 409,
+        data: { success: false, error: { code: 'SLUG_EXISTS', message: 'Já existe um negócio com esse nome. Escolha outro nome.' } },
+      },
+    });
+
+    render(<Configuracoes />, { wrapper: makeWrapper('/configuracoes?tab=geral') });
+
+    // Altera o nome da organização e salva
+    const orgInput = await screen.findByPlaceholderText('Nome da organização');
+    fireEvent.change(orgInput, { target: { value: 'Fury' } });
+    fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }));
+
+    // A mensagem do servidor (slug em uso) deve aparecer no toast
+    expect(await screen.findByText(/já existe um negócio com esse nome/i)).toBeInTheDocument();
   });
 });

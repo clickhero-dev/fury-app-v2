@@ -4,8 +4,9 @@ import {
   users,
   tenants,
 } from '@fury/db';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
+import { slugify } from '../lib/slug.js';
 
 type User = typeof users.$inferSelect;
 type Tenant = typeof tenants.$inferSelect;
@@ -24,6 +25,25 @@ export class AuthRepository extends TenantScopedRepository {
 
   async findTenantBySlug(slug: string) {
     return this.db.query.tenants.findFirst({ where: eq(tenants.slug, slug) });
+  }
+
+  /**
+   * Encontra um tenant que conflita com o slug candidato — OU pela coluna
+   * `slug` OU por `slugify(name)` (a coluna legada pode divergir do nome
+   * atual, e o resolveTenantId também resolve por slugify(name)). Exclui o
+   * próprio tenant (renomear para um nome que gera o MESMO slug não é
+   * conflito). Usado no updateMe para barrar troca de nome com slug ocupado.
+   */
+  async findTenantSlugConflict(slug: string, excludeTenantId?: string) {
+    const bySlug = await this.db.query.tenants.findFirst({
+      where: excludeTenantId
+        ? and(eq(tenants.slug, slug), ne(tenants.id, excludeTenantId))
+        : eq(tenants.slug, slug),
+    });
+    if (bySlug) return bySlug;
+
+    const all = await this.db.query.tenants.findMany({ columns: { id: true, name: true } });
+    return all.find((t) => t.id !== excludeTenantId && !!t.name && slugify(t.name) === slug) ?? null;
   }
 
   async findUserByEmail(email: string) {

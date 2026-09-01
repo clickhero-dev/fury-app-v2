@@ -108,8 +108,12 @@ export function Configuracoes() {
       queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       showToast('Alterações salvas com sucesso!', 'success');
     },
-    onError: () => {
-      showToast('Erro ao salvar. Tente novamente.', 'error');
+    onError: (error: unknown) => {
+      const apiMessage =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
+          : undefined;
+      showToast(apiMessage || 'Erro ao salvar. Tente novamente.', 'error');
     },
   });
 
@@ -148,9 +152,10 @@ export function Configuracoes() {
     setTimeout(() => setToast(null), 3000);
   }
 
-  const destinationUrl = meData
-    ? `${window.location.origin}/l/${meData.tenantCodigo || meData.tenantSlug}`
+  const landingPath = meData
+    ? `/l/${meData.tenantSlug || meData.tenantCodigo || meData.tenantId}`
     : '';
+  const destinationUrl = meData ? `${window.location.origin}${landingPath}` : '';
 
   const handleCopyLink = () => {
     if (!destinationUrl) return;
@@ -290,7 +295,7 @@ export function Configuracoes() {
                         <input
                           type="text"
                           readOnly
-                          value={window.location.host + '/l/' + tenantName.toLowerCase().replace(/\s+/g, '-')}
+                          value={window.location.host + landingPath}
                           onClick={(e) => (e.target as HTMLInputElement).select()}
                           className={`${INPUT_STYLE} flex-1 select-all`}
                         />

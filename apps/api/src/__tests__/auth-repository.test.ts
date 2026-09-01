@@ -36,6 +36,42 @@ describe('AuthRepository', () => {
     expect(db.query.tenants.findFirst).toHaveBeenCalledTimes(1);
   });
 
+  it('findTenantSlugConflict acha conflito por slug em outro tenant (exclui o próprio)', async () => {
+    const { db } = makeDb();
+    db.query.tenants.findFirst.mockResolvedValueOnce({ id: 't-2', slug: 'fury' });
+    const repo = new AuthRepository('', db);
+    const found = await repo.findTenantSlugConflict('fury', 't-1');
+    expect(found?.id).toBe('t-2');
+    // a busca deve excluir o próprio tenant (and com ne)
+    const [{ where }] = db.query.tenants.findFirst.mock.calls[0];
+    expect(where).toBeDefined();
+  });
+
+  it('findTenantSlugConflict acha conflito por slugify(name) quando a coluna slug diverge', async () => {
+    const { db } = makeDb();
+    // coluna não conflita; nomes sim (slugify "petróleo" → "petroleo")
+    db.query.tenants.findFirst.mockResolvedValueOnce(null);
+    db.query.tenants.findMany.mockResolvedValueOnce([
+      { id: 't-1', name: 'Petroleo' }, // próprio tenant — deve ser ignorado
+      { id: 't-2', name: 'Petróleo' }, // conflita via slugify(name) NFD
+    ]);
+    const repo = new AuthRepository('', db);
+    const found = await repo.findTenantSlugConflict('petroleo', 't-1');
+    expect(found?.id).toBe('t-2');
+  });
+
+  it('findTenantSlugConflict retorna null quando o slug está livre', async () => {
+    const { db } = makeDb();
+    db.query.tenants.findFirst.mockResolvedValueOnce(null);
+    db.query.tenants.findMany.mockResolvedValueOnce([
+      { id: 't-1', name: 'Outra' },
+      { id: 't-2', name: 'Diferente' },
+    ]);
+    const repo = new AuthRepository('', db);
+    const found = await repo.findTenantSlugConflict('livre', 't-1');
+    expect(found).toBeNull();
+  });
+
   it('createTenant insere e retorna tenant', async () => {
     const { db, insert } = makeDb();
     const repo = new AuthRepository('', db);

@@ -44,6 +44,82 @@ describe('AuthService (deep DI)', () => {
     expect(me.businessContext).toBe('restaurante');
   });
 
+  it('getMe deriva o tenantSlug do NOME (slugify NFD), não da coluna crua', async () => {
+    // Tenant com coluna slug legada (lossy) — o slug público é slugify(name)
+    const repo = makeRepo({ findTenant: vi.fn(async () => ({ name: 'Petróleo', slug: 'petrleo', codigo: 'ABC12345', businessContext: null })) });
+    const svc = makeSvc(repo);
+    const me = await svc.getMe('u1');
+    expect(me.tenantName).toBe('Petróleo');
+    expect(me.tenantSlug).toBe('petroleo');
+  });
+
+  it('updateMe regenera o slug NFD do tenant a partir do novo tenantName', async () => {
+    const updatedTenant = { name: 'Nova Razão Social', slug: 'nova-razao-social', codigo: 'ABC12345', businessContext: null };
+    const repo = makeRepo({
+      findUserById: vi.fn(async () => user),
+      findTenant: vi.fn(async () => updatedTenant),
+      findTenantSlugConflict: vi.fn(async () => null),
+      patchTenant: vi.fn(async () => updatedTenant),
+    });
+    const svc = makeSvc(repo);
+    const me = await svc.updateMe('u1', { tenantName: 'Nova Razão Social' });
+
+    // patchTenant deve atualizar name E o slug slugificado (acentos removidos via NFD)
+    const [tenantId, patch] = repo.patchTenant.mock.calls[0];
+    expect(tenantId).toBe('t1');
+    expect(patch.name).toBe('Nova Razão Social');
+    expect(patch.slug).toBe('nova-razao-social');
+    // o me retornado reflete o novo slug
+    expect(me.tenantName).toBe('Nova Razão Social');
+    expect(me.tenantSlug).toBe('nova-razao-social');
+  });
+
+  it('updateMe BLOQUEIA (409 SLUG_EXISTS) quando o slug do novo nome já existe em OUTRO tenant', async () => {
+    const repo = makeRepo({
+      findUserById: vi.fn(async () => user),
+      findTenant: vi.fn(async () => ({ name: 'Fury', slug: 'fury', codigo: 'ABC12345', businessContext: null })),
+      findTenantSlugConflict: vi.fn(async () => ({ id: 'outro-tenant', name: 'Fury', slug: 'fury' })),
+      patchTenant: vi.fn(async () => undefined),
+    });
+    const svc = makeSvc(repo);
+    await expect(svc.updateMe('u1', { tenantName: 'Fury' })).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'SLUG_EXISTS',
+    });
+    // Não pode ter gravado nada
+    expect(repo.patchTenant).not.toHaveBeenCalled();
+  });
+
+  it('updateMe PERMITE quando o novo nome gera o MESMO slug do próprio tenant (não é conflito)', async () => {
+    const currentTenant = { name: 'Fury', slug: 'fury', codigo: 'ABC12345', businessContext: null };
+    const repo = makeRepo({
+      findUserById: vi.fn(async () => user),
+      findTenant: vi.fn(async () => currentTenant),
+      findTenantSlugConflict: vi.fn(async () => null),
+      patchTenant: vi.fn(async () => currentTenant),
+    });
+    const svc = makeSvc(repo);
+    await svc.updateMe('u1', { tenantName: 'Fury' });
+    const [ , patch ] = repo.patchTenant.mock.calls[0];
+    expect(patch.slug).toBe('fury');
+    // o conflito foi checado EXCLUINDO o próprio tenant
+    expect(repo.findTenantSlugConflict).toHaveBeenCalledWith('fury', 't1');
+  });
+
+  it('updateMe não toca o tenant quando tenantName não é enviado', async () => {
+    const repo = makeRepo({
+      findUserById: vi.fn(async () => user),
+      findTenant: vi.fn(async () => ({ name: 'Empresa', slug: 'emp', codigo: 'ABC12345', businessContext: null })),
+      patchUser: vi.fn(async () => undefined),
+      patchTenant: vi.fn(async () => undefined),
+    });
+    const svc = makeSvc(repo);
+    await svc.updateMe('u1', { name: 'Novo Nome' });
+
+    expect(repo.patchTenant).not.toHaveBeenCalled();
+    expect(repo.patchUser).toHaveBeenCalled();
+  });
+
   it('login de usuário Google (sem passwordHash) → INVALID_CREDENTIALS', async () => {
     const repo = makeRepo({ findUserByEmail: vi.fn(async () => ({ ...user, passwordHash: null })) });
     await expect(makeSvc(repo).login({ email: 'a@b.com', password: 'x' })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
