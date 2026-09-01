@@ -12,6 +12,7 @@ const callbackQuerySchema = z.object({
 
 const authUrlQuerySchema = z.object({
   context: z.enum(['onboarding', 'settings']).default('onboarding'),
+  frontendUrl: z.string().url('frontendUrl invalida').optional(),
 });
 
 const connectionIdSchema = z.object({
@@ -31,8 +32,12 @@ export class MetaController {
       if (!req.user?.tenantId) {
         throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no token JWT.');
       }
-      const { context } = authUrlQuerySchema.parse(req.query);
-      const authUrl = this.metaService.generateMetaAuthUrl(req.user.tenantId, context);
+      const { context, frontendUrl } = authUrlQuerySchema.parse(req.query);
+      // Origin do frontend que iniciou o fluxo: query explícita OU header Origin
+      // do browser (fallback). O redirect pós-OAuth volta ao MESMO ambiente
+      // (app.useady.com.br / HMG / localhost), sem depender de FRONTEND_URL.
+      const origin = frontendUrl ?? (req.headers.origin as string | undefined);
+      const authUrl = this.metaService.generateMetaAuthUrl(req.user.tenantId, context, origin);
       res.status(200).json({
         success: true,
         data: { authUrl },
@@ -53,12 +58,16 @@ export class MetaController {
     try {
       const query = callbackQuerySchema.parse(req.query);
 
-      const { tenantId, returnUrl } = await this.metaService.handleMetaOAuthCallback(query.code, query.state);
+      const { tenantId, returnUrl, frontendUrl: originFrontendUrl } =
+        await this.metaService.handleMetaOAuthCallback(query.code, query.state);
 
       // Email transacional: conta Meta conectada (fire-and-forget, não bloqueia o redirect)
       await sendToTenant(tenantId, undefined, (to) => emailService.sendAccountConnected(to, 'Meta'));
 
-      res.redirect(`${frontendUrl}${returnUrl}`);
+      // Redireciona para o MESMO domínio que iniciou o fluxo (embutido no state
+      // OAuth pelo getAuthUrl), não para o FRONTEND_URL fixo do ambiente.
+      const target = originFrontendUrl ?? frontendUrl;
+      res.redirect(`${target}${returnUrl}`);
     } catch (error) {
       // Erros de token/state OAuth redirecionam para integracoes; falhas na busca de
       // ativos sao tratadas no service e nao chegam aqui (conexao ja persistida).

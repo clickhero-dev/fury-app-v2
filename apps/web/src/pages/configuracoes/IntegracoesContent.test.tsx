@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -87,5 +87,34 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
 
     expect(await screen.findByText('Nenhuma conta de anúncio conectada')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Conectar conta Meta/i })).toBeInTheDocument();
+  });
+
+  it('envia frontendUrl = window.location.origin ao iniciar o OAuth (volta ao MESMO domínio)', async () => {
+    mockApi([]);
+    // /meta/auth/url é chamado ao clicar em "Conectar conta"
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/meta/connections') {
+        return Promise.resolve({ data: { success: true, data: [] } });
+      }
+      if (url === '/meta/auth/url') {
+        return Promise.resolve({
+          data: { success: true, data: { authUrl: 'https://www.facebook.com/dialog/oauth?state=x' } },
+        });
+      }
+      return Promise.resolve({ data: { success: true, data: [] } });
+    });
+
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<IntegracoesContent />, { wrapper: makeWrapper() });
+
+    const button = await screen.findByRole('button', { name: /Conectar conta Meta/i });
+    await user.click(button);
+
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledWith('/meta/auth/url', {
+        params: { context: 'settings', frontendUrl: window.location.origin },
+      });
+    });
   });
 });

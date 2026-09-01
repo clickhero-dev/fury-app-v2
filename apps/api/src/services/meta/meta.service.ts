@@ -54,6 +54,7 @@ interface OAuthStatePayload {
   tenantId: string;
   context: OAuthContext;
   returnUrl?: string;
+  frontendUrl?: string;
 }
 
 const RETURN_URLS: Record<OAuthContext, string> = {
@@ -123,6 +124,27 @@ function verifyOAuthState(state: string): OAuthStatePayload {
     return jwt.verify(state, secret) as OAuthStatePayload;
   } catch {
     throw new AppError(401, 'INVALID_OAUTH_STATE', 'State OAuth invalido ou expirado.');
+  }
+}
+
+/**
+ * Origens de frontend aceitas para o redirect pós-OAuth. Sem configuração
+ * explícita, qualquer origin http(s) válido é aceito por padrão (o fluxo NÃO
+ * depende de setup). ALLOWED_FRONTEND_ORIGINS='a,b' restringe a lista.
+ */
+function isAllowedFrontendOrigin(origin: string): boolean {
+  const explicit = process.env.ALLOWED_FRONTEND_ORIGINS
+    ?.split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  if (explicit && explicit.length > 0) {
+    return explicit.includes(origin);
+  }
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
   }
 }
 
@@ -254,10 +276,22 @@ export class MetaService {
     return decryptToken(connection.accessToken);
   }
 
-  generateMetaAuthUrl(tenantId: string, context: OAuthContext = 'onboarding'): string {
+  generateMetaAuthUrl(
+    tenantId: string,
+    context: OAuthContext = 'onboarding',
+    frontendUrl?: string
+  ): string {
     const appId = getRequiredEnv('META_APP_ID');
     const redirectUri = this.getRedirectUri();
-    const state = signOAuthState({ tenantId, context, returnUrl: RETURN_URLS[context] });
+    const state = signOAuthState({
+      tenantId,
+      context,
+      returnUrl: RETURN_URLS[context],
+      // Origin onde o usuário iniciou o fluxo: embutida no state para o callback
+      // redirecionar de volta ao MESMO ambiente (localhost/HMG/prod), sem
+      // depender de FRONTEND_URL fixo.
+      frontendUrl: frontendUrl && isAllowedFrontendOrigin(frontendUrl) ? frontendUrl : undefined,
+    });
 
     const authUrl = new URL(META_OAUTH_URL);
     authUrl.searchParams.set('client_id', appId);
@@ -281,8 +315,8 @@ export class MetaService {
   async handleMetaOAuthCallback(
     code: string,
     state: string,
-  ): Promise<{ tenantId: string; context: OAuthContext; returnUrl: string }> {
-    const { tenantId, context, returnUrl } = verifyOAuthState(state);
+  ): Promise<{ tenantId: string; context: OAuthContext; returnUrl: string; frontendUrl?: string }> {
+    const { tenantId, context, returnUrl, frontendUrl } = verifyOAuthState(state);
     console.log(`[OAuth] state verificado — tenantId=${tenantId} context=${context}`);
     const appId = getRequiredEnv('META_APP_ID');
     const appSecret = getRequiredEnv('META_APP_SECRET');
@@ -384,7 +418,7 @@ export class MetaService {
       console.error('[OAuth] busca de ativos falhou completamente:', error);
     }
 
-    return { tenantId, context, returnUrl: resolvedReturnUrl };
+    return { tenantId, context, returnUrl: resolvedReturnUrl, frontendUrl };
   }
 
   getTenantAssetSelection(tenantId: string): Promise<TenantAssetSelection | null> {
