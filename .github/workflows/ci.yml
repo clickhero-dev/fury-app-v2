@@ -110,6 +110,14 @@ jobs:
           DATABASE_URL: postgresql://fury:fury_local@localhost:5432/fury_test
           NODE_ENV: test
 
+      # Workspace packages precisam estar BUILT p/ os testes resolverem @fury/db e
+      # @fury/shared (mesmo prereq do Dockerfile do api, que roda os builds antes)
+      - name: Build shared (workspace)
+        run: pnpm --filter @fury/shared run build
+
+      - name: Build db (workspace)
+        run: pnpm --filter @fury/db run build
+
       # Gate unitário rápido: lista de testes sem banco (mesmo comando de sempre)
       - name: Run unit tests (API)
         run: npm run test:unit
