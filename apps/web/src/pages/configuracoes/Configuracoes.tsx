@@ -290,7 +290,7 @@ export function Configuracoes() {
                         <input
                           type="text"
                           readOnly
-                          value={destinationUrl}
+                          value={window.location.host + '/l/' + tenantName.toLowerCase().replace(/\s+/g, '-')}
                           onClick={(e) => (e.target as HTMLInputElement).select()}
                           className={`${INPUT_STYLE} flex-1 select-all`}
                         />
