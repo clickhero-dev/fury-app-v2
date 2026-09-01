@@ -44,10 +44,6 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function formatCents(cents: number): string {
-  return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
 function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
   return (
     <div
@@ -415,20 +411,6 @@ export function Configuracoes() {
                   </button>
                 </div>
               </div>
-
-              <div className="border-t border-border pt-6">
-                <h3 className="text-base font-semibold text-text-primary mb-4">Sessões Ativas</h3>
-                <div className="p-4 border border-border rounded-xl bg-surface-secondary flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-text-primary">Sessão Atual</p>
-                    <p className="text-xs text-text-tertiary">Windows Chrome - Último acesso: agora</p>
-                  </div>
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-medium text-brand">
-                    <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-                    Ativa
-                  </span>
-                </div>
-              </div>
             </div>
 
             <Dialog open={passwordOpen} onOpenChange={setPasswordOpen}>
@@ -567,15 +549,9 @@ export function Configuracoes() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-text-tertiary">Próxima Cobrança</span>
+                        <span className="text-xs font-semibold text-text-tertiary">Vencimento do Plano</span>
                         <span className="text-xs font-bold text-text-primary">
                           {formatDate(subscription.currentPeriodEnd)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-text-tertiary">Valor Mensal</span>
-                        <span className="text-xs font-bold text-text-primary">
-                          {subscription.plan ? formatCents(subscription.plan.priceCents) : '—'}
                         </span>
                       </div>
                     </div>
