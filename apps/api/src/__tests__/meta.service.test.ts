@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import jwt from 'jsonwebtoken';
 import { MetaService } from '../services/meta/meta.service.js';
 
 const connection = {
@@ -65,6 +66,19 @@ describe('MetaService (deep DI)', () => {
     expect(url).toContain('redirect_uri=http%3A%2F%2Flocalhost%2Fapi%2Fmeta%2Fauth%2Fcallback');
     expect(url).toContain('state=');
     expect(url).toContain('business_management');
+  });
+
+  it('generateMetaAuthUrl embute frontendUrl (origin de quem inicia o fluxo) no state', () => {
+    const svc = makeSvc(makeRepo());
+    const url = svc.generateMetaAuthUrl('t1', 'settings', 'https://app.useady.com.br');
+    const stateParam = new URL(url).searchParams.get('state') ?? '';
+    expect(stateParam).toBeTruthy();
+
+    // O state decodificado deve carregar a frontendUrl para o callback
+    // redirecionar de volta ao MESMO domínio do início do fluxo.
+    const decoded = jwt.decode(stateParam) as { frontendUrl?: string; context?: string };
+    expect(decoded.frontendUrl).toBe('https://app.useady.com.br');
+    expect(decoded.context).toBe('settings');
   });
 
   it('getTenantAssetSelection retorna null quando o tenant não tem conexão', async () => {

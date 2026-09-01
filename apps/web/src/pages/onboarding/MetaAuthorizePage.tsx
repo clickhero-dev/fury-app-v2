@@ -12,7 +12,7 @@ export function MetaAuthorizePage() {
   useEffect(() => {
     api
       .get<{ success: boolean; data: { authUrl: string } }>('/meta/auth/url', {
-        params: { context: 'onboarding' },
+        params: { context: 'onboarding', frontendUrl: window.location.origin },
       })
       .then((res) => {
         const authUrl = res.data.data.authUrl;
