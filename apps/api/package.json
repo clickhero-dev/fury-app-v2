@@ -34,8 +34,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
     "@aws-sdk/client-s3": "^3.1064.0",
-    "@bull-board/api": "^9.4.0",
-    "@bull-board/express": "^9.4.0",
+    "@bull-board/api": "~9.4.0",
+    "@bull-board/express": "~9.4.0",
     "@fury/db": "*",
     "@fury/shared": "*",
     "@langchain/core": "^1.2.9",
