@@ -1,4 +1,5 @@
-name: CI - EasyPanel
+name: CI - Fury monorepo
+
 on:
   push:
     branches: [dev, main, hmg]
@@ -6,10 +7,66 @@ on:
     branches: [dev, main, hmg]
 
 jobs:
-  check:
+  # ─────────────────────────────────────────────────────────────
+  # Build WEB — espelha apps/web/Dockerfile (standalone pnpm)
+  # ─────────────────────────────────────────────────────────────
+  build-web:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Igual ao Dockerfile do web: corepack prepare pnpm@latest
+      - name: Enable pnpm (corepack)
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install web deps (frozen, standalone)
+        working-directory: apps/web
+        run: pnpm i --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
+
+      - name: Build web
+        working-directory: apps/web
+        env:
+          VITE_API_URL: https://clickhero-fury-api.u7pe19.easypanel.host
+          VITE_POSTHOG_KEY: ''
+        run: pnpm run build
+
+  # ─────────────────────────────────────────────────────────────
+  # Build API — espelha apps/api/Dockerfile (monorepo pnpm)
+  # ─────────────────────────────────────────────────────────────
+  build-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Igual ao Dockerfile do api: npm install -g pnpm
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install workspace deps (frozen)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared
+        run: pnpm --filter @fury/shared run build
+
+      - name: Build db
+        run: pnpm --filter @fury/db run build
+
+      - name: Build api
+        run: pnpm --filter @fury/api run build
+
+  # ─────────────────────────────────────────────────────────────
+  # Testes unitários (API + WEB)
+  # ─────────────────────────────────────────────────────────────
+  test-unit:
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16
@@ -24,41 +81,71 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
-        with: 
-          node-version: '20'
-          cache: 'npm'
+        with:
+          node-version: '22'
 
-      - run: npm install --install-links
+      - name: Enable pnpm (corepack)
+        run: corepack enable && corepack prepare pnpm@latest --activate
 
-      - run: npx tsc -b
-        env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
+      - name: Install workspace deps (frozen)
+        run: pnpm install --frozen-lockfile
 
-      - run: npm run build
-
-      - run: npm run db:migrate
+      - name: Migrate test DB
+        run: npm run db:migrate
         env:
           DATABASE_URL: postgresql://fury:fury_local@localhost:5432/fury_test
           NODE_ENV: test
 
-      - run: npm run test:unit
+      # Workspace packages precisam estar BUILT p/ os testes resolverem @fury/db e
+      # @fury/shared (mesmo prereq do Dockerfile do api, que roda os builds antes)
+      - name: Build shared (workspace)
+        run: pnpm --filter @fury/shared run build
+
+      - name: Build db (workspace)
+        run: pnpm --filter @fury/db run build
+
+      # Gate unitário rápido: lista de testes sem banco (mesmo comando de sempre)
+      - name: Run unit tests (API)
+        run: npm run test:unit
         env:
           TEST_DATABASE_URL: postgresql://fury:fury_local@localhost:5432/fury_test
 
-      - name: Run coverage
+      # Suite completa de API com coverage (exclui web + testes de integração pesados)
+      - name: Run coverage (API)
         run: npm run test:coverage:ci
         env:
           TEST_DATABASE_URL: postgresql://fury:fury_local@localhost:5432/fury_test
 
+      # Suite de componentes WEB (runner próprio com jsdom) — install standalone,
+      # igual ao Dockerfile do web
+      - name: Install web deps (standalone)
+        working-directory: apps/web
+        run: pnpm i --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
+
+      - name: Run web tests
+        working-directory: apps/web
+        run: npx vitest run
+
       - name: Generate coverage badge
+        if: github.event_name == 'push'
         run: npm run coverage:badge
 
       - name: Publish coverage badge to badges branch
+        if: github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

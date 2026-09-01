@@ -150,7 +150,9 @@ function resetMocks() {
     return { values: vi.fn().mockReturnValue(valuesResult) };
   });
   dbMock.update.mockReturnValue({
-    set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
+    set: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'conn-1' }]) }),
+    }),
   });
   mockListCategories.mockResolvedValue([
     { categoryId: 'gcid:bakery', displayName: 'Padaria' },
@@ -295,7 +297,11 @@ describe('getGoogleAccounts — listAccounts + selectedAccountId', () => {
       { name: 'accounts/654321', accountName: 'Outra Empresa', type: 'AGENCY' },
     ]);
     mockCreateGoogleApiClient.mockReturnValue({ listAccounts: mockListAccounts });
-    dbMock.update.mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }) });
+    dbMock.update.mockReturnValue({
+      set: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'conn-1' }]) }),
+      }),
+    });
 
     const result = await googleService.getGoogleAccounts('tenant-A');
 
@@ -319,7 +325,11 @@ describe('getGoogleAccounts — listAccounts + selectedAccountId', () => {
       { name: 'accounts/654321', accountName: 'Outra Empresa', type: 'AGENCY' },
     ]);
     mockCreateGoogleApiClient.mockReturnValue({ listAccounts: mockListAccounts });
-    dbMock.update.mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }) });
+    dbMock.update.mockReturnValue({
+      set: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'conn-1' }]) }),
+      }),
+    });
 
     const result = await googleService.getGoogleAccounts('tenant-A');
 

@@ -27,6 +27,8 @@ const {
       googleConnections: { findFirst: vi.fn() },
       googleBusinessProfiles: { findFirst: vi.fn() },
       businessProfileSettings: { findFirst: vi.fn() },
+      googleSyncLogs: { findFirst: vi.fn(), findMany: vi.fn() },
+      users: { findMany: vi.fn().mockResolvedValue([]) },
       tenants: { findFirst: vi.fn() },
     },
     insert: vi.fn(),
@@ -45,6 +47,7 @@ vi.mock('@fury/db', () => ({
   googleBusinessProfiles: {},
   businessProfileSettings: {},
   googleSyncLogs: {},
+  users: {},
   tenants: {},
   eq: vi.fn((a: unknown, b: unknown) => ({ type: 'eq', a, b })),
   and: vi.fn((...args: unknown[]) => ({ type: 'and', args })),
@@ -204,7 +207,7 @@ describe('GBP — criação de perfil (POST /api/google/profiles)', () => {
       expect(payload.address).toMatchObject({ locality: 'São Paulo', regionCode: 'BR' });
     });
 
-    it('Given conectado sem conta selecionada → When cria → Then auto-seleciona a primeira conta GBP e persiste na conexão', async () => {
+    it('Given conectado sem conta selecionada → Then orienta a criação manual (422 GBP_CREATION_NOT_SUPPORTED)', async () => {
       dbMock.query.googleConnections.findFirst.mockResolvedValue(
         makeConnection('tenant-A', { accountId: null, accountName: null })
       );
@@ -214,14 +217,12 @@ describe('GBP — criação de perfil (POST /api/google/profiles)', () => {
         .post('/api/google/profiles')
         .set('Authorization', `Bearer ${authToken('tenant-A')}`);
 
-      expect(res.status).toBe(201);
-      expect(res.body.data.gbpLocationId).toBe('accounts/123456/locations/789');
-
-      // Persistiu a conta selecionada na conexão via update
-      expect(dbMock.update).toHaveBeenCalledTimes(1);
-      const setValues = dbMock.update.mock.results[0].value.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(setValues.accountId).toBe('accounts/999');
-      expect(setValues.accountName).toBe('Empresa X Ltda');
+      // Comportamento atual (decisão de produto): sem conta selecionada, o Google
+      // não permite criação automática — orienta o fluxo manual.
+      expect(res.status).toBe(422);
+      expect(res.body.error?.code).toBe('GBP_CREATION_NOT_SUPPORTED');
+      expect(mockCreateLocation).not.toHaveBeenCalled();
+      expect(dbMock.update).not.toHaveBeenCalled();
     });
   });
 
