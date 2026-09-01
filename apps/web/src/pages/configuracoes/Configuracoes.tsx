@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppLayout, PageHeader } from '@/components'; // IMPORTANTE: Importar PageHeader
 import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
 import { useTheme } from '@/hooks/useTheme';
-import { Sun, Moon, Copy, ExternalLink, Megaphone, Building2 } from 'lucide-react';
+import { Sun, Moon, Copy, ExternalLink, Megaphone } from 'lucide-react';
 import api from '@/lib/api';
 import { MetasPage } from '../onboarding/MetasPage';
 import { PublicoContent } from './PublicoContent';
@@ -347,7 +347,8 @@ export function Configuracoes() {
                       <span className="text-text-tertiary transition group-hover:text-brand">→</span>
                     </Link>
 
-                    <Link
+                    {/* Google Meu Negócio oculto (feature incompleta) — 2026-09 */}
+                    {/* <Link
                       to="/configuracoes/google-meu-negocio"
                       className={`${SURFACE_CARD} group flex items-center justify-between gap-4`}
                     >
@@ -361,7 +362,7 @@ export function Configuracoes() {
                         </div>
                       </div>
                       <span className="text-text-tertiary transition group-hover:text-brand">→</span>
-                    </Link>
+                    </Link> */}
                   </div>
                 </div>
 

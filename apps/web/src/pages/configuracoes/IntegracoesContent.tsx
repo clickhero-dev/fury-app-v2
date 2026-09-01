@@ -15,7 +15,8 @@ import {
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import type { MetaConnection } from '@/types/meta';
-import { GoogleIntegrationCard } from './GoogleIntegrationCard';
+// Google Meu Negócio oculto (feature incompleta) — 2026-09
+// import { GoogleIntegrationCard } from './GoogleIntegrationCard';
 
 interface MetaAuthUrlResponse {
   success: boolean;
@@ -406,13 +407,13 @@ export function IntegracoesContent() {
         </div>
       )}
 
-      {/* Google Meu Negócio */}
-      <div className="space-y-4">
+      {/* Google Meu Negócio oculto (feature incompleta) — 2026-09 */}
+      {/* <div className="space-y-4">
         <div className="pt-2 text-xs font-semibold uppercase tracking-wider text-text-secondary">
           Google Meu Negócio
         </div>
         <GoogleIntegrationCard />
-      </div>
+      </div> */}
     </div>
   );
 }
