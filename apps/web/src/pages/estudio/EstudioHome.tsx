@@ -37,6 +37,7 @@ export function EstudioHome() {
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // ─── Wizard state ─────────────────────────────────────────────
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -53,10 +54,14 @@ export function EstudioHome() {
     },
     onSuccess: () => {
       setDeletingId(null);
+      setToast({ message: 'Criativo excluído com sucesso', type: 'success' });
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+      setTimeout(() => setToast(null), 3000);
     },
     onError: () => {
       setDeletingId(null);
+      setToast({ message: 'Erro ao excluir o criativo. Tente novamente.', type: 'error' });
+      setTimeout(() => setToast(null), 3000);
     },
   });
 
@@ -220,6 +225,15 @@ export function EstudioHome() {
   return (
     <AppLayout>
       <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 sm:px-10">
+        {toast && (
+          <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
+            toast.type === 'success'
+              ? 'bg-success text-white'
+              : 'bg-error text-white'
+          }`}>
+            {toast.type === 'success' ? '✅' : '⚠️'} {toast.message}
+          </div>
+        )}
         {renderPageHeader()}
 
         {/* LIBRARY VIEW */}
