@@ -1,11 +1,9 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { CampaignWizard } from '@/components/campaign-wizard/CampaignWizard';
 import { Search, Loader2, Pause, Play, Trash2, ChevronDown, Plus } from 'lucide-react';
 import { DataTable, StatusBadge, PageHeader } from '@/components';
 import { PeriodSelector } from '@/components/PeriodSelector';
-import api from '@/lib/api';
 import {
   Dialog,
   DialogContent,
@@ -27,8 +25,8 @@ import { type Period, getPeriodDates, formatPeriodLabel } from '@/lib/period-uti
 type FilterType = 'todos' | 'ativo' | 'pausado' | 'finalizado';
 
 const STATUS_OPTIONS: Array<{ value: FilterType; label: string }> = [
-  { value: 'ativo', label: 'Ativas' },
   { value: 'todos', label: 'Todos os status' },
+  { value: 'ativo', label: 'Ativas' },
   { value: 'pausado', label: 'Pausadas' },
   { value: 'finalizado', label: 'Finalizadas' },
 ];
@@ -43,13 +41,8 @@ const StatusBadgeAdapter = ({ status }: { status: CampaignData['status'] }) => {
 
 const PAGE_SIZE = 10;
 
-interface SummaryMetrics {
-  spend: number;
-  conversions: number;
-}
-
 export function PainelCampanhas() {
-  const [filter, setFilter] = useState<FilterType>('ativo');
+  const [filter, setFilter] = useState<FilterType>('todos');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [campaignToPause, setCampaignToPause] = useState<CampaignData | null>(null);
@@ -62,27 +55,6 @@ export function PainelCampanhas() {
   const { data: result = { data: [] }, isLoading } = useCampaigns({ startDate, endDate });
   const campaigns = result.data ?? [];
   const subscriptionError = result.subscriptionError;
-
-  // Mesma fonte do Dashboard ("Clientes alcançados" / "Total investido"):
-  // o resumo de /metrics/summary soma as campanhas ACTIVE+PAUSED do período.
-  // Usar essa fonte garante que "Total Clientes"/"Total investido" da tela de
-  // Campanhas bata com o dashboard, independente do filtro de status da tabela.
-  const { data: metricsSummary } = useQuery({
-    queryKey: ['metrics-summary', startDate, endDate],
-    queryFn: async () => {
-      try {
-        const res = await api.get<{ success: boolean; data: { summary: SummaryMetrics | null } }>(
-          '/metrics/summary',
-          { params: { startDate, endDate } }
-        );
-        return res.data.data.summary ?? null;
-      } catch {
-        return null;
-      }
-    },
-    refetchInterval: 5 * 60 * 1000,
-    staleTime: 30 * 1000,
-  });
   const pauseMutation = usePauseCampaign();
   const deleteMutation = useDeleteCampaign();
 
@@ -131,7 +103,15 @@ export function PainelCampanhas() {
   };
 
   const filteredCampaigns = useMemo(() => {
-    let res = filter === 'todos' ? campaigns : campaigns.filter((c) => c.status === filter);
+    let res;
+    if (filter === 'todos') {
+      // Padrão: mesmas campanhas que o dashboard soma ("Clientes alcançados" =
+      // ACTIVE + PAUSED, exclui ARCHIVED/finalizadas). Assim o "Total Clientes"
+      // (soma das linhas) reproduz o resumo do dashboard por construção.
+      res = campaigns.filter((c) => c.status !== 'finalizado');
+    } else {
+      res = campaigns.filter((c) => c.status === filter);
+    }
     const q = search.trim().toLowerCase();
     if (q) res = res.filter((c) => c.name.toLowerCase().includes(q));
     return res;
@@ -141,20 +121,15 @@ export function PainelCampanhas() {
   const pagedCampaigns = filteredCampaigns.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const summary = useMemo(() => {
-    if (filteredCampaigns.length === 0 && !metricsSummary) return null;
-    // Fonte de verdade: o resumo do dashboard (/metrics/summary). Quando
-    // disponível, os totais batem com o "Clientes alcançados"/"Total investido"
-    // do dashboard. Fallback: soma das linhas filtradas (antes de /summary).
-    const totalInvestido =
-      metricsSummary && metricsSummary.spend != null
-        ? metricsSummary.spend
-        : filteredCampaigns.reduce((sum, c) => sum + c.investido, 0);
-    const totalConversoes =
-      metricsSummary && metricsSummary.conversions != null
-        ? metricsSummary.conversions
-        : filteredCampaigns.reduce((sum, c) => sum + (c.conversoes ?? 0), 0);
+    if (filteredCampaigns.length === 0) return null;
+    // "Total Clientes" = soma das conversões das linhas de campanha exibidas
+    // (ACTIVE+PAUSED do período). Com o backend calculando conversões pelo mesmo
+    // critério do /metrics/summary, essa soma reproduz o "Clientes alcançados"
+    // do dashboard — total da tela de campanhas bate com o dashboard.
+    const totalInvestido = filteredCampaigns.reduce((sum, c) => sum + c.investido, 0);
+    const totalConversoes = filteredCampaigns.reduce((sum, c) => sum + (c.conversoes ?? 0), 0);
     return { totalInvestido, totalConversoes };
-  }, [filteredCampaigns, metricsSummary]);
+  }, [filteredCampaigns]);
 
   const columns = [
     {
