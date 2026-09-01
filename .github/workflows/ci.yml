@@ -18,8 +18,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: pnpm
-          cache-dependency-path: apps/web/pnpm-lock.yaml
 
       # Igual ao Dockerfile do web: corepack prepare pnpm@latest
       - name: Enable pnpm (corepack)
@@ -47,7 +45,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: pnpm
 
       # Igual ao Dockerfile do api: npm install -g pnpm
       - name: Install pnpm
@@ -100,7 +97,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: pnpm
 
       - name: Enable pnpm (corepack)
         run: corepack enable && corepack prepare pnpm@latest --activate
