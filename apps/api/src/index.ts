@@ -28,6 +28,7 @@ import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due
 import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
+import { slugify } from './lib/slug.js';
 import { recoverInterruptedPlannerWorkflows } from './planner-workflow-runner.js';
 import { runApiStartupWorkflow } from './workflows/api-startup-runner.js';
 import { flushAnalytics, captureServerException } from './lib/analytics.js';
@@ -64,7 +65,7 @@ app.use('/studio-assets', express.static(studioAssetsDir));
 // Public LP (landing page) for WhatsApp Conversation campaigns — no auth
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function resolveTenantId(slugOrId: string): Promise<string | null> {
+export async function resolveTenantId(slugOrId: string): Promise<string | null> {
   const { db, tenants } = await import('@fury/db');
   const { eq, or } = await import('drizzle-orm');
   if (UUID_RE.test(slugOrId)) {
@@ -74,7 +75,11 @@ async function resolveTenantId(slugOrId: string): Promise<string | null> {
   const tenant = await db.query.tenants.findFirst({
     where: or(eq(tenants.slug, slugOrId), eq(tenants.codigo, slugOrId)),
   });
-  return tenant?.id ?? null;
+  if (tenant) return tenant.id;
+  // Fallback: o link da LP da campanha usa o NOME DA ORGANIZAÇÃO slugificado
+  // (slugify(name)), que pode divergir do tenants.slug (renomeado/arbitrário).
+  const rows = await db.query.tenants.findMany({ columns: { id: true, name: true } });
+  return rows.find((r) => r.name && slugify(r.name) === slugOrId)?.id ?? null;
 }
 
 app.get('/api/lp/:slug', async (req, res) => {
