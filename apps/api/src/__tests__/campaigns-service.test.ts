@@ -400,7 +400,7 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     })).rejects.toThrow(AppError);
   });
 
-  it('cria whatsapp_conv com URL da LP e OUTCOME_TRAFFIC', async () => {
+  it('cria whatsapp_conv com link da LP em app.useady.com.br/l/<slug> e OUTCOME_TRAFFIC', async () => {
     const { service, repo, meta } = makeService();
     repo.metaConnections.push({
       tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
@@ -423,13 +423,42 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     expect(meta.createdCampaigns[0].objective).toBe('OUTCOME_TRAFFIC');
     expect(meta.createdAdSets[0].optimization_goal).toBe('LINK_CLICKS');
     const link = meta.createdAdCreatives[0].object_story_spec.link_data.link;
-    expect(link).toContain('/api/lp/');
-    expect(link).toContain(TENANT_ID);
+    expect(link).toBe(`https://app.useady.com.br/l/${TENANT_ID}`);
+    expect(link).not.toContain('/api/lp/');
     expect(meta.createdAdCreatives[0].object_story_spec.link_data.call_to_action.type).toBe('LEARN_MORE');
     expect(repo.campaigns).toHaveLength(1);
   });
 
-  it('whatsapp_conv usa slug do tenant na LP quando disponível', async () => {
+  it('whatsapp_conv usa o NOME DA ORGANIZAÇÃO (slugified) no link da LP, não o slug do tenant', async () => {
+    const mockDb = await import('@fury/db');
+    (mockDb.db.query.tenants.findFirst as any).mockResolvedValue({ name: 'Meu Negócio Test', slug: 'slug-antigo' });
+
+    const { service, repo, meta } = makeService();
+    repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+      createdAt: new Date(),
+    } as any);
+    meta.locationsResult = [{ key: 'city_key_1' }];
+    meta.uploadAdImageResult = 'img_hash';
+    meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+
+    const result = await service.createCampaignFromWizard({
+      tenantId: TENANT_ID, objective: 'whatsapp_conv',
+      headline: 'Fale conosco', primaryText: 'Clique e converse',
+      locationCity: 'Sao Paulo', locationRadiusKm: 30,
+      ageMin: 18, ageMax: 65, gender: 'all', dailyBudgetBrl: 100,
+      creativeUploadUrl: 'https://example.com/img.jpg',
+    });
+
+    const link = meta.createdAdCreatives[0].object_story_spec.link_data.link;
+    expect(link).toBe('https://app.useady.com.br/l/meu-negocio-test');
+    expect(link).not.toContain('slug-antigo');
+    expect(link).not.toContain(TENANT_ID);
+    expect(result.success).toBe(true);
+  });
+
+  it('whatsapp_conv cai no slug do tenant quando o nome da organização não está disponível', async () => {
     const mockDb = await import('@fury/db');
     (mockDb.db.query.tenants.findFirst as any).mockResolvedValue({ slug: 'meu-negocio-test' });
 
@@ -452,7 +481,7 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     });
 
     const link = meta.createdAdCreatives[0].object_story_spec.link_data.link;
-    expect(link).toContain('/api/lp/meu-negocio-test');
+    expect(link).toBe('https://app.useady.com.br/l/meu-negocio-test');
     expect(link).not.toContain(TENANT_ID);
     expect(result.success).toBe(true);
   });

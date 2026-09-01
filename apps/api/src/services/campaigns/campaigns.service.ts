@@ -10,6 +10,7 @@ import { CampaignRepository } from '../../repository/campaign.repository.js';
 import { invalidateCampaignsCache } from '../../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../../lib/locations-cache.js';
 import { getResolvedTenantAssetSelection } from '../meta/meta.service.js';
+import { slugify } from '../../lib/slug.js';
 import { getCampaignAds, getCampaignAdCreatives, getVideoSourceUrl, searchMetaInterests as searchMetaInterestsLib } from '../../lib/meta-api.js';
 import type { IMetaCampaignProvider } from '../../lib/providers/meta-campaign.provider.js';
 import type {
@@ -814,22 +815,27 @@ export class CampaignsService {
 
       const adImageHash = await adImageHashPromise;
 
-      // ponytail: compute link once instead of re-deriving in the creative spread
-      const appUrl = process.env.FURY_APP_URL || process.env.APP_URL || 'https://clickhero-fury-api.u7pe19.easypanel.host';
+      // O link do anúncio (whatsapp_conv) aponta para a LP pública do app web:
+      // https://app.useady.com.br/l/<slug>. URL fixa de produção, pois o anúncio
+      // é servido ao público e não pode depender do host/ambiente da API.
+      const LP_BASE_URL = 'https://app.useady.com.br';
 
-      // Busca o slug do tenant para a LP (whatsapp_conv) — fallback pro tenantId
+      // Busca o slug da LP (whatsapp_conv) — derivado do NOME DA ORGANIZAÇÃO
+      // (t.name), não do tenants.slug (pode estar desatualizado ou arbitrário).
+      // Fallback: slug do tenant e, por último, o tenantId.
       let lpSlug = args.tenantId;
       if (args.objective === 'whatsapp_conv') {
         try {
           const t = await new CampaignRepository(args.tenantId).findTenant();
-          if (t?.slug) lpSlug = t.slug;
+          if (t?.name) lpSlug = slugify(t.name);
+          else if (t?.slug) lpSlug = t.slug;
         } catch { /* fallback ao tenantId */ }
       }
 
       const creativeLink = args.objective === 'visits'
         ? args.destinationUrl
         : args.objective === 'whatsapp_conv'
-          ? `${appUrl}/api/lp/${lpSlug}`
+          ? `${LP_BASE_URL}/l/${lpSlug}`
           : `https://www.facebook.com/${pageId}`;
 
       const creativeBody: Record<string, unknown> = instagramCreativeActorId
