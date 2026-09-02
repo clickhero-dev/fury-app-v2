@@ -15,11 +15,13 @@ import { RequireSuperadmin } from './components/auth/RequireSuperadmin';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AuthenticatedShell } from './components/layout/AuthenticatedShell';
 import { AdminShell } from './components/layout/AdminShell';
+import { CampaignWizardProvider } from '@/contexts/CampaignWizardContext';
 import { Dashboard } from './pages/dashboard/Dashboard';
 import { Metas } from './pages/dashboard/Metas';
 import { PainelCampanhas } from './pages/campanhas/PainelCampanhas';
 import { RegrasCampanhas } from './pages/campanhas/RegrasCampanhas';
 import { InsightsCampanha } from './pages/campanhas/InsightsCampanha';
+import { CriarCampanhaPage } from './pages/campanhas/CriarCampanhaPage';
 import { CreativeStudio } from './pages/estudio/CreativeStudio';
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
@@ -102,34 +104,42 @@ export const router = createBrowserRouter([
     element: <RoadmapPage />,
   },
   {
-    element: <AuthenticatedShell />,
+    element: (
+      <CampaignWizardProvider>
+        <AuthenticatedShell />
+      </CampaignWizardProvider>
+    ),
     children: [
       { path: '/dashboard', element: <Dashboard /> },
       { path: '/onboarding/metas', element: <AppLayout><MetasPage /></AppLayout> },
       { path: '/dashboard/metas', element: <Metas /> },
-      { 
-        path: '/campanhas', 
+      {
+        path: '/campanhas',
         element: (
           <AppLayout>
             <PainelCampanhas />
           </AppLayout>
-        ) 
+        )
       },
-      { 
-        path: '/campanhas/regras', 
+      {
+        path: '/criar-campanha',
+        element: <CriarCampanhaPage />,
+      },
+      {
+        path: '/campanhas/regras',
         element: (
           <AppLayout>
             <RegrasCampanhas />
           </AppLayout>
-        ) 
+        )
       },
-      { 
-        path: '/campanhas/:id/insights', 
+      {
+        path: '/campanhas/:id/insights',
         element: (
           <AppLayout>
             <InsightsCampanha />
           </AppLayout>
-        ) 
+        )
       },
       { path: '/automacao', element: <MinhasRegras /> },
       { path: '/automacao/minhas-regras', element: <MinhasRegras /> },

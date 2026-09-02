@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { CampaignWizard } from '@/components/campaign-wizard/CampaignWizard';
+import { Link, useNavigate } from 'react-router-dom';
+import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import { Search, Loader2, Pause, Play, Trash2, ChevronDown, Plus } from 'lucide-react';
 import { DataTable, StatusBadge, PageHeader } from '@/components';
 import { PeriodSelector } from '@/components/PeriodSelector';
@@ -42,13 +42,14 @@ const StatusBadgeAdapter = ({ status }: { status: CampaignData['status'] }) => {
 const PAGE_SIZE = 10;
 
 export function PainelCampanhas() {
+  const navigate = useNavigate();
+  const { setPreSelectedAsset, clearPreSelectedAsset } = useCampaignWizardContext();
   const [filter, setFilter] = useState<FilterType>('todos');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [campaignToPause, setCampaignToPause] = useState<CampaignData | null>(null);
   const [campaignToDelete, setCampaignToDelete] = useState<CampaignData | null>(null);
   const [actionError, setActionError] = useState<string>('');
-  const [wizardOpen, setWizardOpen] = useState(false);
   const [period, setPeriod] = useState<Period>('this_month');
 
   const { startDate, endDate } = getPeriodDates(period);
@@ -57,6 +58,11 @@ export function PainelCampanhas() {
   const subscriptionError = result.subscriptionError;
   const pauseMutation = usePauseCampaign();
   const deleteMutation = useDeleteCampaign();
+
+  const handleCreateCampaign = () => {
+    clearPreSelectedAsset();
+    navigate('/criar-campanha');
+  };
 
   const pendingCampaignId =
     pauseMutation.isPending && pauseMutation.variables
@@ -224,7 +230,7 @@ export function PainelCampanhas() {
         actions={
           <button
             type="button"
-            onClick={() => setWizardOpen(true)}
+            onClick={handleCreateCampaign}
             className="inline-flex items-center gap-2 px-6 py-3 text-xs font-semibold text-white bg-brand hover:bg-brand-hover hover:scale-[1.02] active:scale-[0.98] rounded-full transition-all cursor-pointer shadow-md"
           >
             <Plus className="size-4 stroke-[2.5]" />
@@ -410,8 +416,6 @@ export function PainelCampanhas() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <CampaignWizard open={wizardOpen} onOpenChange={setWizardOpen} />
 
       <Dialog
         open={campaignToDelete !== null}
