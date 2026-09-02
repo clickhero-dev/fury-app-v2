@@ -3,6 +3,10 @@ import type { Request, Response, NextFunction } from 'express';
 import { CampaignsController } from '../controllers/campaigns.controller.js';
 import type { CampaignsService } from '../services/campaigns/campaigns.service.js';
 
+vi.mock('../services/email/notify.js', () => ({
+  sendToTenant: vi.fn().mockResolvedValue(undefined),
+}));
+
 function makeReq(overrides: Partial<Request> = {}): Request {
   return {
     body: {},
@@ -108,6 +112,142 @@ describe('CampaignsController', () => {
         })
       );
       expect(next).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createWizardCampaign multi-criativo', () => {
+    const baseBody = {
+      objective: 'engagement',
+      location_city: 'São Paulo',
+      age_min: 18,
+      age_max: 45,
+      gender: 'all',
+      daily_budget_brl: 30,
+    };
+
+    const lastNextError = () =>
+      (next as unknown as { mock: { calls: Array<[unknown]> } }).mock.calls[0]?.[0] as
+        | { name?: string; issues?: Array<{ message: string }> }
+        | undefined;
+
+    it('201 com creatives[] de 2 itens → service recebe creatives mapeado e status 201', async () => {
+      const createCampaignFromWizard = vi.fn().mockResolvedValue({ success: true });
+      const ctrl = makeController({ createCampaignFromWizard });
+      const req = makeReq({
+        body: {
+          ...baseBody,
+          creatives: [
+            { creative_upload_url: 'https://example.com/a.jpg', headline: 'T1', primary_text: 'P1' },
+            { creative_upload_url: 'https://example.com/b.jpg', headline: 'T2', primary_text: 'P2' },
+          ],
+        },
+      });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(createCampaignFromWizard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          creatives: [
+            {
+              creativeAssetId: undefined,
+              creativeUploadUrl: 'https://example.com/a.jpg',
+              creativeInstagramMediaId: undefined,
+              creativeMediaUrl: undefined,
+              headline: 'T1',
+              primaryText: 'P1',
+              destinationUrl: undefined,
+            },
+            {
+              creativeAssetId: undefined,
+              creativeUploadUrl: 'https://example.com/b.jpg',
+              creativeInstagramMediaId: undefined,
+              creativeMediaUrl: undefined,
+              headline: 'T2',
+              primaryText: 'P2',
+              destinationUrl: undefined,
+            },
+          ],
+        })
+      );
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('400 quando um item de creatives não tem imagem → ZodError', async () => {
+      const ctrl = makeController();
+      const req = makeReq({
+        body: {
+          ...baseBody,
+          creatives: [
+            { creative_upload_url: 'https://example.com/a.jpg', headline: 'T1', primary_text: 'P1' },
+            { headline: 'T2', primary_text: 'P2' },
+          ],
+        },
+      });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(res.status).not.toHaveBeenCalledWith(201);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+      expect(JSON.stringify(lastNextError()?.issues)).toContain(
+        'Cada criativo deve ter imagem da galeria, upload ou post do Instagram.'
+      );
+    });
+
+    it('400 quando creatives tem 5 itens (cap 4) → ZodError', async () => {
+      const ctrl = makeController();
+      const req = makeReq({
+        body: {
+          ...baseBody,
+          creatives: Array.from({ length: 5 }, (_, i) => ({
+            creative_upload_url: `https://example.com/${i}.jpg`,
+            headline: `T${i}`,
+            primary_text: `P${i}`,
+          })),
+        },
+      });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(res.status).not.toHaveBeenCalledWith(201);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+    });
+
+    it('400 quando creatives ausente e legacy sem imagem → mantém mensagem atual', async () => {
+      const ctrl = makeController();
+      const req = makeReq({ body: { ...baseBody, headline: 'T1', primary_text: 'P1' } });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(res.status).not.toHaveBeenCalledWith(201);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+      expect(JSON.stringify(lastNextError()?.issues)).toContain(
+        'Selecione uma imagem da galeria, envie um arquivo ou escolha um post do Instagram.'
+      );
+    });
+
+    it('400 quando creatives ausente e legacy sem headline/primary_text → ZodError (refine legado)', async () => {
+      const ctrl = makeController();
+      const req = makeReq({
+        body: { ...baseBody, creative_upload_url: 'https://example.com/a.jpg' },
+      });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(res.status).not.toHaveBeenCalledWith(201);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+      expect(JSON.stringify(lastNextError()?.issues)).toContain(
+        'Informe o título (headline) e o texto principal (primary text).'
+      );
     });
   });
 });

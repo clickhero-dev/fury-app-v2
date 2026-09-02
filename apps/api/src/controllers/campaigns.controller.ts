@@ -53,16 +53,28 @@ const insightsSchema = z.object({
   end_date: z.string().optional(),
 });
 
+const wizardCreativeItemSchema = z.object({
+  creative_asset_id: z.string().min(1).optional(),
+  creative_upload_url: z.string().min(1).optional(),
+  creative_instagram_media_id: z.string().min(1).optional(),
+  creative_media_url: z.string().min(1).optional(),
+  headline: z.string().min(1).max(40),
+  primary_text: z.string().min(1).max(125),
+  destination_url: z.string().regex(/^https?:\/\//, 'URL inválida. Use http:// ou https://').optional(),
+});
+
 const createWizardSchema = z
   .object({
     objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp', 'whatsapp_conv']),
 
+    creatives: z.array(wizardCreativeItemSchema).min(1).max(4).optional(),
+    // campos únicos legados — mantidos para clientes antigos
     creative_asset_id: z.string().min(1).optional(),
     creative_upload_url: z.string().min(1).optional(),
     creative_instagram_media_id: z.string().min(1).optional(),
     creative_media_url: z.string().min(1).optional(),
-    headline: z.string().min(1).max(40),
-    primary_text: z.string().min(1).max(125),
+    headline: z.string().min(1).max(40).optional(),
+    primary_text: z.string().min(1).max(125).optional(),
     destination_url: z.string().regex(/^https?:\/\//, 'URL inválida. Use http:// ou https://').optional(),
 
     location_city: z.string().min(1),
@@ -85,11 +97,23 @@ const createWizardSchema = z
     instagram_username: z.string().min(1).optional(),
   })
   .refine(
-    (data) => Boolean(data.creative_asset_id || data.creative_upload_url || data.creative_instagram_media_id),
+    (data) =>
+      data.creatives !== undefined ||
+      Boolean(data.creative_asset_id || data.creative_upload_url || data.creative_instagram_media_id),
     {
       message: 'Selecione uma imagem da galeria, envie um arquivo ou escolha um post do Instagram.',
-      path: ['creative_asset_id'],
+      path: ['creatives'],
     }
+  )
+  .refine(
+    (data) =>
+      data.creatives === undefined ||
+      data.creatives.every((c) => Boolean(c.creative_asset_id || c.creative_upload_url || c.creative_instagram_media_id)),
+    { message: 'Cada criativo deve ter imagem da galeria, upload ou post do Instagram.', path: ['creatives'] }
+  )
+  .refine(
+    (data) => data.creatives !== undefined || (Boolean(data.headline) && Boolean(data.primary_text)),
+    { message: 'Informe o título (headline) e o texto principal (primary text).', path: ['headline'] }
   )
   .refine((data) => data.age_max >= data.age_min, {
     message: 'A idade máxima deve ser maior ou igual à idade mínima.',
@@ -131,6 +155,22 @@ const createWizardSchema = z
       path: ['instagram_user_id'],
     }
   );
+
+type WizardCreativeItem = z.infer<typeof wizardCreativeItemSchema>;
+
+// Mapeia o payload do wizard (snake_case) para o formato do service (camelCase).
+// Usado nos dois call sites de createCampaignFromWizard (createWizardCampaign e mcpLogWizard).
+function toWizardCreativeInputs(creatives: WizardCreativeItem[] | undefined) {
+  return creatives?.map((c) => ({
+    creativeAssetId: c.creative_asset_id,
+    creativeUploadUrl: c.creative_upload_url,
+    creativeInstagramMediaId: c.creative_instagram_media_id,
+    creativeMediaUrl: c.creative_media_url,
+    headline: c.headline,
+    primaryText: c.primary_text,
+    destinationUrl: c.destination_url,
+  }));
+}
 
 const metaLocationsSchema = z.object({
   q: z.string().min(2, 'Digite ao menos 2 caracteres'),
@@ -624,6 +664,7 @@ export class CampaignsController {
       const result = await this.campaignsService.createCampaignFromWizard({
         tenantId,
         objective: data.objective,
+        creatives: toWizardCreativeInputs(data.creatives),
         creativeAssetId: data.creative_asset_id,
         creativeUploadUrl: data.creative_upload_url,
         creativeInstagramMediaId: data.creative_instagram_media_id,
@@ -737,6 +778,7 @@ export class CampaignsController {
         const result = await this.campaignsService.createCampaignFromWizard({
           tenantId,
           objective: data.objective,
+          creatives: toWizardCreativeInputs(data.creatives),
           creativeAssetId: data.creative_asset_id,
           creativeUploadUrl: data.creative_upload_url,
           creativeInstagramMediaId: data.creative_instagram_media_id,

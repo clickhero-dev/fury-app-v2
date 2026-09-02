@@ -4,7 +4,10 @@ export type WizardGender = 'all' | 'male' | 'female';
 
 export const AGE_OPTIONS = [18, 21, 25, 30, 35, 40, 45, 50, 55, 60, 65] as const;
 
+export const MAX_CREATIVES = 4;
+
 export interface WizardCreativeState {
+  id: string; // chave estável p/ listas (crypto.randomUUID)
   assetId?: string;
   assetUrl?: string;
   uploadUrl?: string;
@@ -13,6 +16,16 @@ export interface WizardCreativeState {
   destinationUrl?: string;
   instagramMediaId?: string;
   mediaUrl?: string;
+}
+
+/** Cria um criativo vazio com id estável — usado no estado inicial do wizard e no botão "Adicionar outro criativo". */
+export function createEmptyCreative(preSelectedAssetId?: string): WizardCreativeState {
+  return {
+    id: crypto.randomUUID(),
+    assetId: preSelectedAssetId,
+    headline: '',
+    primaryText: '',
+  };
 }
 
 export interface WizardAudienceState {
@@ -44,23 +57,35 @@ export interface WizardWhatsappState {
 }
 
 export interface WizardState {
-  currentStep: 1 | 2 | 3 | 4;
+  currentStep: 1 | 2 | 3 | 4 | 5;
   objective: WizardObjective | null;
-  creative: WizardCreativeState;
+  creatives: WizardCreativeState[];
   audience: WizardAudienceState;
   budget: WizardBudgetState;
   whatsapp: WizardWhatsappState;
   preSelectedAssetId?: string;
 }
 
-export interface CreateWizardCampaignPayload {
-  objective: WizardObjective;
+export interface WizardPayloadCreative {
   creative_asset_id?: string;
   creative_upload_url?: string;
   creative_instagram_media_id?: string;
   creative_media_url?: string;
   headline: string;
   primary_text: string;
+  destination_url?: string;
+}
+
+export interface CreateWizardCampaignPayload {
+  objective: WizardObjective;
+  creatives: WizardPayloadCreative[];
+  // campos únicos legados — aceitos pela API para clientes antigos, o frontend novo envia apenas creatives[]
+  creative_asset_id?: string;
+  creative_upload_url?: string;
+  creative_instagram_media_id?: string;
+  creative_media_url?: string;
+  headline?: string;
+  primary_text?: string;
   destination_url?: string;
   location_city: string;
   location_city_key?: string;

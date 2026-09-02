@@ -429,6 +429,7 @@ export async function getInstagramAccountInsights(
 ): Promise<InstagramAccountInsights> {
   const insights: InstagramAccountInsights = { comments: 0, saves: 0, followerChange: 0 };
 
+  // ou resposta não está vindo correta, ou o endpoint tá errado.
   try {
     const totals = await metaApiCall<InstagramTotalValueInsightsResponse>(
       `/${igUserId}/insights?metric=comments,saves&metric_type=total_value&period=day&since=${since}&until=${until}`,

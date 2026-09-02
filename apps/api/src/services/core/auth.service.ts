@@ -13,6 +13,7 @@ import {
 import { emailService, type EmailService } from '../email/email.service.js';
 import type { UserDTO } from '../../lib/shared.js';
 import { AuthRepository } from '../../repository/auth.repository.js';
+import { slugify } from '../../lib/slug.js';
 
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
@@ -198,7 +199,10 @@ export class AuthService {
     return {
       ...userToDTO(user),
       tenantName: tenant?.name ?? '',
-      tenantSlug: tenant?.slug ?? '',
+      // Slug público da LP: derivado do NOME (slugify NFD), não da coluna crua
+      // (colunas legadas podem ser lossy, ex. "petrleo" → aqui "petroleo").
+      // Fallback para a coluna caso o nome não produza slug.
+      tenantSlug: tenant ? slugify(tenant.name) || tenant.slug || '' : '',
       tenantCodigo: tenant?.codigo ?? '',
       businessContext: tenant?.businessContext ?? null,
     };
@@ -217,7 +221,23 @@ export class AuthService {
     if (data.audienceDefaults !== undefined) userUpdates.audienceDefaults = data.audienceDefaults;
     if (Object.keys(userUpdates).length > 0) await this.repo('').patchUser(userId, userUpdates);
 
-    if (data.tenantName !== undefined) await this.repo(user.tenantId).patchTenant(user.tenantId, { name: data.tenantName });
+    if (data.tenantName !== undefined) {
+      // Troca de nome = troca de slug público da LP (/l/<slug>).
+      // 1) Deriva o slug do novo nome (slugify NFD, mesma regra das campanhas).
+      // 2) Se o slug já pertence a OUTRO tenant, NÃO permite a troca (409).
+      // 3) Caso contrário grava name + slug juntos, mantendo o slug sincronizado.
+      const newSlug = slugify(data.tenantName);
+      const existing = newSlug
+        ? await this.repo('').findTenantSlugConflict(newSlug, user.tenantId)
+        : null;
+      if (existing) {
+        throw new AppError(409, 'SLUG_EXISTS', 'Já existe um negócio com esse nome. Escolha outro nome.');
+      }
+      await this.repo(user.tenantId).patchTenant(user.tenantId, {
+        name: data.tenantName,
+        ...(newSlug ? { slug: newSlug } : {}),
+      });
+    }
     if (data.businessContext !== undefined) await this.repo(user.tenantId).patchTenant(user.tenantId, { businessContext: data.businessContext || null });
 
     return this.getMe(userId);

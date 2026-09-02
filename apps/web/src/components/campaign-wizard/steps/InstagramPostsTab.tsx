@@ -36,8 +36,9 @@ interface MetaAuthUrlResponse {
 }
 
 interface InstagramPostsTabProps {
-  value: WizardCreativeState;
-  onChange: (updates: Partial<WizardCreativeState>) => void;
+  selected: WizardCreativeState[];
+  onToggle: (post: { id: string; mediaUrl?: string; caption?: string }) => void;
+  canAdd: boolean;
   objective: WizardObjective | null;
   instagramUserId?: string;
 }
@@ -82,20 +83,20 @@ function ProxiedImage({ url, alt, className }: { url: string; alt: string; class
 
   if (failed) {
     return (
-      <div className={cn('flex items-center justify-center bg-gray-100 text-gray-300', className)}>
+      <div className={cn('flex items-center justify-center bg-surface-secondary text-text-tertiary', className)}>
         <ImagePlus className="w-8 h-8" />
       </div>
     );
   }
 
   if (!objectUrl) {
-    return <div className={cn('animate-pulse bg-gray-200', className)} />;
+    return <div className={cn('animate-pulse bg-surface-secondary', className)} />;
   }
 
   return <img src={objectUrl} alt={alt} className={className} />;
 }
 
-export function InstagramPostsTab({ value, onChange, objective, instagramUserId }: InstagramPostsTabProps) {
+export function InstagramPostsTab({ selected, onToggle, canAdd, objective, instagramUserId }: InstagramPostsTabProps) {
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery<InstagramPostsResponse>({
     queryKey: ['instagram/posts-ranked', objective, instagramUserId],
     queryFn: async () => {
@@ -121,20 +122,13 @@ export function InstagramPostsTab({ value, onChange, objective, instagramUserId 
   });
 
   function handleSelectPost(post: InstagramPost) {
-    onChange({
-      instagramMediaId: post.id,
-      mediaUrl: post.media_url ?? undefined,
-      assetId: undefined,
-      assetUrl: undefined,
-      uploadUrl: undefined,
-      primaryText: value.primaryText || (post.caption ?? '').slice(0, 125),
-    });
+    onToggle({ id: post.id, mediaUrl: post.media_url ?? undefined, caption: post.caption });
   }
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+        <Loader2 className="w-6 h-6 animate-spin text-text-tertiary" />
       </div>
     );
   }
@@ -149,7 +143,7 @@ export function InstagramPostsTab({ value, onChange, objective, instagramUserId 
 
   if (isError && isReconnectError) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500 gap-3">
+      <div className="flex flex-col items-center justify-center py-12 text-center text-text-secondary gap-3">
         <p className="text-sm">Para usar esta funcionalidade, reconecte sua conta Meta.</p>
         <Button
           variant="primary"
@@ -164,7 +158,7 @@ export function InstagramPostsTab({ value, onChange, objective, instagramUserId 
 
   if (isError && isInstagramAccountMissing) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500 px-4">
+      <div className="flex flex-col items-center justify-center py-12 text-center text-text-secondary px-4">
         <p className="text-sm">{errorMessage}</p>
       </div>
     );
@@ -172,7 +166,7 @@ export function InstagramPostsTab({ value, onChange, objective, instagramUserId 
 
   if (isError) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500 gap-3">
+      <div className="flex flex-col items-center justify-center py-12 text-center text-text-secondary gap-3">
         <p className="text-sm">Erro ao carregar posts. Tente novamente.</p>
         <Button variant="outline" onClick={() => refetch()} disabled={isRefetching}>
           {isRefetching ? 'Tentando...' : 'Tentar novamente'}
@@ -182,11 +176,14 @@ export function InstagramPostsTab({ value, onChange, objective, instagramUserId 
   }
 
   const posts = data?.data ?? [];
+  const selectedPostIds = new Set(
+    selected.filter((c) => c.instagramMediaId).map((c) => c.instagramMediaId as string)
+  );
 
   if (posts.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500">
-        <ImagePlus className="w-8 h-8 mb-2 text-gray-300" />
+      <div className="flex flex-col items-center justify-center py-12 text-center text-text-secondary">
+        <ImagePlus className="w-8 h-8 mb-2 text-text-tertiary" />
         <p className="text-sm">Nenhum post encontrado no Instagram.</p>
       </div>
     );
@@ -195,15 +192,17 @@ export function InstagramPostsTab({ value, onChange, objective, instagramUserId 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
       {posts.map((post) => {
-        const isSelected = value.instagramMediaId === post.id;
+        const isSelected = selectedPostIds.has(post.id);
         return (
           <button
             key={post.id}
             type="button"
             onClick={() => handleSelectPost(post)}
+            disabled={!isSelected && !canAdd}
             className={cn(
-              'relative rounded-xl overflow-hidden border-2 transition-all bg-gray-100 text-left',
-              isSelected ? 'border-[#E8631A]' : 'border-transparent hover:border-[#E8631A]/40'
+              'relative rounded-xl overflow-hidden border-2 transition-all bg-surface-secondary text-left',
+              isSelected ? 'border-brand' : 'border-transparent hover:border-brand/40',
+              !isSelected && !canAdd && 'opacity-50 cursor-not-allowed'
             )}
           >
             {post.media_url ? (
@@ -213,28 +212,28 @@ export function InstagramPostsTab({ value, onChange, objective, instagramUserId 
                 className="w-full h-48 object-cover"
               />
             ) : (
-              <div className="w-full h-48 flex items-center justify-center text-gray-300">
+              <div className="w-full h-48 flex items-center justify-center text-text-tertiary">
                 <ImagePlus className="w-8 h-8" />
               </div>
             )}
 
             {isSelected && (
-              <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-[#E8631A] flex items-center justify-center">
+              <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-brand flex items-center justify-center">
                 <Check className="w-4 h-4 text-white" />
               </div>
             )}
 
             {post.recommended && (
-              <div className="absolute top-2 left-2 bg-[#E8631A] text-white text-[10px] font-bold px-2 py-1 rounded-full">
+              <div className="absolute top-2 left-2 bg-brand text-white text-[10px] font-bold px-2 py-1 rounded-full">
                 ⚡ Recomendado pelo FURY
               </div>
             )}
 
-            <div className="p-2 bg-white">
+            <div className="p-2 bg-surface">
               {post.caption && (
-                <p className="text-xs text-gray-700 line-clamp-2 mb-1">{post.caption}</p>
+                <p className="text-xs text-text-secondary line-clamp-2 mb-1">{post.caption}</p>
               )}
-              <p className="text-[11px] text-gray-500">{formatMetrics(objective, post)}</p>
+              <p className="text-[11px] text-text-secondary">{formatMetrics(objective, post)}</p>
             </div>
           </button>
         );

@@ -11,8 +11,16 @@ function mockRow(overrides: Record<string, any> = {}) {
 }
 
 function makeDb(rootRow?: any) {
+  const updateSetResult = { rootAssetId: null };
   const update = vi.fn(() => ({
-    set: (setData: any) => ({ where: (where: any) => ({ returning: async () => [mockRow({ ...setData })] }) }),
+    set: (setData: any) => ({
+      where: (where: any) => {
+        Object.assign(updateSetResult, setData);
+        const result: any = Promise.resolve();
+        result.returning = async () => [mockRow({ ...setData })];
+        return result;
+      },
+    }),
   }));
   const insert = vi.fn(() => ({
     values: (values: any) => ({ returning: async () => [mockRow({ ...values })] }),
@@ -31,7 +39,7 @@ function makeDb(rootRow?: any) {
     insert,
     delete: del,
   };
-  return { db, update, insert, del, select };
+  return { db, update, insert, del, select, updateSetResult };
 }
 
 const tenantId = '9e9d3a10-0000-4000-8000-00000000000a';
@@ -92,5 +100,27 @@ describe('StudioRepository', () => {
     expect(result.rows.length).toBe(2);
     expect(result.total).toBe(3);
     expect(result.modificationsRemainingByRootId.get('root-1')).toBe(2);
+  });
+
+  it('deleteAssetAndChildren faz UPDATE set rootAssetId=null nos filhos antes do DELETE', async () => {
+    const { db, del, update } = makeDb();
+    const repo = new StudioRepository(tenantId, db);
+    await repo.deleteAssetAndChildren('root-1');
+
+    // Primeiro: UPDATE para desvincular filhos (evita violação de FK)
+    expect(update).toHaveBeenCalledTimes(1);
+    // Depois: DELETE do próprio asset
+    expect(del).toHaveBeenCalledTimes(1);
+  });
+
+  it('deleteAssetAndChildren sem filhos: UPDATE com where vazio + DELETE', async () => {
+    const { db, del, update } = makeDb();
+    const repo = new StudioRepository(tenantId, db);
+    await repo.deleteAssetAndChildren('asset-1');
+
+    // UPDATE é chamado (mesmo sem filhos, o where não encontra nada)
+    expect(update).toHaveBeenCalledTimes(1);
+    // DELETE do próprio asset
+    expect(del).toHaveBeenCalledTimes(1);
   });
 });

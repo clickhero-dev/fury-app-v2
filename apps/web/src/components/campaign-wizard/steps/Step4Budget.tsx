@@ -21,25 +21,25 @@ export function Step4Budget({ value, onChange }: Step4BudgetProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-bold text-gray-900">Quanto vai investir?</h3>
-        <p className="text-sm text-gray-500 mt-1">Defina o valor diário do investimento na campanha.</p>
+        <h3 className="text-lg font-bold text-text-primary">Quanto vai investir?</h3>
+        <p className="text-sm text-text-secondary mt-1">Defina o valor diário do investimento na campanha.</p>
       </div>
 
       <div>
-        <label className="text-sm font-bold text-gray-900 mb-1 block">Investimento diário</label>
+        <label className="text-sm font-bold text-text-primary mb-1 block">Investimento diário</label>
         <div className="relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">R$</span>
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary font-medium">R$</span>
           <input
             type="number"
             min={7}
             step={1}
             value={value.dailyBudgetBrl}
             onChange={(e) => onChange({ dailyBudgetBrl: Number(e.target.value) })}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20"
+            className="w-full pl-10 pr-4 py-3 border border-border rounded-lg bg-surface text-text-primary transition-all duration-200 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
           />
         </div>
         {value.dailyBudgetBrl < 7 && (
-          <p className="text-sm text-red-600 mt-1">O investimento mínimo é de R$ 7,00/dia (equivalente a US$ 1,00 + 30%).</p>
+          <p className="text-sm text-error mt-1">O investimento mínimo é de R$ 7,00/dia (equivalente a US$ 1,00 + 30%).</p>
         )}
 
         <div className="flex gap-2 mt-3">
@@ -51,8 +51,8 @@ export function Step4Budget({ value, onChange }: Step4BudgetProps) {
               className={cn(
                 'px-4 py-2 rounded-lg border-2 text-sm font-bold transition-all',
                 value.dailyBudgetBrl === amount
-                  ? 'border-[#E8631A] bg-orange-50 text-[#E8631A]'
-                  : 'border-gray-200 text-gray-600 hover:border-[#E8631A]/40'
+                  ? 'border-brand bg-brand/10 text-brand'
+                  : 'border-border text-text-secondary hover:border-brand/40'
               )}
             >
               R${amount}
@@ -61,7 +61,7 @@ export function Step4Budget({ value, onChange }: Step4BudgetProps) {
         </div>
       </div>
 
-      <div className="border-t border-gray-100 pt-4">
+      <div className="border-t border-border/60 pt-4">
         <label className="flex items-center gap-3 cursor-pointer">
           <button
             type="button"
@@ -70,17 +70,17 @@ export function Step4Budget({ value, onChange }: Step4BudgetProps) {
             onClick={() => onChange({ durationDays: hasDuration ? undefined : 7 })}
             className={cn(
               'w-11 h-6 rounded-full transition-colors relative flex-shrink-0',
-              hasDuration ? 'bg-[#E8631A]' : 'bg-gray-300'
+              hasDuration ? 'bg-brand' : 'bg-border'
             )}
           >
             <span
               className={cn(
-                'absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow',
+                'absolute top-0.5 left-0.5 w-5 h-5 bg-surface rounded-full transition-transform shadow',
                 hasDuration && 'translate-x-5'
               )}
             />
           </button>
-          <span className="text-sm font-bold text-gray-900">Definir data de encerramento</span>
+          <span className="text-sm font-bold text-text-primary">Definir data de encerramento</span>
         </label>
 
         {hasDuration && (
@@ -94,40 +94,40 @@ export function Step4Budget({ value, onChange }: Step4BudgetProps) {
                   className={cn(
                     'text-left p-3 rounded-lg border-2 transition-all',
                     value.durationDays === suggestion.days
-                      ? 'border-[#E8631A] bg-orange-50'
-                      : 'border-gray-200 hover:border-[#E8631A]/40'
+                      ? 'border-brand bg-brand/10'
+                      : 'border-border hover:border-brand/40'
                   )}
                 >
-                  <div className="font-bold text-gray-900">{suggestion.days} dias</div>
-                  <div className="text-xs text-gray-500 mt-1">{suggestion.description}</div>
+                  <div className="font-bold text-text-primary">{suggestion.days} dias</div>
+                  <div className="text-xs text-text-secondary mt-1">{suggestion.description}</div>
                 </button>
               ))}
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Número de dias</label>
+              <label className="text-sm font-medium text-text-secondary mb-1 block">Número de dias</label>
               <input
                 type="number"
                 min={1}
                 value={value.durationDays}
                 onChange={(e) => onChange({ durationDays: Number(e.target.value) })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20"
+                className="w-full px-4 py-3 border border-border rounded-lg bg-surface text-text-primary transition-all duration-200 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
               />
             </div>
           </div>
         )}
       </div>
 
-      <div className="bg-gray-50 rounded-xl p-4 space-y-1">
+      <div className="bg-surface-secondary rounded-xl p-4 space-y-1">
         {total !== null && (
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-text-secondary">
             Investimento total estimado:{' '}
-            <span className="font-bold text-gray-900">
+            <span className="font-bold text-text-primary">
               R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
           </p>
         )}
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-text-tertiary">
           Investimento mínimo: R$ 7/dia (US$ 1,00 + 30% = R$ 7 ou aproximadamente US$ 1,30/dia para Meta Ads).
         </p>
       </div>

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Loader2, MapPin } from 'lucide-react';
+import { Loader2, MapPin, X } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { useMetaLocations } from '@/components/campaign-wizard/hooks/useMetaLocations';
+import { useMetaInterests } from '@/components/campaign-wizard/hooks/useMetaInterests';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components';
 import type { WizardGender } from '@/components/campaign-wizard/types';
@@ -15,6 +16,7 @@ interface AudienceDefaults {
   ageMin?: number;
   ageMax?: number;
   gender?: WizardGender;
+  audienceInterests?: { id: string; name: string }[];
 }
 
 interface MeResponse {
@@ -39,7 +41,11 @@ export function PublicoContent() {
   const [businessContext, setBusinessContext] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [audienceInterests, setAudienceInterests] = useState<{ id: string; name: string }[]>([]);
+  const [interestQuery, setInterestQuery] = useState('');
+  const [showInterestDropdown, setShowInterestDropdown] = useState(false);
   const { locations, isLoading: loadingLocations } = useMetaLocations(cityQuery);
+  const { interests, isLoading: loadingInterests } = useMetaInterests(interestQuery);
 
   // Load saved defaults
   useEffect(() => {
@@ -55,6 +61,7 @@ export function PublicoContent() {
         if (defaults.ageMin) setAgeMin(defaults.ageMin);
         if (defaults.ageMax) setAgeMax(defaults.ageMax);
         if (defaults.gender) setGender(defaults.gender);
+        if (defaults.audienceInterests) setAudienceInterests(defaults.audienceInterests);
       }
       if (data.businessContext) setBusinessContext(data.businessContext);
     }).catch(() => {
@@ -75,7 +82,7 @@ export function PublicoContent() {
     setSaved(false);
     try {
       await api.patch('/auth/me', {
-        audienceDefaults: { city, cityKey, ageMin, ageMax, gender },
+        audienceDefaults: { city, cityKey, ageMin, ageMax, gender, audienceInterests },
         businessContext: businessContext || undefined,
       });
       setSaved(true);
@@ -216,6 +223,82 @@ export function PublicoContent() {
         {option.label}
       </button>
     ))}
+  </div>
+</div>
+
+{/* Interesses */}
+<div>
+  <label className="text-sm font-bold text-foreground mb-1 block">Interesses</label>
+  <p className="text-xs text-gray-500 mb-2">Adicione interesses para segmentar o público (máximo 4)</p>
+
+  {audienceInterests.length > 0 && (
+    <div className="flex flex-wrap gap-2 mb-3">
+      {audienceInterests.map((interest) => (
+        <span
+          key={interest.id}
+          className="inline-flex items-center gap-1 px-3 py-1.5 bg-orange-50 text-[#E8631A] text-sm rounded-full border border-[#E8631A]/20"
+        >
+          {interest.name}
+          <button
+            type="button"
+            onClick={() => setAudienceInterests(audienceInterests.filter((i) => i.id !== interest.id))}
+            className="hover:text-red-600"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </span>
+      ))}
+    </div>
+  )}
+
+  {audienceInterests.length >= 4 && (
+    <p className="text-xs text-amber-700 mb-2">Máximo de 4 interesses atingido.</p>
+  )}
+
+  <div className="relative">
+    <input
+      type="text"
+      value={interestQuery}
+      onChange={(e) => {
+        setInterestQuery(e.target.value);
+        setShowInterestDropdown(true);
+      }}
+      onFocus={() => setShowInterestDropdown(true)}
+      onBlur={() => setTimeout(() => setShowInterestDropdown(false), 150)}
+      placeholder="Digite para buscar interesses..."
+      disabled={audienceInterests.length >= 4}
+      className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/20 disabled:opacity-50 disabled:cursor-not-allowed"
+    />
+    {loadingInterests && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
+
+    {showInterestDropdown && interests.length > 0 && (
+      <div className="absolute z-10 mt-1 left-0 right-0 top-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+        {interests.map((interest) => {
+          const alreadySelected = audienceInterests.some((i) => i.id === interest.id);
+          return (
+            <button
+              key={interest.id}
+              type="button"
+              disabled={alreadySelected || audienceInterests.length >= 4}
+              onMouseDown={() => {
+                if (!alreadySelected && audienceInterests.length < 4) {
+                  setAudienceInterests([...audienceInterests, { id: interest.id, name: interest.name }]);
+                  setInterestQuery('');
+                }
+              }}
+              className={`w-full text-left px-4 py-2 hover:bg-orange-50 text-sm ${
+                alreadySelected || audienceInterests.length >= 4
+                  ? 'text-gray-300 cursor-not-allowed'
+                  : 'text-gray-900'
+              }`}
+            >
+              {interest.name}
+              {interest.path?.length ? <span className="text-gray-400 ml-1">— {interest.path.slice(-2).join(' > ')}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+    )}
   </div>
 </div>
           </div>

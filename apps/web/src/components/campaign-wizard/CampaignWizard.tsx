@@ -15,33 +15,67 @@ import { useCampaignWizard } from './hooks/useCampaignWizard';
 import { useMetaAssetSelection } from './hooks/useMetaAssetSelection';
 import { Step1Objective } from './steps/Step1Objective';
 import { Step2Creative } from './steps/Step2Creative';
+import { Step3Audience } from './steps/Step3Audience';
 import { Step4Budget } from './steps/Step4Budget';
 import { Step5Review } from './steps/Step5Review';
 import type { WizardState } from './types';
 
 interface CampaignWizardProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   preSelectedAssetId?: string;
   preSelectedAssetUrl?: string;
+  mode?: 'modal' | 'page';
+  onViewCampaigns?: () => void;
+  onCreateAnother?: () => void;
+  onCancel?: () => void;
 }
 
 const STEP_TITLES: Record<WizardState['currentStep'], string> = {
   1: 'Objetivo',
   2: 'Criativo',
-  3: 'Orçamento',
-  4: 'Revisão e Publicação',
+  3: 'Público',
+  4: 'Orçamento',
+  5: 'Revisão e Publicação',
 };
 
-export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSelectedAssetUrl }: CampaignWizardProps) {
+// Dynamic step configuration based on whether audience step is skipped
+function getVisibleSteps(hasAudienceData: boolean): WizardState['currentStep'][] {
+  if (hasAudienceData) {
+    return [1, 2, 4, 5] as WizardState['currentStep'][];
+  }
+  return [1, 2, 3, 4, 5] as WizardState['currentStep'][];
+}
+
+export function CampaignWizard({
+  open,
+  onOpenChange,
+  preSelectedAssetId,
+  preSelectedAssetUrl,
+  mode = 'page',
+  onViewCampaigns,
+  onCreateAnother,
+  onCancel,
+}: CampaignWizardProps) {
   const navigate = useNavigate();
   const wizard = useCampaignWizard(preSelectedAssetId);
-  const { state } = wizard;
+  const { state, hasAudienceData } = wizard;
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const assetSelection = useMetaAssetSelection();
+  const isModal = mode === 'modal';
+  
+  // Calculate visible steps based on audience data
+  // Include step 3 if user manually navigated to it (via edit button)
+  const visibleSteps = state.currentStep === 3 
+    ? [1, 2, 3, 4, 5] as WizardState['currentStep'][]
+    : getVisibleSteps(hasAudienceData);
 
-  if (state.creative.assetId === preSelectedAssetId && preSelectedAssetUrl && !state.creative.assetUrl) {
-    wizard.setCreative({ assetUrl: preSelectedAssetUrl });
+  if (
+    state.creatives[0]?.assetId === preSelectedAssetId &&
+    preSelectedAssetUrl &&
+    !state.creatives[0]?.assetUrl
+  ) {
+    wizard.updateCreative(state.creatives[0].id, { assetUrl: preSelectedAssetUrl });
   }
 
   // Resolve automaticamente a Pagina do tenant a partir da selecao salva do
@@ -65,139 +99,211 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
   }, [assetSelection.data, state.whatsapp.pageId]);
 
   function handleClose() {
-    const hasProgress = state.currentStep > 1 || state.objective !== null;
-    if (!hasProgress) {
-      wizard.reset();
-      onOpenChange(false);
-      return;
+    if (isModal && onOpenChange) {
+      const hasProgress = state.currentStep > 1 || state.objective !== null;
+      if (!hasProgress) {
+        wizard.reset();
+        onOpenChange(false);
+        return;
+      }
+      setShowCancelConfirm(true);
+    } else if (onCancel) {
+      onCancel();
     }
-    setShowCancelConfirm(true);
   }
 
   function handleConfirmCancel() {
     setShowCancelConfirm(false);
     wizard.reset();
-    onOpenChange(false);
+    if (isModal && onOpenChange) {
+      onOpenChange(false);
+    } else if (onCancel) {
+      onCancel();
+    }
   }
 
   function handleViewCampaigns() {
     wizard.reset();
-    onOpenChange(false);
-    navigate('/campanhas');
+    if (isModal && onOpenChange) {
+      onOpenChange(false);
+      navigate('/campanhas');
+    } else if (onViewCampaigns) {
+      onViewCampaigns();
+    } else {
+      navigate('/campanhas');
+    }
   }
 
   function handleCreateAnother() {
     wizard.reset();
+    if (onCreateAnother) {
+      onCreateAnother();
+    }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={(next) => !next && handleClose()}>
-      <DialogContent className="max-w-lg w-full max-h-[90vh] md:max-w-3xl md:max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden [&>button]:hidden">
-        <div className="px-6 pt-6 pb-4 border-b border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-bold text-gray-900">{STEP_TITLES[state.currentStep]}</h2>
+  const wizardContent = (
+    <>
+      {/* Header with step indicators */}
+      <div className="px-6 pt-6 pb-4 border-b border-border/60">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-bold text-text-primary">{STEP_TITLES[state.currentStep]}</h2>
+          {isModal ? (
             <button
               type="button"
               onClick={handleClose}
-              className="rounded-lg p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              className="rounded-lg p-1.5 text-text-tertiary hover:text-text-secondary hover:bg-surface-secondary transition-colors"
+              aria-label="Fechar"
             >
               <X className="w-5 h-5" />
               <span className="sr-only">Fechar</span>
             </button>
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowCancelConfirm(true)}
+              className="text-sm font-semibold text-text-tertiary hover:text-text-secondary transition-colors"
+            >
+              Cancelar
+            </button>
+          )}
+        </div>
 
-          <div className="flex items-center gap-2">
-            {([1, 2, 3, 4] as const).map((step, index) => {
-              const isVisited = step < state.currentStep;
-              const isCurrent = step === state.currentStep;
-              return (
-                <div key={step} className="flex items-center flex-1 last:flex-none">
-                  <button
-                    type="button"
-                    onClick={() => isVisited && wizard.goToStep(step)}
-                    disabled={!isVisited}
-                    title={isVisited ? `Voltar ao passo ${step}` : undefined}
-                    className={cn(
-                      'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-colors',
-                      isVisited && 'bg-[#E8631A] text-white cursor-pointer hover:bg-[#D4520B]',
-                      isCurrent && 'bg-[#E8631A] text-white ring-4 ring-[#E8631A]/20 cursor-default',
-                      !isVisited && !isCurrent && 'bg-gray-100 text-gray-400 cursor-default'
-                    )}
-                  >
-                    {isVisited ? <Check className="w-4 h-4" /> : step}
-                  </button>
-                  {index < 3 && (
-                    <div
-                      className={cn(
-                        'h-0.5 flex-1 mx-1 transition-colors',
-                        isVisited ? 'bg-[#E8631A]' : 'bg-gray-100'
-                      )}
-                    />
+        <div className="flex items-center gap-2">
+          {visibleSteps.map((step, index) => {
+            const isVisited = step < state.currentStep;
+            const isCurrent = step === state.currentStep;
+            const displayNumber = index + 1; // Show sequential numbers (1, 2, 3, 4) regardless of actual step
+            return (
+              <div key={step} className="flex items-center flex-1 last:flex-none">
+                <button
+                  type="button"
+                  onClick={() => isVisited && wizard.goToStep(step)}
+                  disabled={!isVisited}
+                  title={isVisited ? `Voltar ao passo ${step}` : undefined}
+                  aria-current={isCurrent ? 'step' : undefined}
+                  className={cn(
+                    'w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 transition-colors',
+                    isVisited && 'bg-brand text-white cursor-pointer hover:bg-brand-hover',
+                    isCurrent && 'bg-brand text-white ring-4 ring-brand/20 cursor-default',
+                    !isVisited && !isCurrent && 'bg-surface-secondary text-text-tertiary cursor-default'
                   )}
-                </div>
-              );
-            })}
-          </div>
+                >
+                  {isVisited ? <Check className="w-5 h-5" /> : displayNumber}
+                </button>
+                {index < visibleSteps.length - 1 && (
+                  <div
+                    className={cn(
+                      'h-0.5 flex-1 mx-1 transition-colors',
+                      isVisited ? 'bg-brand' : 'bg-surface-secondary'
+                    )}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          {state.currentStep === 1 && (
-            <Step1Objective
-              value={state.objective}
-              onChange={wizard.setObjective}
-              whatsapp={state.whatsapp}
-              onWhatsappChange={wizard.setWhatsapp}
-            />
-          )}
-          {state.currentStep === 2 && (
-            <Step2Creative
-              value={state.creative}
-              onChange={wizard.setCreative}
-              objective={state.objective}
-              instagramUserId={state.whatsapp.instagramUserId}
-            />
-          )}
-          {state.currentStep === 3 && <Step4Budget value={state.budget} onChange={wizard.setBudget} />}
-          {state.currentStep === 4 && (
-            <Step5Review
-              state={state}
-              onViewCampaigns={handleViewCampaigns}
-              onCreateAnother={handleCreateAnother}
-              onBack={wizard.goBack}
-            />
-          )}
-        </div>
-
-        {state.currentStep < 4 && (
-          <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
-            {state.currentStep > 1 && (
-              <Button variant="outline" className="flex-1" onClick={wizard.goBack}>
-                Voltar
-              </Button>
-            )}
-            <Button variant="primary" className="flex-1" onClick={wizard.goNext} disabled={!wizard.canGoNext}>
-              Continuar
-            </Button>
-          </div>
+      {/* Step content */}
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        {state.currentStep === 1 && (
+          <Step1Objective
+            value={state.objective}
+            onChange={wizard.setObjective}
+            whatsapp={state.whatsapp}
+            onWhatsappChange={wizard.setWhatsapp}
+          />
         )}
-      </DialogContent>
+        {state.currentStep === 2 && (
+          <Step2Creative
+            value={state.creatives}
+            onChange={wizard.setCreatives}
+            objective={state.objective}
+            instagramUserId={state.whatsapp.instagramUserId}
+          />
+        )}
+        {state.currentStep === 3 && (
+          <Step3Audience
+            value={state.audience}
+            onChange={wizard.setAudience}
+            objective={state.objective}
+            whatsapp={state.whatsapp}
+            onWhatsappChange={wizard.setWhatsapp}
+          />
+        )}
+        {state.currentStep === 4 && <Step4Budget value={state.budget} onChange={wizard.setBudget} />}
+        {state.currentStep === 5 && (
+          <Step5Review
+            state={state}
+            onViewCampaigns={handleViewCampaigns}
+            onCreateAnother={handleCreateAnother}
+            onBack={wizard.goBack}
+            onEditField={wizard.goToStep}
+          />
+        )}
+      </div>
 
-      <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancelar criação?</DialogTitle>
-            <DialogDescription>As configurações da campanha serão perdidas.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCancelConfirm(false)}>
-              Continuar editando
+      {/* Footer with navigation buttons */}
+      {state.currentStep < visibleSteps[visibleSteps.length - 1] && (
+        <div className="px-6 py-4 border-t border-border/60 flex gap-3">
+          {state.currentStep > 1 && (
+            <Button variant="outline" className="flex-1" onClick={wizard.goBack}>
+              Voltar
             </Button>
-            <Button variant="destructive" onClick={handleConfirmCancel}>
-              Cancelar campanha
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Dialog>
+          )}
+          <Button variant="primary" className="flex-1" onClick={wizard.goNext} disabled={!wizard.canGoNext}>
+            Continuar
+          </Button>
+        </div>
+      )}
+    </>
+  );
+
+  const cancelDialogContent = (
+    <DialogContent className="bg-surface border border-border-light text-text-primary rounded-2xl">
+      <DialogHeader>
+        <DialogTitle className="text-text-primary">Cancelar criação?</DialogTitle>
+        <DialogDescription className="text-text-secondary">
+          As configurações da campanha serão perdidas.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter className="mt-4 gap-2">
+        <Button variant="outline" onClick={() => setShowCancelConfirm(false)}>
+          Continuar editando
+        </Button>
+        <Button variant="destructive" onClick={handleConfirmCancel}>
+          Cancelar campanha
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  );
+
+  // Render based on mode
+  if (isModal) {
+    return (
+      <>
+        <Dialog open={open} onOpenChange={(next) => !next && handleClose()}>
+          <DialogContent className="max-w-lg w-full max-h-[90vh] md:max-w-3xl md:max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden [&>button]:hidden">
+            {wizardContent}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
+          {cancelDialogContent}
+        </Dialog>
+      </>
+    );
+  }
+
+  // Page mode - render the content directly (a página é quem centraliza a coluna)
+  return (
+    <div className="flex flex-col h-full">
+      {wizardContent}
+      {showCancelConfirm && (
+        <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
+          {cancelDialogContent}
+        </Dialog>
+      )}
+    </div>
   );
 }

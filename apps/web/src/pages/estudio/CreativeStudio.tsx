@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle2, Copy, Loader2, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { AppLayout, Button, Card, CardContent, PageHeader, StatusBadge } from '@/components';
-import { CampaignWizard } from '@/components/campaign-wizard/CampaignWizard';
+import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import api from '@/lib/api';
 import type {
   StudioComplianceStatusResponse,
@@ -63,13 +64,14 @@ function categoryBadge(category: string) {
 }
 
 export function CreativeStudio() {
+  const navigate = useNavigate();
+  const { setPreSelectedAsset } = useCampaignWizardContext();
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState(TEMPLATES[0]?.prompt ?? '');
   const [selectedTemplateId, setSelectedTemplateId] = useState(TEMPLATES[0]?.id ?? 'fashion');
   const [currentAssetId, setCurrentAssetId] = useState<string | null>(null);
   const [pollStartedAt, setPollStartedAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
-  const [wizardOpen, setWizardOpen] = useState(false);
 
   // ─── OpenRouter state ──────────────────────────────────────
   const [creativeType, setCreativeType] = useState<'image' | 'video'>('image');
@@ -184,7 +186,8 @@ export function CreativeStudio() {
 
   const handlePublish = () => {
     if (!canPublish) return;
-    setWizardOpen(true);
+    setPreSelectedAsset({ id: currentAssetId ?? undefined, url: generatedUrl ?? undefined });
+    navigate('/criar-campanha');
   };
 
   const currentModels = creativeType === 'image'
@@ -520,7 +523,6 @@ export function CreativeStudio() {
           </Card>
         </div>
       </div>
-      <CampaignWizard open={wizardOpen} onOpenChange={setWizardOpen} preSelectedAssetId={currentAssetId ?? undefined} preSelectedAssetUrl={generatedUrl ?? undefined} />
     </AppLayout>
   );
 }

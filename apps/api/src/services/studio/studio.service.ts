@@ -453,7 +453,7 @@ export async function deleteStudioAsset(params: { tenantId: string; assetId: str
     throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
   }
 
-  await repo.deleteAsset(params.assetId);
+  await repo.deleteAssetAndChildren(params.assetId);
 }
 
 export type StudioAssetListItem = {

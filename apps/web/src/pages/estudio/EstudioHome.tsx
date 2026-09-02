@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, ArrowRight, Image as ImageIcon, Loader2, Send, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
-import { CampaignWizard } from '@/components/campaign-wizard/CampaignWizard';
+import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import api from '@/lib/api';
 import type { StudioAsset } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
@@ -31,16 +32,15 @@ interface StudioAssetResponse {
 }
 
 export function EstudioHome() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { setPreSelectedAsset } = useCampaignWizardContext();
   const [view, setView] = useState<ViewState>('library');
   const [generationResult, setGenerationResult] = useState<any>(null);
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  // ─── Wizard state ─────────────────────────────────────────────
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [wizardAsset, setWizardAsset] = useState<{ id: string; url: string | null } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // ─── OpenRouter state ──────────────────────────────────────────────
   const [orPrompt, setOrPrompt] = useState('');
@@ -53,10 +53,14 @@ export function EstudioHome() {
     },
     onSuccess: () => {
       setDeletingId(null);
+      setToast({ message: 'Criativo excluído com sucesso', type: 'success' });
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+      setTimeout(() => setToast(null), 3000);
     },
     onError: () => {
       setDeletingId(null);
+      setToast({ message: 'Erro ao excluir o criativo. Tente novamente.', type: 'error' });
+      setTimeout(() => setToast(null), 3000);
     },
   });
 
@@ -155,8 +159,8 @@ export function EstudioHome() {
   };
 
   const handleUseInCampaign = (asset: StudioAsset) => {
-    setWizardAsset({ id: asset.id, url: asset.url });
-    setWizardOpen(true);
+    setPreSelectedAsset({ id: asset.id, url: asset.url ?? undefined });
+    navigate('/criar-campanha');
   };
 
   const typeOptions: Array<{ value: 'all' | 'image' | 'video'; label: string }> = [
@@ -220,6 +224,15 @@ export function EstudioHome() {
   return (
     <AppLayout>
       <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 sm:px-10">
+        {toast && (
+          <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
+            toast.type === 'success'
+              ? 'bg-success text-white'
+              : 'bg-error text-white'
+          }`}>
+            {toast.type === 'success' ? '✅' : '⚠️'} {toast.message}
+          </div>
+        )}
         {renderPageHeader()}
 
         {/* LIBRARY VIEW */}
@@ -458,8 +471,8 @@ export function EstudioHome() {
               onBack={handleBackToLibrary}
               onNewCreative={handleStartQuickCreate}
               onPublish={() => {
-                setWizardAsset({ id: generationResult.assetId, url: generationResult.imageUrl });
-                setWizardOpen(true);
+                setPreSelectedAsset({ id: generationResult.assetId, url: generationResult.imageUrl });
+                navigate('/criar-campanha');
               }}
             />
           </>
@@ -498,13 +511,6 @@ export function EstudioHome() {
           </div>
         )}
       </div>
-
-      <CampaignWizard
-        open={wizardOpen}
-        onOpenChange={setWizardOpen}
-        preSelectedAssetId={wizardAsset?.id}
-        preSelectedAssetUrl={wizardAsset?.url ?? undefined}
-      />
     </AppLayout>
   );
 }
