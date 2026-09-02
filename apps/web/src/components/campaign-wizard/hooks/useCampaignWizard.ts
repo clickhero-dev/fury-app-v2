@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { WizardObjective, WizardState } from '../types';
+import api from '@/lib/api';
 
 const TOTAL_STEPS = 5;
 
@@ -30,6 +31,30 @@ function createInitialState(preSelectedAssetId?: string): WizardState {
 
 export function useCampaignWizard(preSelectedAssetId?: string) {
   const [state, setState] = useState<WizardState>(() => createInitialState(preSelectedAssetId));
+
+  // Load audience defaults from user configuration
+  useEffect(() => {
+    api.get<{ success: boolean; data: { audienceDefaults?: { city?: string; cityKey?: string; ageMin?: number; ageMax?: number; gender?: 'all' | 'male' | 'female' } } }>('/auth/me')
+      .then((res) => {
+        const defaults = res.data.data?.audienceDefaults;
+        if (defaults) {
+          setState((prev) => ({
+            ...prev,
+            audience: {
+              ...prev.audience,
+              city: defaults.city || '',
+              cityKey: defaults.cityKey,
+              ageMin: defaults.ageMin || 18,
+              ageMax: defaults.ageMax || 65,
+              gender: defaults.gender || 'all',
+            },
+          }));
+        }
+      })
+      .catch(() => {
+        // silently ignore - audience stays with default values
+      });
+  }, []);
 
   const setObjective = useCallback((objective: WizardObjective) => {
     setState((prev) => ({ ...prev, objective }));
@@ -88,8 +113,9 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
           state.creative.primaryText.trim().length > 0 &&
           (state.objective !== 'visits' || /^https?:\/\//.test(state.creative.destinationUrl?.trim() ?? ''))
       ),
-      3: state.budget.dailyBudgetBrl >= 7,
-      4: true,
+      3: Boolean(state.audience.city.trim().length > 0),
+      4: state.budget.dailyBudgetBrl >= 7,
+      5: true,
     } as Record<WizardState['currentStep'], boolean>;
   }, [state]);
 

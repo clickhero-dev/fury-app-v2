@@ -15,6 +15,7 @@ import { useCampaignWizard } from './hooks/useCampaignWizard';
 import { useMetaAssetSelection } from './hooks/useMetaAssetSelection';
 import { Step1Objective } from './steps/Step1Objective';
 import { Step2Creative } from './steps/Step2Creative';
+import { Step3Audience } from './steps/Step3Audience';
 import { Step4Budget } from './steps/Step4Budget';
 import { Step5Review } from './steps/Step5Review';
 import type { WizardState } from './types';
@@ -29,8 +30,9 @@ interface CampaignWizardProps {
 const STEP_TITLES: Record<WizardState['currentStep'], string> = {
   1: 'Objetivo',
   2: 'Criativo',
-  3: 'Orçamento',
-  4: 'Revisão e Publicação',
+  3: 'Público',
+  4: 'Orçamento',
+  5: 'Revisão e Publicação',
 };
 
 export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSelectedAssetUrl }: CampaignWizardProps) {
@@ -107,7 +109,7 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
           </div>
 
           <div className="flex items-center gap-2">
-            {([1, 2, 3, 4] as const).map((step, index) => {
+            {([1, 2, 3, 4, 5] as const).map((step, index) => {
               const isVisited = step < state.currentStep;
               const isCurrent = step === state.currentStep;
               return (
@@ -126,7 +128,7 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
                   >
                     {isVisited ? <Check className="w-4 h-4" /> : step}
                   </button>
-                  {index < 3 && (
+                  {index < 4 && (
                     <div
                       className={cn(
                         'h-0.5 flex-1 mx-1 transition-colors',
@@ -157,18 +159,28 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
               instagramUserId={state.whatsapp.instagramUserId}
             />
           )}
-          {state.currentStep === 3 && <Step4Budget value={state.budget} onChange={wizard.setBudget} />}
-          {state.currentStep === 4 && (
+          {state.currentStep === 3 && (
+            <Step3Audience
+              value={state.audience}
+              onChange={wizard.setAudience}
+              objective={state.objective}
+              whatsapp={state.whatsapp}
+              onWhatsappChange={wizard.setWhatsapp}
+            />
+          )}
+          {state.currentStep === 4 && <Step4Budget value={state.budget} onChange={wizard.setBudget} />}
+          {state.currentStep === 5 && (
             <Step5Review
               state={state}
               onViewCampaigns={handleViewCampaigns}
               onCreateAnother={handleCreateAnother}
               onBack={wizard.goBack}
+              onEditField={wizard.goToStep}
             />
           )}
         </div>
 
-        {state.currentStep < 4 && (
+        {state.currentStep < 5 && (
           <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
             {state.currentStep > 1 && (
               <Button variant="outline" className="flex-1" onClick={wizard.goBack}>

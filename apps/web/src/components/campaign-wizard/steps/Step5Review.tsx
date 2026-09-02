@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, ImagePlus, Loader2 } from 'lucide-react';
+import { CheckCircle2, ImagePlus, Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import api from '@/lib/api';
 import { useCreateCampaign } from '../hooks/useCreateCampaign';
 import type { CreateWizardCampaignPayload, WizardState } from '../types';
 
@@ -24,36 +23,15 @@ interface Step5ReviewProps {
   onViewCampaigns: () => void;
   onCreateAnother: () => void;
   onBack: () => void;
+  onEditField: (step: WizardState['currentStep']) => void;
 }
 
-interface AudienceDefaults {
-  city?: string;
-  cityKey?: string;
-  ageMin?: number;
-  ageMax?: number;
-  gender?: 'all' | 'male' | 'female';
-}
-
-export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }: Step5ReviewProps) {
+export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, onEditField }: Step5ReviewProps) {
   const mutation = useCreateCampaign();
-  const [audience, setAudience] = useState<AudienceDefaults>({});
-  const [audienceLoading, setAudienceLoading] = useState(true);
   const [showSlowWarning, setShowSlowWarning] = useState(false);
   const slowWarningTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  useEffect(() => {
-    api.get<{ success: boolean; data: { audienceDefaults?: AudienceDefaults } }>('/auth/me')
-      .then((res) => {
-        const defaults = res.data.data?.audienceDefaults;
-        if (defaults?.city) {
-          setAudience(defaults);
-        }
-      })
-      .catch(() => {
-        // silently ignore — audience stays empty
-      })
-      .finally(() => setAudienceLoading(false));
-  }, []);
+  const audience = state.audience;
 
   // Limpa o timer ao desmontar
   useEffect(() => {
@@ -88,6 +66,7 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
       age_min: audience.ageMin || 18,
       age_max: audience.ageMax || 65,
       gender: audience.gender || 'all',
+      audience_interests: audience.audienceInterests,
       daily_budget_brl: state.budget.dailyBudgetBrl,
       duration_days: state.budget.durationDays,
       ...(state.objective === 'whatsapp'
@@ -143,7 +122,17 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
 
       <div className="rounded-xl border border-gray-200 divide-y divide-gray-100">
         <div className="p-4">
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Objetivo</div>
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">Objetivo</div>
+            <button
+              type="button"
+              onClick={() => onEditField(1)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title="Editar objetivo"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          </div>
           <div className="text-sm font-medium text-gray-900">{objectiveLabel}</div>
         </div>
 
@@ -175,9 +164,19 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
               <ImagePlus className="w-6 h-6 text-gray-300" />
             )}
           </div>
-          <div className="min-w-0">
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
-              Criativo · {creativeSourceLabel}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">
+                Criativo · {creativeSourceLabel}
+              </div>
+              <button
+                type="button"
+                onClick={() => onEditField(2)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                title="Editar criativo"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
             </div>
             <div className="text-sm font-medium text-gray-900 truncate">{state.creative.headline}</div>
             <div className="text-xs text-gray-500 mt-1 line-clamp-2">{state.creative.primaryText}</div>
@@ -185,29 +184,49 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
         </div>
 
         <div className="p-4">
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Público</div>
-          {audienceLoading ? (
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Carregando...
-            </div>
-          ) : audience.city ? (
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">Público</div>
+            <button
+              type="button"
+              onClick={() => onEditField(3)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title="Editar público"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          </div>
+          {audience.city ? (
             <>
               <div className="text-sm font-medium text-gray-900">{audience.city}</div>
               <div className="text-xs text-gray-500 mt-1">
                 {audience.ageMin || 18}-{audience.ageMax || 65} anos •{' '}
                 {GENDER_LABELS[audience.gender || 'all']}
               </div>
+              {audience.audienceInterests && audience.audienceInterests.length > 0 && (
+                <div className="text-xs text-gray-500 mt-1">
+                  Interesses: {audience.audienceInterests.map(i => i.name).join(', ')}
+                </div>
+              )}
             </>
           ) : (
             <div className="text-sm text-amber-700">
-              ⚠️ Público não configurado. Vá em Configurações → Público.
+              ⚠️ Público não configurado. Configure no passo anterior.
             </div>
           )}
         </div>
 
         <div className="p-4">
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Orçamento</div>
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">Orçamento</div>
+            <button
+              type="button"
+              onClick={() => onEditField(4)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title="Editar orçamento"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          </div>
           <div className="text-sm font-medium text-gray-900">
             R$ {state.budget.dailyBudgetBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/dia
             {state.budget.durationDays !== undefined && ` • ${state.budget.durationDays} dias`}
@@ -253,7 +272,7 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack }:
           size="lg"
           className="flex-1"
           onClick={handlePublish}
-          disabled={mutation.isPending || audienceLoading || !audience.city}
+          disabled={mutation.isPending || !audience.city}
         >
           {mutation.isPending ? (
             <span className="flex items-center justify-center gap-2">
