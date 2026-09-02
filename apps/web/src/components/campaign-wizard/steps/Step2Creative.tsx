@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, ImagePlus, Loader2, Sparkles, UploadCloud } from 'lucide-react';
+import { Check, ImagePlus, Loader2, Plus, Sparkles, UploadCloud, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import type { StudioAsset } from '@/types/studio';
 import { useUploadCreative } from '../hooks/useCreateCampaign';
+import { createEmptyCreative, MAX_CREATIVES } from '../types';
 import type { WizardCreativeState, WizardObjective } from '../types';
 import { InstagramPostsTab } from './InstagramPostsTab';
 
@@ -13,65 +15,81 @@ interface StudioAssetResponse {
   assets: StudioAsset[];
 }
 
+interface SuggestResponse {
+  headline: string;
+  primaryText: string;
+}
+
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024;
 
 interface Step2CreativeProps {
-  value: WizardCreativeState;
-  onChange: (updates: Partial<WizardCreativeState>) => void;
+  value: WizardCreativeState[];
+  onChange: (creatives: WizardCreativeState[]) => void;
   objective: WizardObjective | null;
   instagramUserId?: string;
 }
 
-export function Step2Creative({ value, onChange, objective, instagramUserId }: Step2CreativeProps) {
-  const [tab, setTab] = useState<'gallery' | 'upload' | 'instagram'>(value.uploadUrl ? 'upload' : value.instagramMediaId ? 'instagram' : 'gallery');
+interface CreativeCardProps {
+  creative: WizardCreativeState;
+  index: number;
+  objective: WizardObjective | null;
+  instagramUserId?: string;
+  galleryAssets: StudioAsset[];
+  isGalleryLoading: boolean;
+  isSuggesting: boolean;
+  showSuggestError: boolean;
+  suggestErrorMessage: string;
+  onSuggest: (imageUrl: string | null) => void;
+  onUpdate: (updates: Partial<WizardCreativeState>) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+}
+
+function CreativeCard({
+  creative,
+  index,
+  objective,
+  instagramUserId,
+  galleryAssets,
+  isGalleryLoading,
+  isSuggesting,
+  showSuggestError,
+  suggestErrorMessage,
+  onSuggest,
+  onUpdate,
+  onRemove,
+  canRemove,
+}: CreativeCardProps) {
+  const [tab, setTab] = useState<'gallery' | 'upload' | 'instagram'>(
+    creative.uploadUrl ? 'upload' : creative.instagramMediaId ? 'instagram' : 'gallery'
+  );
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadMutation = useUploadCreative();
 
   const canUseInstagramPost = objective === 'engagement' || objective === 'messages' || objective === 'whatsapp';
-  const selectedImageUrl = value.assetUrl || value.uploadUrl || value.mediaUrl || null;
+  const selectedImageUrl = creative.assetUrl || creative.uploadUrl || creative.mediaUrl || null;
 
   useEffect(() => {
     if (!canUseInstagramPost && tab === 'instagram') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTab('gallery');
-      if (value.instagramMediaId) {
-        onChange({ instagramMediaId: undefined, mediaUrl: undefined });
+      if (creative.instagramMediaId) {
+        onUpdate({ instagramMediaId: undefined, mediaUrl: undefined });
       }
     }
-  }, [canUseInstagramPost, tab, value.instagramMediaId, onChange]);
-
-  const suggestMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.post('/campaigns/suggest-text', { imageUrl: selectedImageUrl });
-      return res.data.data as { headline: string; primaryText: string };
-    },
-    onSuccess: (data) => {
-      onChange({ headline: data.headline, primaryText: data.primaryText });
-    },
-  });
-
-  const { data, isLoading } = useQuery<StudioAssetResponse>({
-    queryKey: ['studio/assets'],
-    queryFn: async () => {
-      const response = await api.get('/studio/assets');
-      return response.data;
-    },
-  });
-
-  const galleryAssets = (data?.assets ?? []).filter(
-    (asset) => asset.type === 'image' && asset.complianceStatus !== 'rejected'
-  );
+  }, [canUseInstagramPost, tab, creative.instagramMediaId, onUpdate]);
 
   function handleSelectAsset(asset: StudioAsset) {
     const headline = asset.headline || asset.title || asset.name;
     const primaryText = asset.primaryText || asset.description;
 
-    onChange({
+    onUpdate({
       assetId: asset.id,
       assetUrl: asset.url ?? undefined,
       uploadUrl: undefined,
-      headline: value.headline || headline?.slice(0, 40) || '',
-      primaryText: value.primaryText || primaryText?.slice(0, 125) || '',
+      headline: creative.headline || headline?.slice(0, 40) || '',
+      primaryText: creative.primaryText || primaryText?.slice(0, 125) || '',
     });
   }
 
@@ -93,17 +111,26 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
 
     try {
       const url = await uploadMutation.mutateAsync(file);
-      onChange({ uploadUrl: url, assetId: undefined, assetUrl: undefined });
+      onUpdate({ uploadUrl: url, assetId: undefined, assetUrl: undefined });
     } catch {
       setUploadError('Erro ao enviar imagem. Tente novamente.');
     }
   }
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h3 className="text-lg font-bold text-gray-900">Qual imagem vai usar?</h3>
-        <p className="text-sm text-gray-500 mt-1">Escolha uma imagem da sua galeria ou faça upload de um novo arquivo.</p>
+    <div className="border border-gray-200 rounded-xl p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-bold text-gray-900">Criativo {index + 1}</h4>
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={!canRemove}
+          aria-label={`Remover criativo ${index + 1}`}
+          title="Remover criativo"
+          className="rounded-lg p-1 text-gray-400 hover:text-red-600 hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'gallery' | 'upload' | 'instagram')}>
@@ -114,7 +141,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
         </TabsList>
 
         <TabsContent value="gallery">
-          {isLoading ? (
+          {isGalleryLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
             </div>
@@ -126,7 +153,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-72 overflow-y-auto pr-1">
               {galleryAssets.map((asset) => {
-                const isSelected = value.assetId === asset.id;
+                const isSelected = creative.assetId === asset.id;
                 return (
                   <button
                     key={asset.id}
@@ -177,13 +204,13 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
           >
             {uploadMutation.isPending ? (
               <Loader2 className="w-8 h-8 mb-2 text-gray-400 animate-spin" />
-            ) : value.uploadUrl ? (
-              <img src={value.uploadUrl} alt="Imagem enviada" className="max-h-40 rounded-lg mb-2 object-contain" />
+            ) : creative.uploadUrl ? (
+              <img src={creative.uploadUrl} alt="Imagem enviada" className="max-h-40 rounded-lg mb-2 object-contain" />
             ) : (
               <UploadCloud className="w-8 h-8 mb-2 text-gray-300" />
             )}
             <p className="text-sm font-medium text-gray-700">
-              {value.uploadUrl ? 'Clique para trocar a imagem' : 'Arraste uma imagem ou clique para selecionar'}
+              {creative.uploadUrl ? 'Clique para trocar a imagem' : 'Arraste uma imagem ou clique para selecionar'}
             </p>
             <p className="text-xs text-gray-400 mt-1">PNG ou JPG, até 5MB</p>
             <input
@@ -199,7 +226,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
 
         {canUseInstagramPost && (
           <TabsContent value="instagram">
-            <InstagramPostsTab value={value} onChange={onChange} objective={objective} instagramUserId={instagramUserId} />
+            <InstagramPostsTab value={creative} onChange={onUpdate} objective={objective} instagramUserId={instagramUserId} />
           </TabsContent>
         )}
       </Tabs>
@@ -211,29 +238,28 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => suggestMutation.mutate()}
-                disabled={suggestMutation.isPending || !selectedImageUrl}
+                onClick={() => onSuggest(selectedImageUrl)}
+                disabled={isSuggesting || !selectedImageUrl}
                 className="inline-flex items-center gap-1 text-xs font-medium text-[#E8631A] hover:text-[#D4550F] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 title={!selectedImageUrl ? 'Selecione uma imagem primeiro' : 'Sugerir com IA'}
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                {suggestMutation.isPending ? 'Gerando...' : 'Sugestão IA'}
+                {isSuggesting ? 'Gerando...' : 'Sugestão IA'}
               </button>
-              <span className="text-xs text-gray-400">{value.headline.length}/40</span>
+              <span className="text-xs text-gray-400">{creative.headline.length}/40</span>
             </div>
           </div>
           <input
             type="text"
             maxLength={40}
-            value={value.headline}
-            onChange={(e) => onChange({ headline: e.target.value })}
+            value={creative.headline}
+            onChange={(e) => onUpdate({ headline: e.target.value })}
             placeholder="Ex: Promoção imperdível este mês!"
             className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20"
           />
-          {suggestMutation.isError && (
+          {showSuggestError && (
             <div className="rounded-lg bg-red-50 border border-red-200 p-2 mt-1 text-xs text-red-700">
-              {(suggestMutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data
-                ?.error?.message || 'Não foi possível gerar sugestões agora. Tente novamente em instantes.'}
+              {suggestErrorMessage}
             </div>
           )}
         </div>
@@ -241,13 +267,13 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-sm font-bold text-gray-900">Texto principal</label>
-            <span className="text-xs text-gray-400">{value.primaryText.length}/125</span>
+            <span className="text-xs text-gray-400">{creative.primaryText.length}/125</span>
           </div>
           <textarea
             maxLength={125}
             rows={3}
-            value={value.primaryText}
-            onChange={(e) => onChange({ primaryText: e.target.value })}
+            value={creative.primaryText}
+            onChange={(e) => onUpdate({ primaryText: e.target.value })}
             placeholder="Descreva sua oferta de forma clara e atrativa."
             className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20 resize-none"
           />
@@ -259,12 +285,12 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
             <p className="text-xs text-gray-500 mb-2">Para onde as pessoas vão ao clicar?</p>
             <input
               type="text"
-              value={value.destinationUrl ?? ''}
-              onChange={(e) => onChange({ destinationUrl: e.target.value })}
+              value={creative.destinationUrl ?? ''}
+              onChange={(e) => onUpdate({ destinationUrl: e.target.value })}
               placeholder="https://wa.me/55... · site · instagram.com/seu perfil"
               className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20"
             />
-            {value.destinationUrl && !/^https?:\/\//.test(value.destinationUrl.trim()) && (
+            {creative.destinationUrl && !/^https?:\/\//.test(creative.destinationUrl.trim()) && (
               <p className="text-sm text-red-600 mt-1">O link deve começar com http:// ou https://</p>
             )}
             <p className="text-xs text-gray-400 mt-1">
@@ -273,6 +299,95 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+export function Step2Creative({ value, onChange, objective, instagramUserId }: Step2CreativeProps) {
+  const [suggestErrorCardId, setSuggestErrorCardId] = useState<string | null>(null);
+
+  const suggestMutation = useMutation({
+    mutationFn: async ({ imageUrl }: { imageUrl: string | null }) => {
+      const res = await api.post('/campaigns/suggest-text', { imageUrl });
+      return res.data.data as SuggestResponse;
+    },
+  });
+
+  const { data, isLoading } = useQuery<StudioAssetResponse>({
+    queryKey: ['studio/assets'],
+    queryFn: async () => {
+      const response = await api.get('/studio/assets');
+      return response.data;
+    },
+  });
+
+  const galleryAssets = (data?.assets ?? []).filter(
+    (asset) => asset.type === 'image' && asset.complianceStatus !== 'rejected'
+  );
+
+  const suggestErrorMessage =
+    (suggestMutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error
+      ?.message || 'Não foi possível gerar sugestões agora. Tente novamente em instantes.';
+
+  function updateCreativeById(id: string, updates: Partial<WizardCreativeState>) {
+    onChange(value.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+  }
+
+  function handleAddCreative() {
+    onChange([...value, createEmptyCreative()]);
+  }
+
+  function handleRemoveCreative(id: string) {
+    onChange(value.filter((c) => c.id !== id));
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-lg font-bold text-gray-900">Qual imagem vai usar?</h3>
+        <p className="text-sm text-gray-500 mt-1">Escolha uma imagem da sua galeria ou faça upload de um novo arquivo.</p>
+      </div>
+
+      {value.map((creative, index) => (
+        <CreativeCard
+          key={creative.id}
+          creative={creative}
+          index={index}
+          objective={objective}
+          instagramUserId={instagramUserId}
+          galleryAssets={galleryAssets}
+          isGalleryLoading={isLoading}
+          isSuggesting={suggestMutation.isPending}
+          showSuggestError={suggestErrorCardId === creative.id}
+          suggestErrorMessage={suggestErrorMessage}
+          onSuggest={(imageUrl) =>
+            suggestMutation.mutate(
+              { imageUrl },
+              {
+                onSuccess: (data) => {
+                  setSuggestErrorCardId(null);
+                  updateCreativeById(creative.id, { headline: data.headline, primaryText: data.primaryText });
+                },
+                onError: () => setSuggestErrorCardId(creative.id),
+              }
+            )
+          }
+          onUpdate={(updates) => updateCreativeById(creative.id, updates)}
+          onRemove={() => handleRemoveCreative(creative.id)}
+          canRemove={value.length > 1}
+        />
+      ))}
+
+      <Button
+        type="button"
+        variant="outline"
+        onClick={handleAddCreative}
+        disabled={value.length >= MAX_CREATIVES}
+        className="w-full"
+      >
+        <Plus className="w-4 h-4" />
+        Adicionar outro criativo ({value.length}/{MAX_CREATIVES})
+      </Button>
     </div>
   );
 }

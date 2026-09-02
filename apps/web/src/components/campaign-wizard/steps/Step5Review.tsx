@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, ImagePlus, Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCreateCampaign } from '../hooks/useCreateCampaign';
-import type { CreateWizardCampaignPayload, WizardState } from '../types';
+import { buildWizardCampaignPayload } from '../lib/buildPayload';
+import type { WizardState } from '../types';
 
 const OBJECTIVE_LABELS: Record<NonNullable<WizardState['objective']>, string> = {
   visits: 'Visitas',
@@ -38,11 +39,6 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
     return () => { if (slowWarningTimer.current) clearTimeout(slowWarningTimer.current); };
   }, []);
 
-  const isInstagramCreative = Boolean(state.creative.instagramMediaId);
-  const imageUrl = isInstagramCreative
-    ? state.creative.mediaUrl
-    : state.creative.uploadUrl || state.creative.assetUrl;
-  const creativeSourceLabel = isInstagramCreative ? 'Post do Instagram' : 'Galeria do Estúdio';
   const objectiveLabel = state.objective ? OBJECTIVE_LABELS[state.objective] : '';
   const total =
     state.budget.durationDays !== undefined
@@ -52,35 +48,7 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
   function handlePublish() {
     if (!state.objective) return;
 
-    const payload: CreateWizardCampaignPayload = {
-      objective: state.objective,
-      creative_asset_id: state.creative.assetId,
-      creative_upload_url: state.creative.uploadUrl,
-      creative_instagram_media_id: state.creative.instagramMediaId,
-      creative_media_url: state.creative.instagramMediaId ? state.creative.mediaUrl : undefined,
-      headline: state.creative.headline,
-      primary_text: state.creative.primaryText,
-      destination_url: state.creative.destinationUrl,
-      location_city: audience.city || '',
-      location_city_key: audience.cityKey,
-      age_min: audience.ageMin || 18,
-      age_max: audience.ageMax || 65,
-      gender: audience.gender || 'all',
-      audience_interests: audience.audienceInterests,
-      daily_budget_brl: state.budget.dailyBudgetBrl,
-      duration_days: state.budget.durationDays,
-      ...(state.objective === 'whatsapp'
-        ? {
-            whatsapp_page_id: state.whatsapp.pageId,
-            whatsapp_page_name: state.whatsapp.pageName,
-            whatsapp_phone_number_id: state.whatsapp.phoneNumberId,
-            whatsapp_phone_number: state.whatsapp.phoneNumberDisplay,
-            destinations: state.whatsapp.destinations,
-            instagram_user_id: state.whatsapp.instagramUserId,
-            instagram_username: state.whatsapp.instagramUsername,
-          }
-        : {}),
-    };
+    const payload = buildWizardCampaignPayload(state);
 
     setShowSlowWarning(false);
     if (slowWarningTimer.current) clearTimeout(slowWarningTimer.current);
@@ -156,30 +124,46 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
           </div>
         )}
 
-        <div className="p-4 flex gap-3">
-          <div className="w-16 h-16 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
-            {imageUrl ? (
-              <img src={imageUrl} alt="Criativo" className="w-full h-full object-cover" />
-            ) : (
-              <ImagePlus className="w-6 h-6 text-gray-300" />
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between mb-1">
-              <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">
-                Criativo · {creativeSourceLabel}
-              </div>
-              <button
-                type="button"
-                onClick={() => onEditField(2)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-                title="Editar criativo"
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">
+              Criativos ({state.creatives.length})
             </div>
-            <div className="text-sm font-medium text-gray-900 truncate">{state.creative.headline}</div>
-            <div className="text-xs text-gray-500 mt-1 line-clamp-2">{state.creative.primaryText}</div>
+            <button
+              type="button"
+              onClick={() => onEditField(2)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title="Editar criativos"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-3">
+            {state.creatives.map((creative, index) => {
+              const isInstagramCreative = Boolean(creative.instagramMediaId);
+              const imageUrl = isInstagramCreative
+                ? creative.mediaUrl
+                : creative.uploadUrl || creative.assetUrl;
+              const creativeSourceLabel = isInstagramCreative ? 'Post do Instagram' : 'Galeria do Estúdio';
+              return (
+                <div key={creative.id} className="flex gap-3">
+                  <div className="w-16 h-16 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    {imageUrl ? (
+                      <img src={imageUrl} alt={`Criativo ${index + 1}`} className="w-full h-full object-cover" />
+                    ) : (
+                      <ImagePlus className="w-6 h-6 text-gray-300" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
+                      Criativo {index + 1} · {creativeSourceLabel}
+                    </div>
+                    <div className="text-sm font-medium text-gray-900 truncate">{creative.headline}</div>
+                    <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{creative.primaryText}</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
