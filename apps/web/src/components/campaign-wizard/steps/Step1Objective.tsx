@@ -42,8 +42,8 @@ export function Step1Objective({ value, onChange, whatsapp, onWhatsappChange }: 
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-bold text-gray-900">Qual o objetivo da sua campanha?</h3>
-        <p className="text-sm text-gray-500 mt-1">Escolha o que você mais quer alcançar com este anúncio.</p>
+        <h3 className="text-lg font-bold text-text-primary">Qual o objetivo da sua campanha?</h3>
+        <p className="text-sm text-text-secondary mt-1">Escolha o que você mais quer alcançar com este anúncio.</p>
       </div>
 
       <div className="space-y-3">
@@ -57,19 +57,19 @@ export function Step1Objective({ value, onChange, whatsapp, onWhatsappChange }: 
               className={cn(
                 'w-full text-left p-4 rounded-xl border-2 transition-all duration-200 flex items-start gap-4',
                 isSelected
-                  ? 'border-[#E8631A] bg-orange-50'
-                  : 'border-gray-200 bg-white hover:border-[#E8631A]/40'
+                  ? 'border-brand bg-brand/10'
+                  : 'border-border bg-surface hover:border-brand/40'
               )}
             >
               <div className="text-3xl leading-none">{option.emoji}</div>
               <div className="flex-1">
-                <div className="font-bold text-gray-900">{option.title}</div>
-                <div className="text-sm text-gray-500 mt-1">{option.description}</div>
+                <div className="font-bold text-text-primary">{option.title}</div>
+                <div className="text-sm text-text-secondary mt-1">{option.description}</div>
               </div>
               <div
                 className={cn(
                   'w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-1',
-                  isSelected ? 'border-[#E8631A] bg-[#E8631A]' : 'border-gray-300'
+                  isSelected ? 'border-brand bg-brand' : 'border-border'
                 )}
               >
                 {isSelected && <Check className="w-4 h-4 text-white" />}
@@ -152,34 +152,34 @@ function MessagingDestinationFields({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 p-4 space-y-4 bg-gray-50/50">
+    <div className="rounded-xl border border-border p-4 space-y-4 bg-surface-secondary/50">
       <div>
-        <h4 className="text-sm font-bold text-gray-900">Destino das mensagens</h4>
-        <p className="text-xs text-gray-500 mt-0.5">Escolha onde deseja receber as conversas.</p>
+        <h4 className="text-sm font-bold text-text-primary">Destino das mensagens</h4>
+        <p className="text-xs text-text-secondary mt-0.5">Escolha onde deseja receber as conversas.</p>
       </div>
 
       {isLoadingPages && (
-        <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="flex items-center gap-2 text-sm text-text-secondary">
           <Loader2 className="w-4 h-4 animate-spin" />
           Carregando dados do seu negócio...
         </div>
       )}
 
       {isPagesError && (
-        <p className="text-xs text-red-600">
+        <p className="text-xs text-error">
           Não foi possível carregar os dados do seu negócio. Verifique a conexão Meta em Configurações → Integrações.
         </p>
       )}
 
       {!isLoadingPages && !isPagesError && pages.length === 0 && (
-        <p className="text-xs text-amber-700">
+        <p className="text-xs text-warning">
           Nenhuma Página selecionada na conexão Meta. Configure em Configurações → Integrações.
         </p>
       )}
 
       {pages.length > 1 && (
         <div>
-          <label className="text-sm font-bold text-gray-900 mb-1 block">Qual negócio vai anunciar?</label>
+          <label className="text-sm font-bold text-text-primary mb-1 block">Qual negócio vai anunciar?</label>
           <Select value={whatsapp.pageId ?? ''} onChange={(e) => handleSelectPage(e.target.value)}>
             <option value="">Selecione</option>
             {pages.map((page) => (
@@ -191,25 +191,25 @@ function MessagingDestinationFields({
 
       {whatsapp.pageId && (
         <div>
-          <label className="text-sm font-bold text-gray-900 mb-2 block">Onde quer receber as mensagens?</label>
+          <label className="text-sm font-bold text-text-primary mb-2 block">Onde quer receber as mensagens?</label>
           {onlyMessengerAvailable && (
-            <p className="text-xs text-amber-700 mb-2">
+            <p className="text-xs text-warning mb-2">
               Este negócio só tem Facebook disponível. Para usar WhatsApp, vincule um número WABA. Para usar Instagram, conecte sua conta Instagram à Página no Meta Business.
             </p>
           )}
           <div className="space-y-3">
             {whatsapp.hasWhatsApp && (
               <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
+                <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
                   <input
                     type="checkbox"
                     checked={whatsapp.destinations.includes('whatsapp')}
                     onChange={() => toggleDestination('whatsapp')}
-                    className="w-4 h-4 rounded border-gray-300 text-[#E8631A] focus:ring-[#E8631A]"
+                    className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
                   />
                   WhatsApp
                 </label>
-                <p className="text-xs text-gray-500 ml-6">As pessoas vão te chamar pelo WhatsApp</p>
+                <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo WhatsApp</p>
                 {whatsapp.destinations.includes('whatsapp') && (
                   <div className="mt-2 ml-6">
                     <div className="relative">
@@ -229,16 +229,16 @@ function MessagingDestinationFields({
                         ))}
                       </Select>
                       {isLoadingNumbers && (
-                        <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+                        <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary animate-spin" />
                       )}
                     </div>
                     {pageHasNoWhatsapp && (
-                      <p className="text-xs text-amber-700 mt-1">
+                      <p className="text-xs text-warning mt-1">
                         Esta página não tem número de WhatsApp vinculado. Vincule um número no Meta Business.
                       </p>
                     )}
                     {isNumbersError && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-xs text-error mt-1">
                         Não foi possível carregar os números de WhatsApp desta página. Tente novamente.
                       </p>
                     )}
@@ -249,33 +249,33 @@ function MessagingDestinationFields({
 
             {whatsapp.hasInstagram && (
               <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
+                <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
                   <input
                     type="checkbox"
                     checked={whatsapp.destinations.includes('instagram_direct')}
                     onChange={() => toggleDestination('instagram_direct')}
-                    className="w-4 h-4 rounded border-gray-300 text-[#E8631A] focus:ring-[#E8631A]"
+                    className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
                   />
                   Instagram
                 </label>
-                <p className="text-xs text-gray-500 ml-6">As pessoas vão te chamar pelo Instagram</p>
+                <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo Instagram</p>
                 {whatsapp.destinations.includes('instagram_direct') && (
-                  <div className="mt-1 ml-6 text-sm text-gray-600">@{whatsapp.instagramUsername}</div>
+                  <div className="mt-1 ml-6 text-sm text-text-secondary">@{whatsapp.instagramUsername}</div>
                 )}
               </div>
             )}
 
             <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
+              <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
                 <input
                   type="checkbox"
                   checked={whatsapp.destinations.includes('messenger')}
                   onChange={() => toggleDestination('messenger')}
-                  className="w-4 h-4 rounded border-gray-300 text-[#E8631A] focus:ring-[#E8631A]"
+                  className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
                 />
                 Facebook
               </label>
-              <p className="text-xs text-gray-500 ml-6">As pessoas vão te chamar pelo Facebook</p>
+              <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo Facebook</p>
             </div>
           </div>
         </div>

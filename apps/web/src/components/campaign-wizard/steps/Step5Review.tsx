@@ -64,10 +64,10 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
   if (mutation.isSuccess) {
     return (
       <div className="flex flex-col items-center text-center py-8 space-y-4">
-        <CheckCircle2 className="w-16 h-16 text-green-500" />
+        <CheckCircle2 className="w-16 h-16 text-success" />
         <div>
-          <h3 className="text-lg font-bold text-gray-900">Campanha publicada com sucesso!</h3>
-          <p className="text-sm text-gray-500 mt-1">Sua campanha já está ativa no Meta Ads.</p>
+          <h3 className="text-lg font-bold text-text-primary">Campanha publicada com sucesso!</h3>
+          <p className="text-sm text-text-secondary mt-1">Sua campanha já está ativa no Meta Ads.</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 w-full pt-2">
           <Button variant="outline" className="flex-1" onClick={onCreateAnother}>
@@ -84,33 +84,33 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-lg font-bold text-gray-900">Revisão e Publicação</h3>
-        <p className="text-sm text-gray-500 mt-1">Confira os detalhes antes de publicar sua campanha.</p>
+        <h3 className="text-lg font-bold text-text-primary">Revisão e Publicação</h3>
+        <p className="text-sm text-text-secondary mt-1">Confira os detalhes antes de publicar sua campanha.</p>
       </div>
 
-      <div className="rounded-xl border border-gray-200 divide-y divide-gray-100">
+      <div className="rounded-xl border border-border divide-y divide-border/60">
         <div className="p-4">
           <div className="flex items-center justify-between mb-1">
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">Objetivo</div>
+            <div className="text-xs font-bold text-text-tertiary uppercase tracking-wide">Objetivo</div>
             <button
               type="button"
               onClick={() => onEditField(1)}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-text-tertiary hover:text-text-secondary transition-colors"
               title="Editar objetivo"
             >
               <Pencil className="w-4 h-4" />
             </button>
           </div>
-          <div className="text-sm font-medium text-gray-900">{objectiveLabel}</div>
+          <div className="text-sm font-medium text-text-primary">{objectiveLabel}</div>
         </div>
 
         {state.objective === 'whatsapp' && (
           <div className="p-4">
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
+            <div className="text-xs font-bold text-text-tertiary uppercase tracking-wide mb-1">
               Destino das mensagens
             </div>
-            <div className="text-sm font-medium text-gray-900">{state.whatsapp.pageName}</div>
-            <div className="text-xs text-gray-500 mt-1 space-y-0.5">
+            <div className="text-sm font-medium text-text-primary">{state.whatsapp.pageName}</div>
+            <div className="text-xs text-text-secondary mt-1 space-y-0.5">
               {state.whatsapp.destinations.includes('whatsapp') && (
                 <div>WhatsApp: {state.whatsapp.phoneNumberDisplay}</div>
               )}
@@ -126,13 +126,13 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
 
         <div className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">
+            <div className="text-xs font-bold text-text-tertiary uppercase tracking-wide">
               Criativos ({state.creatives.length})
             </div>
             <button
               type="button"
               onClick={() => onEditField(2)}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-text-tertiary hover:text-text-secondary transition-colors"
               title="Editar criativos"
             >
               <Pencil className="w-4 h-4" />
@@ -147,19 +147,19 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
               const creativeSourceLabel = isInstagramCreative ? 'Post do Instagram' : 'Galeria do Estúdio';
               return (
                 <div key={creative.id} className="flex gap-3">
-                  <div className="w-16 h-16 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                  <div className="w-16 h-16 rounded-lg bg-surface-secondary overflow-hidden flex-shrink-0 flex items-center justify-center">
                     {imageUrl ? (
                       <img src={imageUrl} alt={`Criativo ${index + 1}`} className="w-full h-full object-cover" />
                     ) : (
-                      <ImagePlus className="w-6 h-6 text-gray-300" />
+                      <ImagePlus className="w-6 h-6 text-text-tertiary" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
+                    <div className="text-[11px] font-bold text-text-tertiary uppercase tracking-wide">
                       Criativo {index + 1} · {creativeSourceLabel}
                     </div>
-                    <div className="text-sm font-medium text-gray-900 truncate">{creative.headline}</div>
-                    <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{creative.primaryText}</div>
+                    <div className="text-sm font-medium text-text-primary truncate">{creative.headline}</div>
+                    <div className="text-xs text-text-secondary mt-0.5 line-clamp-2">{creative.primaryText}</div>
                   </div>
                 </div>
               );
@@ -169,11 +169,11 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
 
         <div className="p-4">
           <div className="flex items-center justify-between mb-1">
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">Público</div>
+            <div className="text-xs font-bold text-text-tertiary uppercase tracking-wide">Público</div>
             <button
               type="button"
               onClick={() => onEditField(3)}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-text-tertiary hover:text-text-secondary transition-colors"
               title="Editar público"
             >
               <Pencil className="w-4 h-4" />
@@ -181,19 +181,19 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
           </div>
           {audience.city ? (
             <>
-              <div className="text-sm font-medium text-gray-900">{audience.city}</div>
-              <div className="text-xs text-gray-500 mt-1">
+              <div className="text-sm font-medium text-text-primary">{audience.city}</div>
+              <div className="text-xs text-text-secondary mt-1">
                 {audience.ageMin || 18}-{audience.ageMax || 65} anos •{' '}
                 {GENDER_LABELS[audience.gender || 'all']}
               </div>
               {audience.audienceInterests && audience.audienceInterests.length > 0 && (
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-text-secondary mt-1">
                   Interesses: {audience.audienceInterests.map(i => i.name).join(', ')}
                 </div>
               )}
             </>
           ) : (
-            <div className="text-sm text-amber-700">
+            <div className="text-sm text-warning">
               ⚠️ Público não configurado. Configure no passo anterior.
             </div>
           )}
@@ -201,22 +201,22 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
 
         <div className="p-4">
           <div className="flex items-center justify-between mb-1">
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-wide">Orçamento</div>
+            <div className="text-xs font-bold text-text-tertiary uppercase tracking-wide">Orçamento</div>
             <button
               type="button"
               onClick={() => onEditField(4)}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-text-tertiary hover:text-text-secondary transition-colors"
               title="Editar orçamento"
             >
               <Pencil className="w-4 h-4" />
             </button>
           </div>
-          <div className="text-sm font-medium text-gray-900">
+          <div className="text-sm font-medium text-text-primary">
             R$ {state.budget.dailyBudgetBrl.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/dia
             {state.budget.durationDays !== undefined && ` • ${state.budget.durationDays} dias`}
           </div>
           {total !== null && (
-            <div className="text-xs text-gray-500 mt-1">
+            <div className="text-xs text-text-secondary mt-1">
               Total estimado: R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
           )}
@@ -224,7 +224,7 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
       </div>
 
       {showSlowWarning && (
-        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
+        <div className="rounded-lg bg-warning/10 border border-warning/25 p-3 text-sm text-warning flex items-start gap-2">
           <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -235,7 +235,7 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
       )}
 
       {mutation.isError && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+        <div className="rounded-lg bg-error/10 border border-error/20 p-3 text-sm text-error">
           {(mutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error
             ?.message || 'Erro ao publicar no Meta. Tente novamente.'}
         </div>

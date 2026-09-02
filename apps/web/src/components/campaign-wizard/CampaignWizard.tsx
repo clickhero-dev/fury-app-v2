@@ -144,17 +144,26 @@ export function CampaignWizard({
   const wizardContent = (
     <>
       {/* Header with step indicators */}
-      <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+      <div className="px-6 pt-6 pb-4 border-b border-border/60">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-bold text-gray-900">{STEP_TITLES[state.currentStep]}</h2>
-          {isModal && (
+          <h2 className="text-base font-bold text-text-primary">{STEP_TITLES[state.currentStep]}</h2>
+          {isModal ? (
             <button
               type="button"
               onClick={handleClose}
-              className="rounded-lg p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              className="rounded-lg p-1.5 text-text-tertiary hover:text-text-secondary hover:bg-surface-secondary transition-colors"
+              aria-label="Fechar"
             >
               <X className="w-5 h-5" />
               <span className="sr-only">Fechar</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowCancelConfirm(true)}
+              className="text-sm font-semibold text-text-tertiary hover:text-text-secondary transition-colors"
+            >
+              Cancelar
             </button>
           )}
         </div>
@@ -171,20 +180,21 @@ export function CampaignWizard({
                   onClick={() => isVisited && wizard.goToStep(step)}
                   disabled={!isVisited}
                   title={isVisited ? `Voltar ao passo ${step}` : undefined}
+                  aria-current={isCurrent ? 'step' : undefined}
                   className={cn(
-                    'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-colors',
-                    isVisited && 'bg-[#E8631A] text-white cursor-pointer hover:bg-[#D4520B]',
-                    isCurrent && 'bg-[#E8631A] text-white ring-4 ring-[#E8631A]/20 cursor-default',
-                    !isVisited && !isCurrent && 'bg-gray-100 text-gray-400 cursor-default'
+                    'w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 transition-colors',
+                    isVisited && 'bg-brand text-white cursor-pointer hover:bg-brand-hover',
+                    isCurrent && 'bg-brand text-white ring-4 ring-brand/20 cursor-default',
+                    !isVisited && !isCurrent && 'bg-surface-secondary text-text-tertiary cursor-default'
                   )}
                 >
-                  {isVisited ? <Check className="w-4 h-4" /> : displayNumber}
+                  {isVisited ? <Check className="w-5 h-5" /> : displayNumber}
                 </button>
                 {index < visibleSteps.length - 1 && (
                   <div
                     className={cn(
                       'h-0.5 flex-1 mx-1 transition-colors',
-                      isVisited ? 'bg-[#E8631A]' : 'bg-gray-100'
+                      isVisited ? 'bg-brand' : 'bg-surface-secondary'
                     )}
                   />
                 )}
@@ -235,7 +245,7 @@ export function CampaignWizard({
 
       {/* Footer with navigation buttons */}
       {state.currentStep < visibleSteps[visibleSteps.length - 1] && (
-        <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+        <div className="px-6 py-4 border-t border-border/60 flex gap-3">
           {state.currentStep > 1 && (
             <Button variant="outline" className="flex-1" onClick={wizard.goBack}>
               Voltar
@@ -250,12 +260,14 @@ export function CampaignWizard({
   );
 
   const cancelDialogContent = (
-    <DialogContent>
+    <DialogContent className="bg-surface border border-border-light text-text-primary rounded-2xl">
       <DialogHeader>
-        <DialogTitle>Cancelar criação?</DialogTitle>
-        <DialogDescription>As configurações da campanha serão perdidas.</DialogDescription>
+        <DialogTitle className="text-text-primary">Cancelar criação?</DialogTitle>
+        <DialogDescription className="text-text-secondary">
+          As configurações da campanha serão perdidas.
+        </DialogDescription>
       </DialogHeader>
-      <DialogFooter>
+      <DialogFooter className="mt-4 gap-2">
         <Button variant="outline" onClick={() => setShowCancelConfirm(false)}>
           Continuar editando
         </Button>
@@ -283,9 +295,9 @@ export function CampaignWizard({
     );
   }
 
-  // Page mode - render the content directly (coluna centralizada)
+  // Page mode - render the content directly (a página é quem centraliza a coluna)
   return (
-    <div className="flex flex-col h-full w-full max-w-2xl mx-auto">
+    <div className="flex flex-col h-full">
       {wizardContent}
       {showCancelConfirm && (
         <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
