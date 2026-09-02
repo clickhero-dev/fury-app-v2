@@ -36,8 +36,9 @@ interface MetaAuthUrlResponse {
 }
 
 interface InstagramPostsTabProps {
-  value: WizardCreativeState;
-  onChange: (updates: Partial<WizardCreativeState>) => void;
+  selected: WizardCreativeState[];
+  onToggle: (post: { id: string; mediaUrl?: string; caption?: string }) => void;
+  canAdd: boolean;
   objective: WizardObjective | null;
   instagramUserId?: string;
 }
@@ -95,7 +96,7 @@ function ProxiedImage({ url, alt, className }: { url: string; alt: string; class
   return <img src={objectUrl} alt={alt} className={className} />;
 }
 
-export function InstagramPostsTab({ value, onChange, objective, instagramUserId }: InstagramPostsTabProps) {
+export function InstagramPostsTab({ selected, onToggle, canAdd, objective, instagramUserId }: InstagramPostsTabProps) {
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery<InstagramPostsResponse>({
     queryKey: ['instagram/posts-ranked', objective, instagramUserId],
     queryFn: async () => {
@@ -121,14 +122,7 @@ export function InstagramPostsTab({ value, onChange, objective, instagramUserId 
   });
 
   function handleSelectPost(post: InstagramPost) {
-    onChange({
-      instagramMediaId: post.id,
-      mediaUrl: post.media_url ?? undefined,
-      assetId: undefined,
-      assetUrl: undefined,
-      uploadUrl: undefined,
-      primaryText: value.primaryText || (post.caption ?? '').slice(0, 125),
-    });
+    onToggle({ id: post.id, mediaUrl: post.media_url ?? undefined, caption: post.caption });
   }
 
   if (isLoading) {
@@ -182,6 +176,9 @@ export function InstagramPostsTab({ value, onChange, objective, instagramUserId 
   }
 
   const posts = data?.data ?? [];
+  const selectedPostIds = new Set(
+    selected.filter((c) => c.instagramMediaId).map((c) => c.instagramMediaId as string)
+  );
 
   if (posts.length === 0) {
     return (
@@ -195,15 +192,17 @@ export function InstagramPostsTab({ value, onChange, objective, instagramUserId 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
       {posts.map((post) => {
-        const isSelected = value.instagramMediaId === post.id;
+        const isSelected = selectedPostIds.has(post.id);
         return (
           <button
             key={post.id}
             type="button"
             onClick={() => handleSelectPost(post)}
+            disabled={!isSelected && !canAdd}
             className={cn(
               'relative rounded-xl overflow-hidden border-2 transition-all bg-gray-100 text-left',
-              isSelected ? 'border-[#E8631A]' : 'border-transparent hover:border-[#E8631A]/40'
+              isSelected ? 'border-[#E8631A]' : 'border-transparent hover:border-[#E8631A]/40',
+              !isSelected && !canAdd && 'opacity-50 cursor-not-allowed'
             )}
           >
             {post.media_url ? (
