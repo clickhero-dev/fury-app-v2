@@ -33,7 +33,7 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
 
   // Load audience defaults from user configuration
   useEffect(() => {
-    api.get<{ success: boolean; data: { audienceDefaults?: { city?: string; cityKey?: string; ageMin?: number; ageMax?: number; gender?: 'all' | 'male' | 'female' } } }>('/auth/me')
+    api.get<{ success: boolean; data: { audienceDefaults?: { city?: string; cityKey?: string; ageMin?: number; ageMax?: number; gender?: 'all' | 'male' | 'female'; audienceInterests?: { id: string; name: string }[] } } }>('/auth/me')
       .then((res) => {
         const defaults = res.data.data?.audienceDefaults;
         if (defaults) {
@@ -46,6 +46,7 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
               ageMin: defaults.ageMin || 18,
               ageMax: defaults.ageMax || 65,
               gender: defaults.gender || 'all',
+              audienceInterests: defaults.audienceInterests || [],
             },
           }));
         }

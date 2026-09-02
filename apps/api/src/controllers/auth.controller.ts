@@ -21,6 +21,10 @@ const updateMeSchema = z.object({
     ageMin: z.number().int().min(18).max(65).optional(),
     ageMax: z.number().int().min(18).max(65).optional(),
     gender: z.enum(['all', 'male', 'female']).optional(),
+    audienceInterests: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+    })).optional(),
   }).optional(),
   businessContext: z.string().optional(),
 });

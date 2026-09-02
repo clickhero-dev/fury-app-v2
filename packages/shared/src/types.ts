@@ -100,6 +100,7 @@ export interface UserDTO {
     ageMin?: number;
     ageMax?: number;
     gender?: 'all' | 'male' | 'female';
+    audienceInterests?: { id: string; name: string }[];
   };
   createdAt: Date;
 }
