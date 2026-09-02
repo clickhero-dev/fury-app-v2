@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from '../Sidebar';
+import { SnackHost } from './SnackHost';
 import api from '../../lib/api';
 import { useSubscription } from '../../hooks/useBilling';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
@@ -143,6 +144,7 @@ export function AuthenticatedShell() {
         />
       )}
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+      <SnackHost />
       {/* Outlet renderiza a página da rota ativa com acesso ao ShellContext */}
       <Outlet context={{ setMobileOpen } satisfies ShellContext} />
     </div>

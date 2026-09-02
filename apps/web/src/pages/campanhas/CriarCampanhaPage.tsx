@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CampaignWizard } from '@/components/campaign-wizard/CampaignWizard';
 import { PageHeader } from '@/components/PageHeader';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
+import { showSnack } from '@/lib/snack';
 
 export function CriarCampanhaPage() {
   const navigate = useNavigate();
@@ -17,7 +18,9 @@ export function CriarCampanhaPage() {
 
   function handleCancel() {
     clearPreSelectedAsset();
-    // Stay on the page with cleared state (as per user decision)
+    // Redireciona para o dashboard com um snack de confirmação
+    showSnack('Campanha cancelada com sucesso');
+    navigate('/dashboard');
   }
 
   function handleViewCampaigns() {

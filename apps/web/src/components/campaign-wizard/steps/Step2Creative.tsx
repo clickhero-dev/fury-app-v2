@@ -327,17 +327,17 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
             {value.map((c) => {
               const image = c.assetUrl || c.uploadUrl || c.mediaUrl;
               return (
-                <div
-                  key={c.id}
-                  className="relative w-11 h-11 rounded-lg overflow-hidden border border-border bg-surface-secondary"
-                >
-                  {image ? (
-                    <img src={image} alt="Criativo selecionado" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-text-tertiary">
-                      <ImagePlus className="w-3.5 h-3.5" />
-                    </div>
-                  )}
+                <div key={c.id} className="relative w-11 h-11">
+                  {/* thumb com overflow-hidden; o botão de remover fica FORA desse wrapper para não ser cortado */}
+                  <div className="w-full h-full rounded-lg overflow-hidden border border-border bg-surface-secondary">
+                    {image ? (
+                      <img src={image} alt="Criativo selecionado" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-text-tertiary">
+                        <ImagePlus className="w-3.5 h-3.5" />
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleRemove(c.id)}

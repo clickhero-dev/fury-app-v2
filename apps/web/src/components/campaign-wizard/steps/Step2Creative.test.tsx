@@ -131,4 +131,24 @@ describe('Step2Creative — seleção múltipla de imagens', () => {
     const statuses = screen.getAllByRole('status');
     expect(statuses.some((el) => el.textContent?.includes('1/4 selecionadas'))).toBe(true);
   });
+
+  it('remove uma imagem selecionada pelo X da faixa "Selecionadas"', async () => {
+    render(
+      <Harness
+        initial={[
+          makeCreative({ id: 'c1', assetId: 'a1', assetUrl: 'https://cdn.example.com/a1.jpg' }),
+          makeCreative({ id: 'c2', assetId: 'a2', assetUrl: 'https://cdn.example.com/a2.jpg' }),
+        ]}
+      />
+    );
+    await screen.findByRole('button', { name: /Banner A/ });
+
+    const removeButtons = screen.getAllByRole('button', { name: 'Remover criativo' });
+    expect(removeButtons).toHaveLength(2);
+    fireEvent.click(removeButtons[0]);
+
+    const next = onCreativesChange.mock.calls[0][0] as WizardCreativeState[];
+    expect(next).toHaveLength(1);
+    expect(next[0].id).toBe('c2');
+  });
 });

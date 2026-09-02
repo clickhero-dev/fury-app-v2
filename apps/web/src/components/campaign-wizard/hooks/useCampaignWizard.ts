@@ -10,7 +10,7 @@ function createInitialState(preSelectedAssetId?: string): WizardState {
   return {
     currentStep: 1,
     objective: null,
-    creatives: [createEmptyCreative(preSelectedAssetId)],
+    creatives: preSelectedAssetId ? [createEmptyCreative(preSelectedAssetId)] : [],
     audience: {
       city: '',
       ageMin: 18,
