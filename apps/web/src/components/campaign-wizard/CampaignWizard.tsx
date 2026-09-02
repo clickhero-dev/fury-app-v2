@@ -35,12 +35,26 @@ const STEP_TITLES: Record<WizardState['currentStep'], string> = {
   5: 'Revisão e Publicação',
 };
 
+// Dynamic step configuration based on whether audience step is skipped
+function getVisibleSteps(hasAudienceData: boolean): WizardState['currentStep'][] {
+  if (hasAudienceData) {
+    return [1, 2, 4, 5] as WizardState['currentStep'][];
+  }
+  return [1, 2, 3, 4, 5] as WizardState['currentStep'][];
+}
+
 export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSelectedAssetUrl }: CampaignWizardProps) {
   const navigate = useNavigate();
   const wizard = useCampaignWizard(preSelectedAssetId);
-  const { state } = wizard;
+  const { state, hasAudienceData, audienceLoaded } = wizard;
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const assetSelection = useMetaAssetSelection();
+  
+  // Calculate visible steps based on audience data
+  // Include step 3 if user manually navigated to it (via edit button)
+  const visibleSteps = state.currentStep === 3 
+    ? [1, 2, 3, 4, 5] as WizardState['currentStep'][]
+    : getVisibleSteps(hasAudienceData);
 
   if (state.creative.assetId === preSelectedAssetId && preSelectedAssetUrl && !state.creative.assetUrl) {
     wizard.setCreative({ assetUrl: preSelectedAssetUrl });
@@ -109,9 +123,10 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
           </div>
 
           <div className="flex items-center gap-2">
-            {([1, 2, 3, 4, 5] as const).map((step, index) => {
+            {visibleSteps.map((step, index) => {
               const isVisited = step < state.currentStep;
               const isCurrent = step === state.currentStep;
+              const displayNumber = index + 1; // Show sequential numbers (1, 2, 3, 4) regardless of actual step
               return (
                 <div key={step} className="flex items-center flex-1 last:flex-none">
                   <button
@@ -126,9 +141,9 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
                       !isVisited && !isCurrent && 'bg-gray-100 text-gray-400 cursor-default'
                     )}
                   >
-                    {isVisited ? <Check className="w-4 h-4" /> : step}
+                    {isVisited ? <Check className="w-4 h-4" /> : displayNumber}
                   </button>
-                  {index < 4 && (
+                  {index < visibleSteps.length - 1 && (
                     <div
                       className={cn(
                         'h-0.5 flex-1 mx-1 transition-colors',
@@ -180,7 +195,7 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
           )}
         </div>
 
-        {state.currentStep < 5 && (
+        {state.currentStep < visibleSteps[visibleSteps.length - 1] && (
           <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
             {state.currentStep > 1 && (
               <Button variant="outline" className="flex-1" onClick={wizard.goBack}>

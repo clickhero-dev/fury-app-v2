@@ -31,6 +31,7 @@ function createInitialState(preSelectedAssetId?: string): WizardState {
 
 export function useCampaignWizard(preSelectedAssetId?: string) {
   const [state, setState] = useState<WizardState>(() => createInitialState(preSelectedAssetId));
+  const [audienceLoaded, setAudienceLoaded] = useState(false);
 
   // Load audience defaults from user configuration
   useEffect(() => {
@@ -50,11 +51,21 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
             },
           }));
         }
+        setAudienceLoaded(true);
       })
       .catch(() => {
         // silently ignore - audience stays with default values
+        setAudienceLoaded(true);
       });
   }, []);
+
+  // Check if audience data is configured (city is the main requirement)
+  const hasAudienceData = useMemo(() => {
+    return (
+      state.audience.city.trim().length > 0 &&
+      audienceLoaded
+    );
+  }, [state.audience, audienceLoaded]);
 
   const setObjective = useCallback((objective: WizardObjective) => {
     setState((prev) => ({ ...prev, objective }));
@@ -81,11 +92,20 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
   }, []);
 
   const goNext = useCallback(() => {
-    setState((prev) => ({
-      ...prev,
-      currentStep: (Math.min(prev.currentStep + 1, TOTAL_STEPS) as WizardState['currentStep']),
-    }));
-  }, []);
+    setState((prev) => {
+      let nextStep = prev.currentStep + 1;
+      
+      // Skip step 3 (Audience) if audience data is already configured
+      if (prev.currentStep === 2 && hasAudienceData) {
+        nextStep = 4;
+      }
+      
+      return {
+        ...prev,
+        currentStep: (Math.min(nextStep, TOTAL_STEPS) as WizardState['currentStep']),
+      };
+    });
+  }, [hasAudienceData]);
 
   const goBack = useCallback(() => {
     setState((prev) => ({
@@ -113,7 +133,12 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
           state.creative.primaryText.trim().length > 0 &&
           (state.objective !== 'visits' || /^https?:\/\//.test(state.creative.destinationUrl?.trim() ?? ''))
       ),
-      3: Boolean(state.audience.city.trim().length > 0),
+      3: Boolean(
+        state.audience.city.trim().length > 0 &&
+        state.audience.ageMin >= 18 &&
+        state.audience.ageMax <= 65 &&
+        state.audience.ageMin <= state.audience.ageMax
+      ),
       4: state.budget.dailyBudgetBrl >= 7,
       5: true,
     } as Record<WizardState['currentStep'], boolean>;
@@ -135,6 +160,8 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
     isStepValid,
     canGoNext,
     totalSteps: TOTAL_STEPS,
+    hasAudienceData,
+    audienceLoaded,
   };
 }
 
