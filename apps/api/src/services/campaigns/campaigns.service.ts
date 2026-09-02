@@ -63,8 +63,9 @@ export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'mess
 export interface CreateWizardCampaignArgs {
   tenantId: string; objective: WizardObjective; creativeAssetId?: string;
   creativeUploadUrl?: string; creativeInstagramMediaId?: string;
-  creativeMediaUrl?: string; headline: string; primaryText: string;
+  creativeMediaUrl?: string; headline?: string; primaryText?: string;
   destinationUrl?: string; locationCity: string; locationCityKey?: string;
+  creatives?: WizardCreativeInput[];
   locationRadiusKm: number; ageMin: number; ageMax: number;
   gender: 'all' | 'male' | 'female'; dailyBudgetBrl: number; durationDays?: number;
   whatsappPageId?: string; whatsappPageName?: string;
@@ -76,6 +77,41 @@ export interface CreateWizardCampaignArgs {
 
 export interface CreateWizardCampaignResult {
   success: true; campaign_id: string; meta_campaign_id: string; campaign_name: string;
+}
+
+// ── Multi-criativo ────────────────────────────────────────────────────────────
+
+export interface WizardCreativeInput {
+  creativeAssetId?: string;
+  creativeUploadUrl?: string;
+  creativeInstagramMediaId?: string;
+  creativeMediaUrl?: string;
+  headline: string;
+  primaryText: string;
+  destinationUrl?: string;
+}
+
+// Exportada para testes — legado vira array de 1; se `creatives` veio, ele vence.
+export function normalizeWizardCreatives(args: {
+  creatives?: WizardCreativeInput[];
+  creativeAssetId?: string;
+  creativeUploadUrl?: string;
+  creativeInstagramMediaId?: string;
+  creativeMediaUrl?: string;
+  headline?: string;
+  primaryText?: string;
+  destinationUrl?: string;
+}): WizardCreativeInput[] {
+  if (args.creatives && args.creatives.length > 0) return args.creatives;
+  return [{
+    creativeAssetId: args.creativeAssetId,
+    creativeUploadUrl: args.creativeUploadUrl,
+    creativeInstagramMediaId: args.creativeInstagramMediaId,
+    creativeMediaUrl: args.creativeMediaUrl,
+    headline: args.headline ?? '',
+    primaryText: args.primaryText ?? '',
+    destinationUrl: args.destinationUrl,
+  }];
 }
 
 // ── Wizard constants ────────────────────────────────────────────────────────
@@ -663,20 +699,56 @@ export class CampaignsService {
       if (messagingDestinations.includes('instagram_direct') && !args.instagramUserId) throw new AppError(400, 'INSTAGRAM_USER_ID_REQUIRED', 'Conecte uma conta do Instagram à Página no Meta Business para usar Instagram Direct.');
     }
 
-    let imageUrl = args.creativeInstagramMediaId ? args.creativeMediaUrl : args.creativeUploadUrl;
-    if (!imageUrl && args.creativeAssetId) {
-      const asset = await this.repo.findCreativeAsset(args.creativeAssetId, args.tenantId);
-      if (!asset) throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo não encontrado.');
-      imageUrl = asset.url;
+    const creatives = normalizeWizardCreatives(args);
+    const createdAdCreativeIds: string[] = [];
+    const createdAdIds: string[] = [];
+    const creativeImageUrls: string[] = [];
+    const creativeAssetIds: string[] = [];
+    const imageHashByUrl = new Map<string, string | undefined>();
+
+    // 1) URLs das imagens de todos os criativos em paralelo (galeria / upload / Instagram)
+    const resolved = await Promise.all(
+      creatives.map(async (c) => {
+        let imageUrl = c.creativeInstagramMediaId ? c.creativeMediaUrl : c.creativeUploadUrl;
+        if (!imageUrl && c.creativeAssetId) {
+          const asset = await this.repo.findCreativeAsset(c.creativeAssetId, args.tenantId);
+          if (!asset) throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', `Asset criativo ${c.creativeAssetId} não encontrado.`);
+          imageUrl = asset.url;
+        }
+        return imageUrl;
+      })
+    );
+    if (resolved.every((u, i) => !u && !creatives[i].creativeInstagramMediaId)) {
+      throw new AppError(400, 'CREATIVE_IMAGE_MISSING', 'Selecione uma imagem da galeria ou envie um arquivo.');
     }
 
-    if (!imageUrl && !args.creativeInstagramMediaId) {
-      throw new AppError(400, 'CREATIVE_IMAGE_MISSING', 'Selecione uma imagem da galeria ou envie um arquivo.');
+    // 2) Download + upload do hash por URL — deduplicado via Map (URLs repetidas baixam 1× só)
+    const getAdImageHash = async (imageUrl: string | undefined): Promise<string | undefined> => {
+      if (!imageUrl) return undefined;
+      if (imageHashByUrl.has(imageUrl)) return imageHashByUrl.get(imageUrl);
+      const downloadPromise = (async () => {
+        const result = await this.meta.downloadImage(imageUrl, AbortSignal.timeout(90_000));
+        if (!result) throw new Error(`Falha ao baixar imagem (HTTP). Verifique se a URL está acessível.`);
+        if (!result.contentType.includes('jpeg') && !result.contentType.includes('png') && !result.contentType.includes('image/')) {
+          throw new Error(`Formato de imagem nao suportado: ${result.contentType || 'desconhecido'}. Use uma imagem JPEG ou PNG acessivel publicamente.`);
+        }
+        const ext = result.contentType.includes('png') ? 'png' : 'jpg';
+        return this.meta.uploadAdImage({
+          adAccountId,
+          base64: result.buffer.toString('base64'),
+          filename: `fury_creative_${Date.now()}_${imageHashByUrl.size}.${ext}`,
+          accessToken,
+        });
+      })();
+      imageHashByUrl.set(imageUrl, undefined); // trava a URL p/ não baixar 2×
+      const hash = await downloadPromise;
+      imageHashByUrl.set(imageUrl, hash);
+      return hash;
     }
 
     let instagramCreativeActorId: string | undefined;
     let instagramCreativePageId: string | undefined;
-    if (args.creativeInstagramMediaId) {
+    if (args.creativeInstagramMediaId || creatives.some((c) => c.creativeInstagramMediaId)) {
       const assetSelection = await this.deps.getResolvedTenantAssetSelection(args.tenantId);
       const igPage = assetSelection.pages.find((page) => page.instagramUserId);
       if (!igPage?.instagramUserId) throw new AppError(400, 'INSTAGRAM_ACCOUNT_NOT_FOUND', 'Nenhuma conta do Instagram conectada para usar este post como criativo.');
@@ -696,8 +768,8 @@ export class CampaignsService {
 
     const today = new Date();
     const dataLabel = today.toLocaleDateString('pt-BR');
-    // o nome da campanha reflete o título do anúncio (headline) definido no wizard
-    const campaignName = args.headline;
+    // o nome da campanha reflete a headline do 1º criativo definido no wizard
+    const campaignName = creatives[0].headline;
 
     const selectedPageIds = (metaConn.selectedPageIds as string[] | null) ?? [];
     let pageId = args.objective === 'whatsapp' ? args.whatsappPageId! : selectedPageIds[0] || process.env.META_PAGE_ID || '';
@@ -727,18 +799,21 @@ export class CampaignsService {
 
     let metaCampaignId: string | undefined;
     let adSetId: string | undefined;
-    let adCreativeId: string | undefined;
-    let metaAdId: string | undefined;
     let dbCampaignId: string | undefined;
 
     // Rollback de "limpeza total": se a criação falhar em qualquer etapa, remove
-    // do Meta os objetos já criados (ad → adset → adcreative → campaign) e, se
-    // houver, o registro local no banco. Falhas no próprio cleanup só são logadas.
+    // do Meta os objetos já criados (ads → adcreatives → adset → campaign, todos
+    // em ordem reversa) e, se houver, o registro local no banco. Falhas no próprio
+    // cleanup só são logadas.
     const rollback = async (step: string): Promise<void> => {
       const pendingDeletes: Array<{ id: string; label: string; del: () => Promise<void> }> = [];
-      if (metaAdId) pendingDeletes.push({ id: metaAdId, label: 'ad', del: () => this.meta.deleteAd(metaAdId!, accessToken) });
+      for (const id of [...createdAdIds].reverse()) {
+        pendingDeletes.push({ id, label: 'ad', del: () => this.meta.deleteAd(id, accessToken) });
+      }
+      for (const id of [...createdAdCreativeIds].reverse()) {
+        pendingDeletes.push({ id, label: 'adcreative', del: () => this.meta.deleteAdCreative(id, accessToken) });
+      }
       if (adSetId) pendingDeletes.push({ id: adSetId, label: 'adset', del: () => this.meta.deleteAdSet(adSetId!, accessToken) });
-      if (adCreativeId) pendingDeletes.push({ id: adCreativeId, label: 'adcreative', del: () => this.meta.deleteAdCreative(adCreativeId!, accessToken) });
       if (metaCampaignId) pendingDeletes.push({ id: metaCampaignId, label: 'campaign', del: () => this.meta.deleteCampaign(metaCampaignId!, accessToken) });
 
       for (const { id, label, del } of pendingDeletes) {
@@ -765,23 +840,6 @@ export class CampaignsService {
         name: campaignName, objective: objectiveConfig.metaObjective, status: 'ACTIVE',
         special_ad_categories: [], is_adset_budget_sharing_enabled: false,
       };
-
-      let adImageHashPromise: Promise<string | undefined> = Promise.resolve(undefined);
-      if (!instagramCreativeActorId && imageUrl) {
-        adImageHashPromise = (async () => {
-          const result = await this.meta.downloadImage(imageUrl, AbortSignal.timeout(90_000));
-          if (!result) throw new Error(`Falha ao baixar imagem (HTTP). Verifique se a URL está acessível.`);
-          if (!result.contentType.includes('jpeg') && !result.contentType.includes('png') && !result.contentType.includes('image/')) {
-            throw new Error(`Formato de imagem nao suportado: ${result.contentType || 'desconhecido'}. Use uma imagem JPEG ou PNG acessivel publicamente.`);
-          }
-          const ext = result.contentType.includes('png') ? 'png' : 'jpg';
-          const hash = await this.meta.uploadAdImage({
-            adAccountId, base64: result.buffer.toString('base64'),
-            filename: `fury_creative_${Date.now()}.${ext}`, accessToken,
-          });
-          return hash;
-        })();
-      }
 
       const campaignResponse = await this.meta.createCampaign(adAccountId, accessToken, campaignBody);
       metaCampaignId = campaignResponse.id;
@@ -813,8 +871,6 @@ export class CampaignsService {
       const adSetResponse = await this.meta.createAdSet(adAccountId, accessToken, adSetBody);
       adSetId = adSetResponse.id;
 
-      const adImageHash = await adImageHashPromise;
-
       // O link do anúncio (whatsapp_conv) aponta para a LP pública do app web:
       // https://app.useady.com.br/l/<slug>. URL fixa de produção, pois o anúncio
       // é servido ao público e não pode depender do host/ambiente da API.
@@ -832,26 +888,41 @@ export class CampaignsService {
         } catch { /* fallback ao tenantId */ }
       }
 
-      const creativeLink = args.objective === 'visits'
-        ? args.destinationUrl
-        : args.objective === 'whatsapp_conv'
-          ? `${LP_BASE_URL}/l/${lpSlug}`
-          : `https://www.facebook.com/${pageId}`;
+      // O link de cada anúncio usa o destinationUrl PRÓPRIO do criativo
+      // (whatsapp_conv sempre aponta para a LP pública do app web).
+      const creativeLinkFor = (c: WizardCreativeInput): string | undefined =>
+        args.objective === 'visits'
+          ? c.destinationUrl
+          : args.objective === 'whatsapp_conv'
+            ? `${LP_BASE_URL}/l/${lpSlug}`
+            : `https://www.facebook.com/${pageId}`;
 
-      const creativeBody: Record<string, unknown> = instagramCreativeActorId
-        ? { object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: args.creativeInstagramMediaId, call_to_action: JSON.stringify({ type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: args.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
-        : { name: 'Creative — FURY', object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: args.primaryText, name: args.headline, call_to_action: messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, link: creativeLink } } };
+      for (let i = 0; i < creatives.length; i++) {
+        const c = creatives[i];
+        const imageUrl = resolved[i];
+        if (imageUrl) creativeImageUrls.push(imageUrl);
+        if (c.creativeAssetId) creativeAssetIds.push(c.creativeAssetId);
 
-      const adCreativeResponse = await this.meta.createAdCreative(adAccountId, accessToken, creativeBody);
-      adCreativeId = adCreativeResponse.id;
+        const isInstagramCreative = Boolean(c.creativeInstagramMediaId);
+        const adImageHash = !isInstagramCreative ? await getAdImageHash(imageUrl) : undefined;
 
-      const adResponse = await this.meta.createAd(adAccountId, accessToken, {
-        name: `Ad — FURY — ${dataLabel}`, adset_id: adSetId,
-        creative: { creative_id: adCreativeId }, status: 'ACTIVE',
-      });
-      metaAdId = adResponse.id;
+        const creativeBody: Record<string, unknown> = isInstagramCreative
+          ? { object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: c.creativeInstagramMediaId, call_to_action: JSON.stringify({ type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: c.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
+          : { name: `Creative — FURY #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, link: creativeLinkFor(c) } } };
+
+        const adCreativeResponse = await this.meta.createAdCreative(adAccountId, accessToken, creativeBody);
+        createdAdCreativeIds.push(adCreativeResponse.id);
+
+        const adResponse = await this.meta.createAd(adAccountId, accessToken, {
+          name: `Ad — FURY — ${dataLabel} #${i + 1}`,
+          adset_id: adSetId,
+          creative: { creative_id: adCreativeResponse.id },
+          status: 'ACTIVE',
+        });
+        createdAdIds.push(adResponse.id);
+      }
     } catch (err) {
-      const step = !metaCampaignId ? 'campaign' : !adSetId ? 'adset' : !adCreativeId ? 'creative' : 'ad';
+      const step = !metaCampaignId ? 'campaign' : !adSetId ? 'adset' : 'creative';
       await rollback(step);
       mapWizardMetaError(err, step);
     }
@@ -862,12 +933,19 @@ export class CampaignsService {
         tenantId: args.tenantId, metaCampaignId, name: campaignName, status: 'active',
         budget: {
           daily_budget: Math.round(args.dailyBudgetBrl * 100), objective: objectiveConfig.metaObjective,
-          created_via: 'wizard', ad_set_id: adSetId, ad_creative_id: adCreativeId, ad_id: metaAdId,
+          created_via: 'wizard', ad_set_id: adSetId,
           duration_days: args.durationDays ?? null,
-          creative_asset_id: args.creativeAssetId ?? null,
-          creative_image_url: imageUrl ?? null,
-          creative_headline: args.headline ?? null,
-          creative_primary_text: args.primaryText ?? null,
+          ad_creative_ids: createdAdCreativeIds,
+          ad_ids: createdAdIds,
+          creative_image_urls: creativeImageUrls,
+          creative_asset_ids: creativeAssetIds,
+          // legado = 1º criativo (consumers antigos: fallback de getCampaignInsights)
+          ad_creative_id: createdAdCreativeIds[0] ?? null,
+          ad_id: createdAdIds[0] ?? null,
+          creative_asset_id: creativeAssetIds[0] ?? null,
+          creative_image_url: creativeImageUrls[0] ?? null,
+          creative_headline: creatives[0].headline,
+          creative_primary_text: creatives[0].primaryText,
           ...(args.objective === 'whatsapp' ? {
             destinations: messagingDestinations, destination_type: messagingDestinationType,
             whatsapp_page_id: args.whatsappPageId, whatsapp_page_name: args.whatsappPageName ?? null,
