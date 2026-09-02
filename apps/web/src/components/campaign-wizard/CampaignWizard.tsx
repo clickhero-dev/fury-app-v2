@@ -56,8 +56,12 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
     ? [1, 2, 3, 4, 5] as WizardState['currentStep'][]
     : getVisibleSteps(hasAudienceData);
 
-  if (state.creative.assetId === preSelectedAssetId && preSelectedAssetUrl && !state.creative.assetUrl) {
-    wizard.setCreative({ assetUrl: preSelectedAssetUrl });
+  if (
+    state.creatives[0]?.assetId === preSelectedAssetId &&
+    preSelectedAssetUrl &&
+    !state.creatives[0]?.assetUrl
+  ) {
+    wizard.updateCreative(state.creatives[0].id, { assetUrl: preSelectedAssetUrl });
   }
 
   // Resolve automaticamente a Pagina do tenant a partir da selecao salva do
@@ -168,8 +172,8 @@ export function CampaignWizard({ open, onOpenChange, preSelectedAssetId, preSele
           )}
           {state.currentStep === 2 && (
             <Step2Creative
-              value={state.creative}
-              onChange={wizard.setCreative}
+              value={state.creatives}
+              onChange={wizard.setCreatives}
               objective={state.objective}
               instagramUserId={state.whatsapp.instagramUserId}
             />
