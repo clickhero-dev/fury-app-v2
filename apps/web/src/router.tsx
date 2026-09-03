@@ -146,8 +146,8 @@ export const router = createBrowserRouter([
       { path: '/estudio-criativo', element: <CreativeStudio /> },
       { path: '/estudio', element: <EstudioHome /> },
       { path: '/estudio/imagem', element: <GeradorImagem /> },
-/*       { path: '/planejador', element: <PlanejadorPage /> },
-      { path: '/calendario', element: <CalendarioPage /> }, */
+      { path: '/planejador', element: <PlanejadorPage /> },
+      { path: '/calendario', element: <CalendarioPage /> },
       { path: '/configuracoes', element: <Configuracoes /> },
       { path: '/configuracoes/integracoes', element: <Integracoes /> },
       // Google Meu Negócio oculto (feature incompleta) — 2026-09
