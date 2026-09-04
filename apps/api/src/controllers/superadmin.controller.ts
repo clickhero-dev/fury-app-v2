@@ -382,6 +382,26 @@ export class SuperAdminController {
 
   // ─── Subscription ──────────────────────────────────────
 
+  resetQuota = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const tenantId = req.params.tenantId;
+
+      const { SubscriptionRepository } = await import('../repository/subscription.repository.js');
+      const subRepo = new SubscriptionRepository(tenantId);
+      
+      await subRepo.resetCreativeQuota();
+
+      res.json({
+        success: true,
+        data: { message: 'Cota resetada com sucesso' },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   updateSubscription = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const repo = this.repo;

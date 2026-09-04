@@ -6,8 +6,11 @@ const { dbMock, mockGenerateImage, mockUploadAsset, mockFindByPlanId } = vi.hois
   dbMock: {
     insert: vi.fn(),
     select: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
     query: {
       creativeAssets: { findFirst: vi.fn() },
+      clientGoals: { findFirst: vi.fn() },
       metaConnections: { findFirst: vi.fn() },
       socialPosts: { findFirst: vi.fn() },
     },
@@ -26,6 +29,7 @@ vi.mock('@fury/db', async () => {
   return {
     db: dbMock,
     socialPosts: { id: 'id', tenantId: 'tenantId' },
+    clientGoals: {},
     creativeAssets: {},
     metaConnections: {},
     eq: (a: any) => a,
@@ -59,6 +63,7 @@ describe('studio.service — modo planner', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     dbMock.query.socialPosts.findFirst.mockResolvedValue(undefined); // nenhum post existente (idempotência)
+    dbMock.query.clientGoals.findFirst.mockResolvedValue(null); // sem clientGoal cadastrado (guardrail de nicho)
     mockFindByPlanId.mockResolvedValue(null); // checkAndCompletePlannerJob: nenhum job do planner
     dbMock.select.mockReturnValue({
       from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ total: 0 }]) }),
