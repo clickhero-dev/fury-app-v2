@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ApiResponse } from '../lib/shared.js';
 import { ZodError } from 'zod';
 import { captureServerException } from '../lib/analytics.js';
+import { logger } from '../lib/logger.js';
 
 class AppError extends Error {
   constructor(
@@ -21,7 +22,7 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ) {
-  console.error('Error:', err);
+  logger.error({ err, method: req.method, path: req.originalUrl }, 'error');
 
   // Tenant context (derivado de req, presente quando há autenticação)
   const tenantId = (req as Request & { tenantId?: string }).tenantId;

@@ -1,7 +1,9 @@
 import { Worker } from 'bullmq';
 import { processStudioGenerationJob, type StudioGenerationJobData, type GenerateStudioImageResult } from '../services/studio/studio.service.js';
+import { withJobSpan } from '../lib/otel-jobs.js';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const QUEUE_NAME = 'studio-generate-image';
 
 let studioWorker: Worker<StudioGenerationJobData, GenerateStudioImageResult> | null = null;
 
@@ -11,8 +13,11 @@ export async function startStudioGenerationWorker(): Promise<void> {
   }
 
   studioWorker = new Worker<StudioGenerationJobData, GenerateStudioImageResult>(
-    'studio-generate-image',
-    async (job) => processStudioGenerationJob(job.data),
+    QUEUE_NAME,
+    async (job) =>
+      withJobSpan({ queue: QUEUE_NAME, jobId: job.id }, `${QUEUE_NAME} process`, async () =>
+        processStudioGenerationJob(job.data)
+      ),
     {
       connection: {
         url: redisUrl,

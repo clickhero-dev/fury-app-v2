@@ -1,6 +1,7 @@
 import { Worker, Queue } from 'bullmq';
 import { getRedis } from '../lib/redis.js';
 import { runPlannerWorkflow } from '../planner-workflow-runner.js';
+import { withJobSpan } from '../lib/otel-jobs.js';
 
 export interface PlannerJobData {
   jobId: string;
@@ -42,7 +43,13 @@ export async function startPlannerWorker(): Promise<void> {
     QUEUE_NAME,
     async (job) => {
       const { jobId, tenantId, postsCount = 8 } = job.data;
-      await runPlannerWorkflow(jobId, tenantId, postsCount);
+      await withJobSpan(
+        { queue: QUEUE_NAME, jobId, tenantId, attempt: job.attemptsMade + 1 },
+        `${QUEUE_NAME} process`,
+        async () => {
+          await runPlannerWorkflow(jobId, tenantId, postsCount);
+        }
+      );
     },
     {
       connection: getRedis(),

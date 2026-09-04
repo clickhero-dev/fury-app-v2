@@ -4,6 +4,7 @@ import { db, campaigns, tenants } from '@fury/db';
 import { emitToTenant } from '../lib/sse.js';
 import { createBullConnection, FURY_ENGINE_QUEUE_NAME, type FuryEngineJobPayload } from '../lib/queue.js';
 import { calculateScore, getGrade, evaluateRules, computeAndSaveScore, type CampaignMetrics } from '../services/llms/fury-engine.service.js';
+import { withJobSpan } from '../lib/otel-jobs.js';
 
 interface FuryJobResult {
   tenantsProcessed: number;
@@ -62,10 +63,19 @@ async function processJob(job: Job<FuryEngineJobPayload>): Promise<FuryJobResult
 export async function startFuryEngineWorker(): Promise<Worker<FuryEngineJobPayload>> {
   const connection = await createBullConnection();
 
-  const worker = new Worker<FuryEngineJobPayload>(FURY_ENGINE_QUEUE_NAME, processJob, {
-    connection,
-    concurrency: 1,
-  });
+  const worker = new Worker<FuryEngineJobPayload>(
+    FURY_ENGINE_QUEUE_NAME,
+    (job) =>
+      withJobSpan(
+        { queue: FURY_ENGINE_QUEUE_NAME, jobId: job.id, attempt: job.attemptsMade + 1 },
+        `${FURY_ENGINE_QUEUE_NAME} process`,
+        () => processJob(job)
+      ),
+    {
+      connection,
+      concurrency: 1,
+    }
+  );
 
   worker.on('completed', (job, result) => {
     console.log('[fury-engine] Job completed', { jobId: job.id, stats: result });

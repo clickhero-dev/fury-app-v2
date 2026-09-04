@@ -9,4 +9,5 @@ allowBuilds:
   core-js: false
   esbuild: true
   msgpackr-extract: true
+  protobufjs: false
   sharp: true

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { db, requestLogs } from '@fury/db';
 import { sanitizeBody, sanitizeHeaders } from '../lib/sanitize-log-data.js';
+import { logger } from '../lib/logger.js';
 
 const FLUSH_INTERVAL_MS = 5_000;
 const MAX_BUFFER_SIZE = 100;
@@ -59,7 +60,7 @@ async function flushBuffer() {
     flushFailures = 0;
   } catch (err) {
     flushFailures++;
-    console.error(`[request-logger] flush failed (attempt #${flushFailures}):`, err);
+    logger.error({ err, attempt: flushFailures }, '[request-logger] flush failed');
     // Keep entries in buffer for retry — schedule another flush
   } finally {
     isFlushing = false;

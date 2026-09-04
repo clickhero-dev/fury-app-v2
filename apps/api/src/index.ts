@@ -1,8 +1,10 @@
 /// <reference path="./types/express.d.ts" />
 import 'dotenv/config';
+import { initOtel } from './lib/otel.js';
 import express from 'express';
 import cors from 'cors';
 import { loggerMiddleware } from './middleware/logger.js';
+import { metricsMiddleware } from './middleware/metrics.js';
 import { requestLogger, flushRequestLogs } from './middleware/request-logger.js';
 import { rateLimitMiddleware } from './middleware/rate-limit.middleware.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -33,6 +35,7 @@ import { slugify } from './lib/slug.js';
 import { recoverInterruptedPlannerWorkflows } from './planner-workflow-runner.js';
 import { runApiStartupWorkflow } from './workflows/api-startup-runner.js';
 import { flushAnalytics, captureServerException } from './lib/analytics.js';
+import { shutdownOtel } from './lib/otel.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -59,6 +62,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(loggerMiddleware);
+app.use(metricsMiddleware);
 app.use(requestLogger);
 console.log('=== STATIC serving /studio-assets from:', studioAssetsDir);
 app.use('/studio-assets', express.static(studioAssetsDir));
@@ -202,6 +206,9 @@ app.use((req, res) => {
 
 // Tudo que precisa de await fica dentro da IIFE
 (async () => {
+  // Observabilidade: liga o SDK OTel primeiro (env-gated; noop em test/dev sem env)
+  initOtel();
+
   if (NODE_ENV !== 'test') {
     // 🚀 Run API startup workflow: db check → migrations → redis → env validation
     await runApiStartupWorkflow();
@@ -298,6 +305,7 @@ app.use((req, res) => {
         await closeRedisConnection();
         await closeRedis();
         await flushAnalytics();
+        await shutdownOtel();
         console.log('Server closed');
         process.exit(0);
       });
