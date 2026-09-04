@@ -1,5 +1,31 @@
 import { describe, it, expect } from 'vitest';
-import { formatPlanDate, planStatusLabel, buildHistoryRows, generatePayload, shouldGiveUpPolling } from './plannerPage.utils';
+import { formatPlanDate, planStatusLabel, buildHistoryRows, generatePayload, shouldGiveUpPolling, shouldShowRecoveryScreen } from './plannerPage.utils';
+
+describe('shouldShowRecoveryScreen — BDD da tela "Recuperando planejamento..."', () => {
+  // Regra: só deve aparecer enquanto um job salvo está sendo recuperado e a
+  // geração ainda está ativa (view 'generating'). Quando o job termina (view
+  // 'review'/'idle'), a tela de recuperação NUNCA pode segurar a página.
+
+  it('Dado um job salvo sendo recuperado, QUANDO o primeiro fetch ainda não respondeu E a view é generating, ENTÃO mostra "Recuperando..."', () => {
+    expect(shouldShowRecoveryScreen({ recovered: true, isFetched: false, view: 'generating' })).toBe(true);
+  });
+
+  it('Dado um job que CONCLUIU, QUANDO o DONE chega (view review) E o fetch do novo jobId ainda não rodou, ENTÃO NÃO mostra "Recuperando..." (BUG: tela eterna após conclusão)', () => {
+    expect(shouldShowRecoveryScreen({ recovered: true, isFetched: false, view: 'review' })).toBe(false);
+  });
+
+  it('Dado um job que FALHOU, QUANDO o ERROR chega (view idle), ENTÃO NÃO mostra "Recuperando..."', () => {
+    expect(shouldShowRecoveryScreen({ recovered: true, isFetched: false, view: 'idle' })).toBe(false);
+  });
+
+  it('Dado o primeiro fetch já respondido, QUANDO ainda está em generating, ENTÃO não mostra a tela (o próprio polling assume)', () => {
+    expect(shouldShowRecoveryScreen({ recovered: true, isFetched: true, view: 'generating' })).toBe(false);
+  });
+
+  it('Dado que não há job salvo (recovered false), ENTÃO nunca mostra "Recuperando..."', () => {
+    expect(shouldShowRecoveryScreen({ recovered: false, isFetched: false, view: 'generating' })).toBe(false);
+  });
+});
 
 describe('plannerPage.utils — histórico e formatação', () => {
   it('formatPlanDate: ISO completo e só-data → "05 set 2026"', () => {

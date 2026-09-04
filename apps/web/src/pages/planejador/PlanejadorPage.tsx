@@ -10,7 +10,7 @@ import { PostsGrid } from './components/PostsGrid';
 import { PostSidePanel } from './components/PostSidePanel';
 import type { PrerequisiteCheck } from './components/IdleStatus';
 import type { JobStatus, Plan, Post, ViewState } from './types';
-import { buildHistoryRows, generatePayload, shouldGiveUpPolling } from './plannerPage.utils';
+import { buildHistoryRows, generatePayload, shouldGiveUpPolling, shouldShowRecoveryScreen } from './plannerPage.utils';
 import { captureEvent } from '@/lib/posthog';
 
 interface AgentLabelsResponse {
@@ -172,6 +172,7 @@ export function PlanejadorPage() {
   useEffect(() => {
     if (jobStatus?.state === 'DONE') {
       saveJobId(null);
+      setRecovered(false);
       setJobId(null);
       if (jobStatus.planId) setActivePlanId(jobStatus.planId);
       setView('review');
@@ -184,6 +185,7 @@ export function PlanejadorPage() {
   useEffect(() => {
     if (jobStatus?.state === 'ERROR') {
       saveJobId(null);
+      setRecovered(false);
       setErrorMsg('Desculpe, algo deu errado ao gerar seu plano. Tente novamente em instantes.');
       setJobId(null);
       setView('idle');
@@ -245,7 +247,7 @@ export function PlanejadorPage() {
   }, [queryClient, activePlanId]);
 
  // Loading do estado de recuperação
- if (recovered && !isFetched) {
+ if (shouldShowRecoveryScreen({ recovered, isFetched, view })) {
   return (
     <AppLayout>
       <div className="flex min-h-[60vh] flex-col items-center justify-center p-6 text-center">

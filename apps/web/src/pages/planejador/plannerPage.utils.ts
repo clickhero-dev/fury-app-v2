@@ -73,3 +73,19 @@ export function shouldGiveUpPolling(
   const waiting = ['pending', 'running', 'generating'].includes(status);
   return waiting && now - startedAt > maxMs;
 }
+
+/**
+ * Decide se a tela "Recuperando planejamento..." deve segurar a página.
+ * Só tem sentido enquanto um job salvo está sendo recuperado (recovered) e a
+ * geração ainda está ativa (view 'generating'). Quando o job terminou
+ * (view 'review'/'idle'), NUNCA pode bloquear — senão, após DONE/ERROR, o
+ * jobId é limpo e a query do job fica disabled (isFetched=false) → tela de
+ * recuperação para sempre.
+ */
+export function shouldShowRecoveryScreen(args: {
+  recovered: boolean;
+  isFetched: boolean;
+  view: string;
+}): boolean {
+  return args.recovered && !args.isFetched && args.view === 'generating';
+}
