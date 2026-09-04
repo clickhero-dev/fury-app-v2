@@ -50,7 +50,7 @@ function mockRes() {
 describe('PlannerController — happy path', () => {
   it('generatePlan inicia a geração usando o tenant do contexto e responde 200', async () => {
     const svc = mockPlannerService();
-    svc.startPlanGeneration.mockResolvedValue({ id: 'job-1', tenantId: 't-1', status: 'running' });
+    svc.startPlanGeneration.mockResolvedValue({ id: 'job-1', tenantId: 't-1', status: 'running', state: 'WORKING' });
     const c = new PlannerController(svc as any);
 
     const req = { tenant: { tenantId: 't-1' }, body: {} } as any;
@@ -59,7 +59,7 @@ describe('PlannerController — happy path', () => {
 
     await c.generatePlan(req, res, next);
 
-    expect(svc.startPlanGeneration).toHaveBeenCalledWith('t-1');
+    expect(svc.startPlanGeneration).toHaveBeenCalledWith('t-1', 8);
     expect(next).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({ success: true, data: expect.objectContaining({ id: 'job-1' }) });
   });

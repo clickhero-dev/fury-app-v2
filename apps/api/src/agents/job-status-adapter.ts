@@ -39,10 +39,24 @@ export function snapshotToJobStatus(snapshot: WorkflowSnapshot): JobStatus {
     };
   });
 
+  // Calculate high-level state from status
+  const status = snapshot.status === 'awaiting_images' ? 'generating' : snapshot.status;
+  let state: 'INITIALIZING' | 'WORKING' | 'DONE' | 'ERROR';
+  if (status === 'pending') {
+    state = 'INITIALIZING';
+  } else if (status === 'running' || status === 'generating') {
+    state = 'WORKING';
+  } else if (status === 'done') {
+    state = 'DONE';
+  } else {
+    state = 'ERROR';
+  }
+
   return {
     id: snapshot.id,
     tenantId: snapshot.tenantId,
-    status: snapshot.status === 'awaiting_images' ? 'generating' : snapshot.status,
+    status,
+    state,
     currentAgent: STAGE_TO_AGENT[snapshot.currentStage ?? ''] ?? 'Pipeline',
     agentProgress: steps,
     planId: snapshot.planId,

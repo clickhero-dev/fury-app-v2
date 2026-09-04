@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Sparkles, CheckCircle2, AlertCircle, Wand2 } from "lucide-react";
+import { GenerateConfirmationModal } from "./GenerateConfirmationModal";
 
 export interface PrerequisiteCheck {
   label: string;
@@ -7,14 +9,30 @@ export interface PrerequisiteCheck {
 }
 
 interface IdleStatusProps {
-  onGenerate: () => void;
+  onGenerate: (postsCount: number) => void;
   isLoading: boolean;
   checks?: PrerequisiteCheck[];
+  creativesRemaining: number | null;
+  creativesLimit: number | null;
+  quotaSufficient: boolean;
 }
 
-export function IdleStatus({ onGenerate, isLoading, checks }: IdleStatusProps) {
+export function IdleStatus({ onGenerate, isLoading, checks, creativesRemaining, creativesLimit, quotaSufficient }: IdleStatusProps) {
+  const [showModal, setShowModal] = useState(false);
+  
   // Mantém a lógica original: se checks não for passado, libera o botão
   const allOk = !checks || checks.every((c) => c.ok);
+
+  const handleGenerateClick = () => {
+    if (quotaSufficient) {
+      setShowModal(true);
+    }
+  };
+
+  const handleConfirmGenerate = (postsCount: number) => {
+    setShowModal(false);
+    onGenerate(postsCount);
+  };
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-10 lg:px-10 lg:py-14">
@@ -45,9 +63,9 @@ export function IdleStatus({ onGenerate, isLoading, checks }: IdleStatusProps) {
 
             <button
               type="button"
-              onClick={onGenerate}
-              disabled={isLoading || !allOk}
-              title={!allOk ? 'Complete todos os requisitos pendentes para gerar' : undefined}
+              onClick={handleGenerateClick}
+              disabled={isLoading || !allOk || !quotaSufficient}
+              title={!allOk ? 'Complete todos os requisitos pendentes para gerar' : !quotaSufficient ? 'Cota insuficiente para gerar planejamento' : undefined}
               className="mt-8 inline-flex items-center gap-2 rounded-xl gradient-spark px-6 py-3.5 text-base font-semibold text-white shadow-soft transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
             >
               {isLoading ? (
@@ -64,8 +82,10 @@ export function IdleStatus({ onGenerate, isLoading, checks }: IdleStatusProps) {
             </button>
 
             <p className="mt-3 text-xs text-primary-foreground/70">
-              {allOk
+              {allOk && quotaSufficient
                 ? "Nada é publicado sem a sua aprovação."
+                : !quotaSufficient
+                ? "Cota insuficiente para gerar planejamento."
                 : "Preencha os requisitos pendentes para continuar."}
             </p>
           </div>
@@ -139,6 +159,16 @@ export function IdleStatus({ onGenerate, isLoading, checks }: IdleStatusProps) {
           </p>
         </div>
       </footer>
+
+      {/* Modal de Confirmação */}
+      <GenerateConfirmationModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onConfirm={handleConfirmGenerate}
+        creativesRemaining={creativesRemaining}
+        creativesLimit={creativesLimit}
+        defaultPostsToGenerate={8}
+      />
     </div>
   );
 }

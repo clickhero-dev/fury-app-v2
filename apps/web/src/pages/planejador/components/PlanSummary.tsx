@@ -23,7 +23,7 @@ interface PlanSummaryProps {
 }
 
 function formatPeriod(start?: string, end?: string): string {
-  if (!start || !end) return '1 a 31 de julho de 2026';
+  if (!start || !end) return 'Período não definido';
   const s = new Date(start);
   const e = new Date(end);
   const months = [
