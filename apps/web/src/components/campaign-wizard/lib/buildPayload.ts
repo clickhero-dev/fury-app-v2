@@ -11,7 +11,8 @@ export function buildWizardCampaignPayload(state: WizardState): CreateWizardCamp
       creative_media_url: c.instagramMediaId ? c.mediaUrl : undefined,
       headline: c.headline,
       primary_text: c.primaryText,
-      destination_url: c.destinationUrl,
+      // undefined → JSON omite; o backend REJEITA "" como URL inválida.
+      destination_url: c.destinationUrl || undefined,
     })),
     location_city: audience.city || '',
     location_city_key: audience.cityKey,

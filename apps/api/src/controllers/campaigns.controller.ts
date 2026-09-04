@@ -60,7 +60,11 @@ const wizardCreativeItemSchema = z.object({
   creative_media_url: z.string().min(1).optional(),
   headline: z.string().min(1).max(40),
   primary_text: z.string().min(1).max(125),
-  destination_url: z.string().regex(/^https?:\/\//, 'URL inválida. Use http:// ou https://').optional(),
+  // "" = sem URL (o wizard envia vazio quando o criativo não tem link). URL
+  // inválida de verdade (não-vazia sem http) continua barrada.
+  destination_url: z
+    .union([z.string().regex(/^https?:\/\//, 'URL inválida. Use http:// ou https://'), z.literal('')])
+    .optional(),
 });
 
 const createWizardSchema = z
@@ -75,7 +79,9 @@ const createWizardSchema = z
     creative_media_url: z.string().min(1).optional(),
     headline: z.string().min(1).max(40).optional(),
     primary_text: z.string().min(1).max(125).optional(),
-    destination_url: z.string().regex(/^https?:\/\//, 'URL inválida. Use http:// ou https://').optional(),
+    destination_url: z
+      .union([z.string().regex(/^https?:\/\//, 'URL inválida. Use http:// ou https://'), z.literal('')])
+      .optional(),
 
     location_city: z.string().min(1),
     location_city_key: z.string().min(1).optional(),

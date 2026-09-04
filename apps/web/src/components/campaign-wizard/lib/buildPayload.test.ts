@@ -55,6 +55,20 @@ describe('buildWizardCampaignPayload', () => {
     expect(payload.primary_text).toBeUndefined();
   });
 
+  it('não envia destination_url quando vazio (backend rejeita "" como URL inválida)', () => {
+    const state = {
+      ...makeState(),
+      creatives: [
+        { id: 'c1', assetId: 'a1', headline: 'Título 1', primaryText: 'Texto 1', destinationUrl: '' },
+        { id: 'c2', assetId: 'a2', headline: 'Título 2', primaryText: 'Texto 2' },
+      ],
+    };
+    const payload = buildWizardCampaignPayload(state);
+
+    expect(payload.creatives[0].destination_url).toBeUndefined();
+    expect(payload.creatives[1].destination_url).toBeUndefined();
+  });
+
   it('mapeia dados de audiência e orçamento', () => {
     const payload = buildWizardCampaignPayload(makeState());
     expect(payload.objective).toBe('visits');

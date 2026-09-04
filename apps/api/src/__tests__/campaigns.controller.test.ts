@@ -249,5 +249,60 @@ describe('CampaignsController', () => {
         'Informe o título (headline) e o texto principal (primary text).'
       );
     });
+
+    it('aceita criativo com destination_url "" (sem URL) — payload real do curl pós-feat multi-imagem', async () => {
+      const createCampaignFromWizard = vi.fn().mockResolvedValue({ success: true });
+      const ctrl = makeController({ createCampaignFromWizard });
+      const req = makeReq({
+        body: {
+          ...baseBody,
+          objective: 'whatsapp_conv',
+          creatives: [
+            {
+              creative_asset_id: '9edd8e0f-b782-4bab-98e6-eab2612d5241',
+              headline: 'teste',
+              primary_text: 'tete',
+              destination_url: '', // ← o campo que a feat multi-imagem passou a enviar sempre
+            },
+          ],
+        },
+      });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(createCampaignFromWizard).toHaveBeenCalledTimes(1);
+      expect((createCampaignFromWizard.mock.calls[0][0] as any).creatives[0]).toMatchObject({
+        destinationUrl: '',
+        headline: 'teste',
+        primaryText: 'tete',
+      });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('continua barrando URL não-http (não vazia) com a mensagem atual', async () => {
+      const ctrl = makeController();
+      const req = makeReq({
+        body: {
+          ...baseBody,
+          creatives: [
+            {
+              creative_upload_url: 'https://example.com/a.jpg',
+              headline: 'T1',
+              primary_text: 'P1',
+              destination_url: 'google.com', // inválida de verdade
+            },
+          ],
+        },
+      });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(res.status).not.toHaveBeenCalledWith(201);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+      expect(JSON.stringify(lastNextError()?.issues)).toContain('URL inválida. Use http:// ou https://');
+    });
   });
 });
