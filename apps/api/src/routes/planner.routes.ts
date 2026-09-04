@@ -22,6 +22,7 @@ router.use(authMiddleware);
 
 router.post('/generate', tenantMiddleware, planner.generatePlan);
 router.get('/jobs/:jobId', tenantMiddleware, planner.getJob);
+router.get('/plans', tenantMiddleware, planner.listPlans);
 router.get('/plans/latest', tenantMiddleware, planner.getLatestPlan);
 router.get('/plans/:planId', tenantMiddleware, planner.getPlan);
 router.get('/prerequisites', tenantMiddleware, planner.handleGetPrerequisites);
@@ -43,5 +44,8 @@ router.post('/cron/publish-due', planner.handlePublishDue);
 
 // Agent labels (public endpoint para o frontend consumir)
 router.get('/agent-labels', planner.handleGetAgentLabels);
+
+// Quota endpoint para o planejador
+router.get('/quota', tenantMiddleware, planner.handleGetQuota);
 
 export default router;

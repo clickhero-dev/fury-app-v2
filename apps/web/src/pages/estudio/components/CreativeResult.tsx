@@ -3,6 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, BookmarkCheck, Loader2, RefreshCw, Upload, X } from 'lucide-react';
 import { Button } from '@/components';
 import api from '@/lib/api';
+import { complianceBadge } from '@/lib/compliance.utils';
+import { cn } from '@/lib/utils';
 import { layoutLabel, isKnownLayout } from '@/lib/layout-labels';
 import type { GenerateCreativeResponse, StudioPublishResponse } from '@/types/studio';
 
@@ -159,6 +161,33 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
 
   return (
     <div className="space-y-6">
+      {(() => {
+        const badge = (currentResult as any).complianceStatus
+          ? complianceBadge((currentResult as any).complianceStatus, (currentResult as any).complianceNotes)
+          : null;
+        if (!badge || badge.tone === 'unknown') return null;
+        return (
+          <div
+            className={cn(
+              'rounded-2xl border px-4 py-3 text-sm',
+              badge.tone === 'rejected' && 'border-red-200 bg-red-50 text-red-800',
+              badge.tone === 'approved' && 'border-green-200 bg-green-50 text-green-800',
+              badge.tone === 'pending' && 'border-amber-200 bg-amber-50 text-amber-800'
+            )}
+          >
+            <p className="font-semibold">{badge.label}</p>
+            {badge.reasons.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {badge.reasons.map((reason, i) => (
+                  <li key={i} className="text-xs leading-snug">
+                    • {reason}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })()}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
         {/* Preview area — video or image */}
         <div className="overflow-hidden rounded-2xl border border-[#E6E8EC]">

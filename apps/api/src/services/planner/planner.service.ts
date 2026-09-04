@@ -14,6 +14,35 @@ import { PlannerRepository } from '../../repository/planner.repository.js';
 // o fluxo limpa os dados do banco e permite gerar novamente.
 const PLANNER_JOB_STALE_MS = 15 * 60 * 1000;
 
+export type AssetComplianceSummary = {
+  url: string;
+  complianceStatus: string | null;
+  complianceNotes: string | null;
+};
+
+export type PlanPostWithCompliance = {
+  compliance: { status: string | null; notes: string | null } | null;
+};
+
+/** Anexa o compliance do creative_asset ao post, casando pela URL da imagem. */
+export function decoratePostsWithCompliance(
+  posts: Array<Record<string, any>>,
+  assets: AssetComplianceSummary[]
+): Array<Record<string, unknown> & PlanPostWithCompliance> {
+  const byUrl = new Map(assets.map((a) => [a.url, a]));
+  return posts.map((post) => {
+    const urls = Array.isArray(post.imageUrls) ? (post.imageUrls as Array<string | null>) : [];
+    const url = post.imageUrl ?? urls[0] ?? null;
+    const asset = url ? byUrl.get(url) : undefined;
+    return {
+      ...post,
+      compliance: asset
+        ? { status: asset.complianceStatus, notes: asset.complianceNotes }
+        : null,
+    };
+  });
+}
+
 // ── helpers puros (sem dependência de repo/service) ──────────────────────────
 
 function formatWaitSeconds(seconds: number): string {
@@ -83,7 +112,7 @@ export class PlannerService {
     await this.repo(tenantId).clearPlannerData();
   }
 
-  async startPlanGeneration(tenantId: string): Promise<JobStatus> {
+  async startPlanGeneration(tenantId: string, postsCount: number = 8): Promise<JobStatus> {
     // Gate de créditos ANTES de qualquer etapa do pipeline: se não há saldo,
     // para por aqui e devolve 402 ao front — sem criar job, sem enfileirar,
     // sem queimar créditos nas chamadas de LLM dos agentes iniciais.
@@ -112,14 +141,15 @@ export class PlannerService {
       tenantId,
       workflow: 'planner-generate',
       lockKey: tenantId,
+      metadata: { postsCount }, // Store postsCount in job metadata
     });
 
     try {
-      await enqueuePlanGeneration(id, tenantId);
+      await enqueuePlanGeneration(id, tenantId, postsCount);
     } catch (err) {
       console.warn('[planner] falha ao enfileirar no BullMQ, executando inline:', err);
       const { runPlannerWorkflow } = await import('../../planner-workflow-runner.js');
-      void runPlannerWorkflow(id, tenantId).catch((pipelineErr) => {
+      void runPlannerWorkflow(id, tenantId, postsCount).catch((pipelineErr) => {
         console.error('[planner] pipeline inline falhou:', pipelineErr);
       });
     }
@@ -136,11 +166,38 @@ export class PlannerService {
   }
 
   async getPlanById(planId: string, tenantId: string) {
-    return this.repo(tenantId).getPlanById(planId);
+    const repo = this.repo(tenantId);
+    const plan = await repo.getPlanById(planId);
+    if (!plan) return null;
+    await this.attachComplianceToPosts(repo, plan.posts ?? [], (posts) => {
+      plan.posts = posts as any;
+    });
+    return plan;
+  }
+
+  /** Anexa o compliance (do creative_asset) aos posts, casando pela URL da imagem. */
+  private async attachComplianceToPosts(
+    repo: PlannerRepository,
+    posts: Array<Record<string, any>>,
+    apply: (decorated: Array<Record<string, unknown> & PlanPostWithCompliance>) => void,
+  ): Promise<void> {
+    const urls = posts
+      .map((p) => {
+        const urls = Array.isArray(p.imageUrls) ? (p.imageUrls as Array<string | null>) : [];
+        return p.imageUrl ?? urls[0] ?? null;
+      })
+      .filter((u): u is string => !!u);
+    if (urls.length === 0) return;
+    const assets = await repo.findAssetsByUrls(urls);
+    apply(decoratePostsWithCompliance(posts, assets));
   }
 
   async getLatestPlanByTenant(tenantId: string) {
     return this.repo(tenantId).getLatestPlan();
+  }
+
+  async listPlansByTenant(tenantId: string, limit = 10) {
+    return this.repo(tenantId).listPlans(limit);
   }
 
   async getPrerequisites(tenantId: string) {
@@ -246,10 +303,16 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
     startDate: string,
     endDate: string,
   ): Promise<Array<Record<string, any>>> {
-    const allPosts = await this.repo(tenantId).listPostsByDateRange(startDate, endDate);
+    const repo = this.repo(tenantId);
+    const allPosts = await repo.listPostsByDateRange(startDate, endDate);
+    const urls = allPosts
+      .map((p: any) => p.imageUrl ?? p.imageUrls?.[0] ?? null)
+      .filter((u: unknown): u is string => !!u);
+    const assets = urls.length > 0 ? await repo.findAssetsByUrls(urls) : [];
+    const decorated = decoratePostsWithCompliance(allPosts, assets) as any[];
 
     // Enriquece com metadados
-    return allPosts.map(post => ({
+    return decorated.map(post => ({
       ...post,
       _source: post.planId ? 'plan' : 'manual',
       _planTitle: post.plan?.title ?? null,

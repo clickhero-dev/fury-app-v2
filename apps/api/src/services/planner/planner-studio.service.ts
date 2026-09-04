@@ -21,14 +21,25 @@ export async function checkAndCompletePlannerJob(planId: string, tenantId: strin
   const repo = new PlannerRepository(tenantId);
   const createdCount = await repo.countPostsByPlan(planId);
 
-  // Prioridade: artifact do job > parâmetro (caller) > fallback 8
+  // Fontes de verdade em ordem: artifact do job (gravado no enfileiramento) >
+  // metadata.postsCount (gravado ao criar o job) > parâmetro do caller.
   let expected = expectedCount;
   const job = await plannerStore.findByPlanId(planId);
   if (job) {
     const artifactExpected = Number((job.artifacts as any)?.expectedPosts ?? 0);
     if (artifactExpected > 0) expected = artifactExpected;
+    else {
+      const metaCount = Number((job as any).metadata?.postsCount ?? 0);
+      if (metaCount > 0) expected = metaCount;
+    }
   }
   const expectedPosts = expected ?? 8;
+
+  if (createdCount > expectedPosts) {
+    console.warn(
+      `[planner] divergência de conclusão: ${createdCount} posts criados vs ${expectedPosts} esperados (plan ${planId})`,
+    );
+  }
 
   if (createdCount >= expectedPosts) {
     if (job && job.status === 'awaiting_images') {

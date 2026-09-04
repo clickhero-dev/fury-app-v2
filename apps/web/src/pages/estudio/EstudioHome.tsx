@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, ArrowRight, Image as ImageIcon, Loader2, Send, Sparkles, Trash2, Wand2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Loader2, Send, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import api from '@/lib/api';
+import { complianceBadge } from '@/lib/compliance.utils';
 import type { StudioAsset } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
 
@@ -15,7 +16,7 @@ const FEATURES = {
 };
 
 const CREATIVE_TYPE = 'image' as const;
-const IMAGE_MODEL = 'black-forest-labs/flux.2-max';
+const IMAGE_MODEL = 'black-forest-labs/flux.2-pro';
 
 /* ── Estilos com efeito de Hover estilo Campanhas e Tokens Semânticos ── */
 const SURFACE = 'rounded-2xl border border-border bg-surface shadow-sm';
@@ -153,6 +154,8 @@ export function EstudioHome() {
       assetId: asset.id,
       imageUrl: asset.url ?? '',
       creativeData,
+      complianceStatus: asset.complianceStatus,
+      complianceNotes: asset.complianceNotes,
       modificationsRemaining: asset.modificationsRemaining ?? null,
     });
     setView('result');
@@ -173,6 +176,7 @@ export function EstudioHome() {
     { value: 'all', label: 'Todos' },
     { value: 'pending_compliance', label: 'Gerado' },
     { value: 'approved', label: 'Pronto' },
+    { value: 'rejected', label: 'Reprovado' },
   ];
 
   const getTypeCount = (type: string) =>
@@ -530,11 +534,13 @@ const BACKEND_URL = api.defaults.baseURL?.replace(/\/api$/, '') ?? '';
 
 function resolveAssetUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  return url.startsWith('http') ? url : `${BACKEND_URL}${url}`;
+  // data URLs (render-creative) e http são usados direto; o resto é caminho estático do backend.
+  return url.startsWith('data:') || url.startsWith('http') ? url : `${BACKEND_URL}${url}`;
 }
 
 function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDeleteConfirm, onDeleteCancel, onViewDetails, onUseInCampaign }: AssetCardProps) {
   const imageUrl = resolveAssetUrl(asset.url);
+  const badge = complianceBadge(asset.complianceStatus, asset.complianceNotes);
   return (
     <div className={`group ${SURFACE} ${CARD_HOVER} overflow-hidden`}>
       {imageUrl && asset.type === 'image' ? (
@@ -547,6 +553,41 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
               (e.target as HTMLImageElement).style.display = 'none';
             }}
           />
+          {badge.tone === 'approved' && (
+            <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-green-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
+              <CheckCircle2 className="h-3 w-3" />
+              {badge.label}
+            </div>
+          )}
+          {badge.tone === 'rejected' && (
+            <>
+              <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-red-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
+                <AlertCircle className="h-3 w-3" />
+                {badge.label}
+              </div>
+              {badge.reasons.length > 0 && (
+                <div className="absolute inset-x-0 bottom-0 space-y-1 bg-black/75 px-3 py-2 backdrop-blur-sm">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-red-300">Motivo da reprovação</p>
+                  <ul className="space-y-0.5">
+                    {badge.reasons.slice(0, 2).map((reason, i) => (
+                      <li key={i} className="line-clamp-2 text-[11px] leading-snug text-white/90">
+                        • {reason}
+                      </li>
+                    ))}
+                    {badge.reasons.length > 2 && (
+                      <li className="text-[11px] text-white/70">+{badge.reasons.length - 2} motivo(s) — Ver detalhes</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+          {badge.tone === 'pending' && (
+            <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-amber-500/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {badge.label}
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex aspect-square w-full items-center justify-center bg-gradient-to-br from-brand/10 to-background">

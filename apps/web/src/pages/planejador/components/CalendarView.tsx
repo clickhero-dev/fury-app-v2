@@ -2,6 +2,7 @@ import { useRef, useState, useCallback, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import FullCalendar from '@fullcalendar/react';
+import { complianceBadge } from '@/lib/compliance.utils';
 import './CalendarView.css';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
@@ -103,6 +104,7 @@ export function CalendarView() {
   const now = useMemo(() => new Date(), []);
   const calendarRef = useRef<FullCalendar | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
   const [selectedPost, setSelectedPost] = useState<CalendarPost | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showPostTypeDialog, setShowPostTypeDialog] = useState(false);
@@ -199,6 +201,10 @@ export function CalendarView() {
       if (prev?.startDate === newStart && prev?.endDate === newEnd) return prev;
       return { startDate: newStart, endDate: newEnd };
     });
+
+    // Exit selection mode when date range changes
+    setSelectionMode(false);
+    setSelectedIds(new Set());
   }, []);
 
   const handleEventClick = useCallback(
@@ -206,12 +212,12 @@ export function CalendarView() {
       const post = getPostFromEvent(info.event);
       if (!post) return;
 
-      // Clique normal abre o painel de detalhes (modal lateral com as
-      // informações do post). Ctrl/Cmd+Clique alterna a multisseleção, que
-      // exibe a barra de ações em lote (Agendar/Desprogramar/Excluir).
+      // Em modo de seleção, clique simples sempre alterna seleção
+      // Fora do modo, Ctrl/Cmd+Clique alterna seleção, clique normal abre detalhes
       const isModifierClick = info.jsEvent.ctrlKey || info.jsEvent.metaKey;
+      const shouldToggleSelection = selectionMode || isModifierClick;
 
-      if (resolveEventClickAction(isModifierClick) === 'toggle-selection') {
+      if (shouldToggleSelection) {
         setSelectedIds((prev) => {
           const next = new Set(prev);
           if (next.has(post.id)) next.delete(post.id);
@@ -223,7 +229,7 @@ export function CalendarView() {
 
       setSelectedPost(post as CalendarPost);
     },
-    [],
+    [selectionMode],
   );
 
   const handleDateClick = useCallback((info: { dateStr: string }) => {
@@ -285,6 +291,7 @@ export function CalendarView() {
     },
     onSuccess: () => {
       clearSelection();
+      setSelectionMode(false);
       setShowScheduleDialog(false);
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
     },
@@ -298,6 +305,7 @@ export function CalendarView() {
     onSuccess: () => {
       const count = selectedIds.size;
       clearSelection();
+      setSelectionMode(false);
       setSelectedPost(null);
       setShowDeleteConfirm(false);
       showToast(count > 1 ? `${count} posts excluídos com sucesso!` : 'Post excluído com sucesso!');
@@ -307,6 +315,14 @@ export function CalendarView() {
   });
 
   const clearSelection = () => setSelectedIds(new Set());
+
+  const toggleSelectionMode = () => {
+    setSelectionMode((prev) => {
+      const next = !prev;
+      if (!next) clearSelection();
+      return next;
+    });
+  };
 
   const selectAll = () => {
     if (selectedIds.size === posts.length) clearSelection();
@@ -402,12 +418,25 @@ export function CalendarView() {
 
           <div className="flex flex-wrap items-center gap-2">
             {posts.length > 0 && (
-              <button
-                onClick={selectAll}
-                className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-              >
-                {selectedIds.size === posts.length ? 'Desmarcar todos' : 'Selecionar todos'}
-              </button>
+              <>
+                <button
+                  onClick={toggleSelectionMode}
+                  className={clsx(
+                    'cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
+                    selectionMode
+                      ? 'bg-brand text-white'
+                      : 'text-text-secondary hover:bg-surface-secondary hover:text-text-primary',
+                  )}
+                >
+                  {selectionMode ? 'Sair do modo seleção' : 'Modo seleção'}
+                </button>
+                <button
+                  onClick={selectAll}
+                  className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                >
+                  {selectedIds.size === posts.length ? 'Desmarcar todos' : 'Selecionar todos'}
+                </button>
+              </>
             )}
             <div className="flex rounded-lg border border-border p-0.5">
               {views.map((v) => (
@@ -484,7 +513,10 @@ export function CalendarView() {
 
               <button
                 aria-label="Limpar seleção"
-                onClick={clearSelection}
+                onClick={() => {
+                  clearSelection();
+                  setSelectionMode(false);
+                }}
                 className="ml-1 cursor-pointer rounded-md p-1.5 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               >
                 <X className="size-4" />
@@ -528,6 +560,7 @@ export function CalendarView() {
               <EventCard
                 arg={info}
                 selectedIds={selectedIds}
+                selectionMode={selectionMode}
                 showToast={showToast}
                 queryClient={queryClient}
                 getErrorMessage={getErrorMessage}
@@ -610,17 +643,20 @@ export function CalendarView() {
 function EventCard({
   arg,
   selectedIds,
+  selectionMode,
   showToast,
   queryClient,
   getErrorMessage,
 }: {
   arg: EventContentArg;
   selectedIds: Set<string>;
+  selectionMode: boolean;
   showToast: (message: string, type?: 'success' | 'error') => void;
   queryClient: ReturnType<typeof useQueryClient>;
   getErrorMessage: (err: unknown, defaultMessage: string) => string;
 }) {
   const post = getPostFromEvent(arg.event) as (CalendarPost & Record<string, unknown>) | null;
+  const badge = post ? complianceBadge((post.compliance as any)?.status ?? null, (post.compliance as any)?.notes ?? null) : null;
   const channel = resolveChannel((post ?? {}) as Record<string, unknown>);
   const status = resolveStatus((post ?? {}) as Record<string, unknown>);
   const tone = status === 'acao' ? 'accent' : 'brand';
@@ -673,6 +709,7 @@ function EventCard({
         isList ? 'border border-l-[3px] border-border' : 'shadow-sm',
         tone === 'brand' ? 'border-l-brand' : 'border-l-accent',
         isSelected && 'ring-1 ring-brand',
+        selectionMode && 'cursor-pointer hover:ring-1 hover:ring-brand/50',
         isPast
           ? 'opacity-60 grayscale-[25%] hover:opacity-85'
           : 'hover:-translate-y-px hover:shadow-lg',
@@ -688,6 +725,24 @@ function EventCard({
           <ChannelIcon className="size-3" />
           {channelLabels[channel]}
         </span>
+        {badge?.tone === 'approved' && (
+          <span
+            className="inline-flex items-center gap-1 rounded bg-green-600/95 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
+            title={badge.label}
+          >
+            <CheckCircle className="size-3" />
+            Aprovado
+          </span>
+        )}
+        {badge?.tone === 'rejected' && (
+          <span
+            className="inline-flex items-center gap-1 rounded bg-red-600/95 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
+            title={badge.reasons.join(' • ')}
+          >
+            <XCircle className="size-3" />
+            Reprovado
+          </span>
+        )}
         {arg.timeText ? (
           <span className="text-[10px] font-medium text-text-secondary">{arg.timeText}</span>
         ) : null}

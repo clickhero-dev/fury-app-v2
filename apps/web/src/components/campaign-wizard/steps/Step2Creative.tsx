@@ -4,6 +4,7 @@ import { Check, ImagePlus, Loader2, Sparkles, UploadCloud, X } from 'lucide-reac
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
+import { complianceBadge } from '@/lib/compliance.utils';
 import type { StudioAsset } from '@/types/studio';
 import { useUploadCreative } from '../hooks/useCreateCampaign';
 import { MAX_CREATIVES } from '../types';
@@ -69,9 +70,8 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
     },
   });
 
-  const galleryAssets = (data?.assets ?? []).filter(
-    (asset) => asset.type === 'image' && asset.complianceStatus !== 'rejected'
-  );
+  // Assets reprovados continuam visíveis (com badge + motivo), mas não selecionáveis.
+  const galleryAssets = (data?.assets ?? []).filter((asset) => asset.type === 'image');
 
   const selectedImageUrl = value[0]?.assetUrl || value[0]?.uploadUrl || value[0]?.mediaUrl || null;
 
@@ -88,6 +88,11 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
   }
 
   function handleToggleAsset(asset: StudioAsset) {
+    if (complianceBadge(asset.complianceStatus, asset.complianceNotes).tone === 'rejected') {
+      // Asset reprovado não pode entrar na campanha — remove da seleção se já estava.
+      onChange(value.filter((c) => c.assetId !== asset.id));
+      return;
+    }
     const existing = value.find((c) => c.assetId === asset.id);
     if (existing) {
       onChange(value.filter((c) => c.id !== existing.id));
@@ -233,17 +238,21 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
             <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-64 overflow-y-auto pr-1">
               {galleryAssets.map((asset) => {
                 const isSelected = value.some((c) => c.assetId === asset.id);
+                const badge = complianceBadge(asset.complianceStatus, asset.complianceNotes);
+                const isRejected = badge.tone === 'rejected';
                 return (
                   <button
                     key={asset.id}
                     type="button"
                     onClick={() => handleToggleAsset(asset)}
-                    disabled={!isSelected && !canAddMore}
-                    title={asset.name ?? 'Criativo'}
+                    disabled={isRejected || (!isSelected && !canAddMore)}
+                    title={isRejected ? badge.reasons.join(' • ') : (asset.name ?? 'Criativo')}
                     className={cn(
                       'relative rounded-lg overflow-hidden border-2 transition-all aspect-square bg-surface-secondary',
                       isSelected ? 'border-brand' : 'border-transparent hover:border-brand/40',
-                      !isSelected && !canAddMore && 'opacity-50 cursor-not-allowed'
+                      (!isSelected && !canAddMore) || isRejected
+                        ? 'opacity-60 cursor-not-allowed'
+                        : ''
                     )}
                   >
                     {asset.url ? (
@@ -257,6 +266,35 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-text-tertiary">
                         <ImagePlus className="w-5 h-5" />
+                      </div>
+                    )}
+                    {badge.tone === 'approved' && (
+                        <div className="absolute left-1.5 top-1.5 z-10 flex items-center gap-1 rounded-full bg-green-600/95 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                          <Check className="h-2.5 w-2.5" />
+                          {badge.label}
+                        </div>
+                      )}
+                      {isRejected && (
+                      <>
+                        <div className="absolute left-1.5 top-1.5 z-10 flex items-center gap-1 rounded-full bg-red-600/95 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                          <X className="h-2.5 w-2.5" />
+                          {badge.label}
+                        </div>
+                        {badge.reasons.length > 0 && (
+                          <div className="absolute inset-x-0 bottom-0 z-10 space-y-0.5 bg-black/75 px-2 py-1.5 backdrop-blur-sm">
+                            {badge.reasons.slice(0, 2).map((reason, i) => (
+                              <p key={i} className="line-clamp-2 text-[10px] leading-snug text-white/90">
+                                • {reason}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {badge.tone === 'pending' && (
+                      <div className="absolute left-1.5 top-1.5 z-10 flex items-center gap-1 rounded-full bg-amber-500/95 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                        {badge.label}
                       </div>
                     )}
                     {isSelected && (
