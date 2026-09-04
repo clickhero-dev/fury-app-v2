@@ -9,6 +9,21 @@ function getClient() {
   return apiKey;
 }
 
+/**
+ * Fetch com timeout (AbortController). Uma conexão pendurada SEM abort trava o
+ * job do planner por ~10min (ou mais) — a tela "gerando..." congela sem
+ * progresso. Timeout em ms; abortado → erro rápido → job falha/retoma, não pende.
+ */
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 180_000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export type ChatContentPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } };
@@ -97,7 +112,7 @@ export const openrouterService = {
     options: { model?: string; temperature?: number; max_tokens?: number; response_format?: { type: 'json_object' } } = {},
   ): Promise<string> {
     const apiKey = getClient();
-    const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+    const response = await fetchWithTimeout(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
@@ -148,7 +163,7 @@ export const openrouterService = {
     previousImageUrl?: string;
   }): Promise<string> {
     const apiKey = getClient();
-    const response = await fetch(`${OPENROUTER_BASE}/images`, {
+    const response = await fetchWithTimeout(`${OPENROUTER_BASE}/images`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
