@@ -11,6 +11,7 @@ interface WorkflowJobRow {
   currentStage: string | null;
   stages: StageTrace[] | null;
   artifacts: ArtifactMap | null;
+  metadata?: Record<string, unknown> | null;
   planId: string | null;
   error: string | null;
   createdAt: Date;
@@ -27,6 +28,7 @@ function toSnapshot(row: WorkflowJobRow): WorkflowSnapshot {
     currentStage: row.currentStage,
     stages: row.stages ?? [],
     artifacts: row.artifacts ?? {},
+    metadata: row.metadata ?? undefined,
     planId: row.planId ?? undefined,
     error: row.error ?? undefined,
     createdAt: row.createdAt.toISOString(),
@@ -40,14 +42,15 @@ function toSnapshot(row: WorkflowJobRow): WorkflowSnapshot {
  * garantindo que a recuperação retome sempre a partir de um estado confiável.
  */
 export class PostgresCheckpointStore implements CheckpointStore {
-  async create(input: { id: string; tenantId: string; workflow: string; lockKey: string }): Promise<void> {
+  async create(input: { id: string; tenantId: string; workflow: string; lockKey: string; metadata?: Record<string, unknown> }): Promise<void> {
     await new WorkflowJobRepository('').createWorkflowJob({
       id: input.id,
       tenantId: input.tenantId,
       workflow: input.workflow,
       lockKey: input.lockKey,
       status: 'pending',
-    });
+      metadata: input.metadata,
+    } as any);
   }
 
   async load(jobId: string): Promise<WorkflowSnapshot | null> {
@@ -61,6 +64,7 @@ export class PostgresCheckpointStore implements CheckpointStore {
     currentStage?: string | null;
     stages?: StageTrace[];
     artifacts?: ArtifactMap;
+    metadata?: Record<string, unknown>;
     planId?: string;
     error?: string;
   }): Promise<void> {
@@ -69,10 +73,11 @@ export class PostgresCheckpointStore implements CheckpointStore {
       currentStage: patch.currentStage ?? null,
       stages: patch.stages ?? undefined,
       artifacts: patch.artifacts ?? undefined,
+      metadata: patch.metadata ?? undefined,
       planId: patch.planId ?? null,
       error: patch.error ?? null,
       updatedAt: new Date(),
-    });
+    } as any);
   }
 
   async markFailed(jobId: string, stageId: string, error: string): Promise<void> {

@@ -108,6 +108,19 @@ describe('startPlanGeneration — lock de job por tenant', () => {
     expect(status.id).toBe('new-1');
   });
 
+  it('enfileira SEM jobId fixo por dia (dedup diário trava o resto do dia após 1 falha)', async () => {
+    (dbMock.query.workflowJobs.findFirst as any)
+      .mockResolvedValueOnce(null) // findActiveByLockKey -> nenhum ativo
+      .mockResolvedValueOnce(newJobSnapshot); // load do job criado
+
+    await startPlanGeneration('t1');
+
+    const enqueueOpts = (queueAdd.mock.calls[0] as any)?.[2];
+    expect(enqueueOpts.jobId).toBeUndefined();
+    // o lock do Postgres já deduplica por tenant — o jobId BullMQ deve ser único
+    expect(enqueueOpts).not.toHaveProperty('jobId');
+  });
+
   it('com job ativo recente (<15min): rejeita 409 pedindo para aguardar', async () => {
     (dbMock.query.workflowJobs.findFirst as any)
       .mockResolvedValueOnce(activeSnapshot(new Date(Date.now() - 2 * MINUTE).toISOString()));

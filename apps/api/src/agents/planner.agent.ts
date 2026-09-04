@@ -21,6 +21,7 @@ Para CADA data fornecida, crie UM item de conteúdo com:
 - title: título curto e chamativo do post
 - descricao: legenda completa em português brasileiro, engajadora e com o tom da marca
 - prompt: descrição detalhada da imagem (cena, composição, cores da marca, estilo)
+REGRA CRÍTICA DA IMAGEM: a imagem DEVE retratar fielmente o produto/serviço real informado no contexto (ex.: se o nicho é padaria, mostre pães, vitrine, padaria). NUNCA misture o produto com conceitos de tecnologia/software/app/digital (ex.: NÃO gere "pão digital", app de padaria, ícones de programação). A imagem deve ser fotográfica e apetitosa, SEM texto, SEM letras na imagem e SEM logotipos de outras empresas.
 Responda APENAS em JSON válido no formato: {"posts":[{"title":"...","descricao":"...","prompt":"..."}]}
 Retorne exatamente ${count} itens, um para cada data, na mesma ordem das datas fornecidas.`;
 
@@ -164,7 +165,13 @@ export async function generateContentPrompts(context: PlannerContext, dates: Con
     JSON.stringify(dates.map((d) => ({ date: d.date, name: d.name }))),
   ].join('\n');
 
-  const result = await agent.invoke({ messages: [{ role: 'human', content: user }] });
+  // timeout/maxRetries POR CHAMADA (RunnableConfig): sem isso, uma conexão
+  // pendurada trava o job do planner por ~10min (default do SDK) — a tela
+  // "gerando..." congela sem progresso até reiniciar a API.
+  const result = await agent.invoke(
+    { messages: [{ role: 'human', content: user }] },
+    { timeout: 180_000, maxRetries: 2 } as any,
+  );
 
   let items: PlannerContentItem[] = [];
   const structured = (result as { structuredResponse?: { posts?: unknown[] } }).structuredResponse;

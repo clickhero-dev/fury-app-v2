@@ -1,10 +1,10 @@
-import OpenAI from 'openai';
 import { AppError } from '../../middleware/errorHandler.js';
 import { createAdCreativeFromCopy, uploadAdImage } from '../../lib/meta-api.js';
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { saveTemporaryStudioImage } from '../../lib/temp-storage.js';
 import { getComplianceQueue } from '../../lib/queue.js';
 import { openrouterService } from '../llms/openrouter.service.js';
+import { enhancePromptForImage } from '../llms/prompt-enhancer.js';
 import { StudioRepository } from '../../repository/studio.repository.js';
 
 export type StudioImageGenerationResult = {
@@ -28,94 +28,8 @@ export type StudioComplianceStatusResult = {
   createdAt: string;
 };
 
-async function enhancePromptForImage(prompt: string): Promise<string> {
-  if (prompt.length >= 100) return prompt;
-
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return prompt;
-
-  const systemMessage = [
-    'Você é um especialista em publicidade digital especializado em descrições de imagens.',
-    'Preserve o tema principal do prompt original. Adicione detalhes visuais (iluminação, composição, ângulo, cores) SEM mudar o assunto principal.',
-    'O prompt melhorado deve ter entre 150 e 400 caracteres e estar em português.',
-    'Retorne APENAS o prompt melhorado, sem aspas, sem introdução.',
-  ].join('\n');
-
-  const userMessage = `Prompt original: "${prompt}"`;
-
-  try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek/deepseek-chat',
-        messages: [
-          { role: 'system', content: systemMessage },
-          { role: 'user', content: userMessage },
-        ],
-        temperature: 0.7,
-        max_tokens: 600,
-      }),
-    });
-
-    if (!response.ok) return prompt;
-
-    const data = await response.json() as { choices?: { message?: { content: string } }[] };
-    const improved = data?.choices?.[0]?.message?.content?.trim();
-    return improved && improved.length > 0 ? improved : prompt;
-  } catch {
-    return prompt;
-  }
-}
-
-const OPENAI_IMAGE_MODEL = 'dall-e-3';
-const STUDIO_IMAGE_SIZE = '1024x1024';
-const STUDIO_IMAGE_QUALITY = 'standard';
-const STUDIO_IMAGE_STYLE = 'vivid';
-
 function normalizePublicBaseUrl(publicBaseUrl: string) {
   return publicBaseUrl.replace(/\/+$/, '');
-}
-
-function buildOpenAIClient() {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    throw new AppError(500, 'OPENAI_API_KEY_MISSING', 'OPENAI_API_KEY nao configurada.');
-  }
-
-  return new OpenAI({ apiKey });
-}
-
-async function generateOpenAIImage(prompt: string): Promise<string> {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new AppError(500, 'OPENAI_API_KEY_MISSING', 'OPENAI_API_KEY nao configurada.');
-  }
-
-  const client = buildOpenAIClient();
-  const response = await client.images.generate({
-    model: OPENAI_IMAGE_MODEL,
-    prompt,
-    size: STUDIO_IMAGE_SIZE,
-    quality: STUDIO_IMAGE_QUALITY,
-    style: STUDIO_IMAGE_STYLE,
-  });
-
-  const generatedUrl = response.data?.[0]?.url;
-  const generatedBase64 = response.data?.[0]?.b64_json;
-
-  if (generatedUrl) {
-    return generatedUrl;
-  }
-
-  if (generatedBase64) {
-    return `data:image/png;base64,${generatedBase64}`;
-  }
-
-  throw new AppError(502, 'OPENAI_IMAGE_GENERATION_FAILED', 'OpenAI nao retornou a imagem gerada.');
 }
 
 function parseComplianceNotes(complianceNotes: string | null) {
@@ -210,16 +124,14 @@ async function persistGeneratedImage(params: {
   const repo = new StudioRepository(params.tenantId);
 
   let sourceUrl: string;
-  if (process.env.OPENROUTER_API_KEY) {
-    const brandKit = await repo.findBrandKit();
-    sourceUrl = await openrouterService.generateImage({
-      model: 'black-forest-labs/flux.2-klein-4b',
-      prompt: enhancedPrompt,
-      logoUrl: brandKit?.logoUrl ?? undefined,
-    });
-  } else {
-    sourceUrl = await generateOpenAIImage(enhancedPrompt);
-  }
+  // Geração SEMPRE via OpenRouter (FLUX) — nunca DALL-E/OpenAI.
+  // Sem OPENROUTER_API_KEY o próprio serviço lança 500 OPENROUTER_API_KEY_MISSING.
+  const brandKit = await repo.findBrandKit();
+  sourceUrl = await openrouterService.generateImage({
+    model: 'black-forest-labs/flux.2-pro',
+    prompt: enhancedPrompt,
+    logoUrl: brandKit?.logoUrl ?? undefined,
+  });
 
   // OpenAI returns a temporary CDN URL — use it directly so the browser can
   // display the image immediately. The compliance worker re-downloads it

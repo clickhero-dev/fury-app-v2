@@ -85,12 +85,17 @@ async function countPlannerPosts(planId: string, tenantId: string): Promise<numb
  *  4. enfileira os posts na fila studio-generate-image
  *     (5 — quando cada imagem termina, o worker studio grava o social_post)
  */
-export async function runPlannerWorkflow(jobId: string, tenantId: string): Promise<void> {
+export async function runPlannerWorkflow(jobId: string, tenantId: string, postsCountParam: number = 8): Promise<void> {
   // Prerequisito: gate de créditos antes de gastar qualquer LLM.
   await openrouterService.assertCreditsAvailable();
 
   const stages: StageTrace[] = [];
   const snapshot = await plannerStore.load(jobId);
+
+  // Use postsCount from metadata (for recovery) or parameter (for new execution).
+  // `snapshot` pode ser null (execução nova) — NUNCA acessar .metadata sem guard:
+  // crash aqui no início do pipeline = job nunca progride e a tela não atualiza.
+  const postsCount = (snapshot?.metadata as { postsCount?: number } | undefined)?.postsCount ?? postsCountParam;
 
   // Já enfileirado (crash/restart após o enfileiramento): verifica a conclusão
   // REAL (posts criados vs esperados) antes de marcar done — e re-enfileira
@@ -133,7 +138,7 @@ export async function runPlannerWorkflow(jobId: string, tenantId: string): Promi
     // 2+3. Datas (código) + conteúdo (LLM achatado)
     currentStageId = 'planner';
     await setStage(jobId, stages, 'planner', 'RUNNING');
-    const dates = buildContentDates(8);
+    const dates = buildContentDates(postsCount);
     const posts = await generateContentPrompts(context, dates);
     await setStage(jobId, stages, 'planner', 'COMMITTED');
     if (posts.length === 0) throw new Error('O planejador não retornou nenhum post.');
@@ -152,6 +157,9 @@ export async function runPlannerWorkflow(jobId: string, tenantId: string): Promi
 
     // As imagens são geradas de forma assíncrona; cada worker studio grava seu
     // social_post ao concluir. O job marca 'awaiting_images' para aguardar.
+    // Para o heartbeat: a execução deste processo terminou — sem isso o lock
+    // nunca envelhece e nem recovery-boot nem stale-timeout alcançam o job.
+    clearInterval(heartbeatInterval);
     await plannerStore.save(jobId, { status: 'awaiting_images', currentStage: 'image-generation', planId });
 
   } catch (err) {
@@ -178,7 +186,8 @@ export async function recoverInterruptedPlannerWorkflows(): Promise<number> {
       continue;
     }
     console.log(`[planner-recovery] retomando job ${snapshot.id}`);
-    void runPlannerWorkflow(snapshot.id, snapshot.tenantId).catch((err) => {
+    const postsCount = (snapshot?.metadata as { postsCount?: number } | undefined)?.postsCount ?? 8;
+    void runPlannerWorkflow(snapshot.id, snapshot.tenantId, postsCount).catch((err) => {
       console.error(`[planner-recovery] job ${snapshot.id} falhou ao retomar:`, err);
     });
     resumed += 1;

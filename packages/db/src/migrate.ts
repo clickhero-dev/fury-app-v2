@@ -125,6 +125,16 @@ const STEPS: MigrationStep[] = [
     },
   },
   { tag: '0032_add_budget_optimizations' },
+  { tag: '0033_add_workflow_jobs_metadata',
+    // Safety: garante o valor 'awaiting_images' no enum workflow_status mesmo
+    // quando a tabela/enum vieram de snapshot sem rodar o afterHook da 0030
+    // (banco sem o valor quebra toda geração do planner na stage image-generation).
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "workflow_status" ADD VALUE IF NOT EXISTS 'awaiting_images'`);
+      console.log('    + ensured awaiting_images on workflow_status');
+    },
+  },
+{ tag: '0034_add_compliance_attempts' },
 ];
 
 /** Nomes de todas as tabelas do schema (26 tabelas) — usados para validação. */

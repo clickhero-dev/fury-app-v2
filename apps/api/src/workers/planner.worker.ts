@@ -5,6 +5,7 @@ import { runPlannerWorkflow } from '../planner-workflow-runner.js';
 export interface PlannerJobData {
   jobId: string;
   tenantId: string;
+  postsCount?: number;
 }
 
 const QUEUE_NAME = 'planner-generate';
@@ -19,13 +20,14 @@ export function getPlannerQueue(): Queue<PlannerJobData> {
   return plannerQueue;
 }
 
-export async function enqueuePlanGeneration(jobId: string, tenantId: string): Promise<void> {
+export async function enqueuePlanGeneration(jobId: string, tenantId: string, postsCount: number = 8): Promise<void> {
   const queue = getPlannerQueue();
-  const today = new Date().toISOString().split('T')[0];
-  const deduplicationId = `planner-${tenantId}-${today}`;
-  
-  await queue.add('generate', { jobId, tenantId }, {
-    jobId: deduplicationId,
+
+  // SEM jobId fixo por dia: jobId estático + job falho preservado no Redis
+  // (removeOnFail: 500) faz o BullMQ ignorar silenciosamente os generates do
+  // resto do dia — a linha workflow_jobs fica 'pending' órfã e trava o lock.
+  // A deduplicação por tenant já é feita pelo lock Postgres (findActiveByLockKey).
+  await queue.add('generate', { jobId, tenantId, postsCount }, {
     removeOnComplete: 100,
     removeOnFail: 500,
     attempts: 3,
@@ -39,8 +41,8 @@ export async function startPlannerWorker(): Promise<void> {
   plannerWorker = new Worker<PlannerJobData>(
     QUEUE_NAME,
     async (job) => {
-      const { jobId, tenantId } = job.data;
-      await runPlannerWorkflow(jobId, tenantId);
+      const { jobId, tenantId, postsCount = 8 } = job.data;
+      await runPlannerWorkflow(jobId, tenantId, postsCount);
     },
     {
       connection: getRedis(),

@@ -11,6 +11,8 @@ export interface CheckpointStore {
     tenantId: string;
     workflow: string;
     lockKey: string;
+    /** Metadados do job gravados na criação (ex.: postsCount do planner). */
+    metadata?: Record<string, unknown>;
   }): Promise<void>;
 
   load(jobId: string): Promise<WorkflowSnapshot | null>;
@@ -21,6 +23,7 @@ export interface CheckpointStore {
     currentStage?: string | null;
     stages?: StageTrace[];
     artifacts?: ArtifactMap;
+    metadata?: Record<string, unknown>;
     planId?: string;
     error?: string;
   }): Promise<void>;
@@ -45,7 +48,7 @@ export interface CheckpointStore {
 export class InMemoryCheckpointStore implements CheckpointStore {
   private rows = new Map<string, WorkflowSnapshot>();
 
-  async create(input: { id: string; tenantId: string; workflow: string; lockKey: string }): Promise<void> {
+  async create(input: { id: string; tenantId: string; workflow: string; lockKey: string; metadata?: Record<string, unknown> }): Promise<void> {
     const now = new Date().toISOString();
     this.rows.set(input.id, {
       id: input.id,
@@ -56,6 +59,7 @@ export class InMemoryCheckpointStore implements CheckpointStore {
       currentStage: null,
       stages: [],
       artifacts: {},
+      metadata: input.metadata,
       createdAt: now,
       updatedAt: now,
     });
@@ -71,6 +75,7 @@ export class InMemoryCheckpointStore implements CheckpointStore {
     currentStage?: string | null;
     stages?: StageTrace[];
     artifacts?: ArtifactMap;
+    metadata?: Record<string, unknown>;
     planId?: string;
     error?: string;
   }): Promise<void> {

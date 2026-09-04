@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { OpenRouterStudioService } from '../services/openrouter/openrouter-studio.service.js';
 
 const generateImageSchema = z.object({
-  model: z.enum(['bytedance-seed/seedream-4.5', 'black-forest-labs/flux.2-klein-4b', 'black-forest-labs/flux.2-max']),
+  model: z.enum(['bytedance-seed/seedream-4.5', 'black-forest-labs/flux.2-klein-4b', 'black-forest-labs/flux.2-max', 'black-forest-labs/flux.2-pro']),
   prompt: z.string().min(10).max(1000),
   aspect_ratio: z.enum(['1:1', '16:9', '9:16']).optional().default('1:1'),
   resolution: z.enum(['1K', '2K', '4K']).optional().default('2K'),

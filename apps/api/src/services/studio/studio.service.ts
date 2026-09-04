@@ -1,4 +1,3 @@
-import OpenAI from 'openai';
 import { AppError } from '../../middleware/errorHandler.js';
 import { getComplianceQueue } from '../../lib/queue.js';
 import { uploadAdImage } from '../../lib/meta-api.js';
@@ -6,9 +5,12 @@ import { decryptMetaToken } from '../../utils/crypto.js';
 import { saveTemporaryStudioImage } from '../../lib/temp-storage.js';
 import { uploadAsset } from '../storage/storage.service.js';
 import { openrouterService } from '../llms/openrouter.service.js';
+import { enhancePromptForImage } from '../llms/prompt-enhancer.js';
+import { sanitizeImagePromptForBusiness } from '../llms/image-prompt-guardrail.js';
 import { generateId } from '../../agents/utils.js';
 import type { PlannerPrompt } from '../../agents/types.js';
 import { checkAndCompletePlannerJob } from '../planner/planner-studio.service.js';
+import { consumeCreativeQuota } from './creative-quota.service.js';
 import { StudioRepository } from '../../repository/studio.repository.js';
 import { PlannerRepository } from '../../repository/planner.repository.js';
 
@@ -65,6 +67,8 @@ async function persistStudioImage(input: StudioGenerationJobData): Promise<Gener
       await complianceQueue.add('compliance-check', { creativeAssetId: asset.id, tenantId: input.tenantId }, {
         removeOnComplete: 1000,
         removeOnFail: 5000,
+        attempts: 4,
+        backoff: { type: 'exponential', delay: 10_000 },
       });
       complianceEnqueued = true;
     } catch (err) {
@@ -104,81 +108,6 @@ function calcularPontuacao(texto: string, type: keyof typeof CHAR_LIMITS) {
   return Math.min(Math.max(pontuacao, 0), 10);
 }
 
-function buildMockVariations(input: any) {
-  const templates = [
-    `${input.produto} — transforme seu negócio hoje!`,
-    `Descubra ${input.produto} para ${input.publico}`,
-    `A melhor escolha em ${input.produto}`,
-    `Clique e conheça ${input.produto}`,
-    `Garanta ${input.produto} agora mesmo`,
-  ];
-
-  const quantidade = Math.min(Math.max(input.quantidadeVariacoes || 3, 3), 5);
-  return Array.from({ length: quantidade }, (_, index) => {
-    const texto = templates[index % templates.length];
-    return {
-      texto,
-      caracteres: texto.length,
-      pontuacao: calcularPontuacao(texto, input.type),
-    };
-  });
-}
-
-function buildSystemPrompt() {
-  return 'Você é um especialista em copywriting para anúncios digitais no Facebook e Instagram.\n\nGere variações de copy persuasivas, claras e em português brasileiro adequadas para o público-alvo.\n\nRespeite RIGOROSAMENTE os limites de caracteres especificados.\n\nResponda APENAS em JSON válido, sem texto adicional, sem markdown.';
-}
-
-function buildUserPrompt(input: any) {
-  const limiteChars = {
-    headline: 40,
-    descricao: 125,
-    cta: 20,
-    completo: 300,
-  } as const;
-  return `Produto/serviço: ${input.produto}\n\nPúblico-alvo: ${input.publico}\n\nObjetivo do anúncio: ${input.objetivo}\n\nTom de comunicação: ${input.tom}\n\nGere ${input.quantidadeVariacoes} variações de ${input.type} em português brasileiro.\n\nLimite máximo: ${(limiteChars as any)[input.type]} caracteres por variação.\n\nRetorne APENAS este JSON:\n\n{\n  "variacoes": [\n    { "texto": "texto da variação aqui", "caracteres": 0 }\n  ]\n}`;
-}
-
-export async function generateCopy(input: any) {
-  if (!process.env.OPENAI_API_KEY || process.env.META_USE_MOCK === 'true') {
-    return { variacoes: buildMockVariations(input) };
-  }
-
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const chatResponse = await client.chat.completions.create({
-    model: 'gpt-4o',
-    max_tokens: 1000,
-    messages: [
-      { role: 'system', content: buildSystemPrompt() },
-      { role: 'user', content: buildUserPrompt(input) },
-    ],
-  });
-
-  const responseText = chatResponse.choices[0]?.message?.content ?? '';
-  const cleaned = responseText.replace(/```json|```/g, '').trim();
-
-  let parsed: any = null;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    return { variacoes: buildMockVariations(input) };
-  }
-
-  if (!parsed?.variacoes?.length) {
-    return { variacoes: buildMockVariations(input) };
-  }
-
-  const variacoes = parsed.variacoes.map((variacao: any) => {
-    const texto = String(variacao.texto ?? variacao.text ?? '');
-    return {
-      texto,
-      caracteres: texto.length,
-      pontuacao: calcularPontuacao(texto, input.type),
-    };
-  });
-
-  return { variacoes: variacoes.slice(0, Math.min(Math.max(input.quantidadeVariacoes, 3), 5)) };
-}
-
 export async function requestStudioImageGeneration(input: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
   if (!input) {
     return { message: 'Rota de imagem ativa' } as any;
@@ -191,7 +120,7 @@ export async function requestStudioImageGeneration(input: StudioGenerationJobDat
 }
 
 // ─── Modo planner (planejador de conteúdo) ─────────────────────────────────────
-const PLANNER_IMAGE_MODEL = process.env.PLANNER_IMAGE_MODEL ?? 'black-forest-labs/flux.2-klein-4b';
+const PLANNER_IMAGE_MODEL = process.env.PLANNER_IMAGE_MODEL ?? 'black-forest-labs/flux.2-pro';
 
 /** Aspect ratio (FLUX-compatível) por tipo de post do planner. */
 export function aspectForPlannerPostType(postType: PlannerPrompt['postType']): string {
@@ -257,7 +186,10 @@ export async function processPlannerImageJob(input: StudioGenerationJobData): Pr
   const existingPost = await plannerRepo.findPostByPlanDateType(planId, post.date, post.postType);
 
   if (existingPost) {
-    // Job já processado com sucesso - retornar resultado existente
+    // Job já processado com sucesso - retornar resultado existente.
+    // Ainda assim completa o job: cobre retries que chegam após todos os
+    // posts existirem (ex.: recuperação pós-crash) — nunca deixa o job preso.
+    await checkAndCompletePlannerJob(planId, input.tenantId);
     const existingAsset = await repo.findAssetByUrl(existingPost.imageUrl ?? '');
     return {
       creativeAssetId: existingAsset?.id ?? '',
@@ -266,48 +198,80 @@ export async function processPlannerImageJob(input: StudioGenerationJobData): Pr
     };
   }
 
-  const base64 = await openrouterService.generateImage({
-    model: PLANNER_IMAGE_MODEL,
-    prompt: post.imagePrompt,
-    aspect_ratio: aspectForPlannerPostType(post.postType),
-    logoUrl: input.logoUrl,
-  });
+  // 1) Gera a imagem, persiste e enfileira compliance.
+  //    Falhas AQUI (timeout, quota, erro do modelo, upload) NÃO podem travar o
+  //    job do planner: o post é criado mesmo assim (sem imagem) e o job conclui.
+  //    O usuário regenera a imagem depois pelo painel do post.
+  let imageUrl: string | undefined;
+  let creativeAssetId = '';
+  try {
+    // Enhance do prompt de imagem: enriquece com cena/iluminação/composição SEM
+    // mudar o assunto (padaria → pães, não software). Fallback seguro: prompt original.
+    const enhancedPrompt = await enhancePromptForImage(post.imagePrompt);
+    // Guardrail pré-geração: remove menções a software/digital (nicho não-tech)
+    // e garante o produto real no prompt (impede "pão digital" / imagens fora de contexto).
+    const goals = await plannerRepo.findClientGoal();
+    const guardedPrompt = sanitizeImagePromptForBusiness(enhancedPrompt, {
+      niche: goals?.niche,
+      mainProduct: goals?.mainProduct,
+    });
+    const base64 = await openrouterService.generateImage({
+      model: PLANNER_IMAGE_MODEL,
+      prompt: guardedPrompt,
+      aspect_ratio: aspectForPlannerPostType(post.postType),
+      logoUrl: input.logoUrl,
+    });
 
-  const buffer = Buffer.from(base64.split(',')[1] ?? base64, 'base64');
-  const fileName = `planner/${input.tenantId}/${planId}/${post.date}-${generateId()}.png`;
-  const imageUrl = await uploadAsset(buffer, fileName, 'image/png');
+    const buffer = Buffer.from(base64.split(',')[1] ?? base64, 'base64');
+    const fileName = `planner/${input.tenantId}/${planId}/${post.date}-${generateId()}.png`;
+    imageUrl = await uploadAsset(buffer, fileName, 'image/png');
 
-  // 1) Cria o creativeAsset para aparecer na biblioteca do estúdio
-  const creativeAsset = await repo.createAsset({
-    tenantId: input.tenantId,
-    type: 'image',
-    url: imageUrl,
-    complianceStatus: 'pending_compliance',
-  });
+    // Desconta a cota de criativos APÓS a imagem existir (idempotente: o retry
+    // cai no early-return de existingPost e não desconta de novo). Se a cota
+    // estourou, o catch abaixo cria o post sem imagem (o usuário ajusta depois).
+    await consumeCreativeQuota(input.tenantId);
 
-  // Enfileira compliance check com retry
-  const complianceQueue = await getComplianceQueue();
-  let complianceEnqueued = false;
-  let retries = 3;
-  while (!complianceEnqueued && retries > 0) {
-    try {
-      await complianceQueue.add('compliance-check', { creativeAssetId: creativeAsset.id, tenantId: input.tenantId }, {
-        removeOnComplete: 1000,
-        removeOnFail: 5000,
-      });
-      complianceEnqueued = true;
-    } catch (err) {
-      retries--;
-      if (retries === 0) {
-        // Rollback: deletar creativeAsset criado se compliance queue falhar definitivamente
-        await repo.deleteAsset(creativeAsset.id);
-        throw err;
+    const creativeAsset = await repo.createAsset({
+      tenantId: input.tenantId,
+      type: 'image',
+      url: imageUrl,
+      complianceStatus: 'pending_compliance',
+    });
+    creativeAssetId = String(creativeAsset.id);
+
+    // Enfileira compliance check com retry
+    const complianceQueue = await getComplianceQueue();
+    let complianceEnqueued = false;
+    let retries = 3;
+    while (!complianceEnqueued && retries > 0) {
+      try {
+        await complianceQueue.add('compliance-check', { creativeAssetId: creativeAsset.id, tenantId: input.tenantId }, {
+          removeOnComplete: 1000,
+          removeOnFail: 5000,
+          attempts: 4,
+          backoff: { type: 'exponential', delay: 10_000 },
+        });
+        complianceEnqueued = true;
+      } catch (err) {
+        retries--;
+        if (retries === 0) {
+          // Rollback: deletar creativeAsset criado se compliance queue falhar definitivamente
+          await repo.deleteAsset(creativeAsset.id);
+          throw err;
+        }
+        await new Promise(r => setTimeout(r, 1000 * (4 - retries))); // backoff: 1s, 2s, 3s
       }
-      await new Promise(r => setTimeout(r, 1000 * (4 - retries))); // backoff: 1s, 2s, 3s
     }
+  } catch (err) {
+    // Não propaga: o post (rascunho, sem imagem) será criado logo abaixo.
+    console.warn(
+      `[planner-image] falha ao gerar imagem do post "${post.title}" (${post.date}):`,
+      err instanceof Error ? err.message : err,
+    );
   }
 
-  // 2) Grava o social_post no calendário referenciando o creativeAsset
+  // 2) Grava o social_post no calendário — SEMPRE (com imagem se houve sucesso;
+  //    sem imagem se a geração falhou), para o job do planner concluir.
   await plannerRepo.createPost({
     tenantId: input.tenantId,
     planId,
@@ -326,11 +290,11 @@ export async function processPlannerImageJob(input: StudioGenerationJobData): Pr
   });
 
   // Verificar se todos os posts do plano foram criados e completar o job do planner
-  await checkAndCompletePlannerJob(planId, input.tenantId, 8); // 8 posts esperados por padrão
+  await checkAndCompletePlannerJob(planId, input.tenantId);
 
   return {
-    creativeAssetId: String(creativeAsset.id),
-    imageUrl,
+    creativeAssetId,
+    imageUrl: imageUrl ?? '',
     status: 'pending_compliance' as const,
   };
 }
@@ -350,7 +314,6 @@ export async function processStudioGenerationJob(input: StudioGenerationJobData)
 }
 
 export const studioService = {
-  generateCopy,
   requestStudioImageGeneration,
   processStudioGenerationJob,
   processPlannerImageJob,
