@@ -104,6 +104,10 @@ function toMoney(v: number) {
   return { amount: Math.round(v * 100) };
 }
 
+const dashboardPeriodSchema = z.object({
+  period: z.enum(['7d', '30d', '90d']).default('30d'),
+});
+
 function fromMoney(json: unknown): number {
   const obj = json as { amount?: unknown } | null;
   const raw = Number(obj?.amount ?? 0);
@@ -125,6 +129,17 @@ function serializeGoal(row: typeof clientGoals.$inferSelect) {
  */
 export class SuperAdminController {
   constructor(private repo: SuperAdminRepository) {}
+
+  // ─── Dashboard ─────────────────────────────────────────────
+  getDashboard = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { period } = dashboardPeriodSchema.parse(req.query);
+      const stats = await this.repo.getDashboardStats(period);
+      res.json({ success: true, data: stats, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
 
   // ─── Tenants ───────────────────────────────────────────
 
