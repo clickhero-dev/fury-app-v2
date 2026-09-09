@@ -14,7 +14,7 @@ const {
   mockCreateGoogleApiClient,
   mockFetchVerificationOptions,
   mockVerifyLocation,
-  mockGetLocation,
+  mockGetVoiceOfMerchantState,
 } = vi.hoisted(() => ({
   dbMock: {
     query: {
@@ -30,7 +30,7 @@ const {
   mockCreateGoogleApiClient: vi.fn(),
   mockFetchVerificationOptions: vi.fn(),
   mockVerifyLocation: vi.fn(),
-  mockGetLocation: vi.fn(),
+  mockGetVoiceOfMerchantState: vi.fn(),
 }));
 
 vi.mock('@fury/db', () => ({
@@ -99,7 +99,7 @@ function resetMocks() {
   mockCreateGoogleApiClient.mockReturnValue({
     fetchVerificationOptions: mockFetchVerificationOptions,
     verifyLocation: mockVerifyLocation,
-    getLocation: mockGetLocation,
+    getVoiceOfMerchantState: mockGetVoiceOfMerchantState,
   });
   dbMock.query.googleConnections.findFirst.mockResolvedValue(makeConnection('tenant-A'));
   dbMock.query.googleBusinessProfiles.findFirst.mockResolvedValue(makeProfile('tenant-A'));
@@ -173,7 +173,7 @@ describe('completeVerification — PIN por PHONE/EMAIL', () => {
 
   it('envia PIN via verifyLocation para PHONE', async () => {
     mockVerifyLocation.mockResolvedValue({ status: 'PENDING' });
-    mockGetLocation.mockResolvedValue({ verification: { state: 'UNVERIFIED' } });
+    mockGetVoiceOfMerchantState.mockResolvedValue({ hasVoiceOfMerchant: false, hasBusinessAuthority: false });
 
     const result = await googleService.completeVerification('profile-1', 'tenant-A', 'PHONE');
 
@@ -184,7 +184,7 @@ describe('completeVerification — PIN por PHONE/EMAIL', () => {
 
   it('envia PIN via verifyLocation para EMAIL', async () => {
     mockVerifyLocation.mockResolvedValue({ status: 'PENDING' });
-    mockGetLocation.mockResolvedValue({ verification: { state: 'UNVERIFIED' } });
+    mockGetVoiceOfMerchantState.mockResolvedValue({ hasVoiceOfMerchant: false, hasBusinessAuthority: false });
 
     const result = await googleService.completeVerification('profile-1', 'tenant-A', 'EMAIL');
 
@@ -203,7 +203,7 @@ describe('completeVerification — PIN por PHONE/EMAIL', () => {
 
   it('transição awaiting_verification → verified quando o Google confirma', async () => {
     mockVerifyLocation.mockResolvedValue({ status: 'PENDING' });
-    mockGetLocation.mockResolvedValue({ verification: { state: 'VERIFIED' } });
+    mockGetVoiceOfMerchantState.mockResolvedValue({ hasVoiceOfMerchant: true, hasBusinessAuthority: true });
 
     const result = await googleService.completeVerification('profile-1', 'tenant-A', 'EMAIL');
 

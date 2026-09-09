@@ -27,6 +27,7 @@ import { startComplianceSweeper, stopComplianceSweeper } from './services/studio
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
 import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
 import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
+import { startGoogleAdsManager } from './lib/google-ads-manager.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
 import { slugify } from './lib/slug.js';
@@ -266,6 +267,9 @@ app.use((req, res) => {
       });
       void startGoogleSyncManager().catch((error) => {
         console.error('Failed to start google-sync manager:', error);
+      });
+      void startGoogleAdsManager().catch((error) => {
+        console.error('Failed to start google-ads manager:', error);
       });
       void startPlannerWorker().then(() => {
         return recoverInterruptedPlannerWorkflows().then((count) => {

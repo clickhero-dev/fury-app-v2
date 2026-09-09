@@ -61,8 +61,16 @@ export const profileIdParamsSchema = z.object({
   id: z.string().uuid('ID do perfil inválido'),
 });
 
+/** Criação de campanha Ads — verba mensal obrigatória (BRL). */
+export const adsCampaignSchema = z.object({
+  monthlyBudgetBRL: z
+    .number({ message: 'Verba mensal obrigatória' })
+    .min(30, 'Verba mensal mínima: R$ 30')
+    .max(50_000, 'Verba mensal máxima: R$ 50.000'),
+});
+
 export const contextQuerySchema = z.object({
-  context: z.enum(['onboarding', 'settings']).default('settings'),
+  context: z.enum(['onboarding', 'settings', 'ads']).default('settings'),
   // Origin de onde o OAuth está sendo iniciado (ex.: http://localhost:5173).
   // Embutido no state e usado no redirect pós-callback (multi-ambiente).
   frontendUrl: z.string().url('frontendUrl inválida').optional(),

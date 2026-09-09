@@ -12,6 +12,7 @@ import {
   type GoogleApiClient,
 } from '../../lib/google-api.js';
 import { encryptToken, decryptToken } from '../../utils/crypto.js';
+import { createGoogleAdsApiClient } from '../../lib/google-ads-api.js';
 import { uploadAsset, deleteAsset } from '../storage/storage.service.js';
 import { GoogleRepository } from '../../repository/google.repository.js';
 
@@ -20,6 +21,7 @@ import { GoogleRepository } from '../../repository/google.repository.js';
 import {
   GOOGLE_AUTH_URL,
   GOOGLE_OAUTH_SCOPE,
+  GOOGLE_ADS_OAUTH_SCOPE,
   RETURN_URLS,
   signOAuthState,
   verifyOAuthState,
@@ -58,7 +60,9 @@ import type {
   GoogleSyncLogsResult,
   GooglePhotoUploadResult,
   GoogleServiceDeps,
+  GoogleAdsCampaignResult,
 } from './google.types.js';
+import { GOOGLE_ADS_MIN_MONTHLY_BUDGET, GOOGLE_ADS_MAX_MONTHLY_BUDGET } from './google.types.js';
 import type { GoogleQualityReport } from './google.quality.js';
 
 // ── Barrel público ────────────────────────────────────────────────────────────
@@ -119,7 +123,10 @@ export class GoogleService {
     authUrl.searchParams.set('client_id', clientId);
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('scope', GOOGLE_OAUTH_SCOPE);
+    // context 'ads' adiciona o escopo adwords (Fluxo 3) mantendo business.manage.
+    const scope =
+      context === 'ads' ? `${GOOGLE_OAUTH_SCOPE} ${GOOGLE_ADS_OAUTH_SCOPE}` : GOOGLE_OAUTH_SCOPE;
+    authUrl.searchParams.set('scope', scope);
     authUrl.searchParams.set('access_type', 'offline');
     authUrl.searchParams.set('prompt', 'consent');
     authUrl.searchParams.set('state', state);
@@ -152,12 +159,19 @@ export class GoogleService {
     const repo = this.repo(tenantId);
     const existing = await repo.findGoogleConnection();
 
+    // Escopos concedidos pelo Google (string com espaços → array). Usado para
+    // saber se a conta Ads (adwords) está conectada — Fluxo 3.
+    const grantedScopes: string[] = (tokenResponse.scope ?? '')
+      .split(' ')
+      .filter(Boolean);
+
     if (existing) {
       await repo.patchGoogleConnection(existing.id, {
         googleUserId,
         accessToken,
         refreshToken,
         tokenExpiresAt,
+        scopes: grantedScopes,
         updatedAt: new Date(),
       });
     } else {
@@ -166,6 +180,7 @@ export class GoogleService {
         accessToken,
         refreshToken,
         tokenExpiresAt,
+        scopes: grantedScopes,
       });
     }
 
@@ -187,6 +202,10 @@ export class GoogleService {
       accountName: connection.accountName ?? null,
       tokenExpiresAt: connection.tokenExpiresAt.toISOString(),
       connected: connection.tokenExpiresAt.getTime() > Date.now(),
+      scopes: Array.isArray(connection.scopes) ? connection.scopes : [],
+      adsConnected: Array.isArray(connection.scopes)
+        ? connection.scopes.includes('https://www.googleapis.com/auth/adwords')
+        : false,
     };
   }
 
@@ -283,11 +302,20 @@ export class GoogleService {
     const settings = (await repo.findBusinessProfile()) ?? null;
     const tenant = (await repo.findTenant()) ?? null;
 
+    // Perfil espelhado persistido (1-por-tenant) — permite recuperar perfil em
+    // sessões posteriores (reload) e habilitar promoção Ads sem recriar.
+    const persisted = (await repo.findGoogleBusinessProfileByTenant()) ?? null;
+
     const searchLocation = buildSearchLocation(settings, tenant);
     const searchTitle = searchLocation.title ?? '';
 
     if (!searchTitle) {
-      return { found: false, matches: [], duplicateAlert: false };
+      return {
+        found: false,
+        matches: [],
+        duplicateAlert: false,
+        profile: persisted ? mapGbpLocationToProfile(persisted, { title: persisted.name }) : null,
+      };
     }
 
     const client = this.createClientForConnection(connection);
@@ -307,6 +335,7 @@ export class GoogleService {
       found,
       matches: normalized,
       duplicateAlert: normalized.length > 0 && !found,
+      profile: persisted ? mapGbpLocationToProfile(persisted, { title: persisted.name }) : null,
     };
   }
 
@@ -720,9 +749,9 @@ export class GoogleService {
 
     const client = googleApi ?? this.createClientForConnection(connection);
     await client.verifyLocation(profile.gbpLocationId, method);
-    const gbpLocation = await client.getLocation(profile.gbpLocationId);
+    const voiceState = await client.getVoiceOfMerchantState(profile.gbpLocationId);
 
-    if (gbpLocation.verification?.state === 'VERIFIED') {
+    if (voiceState.hasVoiceOfMerchant === true) {
       await this.repo(tenantId).patchBusinessProfile(profile.id, {
         verificationState: 'VERIFIED',
         syncStatus: 'verified',
@@ -962,6 +991,166 @@ export class GoogleService {
     await this.repo(tenantId).patchBusinessProfile(profile.id, { photos: updatedPhotos, updatedAt: new Date() });
 
     return { photos: updatedPhotos, associatedManually: true };
+  }
+
+  // ── Google Ads (Fluxo 3 — promoção do GBP) ──────────────────────────────
+
+  /** Monta o cliente Ads com o token da conexão + developer token do ambiente. */
+  private createAdsClient(
+    connection: (typeof import('@fury/db').googleConnections.$inferSelect) & { scopes?: unknown },
+  ) {
+    return createGoogleAdsApiClient({
+      developerToken: process.env.GOOGLE_ADS_DEVELOPER_TOKEN,
+      customerId: process.env.GOOGLE_ADS_CUSTOMER_ID,
+      accessToken: decryptToken(connection.accessToken),
+    });
+  }
+
+  private assertAdsEligible(
+    profile: typeof import('@fury/db').googleBusinessProfiles.$inferSelect,
+    connection: (typeof import('@fury/db').googleConnections.$inferSelect) & { scopes?: unknown },
+  ): void {
+    if (profile.verificationState !== 'VERIFIED') {
+      throw new AppError(
+        409,
+        GOOGLE_ERROR_CODES.FORBIDDEN,
+        'O perfil ainda não está verificado no Google. Verifique o perfil antes de anunciar.'
+      );
+    }
+    const rawScopes = connection.scopes;
+    const scopes: string[] = Array.isArray(rawScopes) ? (rawScopes as string[]) : [];
+    if (!scopes.includes('https://www.googleapis.com/auth/adwords')) {
+      throw new AppError(
+        409,
+        GOOGLE_ERROR_CODES.FORBIDDEN,
+        'Conecte a conta do Google Ads nas Integrações para anunciar seu perfil.'
+      );
+    }
+  }
+
+  /**
+   * Cria a campanha de promoção do perfil no Google Ads (Fluxo 3):
+   *  1. AssetSet LOCATION_SYNC (token business.manage da conta dona do perfil)
+   *  2. Attach no customer (gera os location assets)
+   *  3. Budget diário (verba mensal / 30.4) + campanha SEARCH
+   * Persiste ids/status no perfil. Idempotente por perfil.
+   */
+  async criarCampanhaAds(
+    profileId: string,
+    tenantId: string,
+    monthlyBudgetBRL: number,
+  ): Promise<GoogleAdsCampaignResult> {
+    if (
+      monthlyBudgetBRL < GOOGLE_ADS_MIN_MONTHLY_BUDGET ||
+      monthlyBudgetBRL > GOOGLE_ADS_MAX_MONTHLY_BUDGET
+    ) {
+      throw new AppError(
+        400,
+        GOOGLE_ERROR_CODES.VALIDATION_ERROR,
+        `A verba mensal deve estar entre R$ ${GOOGLE_ADS_MIN_MONTHLY_BUDGET} e R$ ${GOOGLE_ADS_MAX_MONTHLY_BUDGET}.`
+      );
+    }
+
+    const profile = await this.getProfileConnection(profileId, tenantId);
+    const connection = await this.repo(tenantId).findGoogleConnectionByRawId(profile.connectionId);
+    if (!connection) {
+      throw new AppError(
+        404,
+        GOOGLE_ERROR_CODES.NOT_FOUND,
+        'Nenhuma conexão Google encontrada. Conecte sua conta Google para continuar.'
+      );
+    }
+
+    this.assertAdsEligible(profile, connection);
+
+    if (profile.adsCampaignId) {
+      throw new AppError(
+        409,
+        GOOGLE_ERROR_CODES.VALIDATION_ERROR,
+        'Este perfil já possui uma campanha no Google Ads. Pause ou aguarde a campanha atual.'
+      );
+    }
+
+    const adsClient = this.createAdsClient(connection);
+
+    // 1) Asset set LOCATION_SYNC — sincroniza os locais GBP com o Google Ads.
+    const assetSet = await adsClient.mutateAssetSets({
+      emailAddress: profile.email ?? connection.accountName ?? '',
+      httpAuthorizationToken: `Bearer ${decryptToken(connection.accessToken)}`,
+      assetSetName: `Ady - ${profile.name}`,
+    });
+
+    // 2) Attach no customer — a API gera os location assets automaticamente.
+    await adsClient.mutateCustomerAssetSets(assetSet.resourceName);
+
+    // 3) Budget diário (mensal/30.4) + campanha SEARCH.
+    const campaign = await adsClient.mutateCampaign({
+      name: `Ady - Promoção ${profile.name}`,
+      monthlyBudgetBRL,
+    });
+
+    const repo = this.repo(tenantId);
+    await repo.patchBusinessProfile(profile.id, {
+      adsCampaignId: String(campaign.campaignId),
+      adsCampaignStatus: 'ENABLED',
+      adsMonthlyBudget: monthlyBudgetBRL.toFixed(2),
+      adsBudgetMicros: Math.round((monthlyBudgetBRL / 30.4) * 1_000_000),
+      adsServedAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await repo.createSyncLog({
+      connectionId: connection.id,
+      profileId: profile.id,
+      operation: 'update',
+      status: 'success',
+      message: 'Campanha criada no Google Ads.',
+    });
+
+    return { campaignId: campaign.campaignId, budgetId: campaign.budgetId, assetSetId: assetSet.assetSetId };
+  }
+
+  /** Pausa a campanha Ads do perfil (status local; pause remoto fica no worker). */
+  async pauseCampanhaAds(
+    profileId: string,
+    tenantId: string,
+  ): Promise<{ paused: boolean; status: string }> {
+    const profile = await this.getProfileConnection(profileId, tenantId);
+
+    if (!profile.adsCampaignId) {
+      throw new AppError(
+        404,
+        GOOGLE_ERROR_CODES.NOT_FOUND,
+        'Nenhuma campanha ativa no Google Ads para este perfil.'
+      );
+    }
+
+    await this.repo(tenantId).patchBusinessProfile(profile.id, {
+      adsCampaignStatus: 'PAUSED',
+      updatedAt: new Date(),
+    });
+
+    return { paused: true, status: 'PAUSED' };
+  }
+
+  /** Status atual da campanha Ads do perfil (local + refresh opcional via worker). */
+  async getAdsCampaignStatus(
+    profileId: string,
+    tenantId: string,
+  ): Promise<{
+    campaignId: string | null;
+    status: 'ENABLED' | 'PAUSED' | 'REMOVED' | 'UNKNOWN' | null;
+    monthlyBudgetBRL: string | null;
+    dailyBudgetMicros: number | null;
+    lastServedAt: string | null;
+  }> {
+    const profile = await this.getProfileConnection(profileId, tenantId);
+    return {
+      campaignId: profile.adsCampaignId,
+      status: profile.adsCampaignStatus ?? null,
+      monthlyBudgetBRL: profile.adsMonthlyBudget,
+      dailyBudgetMicros: profile.adsBudgetMicros,
+      lastServedAt: profile.adsServedAt ? profile.adsServedAt.toISOString() : null,
+    };
   }
 }
 

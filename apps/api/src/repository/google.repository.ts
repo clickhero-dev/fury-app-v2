@@ -89,6 +89,13 @@ export class GoogleRepository extends TenantScopedRepository {
     });
   }
 
+  /** Perfil espelhado do tenant (1-por-tenant) — usado para recuperar perfil persistido. */
+  async findGoogleBusinessProfileByTenant() {
+    return this.db.query.googleBusinessProfiles.findFirst({
+      where: eq(googleBusinessProfiles.tenantId, this.tenantId),
+    });
+  }
+
   async patchBusinessProfile(id: string, data: Partial<GoogleBusinessProfile>) {
     const [row] = await this.db.update(googleBusinessProfiles).set(data as any).where(eq(googleBusinessProfiles.id, id)).returning();
     return row ?? null;
