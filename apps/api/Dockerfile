@@ -1,8 +1,8 @@
 FROM node:22-alpine AS builder
 RUN apk add --no-cache python3 make g++ fontconfig
 
-# Install pnpm
-RUN npm install -g pnpm
+# Install pnpm (versão pinada = mesmo da dev local — ver `pnpm --version`; pnpm@latest quebrou allowBuilds)
+RUN npm install -g pnpm@11.21.0
 
 WORKDIR /app
 
@@ -24,8 +24,8 @@ RUN pnpm --filter @fury/api run build
 FROM node:22-alpine
 RUN apk add --no-cache fontconfig font-opensans font-dejavu
 
-# Install pnpm for prod install
-RUN npm install -g pnpm
+# Install pnpm for prod install (versão pinada)
+RUN npm install -g pnpm@11.21.0
 
 WORKDIR /app
 
