@@ -13,6 +13,7 @@ const {
   dbMock,
   mockCreateGoogleApiClient,
   mockGetLocation,
+  mockGetVoiceOfMerchantState,
   workerInstances,
   queueAddSpy,
 } = vi.hoisted(() => ({
@@ -29,6 +30,7 @@ const {
   } as any,
   mockCreateGoogleApiClient: vi.fn(),
   mockGetLocation: vi.fn(),
+  mockGetVoiceOfMerchantState: vi.fn(),
   workerInstances: [] as Array<{
     name: string;
     processor: (job: { data: unknown }) => Promise<unknown>;
@@ -143,6 +145,7 @@ function resetMocks() {
   queueAddSpy.mockClear();
   mockCreateGoogleApiClient.mockReturnValue({
     getLocation: mockGetLocation,
+    getVoiceOfMerchantState: mockGetVoiceOfMerchantState,
     listAccounts: vi.fn(),
     listLocations: vi.fn(),
     createLocation: vi.fn(),
@@ -188,15 +191,11 @@ describe('processSyncJob — transição awaiting_verification → verified', ()
     dbMock.query.googleBusinessProfiles.findMany.mockResolvedValue([
       makeProfile('tenant-A', { syncStatus: 'awaiting_verification' }),
     ]);
-    mockGetLocation.mockResolvedValue({
-      name: 'accounts/123456/locations/789',
-      title: 'Minha Empresa Ltda',
-      verification: { state: 'VERIFIED' },
-    });
+    mockGetVoiceOfMerchantState.mockResolvedValue({ hasVoiceOfMerchant: true, hasBusinessAuthority: true });
 
     await processSyncJob();
 
-    expect(mockGetLocation).toHaveBeenCalledWith('accounts/123456/locations/789');
+    expect(mockGetVoiceOfMerchantState).toHaveBeenCalledWith('accounts/123456/locations/789');
     const setValues = dbMock.update.mock.results[0]?.value.set.mock.calls[0]?.[0] ?? {};
     expect(setValues.verificationState).toBe('VERIFIED');
     expect(setValues.syncStatus).toBe('verified');
@@ -207,11 +206,7 @@ describe('processSyncJob — transição awaiting_verification → verified', ()
     dbMock.query.googleBusinessProfiles.findMany.mockResolvedValue([
       makeProfile('tenant-A', { syncStatus: 'awaiting_verification' }),
     ]);
-    mockGetLocation.mockResolvedValue({
-      name: 'accounts/123456/locations/789',
-      title: 'Minha Empresa Ltda',
-      verification: { state: 'UNVERIFIED' },
-    });
+    mockGetVoiceOfMerchantState.mockResolvedValue({ hasVoiceOfMerchant: false, hasBusinessAuthority: false });
 
     await processSyncJob();
 
@@ -227,11 +222,7 @@ describe('processSyncJob — transição awaiting_verification → verified', ()
         email: 'contato@empresa.com.br',
       }),
     ]);
-    mockGetLocation.mockResolvedValue({
-      name: 'accounts/123456/locations/789',
-      title: 'Minha Empresa Ltda',
-      verification: { state: 'VERIFIED' },
-    });
+    mockGetVoiceOfMerchantState.mockResolvedValue({ hasVoiceOfMerchant: true, hasBusinessAuthority: true });
 
     await processSyncJob();
 
@@ -242,11 +233,7 @@ describe('processSyncJob — transição awaiting_verification → verified', ()
     dbMock.query.googleBusinessProfiles.findMany.mockResolvedValue([
       makeProfile('tenant-A', { syncStatus: 'awaiting_verification' }),
     ]);
-    mockGetLocation.mockResolvedValue({
-      name: 'accounts/123456/locations/789',
-      title: 'Minha Empresa Ltda',
-      verification: { state: 'UNVERIFIED' },
-    });
+    mockGetVoiceOfMerchantState.mockResolvedValue({ hasVoiceOfMerchant: false, hasBusinessAuthority: false });
 
     await processSyncJob();
 
@@ -257,11 +244,7 @@ describe('processSyncJob — transição awaiting_verification → verified', ()
     dbMock.query.googleBusinessProfiles.findMany.mockResolvedValue([
       makeProfile('tenant-A', { syncStatus: 'awaiting_verification' }),
     ]);
-    mockGetLocation.mockResolvedValue({
-      name: 'accounts/123456/locations/789',
-      title: 'Minha Empresa Ltda',
-      verification: { state: 'VERIFIED' },
-    });
+    mockGetVoiceOfMerchantState.mockResolvedValue({ hasVoiceOfMerchant: true, hasBusinessAuthority: true });
 
     await processSyncJob();
 
@@ -276,7 +259,7 @@ describe('processSyncJob — erro e isolamento', () => {
     dbMock.query.googleBusinessProfiles.findMany.mockResolvedValue([
       makeProfile('tenant-A', { syncStatus: 'awaiting_verification' }),
     ]);
-    mockGetLocation.mockRejectedValue(new Error('GBP API offline'));
+    mockGetVoiceOfMerchantState.mockRejectedValue(new Error('GBP API offline'));
 
     await processSyncJob();
 
@@ -303,15 +286,11 @@ describe('processSyncJob — erro e isolamento', () => {
         syncStatus: 'awaiting_verification',
       }),
     ]);
-    mockGetLocation.mockResolvedValue({
-      name: 'accounts/123456/locations/789',
-      title: 'Minha Empresa Ltda',
-      verification: { state: 'VERIFIED' },
-    });
+    mockGetVoiceOfMerchantState.mockResolvedValue({ hasVoiceOfMerchant: true, hasBusinessAuthority: true });
 
     await processSyncJob();
 
-    expect(mockGetLocation).toHaveBeenCalledTimes(2);
+    expect(mockGetVoiceOfMerchantState).toHaveBeenCalledTimes(2);
     expect(dbMock.update).toHaveBeenCalledTimes(2);
   });
 
