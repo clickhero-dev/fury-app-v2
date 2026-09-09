@@ -18,12 +18,12 @@ const maskUpload = multer({
   limits: { fileSize: 1 * 1024 * 1024 },
 });
 
-router.get('/models', controllers.openrouter.getModels);
+router.get('/models', controllers.studioAi.getModels);
 
-router.post('/enhance-prompt', authMiddleware, tenantMiddleware, controllers.openrouter.enhancePrompt);
-router.post('/generate-image', authMiddleware, tenantMiddleware, controllers.openrouter.generateImage);
-router.post('/generate-video', authMiddleware, tenantMiddleware, controllers.openrouter.generateVideo);
-router.post('/regenerate', authMiddleware, tenantMiddleware, controllers.openrouter.regenerate);
+router.post('/enhance-prompt', authMiddleware, tenantMiddleware, controllers.studioAi.enhancePrompt);
+router.post('/generate-image', authMiddleware, tenantMiddleware, controllers.studioAi.generateImage);
+router.post('/generate-video', authMiddleware, tenantMiddleware, controllers.studioAi.generateVideo);
+router.post('/regenerate', authMiddleware, tenantMiddleware, controllers.studioAi.regenerate);
 router.post(
   '/regenerate-ad',
   authMiddleware,
@@ -32,7 +32,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     const maskFile = (req as any).file as Express.Multer.File | undefined;
     try {
-      await controllers.openrouter.regenerateAd(req, res, next);
+      await controllers.studioAi.regenerateAd(req, res, next);
     } finally {
       // ponytail: limpa máscara temporária
       if (maskFile?.path) await unlink(maskFile.path).catch(() => {});
