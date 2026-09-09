@@ -4,18 +4,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle2, Copy, Loader2, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { AppLayout, Button, Card, CardContent, PageHeader, StatusBadge } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
+import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
+import { formatDuration, formatCost } from '@/lib/studio-metrics';
 import type {
   StudioComplianceStatusResponse,
   StudioTemplate,
 } from '@/types/studio';
 
-interface ModelInfo {
-  id: string;
-  label: string;
-  description: string;
-  category: string;
-  type: 'image' | 'video';
+interface GenerateImageResponse {
+  creativeAssetId: string;
+  imageUrl: string;
+  model?: string;
+  processingTimeMs?: number | null;
+  costUsd?: number | null;
 }
 
 const TEMPLATES: StudioTemplate[] = [
@@ -57,12 +59,6 @@ function getComplianceTone(status?: StudioComplianceStatusResponse['complianceSt
   return 'pending_compliance';
 }
 
-function categoryBadge(category: string) {
-  if (category === 'barato') return { label: '💰 Barato', class: 'bg-green-100 text-green-700' };
-  if (category === 'custo-beneficio') return { label: '⭐ Custo-benefício', class: 'bg-blue-100 text-blue-700' };
-  return { label: '👑 Qualidade', class: 'bg-purple-100 text-purple-700' };
-}
-
 export function CreativeStudio() {
   const navigate = useNavigate();
   const { setPreSelectedAsset } = useCampaignWizardContext();
@@ -72,6 +68,8 @@ export function CreativeStudio() {
   const [currentAssetId, setCurrentAssetId] = useState<string | null>(null);
   const [pollStartedAt, setPollStartedAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
+  const [lastResultInfo, setLastResultInfo] = useState<{ processingTimeMs?: number | null; costUsd?: number | null } | null>(null);
 
   // ─── OpenRouter state ──────────────────────────────────────
   const [creativeType, setCreativeType] = useState<'image' | 'video'>('image');
@@ -80,10 +78,10 @@ export function CreativeStudio() {
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
 
   const modelsQuery = useQuery({
-    queryKey: ['openrouter', 'models'],
+    queryKey: ['studio-ai', 'models'],
     queryFn: async () => {
-      const res = await api.get('/openrouter/models');
-      return res.data as { image: ModelInfo[]; video: ModelInfo[] };
+      const res = await api.get('/studio/ai/models');
+      return res.data as { image: StudioModelOption[]; video: StudioModelOption[] };
     },
     staleTime: 1000 * 60 * 60, // 1h
   });
@@ -105,26 +103,40 @@ export function CreativeStudio() {
 
   const generateImageMutation = useMutation({
     mutationFn: async (payload: { model: string; prompt: string; aspect_ratio?: string }) => {
-      const response = await api.post('/openrouter/generate-image', payload);
+      const response = await api.post('/studio/ai/generate-image', payload);
       return response.data;
     },
-    onSuccess: (data: any) => {
+    onMutate: () => {
+      setGenerationStartedAt(Date.now());
+      setLastResultInfo(null);
+    },
+    onSuccess: (data: GenerateImageResponse) => {
       setCurrentAssetId(data.creativeAssetId);
       setPollStartedAt(Date.now());
       setGeneratedUrl(data.imageUrl);
+      setLastResultInfo({ processingTimeMs: data.processingTimeMs, costUsd: data.costUsd });
+      setGenerationStartedAt(null);
       queryClient.setQueryData(['studio', 'asset', data.creativeAssetId], data);
     },
+    onError: () => setGenerationStartedAt(null),
   });
 
   const generateVideoMutation = useMutation({
     mutationFn: async (payload: { model: string; prompt: string; duration?: number }) => {
-      const response = await api.post('/openrouter/generate-video', payload);
+      const response = await api.post('/studio/ai/generate-video', payload);
       return response.data;
     },
-    onSuccess: (data: any) => {
+    onMutate: () => {
+      setGenerationStartedAt(Date.now());
+      setLastResultInfo(null);
+    },
+    onSuccess: (data: { creativeAssetId: string; videoUrl: string; processingTimeMs?: number | null }) => {
       setCurrentAssetId(data.creativeAssetId);
       setGeneratedUrl(data.videoUrl);
+      setLastResultInfo({ processingTimeMs: data.processingTimeMs });
+      setGenerationStartedAt(null);
     },
+    onError: () => setGenerationStartedAt(null),
   });
 
   const complianceQuery = useQuery<StudioComplianceStatusResponse>({
@@ -153,6 +165,8 @@ export function CreativeStudio() {
   const canPublish = currentCompliance?.complianceStatus === 'approved';
 
   const isGenerating = generateImageMutation.isPending || generateVideoMutation.isPending;
+
+  const elapsedSeconds = generationStartedAt ? Math.max(0, Math.round((nowMs - generationStartedAt) / 1000)) : 0;
 
   const handleGenerate = () => {
     const finalPrompt = prompt.trim();
@@ -236,68 +250,14 @@ export function CreativeStudio() {
                 </div>
               </div>
 
-              {/* Seletor de modelo */}
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">
-                  Modelo de {creativeType === 'image' ? 'imagem' : 'vídeo'}
-                </p>
-                <div className="space-y-2">
-                  {currentModels.length > 0 ? (
-                    currentModels.map((model) => {
-                      const badge = categoryBadge(model.category);
-                      return (
-                        <button
-                          key={model.id}
-                          onClick={() => setSelectedModel(model.id)}
-                          className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
-                            selectedModel === model.id
-                              ? 'border-[#E8631A] bg-[#FFF4ED]'
-                              : 'border-[#E6E8EC] bg-white hover:border-[#F0B48E]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-[#101828]">{model.label}</span>
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badge.class}`}>
-                              {badge.label}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 text-xs text-[#667085]">{model.description}</p>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <div className="space-y-2">
-                      {/* Fallback inline enquanto a query carrega */}
-                      {[
-                        { id: 'bytedance-seed/seedream-4.5', label: 'Seedream 4.5', desc: 'ByteDance — Mais barato ($0.04/img)', cat: 'barato' },
-                        { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 Klein 4B', desc: 'Black Forest Labs — Melhor custo-benefício', cat: 'custo-beneficio' },
-                        { id: 'black-forest-labs/flux.2-max', label: 'FLUX.2 Max', desc: 'Black Forest Labs — Máxima qualidade', cat: 'qualidade' },
-                      ].map((m) => {
-                        const badge = categoryBadge(m.cat);
-                        return (
-                          <button
-                            key={m.id}
-                            onClick={() => setSelectedModel(m.id)}
-                            className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
-                              selectedModel === m.id
-                                ? 'border-[#E8631A] bg-[#FFF4ED]'
-                                : 'border-[#E6E8EC] bg-white hover:border-[#F0B48E]'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-semibold text-[#101828]">{m.label}</span>
-                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badge.class}`}>
-                                {badge.label}
-                              </span>
-                            </div>
-                            <p className="mt-0.5 text-xs text-[#667085]">{m.desc}</p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
+              {/* Seletor de modelo (compacto) */}
+              <ModelSelect
+                models={currentModels}
+                selectedModel={selectedModel}
+                onSelect={setSelectedModel}
+                typeLabel={creativeType === 'image' ? 'imagem' : 'vídeo'}
+                id="creative-studio-model-select"
+              />
 
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Templates por nicho</p>
@@ -368,7 +328,10 @@ export function CreativeStudio() {
                 <div className="rounded-2xl border border-[#FFE3D4] bg-[#FFF7F2] p-4 text-sm text-[#7A4A27]">
                   <div className="flex items-center gap-3">
                     <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
-                    <span>FURY está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...</span>
+                    <span>
+                      FURY está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...
+                      {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
+                    </span>
                   </div>
                 </div>
               )}
@@ -421,7 +384,10 @@ export function CreativeStudio() {
                 <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[#E6E8EC] bg-gradient-to-br from-[#FFF7F2] to-white">
                   <div className="space-y-4 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
-                    <p className="text-base font-semibold text-[#101828]">FURY está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...</p>
+                    <p className="text-base font-semibold text-[#101828]">
+                      FURY está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...
+                      {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
+                    </p>
                     <p className="text-sm text-[#667085]">A geração via OpenRouter e a checagem de compliance são processadas em sequência.</p>
                   </div>
                 </div>
@@ -485,6 +451,23 @@ export function CreativeStudio() {
                       <p className="mt-2 text-sm text-[#101828]">{new Date(currentCompliance.createdAt).toLocaleString('pt-BR')}</p>
                     </div>
                   </div>
+
+                  {(lastResultInfo?.processingTimeMs != null || lastResultInfo?.costUsd != null) && (
+                    <div className="grid gap-4 md:grid-cols-3">
+                      {lastResultInfo?.processingTimeMs != null && (
+                        <div className="rounded-2xl bg-[#FCFCFD] p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[#667085]">Tempo de processamento</p>
+                          <p className="mt-2 text-sm text-[#101828]">{formatDuration(lastResultInfo.processingTimeMs)}</p>
+                        </div>
+                      )}
+                      {lastResultInfo?.costUsd != null && (
+                        <div className="rounded-2xl bg-[#FCFCFD] p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[#667085]">Custo da imagem</p>
+                          <p className="mt-2 text-sm text-[#101828]">{formatCost(lastResultInfo.costUsd)}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {currentCompliance.complianceStatus === 'rejected' && currentCompliance.issues.length > 0 && (
                     <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
