@@ -10,10 +10,12 @@ export async function startGoogleSyncManager(): Promise<void> {
 
   const queue = new Queue('google-sync', { connection });
   await queue.add('google-sync:tick', { timestamp: new Date().toISOString() }, {
-    repeat: { pattern: '* * * * *' },
+    // 1x/dia à meia-noite — preserva quota da GBP API (transições de verificação
+    // são lentas; polling frequente só consome quota sem ganho perceptível).
+    repeat: { pattern: '0 0 * * *' },
   });
 
-  console.log('✅ Google-sync scheduler started (runs every minute)');
+  console.log('✅ Google-sync scheduler started (runs daily at midnight)');
 }
 
 export async function stopGoogleSyncManager(): Promise<void> {

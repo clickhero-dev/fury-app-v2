@@ -4,6 +4,8 @@ import { AppLayout, ErrorBoundary, PageHeader, LoadingSpinner } from '@/componen
 import { cn } from '@/lib/utils';
 import { useGoogleSettings } from '@/hooks/useGoogleSettings';
 import { GoogleConnectionCard } from './components/GoogleConnectionCard';
+import { GoogleAdsConnectionCard } from './components/GoogleAdsConnectionCard';
+import { CampaignBudgetForm } from './components/CampaignBudgetForm';
 import { ProfileLookupResult } from './components/ProfileLookupResult';
 import { BusinessProfileForm } from './components/BusinessProfileForm';
 import { ProfileStatusPanel } from './components/ProfileStatusPanel';
@@ -19,6 +21,10 @@ import {
   useGoogleProfile,
   useSyncProfile,
   useSyncLogs,
+  useGoogleAdsAuthUrl,
+  useGoogleAdsStatus,
+  useCreateGoogleAdsCampaign,
+  usePauseGoogleAdsCampaign,
 } from './useGoogleMeuNegocio';
 import type { GoogleCompleteVerificationInput, GoogleCreateProfileResult } from '@/types/google';
 
@@ -40,31 +46,65 @@ function errorMessage(err: unknown): string {
   );
 }
 
+/** Detecta quota excedida/recurso indisponível na resposta da API do Google. */
+function isQuotaExceeded(err: unknown): boolean {
+  const msg = errorMessage(err).toLowerCase();
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  return (
+    msg.includes('quota exceeded') ||
+    msg.includes('quota excedida') ||
+    msg.includes('resource exhausted') ||
+    status === 429 ||
+    (status === 403 && msg.includes('quota'))
+  );
+}
+
+function QuotaWarningBanner() {
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border border-warning/40 bg-warning/10 p-4">
+      <span className="text-lg leading-none">⚠️</span>
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-text-primary">Google temporariamente indisponível</p>
+        <p className="text-xs text-text-tertiary">
+          A API do Google atingiu o limite de uso (quota). Isso costuma normalizar em alguns minutos.
+          Tente novamente mais tarde.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function GoogleMeuNegocioContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
   const [createdProfile, setCreatedProfile] = useState<GoogleCreateProfileResult | null>(null);
 
   const { data: connection, isLoading: connectionLoading } = useGoogleConnection();
-  const { data: lookup, isLoading: lookupLoading, isError: lookupError } = useGoogleLookup(!!connection);
+  const { data: lookup, isLoading: lookupLoading, isError: lookupError, error: lookupQueryError } = useGoogleLookup(!!connection);
   const { data: settings } = useGoogleSettings();
   const connectMutation = useGoogleConnect();
   const disconnectMutation = useGoogleDisconnect();
   const createMutation = useCreateProfile();
-  const { data: verification, isLoading: verificationLoading } = useVerification(
-    createdProfile?.id ?? null,
-    !!createdProfile
-  );
   const completeMutation = useCompleteVerification();
-  const { data: profile, isLoading: profileLoading } = useGoogleProfile(
-    createdProfile?.id ?? null,
-    !!createdProfile
-  );
   const syncMutation = useSyncProfile();
-  const { data: syncLogs, isLoading: syncLogsLoading } = useSyncLogs(
-    createdProfile?.id ?? null,
-    !!createdProfile
+  // Perfil "ativo": o recém-criado na sessão OU o persistido no banco (pós-reload).
+  const activeProfileId = createdProfile?.id ?? lookup?.profile?.id ?? null;
+  const { data: verification, isLoading: verificationLoading } = useVerification(
+    activeProfileId,
+    !!activeProfileId
   );
+  const { data: profile, isLoading: profileLoading } = useGoogleProfile(
+    activeProfileId,
+    !!activeProfileId
+  );
+  const { data: syncLogs, isLoading: syncLogsLoading } = useSyncLogs(
+    activeProfileId,
+    !!activeProfileId
+  );
+  const adsAuthQuery = useGoogleAdsAuthUrl();
+  const { data: adsStatus } = useGoogleAdsStatus(activeProfileId, !!activeProfileId && connection?.adsConnected === true);
+  const createAdsMutation = useCreateGoogleAdsCampaign();
+  const pauseAdsMutation = usePauseGoogleAdsCampaign();
 
   const settingsComplete = Boolean(
     settings?.name?.trim() &&
@@ -106,6 +146,36 @@ function GoogleMeuNegocioContent() {
       onError: (err) => {
         showToast(errorMessage(err), 'error');
       },
+    });
+  }
+
+  function handleConnectAds() {
+    adsAuthQuery.refetch().then((result) => {
+      const authUrl = result.data?.authUrl;
+      if (!authUrl) {
+        showToast('Não foi possível gerar o link de conexão do Google Ads.', 'error');
+        return;
+      }
+      window.location.href = authUrl;
+    });
+  }
+
+  function handleCreateAdsCampaign(monthlyBudgetBRL: number) {
+    if (!activeProfileId) return;
+    createAdsMutation.mutate(
+      { profileId: activeProfileId, monthlyBudgetBRL },
+      {
+        onSuccess: () => showToast('Campanha criada no Google Ads. O anúncio será ativado em breve.'),
+        onError: (err) => showToast(errorMessage(err), 'error'),
+      }
+    );
+  }
+
+  function handlePauseAdsCampaign() {
+    if (!activeProfileId) return;
+    pauseAdsMutation.mutate(activeProfileId, {
+      onSuccess: () => showToast('Anúncio pausado.'),
+      onError: (err) => showToast(errorMessage(err), 'error'),
     });
   }
 
@@ -164,6 +234,10 @@ function GoogleMeuNegocioContent() {
         />
       )}
 
+      {lookupError && lookupQueryError && isQuotaExceeded(lookupQueryError) && (
+        <QuotaWarningBanner />
+      )}
+
       <ProfileLookupResult
         result={lookup}
         isLoading={lookupLoading}
@@ -179,16 +253,34 @@ function GoogleMeuNegocioContent() {
         isCompleting={completeMutation.isPending}
       />
 
-      {createdProfile && !profileLoading && profile && (
+      <GoogleAdsConnectionCard
+        connection={connection}
+        onConnect={handleConnectAds}
+        loadingAuthUrl={adsAuthQuery.isFetching}
+      />
+
+      {activeProfileId && profile?.verificationState === 'VERIFIED' && connection?.adsConnected && (
+        <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          <CampaignBudgetForm
+            onSubmit={handleCreateAdsCampaign}
+            submitting={createAdsMutation.isPending}
+            disabled={createAdsMutation.isPending}
+          />
+        </div>
+      )}
+
+      {activeProfileId && !profileLoading && profile && (
         <ProfileStatusPanel
           profile={profile}
           syncLogs={syncLogs}
           isSyncing={syncLogsLoading || syncMutation.isPending}
+          adsStatus={adsStatus}
+          onPauseAds={handlePauseAdsCampaign}
+          pausingAds={pauseAdsMutation.isPending}
           onSync={() =>
-            syncMutation.mutate(createdProfile.id, {
+            syncMutation.mutate(activeProfileId, {
               onSuccess: (synced) => {
                 if (synced.syncStatus === 'verified') {
-                  setCreatedProfile(null);
                   showToast('Perfil sincronizado e verificado pelo Google.');
                 } else {
                   showToast('Perfil sincronizado com sucesso.');
@@ -200,9 +292,9 @@ function GoogleMeuNegocioContent() {
         />
       )}
 
-      {createdProfile && !profileLoading && profile && (
+      {activeProfileId && !profileLoading && profile && (
         <PhotoUploader
-          profileId={createdProfile.id}
+          profileId={activeProfileId}
           photos={profile.photos}
           onPhotosChange={(photos) => {
             // O query cache é invalidado automaticamente pelo hook

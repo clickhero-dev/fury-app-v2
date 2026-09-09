@@ -30,6 +30,10 @@ export interface GoogleConnection {
   accountName: string | null;
   tokenExpiresAt: string;
   connected: boolean;
+  /** Escopos OAuth concedidos (URLs completas). */
+  scopes: string[];
+  /** true quando a conta Google Ads está conectada (escopo adwords). */
+  adsConnected: boolean;
 }
 
 /** Conta de negócio da GBP retornada por GET /google/accounts. */
@@ -60,6 +64,8 @@ export interface GoogleLookupResult {
   found: boolean;
   matches: GoogleLookupMatch[];
   duplicateAlert: boolean;
+  /** Perfil espelhado persistido (null quando ainda não criado). */
+  profile: GoogleBusinessProfile | null;
 }
 
 /** Horário de funcionamento no formato do Google Business Profile. */
@@ -180,4 +186,29 @@ export interface GoogleCompleteVerificationResult {
 export interface GooglePhotoUploadResult {
   photos: string[];
   associatedManually: true;
+}
+
+// ── Google Ads (Fluxo 3 — promoção do perfil) ────────────────────────────
+
+export type GoogleAdsStatusValue = 'ENABLED' | 'PAUSED' | 'REMOVED' | 'UNKNOWN' | null;
+
+/** Payload para criar campanha (POST /profiles/:id/ads/campaign). */
+export interface GoogleAdsCampaignInput {
+  monthlyBudgetBRL: number;
+}
+
+/** Resultado da criação da campanha. */
+export interface GoogleAdsCampaignResult {
+  campaignId: number;
+  budgetId: number;
+  assetSetId: number;
+}
+
+/** Status da campanha Ads (GET /profiles/:id/ads/status). */
+export interface GoogleAdsCampaignStatus {
+  campaignId: string | null;
+  status: GoogleAdsStatusValue;
+  monthlyBudgetBRL: string | null;
+  dailyBudgetMicros: number | null;
+  lastServedAt: string | null;
 }

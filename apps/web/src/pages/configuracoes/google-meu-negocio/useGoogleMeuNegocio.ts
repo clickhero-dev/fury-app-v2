@@ -12,6 +12,9 @@ import type {
   GoogleQualityReport,
   GoogleSyncLogsResult,
   GooglePhotoUploadResult,
+  GoogleAdsCampaignInput,
+  GoogleAdsCampaignResult,
+  GoogleAdsCampaignStatus,
 } from '@/types/google';
 
 export const googleConnectionKey = ['google-connection'] as const;
@@ -23,6 +26,9 @@ export const googleQualityKey = (profileId: string | null) =>
   ['google-profile-quality', profileId] as const;
 export const googleSyncLogsKey = (profileId: string | null) =>
   ['google-sync-logs', profileId] as const;
+export const googleAdsStatusKey = (profileId: string | null) =>
+  ['google-ads-status', profileId] as const;
+export const googleAdsAuthKey = ['google-ads-auth-url'] as const;
 
 interface GoogleApiResponse<T> {
   success: boolean;
@@ -288,6 +294,82 @@ export function useRemovePhoto() {
     },
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: googleProfileKey(variables.profileId) });
+    },
+  });
+}
+
+// ── Google Ads (Fluxo 3 — promoção do perfil) ────────────────────────────
+
+/** Gera URL de OAuth para conectar a conta Ads (escopo adwords adicional). */
+export function useGoogleAdsAuthUrl() {
+  return useQuery<{ authUrl: string }>({
+    queryKey: googleAdsAuthKey,
+    queryFn: async () => {
+      const response = await api.get<GoogleApiResponse<{ authUrl: string }>>('/google/auth/url', {
+        params: { context: 'ads' },
+      });
+      return response.data.data;
+    },
+    enabled: false,
+    retry: false,
+  });
+}
+
+/** Status da campanha Ads do perfil (refetch a cada 60s p/ veiculação). */
+export function useGoogleAdsStatus(profileId: string | null, enabled: boolean) {
+  return useQuery<GoogleAdsCampaignStatus | null>({
+    queryKey: googleAdsStatusKey(profileId),
+    queryFn: async () => {
+      if (!profileId) return null;
+      const response = await api.get<GoogleApiResponse<GoogleAdsCampaignStatus>>(
+        `/google/profiles/${profileId}/ads/status`
+      );
+      return response.data.data;
+    },
+    enabled: enabled && !!profileId,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+}
+
+/** Cria a campanha Ads com verba mensal (BRL). */
+export function useCreateGoogleAdsCampaign() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      profileId,
+      monthlyBudgetBRL,
+    }: {
+      profileId: string;
+      monthlyBudgetBRL: number;
+    }): Promise<GoogleAdsCampaignResult> => {
+      const input: GoogleAdsCampaignInput = { monthlyBudgetBRL };
+      const response = await api.post<GoogleApiResponse<GoogleAdsCampaignResult>>(
+        `/google/profiles/${profileId}/ads/campaign`,
+        input
+      );
+      return response.data.data;
+    },
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: googleAdsStatusKey(variables.profileId) });
+      void queryClient.invalidateQueries({ queryKey: googleProfileKey(variables.profileId) });
+    },
+  });
+}
+
+/** Pausa a campanha Ads do perfil. */
+export function usePauseGoogleAdsCampaign() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (profileId: string): Promise<{ paused: boolean; status: string }> => {
+      const response = await api.post<GoogleApiResponse<{ paused: boolean; status: string }>>(
+        `/google/profiles/${profileId}/ads/campaign/pause`
+      );
+      return response.data.data;
+    },
+    onSuccess: (_data, profileId) => {
+      void queryClient.invalidateQueries({ queryKey: googleAdsStatusKey(profileId) });
+      void queryClient.invalidateQueries({ queryKey: googleProfileKey(profileId) });
     },
   });
 }
