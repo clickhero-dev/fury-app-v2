@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { OpenRouterStudioService } from '../services/openrouter/openrouter-studio.service.js';
+import { StudioAiService } from '../services/studio/studio-ai.service.js';
 
 function makeRepo(override: Record<string, any> = {}) {
   return {
@@ -14,7 +14,7 @@ function makeRepo(override: Record<string, any> = {}) {
 let repo: any = makeRepo();
 const llm = {
   chat: vi.fn(async () => ' prompt melhorado '),
-  generateImage: vi.fn(async () => 'data:image/png;base64,AAAA'),
+  generateImageWithMeta: vi.fn(async (o: any) => ({ dataUrl: 'data:image/png;base64,AAAA', costUsd: 0.04, model: o.model })),
   generateVideo: vi.fn(async () => 'https://cdn/v.mp4'),
   editImage: vi.fn(async () => 'data:image/png;base64,BBBB'),
 };
@@ -25,12 +25,22 @@ const quota = {
   refundModificationQuota: vi.fn(async () => undefined),
   getModificationsPerCreativeLimit: vi.fn(async () => 3),
 };
-const svc = new OpenRouterStudioService(() => repo as any, llm as any, quota as any);
+const svc = new StudioAiService(() => repo as any, llm as any, quota as any);
 
-describe('OpenRouterStudioService', () => {
-  it('getModels retorna catálogo', () => {
+describe('StudioAiService', () => {
+  it('getModels retorna catálogo de 9 imagens (3 FLUX.2 + 6 outras) e 3 vídeos', () => {
     const { image, video } = svc.getModels();
-    expect(image).toHaveLength(3);
+    expect(image).toHaveLength(9);
+    expect(image.filter((m) => m.family === 'flux-2')).toHaveLength(3);
+    expect(image.filter((m) => m.family === 'outras')).toHaveLength(6);
+    expect(video).toHaveLength(3);
+    expect(new Set(image.map((m) => m.id)).size).toBe(9);
+    for (const m of [...image, ...video]) {
+      expect(m.id).toBeTruthy();
+      expect(m.label).toBeTruthy();
+      expect(m.category).toBeTruthy();
+      expect(m.description).toBeTruthy();
+    }
     expect(video).toHaveLength(3);
   });
 
@@ -47,16 +57,26 @@ describe('OpenRouterStudioService', () => {
     expect(out.enhancedPrompt).toContain('Marca: Negócio X.');
   });
 
-  it('generateImage consome quota e cria asset', async () => {
+  it('generateImage consome quota, cria asset e devolve custo + tempo', async () => {
     const out = await svc.generateImage('t-1', { model: 'x', prompt: 'p'.repeat(20), aspect_ratio: '1:1', resolution: '2K' });
     expect(quota.consumeCreativeQuota).toHaveBeenCalledWith('t-1');
-    expect(repo.createAsset).toHaveBeenCalled();
+    expect(repo.createAsset).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0.04, processingTimeMs: expect.any(Number) }));
     expect(out.type).toBe('image');
     expect(out.modificationsRemaining).toBe(3);
+    expect(out.costUsd).toBe(0.04);
+    expect(typeof out.processingTimeMs).toBe('number');
+    expect(out.processingTimeMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('generateImage sem custo no OpenRouter persiste costUsd null', async () => {
+    (llm.generateImageWithMeta as any).mockResolvedValueOnce({ dataUrl: 'data:image/png;base64,AAAA', costUsd: null, model: 'x' });
+    const out = await svc.generateImage('t-1', { model: 'x', prompt: 'p'.repeat(20), aspect_ratio: '1:1', resolution: '2K' });
+    expect(repo.createAsset).toHaveBeenCalledWith(expect.objectContaining({ costUsd: null }));
+    expect(out.costUsd).toBeNull();
   });
 
   it('generateImage em falha devolve quota', async () => {
-    (llm.generateImage as any).mockRejectedValueOnce(new Error('boom'));
+    (llm.generateImageWithMeta as any).mockRejectedValueOnce(new Error('boom'));
     await expect(svc.generateImage('t-1', { model: 'x', prompt: 'p'.repeat(20), aspect_ratio: '1:1', resolution: '2K' })).rejects.toThrow();
     expect(quota.refundCreativeQuota).toHaveBeenCalledWith('t-1');
   });
@@ -67,11 +87,13 @@ describe('OpenRouterStudioService', () => {
     expect(repo.createAsset).toHaveBeenCalledWith(expect.objectContaining({ type: 'video' }));
   });
 
-  it('regenerate edita e cria asset imagem', async () => {
+  it('regenerate edita e cria asset imagem com custo + tempo', async () => {
     const out = await svc.regenerate('t-1', { assetId: 'a1', feedback: 'mais contraste' });
     expect(llm.chat).toHaveBeenCalled();
     expect(out.type).toBe('image');
     expect(out.assetId).toBe('new-id');
+    expect(repo.createAsset).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0.04, processingTimeMs: expect.any(Number) }));
+    expect(typeof out.processingTimeMs).toBe('number');
   });
 
   it('regenerate sem prompt → erro', async () => {

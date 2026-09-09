@@ -1,17 +1,26 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { readFile } from 'node:fs/promises';
-import { OpenRouterStudioService } from '../services/openrouter/openrouter-studio.service.js';
+import { StudioAiService } from '../services/studio/studio-ai.service.js';
+import { IMAGE_MODELS, VIDEO_MODELS } from '../services/studio/studio-model-catalog.js';
+
+/**
+ * IDs aceitos no body de generate-image/video. Sincronizados MANUALMENTE
+ * com o catálogo (studio-model-catalog.ts) — o teste de paridade em
+ * studio-ai.controller.test.ts garante que os dois lados não divergem.
+ */
+export const IMAGE_MODEL_IDS = IMAGE_MODELS.map((m) => m.id) as [string, ...string[]];
+export const VIDEO_MODEL_IDS = VIDEO_MODELS.map((m) => m.id) as [string, ...string[]];
 
 const generateImageSchema = z.object({
-  model: z.enum(['bytedance-seed/seedream-4.5', 'black-forest-labs/flux.2-klein-4b', 'black-forest-labs/flux.2-max', 'black-forest-labs/flux.2-pro']),
+  model: z.enum(IMAGE_MODEL_IDS),
   prompt: z.string().min(10).max(1000),
   aspect_ratio: z.enum(['1:1', '16:9', '9:16']).optional().default('1:1'),
   resolution: z.enum(['1K', '2K', '4K']).optional().default('2K'),
 });
 
 const generateVideoSchema = z.object({
-  model: z.enum(['google/veo-3.1-lite', 'kwaivgi/kling-video-o1', 'google/veo-3.1']),
+  model: z.enum(VIDEO_MODEL_IDS),
   prompt: z.string().min(10).max(1000),
   duration: z.number().int().min(3).max(15).optional().default(4),
   resolution: z.enum(['480p', '720p', '1080p']).optional().default('720p'),
@@ -22,8 +31,8 @@ const generateVideoSchema = z.object({
 const enhancePromptSchema = z.object({ prompt: z.string().min(3).max(1000), type: z.enum(['image', 'video']) });
 const regenerateQuickSchema = z.object({ assetId: z.string().uuid(), feedback: z.string().min(3) });
 
-export class OpenRouterController {
-  constructor(private service: OpenRouterStudioService) {}
+export class StudioAiController {
+  constructor(private service: StudioAiService) {}
 
   private validationError(res: Response, error: unknown): boolean {
     if (error instanceof z.ZodError) {
@@ -52,7 +61,7 @@ export class OpenRouterController {
       const tenantId = (req as any).tenant?.tenantId as string;
       const data = await this.service.generateImage(tenantId, body);
       res.json(data);
-    } catch (e) { next(e); }
+    } catch (e) { if (!this.validationError(res, e)) next(e); }
   };
 
   generateVideo = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -61,7 +70,7 @@ export class OpenRouterController {
       const tenantId = (req as any).tenant?.tenantId as string;
       const data = await this.service.generateVideo(tenantId, body);
       res.json(data);
-    } catch (e) { next(e); }
+    } catch (e) { if (!this.validationError(res, e)) next(e); }
   };
 
   regenerate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

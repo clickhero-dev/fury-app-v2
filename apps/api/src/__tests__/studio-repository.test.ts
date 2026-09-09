@@ -54,6 +54,22 @@ describe('StudioRepository', () => {
     expect(asset.type).toBe('image');
   });
 
+  it('createAsset persiste costUsd e processingTimeMs', async () => {
+    const { db, insert } = makeDb();
+    const repo = new StudioRepository(tenantId, db);
+    const asset = await repo.createAsset({
+      tenantId,
+      type: 'image',
+      url: 'https://cdn/x.png',
+      complianceStatus: 'pending_compliance',
+      costUsd: 0.04,
+      processingTimeMs: 1234,
+    });
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(asset.costUsd).toBe(0.04);
+    expect(asset.processingTimeMs).toBe(1234);
+  });
+
   it('deleteAsset usa operation delete', async () => {
     const { db, del } = makeDb();
     const repo = new StudioRepository(tenantId, db);

@@ -7,8 +7,8 @@ import { BrandKitService } from './services/brand-kit/brand-kit.service.js';
 import { BrandKitController } from './controllers/brand-kit.controller.js';
 import { FuryEngineService } from './services/fury/fury-engine.service.js';
 import { FuryController } from './controllers/fury.controller.js';
-import { OpenRouterStudioService } from './services/openrouter/openrouter-studio.service.js';
-import { OpenRouterController } from './controllers/openrouter.controller.js';
+import { StudioAiService } from './services/studio/studio-ai.service.js';
+import { StudioAiController } from './controllers/studio-ai.controller.js';
 import { StudioService } from './services/studio/creative-studio.service.js';
 import { StudioPublishingService } from './services/studio/studio-publishing.service.js';
 import { CreativeStudioController } from './controllers/creative-studio.controller.js';
@@ -59,7 +59,7 @@ const metricsProvider: IMetricsProvider =
 export const goalService = new GoalService(metricsProvider);
 export const brandKitService = new BrandKitService();
 export const furyEngineService = new FuryEngineService();
-export const openRouterStudioService = new OpenRouterStudioService();
+export const studioAiService = new StudioAiService();
 export const studioService = new StudioService();
 export const studioPublishingService = new StudioPublishingService();
 export const billingService = new BillingService();
@@ -78,7 +78,7 @@ export const controllers = {
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),
   fury: new FuryController(furyEngineService),
-  openrouter: new OpenRouterController(openRouterStudioService),
+  studioAi: new StudioAiController(studioAiService),
   studio: new CreativeStudioController(studioService),
   studioPublishing: new StudioPublishingController(studioPublishingService),
   billing: new BillingController(billingService),

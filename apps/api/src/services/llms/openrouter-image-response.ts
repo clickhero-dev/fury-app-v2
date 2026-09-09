@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { Transform } from 'node:stream';
 import { finished } from 'node:stream/promises';
 import { pipeline } from 'node:stream/promises';
-import { ensureStudioAssetsDir, studioAssetsDir } from './temp-storage.js';
-import { uploadAssetFromPath } from '../services/storage/storage.service.js';
+import { ensureStudioAssetsDir, studioAssetsDir } from '../../lib/temp-storage.js';
+import { uploadAssetFromPath } from '../../services/storage/storage.service.js';
 
 const BASE64_MARKER = ';base64,';
 const DATA_URL_PREFIX = 'data:image/';

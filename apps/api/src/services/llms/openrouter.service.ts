@@ -1,5 +1,5 @@
 import { AppError } from '../../middleware/errorHandler.js';
-import { persistOpenRouterImageResponse } from '../../lib/openrouter-image-response.js';
+import { persistOpenRouterImageResponse } from './openrouter-image-response.js';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
@@ -154,14 +154,18 @@ export const openrouterService = {
     assertCreditsOrThrow(state);
   },
 
-  async generateImage(options: {
+  /**
+   * Gera imagem e devolve meta (custo real em USD quando o OpenRouter
+   * informar usage.cost; null caso contrário — sem estimativa).
+   */
+  async generateImageWithMeta(options: {
     model: string;
     prompt: string;
     aspect_ratio?: string;
     resolution?: string;
     logoUrl?: string;
     previousImageUrl?: string;
-  }): Promise<string> {
+  }): Promise<{ dataUrl: string; costUsd: number | null; model: string }> {
     const apiKey = getClient();
     const response = await fetchWithTimeout(`${OPENROUTER_BASE}/images`, {
       method: 'POST',
@@ -182,6 +186,7 @@ export const openrouterService = {
       throw new AppError(502, 'OPENROUTER_IMAGE_ERROR', `OpenRouter image error: ${err}`);
     }
     const data = (await response.json()) as any;
+    const costUsd = typeof data.usage?.cost === 'number' ? data.usage.cost : null;
     const imageData = data.data?.[0];
     let result: string;
     if (imageData?.b64_json) result = `data:image/png;base64,${imageData.b64_json}`;
@@ -211,7 +216,20 @@ export const openrouterService = {
       }
     }
 
-    return result;
+    return { dataUrl: result, costUsd, model: options.model };
+  },
+
+  /** Gera imagem e devolve apenas a data URL (API legada — preferir generateImageWithMeta). */
+  async generateImage(options: {
+    model: string;
+    prompt: string;
+    aspect_ratio?: string;
+    resolution?: string;
+    logoUrl?: string;
+    previousImageUrl?: string;
+  }): Promise<string> {
+    const { dataUrl } = await openrouterService.generateImageWithMeta(options);
+    return dataUrl;
   },
 
   async generateVideo(options: {

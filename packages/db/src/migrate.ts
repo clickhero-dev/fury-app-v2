@@ -135,6 +135,7 @@ const STEPS: MigrationStep[] = [
     },
   },
 { tag: '0034_add_compliance_attempts' },
+  { tag: '0035_add_creative_asset_cost_time' },
 ];
 
 /** Nomes de todas as tabelas do schema (26 tabelas) — usados para validação. */
