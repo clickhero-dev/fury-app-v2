@@ -184,6 +184,8 @@ export const creativeAssets = pgTable(
     complianceStatus: complianceStatusEnum('compliance_status').notNull().default('pending_compliance'),
     complianceNotes: text('compliance_notes'),
     complianceAttempts: integer('compliance_attempts').notNull().default(0),
+    costUsd: numeric('cost_usd', { precision: 10, scale: 6, mode: 'number' }),
+    processingTimeMs: integer('processing_time_ms'),
     rootAssetId: uuid('root_asset_id').references((): AnyPgColumn => creativeAssets.id),
     modificationsRemaining: integer('modifications_remaining'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
