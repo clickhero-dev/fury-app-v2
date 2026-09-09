@@ -2,7 +2,7 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect, afterEach } from 'vitest';
-import { extractBase64ImageToFile, findRemoteImageUrl } from '../lib/openrouter-image-response.js';
+import { extractBase64ImageToFile, findRemoteImageUrl } from '../services/llms/openrouter-image-response.js';
 
 describe('openrouter-image-response', () => {
   let workDir: string;
