@@ -122,7 +122,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
       fd.append('feedback', feedbackText);
       if (maskBlob) fd.append('mask', maskBlob, 'mask.png');
 
-      const endpoint = isQuickCreate ? '/openrouter/regenerate-ad' : '/studio/creative/regenerate';
+      const endpoint = isQuickCreate ? '/studio/ai/regenerate-ad' : '/studio/creative/regenerate';
       const res = await api.post<GenerateCreativeResponse>(endpoint, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });

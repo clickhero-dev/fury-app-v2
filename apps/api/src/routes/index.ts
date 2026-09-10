@@ -11,7 +11,7 @@ import budgetRoutes from "./budget.routes.js";
 import instagramRoutes from "./instagram.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
 import formsRoutes from "./forms.routes.js";
-import openrouterRoutes from "./openrouter.routes.js";
+import studioAiRoutes from "./studio-ai.routes.js";
 import observabilityRoutes from "./observability.routes.js";
 import bullBoardRoutes from "./bull-board.routes.js";
 
@@ -54,7 +54,7 @@ router.use("/fury", furyRoutes);
 router.use("/goals", goalsRoutes);
 router.use("/billing", billingRoutes);
 router.use("/brand-kit", ...AUTH_TENANT_SUB, brandKitRoutes);
-router.use("/openrouter", openrouterRoutes);
+router.use("/studio/ai", studioAiRoutes);
 router.use(
   "/observability",
   ...AUTH_TENANT_SUB,

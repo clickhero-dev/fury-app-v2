@@ -1,11 +1,13 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Loader2, Send, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
+import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
+import { formatDuration, formatCost } from '@/lib/studio-metrics';
 import type { StudioAsset } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
 
@@ -32,12 +34,22 @@ interface StudioAssetResponse {
   creativesLimit: number | null;
 }
 
+interface GenerationResult {
+  type: 'image';
+  assetId: string;
+  imageUrl: string;
+  creativeData: { headline: string; primary_text: string; cta: string };
+  modificationsRemaining: number | null;
+  complianceStatus?: string;
+  complianceNotes?: string;
+}
+
 export function EstudioHome() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { setPreSelectedAsset } = useCampaignWizardContext();
   const [view, setView] = useState<ViewState>('library');
-  const [generationResult, setGenerationResult] = useState<any>(null);
+  const [generationResult, setGenerationResult] = useState<GenerationResult | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -47,6 +59,30 @@ export function EstudioHome() {
   const [orPrompt, setOrPrompt] = useState('');
   const [progressMessage, setProgressMessage] = useState('');
   const [quotaErrorMessage, setQuotaErrorMessage] = useState<string | null>(null);
+  const [selectedImageModel, setSelectedImageModel] = useState(IMAGE_MODEL);
+  const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [lastResultInfo, setLastResultInfo] = useState<{ processingTimeMs?: number | null; costUsd?: number | null } | null>(null);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const elapsedSeconds = generationStartedAt ? Math.max(0, Math.round((nowMs - generationStartedAt) / 1000)) : 0;
+
+  const modelsQuery = useQuery({
+    queryKey: ['studio-ai', 'models'],
+    queryFn: async () => {
+      const res = await api.get('/studio/ai/models');
+      return res.data as { image: StudioModelOption[]; video: StudioModelOption[] };
+    },
+    staleTime: 1000 * 60 * 60, // 1h
+  });
+  const imageModels = modelsQuery.data?.image ?? [];
 
   const deleteMutation = useMutation({
     mutationFn: async (assetId: string) => {
@@ -68,10 +104,10 @@ export function EstudioHome() {
   const orImageMutation = useMutation({
     mutationFn: async (payload: { model: string; prompt: string }) => {
       setProgressMessage('Gerando imagem...');
-      const res = await api.post('/openrouter/generate-image', payload);
+      const res = await api.post('/studio/ai/generate-image', payload);
       return res.data;
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: { creativeAssetId: string; imageUrl: string; processingTimeMs?: number | null; costUsd?: number | null; modificationsRemaining?: number | null }) => {
       setGenerationResult({
         type: 'image',
         assetId: data.creativeAssetId,
@@ -79,11 +115,14 @@ export function EstudioHome() {
         creativeData: { headline: '', primary_text: '', cta: '' },
         modificationsRemaining: data.modificationsRemaining ?? null,
       });
+      setLastResultInfo({ processingTimeMs: data.processingTimeMs, costUsd: data.costUsd });
+      setGenerationStartedAt(null);
       setView('result');
       setProgressMessage('');
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
-    onError: (error: any) => {
+    onError: (error: { response?: { data?: { error?: { message?: string } } } }) => {
+      setGenerationStartedAt(null);
       setView('error');
       setProgressMessage('');
       setQuotaErrorMessage(error?.response?.data?.error?.message ?? null);
@@ -123,18 +162,21 @@ export function EstudioHome() {
     if (finalPrompt.length < 10) return;
     setView('loading');
     setProgressMessage('Aprimorando explicação detalhada...');
+    // cronômetro começa no clique — cobre enhance-prompt + geração
+    setGenerationStartedAt(Date.now());
+    setLastResultInfo(null);
 
     try {
-      const enhanceRes = await api.post('/openrouter/enhance-prompt', {
+      const enhanceRes = await api.post('/studio/ai/enhance-prompt', {
         prompt: finalPrompt,
         type: CREATIVE_TYPE,
       });
       const { enhancedPrompt } = enhanceRes.data as { enhancedPrompt: string };
       setProgressMessage('Gerando imagem...');
-      orImageMutation.mutate({ model: IMAGE_MODEL, prompt: enhancedPrompt });
+      orImageMutation.mutate({ model: selectedImageModel, prompt: enhancedPrompt });
     } catch {
       setProgressMessage('Gerando imagem...');
-      orImageMutation.mutate({ model: IMAGE_MODEL, prompt: finalPrompt });
+      orImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt });
     }
   };
 
@@ -394,6 +436,15 @@ export function EstudioHome() {
               Descreva o anúncio que deseja gerar para criar a imagem ideal
             </p>
 
+            <div className={`${SURFACE} p-5`}>
+              <ModelSelect
+                models={imageModels}
+                selectedModel={selectedImageModel}
+                onSelect={setSelectedImageModel}
+                id="quick-create-model-select"
+              />
+            </div>
+
             {quotaReached && (
               <div className="flex items-start gap-2.5 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-text-primary">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
@@ -451,6 +502,7 @@ export function EstudioHome() {
             <div>
               <h2 className="text-2xl font-semibold tracking-[-0.02em] text-text-primary">
                 {progressMessage || 'O ady está criando sua imagem...'}
+                {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
               </h2>
               <p className="mt-2 text-sm text-text-tertiary">
                 A geração com IA e a renderização podem levar de 1 a 2 minutos
@@ -470,6 +522,22 @@ export function EstudioHome() {
             <div className="pt-1">
               <p className="text-sm text-text-tertiary">Regenere com ajustes, salve ou publique direto na sua conta</p>
             </div>
+            {(lastResultInfo?.processingTimeMs != null || lastResultInfo?.costUsd != null) && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {lastResultInfo?.processingTimeMs != null && (
+                  <div className={`${SURFACE} p-4`}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">Tempo de processamento</p>
+                    <p className="mt-1 text-2xl font-bold text-text-primary">{formatDuration(lastResultInfo.processingTimeMs)}</p>
+                  </div>
+                )}
+                {lastResultInfo?.costUsd != null && (
+                  <div className={`${SURFACE} p-4`}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">Custo da imagem</p>
+                    <p className="mt-1 text-2xl font-bold text-text-primary">{formatCost(lastResultInfo.costUsd)}</p>
+                  </div>
+                )}
+              </div>
+            )}
             <CreativeResult
               result={generationResult}
               onBack={handleBackToLibrary}

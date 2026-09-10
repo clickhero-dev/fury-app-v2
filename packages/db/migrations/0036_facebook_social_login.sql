@@ -1,4 +1,4 @@
--- Migration 0035: Facebook social login support
+-- Migration 0036: Facebook social login support
 -- Adiciona facebook_id em users (nullable), índice de busca e unicidade parcial.
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS facebook_id VARCHAR(255);

@@ -135,7 +135,8 @@ const STEPS: MigrationStep[] = [
     },
   },
 { tag: '0034_add_compliance_attempts' },
-  { tag: '0035_facebook_social_login' },
+  { tag: '0035_add_creative_asset_cost_time' },
+  { tag: '0036_facebook_social_login' },
 ];
 
 /** Nomes de todas as tabelas do schema (26 tabelas) — usados para validação. */
