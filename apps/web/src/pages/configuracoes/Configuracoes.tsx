@@ -37,6 +37,7 @@ interface MeResponse {
   tenantCodigo: string;
   role: string;
   tenantId: string;
+  hasPassword: boolean;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -131,6 +132,8 @@ export function Configuracoes() {
     }
   }, [cancelMutation.isSuccess, cancelMutation.isError]);
 
+  const isSettingInitialPassword = meData?.hasPassword === false;
+
   const changePasswordMutation = useMutation({
     mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
       await api.post('/auth/change-password', data);
@@ -144,6 +147,23 @@ export function Configuracoes() {
     },
     onError: () => {
       showToast('Erro ao alterar senha. Verifique a senha atual e tente novamente.', 'error');
+    },
+  });
+
+  const setPasswordMutation = useMutation({
+    mutationFn: async (data: { newPassword: string }) => {
+      await api.post('/auth/set-password', data);
+    },
+    onSuccess: () => {
+      setPasswordOpen(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      showToast('Senha definida com sucesso!', 'success');
+    },
+    onError: () => {
+      showToast('Erro ao definir senha. Tente novamente.', 'error');
     },
   });
 
@@ -405,15 +425,21 @@ export function Configuracoes() {
                 <h3 className="text-base font-semibold text-text-primary mb-4">Segurança da Conta</h3>
                 <div className="p-4 border border-border rounded-xl bg-surface-secondary flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-text-primary">Alterar Senha</p>
-                    <p className="text-xs text-text-tertiary">Atualize sua senha regularmente</p>
+                    <p className="text-sm font-semibold text-text-primary">
+                      {isSettingInitialPassword ? 'Definir Senha' : 'Alterar Senha'}
+                    </p>
+                    <p className="text-xs text-text-tertiary">
+                      {isSettingInitialPassword
+                        ? 'Sua conta usa login social. Defina uma senha para também entrar com e-mail.'
+                        : 'Atualize sua senha regularmente'}
+                    </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setPasswordOpen(true)}
                     className="rounded-full border border-border px-4 py-1.5 text-xs font-medium text-text-primary hover:bg-border cursor-pointer"
                   >
-                    Alterar
+                    {isSettingInitialPassword ? 'Definir' : 'Alterar'}
                   </button>
                 </div>
               </div>
@@ -422,18 +448,22 @@ export function Configuracoes() {
             <Dialog open={passwordOpen} onOpenChange={setPasswordOpen}>
               <DialogContent className="max-w-md border-border bg-surface text-text-primary">
                 <DialogHeader>
-                  <DialogTitle className="text-base font-semibold text-text-primary">Alterar Senha</DialogTitle>
+                  <DialogTitle className="text-base font-semibold text-text-primary">
+                    {isSettingInitialPassword ? 'Definir Senha' : 'Alterar Senha'}
+                  </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 my-2">
-                  <div>
-                    <label className="block text-xs font-semibold text-text-tertiary mb-2">Senha Atual</label>
-                    <input
-                      type="password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      className={INPUT_STYLE}
-                    />
-                  </div>
+                  {!isSettingInitialPassword && (
+                    <div>
+                      <label className="block text-xs font-semibold text-text-tertiary mb-2">Senha Atual</label>
+                      <input
+                        type="password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        className={INPUT_STYLE}
+                      />
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs font-semibold text-text-tertiary mb-2">Nova Senha</label>
                     <input
@@ -475,20 +505,24 @@ export function Configuracoes() {
                     type="button"
                     disabled={
                       changePasswordMutation.isPending ||
-                      !currentPassword ||
+                      setPasswordMutation.isPending ||
+                      (!isSettingInitialPassword && !currentPassword) ||
                       !newPassword ||
                       newPassword.length < 8 ||
                       newPassword !== confirmPassword
                     }
                     onClick={() =>
-                      changePasswordMutation.mutate({
-                        currentPassword,
-                        newPassword,
-                      })
+                      isSettingInitialPassword
+                        ? setPasswordMutation.mutate({ newPassword })
+                        : changePasswordMutation.mutate({ currentPassword, newPassword })
                     }
                     className="rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-50 cursor-pointer"
                   >
-                    {changePasswordMutation.isPending ? 'Alterando...' : 'Alterar Senha'}
+                    {changePasswordMutation.isPending || setPasswordMutation.isPending
+                      ? 'Salvando...'
+                      : isSettingInitialPassword
+                        ? 'Definir Senha'
+                        : 'Alterar Senha'}
                   </button>
                 </DialogFooter>
               </DialogContent>

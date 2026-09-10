@@ -201,3 +201,45 @@ export async function checkResetPasswordRateLimit(email: string): Promise<{ allo
     return { allowed: true, remaining: maxAttempts };
   }
 }
+
+/**
+ * Rate limit por IP para os endpoints de login social (start do OAuth, callback
+ * e troca do handoff). Janela curta e teto alto — fluxo interativo com retries
+ * legítimos, mas ainda barra automação.
+ */
+export async function checkSocialLoginRateLimit(ip: string): Promise<{ allowed: boolean; remaining: number }> {
+  const redis = getRedis();
+  const key = `social_login:${ip}`;
+  const maxAttempts = 30;
+  const windowMs = 5 * 60 * 1000; // 5 minutes
+
+  try {
+    const current = await redis.incr(key);
+    if (current === 1) {
+      await redis.pexpire(key, windowMs);
+    }
+    return { allowed: current <= maxAttempts, remaining: Math.max(0, maxAttempts - current) };
+  } catch (err) {
+    console.error('Social login rate limit check failed, allowing request:', err);
+    return { allowed: true, remaining: maxAttempts };
+  }
+}
+
+/** Rate limit por usuário para "definir senha inicial" (conta social). */
+export async function checkSetPasswordRateLimit(userId: string): Promise<{ allowed: boolean; remaining: number }> {
+  const redis = getRedis();
+  const key = `set_password:${userId}`;
+  const maxAttempts = 5;
+  const windowMs = 15 * 60 * 1000; // 15 minutes
+
+  try {
+    const current = await redis.incr(key);
+    if (current === 1) {
+      await redis.pexpire(key, windowMs);
+    }
+    return { allowed: current <= maxAttempts, remaining: Math.max(0, maxAttempts - current) };
+  } catch (err) {
+    console.error('Set password rate limit check failed, allowing request:', err);
+    return { allowed: true, remaining: maxAttempts };
+  }
+}

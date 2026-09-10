@@ -1,17 +1,17 @@
 import { Loader2 } from 'lucide-react';
-import api from '@/lib/api';
 import { useState } from 'react';
 
 interface GoogleLoginButtonProps {
   label?: string;
-  onSuccess: (data: {
-    token: string;
-    refreshToken: string;
-    user: { id: string; email: string; name: string | null; role: string; tenantId: string };
-    isNewUser: boolean;
-  }) => void;
-  onError: (message: string) => void;
+  /** @deprecated fluxo é redirect — a conclusão é tratada por `?social_login=` na página */
+  onSuccess?: (data: unknown) => void;
+  /** @deprecated não há mais chamada XHR que possa falhar aqui */
+  onError?: (message: string) => void;
 }
+
+// Login social é navegação top-level direta (não XHR) — senão o browser
+// descarta o cookie de nonce anti-CSRF do backend.
+const API_BASE = (import.meta.env.VITE_API_URL ?? '/api').replace(/\/+$/, '');
 
 const GOOGLE_ICON = (
   <svg className="size-5" viewBox="0 0 24 24" fill="none">
@@ -22,20 +22,12 @@ const GOOGLE_ICON = (
   </svg>
 );
 
-export function GoogleLoginButton({ label = 'Continuar com Google', onSuccess, onError }: GoogleLoginButtonProps) {
+export function GoogleLoginButton({ label = 'Continuar com Google' }: GoogleLoginButtonProps) {
   const [loading, setLoading] = useState(false);
 
-  const handleClick = async () => {
-    try {
-      setLoading(true);
-      // Get Google OAuth URL from API
-      const { data } = await api.get('/auth/google/url');
-      // Redirect to Google OAuth
-      window.location.href = data.data.authUrl;
-    } catch (err) {
-      setLoading(false);
-      onError(err instanceof Error ? err.message : 'Erro ao iniciar login com Google');
-    }
+  const handleClick = () => {
+    setLoading(true);
+    window.location.href = `${API_BASE}/auth/google/url?origin=${encodeURIComponent(window.location.origin)}`;
   };
 
   return (

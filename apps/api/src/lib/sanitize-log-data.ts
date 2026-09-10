@@ -1,6 +1,9 @@
 const SENSITIVE_HEADERS = new Set(['authorization', 'cookie', 'set-cookie']);
 const SENSITIVE_BODY_KEYS = new Set([
   'password',
+  'newpassword',
+  'currentpassword',
+  'otp',
   'token',
   'access_token',
   'refresh_token',

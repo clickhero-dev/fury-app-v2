@@ -19,6 +19,14 @@ const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
 const RESET_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
+export type MeResponse = UserDTO & {
+  hasPassword: boolean;
+  tenantName: string;
+  tenantSlug: string;
+  tenantCodigo: string;
+  businessContext: string | null;
+};
+
 // ── helpers puros (sem dependência de repo) ──────────────────────────
 function generateSlug(companyName: string): string {
   return companyName
@@ -192,12 +200,15 @@ export class AuthService {
     await revokeRefreshToken(userId);
   }
 
-  async getMe(userId: string): Promise<UserDTO & { tenantName: string; tenantSlug: string; tenantCodigo: string; businessContext: string | null }> {
+  async getMe(userId: string): Promise<MeResponse> {
     const user = await this.repo('').findUserById(userId);
     if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
     const tenant = await this.repo(user.tenantId).findTenant();
     return {
       ...userToDTO(user),
+      // Conta criada por login social não tem senha até definir uma — o front
+      // usa isso para mostrar "Definir senha" no lugar de "Alterar senha".
+      hasPassword: !!user.passwordHash,
       tenantName: tenant?.name ?? '',
       // Slug público da LP: derivado do NOME (slugify NFD), não da coluna crua
       // (colunas legadas podem ser lossy, ex. "petrleo" → aqui "petroleo").
@@ -211,7 +222,7 @@ export class AuthService {
   async updateMe(
     userId: string,
     data: { name?: string; tenantName?: string; notificationPrefs?: UserDTO['notificationPrefs']; audienceDefaults?: Record<string, unknown>; businessContext?: string },
-  ): Promise<UserDTO & { tenantName: string; tenantSlug: string; tenantCodigo: string; businessContext: string | null }> {
+  ): Promise<MeResponse> {
     const user = await this.repo('').findUserById(userId);
     if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
 
@@ -302,13 +313,35 @@ export class AuthService {
   async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
     const user = await this.repo('').findUserById(userId);
     if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
-    if (!user.passwordHash) throw new AppError(400, 'NO_PASSWORD', 'Login feito com Google. Defina uma senha nas configurações.');
+    if (!user.passwordHash) throw new AppError(400, 'NO_PASSWORD', 'Sua conta usa login social. Defina uma senha primeiro.');
 
     const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!isPasswordValid) throw new AppError(400, 'WRONG_PASSWORD', 'Senha atual incorreta');
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await this.repo('').patchUser(userId, { passwordHash });
+  }
+
+  /**
+   * Define a senha INICIAL de uma conta criada por login social (sem senha).
+   * Não sobrescreve senha existente — isso é papel de `changePassword` (que
+   * exige a senha atual). Invalida os refresh tokens após definir.
+   */
+  async setInitialPassword(userId: string, newPassword: string): Promise<void> {
+    const user = await this.repo('').findUserById(userId);
+    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (user.passwordHash) {
+      throw new AppError(409, 'PASSWORD_ALREADY_SET', 'Esta conta já tem uma senha. Use "alterar senha".');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.repo('').patchUser(userId, { passwordHash });
+    await revokeRefreshToken(userId);
+
+    this.deps.email.sendPasswordResetConfirmation(user.email).catch((error: any) => {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[setInitialPassword] Failed to send confirmation to ${user.email}:`, errorMessage);
+    });
   }
 }
 
