@@ -1,12 +1,15 @@
 import api from '@/lib/api';
 import { store } from '@/store';
 import { login as authLogin } from '@/store/slices/authSlice';
+import type { PolicyState } from '@/types/auth';
 
 export interface SocialSession {
   token: string;
   refreshToken: string;
   user: { id: string; email: string; name: string | null; role: string | null; tenantId: string };
   isNewUser: boolean;
+  /** Estado do aceite da política (embutido pela API — paridade com login por senha). */
+  policy?: PolicyState | null;
 }
 
 /** Persiste a sessão social (localStorage + Redux) — mesmo formato do login com senha. */
@@ -22,6 +25,7 @@ export function applySocialSession(data: SocialSession): void {
       email: data.user.email,
       role: data.user.role ?? null,
       tenantId: data.user.tenantId,
+      policy: data.policy ?? null,
     }),
   );
 }

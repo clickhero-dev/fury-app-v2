@@ -15,6 +15,8 @@ import { CreativeStudioController } from './controllers/creative-studio.controll
 import { StudioPublishingController } from './controllers/studio-publishing.controller.js';
 import { BillingService } from './services/billing/billing.service.js';
 import { BillingController } from './controllers/billing.controller.js';
+import { PolicyService } from './services/policy/policy.service.js';
+import { PolicyController } from './controllers/policy.controller.js';
 import { ObservabilityService } from './services/observability/observability.service.js';
 import { ObservabilityController } from './controllers/observability.controller.js';
 import { FormsService } from './services/forms/forms.service.js';
@@ -63,6 +65,7 @@ export const studioAiService = new StudioAiService();
 export const studioService = new StudioService();
 export const studioPublishingService = new StudioPublishingService();
 export const billingService = new BillingService();
+export const policyService = new PolicyService();
 export const observabilityService = new ObservabilityService();
 export const formsService = new FormsService();
 export const automationService = new AutomationService();
@@ -82,10 +85,11 @@ export const controllers = {
   studio: new CreativeStudioController(studioService),
   studioPublishing: new StudioPublishingController(studioPublishingService),
   billing: new BillingController(billingService),
+  policy: new PolicyController(policyService),
   observability: new ObservabilityController(observabilityService),
   forms: new FormsController(formsService),
   metrics: new MetricsController(metricsService),
-  auth: new AuthController(authService, socialAuthService),
+  auth: new AuthController(authService, socialAuthService, policyService),
   automation: new AutomationController(automationService),
   google: new GoogleController(googleService),
   meta: new MetaController(metaService),

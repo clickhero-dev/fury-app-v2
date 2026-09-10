@@ -38,6 +38,7 @@ import { Subscription } from './pages/billing/Subscription';
 import { AssinaturaVencida } from './pages/billing/AssinaturaVencida';
 import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
 import { RoadmapPage } from './pages/roadmap/RoadmapPage';
+import { PoliticaDeUsoPage } from './pages/politica/PoliticaDeUsoPage';
 import { AdminLogin } from './pages/superadmin/AdminLogin';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { TenantsPage } from './pages/superadmin/TenantsPage';
@@ -163,7 +164,14 @@ export const router = createBrowserRouter([
     path: '/assinatura-vencida',
     element: <AssinaturaVencida />,
   },
-  
+
+  // Política de uso: autenticada, mas FORA do AuthenticatedShell (sem gate
+  // recursivo) — é o destino do redirect quando o aceite está pendente.
+  {
+    path: '/politica',
+    element: <PoliticaDeUsoPage />,
+  },
+
   /* =========================================================
      ÁREA DE LOGIN DO ADMIN (Forçada no Modo Escuro)
      ========================================================= */

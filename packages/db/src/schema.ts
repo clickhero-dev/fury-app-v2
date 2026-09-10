@@ -788,6 +788,67 @@ export const googleSyncLogsRelations = relations(googleSyncLogs, ({ one }) => ({
   }),
 }));
 
+// ===== Política de uso tables =====
+
+export const policyVersions = pgTable(
+  'policy_versions',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    version: varchar('version', { length: 50 }).notNull(),
+    content: text('content').notNull(),
+    effectiveFrom: timestamp('effective_from', { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    versionIdx: index('policy_versions_version_idx').on(table.version),
+    createdAtIdx: index('policy_versions_created_at_idx').on(table.createdAt),
+  })
+);
+
+export const policyAcceptances = pgTable(
+  'policy_acceptances',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    policyVersionId: uuid('policy_version_id')
+      .notNull()
+      .references(() => policyVersions.id, { onDelete: 'restrict' }),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('policy_acceptances_tenant_id_idx').on(table.tenantId),
+    userIdIdx: index('policy_acceptances_user_id_idx').on(table.userId),
+    userVersionUnique: unique('policy_acceptances_user_version_unique').on(
+      table.userId,
+      table.policyVersionId
+    ),
+  })
+);
+
+export const policyVersionsRelations = relations(policyVersions, ({ many }) => ({
+  acceptances: many(policyAcceptances),
+}));
+
+export const policyAcceptancesRelations = relations(policyAcceptances, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [policyAcceptances.tenantId],
+    references: [tenants.id],
+  }),
+  user: one(users, {
+    fields: [policyAcceptances.userId],
+    references: [users.id],
+  }),
+  version: one(policyVersions, {
+    fields: [policyAcceptances.policyVersionId],
+    references: [policyVersions.id],
+  }),
+}));
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -816,4 +877,6 @@ export const allTables = {
   googleBusinessProfiles,
   businessProfileSettings,
   googleSyncLogs,
+  policyVersions,
+  policyAcceptances,
 };

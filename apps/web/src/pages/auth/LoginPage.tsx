@@ -55,6 +55,7 @@ export function LoginPage() {
           email: data.user.email,
           role: data.user.role ?? null,
           tenantId: data.user.tenantId,
+          policy: data.policy ?? null,
         }));
         navigate('/dashboard');
         return;

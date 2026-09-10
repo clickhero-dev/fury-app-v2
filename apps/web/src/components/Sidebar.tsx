@@ -40,6 +40,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   return (
     <aside
+      data-testid="sidebar-root"
       className={`
         sticky top-0 h-screen shrink-0 flex-col border-r border-border bg-sidebar-bg px-4 py-6
         transition-all duration-300 ease-in-out

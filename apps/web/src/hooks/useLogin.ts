@@ -28,6 +28,7 @@ export function useLogin() {
         email: result.user.email,
         role: result.user.role ?? null,
         tenantId: result.user.tenantId ?? '',
+        policy: result.policy ?? null,
       }));
 
       captureEvent('login_sucesso');

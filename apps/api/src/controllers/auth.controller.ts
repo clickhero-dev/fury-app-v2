@@ -222,7 +222,14 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private socialAuthService: SocialAuthService,
+    private policyService?: { getLoginState: (userId: string) => Promise<{ currentVersion: string | null; accepted: boolean }> },
   ) {}
+
+  /** Estado do aceite da política embutido na resposta (evita over-fetching). */
+  private async policyState(userId: string) {
+    if (!this.policyService) return undefined;
+    return this.policyService.getLoginState(userId);
+  }
 
   register = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -250,6 +257,7 @@ export class AuthController {
     try {
       const body = loginSchema.parse(req.body);
       const result = await this.authService.login(body);
+      const policy = await this.policyState(result.user.id);
 
       res.status(200).json({
         success: true,
@@ -262,6 +270,7 @@ export class AuthController {
             role: result.user.role,
             tenantId: result.user.tenantId,
           },
+          ...(policy ? { policy } : {}),
         },
         timestamp: new Date().toISOString(),
       });
@@ -310,10 +319,11 @@ export class AuthController {
       }
 
       const user = await this.authService.getMe(req.user.userId);
+      const policy = await this.policyState(req.user.userId);
 
       res.status(200).json({
         success: true,
-        data: user,
+        data: { ...user, ...(policy ? { policy } : {}) },
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
@@ -538,6 +548,7 @@ export class AuthController {
       }
 
       const result = await this.socialAuthService.handleGoogleSocialLogin(code, redirectUri);
+      const policy = await this.policyState(result.user.id);
       const sessionPayload = {
         token: result.tokens.accessToken,
         refreshToken: result.tokens.refreshToken,
@@ -549,6 +560,7 @@ export class AuthController {
           tenantId: result.user.tenantId,
         },
         isNewUser: result.isNewUser,
+        ...(policy ? { policy } : {}),
       };
 
       if (isPost) {
@@ -627,9 +639,16 @@ export class AuthController {
       // SPA fez a troca do code: emite e devolve a sessão direto no corpo.
       if (isPost) {
         const tokens = await this.socialAuthService.issueSession(user);
+        const policy = await this.policyState(user.id);
         res.status(200).json({
           success: true,
-          data: { token: tokens.accessToken, refreshToken: tokens.refreshToken, user: publicUser, isNewUser },
+          data: {
+            token: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            user: publicUser,
+            isNewUser,
+            ...(policy ? { policy } : {}),
+          },
           timestamp: new Date().toISOString(),
         });
         return;
@@ -680,6 +699,9 @@ export class AuthController {
         role: payload.user.role,
       });
 
+      // Paridade com login/Google: estado do aceite embutido (zero round-trip extra).
+      const policy = await this.policyState(payload.user.id);
+
       res.status(200).json({
         success: true,
         data: {
@@ -687,6 +709,7 @@ export class AuthController {
           refreshToken: tokens.refreshToken,
           user: payload.user,
           isNewUser: payload.isNewUser,
+          ...(policy ? { policy } : {}),
         },
         timestamp: new Date().toISOString(),
       });

@@ -6,7 +6,7 @@ import { SnackHost } from './SnackHost';
 import api from '../../lib/api';
 import { useSubscription } from '../../hooks/useBilling';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { setMetaId, setPlan, selectIsPlanExpired, selectUserRole } from '../../store/slices/authSlice';
+import { setMetaId, setPlan, selectIsPlanExpired, selectUserRole, selectNeedsPolicyAcceptance, setPolicyAccepted } from '../../store/slices/authSlice';
 import {
   computeSubscriptionState,
   shouldRedirectToExpired,
@@ -27,6 +27,19 @@ export type ShellContext = {
 const ONBOARDING_EXEMPT = ['/assinatura', '/planos'];
 
 /**
+ * Rotas isentas do gate da política de uso. /politica é o próprio destino
+ * do aceite; /assinatura-vencida e billing permanecem acessíveis.
+ */
+const POLICY_EXEMPT = ['/politica', '/assinatura-vencida', '/assinatura', '/planos'];
+
+interface PolicyCurrentData {
+  currentVersion: string | null;
+  currentVersionId: string | null;
+  accepted: boolean;
+  content: string | null;
+}
+
+/**
  * Layout principal da aplicação ady para usuários autenticados.
  */
 export function AuthenticatedShell() {
@@ -42,7 +55,37 @@ export function AuthenticatedShell() {
   const isSubscriptionExempt =
     isExempt || location.pathname.startsWith('/assinatura-vencida');
 
-  // Só verifica conexão Meta se autenticado, fora de rotas isentas/onboarding e se não for usuário demo
+  // ── Gate da política de uso ──────────────────────────────────────────────
+  // Estado conhecido vem do login (embutido na resposta) ou do localStorage
+  // (persistido) — ZERO chamadas extras. Sessão antiga (null) busca
+  // /policy/current uma única vez para decidir (sem loop: /politica é isenta).
+  const isPolicyRoute = location.pathname.startsWith('/politica');
+  const isPolicyExempt =
+    isPolicyRoute || POLICY_EXEMPT.some((p) => location.pathname.startsWith(p)) || isOnboarding;
+  const needsPolicy = useAppSelector(selectNeedsPolicyAcceptance);
+
+  const shouldCheckPolicy = !!token && !isPolicyExempt;
+
+  // Sessão antiga: resolve o estado uma vez e grava no slice (persistido).
+  const { data: policyResolved } = useQuery({
+    queryKey: ['policy-current'],
+    queryFn: async () => {
+      const res = await api.get<{ data: PolicyCurrentData }>('/policy/current');
+      const d = res.data.data;
+      dispatch(
+        setPolicyAccepted({ currentVersion: d.currentVersion, accepted: d.accepted })
+      );
+      return d;
+    },
+    enabled: shouldCheckPolicy && needsPolicy === null,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const policyPending =
+    shouldCheckPolicy && (needsPolicy === true || (needsPolicy === null && policyResolved?.accepted === false));
+
+  // ── Verificação de conexão Meta ──────
   const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser;
   const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoUser;
 
@@ -129,6 +172,11 @@ export function AuthenticatedShell() {
 
   if (shouldCheckSubscription && !isAdmin && redirectToExpired) {
     return <Navigate to="/assinatura-vencida" replace />;
+  }
+
+  // ── Gate da política: usuário pendente vai para /politica (antes de qualquer conteúdo) ──
+  if (policyPending) {
+    return <Navigate to="/politica" replace />;
   }
 
   // Sem token — redireciona para login
