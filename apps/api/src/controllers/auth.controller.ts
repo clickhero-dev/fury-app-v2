@@ -401,6 +401,7 @@ export class AuthController {
           throw new AppError(400, 'MISSING_CODE', 'Code obrigatorio para login social.');
         }
         const result = await this.socialAuthService.handleGoogleSocialLogin(bodyCode, redirectUri);
+        const policy = await this.policyState(result.user.id);
         res.status(200).json({
           success: true,
           data: {
@@ -414,6 +415,7 @@ export class AuthController {
               tenantId: result.user.tenantId,
             },
             isNewUser: result.isNewUser,
+            ...(policy ? { policy } : {}),
           },
           timestamp: new Date().toISOString(),
         });
@@ -421,6 +423,7 @@ export class AuthController {
       }
 
       const result = await this.socialAuthService.handleGoogleSocialLogin(code, redirectUri);
+      const policy = await this.policyState(result.user.id);
       const tokenData = encodeURIComponent(JSON.stringify({
         token: result.tokens.accessToken,
         refreshToken: result.tokens.refreshToken,
@@ -432,6 +435,7 @@ export class AuthController {
           tenantId: result.user.tenantId,
         },
         isNewUser: result.isNewUser,
+        ...(policy ? { policy } : {}),
       }));
       const redirectPath = result.isNewUser ? '/cadastro' : '/login';
       res.redirect(`${frontendUrl}${redirectPath}?social_login=${tokenData}`);

@@ -30,6 +30,7 @@ export function RegisterPage() {
           email: data.user.email,
           role: data.user.role ?? null,
           tenantId: data.user.tenantId,
+          policy: data.policy ?? null,
         }));
         if (data.isNewUser) {
           navigate('/onboarding/conectar-meta');
@@ -99,6 +100,7 @@ export function RegisterPage() {
                 email: data.user.email,
                 role: data.user.role ?? null,
                 tenantId: data.user.tenantId,
+                policy: data.policy ?? null,
               }));
               if (data.isNewUser) {
                 navigate('/onboarding/conectar-meta');

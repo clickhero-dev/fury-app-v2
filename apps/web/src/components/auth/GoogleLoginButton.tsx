@@ -1,6 +1,7 @@
 import { Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 import { useState } from 'react';
+import type { PolicyState } from '@/types/auth';
 
 interface GoogleLoginButtonProps {
   label?: string;
@@ -9,6 +10,7 @@ interface GoogleLoginButtonProps {
     refreshToken: string;
     user: { id: string; email: string; name: string | null; role: string; tenantId: string };
     isNewUser: boolean;
+    policy?: PolicyState | null;
   }) => void;
   onError: (message: string) => void;
 }

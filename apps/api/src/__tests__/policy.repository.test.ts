@@ -105,31 +105,6 @@ describe('PolicyRepository', () => {
     });
   });
 
-  describe('hasUserAcceptedAnyVersion', () => {
-    it('retorna true quando há aceite de qualquer versão', async () => {
-      selectMock.mockReturnValue({
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue([{ ok: 1 }]),
-      });
-
-      const result = await repo.hasUserAcceptedAnyVersion('u1');
-
-      expect(result).toBe(true);
-      expect(selectMock).toHaveBeenCalledTimes(1);
-    });
-
-    it('retorna false quando não há aceite', async () => {
-      selectMock.mockReturnValue({
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue([]),
-      });
-
-      expect(await repo.hasUserAcceptedAnyVersion('u1')).toBe(false);
-    });
-  });
-
   describe('getCurrentPolicyWithAcceptance', () => {
     it('retorna versão vigente + accepted=false quando usuário não aceitou', async () => {
       findFirstVersions.mockResolvedValue({ id: 'v1', version: '1.0' });

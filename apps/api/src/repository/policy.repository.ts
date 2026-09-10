@@ -1,5 +1,4 @@
-import { and, eq } from 'drizzle-orm';
-import { desc, sql as sqlFn } from 'drizzle-orm';
+import { and, eq, desc } from 'drizzle-orm';
 import {
   db as defaultDb,
   type Database,
@@ -55,20 +54,6 @@ export class PolicyRepository extends TenantScopedRepository {
       })
       .returning();
     return row ?? null;
-  }
-
-  /**
-   * O usuário já aceitou QUALQUER versão? Usado no login para o gate:
-   * se a versão vigente mudou, o aceite antigo não vale — mas a existência
-   * de um aceite anterior distingue usuário antigo de novo (UX de redirect).
-   */
-  async hasUserAcceptedAnyVersion(userId: string): Promise<boolean> {
-    const rows = await this.db
-      .select({ ok: sqlFn`1` })
-      .from(policyAcceptances)
-      .where(eq(policyAcceptances.userId, userId))
-      .limit(1);
-    return rows.length > 0;
   }
 
   /** Versão vigente + aceite do usuário numa única ida ao banco. */

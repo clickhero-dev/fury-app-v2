@@ -11,7 +11,10 @@ const authServiceMock = {
   login: vi.fn(),
   socialAuthService: {},
 };
-const socialAuthServiceMock = {};
+const socialAuthServiceMock = {
+  generateSocialLoginUrl: vi.fn(),
+  handleGoogleSocialLogin: vi.fn(),
+};
 const policyServiceMock = {
   getLoginState: vi.fn(),
 };
@@ -97,6 +100,37 @@ describe('AuthController × Policy (estado embutido no login)', () => {
       expect.objectContaining({
         success: true,
         data: expect.objectContaining({
+          policy: { currentVersion: '1.0', accepted: false },
+        }),
+      })
+    );
+  });
+
+  it('social login (POST): resposta contém policy { currentVersion, accepted }', async () => {
+    (socialAuthServiceMock.handleGoogleSocialLogin as ReturnType<typeof vi.fn>).mockResolvedValue({
+      tokens: { accessToken: 'at', refreshToken: 'rt' },
+      user: { id: 'u1', email: 't@t.test', name: 'Test', role: 'owner', tenantId: 't1' },
+      isNewUser: true,
+    });
+
+    const req = {
+      body: { code: 'google-code' },
+      method: 'POST',
+      query: {},
+      get: () => 'localhost:5173',
+      protocol: 'http',
+    } as unknown as Request;
+    const res = createRes();
+
+    await controller.googleSocialCallback(req, res, next);
+
+    expect(policyServiceMock.getLoginState).toHaveBeenCalledWith('u1');
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({
+          isNewUser: true,
           policy: { currentVersion: '1.0', accepted: false },
         }),
       })
