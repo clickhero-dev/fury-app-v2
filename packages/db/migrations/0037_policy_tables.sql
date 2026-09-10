@@ -1,4 +1,4 @@
--- Policy de uso: tabelas de versionamento e aceite (feature politicas-de-uso)
+-- Migration 0037: Policy de uso — tabelas de versionamento e aceite (feature politicas-de-uso)
 
 CREATE TABLE IF NOT EXISTS "policy_versions" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),

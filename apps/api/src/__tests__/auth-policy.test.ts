@@ -1,6 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response, NextFunction } from 'express';
 
+vi.mock('../middleware/rate-limit.middleware.js', () => ({
+  checkEmailVerificationRateLimit: vi.fn(async () => ({ allowed: true, remaining: 10 })),
+  checkForgotPasswordRateLimit: vi.fn(async () => ({ allowed: true })),
+  checkResetPasswordRateLimit: vi.fn(async () => ({ allowed: true })),
+  checkSocialLoginRateLimit: vi.fn(async () => ({ allowed: true, remaining: 30 })),
+  checkSetPasswordRateLimit: vi.fn(async () => ({ allowed: true, remaining: 5 })),
+  getClientIp: vi.fn(() => '127.0.0.1'),
+}));
+
 /**
  * Testes da integração login × política (requisito 6 — evitar over-fetching):
  * a resposta de login e /auth/me devem embutir o estado do aceite

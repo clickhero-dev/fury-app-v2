@@ -54,6 +54,10 @@ export class AuthRepository extends TenantScopedRepository {
     return this.db.query.users.findFirst({ where: eq(users.googleId, googleId) });
   }
 
+  async findUserByFacebookId(facebookId: string) {
+    return this.db.query.users.findFirst({ where: eq(users.facebookId, facebookId) });
+  }
+
   async findUserById(id: string) {
     return this.db.query.users.findFirst({ where: eq(users.id, id) });
   }

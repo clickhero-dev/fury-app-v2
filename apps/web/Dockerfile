@@ -1,7 +1,9 @@
 FROM node:22-alpine AS builder
 
 RUN apk add --no-cache python3 make g++
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Versão pinada = mesma do desenvolvimento local (ver `pnpm --version`).
+# pnpm@latest quebrou o allowBuilds/onlyBuiltDependencies no pnpm 12 (ERR_PNPM_IGNORED_BUILDS).
+RUN corepack enable && corepack prepare pnpm@11.21.0 --activate
 
 WORKDIR /app
 

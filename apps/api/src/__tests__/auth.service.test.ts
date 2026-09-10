@@ -201,3 +201,39 @@ describe('AuthService.forgotPassword / resetPassword (recuperação de senha)', 
     await expect(makeSvc(repo).resetPassword('a@b.com', '123456', 'Novasenha1!')).rejects.toMatchObject({ code: 'INVALID_OR_EXPIRED_OTP' });
   });
 });
+
+describe('AuthService.getMe hasPassword', () => {
+  it('false quando a conta não tem passwordHash (login social)', async () => {
+    const repo = makeRepo({ findUserById: vi.fn(async () => ({ ...user })) });
+    const me = await makeSvc(repo).getMe('u1');
+    expect(me.hasPassword).toBe(false);
+  });
+
+  it('true quando a conta tem passwordHash', async () => {
+    const repo = makeRepo({ findUserById: vi.fn(async () => ({ ...user, passwordHash: 'hash' })) });
+    const me = await makeSvc(repo).getMe('u1');
+    expect(me.hasPassword).toBe(true);
+  });
+});
+
+describe('AuthService.setInitialPassword', () => {
+  it('grava hash e revoga refresh quando a conta não tem senha', async () => {
+    const patchUser = vi.fn(async () => undefined);
+    const repo = makeRepo({ findUserById: vi.fn(async () => ({ ...user })), patchUser });
+    await makeSvc(repo).setInitialPassword('u1', 'Novasenha1!');
+    expect(patchUser).toHaveBeenCalledWith('u1', expect.objectContaining({ passwordHash: expect.any(String) }));
+  });
+
+  it('409 PASSWORD_ALREADY_SET quando já existe senha', async () => {
+    const repo = makeRepo({ findUserById: vi.fn(async () => ({ ...user, passwordHash: 'hash' })) });
+    await expect(makeSvc(repo).setInitialPassword('u1', 'Novasenha1!')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'PASSWORD_ALREADY_SET',
+    });
+  });
+
+  it('401 quando o usuário não existe', async () => {
+    const repo = makeRepo({ findUserById: vi.fn(async () => null) });
+    await expect(makeSvc(repo).setInitialPassword('u1', 'Novasenha1!')).rejects.toMatchObject({ code: 'USER_NOT_FOUND' });
+  });
+});

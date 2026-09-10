@@ -22,12 +22,24 @@ function resolveRequestId(req: Request): string {
   return raw && UUID_RE.test(raw) ? raw : randomUUID();
 }
 
+// Rotas de OAuth social / handoff carregam material de autenticação na
+// query e no body (`code`, `state`, handoff id) — não persistir nada dessas
+// requests em request_logs. As demais rotas de auth seguem passando por
+// sanitizeBody (que redige senha/otp/token).
+// case-insensitive: o roteamento do Express casa `/API/Auth/Facebook/...`
+const SENSITIVE_PATH_RE = /^\/api\/auth\/(facebook|google|social)(\/|$)/i;
+function isSensitivePath(req: Request): boolean {
+  return SENSITIVE_PATH_RE.test(req.path || req.originalUrl || '');
+}
+
 function extractQueryString(req: Request): string | null {
+  if (isSensitivePath(req)) return null;
   const qs = req.url?.split('?')[1];
   return qs && qs.length <= 2048 ? qs : null;
 }
 
 function captureRequestBody(req: Request): unknown {
+  if (isSensitivePath(req)) return null;
   if (req.body == null || typeof req.body !== 'object') {
     return null;
   }
@@ -104,7 +116,9 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
       tenantId: req.tenant?.tenantId ?? req.user?.tenantId ?? null,
       userId: req.user?.userId ?? null,
       method: req.method,
-      path: req.originalUrl.slice(0, 2048),
+      // `req.originalUrl` inclui a query — nos paths sensíveis (OAuth code/state)
+      // grava só `req.path`, sem a query.
+      path: (isSensitivePath(req) ? req.path : req.originalUrl).slice(0, 2048),
       queryString: extractQueryString(req),
       statusCode: res.statusCode,
       responseTimeMs: Date.now() - start,

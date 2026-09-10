@@ -29,6 +29,13 @@ describe('AuthRepository', () => {
     expect(db.query.users.findFirst).toHaveBeenCalledTimes(1);
   });
 
+  it('findUserByFacebookId consulta por facebookId (GLOBAL)', async () => {
+    const { db } = makeDb();
+    const repo = new AuthRepository('', db);
+    await repo.findUserByFacebookId('fb-1');
+    expect(db.query.users.findFirst).toHaveBeenCalledTimes(1);
+  });
+
   it('findTenantBySlug consulta tenants por slug (GLOBAL)', async () => {
     const { db } = makeDb();
     const repo = new AuthRepository('', db);
