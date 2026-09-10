@@ -80,15 +80,23 @@ function fakeTxDb() {
 }
 
 describe('SocialAuthService.generateFacebookLoginUrl', () => {
-  it('monta URL do dialog com scope public_profile,email e response_type=code', () => {
+  it('default: scope inclui pages_show_list (Login for Business exige ≥1 permissão de negócio)', () => {
+    delete process.env.FACEBOOK_LOGIN_SCOPE;
     const url = makeFbSvc().svc.generateFacebookLoginUrl('http://cb', 'st-1');
     expect(url).toContain('facebook.com');
     expect(url).toContain('/dialog/oauth');
-    expect(url).toContain('scope=public_profile%2Cemail');
+    expect(decodeURIComponent(url)).toContain('scope=public_profile,email,pages_show_list');
     expect(url).toContain('response_type=code');
     expect(url).toContain('state=st-1');
-    expect(url).not.toContain('pages_show_list');
     expect(url).not.toContain('ads_');
+  });
+
+  it('FACEBOOK_LOGIN_SCOPE sobrescreve o scope (ex.: app Consumer)', () => {
+    process.env.FACEBOOK_LOGIN_SCOPE = 'public_profile,email';
+    const url = makeFbSvc().svc.generateFacebookLoginUrl('http://cb');
+    expect(decodeURIComponent(url)).toContain('scope=public_profile,email');
+    expect(url).not.toContain('pages_show_list');
+    delete process.env.FACEBOOK_LOGIN_SCOPE;
   });
 });
 
