@@ -136,9 +136,10 @@ const STEPS: MigrationStep[] = [
   },
 { tag: '0034_add_compliance_attempts' },
   { tag: '0035_add_creative_asset_cost_time' },
+  { tag: '0036_policy_tables' },
 ];
 
-/** Nomes de todas as tabelas do schema (26 tabelas) — usados para validação. */
+/** Nomes de todas as tabelas do schema (28 tabelas) — usados para validação. */
 export const REQUIRED_TABLES = [
   'tenants',
   'users',
@@ -166,6 +167,8 @@ export const REQUIRED_TABLES = [
   'google_business_profiles',
   'business_profile_settings',
   'google_sync_logs',
+  'policy_versions',
+  'policy_acceptances',
 ];
 
 /**
@@ -253,7 +256,7 @@ export async function validateRequiredTables(): Promise<{ ok: boolean; missing: 
     const missing = REQUIRED_TABLES.filter((t) => !existingTables.has(t));
 
     if (missing.length === 0) {
-      console.log('[validateRequiredTables] All 26 required tables exist');
+      console.log('[validateRequiredTables] All required tables exist');
       return { ok: true, missing: [] };
     }
 
