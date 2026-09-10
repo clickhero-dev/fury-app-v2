@@ -105,6 +105,7 @@ export const users = pgTable(
     email: varchar('email', { length: 255 }).notNull().unique(),
     passwordHash: text('password_hash'),
     googleId: varchar('google_id', { length: 255 }),
+    facebookId: varchar('facebook_id', { length: 255 }),
     role: userRoleEnum('role').notNull().default('member'),
     notificationPrefs: jsonb('notification_prefs').default(sql`'{"campanhas":true,"performance":true,"equipe":false}'::jsonb`),
     audienceDefaults: jsonb('audience_defaults').default(sql`'{"city":"","ageMin":18,"ageMax":65,"gender":"all"}'::jsonb`),
@@ -118,6 +119,7 @@ export const users = pgTable(
   (table) => ({
     tenantIdIdx: index('users_tenant_id_idx').on(table.tenantId),
     emailTenantIdx: index('users_email_tenant_idx').on(table.email, table.tenantId),
+    facebookIdIdx: index('users_facebook_id_idx').on(table.facebookId),
   })
 );
 

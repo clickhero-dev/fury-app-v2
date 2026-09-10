@@ -17,10 +17,18 @@ router.post('/logout', authMiddleware, controllers.auth.logout);
 router.get('/me', authMiddleware, controllers.auth.getMe);
 router.patch('/me', authMiddleware, controllers.auth.updateMe);
 router.post('/change-password', authMiddleware, controllers.auth.changePassword);
+router.post('/set-password', authMiddleware, controllers.auth.setPassword);
 
 // Google social login
 router.get('/google/url', controllers.auth.googleSocialUrl);
 router.get('/google/callback', controllers.auth.googleSocialCallback);
 router.post('/google/callback', controllers.auth.googleSocialCallback);
+
+// Facebook social login
+router.get('/facebook/url', controllers.auth.facebookSocialUrl);
+router.get('/facebook/callback', controllers.auth.facebookSocialCallback);
+
+// Troca do handoff id (redirect pós-OAuth) pela sessão — sem token na URL
+router.post('/social/handoff', controllers.auth.socialHandoff);
 
 export default router;
