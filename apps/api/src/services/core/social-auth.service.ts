@@ -15,7 +15,12 @@ import crypto from 'node:crypto';
 
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const SOCIAL_LOGIN_SCOPE = 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
-const FACEBOOK_LOGIN_SCOPE = 'public_profile,email';
+// O app da Meta usado é "Facebook Login for Business", que EXIGE pelo menos uma
+// permissão de negócio junto de public_profile/email (senão a tela de login
+// recusa com "app não disponível"). `pages_show_list` é a mais leve e já tem
+// acesso liberado nesse app (é a mesma do fluxo "Conectar conta").
+// Num app tipo Consumer bastaria `public_profile,email` — daí o override por env.
+const DEFAULT_FACEBOOK_LOGIN_SCOPE = 'public_profile,email,pages_show_list';
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60;
 const SOCIAL_HANDOFF_TTL = 60;
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
@@ -107,14 +112,15 @@ export class SocialAuthService {
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   }
 
-  /** Gera URL de OAuth do Facebook para login social (escopo public_profile + email). */
+  /** Gera a URL do dialog de OAuth do Facebook para login. Scope via env (`FACEBOOK_LOGIN_SCOPE`) ou default. */
   generateFacebookLoginUrl(redirectUri: string, state?: string): string {
     const { appId } = this.deps.facebookOauth.getFacebookOAuthConfig();
+    const scope = process.env.FACEBOOK_LOGIN_SCOPE?.trim() || DEFAULT_FACEBOOK_LOGIN_SCOPE;
     const params = new URLSearchParams({
       client_id: appId,
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: FACEBOOK_LOGIN_SCOPE,
+      scope,
     });
     if (state) params.set('state', state);
     return `${FACEBOOK_OAUTH_DIALOG_URL}?${params.toString()}`;
