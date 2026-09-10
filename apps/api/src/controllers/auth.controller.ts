@@ -106,7 +106,14 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private socialAuthService: SocialAuthService,
+    private policyService?: { getLoginState: (userId: string) => Promise<{ currentVersion: string | null; accepted: boolean }> },
   ) {}
+
+  /** Estado do aceite da política embutido na resposta (evita over-fetching). */
+  private async policyState(userId: string) {
+    if (!this.policyService) return undefined;
+    return this.policyService.getLoginState(userId);
+  }
 
   register = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -134,6 +141,7 @@ export class AuthController {
     try {
       const body = loginSchema.parse(req.body);
       const result = await this.authService.login(body);
+      const policy = await this.policyState(result.user.id);
 
       res.status(200).json({
         success: true,
@@ -146,6 +154,7 @@ export class AuthController {
             role: result.user.role,
             tenantId: result.user.tenantId,
           },
+          ...(policy ? { policy } : {}),
         },
         timestamp: new Date().toISOString(),
       });
@@ -194,10 +203,11 @@ export class AuthController {
       }
 
       const user = await this.authService.getMe(req.user.userId);
+      const policy = await this.policyState(req.user.userId);
 
       res.status(200).json({
         success: true,
-        data: user,
+        data: { ...user, ...(policy ? { policy } : {}) },
         timestamp: new Date().toISOString(),
       });
     } catch (error) {

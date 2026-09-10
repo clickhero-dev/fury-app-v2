@@ -20,6 +20,7 @@ import goalsRoutes from "./goals.routes.js";
 import billingRoutes from "./billing.routes.js";
 import brandKitRoutes from "./brand-kit.routes.js";
 import superadminRoutes from "./superadmin.routes.js";
+import policyRoutes from "./policy.routes.js";
 import plannerRoutes from "./planner.routes.js"; // NOVO
 
 import { authMiddleware } from "../middleware/auth.middleware.js";
@@ -53,6 +54,9 @@ router.use("/forms", ...AUTH_TENANT_SUB, formsRoutes);
 router.use("/fury", furyRoutes);
 router.use("/goals", goalsRoutes);
 router.use("/billing", billingRoutes);
+// Política de uso: auth+tenant (sem checkSubscriptionActive) — o aceite vem
+// ANTES do onboarding/planos, e usuário novo ainda não tem assinatura.
+router.use("/policy", authMiddleware, tenantMiddleware, policyRoutes);
 router.use("/brand-kit", ...AUTH_TENANT_SUB, brandKitRoutes);
 router.use("/studio/ai", studioAiRoutes);
 router.use(
