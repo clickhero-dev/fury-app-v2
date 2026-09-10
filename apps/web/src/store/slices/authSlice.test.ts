@@ -27,6 +27,7 @@ async function importSlice() {
 
 const PLAN_KEY = 'fury-plan';
 const PLAN_EXPIRATION_KEY = 'fury-plan-expiration';
+const POLICY_KEY = 'fury-policy';
 
 beforeEach(() => {
   installDomGlobals();
@@ -137,5 +138,81 @@ describe('authSlice — selectIsPlanExpired', () => {
     const state = reducer(undefined, { type: '@@init' });
 
     expect(selectIsPlanExpired({ auth: state })).toBeNull();
+  });
+});
+
+describe('authSlice — política de uso (aceite)', () => {
+  const loginPayload = { token: 't', refreshToken: 'r', name: 'Ana', email: 'a@b.com', role: 'owner', tenantId: 't1' };
+
+  it('setPolicyAccepted grava estado aceito e persiste no localStorage', async () => {
+    const { setPolicyAccepted, reducer } = await importSlice();
+
+    const next = reducer(undefined, setPolicyAccepted({ currentVersion: '1.0', accepted: true }));
+
+    expect(next.policy).toEqual({ currentVersion: '1.0', accepted: true });
+    expect(localStorage.getItem(POLICY_KEY)).toBe(JSON.stringify({ currentVersion: '1.0', accepted: true }));
+  });
+
+  it('login com policy no payload grava o estado (evita over-fetching)', async () => {
+    const { login, reducer } = await importSlice();
+
+    const state = reducer(
+      undefined,
+      login({ ...loginPayload, policy: { currentVersion: '1.0', accepted: false } })
+    );
+
+    expect(state.policy).toEqual({ currentVersion: '1.0', accepted: false });
+    expect(localStorage.getItem(POLICY_KEY)).toBe(JSON.stringify({ currentVersion: '1.0', accepted: false }));
+  });
+
+  it('login sem policy mantém o estado existente (sessão antiga)', async () => {
+    installDomGlobals({ [POLICY_KEY]: JSON.stringify({ currentVersion: '1.0', accepted: true }) });
+    const { login, reducer } = await importSlice();
+
+    const state = reducer(undefined, login(loginPayload));
+
+    expect(state.policy).toEqual({ currentVersion: '1.0', accepted: true });
+  });
+
+  it('hydrate recupera o estado da política (sobrevive a reload, sem re-fetch)', async () => {
+    installDomGlobals({ [POLICY_KEY]: JSON.stringify({ currentVersion: '1.0', accepted: true }) });
+    const { reducer, selectPolicy } = await importSlice();
+    const state = reducer(undefined, { type: '@@init' });
+
+    expect(selectPolicy({ auth: state })).toEqual({ currentVersion: '1.0', accepted: true });
+  });
+
+  it('selectNeedsPolicyAcceptance: true quando accepted=false', async () => {
+    const { reducer, selectNeedsPolicyAcceptance } = await importSlice();
+    const state = reducer(undefined, { type: '@@init' });
+    const withPolicy = { ...state, policy: { currentVersion: '1.0', accepted: false } };
+
+    expect(selectNeedsPolicyAcceptance({ auth: withPolicy })).toBe(true);
+  });
+
+  it('selectNeedsPolicyAcceptance: false quando accepted=true', async () => {
+    const { reducer, selectNeedsPolicyAcceptance } = await importSlice();
+    const state = reducer(undefined, { type: '@@init' });
+    const withPolicy = { ...state, policy: { currentVersion: '1.0', accepted: true } };
+
+    expect(selectNeedsPolicyAcceptance({ auth: withPolicy })).toBe(false);
+  });
+
+  it('selectNeedsPolicyAcceptance: null quando estado desconhecido (sessão antiga — buscar /policy/current)', async () => {
+    const { reducer, selectNeedsPolicyAcceptance } = await importSlice();
+    const state = reducer(undefined, { type: '@@init' });
+
+    expect(selectNeedsPolicyAcceptance({ auth: state })).toBeNull();
+  });
+
+  it('logout limpa policy do estado e do localStorage', async () => {
+    installDomGlobals({ [POLICY_KEY]: JSON.stringify({ currentVersion: '1.0', accepted: true }) });
+    const { logout, reducer } = await importSlice();
+
+    const state = reducer(undefined, { type: '@@init' });
+    const after = reducer(state, logout());
+
+    expect(after.policy).toBeNull();
+    expect(localStorage.getItem(POLICY_KEY)).toBeNull();
   });
 });

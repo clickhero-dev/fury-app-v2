@@ -15,11 +15,18 @@ export interface LoginRequest {
   password: string;
 }
 
+/** Estado do aceite da política de uso (embutido no login — evita over-fetching). */
+export interface PolicyState {
+  currentVersion: string | null;
+  accepted: boolean;
+}
+
 /** Resposta da API após login bem-sucedido. */
 export interface LoginResponse {
   token: string;
   refreshToken: string;
   user: User;
+  policy?: PolicyState | null;
 }
 
 /** Payload enviado no corpo da requisição de cadastro. */

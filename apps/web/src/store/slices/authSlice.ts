@@ -1,9 +1,15 @@
 import { createSlice, createSelector, type PayloadAction } from '@reduxjs/toolkit';
 import { isPlanExpiredFromDate } from '../../components/layout/subscriptionGuard';
 
-/** Chaves de persistência do plano no localStorage (sobrevivem a reload e a falhas de API). */
+/** Chaves de persistência do plano e da política no localStorage (sobrevivem a reload e a falhas de API). */
 const PLAN_KEY = 'fury-plan';
 const PLAN_EXPIRATION_KEY = 'fury-plan-expiration';
+const POLICY_KEY = 'fury-policy';
+
+export interface PolicyState {
+  currentVersion: string | null;
+  accepted: boolean;
+}
 
 export interface AuthState {
   token: string | null;
@@ -15,6 +21,7 @@ export interface AuthState {
   metaId: string | null;
   plan: string | null;
   planExpiration: string | null;
+  policy: PolicyState | null;
   theme: 'light' | 'dark';
 }
 
@@ -38,6 +45,26 @@ function getInitialTheme(): 'light' | 'dark' {
   return prefersDark ? 'dark' : 'light';
 }
 
+/** Lê e valida o estado da política persistido (null se ausente/corrompido). */
+function readStoredPolicy(): PolicyState | null {
+  try {
+    const raw = localStorage.getItem(POLICY_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      (parsed.currentVersion === null || typeof parsed.currentVersion === 'string') &&
+      typeof parsed.accepted === 'boolean'
+    ) {
+      return { currentVersion: parsed.currentVersion, accepted: parsed.accepted };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function hydrate(): AuthState {
   try {
     const user = JSON.parse(localStorage.getItem('user') ?? '{}');
@@ -51,6 +78,7 @@ function hydrate(): AuthState {
       metaId: null,
       plan: localStorage.getItem(PLAN_KEY),
       planExpiration: localStorage.getItem(PLAN_EXPIRATION_KEY),
+      policy: readStoredPolicy(),
       theme: getInitialTheme(),
     };
   } catch {
@@ -64,6 +92,7 @@ function hydrate(): AuthState {
       metaId: null,
       plan: localStorage.getItem(PLAN_KEY),
       planExpiration: localStorage.getItem(PLAN_EXPIRATION_KEY),
+      policy: readStoredPolicy(),
       theme: getInitialTheme(),
     };
   }
@@ -84,6 +113,7 @@ const authSlice = createSlice({
         email: string;
         role: string | null;
         tenantId: string;
+        policy?: PolicyState | null;
       }>
     ) {
       state.token = action.payload.token;
@@ -92,6 +122,16 @@ const authSlice = createSlice({
       state.email = action.payload.email;
       state.role = action.payload.role;
       state.tenantId = action.payload.tenantId;
+      // Policy vem embutida no login (evita over-fetching). Ausente = sessão
+      // antiga/fluxo social: mantém o valor persistido (hydrate) — null = checar.
+      if (action.payload.policy !== undefined) {
+        state.policy = action.payload.policy;
+        if (action.payload.policy === null) {
+          localStorage.removeItem(POLICY_KEY);
+        } else {
+          localStorage.setItem(POLICY_KEY, JSON.stringify(action.payload.policy));
+        }
+      }
     },
     setTokens(state, action: PayloadAction<{ token: string; refreshToken: string }>) {
       state.token = action.payload.token;
@@ -120,6 +160,11 @@ const authSlice = createSlice({
         localStorage.setItem(PLAN_EXPIRATION_KEY, action.payload.planExpiration);
       }
     },
+    /** Registro do aceite (após POST /policy/accept) — persiste no localStorage. */
+    setPolicyAccepted(state, action: PayloadAction<PolicyState>) {
+      state.policy = action.payload;
+      localStorage.setItem(POLICY_KEY, JSON.stringify(action.payload));
+    },
     setTheme(state, action: PayloadAction<'light' | 'dark'>) {
       state.theme = action.payload;
     },
@@ -133,8 +178,10 @@ const authSlice = createSlice({
       state.metaId = null;
       state.plan = null;
       state.planExpiration = null;
+      state.policy = null;
       localStorage.removeItem(PLAN_KEY);
       localStorage.removeItem(PLAN_EXPIRATION_KEY);
+      localStorage.removeItem(POLICY_KEY);
     },
   },
 });
@@ -145,6 +192,7 @@ export const {
   setUserProfile,
   setMetaId,
   setPlan,
+  setPolicyAccepted,
   setTheme,
   logout,
 } = authSlice.actions;
@@ -161,6 +209,19 @@ export const selectMetaId = (state: { auth: AuthState }) => state.auth.metaId;
 export const selectPlan = (state: { auth: AuthState }) => state.auth.plan;
 export const selectPlanExpiration = (state: { auth: AuthState }) => state.auth.planExpiration;
 export const selectTheme = (state: { auth: AuthState }) => state.auth.theme;
+export const selectPolicy = (state: { auth: AuthState }) => state.auth.policy;
+
+/**
+ * Estado do aceite da política:
+ * - `true`  → usuário pendente (redireciona para /politica);
+ * - `false` → aceite ok;
+ * - `null`  → desconhecido (sessão antiga sem valor persistido): o shell busca
+ *   /policy/current uma única vez para decidir — evita bloquear indevidamente.
+ */
+export const selectNeedsPolicyAcceptance = createSelector([selectPolicy], (policy) => {
+  if (policy === null) return null;
+  return !policy.accepted;
+});
 
 /**
  * Estado de vencimento a partir da data persistida no Redux/localStorage.
