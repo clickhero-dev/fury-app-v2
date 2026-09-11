@@ -25,6 +25,7 @@ import { startStudioGenerationWorker, stopStudioGenerationWorker } from './worke
 import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
 import { startComplianceSweeper, stopComplianceSweeper } from './services/studio/compliance-sweeper.js';
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
+import { startMetricsSyncWorker, stopMetricsSyncWorker } from './workers/metrics-sync.worker.js';
 import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
 import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
 import { seedStartup } from './lib/seed-superadmin.js';
@@ -257,6 +258,9 @@ app.use((req, res) => {
       startComplianceSweeper();
       void startBudgetOptimizerWorker().catch((error) => {
         console.error('Failed to start Budget optimizer worker:', error);
+      });
+      void startMetricsSyncWorker({ warmup: true }).catch((error) => {
+        console.error('Failed to start metrics sync worker:', error);
       });
       void startFuryEngine().catch((error) => {
         console.error('Failed to start Fury engine:', error);

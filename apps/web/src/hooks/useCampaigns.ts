@@ -61,7 +61,8 @@ export function useCampaigns(period?: CampaignsPeriod) {
       }
     },
     placeholderData: keepPreviousData,
-    staleTime: 30 * 1000,
-    refetchInterval: 30 * 1000,
+    staleTime: 60 * 1000,
+    // Sem polling: métricas vêm de metrics_daily (sync 1h, feature 014) —
+    // refetch só em remount/troca de período/invalidação explícita.
   });
 }
