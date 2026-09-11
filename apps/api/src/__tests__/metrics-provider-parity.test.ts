@@ -184,6 +184,54 @@ describe('DatabaseMetricsProvider lendo do rollup (paridade)', () => {
     expect(active.data[0]!.id).toBe('camp_a');
   });
 
+  it('fix #173: com Meta FORA, status vem do snapshot do rollup (não "Arquivada" p/ tudo)', async () => {
+    await populateRollup([
+      insightRow({ campaign_id: 'camp_x', campaign_name: 'X', spend: '50.00' }),
+      insightRow({ campaign_id: 'camp_y', campaign_name: 'Y', spend: '30.00' }),
+    ]);
+    // snapshot do sync: X ativa, Y pausada (coluna status preenchida)
+    await syncRepo.upsertBatch([
+      {
+        campaignMetaId: 'camp_x', date: '2026-09-01', status: 'ACTIVE',
+        spend: 50, impressions: 100, clicks: 10, ctr: 10, cpm: 500, cpc: 5, conversions: 1,
+      },
+      {
+        campaignMetaId: 'camp_y', date: '2026-09-01', status: 'PAUSED',
+        spend: 30, impressions: 100, clicks: 10, ctr: 10, cpm: 300, cpc: 3, conversions: 1,
+      },
+    ]);
+    // lista live FALHA → metaList vazio (metaApiCall mockado devolvendo [])
+    metaCampaignList.rows = [];
+
+    const res = await provider.getCampaigns(tenantId, RANGE.startDate, RANGE.endDate, undefined, 1, 10);
+    const x = res.data.find((c) => c.id === 'camp_x')!;
+    const y = res.data.find((c) => c.id === 'camp_y')!;
+    expect(x.status).toBe('ACTIVE'); // snapshot do rollup, não ARCHIVED default
+    expect(y.status).toBe('PAUSED');
+
+    // e o filtro por status continua funcionando com o snapshot
+    const paused = await provider.getCampaigns(tenantId, RANGE.startDate, RANGE.endDate, 'PAUSED', 1, 10);
+    expect(paused.data.map((c) => c.id)).toEqual(['camp_y']);
+  });
+
+  it('fix #173: getSummary exclui ARCHIVED do resumo (paridade com live ACTIVE/PAUSED)', async () => {
+    await populateRollup([
+      insightRow({ campaign_id: 'camp_live', campaign_name: 'Live', spend: '100.00' }),
+      insightRow({ campaign_id: 'camp_dead', campaign_name: 'Dead', spend: '900.00' }),
+    ]);
+    await syncRepo.upsertBatch([
+      {
+        campaignMetaId: 'camp_dead', date: '2026-09-01', status: 'ARCHIVED',
+        spend: 900, impressions: 100, clicks: 10, ctr: 10, cpm: 9000, cpc: 90, conversions: 5,
+      },
+    ]);
+
+    // rollup cobre o range → leitura local com excludeArchived
+    const summary = await provider.getSummary(tenantId, RANGE.startDate, RANGE.endDate);
+    // camp_dead (ARCHIVED) fora: só camp_live (100) conta
+    expect(Number(summary!.spend)).toBeCloseTo(100, 2);
+  });
+
   it('fallback on-demand: range sem cobertura → busca Meta, upserta e responde', async () => {
     // re-aplica o mock padrão (teste anterior trocou por um que lança)
     insightsSpy.mockImplementation(async () => ({ data: metaInsightsByCall } as any));

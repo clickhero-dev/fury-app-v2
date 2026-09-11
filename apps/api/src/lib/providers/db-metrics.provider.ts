@@ -34,9 +34,10 @@ const MAX_ON_DEMAND_DAYS = 180;
 export class DatabaseMetricsProvider implements IMetricsProvider {
   /**
    * Cobertura do rollup é suficiente p/ o range pedido?
-   * Suficiente = [startDate..endDate] contido em [minDate..maxDate] do tenant.
-   * (Dias faltantes DENTRO da janela min-max também ativam on-demand —
-   *  conservador: prefere buscar a mostrar zero silencioso.)
+   * Suficiente = bordas contidas: [startDate..endDate] ⊆ [minDate..maxDate] do
+   * tenant. Dias sem atividade dentro da janela NÃO disparam on-demand (a Meta
+   * também não teria insights nesses dias — zeros são o valor correto).
+   * (Comentário antigo dizia o contrário da implementação — corrigido, fix #173.)
    */
   private async rollupCoversRange(
     tenantId: string,
@@ -279,8 +280,10 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     startDate: string,
     endDate: string
   ): Promise<MetricsSummaryResponse | null> {
-    const summary = await repo.getSummary(startDate, endDate);
-    if (!summary.days.length && summary.spend === 0 && summary.conversions === 0) {
+    // excludeArchived: paridade com o live (getSummary filtrava ACTIVE/PAUSED;
+    // sem o filtro, campanhas arquivadas inflavam o resumo — fix QA #173)
+    const summary = await repo.getSummary(startDate, endDate, { excludeArchived: true });
+    if (summary.daysCount === 0 && summary.spend === 0 && summary.conversions === 0) {
       return null;
     }
     const ctr = summary.impressions > 0 ? calculateCTR(summary.clicks, summary.impressions) : 0;
@@ -372,7 +375,9 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       for (const campaignId of ids) {
         const meta = campaignMeta.get(campaignId);
         const total = totals.find((t) => t.campaignMetaId === campaignId);
-        const normalizedStatus = (meta?.status || 'ARCHIVED').toUpperCase() as
+        // Status: live da Meta primeiro; SEM lista (Meta fora) → snapshot do
+        // rollup; sem nenhum → ARCHIVED (comportamento conservador mantido).
+        const normalizedStatus = (meta?.status || total?.status || 'ARCHIVED').toUpperCase() as
           | 'ACTIVE'
           | 'PAUSED'
           | 'ARCHIVED';
@@ -470,6 +475,34 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       }
       const series = await repo.getCampaignSeries(campaignId, startDate, endDate);
 
+      // Summary do range COMPLETO (antes do cap de 30d do gráfico): o card de
+      // resumo deve refletir o período pedido, não a janela truncada.
+      // ctr/cpm reais do rollup (fix QA #173 — antes fixos em 0).
+      let summary: MetricsSummaryResponse | null = null;
+      if (series.length > 0) {
+        const totalsFull = series.reduce(
+          (acc, d) => ({
+            spend: acc.spend + d.spend,
+            impressions: acc.impressions + d.impressions,
+            clicks: acc.clicks + d.clicks,
+            conversions: acc.conversions + d.conversions,
+          }),
+          { spend: 0, impressions: 0, clicks: 0, conversions: 0 }
+        );
+        summary = {
+          spend: roundToDecimals(totalsFull.spend, 2),
+          impressions: totalsFull.impressions,
+          clicks: totalsFull.clicks,
+          conversions: totalsFull.conversions,
+          ctr: totalsFull.impressions > 0 ? calculateCTR(totalsFull.clicks, totalsFull.impressions) : 0,
+          cpm: totalsFull.impressions > 0 ? roundToDecimals((totalsFull.spend / totalsFull.impressions) * 1000, 2) : 0,
+          cpa: totalsFull.conversions > 0 ? roundToDecimals(totalsFull.spend / totalsFull.conversions, 2) : 0,
+          roas: totalsFull.spend > 0
+            ? roundToDecimals(series.reduce((s, d) => s + (d.roas ?? 0) * d.spend, 0) / totalsFull.spend, 2)
+            : 0,
+        };
+      }
+
       const daily = this.capDailySeries(
         series.map((d) => ({
           date: d.date,
@@ -481,29 +514,6 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         })),
         30
       );
-
-      let summary: MetricsSummaryResponse | null = null;
-      if (daily.length > 0) {
-        const totals = daily.reduce(
-          (acc, d) => ({
-            spend: acc.spend + d.spend,
-            conversions: acc.conversions + d.conversions,
-          }),
-          { spend: 0, conversions: 0 }
-        );
-        summary = {
-          spend: roundToDecimals(totals.spend, 2),
-          impressions: daily.reduce((s, d) => s + d.impressions, 0),
-          clicks: daily.reduce((s, d) => s + d.clicks, 0),
-          conversions: totals.conversions,
-          ctr: 0,
-          cpm: 0,
-          cpa: totals.conversions > 0 ? roundToDecimals(totals.spend / totals.conversions, 2) : 0,
-          roas: totals.spend > 0
-            ? roundToDecimals(daily.reduce((s, d) => s + d.roas * d.spend, 0) / totals.spend, 2)
-            : 0,
-        };
-      }
 
       return {
         campaign: campaignBlock,

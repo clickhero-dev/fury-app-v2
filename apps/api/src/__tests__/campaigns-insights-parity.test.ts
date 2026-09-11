@@ -117,6 +117,13 @@ describe('insights de campanha do rollup', () => {
     expect(res.daily[0]!.conversions).toBeGreaterThan(0);
     // timeseries não chama Meta (rollup cobre)
     expect(insightsSpy).not.toHaveBeenCalled();
+
+    // fix QA #173: ctr/cpm REAIS no summary de campanha (antes fixos em 0)
+    expect(res.summary).not.toBeNull();
+    expect(res.summary!.ctr).toBeGreaterThan(0);
+    expect(res.summary!.cpm).toBeGreaterThan(0);
+    expect(res.summary!.impressions).toBe(3000 + 3000 + 3000);
+    expect(res.summary!.clicks).toBe(120 + 150 + 80);
   });
 
   it('série >30 dias é truncada p/ últimos 30 (capDailySeries mantido)', async () => {
