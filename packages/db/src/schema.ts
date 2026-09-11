@@ -788,40 +788,6 @@ export const googleSyncLogsRelations = relations(googleSyncLogs, ({ one }) => ({
   }),
 }));
 
-// ===== Métricas pré-processadas (feature 014 — metrics_daily rollup) =====
-
-/**
- * 1 linha = 1 tenant × 1 campanha Meta × 1 dia.
- * `campaignMetaId` é o ID NA META (sem FK): campanhas podem existir só na Meta.
- * `conversions` é gravado já normalizado (critério objective-aware do sync) —
- * garante paridade Dashboard ↔ Campanhas por construção.
- * PK composta → upsert idempotente por (tenant, campaign, date).
- */
-export const metricsDaily = pgTable(
-  'metrics_daily',
-  {
-    tenantId: uuid('tenant_id').notNull(),
-    campaignMetaId: varchar('campaign_meta_id', { length: 64 }).notNull(),
-    date: date('date').notNull(),
-    campaignName: varchar('campaign_name', { length: 255 }),
-    objective: varchar('objective', { length: 64 }),
-    status: varchar('status', { length: 32 }),
-    spend: numeric('spend', { precision: 14, scale: 2 }).notNull().default('0'),
-    impressions: integer('impressions').notNull().default(0),
-    clicks: integer('clicks').notNull().default(0),
-    ctr: numeric('ctr', { precision: 10, scale: 4 }).notNull().default('0'),
-    cpm: numeric('cpm', { precision: 14, scale: 4 }).notNull().default('0'),
-    cpc: numeric('cpc', { precision: 14, scale: 4 }).notNull().default('0'),
-    conversions: numeric('conversions', { precision: 14, scale: 4 }).notNull().default('0'),
-    roas: numeric('roas', { precision: 10, scale: 4 }),
-    cpa: numeric('cpa', { precision: 14, scale: 4 }),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => ({
-    tenantDateIdx: index('metrics_daily_tenant_date_idx').on(table.tenantId, table.date),
-  })
-);
-
 // ===== Política de uso tables =====
 
 export const policyVersions = pgTable(
@@ -913,5 +879,4 @@ export const allTables = {
   googleSyncLogs,
   policyVersions,
   policyAcceptances,
-  metricsDaily,
 };
