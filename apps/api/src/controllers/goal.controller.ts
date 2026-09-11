@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { GoalService } from '../services/goals/goal.service.js';
+import { invalidateHttpCache } from '../lib/http-cache.js';
 
 const goalBodySchema = z.object({
   objective: z.string().min(1),
@@ -29,6 +30,7 @@ export class GoalController {
       const { tenantId } = req.tenant!;
       const body = goalBodySchema.parse(req.body);
       const data = await this.service.upsertGoal(tenantId, body);
+      await invalidateHttpCache(tenantId, ['/api/goals', '/api/metrics/goals-progress']);
       res.status(200).json({ success: true, data, timestamp: new Date().toISOString() });
     } catch (error) {
       next(error);
@@ -40,6 +42,7 @@ export class GoalController {
       const { tenantId } = req.tenant!;
       const body = goalBodySchema.parse(req.body);
       const data = await this.service.updateGoal(tenantId, body);
+      await invalidateHttpCache(tenantId, ['/api/goals', '/api/metrics/goals-progress']);
       res.status(200).json({ success: true, data, timestamp: new Date().toISOString() });
     } catch (error) {
       next(error);

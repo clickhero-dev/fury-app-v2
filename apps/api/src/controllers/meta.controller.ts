@@ -4,6 +4,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import type { MetaService } from '../services/meta/meta.service.js';
 import { emailService } from '../services/email/email.service.js';
 import { sendToTenant } from '../services/email/notify.js';
+import { invalidateHttpCache } from '../lib/http-cache.js';
 
 const callbackQuerySchema = z.object({
   code: z.string().min(1, 'Code OAuth ausente'),
@@ -60,6 +61,8 @@ export class MetaController {
 
       const { tenantId, returnUrl, frontendUrl: originFrontendUrl } =
         await this.metaService.handleMetaOAuthCallback(query.code, query.state);
+
+      await invalidateHttpCache(tenantId, ['/api/meta']);
 
       // Email transacional: conta Meta conectada (fire-and-forget, não bloqueia o redirect)
       await sendToTenant(tenantId, undefined, (to) => emailService.sendAccountConnected(to, 'Meta'));
@@ -206,6 +209,7 @@ export class MetaController {
       }
       const selection = saveSelectionBodySchema.parse(req.body);
       await this.metaService.saveTenantAssetSelection(req.tenant.tenantId, selection);
+      await invalidateHttpCache(req.tenant.tenantId, ['/api/meta']);
       res.status(200).json({
         success: true,
         data: selection,
@@ -260,6 +264,7 @@ export class MetaController {
         params.id,
         body.adAccountId
       );
+      await invalidateHttpCache(req.tenant.tenantId, ['/api/meta']);
       res.status(200).json({
         success: true,
         data: { selectedAdAccountId },
@@ -277,6 +282,7 @@ export class MetaController {
       }
       const params = connectionIdSchema.parse(req.params);
       await this.metaService.deleteTenantMetaConnection(req.tenant.tenantId, params.id);
+      await invalidateHttpCache(req.tenant.tenantId, ['/api/meta']);
 
       // Email transacional: conta Meta desconectada (fire-and-forget)
       await sendToTenant(req.tenant.tenantId, req.user?.email, (to) =>

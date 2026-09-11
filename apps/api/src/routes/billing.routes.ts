@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import { controllers } from '../di.js';
+import { cacheMiddleware } from '../middleware/cache.middleware.js';
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.post('/webhook', controllers.billing.webhook);
 // Protected (auth + tenant)
 router.use(authMiddleware, tenantMiddleware);
 router.post('/subscribe', controllers.billing.subscribe);
-router.get('/subscription', controllers.billing.getSubscription);
+router.get('/subscription', cacheMiddleware({ ttl: 60 }), controllers.billing.getSubscription);
 router.get('/invoices', controllers.billing.listInvoices);
 router.delete('/subscription', controllers.billing.cancel);
 

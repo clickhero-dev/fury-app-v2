@@ -10,6 +10,10 @@ import {
   setCampaignsCache,
   invalidateCampaignsCache,
 } from '../lib/campaigns-cache.js';
+import { invalidateHttpCache } from '../lib/http-cache.js';
+
+/** Prefixos de rota cujas respostas GET são afetadas por writes de campanha. */
+const CACHE_PATHS_METRICS_GOALS = ['/api/metrics', '/api/goals'];
 import { openrouterService, type ChatMessage } from '../services/llms/openrouter.service.js';
 import { emailService } from '../services/email/email.service.js';
 import { sendToTenant } from '../services/email/notify.js';
@@ -345,6 +349,8 @@ export class CampaignsController {
         ...data,
       });
 
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
+
       res.status(201).json({
         success: true,
         data: campaign,
@@ -368,6 +374,8 @@ export class CampaignsController {
       }
 
       const result = await this.campaignsService.pauseCampaign({ tenantId, campaignId: id });
+      await invalidateCampaignsCache(tenantId);
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.json({
         success: true,
@@ -392,6 +400,8 @@ export class CampaignsController {
       }
 
       const result = await this.campaignsService.resumeCampaign({ tenantId, campaignId: id });
+      await invalidateCampaignsCache(tenantId);
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.json({
         success: true,
@@ -421,6 +431,9 @@ export class CampaignsController {
         campaignId: id,
         dailyBudget: data.dailyBudget,
       });
+
+      await invalidateCampaignsCache(tenantId);
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.json({
         success: true,
@@ -526,6 +539,7 @@ export class CampaignsController {
       });
 
       await invalidateCampaignsCache(tenantId);
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.json({
         success: true,
@@ -560,6 +574,7 @@ export class CampaignsController {
       });
 
       await invalidateCampaignsCache(tenantId);
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.json({
         success: true,
@@ -592,6 +607,7 @@ export class CampaignsController {
       });
 
       await invalidateCampaignsCache(tenantId);
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.json({
         success: true,
@@ -702,6 +718,8 @@ export class CampaignsController {
       const campaignName =
         (result as any)?.campaign?.name ?? (result as any)?.campaignName ?? (result as any)?.name ?? 'sua campanha';
       await sendToTenant(tenantId, req.user?.email, (to) => emailService.sendCampaignPublished(to, campaignName));
+
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.status(201).json(result);
     } catch (err) {
