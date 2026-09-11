@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { BillingService } from '../services/billing/billing.service.js';
+import { invalidateHttpCache } from '../lib/http-cache.js';
 
 const subscribeSchema = z.object({
   planId: z.string().uuid(),
@@ -38,6 +39,7 @@ export class BillingController {
       const { tenantId } = req.tenant!;
       const payload = subscribeSchema.parse(req.body);
       const sub = await this.service.subscribe(tenantId, payload);
+      await invalidateHttpCache(tenantId, ['/api/billing']);
       res.status(201).json({ success: true, data: sub, timestamp: new Date().toISOString() });
     } catch (e) { next(e); }
   };
@@ -63,6 +65,7 @@ export class BillingController {
     try {
       const { tenantId } = req.tenant!;
       await this.service.cancel(tenantId);
+      await invalidateHttpCache(tenantId, ['/api/billing']);
       res.json({ success: true, data: null, timestamp: new Date().toISOString() });
     } catch (e) { next(e); }
   };
