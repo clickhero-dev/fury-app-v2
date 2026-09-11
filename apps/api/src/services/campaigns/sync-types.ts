@@ -9,21 +9,10 @@ import type { MetaInsightsData } from '../../lib/meta-api.js';
  * pelo adapter injetado — o service não cria repos).
  */
 
-export interface MetricsDailyUpsertRow {
-  campaignMetaId: string;
-  date: string;
-  campaignName?: string | null;
-  objective?: string | null;
-  spend: number;
-  impressions: number;
-  clicks: number;
-  ctr: number;
-  cpm: number;
-  cpc: number;
-  conversions: number;
-  roas?: number | null;
-  cpa?: number | null;
-}
+// Tipo canônico mora no repositório (dono da forma da linha de persistência).
+// Antes era duplicado aqui (nit do QA #173) — agora é re-exportado.
+export type { MetricsDailyUpsertRow } from '../../repository/metrics-daily.repository.js';
+import type { MetricsDailyUpsertRow } from '../../repository/metrics-daily.repository.js';
 
 export interface MetaConnectionRef {
   accessToken: string;

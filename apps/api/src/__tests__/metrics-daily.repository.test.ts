@@ -15,7 +15,11 @@ const sql = postgres(
 
 const tenantA = randomUUID();
 const tenantB = randomUUID();
+// tenantC: dedicado aos testes de status/coalesce (não polui tenantA, cujos
+// testes são order-dependent sem cleanup por teste)
+const tenantC = randomUUID();
 const repoA = new MetricsDailyRepository(tenantA);
+const repoC = new MetricsDailyRepository(tenantC);
 
 function row(over: Partial<MetricsDailyUpsertRow> = {}): MetricsDailyUpsertRow {
   return {
@@ -23,6 +27,7 @@ function row(over: Partial<MetricsDailyUpsertRow> = {}): MetricsDailyUpsertRow {
     date: '2026-09-01',
     campaignName: 'Campanha 1',
     objective: 'OUTCOME_ENGAGEMENT',
+    status: 'ACTIVE',
     spend: 10.5,
     impressions: 1000,
     clicks: 50,
@@ -37,7 +42,7 @@ function row(over: Partial<MetricsDailyUpsertRow> = {}): MetricsDailyUpsertRow {
 }
 
 afterAll(async () => {
-  await sql`DELETE FROM metrics_daily WHERE tenant_id IN (${tenantA}, ${tenantB})`;
+  await sql`DELETE FROM metrics_daily WHERE tenant_id IN (${tenantA}, ${tenantB}, ${tenantC})`;
   await sql.end();
 });
 
@@ -84,7 +89,50 @@ describe('MetricsDailyRepository', () => {
     const summary = await repoA.getSummary('2026-09-01', '2026-09-02');
     expect(Number(summary.spend)).toBeCloseTo(37.75);
     expect(Number(summary.conversions)).toBeCloseTo(23); // 9 + 7 + 7 (3 linhas no range)
-    expect(summary.days).toHaveLength(2);
+    expect(summary.daysCount).toBe(2); // dias distintos (substitui o hack `days`)
+  });
+
+  it('coalesce no upsert: re-upsert SEM status/objective não apaga snapshot anterior', async () => {
+    // 1º upsert: snapshot completo (listagem da Meta)
+    await repoC.upsertBatch([row({ campaignMetaId: 'camp_snap', date: '2026-09-03', status: 'PAUSED', objective: 'OUTCOME_SALES' })]);
+    // 2º upsert (ex.: backfill on-demand, sem lista): NÃO pode zerar o snapshot
+    await repoC.upsertBatch([row({ campaignMetaId: 'camp_snap', date: '2026-09-03', status: null, objective: null })]);
+
+    const range = await repoC.getRange('2026-09-03', '2026-09-03');
+    const snap = range.find((r) => r.campaignMetaId === 'camp_snap')!;
+    expect(snap.status).toBe('PAUSED');
+    expect(snap.objective).toBe('OUTCOME_SALES');
+  });
+
+  it('upsert atualiza status quando o novo valor vem preenchido', async () => {
+    await repoC.upsertBatch([row({ campaignMetaId: 'camp_upd', date: '2026-09-03', status: 'ACTIVE' })]);
+    await repoC.upsertBatch([row({ campaignMetaId: 'camp_upd', date: '2026-09-03', status: 'ARCHIVED' })]);
+    const range = await repoC.getRange('2026-09-03', '2026-09-03');
+    expect(range.find((r) => r.campaignMetaId === 'camp_upd')!.status).toBe('ARCHIVED');
+  });
+
+  it('getSummary com excluirArchived: linhas ARCHIVED/DELETED fora; NULL entra (padrão live)', async () => {
+    // base do tenantC: ACTIVE 10.5/7 + NULL 1/1; archived 100/50 × 2 dias fora
+    await repoC.upsertBatch([
+      row({ campaignMetaId: 'camp_base', date: '2026-09-01', status: 'ACTIVE', spend: 10.5, conversions: 7 }),
+      row({ campaignMetaId: 'camp_arch', date: '2026-09-01', status: 'ARCHIVED', spend: 100, conversions: 50 }),
+      row({ campaignMetaId: 'camp_arch', date: '2026-09-02', status: 'ARCHIVED', spend: 100, conversions: 50 }),
+      row({ campaignMetaId: 'camp_null', date: '2026-09-02', status: null, spend: 1, conversions: 1 }),
+    ]);
+
+    const tudo = await repoC.getSummary('2026-09-01', '2026-09-02');
+    expect(Number(tudo.spend)).toBeCloseTo(211.5);
+
+    const semArchived = await repoC.getSummary('2026-09-01', '2026-09-02', { excludeArchived: true });
+    // ARCHIVED (200/100) fora; ACTIVE e NULL ficam
+    expect(Number(semArchived.spend)).toBeCloseTo(11.5);
+    expect(Number(semArchived.conversions)).toBeCloseTo(8);
+    expect(semArchived.daysCount).toBe(2);
+
+    // DELETED também é excluído
+    await repoC.upsertBatch([row({ campaignMetaId: 'camp_del', date: '2026-09-01', status: 'DELETED', spend: 500, conversions: 0 })]);
+    const semDeleted = await repoC.getSummary('2026-09-01', '2026-09-02', { excludeArchived: true });
+    expect(Number(semDeleted.spend)).toBeCloseTo(11.5);
   });
 
   it('getCampaignTotals agrega por campanha (listagem)', async () => {

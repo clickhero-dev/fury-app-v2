@@ -805,6 +805,7 @@ export const metricsDaily = pgTable(
     date: date('date').notNull(),
     campaignName: varchar('campaign_name', { length: 255 }),
     objective: varchar('objective', { length: 64 }),
+    status: varchar('status', { length: 32 }),
     spend: numeric('spend', { precision: 14, scale: 2 }).notNull().default('0'),
     impressions: integer('impressions').notNull().default(0),
     clicks: integer('clicks').notNull().default(0),

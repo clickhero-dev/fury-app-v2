@@ -139,6 +139,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0036_facebook_social_login' },
   { tag: '0037_policy_tables' },
   { tag: '0038_metrics_daily' },
+  { tag: '0039_metrics_daily_status' },
 ];
 
 /** Nomes de todas as tabelas do schema (28 tabelas) — usados para validação. */

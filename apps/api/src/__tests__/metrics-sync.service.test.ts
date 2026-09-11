@@ -211,6 +211,46 @@ describe('MetaInsightsSyncService', () => {
     expect(Number(rows[0]!.n)).toBe(1);
   });
 
+  it('status/objective da lista Meta são persistidos no rollup (fix QA #173)', async () => {
+    const deps = makeDeps(
+      { [tenantA]: { accessToken: 'tok', adAccountId: 'act_1' } },
+      { [tenantA]: [insightRow()] },
+      { [tenantA]: [{ id: 'camp_sync_1', name: 'Sync', status: 'PAUSED', objective: 'OUTCOME_SALES' }] }
+    );
+    const service = new MetaInsightsSyncService(deps as any);
+    await service.syncTenant(tenantA);
+
+    const rows = await sql`
+      SELECT status, objective FROM metrics_daily WHERE tenant_id = ${tenantA}
+    `;
+    expect(rows[0]!.status).toBe('PAUSED');
+    expect(rows[0]!.objective).toBe('OUTCOME_SALES');
+  });
+
+  it('re-sync sem lista (estilo backfill) NÃO apaga status/objective do snapshot', async () => {
+    const withList = makeDeps(
+      { [tenantA]: { accessToken: 'tok', adAccountId: 'act_1' } },
+      { [tenantA]: [insightRow()] },
+      { [tenantA]: [{ id: 'camp_sync_1', name: 'Sync', status: 'ACTIVE', objective: 'OUTCOME_SALES' }] }
+    );
+    const service1 = new MetaInsightsSyncService(withList as any);
+    await service1.syncTenant(tenantA);
+
+    // 2º ciclo: lista falhou (best-effort → vazio); insights voltam
+    const withoutList = makeDeps(
+      { [tenantA]: { accessToken: 'tok', adAccountId: 'act_1' } },
+      { [tenantA]: [insightRow()] }
+    );
+    const service2 = new MetaInsightsSyncService(withoutList as any);
+    await service2.syncTenant(tenantA);
+
+    const rows = await sql`
+      SELECT status, objective, campaign_name FROM metrics_daily WHERE tenant_id = ${tenantA}
+    `;
+    expect(rows[0]!.status).toBe('ACTIVE'); // coalesce preservou
+    expect(rows[0]!.objective).toBe('OUTCOME_SALES');
+  });
+
   it('re-sync D-0..D-3: dias re-buscados a cada ciclo (range passado ao fetch)', async () => {
     const deps = makeDeps(
       { [tenantA]: { accessToken: 'tok', adAccountId: 'act_1' } },

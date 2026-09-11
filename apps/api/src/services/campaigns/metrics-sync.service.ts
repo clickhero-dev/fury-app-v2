@@ -74,18 +74,25 @@ export class MetaInsightsSyncService {
   }
 
   /** Normaliza 1 insight (campanha-dia) para linha de upsert — MESMO critério do live. */
-  private toUpsertRow(insight: MetaInsightsData, statusMeta: string | null): MetricsDailyUpsertRow | null {
+  private toUpsertRow(
+    insight: MetaInsightsData,
+    meta: { name?: string; status?: string; objective?: string } | undefined
+  ): MetricsDailyUpsertRow | null {
     const campaignId = insight.campaign_id;
     if (!campaignId) return null;
+    const date = insight.date_start || insight.date_stop || '';
+    if (!date) return null; // sem dia Meta, a linha não é persistível (PK)
 
     const spendInReais = centavosToReais(Math.round(parseFloat(insight.spend || '0') * 100));
     const { roas, cpa, conversions } = extractCampaignMetricsFromInsight(insight, spendInReais);
 
     return {
       campaignMetaId: campaignId,
-      date: insight.date_start || insight.date_stop || '',
-      campaignName: insight.campaign_name ?? null,
-      objective: null, // objective-aware já resolvido dentro do parser (conversions)
+      date,
+      // snapshot da lista Meta tem prioridade (mais atual que o insight)
+      campaignName: meta?.name ?? insight.campaign_name ?? null,
+      objective: meta?.objective ?? null,
+      status: meta?.status ?? null,
       spend: spendInReais,
       impressions: parseInt(insight.impressions || '0', 10),
       clicks: parseInt(insight.clicks || '0', 10),
@@ -126,14 +133,7 @@ export class MetaInsightsSyncService {
       }
 
       const rows = insights
-        .map((i) => {
-          const row = this.toUpsertRow(i, campaignMeta[i.campaign_id || '']?.status ?? null);
-          if (!row || !row.date) return null;
-          // snapshot: nome da lista da Meta tem prioridade (mais atual que o insight)
-          const nameFromList = campaignMeta[i.campaign_id || '']?.name;
-          if (nameFromList) row.campaignName = nameFromList;
-          return row;
-        })
+        .map((i) => this.toUpsertRow(i, campaignMeta[i.campaign_id || '']))
         .filter((r): r is MetricsDailyUpsertRow => r !== null);
 
       await this.deps.metricsDaily.upsertBatch(tenantId, rows);

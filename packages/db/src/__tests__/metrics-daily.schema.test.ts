@@ -84,6 +84,7 @@ describe('metrics_daily (migration 0038)', () => {
     expect(columns['cpa']).toBe('numeric');
     expect(columns['campaign_name']).toBe('character varying');
     expect(columns['objective']).toBe('character varying');
+    expect(columns['status']).toBe('character varying');
     expect(columns['updated_at']).toBe('timestamp with time zone');
   });
 

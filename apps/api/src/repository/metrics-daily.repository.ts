@@ -10,6 +10,9 @@ import { TenantScopedRepository } from './base.repository.js';
  * Grão: 1 linha = 1 tenant × 1 campanha Meta × 1 dia (PK composta).
  * Todas as leituras já retornam números (numeric do PG vira string no driver —
  * conversão feita aqui para não vazar `string` para services).
+ *
+ * Snapshot de status/objective (fix QA #173): gravados pelo sync (lista Meta);
+ * upsert usa coalesce — backfill on-demand (sem lista) não apaga snapshot.
  */
 
 export interface MetricsDailyUpsertRow {
@@ -18,6 +21,8 @@ export interface MetricsDailyUpsertRow {
   date: string;
   campaignName?: string | null;
   objective?: string | null;
+  /** Snapshot do status live da lista Meta (ACTIVE/PAUSED/ARCHIVED/DELETED). */
+  status?: string | null;
   spend: number;
   impressions: number;
   clicks: number;
@@ -34,6 +39,7 @@ export interface MetricsDailyRow {
   date: string;
   campaignName: string | null;
   objective: string | null;
+  status: string | null;
   spend: number;
   impressions: number;
   clicks: number;
@@ -59,6 +65,7 @@ export interface CampaignTotalRow {
   campaignMetaId: string;
   campaignName: string | null;
   objective: string | null;
+  status: string | null;
   spend: number;
   impressions: number;
   clicks: number;
@@ -79,6 +86,8 @@ export class MetricsDailyRepository extends TenantScopedRepository {
   /**
    * Upsert idempotente em lote: executar 2× atualiza valores, nunca duplica.
    * updatedAt sempre renovado (rastreia último sync da linha).
+   * coalesce(status/objective): valor novo só sobrescreve quando vem preenchido —
+   * backfill on-demand (sem lista de campanhas) não apaga o snapshot do sync.
    */
   async upsertBatch(rows: MetricsDailyUpsertRow[]): Promise<void> {
     if (rows.length === 0) return;
@@ -92,6 +101,7 @@ export class MetricsDailyRepository extends TenantScopedRepository {
           date: r.date,
           campaignName: r.campaignName ?? null,
           objective: r.objective ?? null,
+          status: r.status ?? null,
           spend: r.spend.toFixed(2),
           impressions: r.impressions,
           clicks: r.clicks,
@@ -107,8 +117,9 @@ export class MetricsDailyRepository extends TenantScopedRepository {
       .onConflictDoUpdate({
         target: [metricsDaily.tenantId, metricsDaily.campaignMetaId, metricsDaily.date],
         set: {
-          campaignName: sql`excluded.campaign_name`,
-          objective: sql`excluded.objective`,
+          campaignName: sql`coalesce(excluded.campaign_name, ${metricsDaily.campaignName})`,
+          objective: sql`coalesce(excluded.objective, ${metricsDaily.objective})`,
+          status: sql`coalesce(excluded.status, ${metricsDaily.status})`,
           spend: sql`excluded.spend`,
           impressions: sql`excluded.impressions`,
           clicks: sql`excluded.clicks`,
@@ -141,6 +152,7 @@ export class MetricsDailyRepository extends TenantScopedRepository {
       date: r.date,
       campaignName: r.campaignName,
       objective: r.objective,
+      status: r.status,
       spend: num(r.spend),
       impressions: r.impressions,
       clicks: r.clicks,
@@ -221,10 +233,16 @@ export class MetricsDailyRepository extends TenantScopedRepository {
     }));
   }
 
-  /** Totais agregados do tenant no período — alimenta /metrics/summary. */
+  /**
+   * Totais agregados do tenant no período — alimenta /metrics/summary.
+   * @param opts.excludeArchived restaura a semântica live (só ACTIVE/PAUSED):
+   *   linhas com status ARCHIVED/DELETED ficam fora; status NULL entra
+   *   (linhas de backfill antigo — não descartar dado silenciosamente).
+   */
   async getSummary(
     startDate: string,
-    endDate: string
+    endDate: string,
+    opts: { excludeArchived?: boolean } = {}
   ): Promise<{
     spend: number;
     impressions: number;
@@ -232,8 +250,19 @@ export class MetricsDailyRepository extends TenantScopedRepository {
     conversions: number;
     roas: number | null;
     cpa: number | null;
-    days: string[];
+    daysCount: number;
   }> {
+    const filters = [
+      eq(metricsDaily.tenantId, this.tenantId),
+      between(metricsDaily.date, startDate, endDate),
+    ];
+    if (opts.excludeArchived) {
+      // status null → true (entra); ARCHIVED/DELETED → false (fora)
+      filters.push(
+        sql`(${metricsDaily.status} IS NULL OR (${metricsDaily.status} <> 'ARCHIVED' AND ${metricsDaily.status} <> 'DELETED'))`
+      );
+    }
+
     const [agg] = await this.db
       .select({
         spend: sql<string>`coalesce(sum(${metricsDaily.spend}), 0)`,
@@ -244,12 +273,7 @@ export class MetricsDailyRepository extends TenantScopedRepository {
         distinctDays: sql<string>`count(distinct ${metricsDaily.date})`,
       })
       .from(metricsDaily)
-      .where(
-        and(
-          eq(metricsDaily.tenantId, this.tenantId),
-          between(metricsDaily.date, startDate, endDate)
-        )
-      );
+      .where(and(...filters));
 
     const spend = num(agg?.spend);
     const conversions = num(agg?.conversions);
@@ -262,8 +286,7 @@ export class MetricsDailyRepository extends TenantScopedRepository {
       conversions,
       roas: numOrNull(agg?.roas),
       cpa: conversions > 0 ? spend / conversions : null,
-      // days (datas distintas) — usado pelo summary "diário" do frontend quando necessário
-      days: daysCount > 0 ? Array.from({ length: daysCount }, () => '') : [],
+      daysCount,
     };
   }
 
@@ -274,6 +297,7 @@ export class MetricsDailyRepository extends TenantScopedRepository {
         campaignMetaId: metricsDaily.campaignMetaId,
         campaignName: sql<string | null>`max(${metricsDaily.campaignName})`,
         objective: sql<string | null>`max(${metricsDaily.objective})`,
+        status: sql<string | null>`max(${metricsDaily.status})`,
         spend: sql<string>`sum(${metricsDaily.spend})`,
         impressions: sql<string>`sum(${metricsDaily.impressions})`,
         clicks: sql<string>`sum(${metricsDaily.clicks})`,
@@ -296,6 +320,7 @@ export class MetricsDailyRepository extends TenantScopedRepository {
         campaignMetaId: r.campaignMetaId,
         campaignName: r.campaignName,
         objective: r.objective,
+        status: r.status,
         spend,
         impressions: num(r.impressions),
         clicks: num(r.clicks),
