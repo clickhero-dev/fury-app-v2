@@ -2,8 +2,8 @@
                         POLÍTICAS DE USO — ADY
 ================================================================================
 
-Versão: [X.X]
-Vigência a partir de: [DD/MM/AAAA]
+Versão: 1.0
+Vigência a partir de: 10/09/2026
 
 Este documento descreve as regras de uso do Ady, incluindo reembolso,
 privacidade, telemetria, tratamento de dados e compartilhamento. Ao usar o
