@@ -1354,25 +1354,7 @@ export async function getMetaInsights(params: {
     fullPath += `&time_increment=${params.timeIncrement}`;
   }
 
-  // Paginação por cursor (feature 014/T10a): contas com muitas campanhas
-  // (campanhas × dias > limite de linha do Graph) truncavam silenciosamente
-  // em ~100 linhas. Segue `paging.next`/`after` até esgotar (guard de 10
-  // páginas = ~1000 linhas por chamada, quota-safe).
-  const first = await metaApiCall<MetaInsightsResponse>(fullPath, params.accessToken);
-  const all: MetaInsightsData[] = [...(first.data || [])];
-  let after = first.paging?.cursors?.after;
-
-  let pages = 1;
-  const MAX_PAGES = 10;
-  while (after && pages < MAX_PAGES) {
-    const nextPath = `${fullPath}&after=${encodeURIComponent(after)}`;
-    const next = await metaApiCall<MetaInsightsResponse>(nextPath, params.accessToken);
-    all.push(...(next.data || []));
-    after = next.paging?.cursors?.after;
-    pages += 1;
-  }
-
-  return { data: all };
+  return metaApiCall<MetaInsightsResponse>(fullPath, params.accessToken);
 }
 
 export interface CampaignAdCreative {
