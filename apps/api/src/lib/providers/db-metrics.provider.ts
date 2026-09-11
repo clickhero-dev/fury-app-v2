@@ -26,89 +26,8 @@ import type {
   GoalsProgressResponse,
 } from '../../types/metrics.types.js';
 import { getClientGoals } from '../../services/campaigns/goal.service.js';
-import { MetricsDailyRepository } from '../../repository/metrics-daily.repository.js';
-
-/** Range máximo p/ fallback on-demand (proteção de quota Meta). */
-const MAX_ON_DEMAND_DAYS = 180;
 
 export class DatabaseMetricsProvider implements IMetricsProvider {
-  /**
-   * Cobertura do rollup é suficiente p/ o range pedido?
-   * Suficiente = bordas contidas: [startDate..endDate] ⊆ [minDate..maxDate] do
-   * tenant. Dias sem atividade dentro da janela NÃO disparam on-demand (a Meta
-   * também não teria insights nesses dias — zeros são o valor correto).
-   * (Comentário antigo dizia o contrário da implementação — corrigido, fix #173.)
-   */
-  private async rollupCoversRange(
-    tenantId: string,
-    startDate: string,
-    endDate: string
-  ): Promise<boolean> {
-    const repo = new MetricsDailyRepository(tenantId);
-    const { minDate, maxDate } = await repo.getCoverage();
-    if (!minDate || !maxDate) return false;
-    return startDate >= minDate && endDate <= maxDate;
-  }
-
-  private rangeDays(startDate: string, endDate: string): number {
-    const ms = new Date(endDate + 'T00:00:00Z').getTime() - new Date(startDate + 'T00:00:00Z').getTime();
-    return Math.floor(ms / 86_400_000);
-  }
-
-  /**
-   * Fallback on-demand (US3): busca o range na Meta e grava no rollup.
-   * Chamado APENAS quando o rollup não cobre o range e o range ≤ 180d.
-   * Falha da Meta NÃO derruba o endpoint — devolve false e o caller responde
-   * com o que existe localmente (zeros).
-   */
-  private async backfillOnDemand(
-    tenantId: string,
-    startDate: string,
-    endDate: string
-  ): Promise<boolean> {
-    if (this.rangeDays(startDate, endDate) > MAX_ON_DEMAND_DAYS) return false;
-    try {
-      const insights = await this.fetchMetaInsights({
-        tenantId,
-        startDate,
-        endDate,
-        timeIncrement: 1,
-      });
-      if (insights.length === 0) return false;
-
-      const rows = insights
-        .map((item) => {
-          const campaignId = item.campaign_id;
-          const date = item.date_start || item.date_stop;
-          if (!campaignId || !date) return null;
-          const spendReais = centavosToReais(Math.round(parseFloat(item.spend || '0') * 100));
-          const { roas, cpa, conversions } = extractCampaignMetricsFromInsight(item, spendReais);
-          return {
-            campaignMetaId: campaignId,
-            date,
-            campaignName: item.campaign_name ?? null,
-            objective: null,
-            spend: spendReais,
-            impressions: parseInt(item.impressions || '0', 10),
-            clicks: parseInt(item.clicks || '0', 10),
-            ctr: parseFloat(item.ctr || '0'),
-            cpm: parseFloat(item.cpm || '0'),
-            cpc: parseFloat(item.cpc || '0'),
-            conversions: conversions ?? 0,
-            roas,
-            cpa,
-          };
-        })
-        .filter((r): r is NonNullable<typeof r> => r !== null);
-
-      await new MetricsDailyRepository(tenantId).upsertBatch(rows);
-      return true;
-    } catch {
-      // Meta indisponível/quota: responde com o rollup existente
-      return false;
-    }
-  }
-
   private async fetchMetaInsights(params: {
     tenantId: string;
     startDate: string;
@@ -255,49 +174,42 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     endDate: string
   ): Promise<MetricsSummaryResponse | null> {
     try {
-      // 401 se Meta não conectada (contrato preservado)
-      await this.getConnectionAndAccount(tenantId);
+      const { accessToken, adAccountId } = await this.getConnectionAndAccount(tenantId);
 
-      const repo = new MetricsDailyRepository(tenantId);
+      type MetaCampaignRow = { id: string; status?: string };
+      const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
+        `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,status')}`,
+        accessToken
+      );
 
-      // Caminho novo: rollup cobre o range → leitura 100% local (0 Meta)
-      if (await this.rollupCoversRange(tenantId, startDate, endDate)) {
-        return await this.summaryFromRollup(repo, startDate, endDate);
+      const includedStatuses = new Set(['ACTIVE', 'PAUSED']);
+      const includedCampaignIds = new Set(
+        (campaignsResp.data || [])
+          .filter((c) => includedStatuses.has((c.status || '').toUpperCase()))
+          .map((c) => c.id)
+      );
+
+      const response = await getMetaInsights({
+        accessToken,
+        adAccountId,
+        startDate,
+        endDate,
+        level: 'campaign',
+      });
+
+      const insights = (response.data || []).filter(
+        (item) => item.campaign_id && includedCampaignIds.has(item.campaign_id)
+      );
+
+      if (insights.length === 0) {
+        return null;
       }
 
-      // Fallback on-demand (US3): lacuna de cobertura → busca Meta, grava, lê
-      await this.backfillOnDemand(tenantId, startDate, endDate);
-      return await this.summaryFromRollup(repo, startDate, endDate);
+      return this.normalizeInsights(insights);
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError(500, 'META_API_ERROR', 'Erro ao buscar resumo de metricas');
     }
-  }
-
-  /** Summary a partir do rollup — mesma forma/semântica do normalizeInsights live. */
-  private async summaryFromRollup(
-    repo: MetricsDailyRepository,
-    startDate: string,
-    endDate: string
-  ): Promise<MetricsSummaryResponse | null> {
-    // excludeArchived: paridade com o live (getSummary filtrava ACTIVE/PAUSED;
-    // sem o filtro, campanhas arquivadas inflavam o resumo — fix QA #173)
-    const summary = await repo.getSummary(startDate, endDate, { excludeArchived: true });
-    if (summary.daysCount === 0 && summary.spend === 0 && summary.conversions === 0) {
-      return null;
-    }
-    const ctr = summary.impressions > 0 ? calculateCTR(summary.clicks, summary.impressions) : 0;
-    const cpm = summary.impressions > 0 ? (summary.spend / summary.impressions) * 1000 : 0;
-    return {
-      spend: roundToDecimals(summary.spend, 2),
-      impressions: summary.impressions,
-      clicks: summary.clicks,
-      conversions: summary.conversions,
-      ctr,
-      cpm,
-      cpa: summary.cpa ?? 0,
-      roas: summary.roas ?? 0,
-    };
   }
 
   private parseDate(dateStr: string): Date {
@@ -331,9 +243,6 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         );
       }
 
-      // Status/nome live: lista leve da Meta (id,name,status,objective) — única
-      // chamada remota deste endpoint. Métricas vêm do rollup (feature 014).
-      type MetaCampaignRow = { id: string; name?: string; status?: string; objective?: string };
       const accessToken = decryptMetaToken(connection.accessToken);
       const adAccounts = (connection.adAccounts as any[]) || [];
       const adAccountId =
@@ -345,39 +254,41 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         throw new AppError(400, 'NO_AD_ACCOUNT', 'Nenhuma conta de anuncios encontrada');
       }
 
-      let metaList: MetaCampaignRow[] = [];
-      try {
-        const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
-          `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,name,status,objective')}`,
-          accessToken
-        );
-        metaList = campaignsResp.data || [];
-      } catch {
-        // lista live é best-effort: sem ela, status deriva do snapshot do rollup
-      }
-      const campaignMeta = new Map(metaList.map((c) => [c.id, c]));
+      type MetaCampaignRow = { id: string; name?: string; status?: string; objective?: string };
 
-      // Métricas do rollup (com fallback on-demand p/ lacuna de cobertura)
-      const repo = new MetricsDailyRepository(tenantId);
-      if (!(await this.rollupCoversRange(tenantId, startDate, endDate))) {
-        await this.backfillOnDemand(tenantId, startDate, endDate);
-      }
-      const totals = await repo.getCampaignTotals(startDate, endDate);
+      const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
+        `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,name,status,objective')}`,
+        accessToken
+      );
 
-      // união: campanhas com métricas no período + campanhas da Meta sem métricas
-      const ids = new Set<string>([
-        ...totals.map((t) => t.campaignMetaId),
+      const response = await getMetaInsights({
+        accessToken,
+        adAccountId,
+        startDate,
+        endDate,
+        level: 'campaign',
+      });
+
+      const insights = response.data || [];
+      const campaignMeta = new Map(
+        (campaignsResp.data || []).map((c) => [c.id, c])
+      );
+      const insightByCampaignId = new Map(
+        insights
+          .filter((row) => row.campaign_id)
+          .map((row) => [row.campaign_id as string, row])
+      );
+
+      const campaignIds = new Set([
         ...campaignMeta.keys(),
+        ...insightByCampaignId.keys(),
       ]);
 
       const campaigns: CampaignResponse[] = [];
 
-      for (const campaignId of ids) {
+      for (const campaignId of campaignIds) {
         const meta = campaignMeta.get(campaignId);
-        const total = totals.find((t) => t.campaignMetaId === campaignId);
-        // Status: live da Meta primeiro; SEM lista (Meta fora) → snapshot do
-        // rollup; sem nenhum → ARCHIVED (comportamento conservador mantido).
-        const normalizedStatus = (meta?.status || total?.status || 'ARCHIVED').toUpperCase() as
+        const normalizedStatus = (meta?.status || 'ARCHIVED').toUpperCase() as
           | 'ACTIVE'
           | 'PAUSED'
           | 'ARCHIVED';
@@ -386,17 +297,49 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
           continue;
         }
 
+        const insight = insightByCampaignId.get(campaignId);
+        if (!insight) {
+          campaigns.push({
+            id: campaignId,
+            name: meta?.name || `Campaign ${campaignId}`,
+            status: normalizedStatus,
+            metrics: {
+              spend: 0,
+              clicks: 0,
+              impressions: 0,
+              conversions: null,
+              roas: null,
+              cpa: null,
+            },
+          });
+          continue;
+        }
+
+        const spend = parseFloat(insight.spend || '0');
+        const spendReais = centavosToReais(Math.round(spend * 100));
+        const impressions = parseInt(insight.impressions || '0', 10);
+        const clicks = parseInt(insight.clicks || '0', 10);
+
+        // Conversões calculadas com o MESMO critério do /metrics/summary
+        // (getSummary → normalizeInsights, sem objective-aware). Assim a soma
+        // das conversões das campanhas (ACTIVE+PAUSED) desta listagem reproduz
+        // o resumo exibido no dashboard — os totais das duas telas batem.
+        const { roas, cpa, conversions } = extractCampaignMetricsFromInsight(
+          insight,
+          spendReais
+        );
+
         campaigns.push({
           id: campaignId,
-          name: meta?.name || total?.campaignName || `Campaign ${campaignId}`,
+          name: insight.campaign_name || meta?.name || `Campaign ${campaignId}`,
           status: normalizedStatus,
           metrics: {
-            spend: total?.spend ?? 0,
-            clicks: total?.clicks ?? 0,
-            impressions: total?.impressions ?? 0,
-            conversions: total ? total.conversions : null,
-            roas: total?.roas ?? null,
-            cpa: total?.cpa ?? null,
+            spend: spendReais,
+            clicks,
+            impressions,
+            conversions,
+            roas,
+            cpa,
           },
         });
       }
@@ -467,53 +410,30 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         /* fallback ja definido em campaignBlock */
       }
 
-      // Timeseries do rollup (feature 014): cobertura local primeiro, Meta só
-      // em fallback on-demand. campaignBlock/creatives seguem live (T6 spec).
-      const repo = new MetricsDailyRepository(tenantId);
-      if (!(await this.rollupCoversRange(tenantId, startDate, endDate))) {
-        await this.backfillOnDemand(tenantId, startDate, endDate);
-      }
-      const series = await repo.getCampaignSeries(campaignId, startDate, endDate);
+      const response = await getMetaInsights({
+        accessToken,
+        entityId: campaignId,
+        startDate,
+        endDate,
+        timeIncrement: 1,
+      });
 
-      // Summary do range COMPLETO (antes do cap de 30d do gráfico): o card de
-      // resumo deve refletir o período pedido, não a janela truncada.
-      // ctr/cpm reais do rollup (fix QA #173 — antes fixos em 0).
+      const insights = response.data || [];
+
       let summary: MetricsSummaryResponse | null = null;
-      if (series.length > 0) {
-        const totalsFull = series.reduce(
-          (acc, d) => ({
-            spend: acc.spend + d.spend,
-            impressions: acc.impressions + d.impressions,
-            clicks: acc.clicks + d.clicks,
-            conversions: acc.conversions + d.conversions,
-          }),
-          { spend: 0, impressions: 0, clicks: 0, conversions: 0 }
-        );
-        summary = {
-          spend: roundToDecimals(totalsFull.spend, 2),
-          impressions: totalsFull.impressions,
-          clicks: totalsFull.clicks,
-          conversions: totalsFull.conversions,
-          ctr: totalsFull.impressions > 0 ? calculateCTR(totalsFull.clicks, totalsFull.impressions) : 0,
-          cpm: totalsFull.impressions > 0 ? roundToDecimals((totalsFull.spend / totalsFull.impressions) * 1000, 2) : 0,
-          cpa: totalsFull.conversions > 0 ? roundToDecimals(totalsFull.spend / totalsFull.conversions, 2) : 0,
-          roas: totalsFull.spend > 0
-            ? roundToDecimals(series.reduce((s, d) => s + (d.roas ?? 0) * d.spend, 0) / totalsFull.spend, 2)
-            : 0,
-        };
+      if (insights.length > 0) {
+        summary = this.normalizeInsights(insights, campaignBlock.objective);
       }
 
-      const daily = this.capDailySeries(
-        series.map((d) => ({
-          date: d.date,
-          spend: roundToDecimals(d.spend, 2),
-          impressions: d.impressions,
-          clicks: d.clicks,
-          conversions: d.conversions,
-          roas: roundToDecimals(d.roas ?? 0, 2),
-        })),
-        30
-      );
+      const dailyRaw: DailyMetricsResponse[] = [];
+      for (const item of insights) {
+        const row = this.mapMetaInsightToDaily(item, campaignBlock.objective);
+        if (row) {
+          dailyRaw.push(row);
+        }
+      }
+
+      const daily = this.capDailySeries(dailyRaw, 30);
 
       return {
         campaign: campaignBlock,
@@ -585,40 +505,41 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     endDate: string
   ): Promise<DailyMetricsResponse[]> {
     try {
-      // 401 se Meta não conectada (contrato preservado)
-      await this.getConnectionAndAccount(tenantId);
+      const insights = await this.fetchMetaInsights({
+        tenantId,
+        startDate,
+        endDate,
+        timeIncrement: 1,
+      });
 
-      const repo = new MetricsDailyRepository(tenantId);
+      return insights
+        .filter((item) => item.date_start && item.date_stop)
+        .map((item) => {
+          const spend = parseFloat(item.spend || '0');
+          const impressions = parseInt(item.impressions || '0', 10);
+          const clicks = parseInt(item.clicks || '0', 10);
 
-      // Caminho novo: rollup cobre → série local (0 Meta)
-      if (await this.rollupCoversRange(tenantId, startDate, endDate)) {
-        return await this.dailyFromRollup(repo, startDate, endDate);
-      }
+          const conversions = getConversionsFromActions(item.actions) ?? 0;
 
-      // Fallback on-demand (US3)
-      await this.backfillOnDemand(tenantId, startDate, endDate);
-      return await this.dailyFromRollup(repo, startDate, endDate);
+          const revenue = (item.action_values || [])
+            .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
+            .reduce((sum, a) => sum + parseFloat(String(a.value)), 0);
+
+          const roas = spend > 0 && revenue > 0 ? roundToDecimals(revenue / spend, 2) : 0;
+
+          return {
+            date: item.date_start!,
+            spend: centavosToReais(Math.round(spend * 100)),
+            impressions,
+            clicks,
+            conversions,
+            roas,
+          };
+        });
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError(500, 'META_API_ERROR', 'Erro ao buscar metricas diarias');
     }
-  }
-
-  /** Série diária do rollup — mesma forma do live (roas ponderado por dia). */
-  private async dailyFromRollup(
-    repo: MetricsDailyRepository,
-    startDate: string,
-    endDate: string
-  ): Promise<DailyMetricsResponse[]> {
-    const series = await repo.getDailySeries(startDate, endDate);
-    return series.map((d) => ({
-      date: d.date,
-      spend: roundToDecimals(d.spend, 2),
-      impressions: d.impressions,
-      clicks: d.clicks,
-      conversions: d.conversions,
-      roas: roundToDecimals(d.roas ?? 0, 2),
-    }));
   }
 
   async getGoalsProgress(tenantId: string): Promise<GoalsProgressResponse> {
