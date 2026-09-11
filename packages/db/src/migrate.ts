@@ -138,6 +138,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0035_add_creative_asset_cost_time' },
   { tag: '0036_facebook_social_login' },
   { tag: '0037_policy_tables' },
+  { tag: '0038_metrics_daily' },
 ];
 
 /** Nomes de todas as tabelas do schema (28 tabelas) — usados para validação. */
@@ -170,6 +171,7 @@ export const REQUIRED_TABLES = [
   'google_sync_logs',
   'policy_versions',
   'policy_acceptances',
+  'metrics_daily',
 ];
 
 /**
