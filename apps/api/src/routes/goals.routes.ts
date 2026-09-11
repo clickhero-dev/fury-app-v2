@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
 import { controllers } from '../di.js';
+import { cacheMiddleware } from '../middleware/cache.middleware.js';
 
 const router = Router();
 router.use(authMiddleware, tenantMiddleware);
@@ -13,6 +14,6 @@ router.use(authMiddleware, tenantMiddleware);
 router.get('/', controllers.goal.get);
 router.post('/setup', controllers.goal.setup);
 router.put('/', controllers.goal.update);
-router.get('/progress', controllers.goal.getProgress);
+router.get('/progress', cacheMiddleware({ ttl: 300 }), controllers.goal.getProgress);
 
 export default router;
