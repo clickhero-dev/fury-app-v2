@@ -24,6 +24,19 @@ import { db } from '@fury/db';
 export const METRICS_SYNC_CRON = '0 * * * *'; // a cada hora, no minuto 0
 const LOCK_KEY = 'lock:metrics-sync';
 const LOCK_TTL_SECONDS = 50 * 60; // < 1h: lock expira antes do próximo ciclo
+const LOCK_OWNER = String(process.pid); // release segura: só o dono deleta
+
+/**
+ * Release atômica do lock (compare-and-del): deleta APENAS se o owner atual é
+ * o próprio pid. Evita deletar o lock de outra instância quando o ciclo
+ * excede o TTL (A expira → B pega o lock → A finaliza e não pode derrubar B).
+ */
+const RELEASE_LOCK_LUA = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+else
+  return 0
+end`;
 
 interface MetricsSyncJobData {
   source?: 'cron' | 'warmup' | 'manual';
@@ -123,7 +136,9 @@ export async function runMetricsSyncNow(
   job: { data?: MetricsSyncJobData } = {}
 ): Promise<{ skipped: boolean; results?: { tenantId: string; ok: boolean; reason?: string; upserted: number }[] }> {
   const redis = getRedis();
-  const acquired = await redis.set(LOCK_KEY, String(process.pid), 'EX', LOCK_TTL_SECONDS);
+  // SET NX EX: apenas 1 instância adquire (ioredis sem NX sobrescreve sempre —
+  // o lock seria decorativo). Owner = pid p/ release segura.
+  const acquired = await redis.set(LOCK_KEY, LOCK_OWNER, 'EX', LOCK_TTL_SECONDS, 'NX');
   if (!acquired) {
     console.log('[METRICS-SYNC] ⏭️  Outra instância está sincronizando — pulando ciclo');
     return { skipped: true };
@@ -144,7 +159,9 @@ export async function runMetricsSyncNow(
     );
     return { skipped: false, results };
   } finally {
-    await redis.del(LOCK_KEY);
+    // compare-and-del atômico: se o ciclo exceder o TTL e outra instância já
+    // tiver pegado o lock, NÃO derrubamos o lock alheio.
+    await redis.eval(RELEASE_LOCK_LUA, 1, LOCK_KEY, LOCK_OWNER);
   }
 }
 
