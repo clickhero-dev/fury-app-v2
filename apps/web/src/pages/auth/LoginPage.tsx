@@ -221,19 +221,6 @@ export function LoginPage() {
             </Link>
           </p>
         </form>
-
-        {/* Rodapé com Link para Click Hero */}
-        <p className="!mt-8 text-center text-xs text-slate-500 dark:text-zinc-500">
-          <span className="font-semibold text-slate-700 dark:text-zinc-300">Ady</span> é um produto{' '}
-          <a
-            href="https://www.clickhero.com.br/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-[#f97316] hover:text-[#ea580c] underline underline-offset-2 transition-colors"
-          >
-            Click Hero
-          </a>
-        </p>
       </div>
     </div>
   );
