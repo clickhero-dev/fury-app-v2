@@ -462,30 +462,48 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         /* fallback ja definido em campaignBlock */
       }
 
-      const response = await getMetaInsights({
-        accessToken,
-        entityId: campaignId,
-        startDate,
-        endDate,
-        timeIncrement: 1,
-      });
+      // Timeseries do rollup (feature 014): cobertura local primeiro, Meta só
+      // em fallback on-demand. campaignBlock/creatives seguem live (T6 spec).
+      const repo = new MetricsDailyRepository(tenantId);
+      if (!(await this.rollupCoversRange(tenantId, startDate, endDate))) {
+        await this.backfillOnDemand(tenantId, startDate, endDate);
+      }
+      const series = await repo.getCampaignSeries(campaignId, startDate, endDate);
 
-      const insights = response.data || [];
+      const daily = this.capDailySeries(
+        series.map((d) => ({
+          date: d.date,
+          spend: roundToDecimals(d.spend, 2),
+          impressions: d.impressions,
+          clicks: d.clicks,
+          conversions: d.conversions,
+          roas: roundToDecimals(d.roas ?? 0, 2),
+        })),
+        30
+      );
 
       let summary: MetricsSummaryResponse | null = null;
-      if (insights.length > 0) {
-        summary = this.normalizeInsights(insights, campaignBlock.objective);
+      if (daily.length > 0) {
+        const totals = daily.reduce(
+          (acc, d) => ({
+            spend: acc.spend + d.spend,
+            conversions: acc.conversions + d.conversions,
+          }),
+          { spend: 0, conversions: 0 }
+        );
+        summary = {
+          spend: roundToDecimals(totals.spend, 2),
+          impressions: daily.reduce((s, d) => s + d.impressions, 0),
+          clicks: daily.reduce((s, d) => s + d.clicks, 0),
+          conversions: totals.conversions,
+          ctr: 0,
+          cpm: 0,
+          cpa: totals.conversions > 0 ? roundToDecimals(totals.spend / totals.conversions, 2) : 0,
+          roas: totals.spend > 0
+            ? roundToDecimals(daily.reduce((s, d) => s + d.roas * d.spend, 0) / totals.spend, 2)
+            : 0,
+        };
       }
-
-      const dailyRaw: DailyMetricsResponse[] = [];
-      for (const item of insights) {
-        const row = this.mapMetaInsightToDaily(item, campaignBlock.objective);
-        if (row) {
-          dailyRaw.push(row);
-        }
-      }
-
-      const daily = this.capDailySeries(dailyRaw, 30);
 
       return {
         campaign: campaignBlock,
