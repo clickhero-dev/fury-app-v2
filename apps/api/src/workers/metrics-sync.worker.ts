@@ -108,6 +108,10 @@ function createSyncService(): MetaInsightsSyncService {
         await new MetricsDailyRepository(tenantId).upsertBatch(rows);
       },
     },
+    getCoverage: async (tenantId) => new MetricsDailyRepository(tenantId).getCoverage(),
+    // Janela de cobertura: garante [hoje-N..hoje] pré-processado — nenhum
+    // usuário paga on-demand (T10b). Default 90d, cap 180d no service.
+    coverageWindowDays: Number(process.env.METRICS_SYNC_COVERAGE_DAYS || 90),
   });
 }
 

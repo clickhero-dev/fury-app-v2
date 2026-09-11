@@ -48,4 +48,8 @@ export interface MetaInsightsSyncDeps {
   metricsDaily: {
     upsertBatch(tenantId: string, rows: MetricsDailyUpsertRow[]): Promise<void>;
   };
+  /** Cobertura atual do rollup do tenant (min/max date) — backfill incremental (T10b). */
+  getCoverage(tenantId: string): Promise<{ minDate: string | null; maxDate: string | null }>;
+  /** Janela de cobertura do sync (dias). Default: só re-sync D-0..D-3. */
+  coverageWindowDays?: number;
 }

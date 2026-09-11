@@ -19,16 +19,58 @@ export type { MetaInsightsSyncDeps, MetricsDailyUpsertRow };
 export class MetaInsightsSyncService {
   /** Janela re-sincronizada por ciclo: hoje + 3 dias retroativos. */
   static readonly RESYNC_DAYS = 3;
+  /** Limite de janela de backfill (proteção de quota — range Meta por chamada). */
+  static readonly MAX_COVERAGE_WINDOW_DAYS = 180;
 
   constructor(private readonly deps: MetaInsightsSyncDeps) {}
 
   /** Range D-N..D-0 (YYYY-MM-DD) em fuso de São Paulo. */
-  private syncRange(today = new Date()): { startDate: string; endDate: string } {
+  private syncRange(
+    today = new Date(),
+    windowDays = MetaInsightsSyncService.RESYNC_DAYS
+  ): { startDate: string; endDate: string } {
     const fmt = (d: Date) =>
       d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // YYYY-MM-DD
     const start = new Date(today);
-    start.setDate(start.getDate() - MetaInsightsSyncService.RESYNC_DAYS);
+    start.setDate(start.getDate() - Math.max(MetaInsightsSyncService.RESYNC_DAYS, windowDays - 1));
     return { startDate: fmt(start), endDate: fmt(today) };
+  }
+
+  /**
+   * Range do ciclo (T10b — backfill incremental): NENHUM usuário paga
+   * on-demand. Se houver janela de cobertura configurada, o job garante
+   * [hoje-N..hoje] coberto:
+   * - tabela vazia → busca a janela inteira (1 chamada de range)
+   * - cobertura atrasada (max antigo) → backfill do max até hoje (re-sync incluso)
+   * - cobertura ok → só o re-sync D-0..D-3 (curta)
+   * Sempre 1 chamada de insights por tenant por ciclo (idempotência cuida do resto).
+   */
+  private async syncRangeForTenant(
+    tenantId: string,
+    today: Date,
+    coverageWindowDays?: number
+  ): Promise<{ startDate: string; endDate: string }> {
+    if (!coverageWindowDays || coverageWindowDays <= MetaInsightsSyncService.RESYNC_DAYS) {
+      return this.syncRange(today);
+    }
+    const windowDays = Math.min(coverageWindowDays, MetaInsightsSyncService.MAX_COVERAGE_WINDOW_DAYS);
+    const fmt = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    const windowStart = new Date(today);
+    windowStart.setDate(windowStart.getDate() - (windowDays - 1));
+
+    const coverage = await this.deps.getCoverage(tenantId);
+    if (!coverage.minDate) {
+      // tabela vazia → janela inteira
+      return { startDate: fmt(windowStart), endDate: fmt(today) };
+    }
+    const todayStr = fmt(today);
+    if (coverage.maxDate && coverage.maxDate >= todayStr) {
+      // cobertura atualizada até hoje → re-sync curto (D-0..D-3) basta
+      return this.syncRange(today);
+    }
+    // cobertura atrasada → backfill de max(cobertura.min, janela.start) até hoje
+    const startStr = coverage.minDate < fmt(windowStart) ? fmt(windowStart) : coverage.minDate;
+    return { startDate: startStr, endDate: todayStr };
   }
 
   /** Normaliza 1 insight (campanha-dia) para linha de upsert — MESMO critério do live. */
@@ -70,7 +112,7 @@ export class MetaInsightsSyncService {
         return { tenantId, ok: false, reason: 'META_NOT_CONNECTED', upserted: 0 };
       }
 
-      const { startDate, endDate } = this.syncRange(today);
+      const { startDate, endDate } = await this.syncRangeForTenant(tenantId, today, (this.deps as any).coverageWindowDays);
       const insights = await this.deps.fetchInsights(tenantId, startDate, endDate);
 
       // status/nome live da lista de campanhas (chamada leve do mesmo ciclo)
