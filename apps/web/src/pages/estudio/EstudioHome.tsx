@@ -5,6 +5,7 @@ import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, L
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
+import { UsageBadge } from '@/components/UsageBadge';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -314,13 +315,7 @@ export function EstudioHome() {
                   </button>
 
                   {/* Informação do número de criativos dinâmica */}
-                  {creativesRemaining !== null && (
-                    <p className="text-xs text-text-tertiary">
-                      {quotaReached
-                        ? 'Limite de criativos do mês atingido — faça upgrade do plano para continuar'
-                        : `${creativesRemaining}${creativesLimit !== null ? ` de ${creativesLimit}` : ''} criativo${creativesRemaining !== 1 ? 's' : ''} restante${creativesRemaining !== 1 ? 's' : ''} este mês`}
-                    </p>
-                  )}
+                  <UsageBadge remaining={creativesRemaining} limit={creativesLimit} className="items-center" />
                 </div>
               </div>
             </section>
@@ -483,11 +478,7 @@ export function EstudioHome() {
                     )}
                     Gerar imagem
                   </button>
-                  {creativesRemaining !== null && (
-                    <p className="text-center text-xs text-text-tertiary">
-                      {creativesRemaining}{creativesLimit !== null ? ` de ${creativesLimit}` : ''} criativo{creativesRemaining !== 1 ? 's' : ''} restante{creativesRemaining !== 1 ? 's' : ''} este mês
-                    </p>
-                  )}
+                  <UsageBadge remaining={creativesRemaining} limit={creativesLimit} />
                 </div>
               </CardContent>
             </Card>
