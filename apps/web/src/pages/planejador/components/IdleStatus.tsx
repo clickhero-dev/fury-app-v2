@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Sparkles, CheckCircle2, AlertCircle, Wand2 } from "lucide-react";
+import { UsageBadge } from "@/components/UsageBadge";
 import { GenerateConfirmationModal } from "./GenerateConfirmationModal";
 
 export interface PrerequisiteCheck {
@@ -88,6 +89,11 @@ export function IdleStatus({ onGenerate, isLoading, checks, creativesRemaining, 
                 ? "Cota insuficiente para gerar planejamento."
                 : "Preencha os requisitos pendentes para continuar."}
             </p>
+
+            {/* Destaque do consumo de crédito (cota de criativos) */}
+            <div className="mt-4 max-w-56">
+              <UsageBadge remaining={creativesRemaining} limit={creativesLimit} />
+            </div>
           </div>
 
           {/* Coluna Direita: Checklist de Status (Renderizado apenas se a prop 'checks' for passada) */}
