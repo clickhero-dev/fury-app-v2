@@ -4,6 +4,12 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, CheckCircle2, XCircle, ArrowLeft, Upload, ImageIcon, Save } from 'lucide-react';
 import { AppLayout, PageHeader, Button, Card } from '@/components';
 import api from '@/lib/api';
+import {
+  COMPLIANCE_APPROVED_HINT,
+  COMPLIANCE_REJECTED_HINT,
+  COMPLIANCE_PENDING_HINT,
+} from '@/lib/compliance.utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useBrandKit } from '@/hooks/useBrandKit';
 import type {
   RenderCreativePayload,
@@ -16,25 +22,52 @@ type WizardStep = 'form' | 'preview' | 'compliance';
 function ComplianceBadge({ status, approved }: { status: string; approved: boolean | null }) {
   if (status === 'pending_compliance') {
     return (
-      <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
-        <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-        Verificando compliance...
-      </div>
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg cursor-help">
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+              Verificando compliance...
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-56 bg-amber-600 text-white border-amber-600">
+            {COMPLIANCE_PENDING_HINT}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
   if (approved === true || status === 'approved') {
     return (
-      <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
-        <CheckCircle2 className="w-4 h-4 shrink-0" />
-        Aprovado para publicação
-      </div>
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg cursor-help">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              Aprovado para publicação
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-56 bg-green-700 text-white border-green-700">
+            {COMPLIANCE_APPROVED_HINT}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
   return (
-    <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">
-      <XCircle className="w-4 h-4 shrink-0" />
-      Reprovado pela política de anúncios
-    </div>
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg cursor-help">
+            <XCircle className="w-4 h-4 shrink-0" />
+            Reprovado pela política de anúncios
+          </div>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-56 bg-red-700 text-white border-red-700">
+          {COMPLIANCE_REJECTED_HINT}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

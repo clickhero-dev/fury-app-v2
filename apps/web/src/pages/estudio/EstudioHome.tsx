@@ -7,6 +7,7 @@ import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatDuration, formatCost } from '@/lib/studio-metrics';
 import type { StudioAsset } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
@@ -622,18 +623,36 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
             }}
           />
           {badge.tone === 'approved' && (
-            <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-green-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
-              <CheckCircle2 className="h-3 w-3" />
-              {badge.label}
-            </div>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-green-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm cursor-help">
+                    <CheckCircle2 className="h-3 w-3" />
+                    {badge.label}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-56 bg-green-700 text-white border-green-700">
+                  {badge.hint}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
           {badge.tone === 'rejected' && (
-            <>
-              <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-red-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
-                <AlertCircle className="h-3 w-3" />
-                {badge.label}
-              </div>
-              {badge.reasons.length > 0 && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-red-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm cursor-help">
+                    <AlertCircle className="h-3 w-3" />
+                    {badge.label}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-56 bg-red-700 text-white border-red-700">
+                  {badge.hint}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {badge.reasons.length > 0 && (
                 <div className="absolute inset-x-0 bottom-0 space-y-1 bg-black/75 px-3 py-2 backdrop-blur-sm">
                   <p className="text-[11px] font-bold uppercase tracking-wide text-red-300">Motivo da reprovação</p>
                   <ul className="space-y-0.5">
@@ -648,13 +667,20 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
                   </ul>
                 </div>
               )}
-            </>
-          )}
           {badge.tone === 'pending' && (
-            <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-amber-500/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              {badge.label}
-            </div>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-amber-500/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm cursor-help">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {badge.label}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-56 bg-amber-600 text-white border-amber-600">
+                  {badge.hint}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       ) : (

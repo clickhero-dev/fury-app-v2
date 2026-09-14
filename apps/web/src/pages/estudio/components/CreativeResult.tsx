@@ -4,6 +4,7 @@ import { AlertCircle, BookmarkCheck, Loader2, RefreshCw, Upload, X } from 'lucid
 import { Button } from '@/components';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { layoutLabel, isKnownLayout } from '@/lib/layout-labels';
 import type { GenerateCreativeResponse, StudioPublishResponse } from '@/types/studio';
@@ -165,16 +166,9 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
         const badge = (currentResult as any).complianceStatus
           ? complianceBadge((currentResult as any).complianceStatus, (currentResult as any).complianceNotes)
           : null;
-        if (!badge || badge.tone === 'unknown') return null;
-        return (
-          <div
-            className={cn(
-              'rounded-2xl border px-4 py-3 text-sm',
-              badge.tone === 'rejected' && 'border-red-200 bg-red-50 text-red-800',
-              badge.tone === 'approved' && 'border-green-200 bg-green-50 text-green-800',
-              badge.tone === 'pending' && 'border-amber-200 bg-amber-50 text-amber-800'
-            )}
-          >
+        if (!badge) return null;
+        const content = (
+          <>
             <p className="font-semibold">{badge.label}</p>
             {badge.reasons.length > 0 && (
               <ul className="mt-2 space-y-1">
@@ -185,7 +179,31 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
                 ))}
               </ul>
             )}
-          </div>
+          </>
+        );
+        const toneClass =
+          badge.tone === 'approved' ? 'border-green-200 bg-green-50 text-green-800'
+          : badge.tone === 'rejected' ? 'border-red-200 bg-red-50 text-red-800'
+          : badge.tone === 'pending' ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : 'border-border bg-surface-muted text-text-secondary';
+        const tipClass =
+          badge.tone === 'approved' ? 'max-w-56 bg-green-700 text-white border-green-700'
+          : badge.tone === 'rejected' ? 'max-w-56 bg-red-700 text-white border-red-700'
+          : badge.tone === 'pending' ? 'max-w-56 bg-amber-600 text-white border-amber-600'
+          : 'max-w-56';
+        return (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div tabIndex={0} className={cn('cursor-help rounded-2xl border px-4 py-3 text-sm', toneClass)}>
+                  {content}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className={tipClass}>
+                {badge.hint}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         );
       })()}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
