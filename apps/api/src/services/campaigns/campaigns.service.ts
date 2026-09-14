@@ -195,6 +195,17 @@ export function mapWizardMetaError(err: unknown, step: string): never {
   if (httpStatus === 504 || message.toLowerCase().includes('timeout')) {
     throw new AppError(504, 'META_TIMEOUT', 'A conexão com os servidores do Meta está lenta no momento. Por favor, tente novamente mais tarde.');
   }
+  // Checkpoint de verificação de identidade ("Autentique sua conta") — pode vir
+  // com code 10/200 + OAuthException, então DEVE ser checado antes desses casos.
+  // Sem code/subcode estável (incidente 2026-09-14): match por texto pt/en.
+  // Mensagem ORIGINAL do Meta é repassada (title: msg) — não substituir, o texto
+  // do Meta é atualizado por eles e já instrui o usuário corretamente.
+  const verificationHints = ['autentique sua conta', 'authenticate your account', 'confirm your identity', 'secure your account', 'checkpoint'];
+  const normalizedErrText = `${metaUserTitle ?? ''} ${metaUserMsg ?? ''} ${message}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (verificationHints.some((hint) => normalizedErrText.includes(hint))) {
+    const metaOriginalMessage = `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}`.trim() || message || 'Erro ao publicar no Meta. Tente novamente.';
+    throw new AppError(403, 'META_ACCOUNT_VERIFICATION', metaOriginalMessage, { step, meta_code: metaCode, meta_subcode: metaSubcode, verification_url: 'https://www.facebook.com/accountquality' });
+  }
   if (metaCode === 190) {
     throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão com Meta expirada. Reconecte em Configurações');
   }

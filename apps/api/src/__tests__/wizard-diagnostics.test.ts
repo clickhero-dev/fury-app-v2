@@ -244,6 +244,31 @@ describe('Wizard Diagnostics (dados de produção)', () => {
     });
   });
 
+  it('DIAG 12: Checkpoint "Autentique sua conta" → META_ACCOUNT_VERIFICATION (antes do 200/10)', async () => {
+    setupBasics();
+    // Checkpoint real observado em produção (14/09): chega com code=10 +
+    // OAuthException e a mensagem de verificação de identidade no user_title/msg.
+    mockMetaApiCall.mockRejectedValue(
+      Object.assign(new Error('[Meta API] 10: permission denied'), {
+        metaCode: 10, metaType: 'OAuthException', httpStatus: 400,
+        metaUserTitle: 'Autentique sua conta',
+        metaUserMsg: 'Acreditamos que alguém pode ter tentado acessar sua conta sem permissão. Para sua proteção, você não poderá criar ou modificar anúncios até autenticar sua conta no Gerenciador de Anúncios. Seus anúncios existentes continuarão a ser veiculados normalmente.',
+      })
+    );
+
+    try {
+      await createCampaignFromWizard(wizardPayload);
+      expect(true).toBe(false); // não deve chegar aqui
+    } catch (err: any) {
+      expect(err.statusCode).toBe(403);
+      expect(err.code).toBe('META_ACCOUNT_VERIFICATION');
+      // mensagem original do Meta repassada (title: msg) — não substituída
+      expect(err.message).toContain('Autentique sua conta');
+      expect(err.message).toContain('Acreditamos que alguém pode ter tentado acessar sua conta');
+      expect(err.details?.verification_url).toBe('https://www.facebook.com/accountquality');
+    }
+  });
+
   it('DIAG 11: Erro com blame_field_specs (formato especial)', async () => {
     setupBasics();
     mockMetaApiCall.mockRejectedValue(
