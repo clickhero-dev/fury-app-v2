@@ -43,10 +43,10 @@ describe('complianceBadge', () => {
     expect(badge.hint).toBe('Seu anúncio passou pela verificação de conteúdo e está liberado para publicar.');
   });
 
-  it('hint vazio quando não é aprovado', () => {
-    expect(complianceBadge('rejected', null).hint).toBe('');
-    expect(complianceBadge('pending_compliance', null).hint).toBe('');
-    expect(complianceBadge(null, null).hint).toBe('');
+  it('hint em todos os status (tooltip em todo badge)', () => {
+    expect(complianceBadge('rejected', null).hint).toBe('Encontramos problemas no conteúdo deste anúncio. Veja os motivos indicados e gere uma nova versão.');
+    expect(complianceBadge('pending_compliance', null).hint).toBe('Estamos verificando o conteúdo do anúncio. O status se atualiza sozinho em instantes.');
+    expect(complianceBadge(null, null).hint).toBe('Este anúncio ainda não passou pela verificação de conteúdo.');
   });
 
   it('pendente → Analisando', () => {

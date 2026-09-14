@@ -12,8 +12,11 @@ export type ComplianceBadgeInfo = {
   hint: string;
 };
 
-/** Texto do tooltip exibido nos badges "Aprovado" do Estúdio. */
+/** Texto do tooltip exibido nos badges de compliance do Estúdio, por status. */
 export const COMPLIANCE_APPROVED_HINT = 'Seu anúncio passou pela verificação de conteúdo e está liberado para publicar.';
+export const COMPLIANCE_REJECTED_HINT = 'Encontramos problemas no conteúdo deste anúncio. Veja os motivos indicados e gere uma nova versão.';
+export const COMPLIANCE_PENDING_HINT = 'Estamos verificando o conteúdo do anúncio. O status se atualiza sozinho em instantes.';
+export const COMPLIANCE_UNKNOWN_HINT = 'Este anúncio ainda não passou pela verificação de conteúdo.';
 
 /** Extrai {approved, issues, text_percentage} do compliance_notes (formato `data={json}` do worker). */
 export function parseComplianceNotes(notes: string | null | undefined): ComplianceParsed {
@@ -73,13 +76,13 @@ export function complianceBadge(
       label: 'Reprovado pelo compliance',
       tone: 'rejected',
       reasons: parsed.issues,
-      hint: '',
+      hint: COMPLIANCE_REJECTED_HINT,
     };
   }
 
   if (complianceStatus === 'pending_compliance' || complianceStatus === 'pending') {
-    return { label: 'Analisando...', tone: 'pending', reasons: [], hint: '' };
+    return { label: 'Analisando...', tone: 'pending', reasons: [], hint: COMPLIANCE_PENDING_HINT };
   }
 
-  return { label: 'Sem análise', tone: 'unknown', reasons: [], hint: '' };
+  return { label: 'Sem análise', tone: 'unknown', reasons: [], hint: COMPLIANCE_UNKNOWN_HINT };
 }
