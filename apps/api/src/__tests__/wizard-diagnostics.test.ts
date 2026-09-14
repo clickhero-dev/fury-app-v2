@@ -256,9 +256,17 @@ describe('Wizard Diagnostics (dados de produção)', () => {
       })
     );
 
-    await expect(createCampaignFromWizard(wizardPayload)).rejects.toMatchObject({
-      statusCode: 403, code: 'META_ACCOUNT_VERIFICATION',
-    });
+    try {
+      await createCampaignFromWizard(wizardPayload);
+      expect(true).toBe(false); // não deve chegar aqui
+    } catch (err: any) {
+      expect(err.statusCode).toBe(403);
+      expect(err.code).toBe('META_ACCOUNT_VERIFICATION');
+      // mensagem original do Meta repassada (title: msg) — não substituída
+      expect(err.message).toContain('Autentique sua conta');
+      expect(err.message).toContain('Acreditamos que alguém pode ter tentado acessar sua conta');
+      expect(err.details?.verification_url).toBe('https://www.facebook.com/accountquality');
+    }
   });
 
   it('DIAG 11: Erro com blame_field_specs (formato especial)', async () => {

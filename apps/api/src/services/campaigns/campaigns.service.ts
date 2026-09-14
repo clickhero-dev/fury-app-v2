@@ -198,12 +198,13 @@ export function mapWizardMetaError(err: unknown, step: string): never {
   // Checkpoint de verificação de identidade ("Autentique sua conta") — pode vir
   // com code 10/200 + OAuthException, então DEVE ser checado antes desses casos.
   // Sem code/subcode estável (incidente 2026-09-14): match por texto pt/en.
+  // Mensagem ORIGINAL do Meta é repassada (title: msg) — não substituir, o texto
+  // do Meta é atualizado por eles e já instrui o usuário corretamente.
   const verificationHints = ['autentique sua conta', 'authenticate your account', 'confirm your identity', 'secure your account', 'checkpoint'];
   const normalizedErrText = `${metaUserTitle ?? ''} ${metaUserMsg ?? ''} ${message}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   if (verificationHints.some((hint) => normalizedErrText.includes(hint))) {
-    throw new AppError(403, 'META_ACCOUNT_VERIFICATION',
-      'Sua conta de anúncios precisa ser autenticada no Facebook antes de criar campanhas. Abra o Gerenciador de Anúncios (Central de Qualidade da Conta) e conclua a verificação. Seus anúncios existentes continuam veiculando normalmente.',
-      { step, meta_code: metaCode, meta_subcode: metaSubcode, verification_url: 'https://www.facebook.com/accountquality' });
+    const metaOriginalMessage = `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}`.trim() || message || 'Erro ao publicar no Meta. Tente novamente.';
+    throw new AppError(403, 'META_ACCOUNT_VERIFICATION', metaOriginalMessage, { step, meta_code: metaCode, meta_subcode: metaSubcode, verification_url: 'https://www.facebook.com/accountquality' });
   }
   if (metaCode === 190) {
     throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão com Meta expirada. Reconecte em Configurações');
