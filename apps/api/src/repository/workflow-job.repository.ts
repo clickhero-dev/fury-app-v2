@@ -32,7 +32,13 @@ export class WorkflowJobRepository extends TenantScopedRepository {
   async listRecoverableWorkflowJobs(opts?: { workflow?: string; sinceMs?: number }) {
     const cutoff = opts?.sinceMs ? new Date(Date.now() - opts.sinceMs) : new Date(0);
     const conditions = [
-      or(eq(workflowJobs.status, 'running'), eq(workflowJobs.status, 'pending')),
+      // awaiting_images = job que enfileirou as imagens mas nunca foi marcado done
+      // (imagem falhou/worker morreu) — é recuperável tanto quanto running/pending.
+      or(
+        eq(workflowJobs.status, 'running'),
+        eq(workflowJobs.status, 'pending'),
+        eq(workflowJobs.status, 'awaiting_images'),
+      ),
       lt(workflowJobs.updatedAt, cutoff),
     ];
     if (opts?.workflow) conditions.push(eq(workflowJobs.workflow, opts.workflow));

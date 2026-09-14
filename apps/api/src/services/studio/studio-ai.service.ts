@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { StudioRepository } from '../../repository/studio.repository.js';
 import { openrouterService } from '../llms/openrouter.service.js';
 import { saveTemporaryStudioImage, ensureStudioAssetsDir, studioAssetsDir } from '../../lib/temp-storage.js';
@@ -13,17 +14,7 @@ import {
   getModificationsPerCreativeLimit,
 } from '../studio/creative-quota.service.js';
 
-// ─── Modelos disponíveis ─────────────────────────────────────────
-const IMAGE_MODELS = [
-  { id: 'bytedance-seed/seedream-4.5', label: 'Seedream 4.5', description: 'ByteDance — Mais barato ($0.04/img). Bom para alto volume.', category: 'barato', type: 'image' },
-  { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 Klein 4B', description: 'Black Forest Labs — Melhor custo-benefício. Rápido e consistente.', category: 'custo-beneficio', type: 'image' },
-  { id: 'black-forest-labs/flux.2-max', label: 'FLUX.2 Max', description: 'Black Forest Labs — Máxima qualidade. Ideal para campanhas premium.', category: 'qualidade', type: 'image' },
-];
-const VIDEO_MODELS = [
-  { id: 'google/veo-3.1-lite', label: 'Veo 3.1 Lite', description: 'Google — Mais barato. Clipes 4-8s, 720p/1080p com áudio.', category: 'barato', type: 'video' },
-  { id: 'kwaivgi/kling-video-o1', label: 'Kling Video O1', description: 'Kuaishou — Melhor custo-benefício. $0.112/s, cinematográfico.', category: 'custo-beneficio', type: 'video' },
-  { id: 'google/veo-3.1', label: 'Veo 3.1', description: 'Google — Máxima qualidade. 1080p, áudio nativo, cenas estendidas. $0.40/s.', category: 'qualidade', type: 'video' },
-];
+import { IMAGE_MODELS, VIDEO_MODELS } from './studio-model-catalog.js';
 
 const VOICE_TONE_LABELS: Record<string, string> = {
   professional: 'Profissional',
@@ -73,7 +64,7 @@ async function uploadVideoToStorage(videoUrl: string): Promise<string> {
 
 type LlmLike = Pick<
   typeof openrouterService,
-  'chat' | 'generateImage' | 'generateVideo' | 'editImage'
+  'chat' | 'generateImageWithMeta' | 'generateVideo' | 'editImage'
 >;
 
 interface QuotaLike {
@@ -86,7 +77,7 @@ interface QuotaLike {
 
 type StudioRepoF = (tenantId: string) => StudioRepository;
 
-export class OpenRouterStudioService {
+export class StudioAiService {
   constructor(
     private repoFactory: StudioRepoF = (t) => new StudioRepository(t),
     private llm: LlmLike = openrouterService,
@@ -172,22 +163,26 @@ export class OpenRouterStudioService {
     payload: { model: string; prompt: string; aspect_ratio: string; resolution: string },
   ): Promise<Record<string, any>> {
     await this.quota.consumeCreativeQuota(tenantId);
+    const startedAt = performance.now();
     try {
       const brand = await this.getBrandContext(tenantId);
-      const base64Image = await this.llm.generateImage({
+      const { dataUrl, costUsd } = await this.llm.generateImageWithMeta({
         model: payload.model,
         prompt: payload.prompt,
         aspect_ratio: payload.aspect_ratio,
         resolution: payload.resolution,
         logoUrl: brand.logoUrl,
       });
-      const imageUrl = await uploadImageToStorage(base64Image);
+      const imageUrl = await uploadImageToStorage(dataUrl);
+      const processingTimeMs = Math.round(performance.now() - startedAt);
       const modificationsRemaining = await this.quota.getModificationsPerCreativeLimit(tenantId);
       const asset = await this.repo(tenantId).createAsset({
         tenantId,
         type: 'image',
         url: imageUrl,
         complianceStatus: 'pending_compliance',
+        costUsd,
+        processingTimeMs,
         modificationsRemaining,
         complianceNotes: JSON.stringify({
           prompt: payload.prompt,
@@ -206,6 +201,8 @@ export class OpenRouterStudioService {
         generatedAt: new Date().toISOString(),
         status: 'pending_compliance' as const,
         modificationsRemaining,
+        costUsd,
+        processingTimeMs,
       };
     } catch (error) {
       await this.quota.refundCreativeQuota(tenantId);
@@ -318,13 +315,17 @@ export class OpenRouterStudioService {
       return { type: 'video' as const, assetId: newAsset.id, videoUrl: storedVideoUrl, creativeData: { headline: '', primary_text: '', cta: '' } };
     }
 
-    const base64Image = await this.llm.generateImage({ model: originalModel, prompt: newPrompt, logoUrl: brand.logoUrl });
-    const imageUrl = await uploadImageToStorage(base64Image);
+    const startedAt = performance.now();
+    const { dataUrl, costUsd } = await this.llm.generateImageWithMeta({ model: originalModel, prompt: newPrompt, logoUrl: brand.logoUrl });
+    const imageUrl = await uploadImageToStorage(dataUrl);
+    const processingTimeMs = Math.round(performance.now() - startedAt);
     const newAsset = await this.repo(tenantId).createAsset({
       tenantId,
       type: 'image',
       url: imageUrl,
       complianceStatus: 'pending_compliance',
+      costUsd,
+      processingTimeMs,
       complianceNotes: JSON.stringify({
         prompt: newPrompt,
         model: originalModel,
@@ -334,7 +335,7 @@ export class OpenRouterStudioService {
         feedback: input.feedback,
       }),
     });
-    return { type: 'image' as const, assetId: newAsset.id, imageUrl, creativeData: { headline: '', primary_text: '', cta: '' } };
+    return { type: 'image' as const, assetId: newAsset.id, imageUrl, creativeData: { headline: '', primary_text: '', cta: '' }, costUsd, processingTimeMs };
   }
 
   async regenerateAd(

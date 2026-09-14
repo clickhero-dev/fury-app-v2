@@ -15,7 +15,8 @@ const state = vi.hoisted(() => ({
     options: { connection: unknown; concurrency: number };
     handlers: Record<string, (...args: unknown[]) => unknown>;
   }>,
-  chatCreate: vi.fn(),
+  openRouterChat: vi.fn(),
+  handleRejected: vi.fn(),
   assets: new Map<string, FakeAsset>(),
   updateCalls: [] as Array<{ id: string; data: Partial<FakeAsset> }>,
   fetchImpl: vi.fn(),
@@ -72,16 +73,12 @@ vi.mock('bullmq', () => {
   return { Worker: WorkerMock, Queue: QueueMock };
 });
 
-vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(function () {
-    return {
-      chat: {
-        completions: {
-          create: state.chatCreate,
-        },
-      },
-    };
-  }),
+vi.mock('../services/llms/openrouter.service.js', () => ({
+  openrouterService: { chat: state.openRouterChat },
+}));
+
+vi.mock('../services/studio/compliance-adjuster.service.js', () => ({
+  complianceAdjuster: { handleRejected: state.handleRejected },
 }));
 
 vi.mock('@fury/db', () => {
@@ -247,9 +244,10 @@ beforeEach(async () => {
   state.workerInstances.length = 0;
   state.assets.clear();
   state.updateCalls.length = 0;
-  state.chatCreate.mockReset();
+  state.openRouterChat.mockReset();
+  state.handleRejected.mockReset();
   state.fetchImpl.mockReset();
-  process.env.OPENAI_API_KEY = 'test-openai-key';
+  // NOTA: NENHUMA OPENAI_API_KEY é setada — o compliance roda via OpenRouter.
   globalThis.fetch = state.fetchImpl;
 
   ({ startComplianceCheckWorker, stopComplianceCheckWorker } = await import('../workers/compliance-check.worker.js'));
@@ -276,19 +274,13 @@ describe('Compliance Check Worker', () => {
       arrayBuffer: async () => new TextEncoder().encode('fake-image').buffer,
     });
 
-    state.chatCreate.mockResolvedValue({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              approved: true,
-              issues: [],
-              text_percentage: 0,
-            }),
-          },
-        },
-      ],
-    });
+    state.openRouterChat.mockResolvedValue(
+      JSON.stringify({
+        approved: true,
+        issues: [],
+        text_percentage: 0,
+      })
+    );
 
     await startComplianceCheckWorker();
     expect(state.workerInstances).toHaveLength(1);
@@ -296,6 +288,13 @@ describe('Compliance Check Worker', () => {
     await state.workerInstances[0].processor({
       data: { creativeAssetId: asset.id, tenantId: asset.tenantId },
     });
+
+    // A análise vai para o OpenRouter com modelo vision + a imagem em data URL
+    expect(state.openRouterChat).toHaveBeenCalledTimes(1);
+    const [messages, opts] = state.openRouterChat.mock.calls[0];
+    expect(opts).toMatchObject({ model: expect.stringContaining('/'), response_format: { type: 'json_object' } });
+    const userParts = (messages as any[])[1].content as any[];
+    expect(userParts[0]).toMatchObject({ type: 'image_url', image_url: { url: expect.stringContaining('data:image/png;base64,') } });
 
     expect(asset.complianceStatus).toBe('approved');
     expect(asset.complianceNotes).toContain('approved=true');
@@ -318,19 +317,13 @@ describe('Compliance Check Worker', () => {
       arrayBuffer: async () => new TextEncoder().encode('fake-image').buffer,
     });
 
-    state.chatCreate.mockResolvedValue({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              approved: false,
-              issues: ['Texto excessivo detectado acima de 20% da imagem'],
-              text_percentage: 25,
-            }),
-          },
-        },
-      ],
-    });
+    state.openRouterChat.mockResolvedValue(
+      JSON.stringify({
+        approved: false,
+        issues: ['Texto excessivo detectado acima de 20% da imagem'],
+        text_percentage: 25,
+      })
+    );
 
     await startComplianceCheckWorker();
     expect(state.workerInstances).toHaveLength(1);
@@ -344,7 +337,7 @@ describe('Compliance Check Worker', () => {
     expect(asset.complianceNotes).toContain('text_percentage=25');
   });
 
-  it('usa fallback de aprovação manual quando não há API key', async () => {
+  it('não depende de OPENAI_API_KEY: analisa via OpenRouter normalmente', async () => {
     delete process.env.OPENAI_API_KEY;
 
     const asset: FakeAsset = {
@@ -361,6 +354,9 @@ describe('Compliance Check Worker', () => {
       headers: { get: () => 'image/png' },
       arrayBuffer: async () => new TextEncoder().encode('fake-image').buffer,
     });
+    state.openRouterChat.mockResolvedValue(
+      JSON.stringify({ approved: true, issues: [], text_percentage: 5 })
+    );
 
     await startComplianceCheckWorker();
     await state.workerInstances[0].processor({
@@ -368,8 +364,164 @@ describe('Compliance Check Worker', () => {
     });
 
     expect(asset.complianceStatus).toBe('approved');
+    expect(asset.complianceNotes).toContain('approved=true');
+    expect(asset.complianceNotes).not.toContain('[FALLBACK]');
+    expect(asset.complianceNotes).not.toContain('API Key OpenAI');
+  });
+
+  it('sem provedor disponível (chat falha) → pending_compliance, NUNCA auto-aprova', async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const asset: FakeAsset = {
+      id: 'asset-4',
+      tenantId: 'tenant-1',
+      url: 'https://example.com/creative.png',
+      complianceStatus: 'pending_compliance',
+      complianceNotes: null,
+    };
+    state.assets.set(asset.id, asset);
+
+    state.fetchImpl.mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'image/png' },
+      arrayBuffer: async () => new TextEncoder().encode('fake-image').buffer,
+    });
+    state.openRouterChat.mockRejectedValue(new Error('OPENROUTER_API_KEY nao configurada'));
+
+    await startComplianceCheckWorker();
+    await state.workerInstances[0].processor({
+      data: { creativeAssetId: asset.id, tenantId: asset.tenantId },
+    });
+
+    expect(asset.complianceStatus).toBe('pending_compliance');
     expect(asset.complianceNotes).toContain('[FALLBACK]');
-    expect(asset.complianceNotes).toContain('API Key OpenAI nao configurada');
+  });
+
+  it('tamanho de texto NÃO é mais critério: 40% da imagem com modelo aprovando → aprovado', async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const asset: FakeAsset = {
+      id: 'asset-7',
+      tenantId: 'tenant-1',
+      url: 'https://example.com/creative.png',
+      complianceStatus: 'pending_compliance',
+      complianceNotes: null,
+    };
+    state.assets.set(asset.id, asset);
+
+    state.fetchImpl.mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'image/png' },
+      arrayBuffer: async () => new TextEncoder().encode('fake-image').buffer,
+    });
+    // O modelo aprovou com 40% de texto — sem hard-check de tamanho, é aprovado
+    state.openRouterChat.mockResolvedValue(
+      JSON.stringify({ approved: true, issues: [], text_percentage: 40 })
+    );
+    state.handleRejected.mockResolvedValue(undefined);
+
+    await startComplianceCheckWorker();
+    await state.workerInstances[0].processor({
+      data: { creativeAssetId: asset.id, tenantId: asset.tenantId },
+    });
+
+    expect(asset.complianceStatus).toBe('approved');
+  });
+
+  it('texto alucinado (caracteres em outros idiomas / glifos quebrados) é reprovação', async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const asset: FakeAsset = {
+      id: 'asset-8',
+      tenantId: 'tenant-1',
+      url: 'https://example.com/creative.png',
+      complianceStatus: 'pending_compliance',
+      complianceNotes: null,
+    };
+    state.assets.set(asset.id, asset);
+
+    state.fetchImpl.mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'image/png' },
+      arrayBuffer: async () => new TextEncoder().encode('fake-image').buffer,
+    });
+    state.openRouterChat.mockResolvedValue(
+      JSON.stringify({
+        approved: false,
+        issues: ['Texto alucinado: caracteres ilegíveis em outro idioma ("хелло world" russo).'],
+        text_percentage: 15,
+      })
+    );
+    state.handleRejected.mockResolvedValue(undefined);
+
+    await startComplianceCheckWorker();
+    await state.workerInstances[0].processor({
+      data: { creativeAssetId: asset.id, tenantId: asset.tenantId },
+    });
+
+    expect(asset.complianceStatus).toBe('rejected');
+    expect(asset.complianceNotes).toContain('alucinado');
+  });
+
+  it('rate-limit do provedor (429/5xx) → relança o erro para o BullMQ tentar de novo (não marca pending)', async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const asset: FakeAsset = {
+      id: 'asset-6',
+      tenantId: 'tenant-1',
+      url: 'https://example.com/creative.png',
+      complianceStatus: 'pending_compliance',
+      complianceNotes: null,
+    };
+    state.assets.set(asset.id, asset);
+
+    state.fetchImpl.mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'image/png' },
+      arrayBuffer: async () => new TextEncoder().encode('fake-image').buffer,
+    });
+    const rateLimited = Object.assign(new Error('Provider returned error (429)'), { statusCode: 502 });
+    state.openRouterChat.mockRejectedValue(rateLimited);
+
+    await startComplianceCheckWorker();
+    await expect(
+      state.workerInstances[0].processor({ data: { creativeAssetId: asset.id, tenantId: asset.tenantId } })
+    ).rejects.toThrow();
+
+    expect(asset.complianceStatus).toBe('pending_compliance'); // mantém o estado inicial p/ retry
+  });
+
+  it('quando rejeitado, dispara o auto-ajuste (handleRejected) e grava rejected', async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const asset: FakeAsset = {
+      id: 'asset-5',
+      tenantId: 'tenant-1',
+      url: 'https://example.com/creative.png',
+      complianceStatus: 'pending_compliance',
+      complianceNotes: null,
+    };
+    state.assets.set(asset.id, asset);
+
+    state.fetchImpl.mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'image/png' },
+      arrayBuffer: async () => new TextEncoder().encode('fake-image').buffer,
+    });
+    state.openRouterChat.mockResolvedValue(
+      JSON.stringify({ approved: false, issues: ['Logotipo de odontologia em anúncio de padaria.'], text_percentage: 25 })
+    );
+    state.handleRejected.mockResolvedValue(undefined);
+
+    await startComplianceCheckWorker();
+    await state.workerInstances[0].processor({
+      data: { creativeAssetId: asset.id, tenantId: asset.tenantId },
+    });
+
+    expect(asset.complianceStatus).toBe('rejected');
+    expect(state.handleRejected).toHaveBeenCalledWith(
+      expect.objectContaining({ creativeAssetId: asset.id, tenantId: asset.tenantId })
+    );
   });
 
   it('inicializa junto com o servidor em modo production', async () => {

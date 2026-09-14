@@ -10,6 +10,10 @@ import {
   setCampaignsCache,
   invalidateCampaignsCache,
 } from '../lib/campaigns-cache.js';
+import { invalidateHttpCache } from '../lib/http-cache.js';
+
+/** Prefixos de rota cujas respostas GET são afetadas por writes de campanha. */
+const CACHE_PATHS_METRICS_GOALS = ['/api/metrics', '/api/goals'];
 import { openrouterService, type ChatMessage } from '../services/llms/openrouter.service.js';
 import { emailService } from '../services/email/email.service.js';
 import { sendToTenant } from '../services/email/notify.js';
@@ -53,17 +57,35 @@ const insightsSchema = z.object({
   end_date: z.string().optional(),
 });
 
+const wizardCreativeItemSchema = z.object({
+  creative_asset_id: z.string().min(1).optional(),
+  creative_upload_url: z.string().min(1).optional(),
+  creative_instagram_media_id: z.string().min(1).optional(),
+  creative_media_url: z.string().min(1).optional(),
+  headline: z.string().min(1).max(40),
+  primary_text: z.string().min(1).max(125),
+  // "" = sem URL (o wizard envia vazio quando o criativo não tem link). URL
+  // inválida de verdade (não-vazia sem http) continua barrada.
+  destination_url: z
+    .union([z.string().regex(/^https?:\/\//, 'URL inválida. Use http:// ou https://'), z.literal('')])
+    .optional(),
+});
+
 const createWizardSchema = z
   .object({
     objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp', 'whatsapp_conv']),
 
+    creatives: z.array(wizardCreativeItemSchema).min(1).max(4).optional(),
+    // campos únicos legados — mantidos para clientes antigos
     creative_asset_id: z.string().min(1).optional(),
     creative_upload_url: z.string().min(1).optional(),
     creative_instagram_media_id: z.string().min(1).optional(),
     creative_media_url: z.string().min(1).optional(),
-    headline: z.string().min(1).max(40),
-    primary_text: z.string().min(1).max(125),
-    destination_url: z.string().regex(/^https?:\/\//, 'URL inválida. Use http:// ou https://').optional(),
+    headline: z.string().min(1).max(40).optional(),
+    primary_text: z.string().min(1).max(125).optional(),
+    destination_url: z
+      .union([z.string().regex(/^https?:\/\//, 'URL inválida. Use http:// ou https://'), z.literal('')])
+      .optional(),
 
     location_city: z.string().min(1),
     location_city_key: z.string().min(1).optional(),
@@ -85,11 +107,23 @@ const createWizardSchema = z
     instagram_username: z.string().min(1).optional(),
   })
   .refine(
-    (data) => Boolean(data.creative_asset_id || data.creative_upload_url || data.creative_instagram_media_id),
+    (data) =>
+      data.creatives !== undefined ||
+      Boolean(data.creative_asset_id || data.creative_upload_url || data.creative_instagram_media_id),
     {
       message: 'Selecione uma imagem da galeria, envie um arquivo ou escolha um post do Instagram.',
-      path: ['creative_asset_id'],
+      path: ['creatives'],
     }
+  )
+  .refine(
+    (data) =>
+      data.creatives === undefined ||
+      data.creatives.every((c) => Boolean(c.creative_asset_id || c.creative_upload_url || c.creative_instagram_media_id)),
+    { message: 'Cada criativo deve ter imagem da galeria, upload ou post do Instagram.', path: ['creatives'] }
+  )
+  .refine(
+    (data) => data.creatives !== undefined || (Boolean(data.headline) && Boolean(data.primary_text)),
+    { message: 'Informe o título (headline) e o texto principal (primary text).', path: ['headline'] }
   )
   .refine((data) => data.age_max >= data.age_min, {
     message: 'A idade máxima deve ser maior ou igual à idade mínima.',
@@ -131,6 +165,22 @@ const createWizardSchema = z
       path: ['instagram_user_id'],
     }
   );
+
+type WizardCreativeItem = z.infer<typeof wizardCreativeItemSchema>;
+
+// Mapeia o payload do wizard (snake_case) para o formato do service (camelCase).
+// Usado nos dois call sites de createCampaignFromWizard (createWizardCampaign e mcpLogWizard).
+function toWizardCreativeInputs(creatives: WizardCreativeItem[] | undefined) {
+  return creatives?.map((c) => ({
+    creativeAssetId: c.creative_asset_id,
+    creativeUploadUrl: c.creative_upload_url,
+    creativeInstagramMediaId: c.creative_instagram_media_id,
+    creativeMediaUrl: c.creative_media_url,
+    headline: c.headline,
+    primaryText: c.primary_text,
+    destinationUrl: c.destination_url,
+  }));
+}
 
 const metaLocationsSchema = z.object({
   q: z.string().min(2, 'Digite ao menos 2 caracteres'),
@@ -299,6 +349,8 @@ export class CampaignsController {
         ...data,
       });
 
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
+
       res.status(201).json({
         success: true,
         data: campaign,
@@ -322,6 +374,8 @@ export class CampaignsController {
       }
 
       const result = await this.campaignsService.pauseCampaign({ tenantId, campaignId: id });
+      await invalidateCampaignsCache(tenantId);
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.json({
         success: true,
@@ -346,6 +400,8 @@ export class CampaignsController {
       }
 
       const result = await this.campaignsService.resumeCampaign({ tenantId, campaignId: id });
+      await invalidateCampaignsCache(tenantId);
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.json({
         success: true,
@@ -375,6 +431,9 @@ export class CampaignsController {
         campaignId: id,
         dailyBudget: data.dailyBudget,
       });
+
+      await invalidateCampaignsCache(tenantId);
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.json({
         success: true,
@@ -480,6 +539,7 @@ export class CampaignsController {
       });
 
       await invalidateCampaignsCache(tenantId);
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.json({
         success: true,
@@ -514,6 +574,7 @@ export class CampaignsController {
       });
 
       await invalidateCampaignsCache(tenantId);
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.json({
         success: true,
@@ -546,6 +607,7 @@ export class CampaignsController {
       });
 
       await invalidateCampaignsCache(tenantId);
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.json({
         success: true,
@@ -624,6 +686,7 @@ export class CampaignsController {
       const result = await this.campaignsService.createCampaignFromWizard({
         tenantId,
         objective: data.objective,
+        creatives: toWizardCreativeInputs(data.creatives),
         creativeAssetId: data.creative_asset_id,
         creativeUploadUrl: data.creative_upload_url,
         creativeInstagramMediaId: data.creative_instagram_media_id,
@@ -655,6 +718,8 @@ export class CampaignsController {
       const campaignName =
         (result as any)?.campaign?.name ?? (result as any)?.campaignName ?? (result as any)?.name ?? 'sua campanha';
       await sendToTenant(tenantId, req.user?.email, (to) => emailService.sendCampaignPublished(to, campaignName));
+
+      await invalidateHttpCache(tenantId, CACHE_PATHS_METRICS_GOALS);
 
       res.status(201).json(result);
     } catch (err) {
@@ -737,6 +802,7 @@ export class CampaignsController {
         const result = await this.campaignsService.createCampaignFromWizard({
           tenantId,
           objective: data.objective,
+          creatives: toWizardCreativeInputs(data.creatives),
           creativeAssetId: data.creative_asset_id,
           creativeUploadUrl: data.creative_upload_url,
           creativeInstagramMediaId: data.creative_instagram_media_id,

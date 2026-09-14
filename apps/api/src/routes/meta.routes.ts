@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { controllers } from '../di.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
+import { cacheMiddleware } from '../middleware/cache.middleware.js';
 
 const router = Router();
 
@@ -25,7 +26,7 @@ router.post('/adaccounts-by-business', authMiddleware, tenantMiddleware, control
 router.post('/whatsapp-by-pages', authMiddleware, tenantMiddleware, controllers.meta.getWhatsappByPages);
 router.post('/save-selection', authMiddleware, tenantMiddleware, controllers.meta.saveSelection);
 router.get('/asset-selection', authMiddleware, tenantMiddleware, controllers.meta.getAssetSelection);
-router.get('/connections', authMiddleware, tenantMiddleware, controllers.meta.getConnections);
+router.get('/connections', authMiddleware, tenantMiddleware, cacheMiddleware({ ttl: 60 }), controllers.meta.getConnections);
 router.patch(
   '/connections/:id/select-account',
   authMiddleware,

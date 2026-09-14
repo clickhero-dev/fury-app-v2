@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X, Copy, Check, LayoutGrid, Image, Sparkles, Film, Upload, Trash2, RotateCcw, Plus } from 'lucide-react';
+import { complianceBadge } from '@/lib/compliance.utils';
 import { clsx } from 'clsx';
 import { useMutation } from '@tanstack/react-query';
 import api from '@/lib/api';
@@ -365,6 +366,33 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate, onRequestD
 
         {/* Content */}
         <div className="px-6 py-6 space-y-6">
+          {(() => {
+            const badge = complianceBadge(post.compliance?.status ?? null, post.compliance?.notes ?? null);
+            if (badge.tone !== 'unknown') {
+              return (
+                <div
+                  className={clsx(
+                    'rounded-xl border px-4 py-3 text-sm',
+                    badge.tone === 'rejected' && 'border-red-200 bg-red-50 text-red-800',
+                    badge.tone === 'approved' && 'border-green-200 bg-green-50 text-green-800',
+                    badge.tone === 'pending' && 'border-amber-200 bg-amber-50 text-amber-800'
+                  )}
+                >
+                  <p className="font-semibold flex items-center gap-2">{badge.label}</p>
+                  {badge.reasons.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {badge.reasons.map((reason, i) => (
+                        <li key={i} className="text-xs leading-snug">
+                          • {reason}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            }
+            return null;
+          })()}
           {/* Status & Histórico Tag */}
           <div className="flex items-center justify-between">
             <span className={clsx('text-xs font-medium px-2.5 py-1 rounded-full', statusColors[post.status])}>

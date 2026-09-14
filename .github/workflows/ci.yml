@@ -145,6 +145,9 @@ jobs:
         run: npm run coverage:badge
 
       - name: Publish coverage badge to badges branch
+        # Badge é cosmético; o GITHUB_TOKEN do Actions não tem push para a
+        # branch badges (403) em repo de org — falha aqui não pode derrubar o CI.
+        continue-on-error: true
         if: github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"

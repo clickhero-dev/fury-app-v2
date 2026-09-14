@@ -11,13 +11,52 @@ import {
   campaigns,
   creativeAssets,
 } from '@fury/db';
-import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type Tenant = typeof tenants.$inferSelect;
 type User = typeof users.$inferSelect;
 type Plan = typeof plans.$inferSelect;
 type Subscription = typeof subscriptions.$inferSelect;
+
+// ── Dashboard (stats globais) ───────────────────────────────────
+export type DashboardPeriod = '7d' | '30d' | '90d';
+
+export type ActivityItem = {
+  tipo: 'novo' | 'trial' | 'plano' | 'cancelamento';
+  tenantName: string;
+  description: string;
+  at: string; // ISO
+};
+
+export interface DashboardStats {
+  mrrCents: number;
+  activeClients: number;
+  newClients: number;
+  activeTrials: number;
+  cancellations: number;
+  plans: Array<{ planId: string; name: string; priceCents: number; interval: string; clients: number }>;
+  recentActivity: ActivityItem[];
+}
+
+/** Monta a lista "Atividade Recente" (puro — sem DB). Subs já vêm do JOIN com tenants/plans. */
+export function mapRecentActivity(
+  subs: Array<{ status: string; createdAt: Date; updatedAt: Date; tenantName: string | null; planName: string | null }>,
+  newTenants: Array<{ name: string; createdAt: Date }>
+): ActivityItem[] {
+  const items: ActivityItem[] = [
+    ...subs.map((s): ActivityItem => {
+      const tenantName = s.tenantName ?? 'Tenant';
+      if (s.status === 'cancelled')
+        return { tipo: 'cancelamento', tenantName, description: s.planName ? `cancelou o plano ${s.planName}` : 'cancelou a assinatura', at: s.updatedAt.toISOString() };
+      if (s.status === 'trial')
+        return { tipo: 'trial', tenantName, description: s.planName ? `iniciou período trial do plano ${s.planName}` : 'iniciou período trial', at: s.createdAt.toISOString() };
+      return { tipo: 'plano', tenantName, description: s.planName ? `assinou o plano ${s.planName}` : 'assinou um plano', at: s.createdAt.toISOString() };
+    }),
+    ...newTenants.map((t): ActivityItem => ({ tipo: 'novo', tenantName: t.name, description: 'criou conta na plataforma', at: t.createdAt.toISOString() })),
+  ];
+  return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10);
+}
 
 /**
  * Repositório **SuperAdmin (GLOBAL)** — operações administrativas que cruzam
@@ -231,5 +270,85 @@ export class SuperAdminRepository extends TenantScopedRepository {
   }
   async findCreativeAssetsByTenant(tenantId: string) {
     return this.db.query.creativeAssets.findMany({ where: eq(creativeAssets.tenantId, tenantId) });
+  }
+
+  // ── Dashboard (stats globais) ───────────────────────────────────
+  async getDashboardStats(period: DashboardPeriod): Promise<DashboardStats> {
+    const days = parseInt(period, 10);
+    const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const now = new Date();
+
+    // "Ativa" = mesma semântica do middleware checkSubscriptionActive
+    const activeSubs = await this.db.query.subscriptions.findMany({
+      where: and(
+        eq(subscriptions.status, 'active'),
+        or(
+          eq(subscriptions.isNonExpirable, true),
+          isNull(subscriptions.currentPeriodEnd),
+          gt(subscriptions.currentPeriodEnd, now)
+        )
+      ),
+    });
+    const trialSubs = await this.db.query.subscriptions.findMany({
+      where: and(eq(subscriptions.status, 'trial'), or(isNull(subscriptions.trialEndsAt), gt(subscriptions.trialEndsAt, now))),
+    });
+
+    const planIds = [...new Set(activeSubs.map((s) => s.planId))];
+    const planRows = planIds.length ? await this.db.query.plans.findMany({ where: inArray(plans.id, planIds) }) : [];
+    const planById = new Map(planRows.map((p) => [p.id, p]));
+
+    // MRR proxy (sem gateway): soma do preço mensal dos planos ativos; anual ÷ 12
+    const mrrCents = activeSubs.reduce((sum, s) => {
+      const p = planById.get(s.planId);
+      if (!p) return sum;
+      return sum + (p.interval === 'yearly' ? Math.round(p.priceCents / 12) : p.priceCents);
+    }, 0);
+
+    const countByPlan = new Map<string, number>();
+    for (const s of activeSubs) countByPlan.set(s.planId, (countByPlan.get(s.planId) ?? 0) + 1);
+
+    const [newClientsRow] = await this.db
+      .select({ total: sql<number>`count(*)::int`.mapWith(Number) })
+      .from(tenants)
+      .where(gte(tenants.createdAt, start));
+    const [cancelRow] = await this.db
+      .select({ total: sql<number>`count(*)::int`.mapWith(Number) })
+      .from(subscriptions)
+      .where(and(eq(subscriptions.status, 'cancelled'), gte(subscriptions.updatedAt, start)));
+
+    const recentSubs = await this.db
+      .select({
+        status: subscriptions.status,
+        createdAt: subscriptions.createdAt,
+        updatedAt: subscriptions.updatedAt,
+        tenantName: tenants.name,
+        planName: plans.name,
+      })
+      .from(subscriptions)
+      .leftJoin(tenants, eq(subscriptions.tenantId, tenants.id))
+      .leftJoin(plans, eq(subscriptions.planId, plans.id))
+      .orderBy(desc(sql`GREATEST(${subscriptions.createdAt}, ${subscriptions.updatedAt})`))
+      .limit(10);
+
+    const recentNewTenants = await this.db.query.tenants.findMany({
+      where: gte(tenants.createdAt, start),
+      orderBy: [desc(tenants.createdAt)],
+      limit: 5,
+    });
+
+    return {
+      mrrCents,
+      activeClients: activeSubs.length,
+      newClients: Number((newClientsRow as any)?.total ?? 0),
+      activeTrials: trialSubs.length,
+      cancellations: Number((cancelRow as any)?.total ?? 0),
+      plans: [...countByPlan.entries()]
+        .map(([planId, clients]) => {
+          const p = planById.get(planId);
+          return { planId, name: p?.name ?? 'Plano removido', priceCents: p?.priceCents ?? 0, interval: p?.interval ?? 'monthly', clients };
+        })
+        .sort((a, b) => b.clients - a.clients),
+      recentActivity: mapRecentActivity(recentSubs as any, recentNewTenants as any),
+    };
   }
 }

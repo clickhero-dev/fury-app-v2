@@ -33,6 +33,10 @@ const updateUserSchema = z.object({
       ageMin: z.number().int().min(18).max(65).optional(),
       ageMax: z.number().int().min(18).max(65).optional(),
       gender: z.enum(["all", "male", "female"]).optional(),
+      audienceInterests: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+      })).optional(),
     })
     .optional(),
 });
@@ -100,6 +104,10 @@ function toMoney(v: number) {
   return { amount: Math.round(v * 100) };
 }
 
+const dashboardPeriodSchema = z.object({
+  period: z.enum(['7d', '30d', '90d']).default('30d'),
+});
+
 function fromMoney(json: unknown): number {
   const obj = json as { amount?: unknown } | null;
   const raw = Number(obj?.amount ?? 0);
@@ -121,6 +129,17 @@ function serializeGoal(row: typeof clientGoals.$inferSelect) {
  */
 export class SuperAdminController {
   constructor(private repo: SuperAdminRepository) {}
+
+  // ─── Dashboard ─────────────────────────────────────────────
+  getDashboard = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { period } = dashboardPeriodSchema.parse(req.query);
+      const stats = await this.repo.getDashboardStats(period);
+      res.json({ success: true, data: stats, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
 
   // ─── Tenants ───────────────────────────────────────────
 
@@ -362,6 +381,26 @@ export class SuperAdminController {
   };
 
   // ─── Subscription ──────────────────────────────────────
+
+  resetQuota = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const tenantId = req.params.tenantId;
+
+      const { SubscriptionRepository } = await import('../repository/subscription.repository.js');
+      const subRepo = new SubscriptionRepository(tenantId);
+      
+      await subRepo.resetCreativeQuota();
+
+      res.json({
+        success: true,
+        data: { message: 'Cota resetada com sucesso' },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
 
   updateSubscription = async (req: Request, res: Response, next: NextFunction) => {
     try {

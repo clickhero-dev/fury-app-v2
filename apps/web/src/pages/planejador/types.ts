@@ -30,6 +30,7 @@ export interface Post {
   imagePrompt?: string;
   imageUrl?: string;        // Single image (reel, image, stories) - legacy/compat
   imageUrls?: string[];     // Multiple images for carousel (max 5)
+  compliance?: { status: string | null; notes: string | null } | null;
   dayIndex: number;
   date: string; // Fase 5: ISO date string (ex: "2026-08-19") — sempre presente da API
   status: string;
@@ -45,6 +46,7 @@ export interface AgentStep {
 export interface JobStatus {
   id: string;
   status: 'pending' | 'running' | 'generating' | 'done' | 'error';
+  state: 'INITIALIZING' | 'WORKING' | 'DONE' | 'ERROR';
   currentAgent: string;
   agentProgress: AgentStep[];
   planId?: string;

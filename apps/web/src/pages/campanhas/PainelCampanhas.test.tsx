@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { PainelCampanhas } from './PainelCampanhas';
+import { CampaignWizardProvider } from '@/contexts/CampaignWizardContext';
 
 const mockApiGet = vi.hoisted(() => vi.fn());
 
@@ -26,9 +27,11 @@ vi.mock('@/hooks/useDeleteCampaign', () => ({ useDeleteCampaign: () => ({ isPend
 function makeWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/campanhas']}>{children}</MemoryRouter>
-    </QueryClientProvider>
+    <CampaignWizardProvider>
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/campanhas']}>{children}</MemoryRouter>
+      </QueryClientProvider>
+    </CampaignWizardProvider>
   );
 }
 

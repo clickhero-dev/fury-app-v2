@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { CampaignsService, normalizeCampaignPanelMetrics, formatCampaignListItem, calculateDateRange, mapWizardMetaError } from '../services/campaigns/campaigns.service.js';
+import { CampaignsService, normalizeCampaignPanelMetrics, formatCampaignListItem, calculateDateRange, mapWizardMetaError, normalizeWizardCreatives } from '../services/campaigns/campaigns.service.js';
 import { MockMetaCampaignProvider } from '../lib/providers/mock-campaign.provider.js';
 import { MockCampaignRepository } from '../lib/providers/mock-campaign.repository.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -484,6 +484,140 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     expect(link).toBe('https://app.useady.com.br/l/meu-negocio-test');
     expect(link).not.toContain(TENANT_ID);
     expect(result.success).toBe(true);
+  });
+
+  it('cria 2 ads (1 por criativo) via creatives[], budget em arrays + legado = 1º criativo', async () => {
+    const { service, repo, meta } = makeService();
+    repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+      createdAt: new Date(),
+    } as any);
+    meta.locationsResult = [{ key: 'city_key_1' }];
+    meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+    meta.uploadAdImageResult = 'img_hash';
+    const downloadSpy = vi.spyOn(meta, 'downloadImage');
+
+    const result = await service.createCampaignFromWizard({
+      tenantId: TENANT_ID, objective: 'visits',
+      headline: 'Legacy ignored', primaryText: 'Legacy ignored',
+      locationCity: 'Sao Paulo', locationRadiusKm: 30,
+      ageMin: 18, ageMax: 65, gender: 'all', dailyBudgetBrl: 100,
+      destinationUrl: 'https://example.com',
+      creatives: [
+        { creativeUploadUrl: 'https://example.com/a.jpg', headline: 'T1', primaryText: 'P1', destinationUrl: 'https://example.com/promo-a' },
+        { creativeUploadUrl: 'https://example.com/b.jpg', headline: 'T2', primaryText: 'P2', destinationUrl: 'https://example.com/promo-b' },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    // nome da campanha = headline do 1º criativo
+    expect(result.campaign_name).toBe('T1');
+    expect(meta.createdCampaigns).toHaveLength(1);
+    expect(meta.createdCampaigns[0].name).toBe('T1');
+    // 1 adset único compartilhado
+    expect(meta.createdAdSets).toHaveLength(1);
+    // N adcreatives + N ads com nomes distintos
+    expect(meta.createdAdCreatives).toHaveLength(2);
+    expect(meta.createdAdCreatives[0].name).toBe('Creative — FURY #1');
+    expect(meta.createdAdCreatives[1].name).toBe('Creative — FURY #2');
+    expect(meta.createdAds).toHaveLength(2);
+    expect(meta.createdAds[0].name).toContain(' #1');
+    expect(meta.createdAds[1].name).toContain(' #2');
+    expect(meta.createdAds[0].name).not.toBe(meta.createdAds[1].name);
+    // imagem de cada criativo é resolvida e baixada
+    expect(downloadSpy).toHaveBeenCalledTimes(2);
+    expect(downloadSpy).toHaveBeenCalledWith('https://example.com/a.jpg', expect.anything());
+    expect(downloadSpy).toHaveBeenCalledWith('https://example.com/b.jpg', expect.anything());
+    // destinationUrl próprio de cada criativo no link do anúncio
+    expect(meta.createdAdCreatives[0].object_story_spec.link_data.link).toBe('https://example.com/promo-a');
+    expect(meta.createdAdCreatives[1].object_story_spec.link_data.link).toBe('https://example.com/promo-b');
+    // budget: arrays completos + campos legados = 1º criativo
+    expect(repo.campaigns).toHaveLength(1);
+    const budget = repo.campaigns[0].budget as Record<string, unknown>;
+    expect(budget.ad_creative_ids).toEqual(['meta_creative_1', 'meta_creative_2']);
+    expect(budget.ad_ids).toEqual(['meta_ad_1', 'meta_ad_2']);
+    expect(budget.creative_image_urls).toEqual(['https://example.com/a.jpg', 'https://example.com/b.jpg']);
+    expect(budget.creative_asset_ids).toEqual([]);
+    expect(budget.ad_creative_id).toBe('meta_creative_1');
+    expect(budget.ad_id).toBe('meta_ad_1');
+    expect(budget.creative_image_url).toBe('https://example.com/a.jpg');
+    expect(budget.creative_asset_id).toBe(null);
+    expect(budget.creative_headline).toBe('T1');
+    expect(budget.creative_primary_text).toBe('P1');
+  });
+
+  it('rollback multi: falha no 2º ad deleta ads/adcreatives criados (reverso), adset e campaign — sem registro local', async () => {
+    const { service, meta, repo } = makeService();
+    repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+      createdAt: new Date(),
+    } as any);
+    meta.locationsResult = [{ key: 'city_key_1' }];
+    meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+    meta.uploadAdImageResult = 'img_hash';
+
+    // o mock só sabe falhar no 1º ad — aqui falhamos no 2º (criativo 2)
+    let adCalls = 0;
+    const originalCreateAd = meta.createAd.bind(meta);
+    meta.createAd = async (adAccountId: string, accessToken: string, body: any) => {
+      adCalls += 1;
+      if (adCalls === 2) throw new Error('Ad 2 fail');
+      return originalCreateAd(adAccountId, accessToken, body);
+    };
+
+    await expect(service.createCampaignFromWizard({
+      tenantId: TENANT_ID, objective: 'visits',
+      headline: 'Legacy', primaryText: 'Legacy',
+      locationCity: 'Sao Paulo', locationRadiusKm: 30,
+      ageMin: 18, ageMax: 65, gender: 'all', dailyBudgetBrl: 100,
+      creatives: [
+        { creativeUploadUrl: 'https://example.com/a.jpg', headline: 'T1', primaryText: 'P1' },
+        { creativeUploadUrl: 'https://example.com/b.jpg', headline: 'T2', primaryText: 'P2' },
+      ],
+    })).rejects.toThrow(AppError);
+
+    // o 2º ad nunca existiu (createAd lançou antes de retornar o id) — só o 1º é deletado
+    expect(meta.deletedAds).toEqual(['meta_ad_1']);
+    // os 2 adcreatives são deletados em ORDEM REVERSA
+    expect(meta.deletedAdCreatives).toEqual(['meta_creative_2', 'meta_creative_1']);
+    expect(meta.deletedAdSets).toEqual(['meta_adset_1']);
+    expect(meta.deletedCampaigns).toEqual(['meta_campaign_1']);
+    // createCampaign (registro local) NÃO foi chamado
+    expect(repo.campaigns).toHaveLength(0);
+  });
+
+  describe('normalizeWizardCreatives (pura)', () => {
+    it('legado single (uploadUrl + headline/primaryText) vira array de 1', () => {
+      const r = normalizeWizardCreatives({
+        creativeUploadUrl: 'https://example.com/a.jpg',
+        headline: 'T1', primaryText: 'P1',
+        destinationUrl: 'https://example.com/lp',
+      });
+      expect(r).toHaveLength(1);
+      expect(r[0]).toMatchObject({
+        creativeUploadUrl: 'https://example.com/a.jpg',
+        headline: 'T1', primaryText: 'P1',
+        destinationUrl: 'https://example.com/lp',
+      });
+    });
+
+    it('creatives arg vence quando presente (legado ignorado)', () => {
+      const r = normalizeWizardCreatives({
+        creatives: [
+          { creativeUploadUrl: 'https://example.com/b.jpg', headline: 'T2', primaryText: 'P2' },
+          { creativeAssetId: 'asset-1', headline: 'T3', primaryText: 'P3' },
+        ],
+        creativeUploadUrl: 'https://example.com/a.jpg',
+        headline: 'T1', primaryText: 'P1',
+      });
+      expect(r).toHaveLength(2);
+      expect(r[0].headline).toBe('T2');
+      expect(r[0].creativeUploadUrl).toBe('https://example.com/b.jpg');
+      expect(r[1].creativeAssetId).toBe('asset-1');
+      expect(r[1].headline).toBe('T3');
+    });
   });
 });
 

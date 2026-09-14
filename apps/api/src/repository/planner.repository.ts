@@ -4,6 +4,7 @@ import {
   campaignPlans,
   socialPosts,
   metaConnections,
+  creativeAssets,
 } from '@fury/db';
 import { and, desc, eq, gte, gt, inArray, isNull, lt, lte, not, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
@@ -49,6 +50,26 @@ export class PlannerRepository extends TenantScopedRepository {
       orderBy: [desc(campaignPlans.createdAt)],
       with: { posts: true },
     });
+  }
+
+  /** Lista os planos do tenant (histórico do planejador), mais recente primeiro, com contagem de posts. */
+  async listPlans(limit = 10): Promise<Array<CampaignPlan & { postCount: number }>> {
+    const plans = await this.db.query.campaignPlans.findMany({
+      where: eq(campaignPlans.tenantId, this.tenantId),
+      orderBy: [desc(campaignPlans.createdAt)],
+      limit,
+    });
+    if (plans.length === 0) return [];
+
+    const ids = plans.map((p) => p.id);
+    const counts = await this.db
+      .select({ planId: socialPosts.planId, total: sql<number>`count(*)::int`.mapWith(Number) })
+      .from(socialPosts)
+      .where(inArray(socialPosts.planId, ids))
+      .groupBy(socialPosts.planId);
+    const countByPlan = new Map(counts.map((c) => [c.planId, c.total]));
+
+    return plans.map((p) => ({ ...p, postCount: countByPlan.get(p.id) ?? 0 }));
   }
 
   /** Marca o plano como `active` e aprova os posts dele. Retorna o plano atualizado ou null. */
@@ -152,6 +173,39 @@ export class PlannerRepository extends TenantScopedRepository {
   }) {
     const [post] = await this.db.insert(socialPosts).values(data as any).returning();
     return post;
+  }
+
+  /** Post do planner cuja imagem é exatamente esta URL (auto-ajuste de compliance). */
+  async findPostByImageUrl(url: string | null | undefined) {
+    if (!url) return null;
+    return this.db.query.socialPosts.findFirst({
+      where: and(eq(socialPosts.imageUrl, url), eq(socialPosts.tenantId, this.tenantId)),
+    });
+  }
+
+  /** Atualiza a imagem de um post (usado no auto-ajuste de compliance). */
+  async updatePostImage(postId: string, imageUrl: string) {
+    await this.db
+      .update(socialPosts)
+      .set({ imageUrl, imageUrls: [imageUrl] })
+      .where(eq(socialPosts.id, postId));
+  }
+
+  /** Assets cuja URL casa com as URLs informadas (enriquecimento de compliance por post). */
+  async findAssetsByUrls(urls: string[]): Promise<Array<{
+    url: string;
+    complianceStatus: string | null;
+    complianceNotes: string | null;
+  }>> {
+    if (urls.length === 0) return [];
+    return this.db
+      .select({
+        url: creativeAssets.url,
+        complianceStatus: creativeAssets.complianceStatus,
+        complianceNotes: creativeAssets.complianceNotes,
+      })
+      .from(creativeAssets)
+      .where(inArray(creativeAssets.url, urls));
   }
 
   // ── Publicação automática ──────────────────────────────────────────

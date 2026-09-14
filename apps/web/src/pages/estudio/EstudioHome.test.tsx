@@ -1,20 +1,22 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { EstudioHome } from './EstudioHome';
+import { CampaignWizardProvider } from '@/contexts/CampaignWizardContext';
 
 const mockApiGet = vi.hoisted(() => vi.fn());
 const mockApiDelete = vi.hoisted(() => vi.fn());
+const mockApiPost = vi.hoisted(() => vi.fn() as any);
 const neverResolving = vi.hoisted(() => () => new Promise(() => {}));
 
 vi.mock('@/lib/api', () => ({
   default: {
     defaults: { baseURL: 'http://localhost/api' },
     get: mockApiGet,
-    post: neverResolving,
+    post: mockApiPost,
     put: vi.fn(),
     patch: vi.fn(),
     delete: mockApiDelete,
@@ -41,6 +43,17 @@ const MOCK_ASSETS = {
   creativesLimit: 20,
 };
 
+const MOCK_MODELS = {
+  image: [
+    { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 Klein 4B', description: 'Rápido', category: 'custo-beneficio', family: 'flux-2', type: 'image' },
+    { id: 'black-forest-labs/flux.2-max', label: 'FLUX.2 Max', description: 'Qualidade', category: 'qualidade', family: 'flux-2', type: 'image' },
+    { id: 'black-forest-labs/flux.2-pro', label: 'FLUX.2 Pro', description: 'Pro', category: 'qualidade', family: 'flux-2', type: 'image' },
+    { id: 'openai/gpt-image-1', label: 'GPT Image 1', description: 'OpenAI', category: 'qualidade', family: 'outras', type: 'image' },
+    { id: 'bytedance-seed/seedream-5.0-pro', label: 'Seedream 5.0 Pro', description: 'ByteDance', category: 'barato', family: 'outras', type: 'image' },
+  ],
+  video: [],
+};
+
 function renderWithProviders() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -48,9 +61,11 @@ function renderWithProviders() {
     },
   });
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter>{children}</MemoryRouter>
-    </QueryClientProvider>
+    <CampaignWizardProvider>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    </CampaignWizardProvider>
   );
   return render(<EstudioHome />, { wrapper });
 }
@@ -61,6 +76,7 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
     mockApiGet.mockResolvedValue({
       data: { assets: [], creativesRemaining: null, creativesLimit: null },
     });
+    mockApiPost.mockImplementation(neverResolving);
   });
 
   it('exibe o novo texto de duração (1 a 2 minutos) na tela de loading', async () => {
@@ -85,6 +101,124 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
     expect(
       screen.queryByText(/levar até 15 segundos/i)
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('EstudioHome — seletor de modelos na criação rápida', () => {
+  const originalGetContext = HTMLCanvasElement.prototype.getContext;
+
+  beforeEach(() => {
+    mockApiGet.mockReset();
+    mockApiPost.mockReset();
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/studio/ai/models')) {
+        return Promise.resolve({ data: MOCK_MODELS });
+      }
+      return Promise.resolve({ data: MOCK_ASSETS });
+    });
+    mockApiPost.mockImplementation((url: string) => {
+      if (url.includes('/enhance-prompt')) {
+        return Promise.resolve({ data: { enhancedPrompt: 'prompt melhorado', brand: {} } });
+      }
+      return Promise.resolve({ data: { type: 'image', creativeAssetId: 'asset-new', imageUrl: 'https://cdn/n.png', costUsd: 0.04, processingTimeMs: 3200 } });
+    });
+    // jsdom não implementa canvas — CreativeResult usa clearRect no mount
+    HTMLCanvasElement.prototype.getContext = (() => ({ clearRect: vi.fn() })) as any;
+  });
+
+  afterEach(() => {
+    HTMLCanvasElement.prototype.getContext = originalGetContext;
+    vi.useRealTimers();
+  });
+
+  it('seletor de IAs oculto: quick-create sem combobox de modelo', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+
+    // OCULTO: seletor de modelos removido da UI — nenhum combobox presente
+    await waitFor(() => expect(screen.getByPlaceholderText(/Ex: Anúncio fashion/i)).toBeInTheDocument());
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  });
+
+  it('Gerar imagem envia o modelo fixo qwen/qwen-image-3-pro (seletor oculto)', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ model: 'qwen/qwen-image-3-pro' }));
+    });
+  });
+
+  it('mostra cronômetro (Xs) desde o clique, mesmo durante o enhance-prompt', async () => {
+    vi.useFakeTimers();
+    mockApiPost.mockImplementation(() => new Promise(() => {})); // enhance nunca resolve
+    renderWithProviders();
+    fireEvent.click(screen.getByRole('button', { name: /criação rápida/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), {
+      target: { value: 'Anúncio fashion minimalista com luz natural' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    act(() => { vi.advanceTimersByTime(3000); });
+
+    expect(screen.getByText(/\(3s\)/)).toBeInTheDocument();
+  });
+
+  it('mostra cronômetro (Xs) na tela de loading enquanto gera', async () => {
+    vi.useFakeTimers();
+    // enhance-prompt resolve; generate-image fica pendente (cronômetro ativo)
+    mockApiPost.mockImplementation((url: string) =>
+      url.includes('/enhance-prompt')
+        ? Promise.resolve({ data: { enhancedPrompt: 'prompt melhorado', brand: {} } })
+        : new Promise(() => {}),
+    );
+    renderWithProviders();
+    fireEvent.click(screen.getByRole('button', { name: /criação rápida/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), {
+      target: { value: 'Anúncio fashion minimalista com luz natural' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    // flush microtasks: enhance → mutate → onMutate (startedAt)
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    act(() => { vi.advanceTimersByTime(3000); });
+
+    expect(screen.getByText(/\(3s\)/)).toBeInTheDocument();
+  });
+
+  it('mostra tempo de processamento e custo quando a imagem fica pronta', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    expect(await screen.findByText(/Tempo de processamento/i)).toBeInTheDocument();
+    expect(screen.getByText(/3,2s/)).toBeInTheDocument();
+    expect(screen.getByText(/US\$ 0,04/)).toBeInTheDocument();
+  });
+
+  it('oculta o custo quando o OpenRouter não retorna usage.cost', async () => {
+    mockApiPost.mockImplementation((url: string) => {
+      if (url.includes('/enhance-prompt')) {
+        return Promise.resolve({ data: { enhancedPrompt: 'prompt melhorado', brand: {} } });
+      }
+      return Promise.resolve({ data: { type: 'image', creativeAssetId: 'asset-new', imageUrl: 'https://cdn/n.png', costUsd: null, processingTimeMs: 2100 } });
+    });
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    expect(await screen.findByText(/Tempo de processamento/i)).toBeInTheDocument();
+    expect(screen.getByText(/2,1s/)).toBeInTheDocument();
+    expect(screen.queryByText(/US\$/)).not.toBeInTheDocument();
   });
 });
 

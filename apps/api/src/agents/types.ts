@@ -16,6 +16,7 @@ export interface JobStatus {
   id: string;
   tenantId: string;
   status: 'pending' | 'running' | 'generating' | 'awaiting_images' | 'done' | 'error';
+  state: 'INITIALIZING' | 'WORKING' | 'DONE' | 'ERROR';
   currentAgent: string;
   agentProgress: AgentStep[];
   planId?: string;

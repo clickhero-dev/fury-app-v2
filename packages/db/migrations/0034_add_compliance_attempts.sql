@@ -1,0 +1,1 @@
+ALTER TABLE "creative_assets" ADD COLUMN IF NOT EXISTS "compliance_attempts" integer NOT NULL DEFAULT 0;

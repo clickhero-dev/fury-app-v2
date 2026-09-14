@@ -38,6 +38,8 @@ export interface WorkflowSnapshot {
   currentStage: string | null;
   stages: StageTrace[];
   artifacts: ArtifactMap;
+  /** Metadados arbitrários do job (ex.: postsCount do planner) — persistidos pelo store. */
+  metadata?: Record<string, unknown>;
   planId?: string;
   error?: string;
   createdAt: string;

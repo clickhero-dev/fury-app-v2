@@ -49,7 +49,7 @@ export function GeneratingState({ jobStatus, agentLabels }: GeneratingStateProps
     );
   }
 
-  if (jobStatus.status === 'error') {
+  if (jobStatus.state === 'ERROR') {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-error">
         <AlertCircle className="h-12 w-12 mb-4" />
@@ -68,7 +68,7 @@ export function GeneratingState({ jobStatus, agentLabels }: GeneratingStateProps
       <div className="flex items-center gap-2 mb-4">
         <Loader2 className="h-5 w-5 animate-spin text-brand" />
         <span className="text-sm text-text-secondary">
-          {jobStatus.status === 'done' ? 'Pipeline concluído' : `Processando: ${currentLabel}`}
+          {jobStatus.state === 'DONE' ? 'Pipeline concluído' : `Processando: ${currentLabel}`}
         </span>
       </div>
       <div className="grid gap-2">

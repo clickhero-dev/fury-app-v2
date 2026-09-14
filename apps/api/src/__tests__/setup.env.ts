@@ -6,5 +6,4 @@ process.env.TOKEN_ENCRYPTION_KEY ??= 'test-token-encryption-key-32-chars!!';
 process.env.TEST_DATABASE_URL ??= 'postgresql://fury:fury_local@localhost:5432/fury_test';
 process.env.DATABASE_URL ??= process.env.TEST_DATABASE_URL;
 process.env.REDIS_URL ??= 'redis://localhost:6379';
-process.env.OPENAI_API_KEY ??= 'test-openai-key';
 process.env.NODE_ENV ??= 'test';

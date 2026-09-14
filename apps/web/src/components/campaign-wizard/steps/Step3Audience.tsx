@@ -366,7 +366,7 @@ export function Step3Audience({ value, onChange, objective, whatsapp, onWhatsapp
       {/* Interesses (detalhamento de público) */}
       <div>
         <label className="text-sm font-bold text-gray-900 mb-1 block">Interesses</label>
-        <p className="text-xs text-gray-500 mb-2">Adicione interesses para segmentar o público (ex: vagas de emprego, moda)</p>
+        <p className="text-xs text-gray-500 mb-2">Adicione interesses para segmentar o público (máximo 4)</p>
 
         {value.audienceInterests.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-3">
@@ -388,6 +388,10 @@ export function Step3Audience({ value, onChange, objective, whatsapp, onWhatsapp
           </div>
         )}
 
+        {value.audienceInterests.length >= 4 && (
+          <p className="text-xs text-amber-700 mb-2">Máximo de 4 interesses atingido.</p>
+        )}
+
         <div className="relative">
           <input
             type="text"
@@ -399,7 +403,8 @@ export function Step3Audience({ value, onChange, objective, whatsapp, onWhatsapp
             onFocus={() => setShowInterestDropdown(true)}
             onBlur={() => setTimeout(() => setShowInterestDropdown(false), 150)}
             placeholder="Digite para buscar interesses..."
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20"
+            disabled={value.audienceInterests.length >= 4}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/20 disabled:opacity-50 disabled:cursor-not-allowed"
           />
           {interestsLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
 
@@ -411,15 +416,17 @@ export function Step3Audience({ value, onChange, objective, whatsapp, onWhatsapp
                 <button
                   key={interest.id}
                   type="button"
-                  disabled={alreadySelected}
+                  disabled={alreadySelected || value.audienceInterests.length >= 4}
                   onMouseDown={() => {
-                    if (!alreadySelected) {
+                    if (!alreadySelected && value.audienceInterests.length < 4) {
                       onChange({ audienceInterests: [...value.audienceInterests, { id: interest.id, name: interest.name }] });
                       setInterestQuery('');
                     }
                   }}
                   className={`w-full text-left px-4 py-2 hover:bg-orange-50 text-sm ${
-                    alreadySelected ? 'text-gray-300 cursor-not-allowed' : 'text-gray-900'
+                    alreadySelected || value.audienceInterests.length >= 4
+                      ? 'text-gray-300 cursor-not-allowed'
+                      : 'text-gray-900'
                   }`}
                 >
                   {interest.name}

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { openrouterService } from '../services/llms/openrouter.service.js';
-import { persistOpenRouterImageResponse } from '../lib/openrouter-image-response.js';
+import { persistOpenRouterImageResponse } from '../services/llms/openrouter-image-response.js';
 
 // Regeneração de imagem usa SOMENTE OpenRouter (sem OpenAI). O módulo é mockado
 // para isolar o teste em construção do request + mapeamento de erros, sem I/O de disco.
-vi.mock('../lib/openrouter-image-response.js', () => ({
+vi.mock('../services/llms/openrouter-image-response.js', () => ({
   persistOpenRouterImageResponse: vi.fn(),
 }));
 

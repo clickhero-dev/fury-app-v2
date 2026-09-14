@@ -8,6 +8,8 @@ import { isAxiosError } from 'axios';
 import { useLogin } from '@/hooks/useLogin';
 import { AdySymbol } from '@/components/AdySymbol';
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton';
+import { FacebookLoginButton } from '@/components/auth/FacebookLoginButton';
+import { consumeFacebookHandoff, readSocialError, stripSocialParams } from '@/lib/social-login';
 import { login as authLogin } from '@/store/slices/authSlice';
 import { store } from '@/store';
 
@@ -53,6 +55,7 @@ export function LoginPage() {
           email: data.user.email,
           role: data.user.role ?? null,
           tenantId: data.user.tenantId,
+          policy: data.policy ?? null,
         }));
         navigate('/dashboard');
         return;
@@ -61,7 +64,25 @@ export function LoginPage() {
       }
     }
 
-    }, []);
+    const socialErr = readSocialError(window.location.search);
+    if (socialErr) {
+      setError(socialErr);
+      stripSocialParams();
+      return;
+    }
+
+    // Retorno do login com Facebook: troca o handoff id pela sessão (sem token na URL)
+    consumeFacebookHandoff(window.location.search)
+      .then((session) => {
+        if (!session) return;
+        stripSocialParams();
+        navigate(session.isNewUser ? '/onboarding/conectar-meta' : '/dashboard');
+      })
+      .catch(() => {
+        setError('Não foi possível concluir o login com Facebook. Tente novamente.');
+        stripSocialParams();
+      });
+    }, [navigate]);
 
   const {
     register,
@@ -189,24 +210,9 @@ export function LoginPage() {
             <span className="absolute px-3 text-xs text-slate-400 dark:text-zinc-500 bg-white dark:bg-[#181915]">ou</span>
           </div>
 
-          <GoogleLoginButton
-            label="Entrar com Google"
-            onSuccess={(data) => {
-              localStorage.setItem('token', data.token);
-              localStorage.setItem('refreshToken', data.refreshToken);
-              localStorage.setItem('user', JSON.stringify(data.user));
-              store.dispatch(authLogin({
-                token: data.token,
-                refreshToken: data.refreshToken,
-                name: data.user.name,
-                email: data.user.email,
-                role: data.user.role ?? null,
-                tenantId: data.user.tenantId,
-              }));
-              navigate('/dashboard');
-            }}
-            onError={(msg) => setError(msg)}
-          />
+          <GoogleLoginButton label="Entrar com Google" />
+
+          <FacebookLoginButton />
 
           {error && (
             <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-center text-xs font-medium text-red-600 dark:text-red-400">

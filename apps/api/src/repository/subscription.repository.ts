@@ -179,6 +179,22 @@ export class SubscriptionRepository extends TenantScopedRepository {
       creativesLimit: readLimits(plan?.limits)?.creativesPerMonth ?? null,
     };
   }
+
+  /** Reseta a cota de criativos para o limite do plano atual. */
+  async resetCreativeQuota(): Promise<void> {
+    const sub = await this.findSubscription();
+    if (!sub) return;
+    
+    const plan = await this.findPlanById(sub.planId);
+    const creativesLimit = readLimits(plan?.limits)?.creativesPerMonth ?? null;
+    
+    if (creativesLimit !== null) {
+      await this.db
+        .update(subscriptions)
+        .set({ creativesRemaining: creativesLimit, updatedAt: new Date() })
+        .where(eq(subscriptions.id, sub.id));
+    }
+  }
 }
 
 function readLimits(rawLimits: unknown): { creativesPerMonth?: number | null; modificationsPerCreative?: number | null } {

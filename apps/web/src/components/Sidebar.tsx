@@ -1,5 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
+  // OCULTO (feature incompleta) — volta no unhide
+  // BrainCircuit,
+  // CalendarDays,
   CreditCard,
   LayoutGrid,
   LogOut,
@@ -23,7 +26,7 @@ interface SidebarProps {
 const nav = [
   { to: '/dashboard', label: 'Painel', icon: LayoutGrid },
   { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
-  // Comentado temporariamente
+  // OCULTO (feature incompleta) — volta no unhide
   // { to: '/planejador', label: 'Planejador IA', icon: BrainCircuit },
   // { to: '/calendario', label: 'Calendário', icon: CalendarDays },
   { to: '/estudio', label: 'Estúdio', icon: Palette },
@@ -39,6 +42,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   return (
     <aside
+      data-testid="sidebar-root"
       className={`
         sticky top-0 h-screen shrink-0 flex-col border-r border-border bg-sidebar-bg px-4 py-6
         transition-all duration-300 ease-in-out

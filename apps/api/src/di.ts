@@ -7,14 +7,16 @@ import { BrandKitService } from './services/brand-kit/brand-kit.service.js';
 import { BrandKitController } from './controllers/brand-kit.controller.js';
 import { FuryEngineService } from './services/fury/fury-engine.service.js';
 import { FuryController } from './controllers/fury.controller.js';
-import { OpenRouterStudioService } from './services/openrouter/openrouter-studio.service.js';
-import { OpenRouterController } from './controllers/openrouter.controller.js';
+import { StudioAiService } from './services/studio/studio-ai.service.js';
+import { StudioAiController } from './controllers/studio-ai.controller.js';
 import { StudioService } from './services/studio/creative-studio.service.js';
 import { StudioPublishingService } from './services/studio/studio-publishing.service.js';
 import { CreativeStudioController } from './controllers/creative-studio.controller.js';
 import { StudioPublishingController } from './controllers/studio-publishing.controller.js';
 import { BillingService } from './services/billing/billing.service.js';
 import { BillingController } from './controllers/billing.controller.js';
+import { PolicyService } from './services/policy/policy.service.js';
+import { PolicyController } from './controllers/policy.controller.js';
 import { ObservabilityService } from './services/observability/observability.service.js';
 import { ObservabilityController } from './controllers/observability.controller.js';
 import { FormsService } from './services/forms/forms.service.js';
@@ -59,10 +61,11 @@ const metricsProvider: IMetricsProvider =
 export const goalService = new GoalService(metricsProvider);
 export const brandKitService = new BrandKitService();
 export const furyEngineService = new FuryEngineService();
-export const openRouterStudioService = new OpenRouterStudioService();
+export const studioAiService = new StudioAiService();
 export const studioService = new StudioService();
 export const studioPublishingService = new StudioPublishingService();
 export const billingService = new BillingService();
+export const policyService = new PolicyService();
 export const observabilityService = new ObservabilityService();
 export const formsService = new FormsService();
 export const automationService = new AutomationService();
@@ -78,14 +81,15 @@ export const controllers = {
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),
   fury: new FuryController(furyEngineService),
-  openrouter: new OpenRouterController(openRouterStudioService),
+  studioAi: new StudioAiController(studioAiService),
   studio: new CreativeStudioController(studioService),
   studioPublishing: new StudioPublishingController(studioPublishingService),
   billing: new BillingController(billingService),
+  policy: new PolicyController(policyService),
   observability: new ObservabilityController(observabilityService),
   forms: new FormsController(formsService),
   metrics: new MetricsController(metricsService),
-  auth: new AuthController(authService, socialAuthService),
+  auth: new AuthController(authService, socialAuthService, policyService),
   automation: new AutomationController(automationService),
   google: new GoogleController(googleService),
   meta: new MetaController(metaService),

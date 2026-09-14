@@ -6,6 +6,11 @@ import { uploadAsset } from '../services/storage/storage.service.js';
 import { openrouterService } from '../services/llms/openrouter.service.js';
 import { plannerService } from '../services/planner/planner.service.js';
 import type { PlannerService } from '../services/planner/planner.service.js';
+import { SubscriptionRepository } from '../repository/subscription.repository.js';
+
+const listPlansSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
 
 /** Controller de planner/campanha — glue HTTP fino. Recebe o service no construtor (injeção). */
 export class PlannerController {
@@ -17,7 +22,14 @@ export class PlannerController {
       await openrouterService.assertCreditsAvailable();
 
       const tenantId = req.tenant!.tenantId;
-      const jobStatus = await this.plannerService.startPlanGeneration(tenantId);
+      const { postsCount = 8 } = req.body as { postsCount?: number };
+      
+      // Validate postsCount
+      if (postsCount < 1 || postsCount > 100) {
+        throw new AppError(400, 'INVALID_POSTS_COUNT', 'Número de posts deve ser entre 1 e 100');
+      }
+      
+      const jobStatus = await this.plannerService.startPlanGeneration(tenantId, postsCount);
       res.json({ success: true, data: jobStatus });
     } catch (err) { next(err); }
   };
@@ -47,6 +59,16 @@ export class PlannerController {
       const tenantId = req.tenant!.tenantId;
       const plan = await this.plannerService.getLatestPlanByTenant(tenantId);
       res.json({ success: true, data: plan ?? null });
+    } catch (err) { next(err); }
+  };
+
+  /** Histórico de planos do tenant (mais recente primeiro). */
+  listPlans = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tenantId = req.tenant!.tenantId;
+      const { limit } = listPlansSchema.parse(req.query);
+      const rows = await this.plannerService.listPlansByTenant(tenantId, limit);
+      res.json({ success: true, data: rows });
     } catch (err) { next(err); }
   };
 
@@ -236,6 +258,14 @@ export class PlannerController {
       res.json({ success: true, data: labels });
     } catch (err) { next(err); }
   };
+
+  handleGetQuota = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tenantId = req.tenant!.tenantId;
+      const quota = await new SubscriptionRepository(tenantId).getCreativeQuotaSnapshot();
+      res.json({ success: true, data: quota });
+    } catch (err) { next(err); }
+  };
 }
 
 const editPostSchema = z.union([
@@ -261,6 +291,7 @@ export const generatePlan = plannerController.generatePlan;
 export const getJob = plannerController.getJob;
 export const getPlan = plannerController.getPlan;
 export const getLatestPlan = plannerController.getLatestPlan;
+export const listPlans = plannerController.listPlans;
 export const handleGetPrerequisites = plannerController.handleGetPrerequisites;
 export const handleConfirm = plannerController.handleConfirm;
 export const handleRevalidate = plannerController.handleRevalidate;
@@ -273,3 +304,4 @@ export const handleMovePost = plannerController.handleMovePost;
 export const handlePublishDue = plannerController.handlePublishDue;
 export const handleUploadMedia = plannerController.handleUploadMedia;
 export const handleGetAgentLabels = plannerController.handleGetAgentLabels;
+export const handleGetQuota = plannerController.handleGetQuota;

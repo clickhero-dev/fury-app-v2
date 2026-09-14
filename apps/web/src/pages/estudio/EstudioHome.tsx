@@ -1,9 +1,14 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, ArrowRight, Image as ImageIcon, Loader2, Send, Sparkles, Trash2, Wand2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Loader2, Send, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
-import { CampaignWizard } from '@/components/campaign-wizard/CampaignWizard';
+import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
+// OCULTO: seletor de IAs removido — import volta no unhide
+// import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
+import { complianceBadge } from '@/lib/compliance.utils';
+import { formatDuration, formatCost } from '@/lib/studio-metrics';
 import type { StudioAsset } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
 
@@ -14,7 +19,7 @@ const FEATURES = {
 };
 
 const CREATIVE_TYPE = 'image' as const;
-const IMAGE_MODEL = 'black-forest-labs/flux.2-max';
+const IMAGE_MODEL = 'qwen/qwen-image-3-pro'; // OCULTO: seletor removido, modelo fixo qwen (volta no unhide)
 
 /* ── Estilos com efeito de Hover estilo Campanhas e Tokens Semânticos ── */
 const SURFACE = 'rounded-2xl border border-border bg-surface shadow-sm';
@@ -30,23 +35,56 @@ interface StudioAssetResponse {
   creativesLimit: number | null;
 }
 
+interface GenerationResult {
+  type: 'image';
+  assetId: string;
+  imageUrl: string;
+  creativeData: { headline: string; primary_text: string; cta: string };
+  modificationsRemaining: number | null;
+  complianceStatus?: string;
+  complianceNotes?: string;
+}
+
 export function EstudioHome() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { setPreSelectedAsset } = useCampaignWizardContext();
   const [view, setView] = useState<ViewState>('library');
-  const [generationResult, setGenerationResult] = useState<any>(null);
+  const [generationResult, setGenerationResult] = useState<GenerationResult | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // ─── Wizard state ─────────────────────────────────────────────
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [wizardAsset, setWizardAsset] = useState<{ id: string; url: string | null } | null>(null);
-
   // ─── OpenRouter state ──────────────────────────────────────────────
   const [orPrompt, setOrPrompt] = useState('');
   const [progressMessage, setProgressMessage] = useState('');
   const [quotaErrorMessage, setQuotaErrorMessage] = useState<string | null>(null);
+  const [selectedImageModel, setSelectedImageModel] = useState(IMAGE_MODEL);
+  const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [lastResultInfo, setLastResultInfo] = useState<{ processingTimeMs?: number | null; costUsd?: number | null } | null>(null);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const elapsedSeconds = generationStartedAt ? Math.max(0, Math.round((nowMs - generationStartedAt) / 1000)) : 0;
+
+  // OCULTO: catálogo/seletor de IAs removido da UI (feature incompleta) — volta no unhide
+  // const modelsQuery = useQuery({
+  //   queryKey: ['studio-ai', 'models'],
+  //   queryFn: async () => {
+  //     const res = await api.get('/studio/ai/models');
+  //     return res.data as { image: StudioModelOption[]; video: StudioModelOption[] };
+  //   },
+  //   staleTime: 1000 * 60 * 60, // 1h
+  // });
+  // const imageModels = modelsQuery.data?.image ?? [];
 
   const deleteMutation = useMutation({
     mutationFn: async (assetId: string) => {
@@ -68,10 +106,10 @@ export function EstudioHome() {
   const orImageMutation = useMutation({
     mutationFn: async (payload: { model: string; prompt: string }) => {
       setProgressMessage('Gerando imagem...');
-      const res = await api.post('/openrouter/generate-image', payload);
+      const res = await api.post('/studio/ai/generate-image', payload);
       return res.data;
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: { creativeAssetId: string; imageUrl: string; processingTimeMs?: number | null; costUsd?: number | null; modificationsRemaining?: number | null }) => {
       setGenerationResult({
         type: 'image',
         assetId: data.creativeAssetId,
@@ -79,11 +117,14 @@ export function EstudioHome() {
         creativeData: { headline: '', primary_text: '', cta: '' },
         modificationsRemaining: data.modificationsRemaining ?? null,
       });
+      setLastResultInfo({ processingTimeMs: data.processingTimeMs, costUsd: data.costUsd });
+      setGenerationStartedAt(null);
       setView('result');
       setProgressMessage('');
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
-    onError: (error: any) => {
+    onError: (error: { response?: { data?: { error?: { message?: string } } } }) => {
+      setGenerationStartedAt(null);
       setView('error');
       setProgressMessage('');
       setQuotaErrorMessage(error?.response?.data?.error?.message ?? null);
@@ -123,18 +164,21 @@ export function EstudioHome() {
     if (finalPrompt.length < 10) return;
     setView('loading');
     setProgressMessage('Aprimorando explicação detalhada...');
+    // cronômetro começa no clique — cobre enhance-prompt + geração
+    setGenerationStartedAt(Date.now());
+    setLastResultInfo(null);
 
     try {
-      const enhanceRes = await api.post('/openrouter/enhance-prompt', {
+      const enhanceRes = await api.post('/studio/ai/enhance-prompt', {
         prompt: finalPrompt,
         type: CREATIVE_TYPE,
       });
       const { enhancedPrompt } = enhanceRes.data as { enhancedPrompt: string };
       setProgressMessage('Gerando imagem...');
-      orImageMutation.mutate({ model: IMAGE_MODEL, prompt: enhancedPrompt });
+      orImageMutation.mutate({ model: selectedImageModel, prompt: enhancedPrompt });
     } catch {
       setProgressMessage('Gerando imagem...');
-      orImageMutation.mutate({ model: IMAGE_MODEL, prompt: finalPrompt });
+      orImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt });
     }
   };
 
@@ -154,14 +198,16 @@ export function EstudioHome() {
       assetId: asset.id,
       imageUrl: asset.url ?? '',
       creativeData,
+      complianceStatus: asset.complianceStatus,
+      complianceNotes: asset.complianceNotes,
       modificationsRemaining: asset.modificationsRemaining ?? null,
     });
     setView('result');
   };
 
   const handleUseInCampaign = (asset: StudioAsset) => {
-    setWizardAsset({ id: asset.id, url: asset.url });
-    setWizardOpen(true);
+    setPreSelectedAsset({ id: asset.id, url: asset.url ?? undefined });
+    navigate('/criar-campanha');
   };
 
   const typeOptions: Array<{ value: 'all' | 'image' | 'video'; label: string }> = [
@@ -174,6 +220,7 @@ export function EstudioHome() {
     { value: 'all', label: 'Todos' },
     { value: 'pending_compliance', label: 'Gerado' },
     { value: 'approved', label: 'Pronto' },
+    { value: 'rejected', label: 'Reprovado' },
   ];
 
   const getTypeCount = (type: string) =>
@@ -391,6 +438,17 @@ export function EstudioHome() {
               Descreva o anúncio que deseja gerar para criar a imagem ideal
             </p>
 
+            <div className={`${SURFACE} p-5`}>
+              {/* OCULTO: seletor de modelo removido — modelo fixo qwen. Volta no unhide
+              <ModelSelect
+                models={imageModels}
+                selectedModel={selectedImageModel}
+                onSelect={setSelectedImageModel}
+                id="quick-create-model-select"
+              />
+              */}
+            </div>
+
             {quotaReached && (
               <div className="flex items-start gap-2.5 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-text-primary">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
@@ -448,6 +506,7 @@ export function EstudioHome() {
             <div>
               <h2 className="text-2xl font-semibold tracking-[-0.02em] text-text-primary">
                 {progressMessage || 'O ady está criando sua imagem...'}
+                {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
               </h2>
               <p className="mt-2 text-sm text-text-tertiary">
                 A geração com IA e a renderização podem levar de 1 a 2 minutos
@@ -467,13 +526,29 @@ export function EstudioHome() {
             <div className="pt-1">
               <p className="text-sm text-text-tertiary">Regenere com ajustes, salve ou publique direto na sua conta</p>
             </div>
+            {(lastResultInfo?.processingTimeMs != null || lastResultInfo?.costUsd != null) && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {lastResultInfo?.processingTimeMs != null && (
+                  <div className={`${SURFACE} p-4`}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">Tempo de processamento</p>
+                    <p className="mt-1 text-2xl font-bold text-text-primary">{formatDuration(lastResultInfo.processingTimeMs)}</p>
+                  </div>
+                )}
+                {lastResultInfo?.costUsd != null && (
+                  <div className={`${SURFACE} p-4`}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">Custo da imagem</p>
+                    <p className="mt-1 text-2xl font-bold text-text-primary">{formatCost(lastResultInfo.costUsd)}</p>
+                  </div>
+                )}
+              </div>
+            )}
             <CreativeResult
               result={generationResult}
               onBack={handleBackToLibrary}
               onNewCreative={handleStartQuickCreate}
               onPublish={() => {
-                setWizardAsset({ id: generationResult.assetId, url: generationResult.imageUrl });
-                setWizardOpen(true);
+                setPreSelectedAsset({ id: generationResult.assetId, url: generationResult.imageUrl });
+                navigate('/criar-campanha');
               }}
             />
           </>
@@ -512,13 +587,6 @@ export function EstudioHome() {
           </div>
         )}
       </div>
-
-      <CampaignWizard
-        open={wizardOpen}
-        onOpenChange={setWizardOpen}
-        preSelectedAssetId={wizardAsset?.id}
-        preSelectedAssetUrl={wizardAsset?.url ?? undefined}
-      />
     </AppLayout>
   );
 }
@@ -538,11 +606,13 @@ const BACKEND_URL = api.defaults.baseURL?.replace(/\/api$/, '') ?? '';
 
 function resolveAssetUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  return url.startsWith('http') ? url : `${BACKEND_URL}${url}`;
+  // data URLs (render-creative) e http são usados direto; o resto é caminho estático do backend.
+  return url.startsWith('data:') || url.startsWith('http') ? url : `${BACKEND_URL}${url}`;
 }
 
 function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDeleteConfirm, onDeleteCancel, onViewDetails, onUseInCampaign }: AssetCardProps) {
   const imageUrl = resolveAssetUrl(asset.url);
+  const badge = complianceBadge(asset.complianceStatus, asset.complianceNotes);
   return (
     <div className={`group ${SURFACE} ${CARD_HOVER} overflow-hidden`}>
       {imageUrl && asset.type === 'image' ? (
@@ -555,6 +625,41 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
               (e.target as HTMLImageElement).style.display = 'none';
             }}
           />
+          {badge.tone === 'approved' && (
+            <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-green-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
+              <CheckCircle2 className="h-3 w-3" />
+              {badge.label}
+            </div>
+          )}
+          {badge.tone === 'rejected' && (
+            <>
+              <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-red-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
+                <AlertCircle className="h-3 w-3" />
+                {badge.label}
+              </div>
+              {badge.reasons.length > 0 && (
+                <div className="absolute inset-x-0 bottom-0 space-y-1 bg-black/75 px-3 py-2 backdrop-blur-sm">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-red-300">Motivo da reprovação</p>
+                  <ul className="space-y-0.5">
+                    {badge.reasons.slice(0, 2).map((reason, i) => (
+                      <li key={i} className="line-clamp-2 text-[11px] leading-snug text-white/90">
+                        • {reason}
+                      </li>
+                    ))}
+                    {badge.reasons.length > 2 && (
+                      <li className="text-[11px] text-white/70">+{badge.reasons.length - 2} motivo(s) — Ver detalhes</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+          {badge.tone === 'pending' && (
+            <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-amber-500/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {badge.label}
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex aspect-square w-full items-center justify-center bg-gradient-to-br from-brand/10 to-background">

@@ -51,24 +51,36 @@ describe('planner.controller — BUG-001 tenantId', () => {
 
     await generatePlan(req, res, next);
 
-    // usa o tenant autenticado, nunca o do body (que é ignorado)
-    expect(startPlanGeneration).toHaveBeenCalledWith('t-1');
+    // usa o tenant autenticado, nunca o do body (que é ignorado);
+    // postsCount default (8) é repassado ao service
+    expect(startPlanGeneration).toHaveBeenCalledWith('t-1', 8);
     expect(next).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({ success: true, data: expect.objectContaining({ id: 'job-1' }) });
   });
 
-  it('generatePlan ignora postCount do body (não é mais aceito pelo service)', async () => {
+  it('generatePlan repassa postsCount do body ao service (usado no job metadata)', async () => {
     startPlanGeneration.mockReturnValue({ id: 'job-2', tenantId: 't-1', status: 'running' });
-    const req = { tenant: { tenantId: 't-1' }, body: { postCount: 8 } } as any;
+    const req = { tenant: { tenantId: 't-1' }, body: { tenantId: 'tentativa-invasao', postsCount: 12 } } as any;
     const res = mockRes();
     const next = vi.fn();
 
     await generatePlan(req, res, next);
 
-    // postCount não é repassado: startPlanGeneration recebe apenas o tenantId
-    expect(startPlanGeneration).toHaveBeenCalledWith('t-1');
+    // tenant continua vindo do contexto autenticado, e o postsCount do body é repassado
+    expect(startPlanGeneration).toHaveBeenCalledWith('t-1', 12);
     expect(next).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith({ success: true, data: expect.objectContaining({ id: 'job-2' }) });
+  });
+
+  it('generatePlan rejeita postsCount fora do range 1-100 com 400', async () => {
+    const req = { tenant: { tenantId: 't-1' }, body: { postsCount: 0 } } as any;
+    const res = mockRes();
+    const next = vi.fn();
+
+    await generatePlan(req, res, next);
+
+    expect(startPlanGeneration).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
   });
 });
 

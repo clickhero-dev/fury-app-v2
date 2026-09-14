@@ -6,6 +6,7 @@ import { router } from './router';
 import { queryClient } from './lib/query-client';
 import { store } from './store';
 import { identifyUser, resetUser, startReplay, stopReplay } from './lib/posthog';
+import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './App.css';
 
@@ -34,6 +35,7 @@ function App() {
         <QueryClientProvider client={queryClient}>
           <ErrorBoundary>
             <RouterProvider router={router} />
+            <CookieConsentBanner />
           </ErrorBoundary>
         </QueryClientProvider>
       </ThemeProvider>

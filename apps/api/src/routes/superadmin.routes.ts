@@ -8,6 +8,9 @@ const router = Router();
 // All routes require auth + superadmin role
 router.use(authMiddleware, superadminMiddleware);
 
+// Dashboard (stats globais)
+router.get("/dashboard", controllers.superadmin.getDashboard);
+
 // Tenants
 router.get("/tenants", controllers.superadmin.listTenants);
 router.get("/tenants/:id", controllers.superadmin.getTenant);
@@ -27,6 +30,10 @@ router.post("/setup-tenant", controllers.superadmin.setupTenant);
 router.patch(
   "/tenants/:tenantId/subscription",
   controllers.superadmin.updateSubscription,
+);
+router.post(
+  "/tenants/:tenantId/reset-quota",
+  controllers.superadmin.resetQuota,
 );
 
 // Fury Config (Benchmarks)

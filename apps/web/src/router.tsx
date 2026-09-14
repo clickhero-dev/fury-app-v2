@@ -15,11 +15,13 @@ import { RequireSuperadmin } from './components/auth/RequireSuperadmin';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AuthenticatedShell } from './components/layout/AuthenticatedShell';
 import { AdminShell } from './components/layout/AdminShell';
+import { CampaignWizardProvider } from '@/contexts/CampaignWizardContext';
 import { Dashboard } from './pages/dashboard/Dashboard';
 import { Metas } from './pages/dashboard/Metas';
 import { PainelCampanhas } from './pages/campanhas/PainelCampanhas';
 import { RegrasCampanhas } from './pages/campanhas/RegrasCampanhas';
 import { InsightsCampanha } from './pages/campanhas/InsightsCampanha';
+import { CriarCampanhaPage } from './pages/campanhas/CriarCampanhaPage';
 import { CreativeStudio } from './pages/estudio/CreativeStudio';
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
@@ -36,6 +38,7 @@ import { Subscription } from './pages/billing/Subscription';
 import { AssinaturaVencida } from './pages/billing/AssinaturaVencida';
 import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
 import { RoadmapPage } from './pages/roadmap/RoadmapPage';
+import { PoliticaDeUsoPage } from './pages/politica/PoliticaDeUsoPage';
 import { AdminLogin } from './pages/superadmin/AdminLogin';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { TenantsPage } from './pages/superadmin/TenantsPage';
@@ -102,42 +105,50 @@ export const router = createBrowserRouter([
     element: <RoadmapPage />,
   },
   {
-    element: <AuthenticatedShell />,
+    element: (
+      <CampaignWizardProvider>
+        <AuthenticatedShell />
+      </CampaignWizardProvider>
+    ),
     children: [
       { path: '/dashboard', element: <Dashboard /> },
       { path: '/onboarding/metas', element: <AppLayout><MetasPage /></AppLayout> },
       { path: '/dashboard/metas', element: <Metas /> },
-      { 
-        path: '/campanhas', 
+      {
+        path: '/campanhas',
         element: (
           <AppLayout>
             <PainelCampanhas />
           </AppLayout>
-        ) 
+        )
       },
-      { 
-        path: '/campanhas/regras', 
+      {
+        path: '/criar-campanha',
+        element: <CriarCampanhaPage />,
+      },
+      {
+        path: '/campanhas/regras',
         element: (
           <AppLayout>
             <RegrasCampanhas />
           </AppLayout>
-        ) 
+        )
       },
-      { 
-        path: '/campanhas/:id/insights', 
+      {
+        path: '/campanhas/:id/insights',
         element: (
           <AppLayout>
             <InsightsCampanha />
           </AppLayout>
-        ) 
+        )
       },
       { path: '/automacao', element: <MinhasRegras /> },
       { path: '/automacao/minhas-regras', element: <MinhasRegras /> },
       { path: '/estudio-criativo', element: <CreativeStudio /> },
       { path: '/estudio', element: <EstudioHome /> },
       { path: '/estudio/imagem', element: <GeradorImagem /> },
-/*       { path: '/planejador', element: <PlanejadorPage /> },
-      { path: '/calendario', element: <CalendarioPage /> }, */
+      { path: '/planejador', element: <PlanejadorPage /> },
+      { path: '/calendario', element: <CalendarioPage /> },
       { path: '/configuracoes', element: <Configuracoes /> },
       { path: '/configuracoes/integracoes', element: <Integracoes /> },
       // Google Meu Negócio oculto (feature incompleta) — 2026-09
@@ -153,7 +164,14 @@ export const router = createBrowserRouter([
     path: '/assinatura-vencida',
     element: <AssinaturaVencida />,
   },
-  
+
+  // Política de uso: autenticada, mas FORA do AuthenticatedShell (sem gate
+  // recursivo) — é o destino do redirect quando o aceite está pendente.
+  {
+    path: '/politica',
+    element: <PoliticaDeUsoPage />,
+  },
+
   /* =========================================================
      ÁREA DE LOGIN DO ADMIN (Forçada no Modo Escuro)
      ========================================================= */

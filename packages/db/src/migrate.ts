@@ -125,9 +125,22 @@ const STEPS: MigrationStep[] = [
     },
   },
   { tag: '0032_add_budget_optimizations' },
+  { tag: '0033_add_workflow_jobs_metadata',
+    // Safety: garante o valor 'awaiting_images' no enum workflow_status mesmo
+    // quando a tabela/enum vieram de snapshot sem rodar o afterHook da 0030
+    // (banco sem o valor quebra toda geração do planner na stage image-generation).
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "workflow_status" ADD VALUE IF NOT EXISTS 'awaiting_images'`);
+      console.log('    + ensured awaiting_images on workflow_status');
+    },
+  },
+{ tag: '0034_add_compliance_attempts' },
+  { tag: '0035_add_creative_asset_cost_time' },
+  { tag: '0036_facebook_social_login' },
+  { tag: '0037_policy_tables' },
 ];
 
-/** Nomes de todas as tabelas do schema (26 tabelas) — usados para validação. */
+/** Nomes de todas as tabelas do schema (28 tabelas) — usados para validação. */
 export const REQUIRED_TABLES = [
   'tenants',
   'users',
@@ -155,6 +168,8 @@ export const REQUIRED_TABLES = [
   'google_business_profiles',
   'business_profile_settings',
   'google_sync_logs',
+  'policy_versions',
+  'policy_acceptances',
 ];
 
 /**
@@ -242,7 +257,7 @@ export async function validateRequiredTables(): Promise<{ ok: boolean; missing: 
     const missing = REQUIRED_TABLES.filter((t) => !existingTables.has(t));
 
     if (missing.length === 0) {
-      console.log('[validateRequiredTables] All 26 required tables exist');
+      console.log('[validateRequiredTables] All required tables exist');
       return { ok: true, missing: [] };
     }
 
