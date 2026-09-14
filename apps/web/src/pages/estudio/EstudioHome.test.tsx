@@ -79,6 +79,35 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
     mockApiPost.mockImplementation(neverResolving);
   });
 
+  it('exibe badge de consumo de cota (usados de total) quando quota conhecida', async () => {
+    mockApiGet.mockResolvedValue({ data: MOCK_ASSETS });
+    renderWithProviders();
+
+    const badge = await screen.findByTestId('usage-badge');
+    expect(badge.getAttribute('data-tone')).toBe('normal');
+    expect(screen.getByText(/10 de 20 criativos usados este mês/i)).toBeInTheDocument();
+    expect(screen.getByTestId('usage-bar')).toBeInTheDocument();
+  });
+
+  it('badge some quando quota desconhecida (null) — comportamento preservado', async () => {
+    renderWithProviders();
+
+    await screen.findByRole('button', { name: /criação rápida/i });
+    expect(screen.queryByTestId('usage-badge')).not.toBeInTheDocument();
+  });
+
+  it('badge em tom de erro + CTA upgrade quando cota zerada', async () => {
+    mockApiGet.mockResolvedValue({
+      data: { assets: [], creativesRemaining: 0, creativesLimit: 20 },
+    });
+    renderWithProviders();
+
+    const badge = await screen.findByTestId('usage-badge');
+    expect(badge.getAttribute('data-tone')).toBe('error');
+    expect(screen.getByText(/limite de criativos do mês atingido/i)).toBeInTheDocument();
+    expect(screen.getByTestId('usage-upgrade-cta')).toBeInTheDocument();
+  });
+
   it('exibe o novo texto de duração (1 a 2 minutos) na tela de loading', async () => {
     const user = userEvent.setup();
     renderWithProviders();
