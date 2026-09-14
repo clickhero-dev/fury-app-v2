@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle2, Copy, Loader2, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { AppLayout, Button, Card, CardContent, PageHeader, StatusBadge } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
-import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
+// OCULTO: seletor de IAs removido — import volta no unhide
+// import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
 import { formatDuration, formatCost } from '@/lib/studio-metrics';
 import type {
@@ -73,18 +74,19 @@ export function CreativeStudio() {
 
   // ─── OpenRouter state ──────────────────────────────────────
   const [creativeType, setCreativeType] = useState<'image' | 'video'>('image');
-  const [selectedImageModel, setSelectedImageModel] = useState('black-forest-labs/flux.2-klein-4b');
+  const [selectedImageModel, setSelectedImageModel] = useState('qwen/qwen-image-3-pro'); // OCULTO: seletor removido, modelo fixo qwen (volta no unhide)
   const [selectedVideoModel, setSelectedVideoModel] = useState('google/veo-3.1-lite');
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
 
-  const modelsQuery = useQuery({
-    queryKey: ['studio-ai', 'models'],
-    queryFn: async () => {
-      const res = await api.get('/studio/ai/models');
-      return res.data as { image: StudioModelOption[]; video: StudioModelOption[] };
-    },
-    staleTime: 1000 * 60 * 60, // 1h
-  });
+  // OCULTO: catálogo/seletor de IAs removido da UI (feature incompleta) — volta no unhide
+  // const modelsQuery = useQuery({
+  //   queryKey: ['studio-ai', 'models'],
+  //   queryFn: async () => {
+  //     const res = await api.get('/studio/ai/models');
+  //     return res.data as { image: StudioModelOption[]; video: StudioModelOption[] };
+  //   },
+  //   staleTime: 1000 * 60 * 60, // 1h
+  // });
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -204,12 +206,12 @@ export function CreativeStudio() {
     navigate('/criar-campanha');
   };
 
-  const currentModels = creativeType === 'image'
-    ? (modelsQuery.data?.image ?? [])
-    : (modelsQuery.data?.video ?? []);
-
-  const selectedModel = creativeType === 'image' ? selectedImageModel : selectedVideoModel;
-  const setSelectedModel = creativeType === 'image' ? setSelectedImageModel : setSelectedVideoModel;
+  // OCULTO: seletor de IAs removido (defaults fixos: qwen imagem / veo vídeo) — volta no unhide
+  // const currentModels = creativeType === 'image'
+  //   ? (modelsQuery.data?.image ?? [])
+  //   : (modelsQuery.data?.video ?? []);
+  // const selectedModel = creativeType === 'image' ? selectedImageModel : selectedVideoModel;
+  // const setSelectedModel = creativeType === 'image' ? setSelectedImageModel : setSelectedVideoModel;
 
   return (
     <AppLayout header={<div className="flex items-center justify-between" />}>
@@ -250,7 +252,7 @@ export function CreativeStudio() {
                 </div>
               </div>
 
-              {/* Seletor de modelo (compacto) */}
+              {/* OCULTO: seletor de modelo removido — modelo fixo qwen (imagem) / veo (vídeo). Volta no unhide
               <ModelSelect
                 models={currentModels}
                 selectedModel={selectedModel}
@@ -258,6 +260,7 @@ export function CreativeStudio() {
                 typeLabel={creativeType === 'image' ? 'imagem' : 'vídeo'}
                 id="creative-studio-model-select"
               />
+              */}
 
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Templates por nicho</p>

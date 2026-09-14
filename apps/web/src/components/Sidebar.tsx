@@ -1,7 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
-  BrainCircuit,
-  CalendarDays,
+  // OCULTO (feature incompleta) — volta no unhide
+  // BrainCircuit,
+  // CalendarDays,
   CreditCard,
   LayoutGrid,
   LogOut,
@@ -25,8 +26,9 @@ interface SidebarProps {
 const nav = [
   { to: '/dashboard', label: 'Painel', icon: LayoutGrid },
   { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
-  { to: '/planejador', label: 'Planejador IA', icon: BrainCircuit },
-  { to: '/calendario', label: 'Calendário', icon: CalendarDays },
+  // OCULTO (feature incompleta) — volta no unhide
+  // { to: '/planejador', label: 'Planejador IA', icon: BrainCircuit },
+  // { to: '/calendario', label: 'Calendário', icon: CalendarDays },
   { to: '/estudio', label: 'Estúdio', icon: Palette },
   { to: '/configuracoes/integracoes', label: 'Integrações', icon: Plug },
   { to: '/configuracoes', label: 'Configurações', icon: Settings },

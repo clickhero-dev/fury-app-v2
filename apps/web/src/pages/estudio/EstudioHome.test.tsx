@@ -131,29 +131,25 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     vi.useRealTimers();
   });
 
-  it('quick-create mostra seletor compacto com optgroups (Família FLUX 2 / Outras famílias)', async () => {
+  it('seletor de IAs oculto: quick-create sem combobox de modelo', async () => {
     renderWithProviders();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
 
-    const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-    const groups = [...select.querySelectorAll('optgroup')].map((g) => g.label);
-    expect(groups).toEqual(['Família FLUX 2', 'Outras famílias']);
-    expect(screen.getByRole('option', { name: /GPT Image 1/ })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /FLUX.2 Klein 4B/ })).toBeInTheDocument();
+    // OCULTO: seletor de modelos removido da UI — nenhum combobox presente
+    await waitFor(() => expect(screen.getByPlaceholderText(/Ex: Anúncio fashion/i)).toBeInTheDocument());
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
-  it('Gerar imagem usa o modelo selecionado no seletor', async () => {
+  it('Gerar imagem envia o modelo fixo qwen/qwen-image-3-pro (seletor oculto)', async () => {
     renderWithProviders();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
-    const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-    fireEvent.change(select, { target: { value: 'openai/gpt-image-1' } });
     await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
     await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
 
     await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ model: 'openai/gpt-image-1' }));
+      expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ model: 'qwen/qwen-image-3-pro' }));
     });
   });
 

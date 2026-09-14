@@ -89,46 +89,32 @@ describe('CreativeStudio — seletor de modelos, tempo e custo', () => {
     vi.useRealTimers();
   });
 
-  it('seletor compacto: combobox com 9 opções agrupadas (FLUX 2 / Outras famílias)', async () => {
-      const { container } = renderWithProviders();
-      const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-      // espera o catálogo carregar (fallback tem só 3 opções)
-      await waitFor(() => expect(container.querySelectorAll('option')).toHaveLength(9));
-      const options = screen.getAllByRole('option');
-      expect(options).toHaveLength(9);
-      // agrupamento por família
-      const groups = [...select.querySelectorAll('optgroup')].map((g) => g.label);
-      expect(groups).toEqual(['Família FLUX 2', 'Outras famílias']);
-      // nenhum modelo Microsoft MAI
-      expect(screen.queryByText(/MAI Image 2.5/i)).not.toBeInTheDocument();
-      // opções das duas famílias presentes
-      expect(screen.getByRole('option', { name: /FLUX.2 Klein 4B/ })).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: /GPT Image 1/ })).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: /Seedream 5.0 Pro/ })).toBeInTheDocument();
+  it('seletor de IAs oculto: sem combobox de modelo na tela', async () => {
+      renderWithProviders();
+      await waitFor(() => expect(screen.getByRole('button', { name: /Gerar imagem/i })).toBeInTheDocument());
+      // OCULTO: seletor de modelos removido da UI — nenhum combobox presente
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     });
 
-    it('selecionar modelo de outra família e Gerar envia o model escolhido', async () => {
+    it('Gerar imagem envia o modelo fixo qwen/qwen-image-3-pro (seletor oculto)', async () => {
       const user = userEvent.setup();
       renderWithProviders();
-      const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-      await waitFor(() => expect(screen.getByRole('option', { name: /GPT Image 1/ })).toBeInTheDocument());
-      fireEvent.change(select, { target: { value: 'openai/gpt-image-1' } });
       await user.type(screen.getByPlaceholderText(/Descreva o estilo/i), 'Anúncio fashion minimalista com luz natural');
 
       const generateBtn = screen.getByRole('button', { name: /Gerar imagem/i });
       await user.click(generateBtn);
 
       await waitFor(() => {
-        expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ model: 'openai/gpt-image-1' }));
+        expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ model: 'qwen/qwen-image-3-pro' }));
       });
     });
 
-    it('mostra a descrição do modelo selecionado abaixo do seletor', async () => {
+    it('não consulta o catálogo de modelos (/studio/ai/models) com o seletor oculto', async () => {
       renderWithProviders();
-      const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-      await waitFor(() => expect(screen.getByRole('option', { name: /GPT Image 1/ })).toBeInTheDocument());
-      fireEvent.change(select, { target: { value: 'openai/gpt-image-1' } });
-      expect(screen.getByText(/OpenAI — Referência em fidelidade ao prompt/)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole('button', { name: /Gerar imagem/i })).toBeInTheDocument());
+      // OCULTO: nenhum fetch de catálogo deve acontecer
+      expect(mockApiGet).not.toHaveBeenCalledWith('/studio/ai/models');
+      expect(mockApiGet).not.toHaveBeenCalled();
     });
 
   it('exibe cronômetro (Xs) enquanto a imagem está sendo gerada', async () => {

@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Loader2, Send, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
-import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
+// OCULTO: seletor de IAs removido — import volta no unhide
+// import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
 import { formatDuration, formatCost } from '@/lib/studio-metrics';
@@ -18,7 +19,7 @@ const FEATURES = {
 };
 
 const CREATIVE_TYPE = 'image' as const;
-const IMAGE_MODEL = 'black-forest-labs/flux.2-pro';
+const IMAGE_MODEL = 'qwen/qwen-image-3-pro'; // OCULTO: seletor removido, modelo fixo qwen (volta no unhide)
 
 /* ── Estilos com efeito de Hover estilo Campanhas e Tokens Semânticos ── */
 const SURFACE = 'rounded-2xl border border-border bg-surface shadow-sm';
@@ -74,15 +75,16 @@ export function EstudioHome() {
 
   const elapsedSeconds = generationStartedAt ? Math.max(0, Math.round((nowMs - generationStartedAt) / 1000)) : 0;
 
-  const modelsQuery = useQuery({
-    queryKey: ['studio-ai', 'models'],
-    queryFn: async () => {
-      const res = await api.get('/studio/ai/models');
-      return res.data as { image: StudioModelOption[]; video: StudioModelOption[] };
-    },
-    staleTime: 1000 * 60 * 60, // 1h
-  });
-  const imageModels = modelsQuery.data?.image ?? [];
+  // OCULTO: catálogo/seletor de IAs removido da UI (feature incompleta) — volta no unhide
+  // const modelsQuery = useQuery({
+  //   queryKey: ['studio-ai', 'models'],
+  //   queryFn: async () => {
+  //     const res = await api.get('/studio/ai/models');
+  //     return res.data as { image: StudioModelOption[]; video: StudioModelOption[] };
+  //   },
+  //   staleTime: 1000 * 60 * 60, // 1h
+  // });
+  // const imageModels = modelsQuery.data?.image ?? [];
 
   const deleteMutation = useMutation({
     mutationFn: async (assetId: string) => {
@@ -437,12 +439,14 @@ export function EstudioHome() {
             </p>
 
             <div className={`${SURFACE} p-5`}>
+              {/* OCULTO: seletor de modelo removido — modelo fixo qwen. Volta no unhide
               <ModelSelect
                 models={imageModels}
                 selectedModel={selectedImageModel}
                 onSelect={setSelectedImageModel}
                 id="quick-create-model-select"
               />
+              */}
             </div>
 
             {quotaReached && (
