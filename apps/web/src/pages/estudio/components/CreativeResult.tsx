@@ -4,6 +4,7 @@ import { AlertCircle, BookmarkCheck, Loader2, RefreshCw, Upload, X } from 'lucid
 import { Button } from '@/components';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { layoutLabel, isKnownLayout } from '@/lib/layout-labels';
 import type { GenerateCreativeResponse, StudioPublishResponse } from '@/types/studio';
@@ -166,15 +167,8 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
           ? complianceBadge((currentResult as any).complianceStatus, (currentResult as any).complianceNotes)
           : null;
         if (!badge || badge.tone === 'unknown') return null;
-        return (
-          <div
-            className={cn(
-              'rounded-2xl border px-4 py-3 text-sm',
-              badge.tone === 'rejected' && 'border-red-200 bg-red-50 text-red-800',
-              badge.tone === 'approved' && 'border-green-200 bg-green-50 text-green-800',
-              badge.tone === 'pending' && 'border-amber-200 bg-amber-50 text-amber-800'
-            )}
-          >
+        const content = (
+          <>
             <p className="font-semibold">{badge.label}</p>
             {badge.reasons.length > 0 && (
               <ul className="mt-2 space-y-1">
@@ -185,6 +179,36 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
                 ))}
               </ul>
             )}
+          </>
+        );
+        if (badge.tone === 'approved') {
+          return (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    tabIndex={0}
+                    className="cursor-help rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+                  >
+                    {content}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-56 bg-green-700 text-white border-green-700">
+                  {badge.hint}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        }
+        return (
+          <div
+            className={cn(
+              'rounded-2xl border px-4 py-3 text-sm',
+              badge.tone === 'rejected' && 'border-red-200 bg-red-50 text-red-800',
+              badge.tone === 'pending' && 'border-amber-200 bg-amber-50 text-amber-800'
+            )}
+          >
+            {content}
           </div>
         );
       })()}

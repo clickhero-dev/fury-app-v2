@@ -35,11 +35,18 @@ describe('complianceBadge', () => {
     expect(badge.reasons).toContain('Texto proibido na imagem.');
   });
 
-  it('aprovado → sem motivos', () => {
+  it('aprovado → sem motivos + hint do tooltip', () => {
     const badge = complianceBadge('approved', '[COMPLIANCE] approved=true | data={"approved":true,"issues":[],"text_percentage":5}');
     expect(badge.label).toBe('Aprovado');
     expect(badge.tone).toBe('approved');
     expect(badge.reasons).toEqual([]);
+    expect(badge.hint).toBe('Seu anúncio passou pela verificação de conteúdo e está liberado para publicar.');
+  });
+
+  it('hint vazio quando não é aprovado', () => {
+    expect(complianceBadge('rejected', null).hint).toBe('');
+    expect(complianceBadge('pending_compliance', null).hint).toBe('');
+    expect(complianceBadge(null, null).hint).toBe('');
   });
 
   it('pendente → Analisando', () => {

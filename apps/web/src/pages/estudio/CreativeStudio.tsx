@@ -6,6 +6,8 @@ import { AppLayout, Button, Card, CardContent, PageHeader, StatusBadge } from '@
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
+import { COMPLIANCE_APPROVED_HINT } from '@/lib/compliance.utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatDuration, formatCost } from '@/lib/studio-metrics';
 import type {
   StudioComplianceStatusResponse,
@@ -428,10 +430,26 @@ export function CreativeStudio() {
                           className="h-full w-full object-cover"
                         />
                       )}
-                      <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
-                        <CheckCircle2 className="h-4 w-4" />
-                        {currentCompliance.complianceStatus === 'approved' ? 'Aprovado' : currentCompliance.complianceStatus === 'rejected' ? 'Reprovado' : 'Em análise'}
-                      </div>
+                      {currentCompliance.complianceStatus === 'approved' ? (
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur cursor-help">
+                                <CheckCircle2 className="h-4 w-4" />
+                                Aprovado
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-56 bg-green-700 text-white border-green-700">
+                              {COMPLIANCE_APPROVED_HINT}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
+                          <CheckCircle2 className="h-4 w-4" />
+                          {currentCompliance.complianceStatus === 'rejected' ? 'Reprovado' : 'Em análise'}
+                        </div>
+                      )}
                     </div>
                   </div>
 

@@ -7,6 +7,7 @@ import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatDuration, formatCost } from '@/lib/studio-metrics';
 import type { StudioAsset } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
@@ -622,10 +623,19 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
             }}
           />
           {badge.tone === 'approved' && (
-            <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-green-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
-              <CheckCircle2 className="h-3 w-3" />
-              {badge.label}
-            </div>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-green-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm cursor-help">
+                    <CheckCircle2 className="h-3 w-3" />
+                    {badge.label}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-56 bg-green-700 text-white border-green-700">
+                  {badge.hint}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
           {badge.tone === 'rejected' && (
             <>

@@ -4,6 +4,8 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, CheckCircle2, XCircle, ArrowLeft, Upload, ImageIcon, Save } from 'lucide-react';
 import { AppLayout, PageHeader, Button, Card } from '@/components';
 import api from '@/lib/api';
+import { COMPLIANCE_APPROVED_HINT } from '@/lib/compliance.utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useBrandKit } from '@/hooks/useBrandKit';
 import type {
   RenderCreativePayload,
@@ -24,10 +26,19 @@ function ComplianceBadge({ status, approved }: { status: string; approved: boole
   }
   if (approved === true || status === 'approved') {
     return (
-      <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
-        <CheckCircle2 className="w-4 h-4 shrink-0" />
-        Aprovado para publicação
-      </div>
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg cursor-help">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              Aprovado para publicação
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-56 bg-green-700 text-white border-green-700">
+            {COMPLIANCE_APPROVED_HINT}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
   return (
