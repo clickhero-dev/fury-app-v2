@@ -174,9 +174,9 @@ export function NotFoundPage() {
       {/* Botão de volta */}
       <Link
         to="/"
-        className="gradient-spark inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white font-medium text-sm
-                   hover:brightness-110 active:brightness-95 transition-all duration-200
-                   shadow-lg shadow-accent/25 hover:shadow-xl hover:shadow-accent/30"
+        className="bg-brand inline-flex items-center gap-2 px-6 py-3 rounded-full text-white font-medium text-sm
+                   hover:bg-brand-hover active:brightness-90 transition-all duration-200
+                   shadow-lg shadow-brand/25 hover:shadow-xl hover:shadow-brand/30"
       >
         {/* Ícone de seta */}
         <svg
