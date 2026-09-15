@@ -62,13 +62,13 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
       data-tone={tone}
       role="status"
       aria-atomic="true"
-      className={`inline-flex w-full max-w-56 flex-col gap-1.5 rounded-xl border px-3 py-2 ${classes.wrap} ${className}`}
+      className={`inline-flex w-full max-w-64 flex-col gap-2 rounded-xl border px-4 py-2.5 ${classes.wrap} ${className}`}
     >
-      <div className="flex items-center gap-1.5 text-xs font-semibold">
+      <div className="flex items-center gap-2 text-sm font-semibold">
         <Icon
           data-testid="usage-icon"
           aria-hidden="true"
-          className="size-3.5 shrink-0"
+          className="size-4 shrink-0"
           color={classes.iconColor}
         />
         <span
@@ -96,7 +96,7 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
           aria-valuenow={pct}
           aria-valuemax={100}
           aria-label="Cota de criativos usada"
-          className="h-1.5 w-full overflow-hidden rounded-full bg-white/10"
+          className="h-2 w-full overflow-hidden rounded-full bg-white/10"
         >
           <div
             data-testid="usage-bar"
@@ -111,7 +111,7 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
         <Link
           to="/planos"
           data-testid="usage-upgrade-cta"
-          className="mt-0.5 inline-flex items-center justify-center rounded-lg border border-current/30 px-2.5 py-1 text-xs font-semibold hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
+          className="mt-0.5 inline-flex items-center justify-center rounded-lg border border-current/30 px-3 py-1.5 text-xs font-semibold hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
         >
           Fazer upgrade
         </Link>
