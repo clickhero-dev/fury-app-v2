@@ -52,6 +52,7 @@ describe('StudioPublishingController', () => {
         tenantId: 't-1',
         type: undefined,
         status: undefined,
+        archived: false,
         page: 1,
         limit: 20,
       });

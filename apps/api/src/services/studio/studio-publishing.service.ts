@@ -6,6 +6,7 @@ import {
 import {
   generateImage as generateStudioImage,
   getStudioAssetById,
+  setActiveStudioAssetVersion,
   publishStudioAssetToMeta,
   type StudioImageGenerationResult,
   type StudioComplianceStatusResult,
@@ -17,6 +18,7 @@ type ListStudioAssetsParams = {
   tenantId: string;
   type?: 'image' | 'video' | 'copy';
   status?: 'pending' | 'approved' | 'rejected';
+  archived?: boolean;
   page: number;
   limit: number;
 };
@@ -51,6 +53,10 @@ export class StudioPublishingService {
 
   async getStudioAssetById(params: { tenantId: string; assetId: string }): Promise<StudioComplianceStatusResult> {
     return getStudioAssetById(params);
+  }
+
+  async setActiveAssetVersion(params: { tenantId: string; assetId: string }): Promise<StudioComplianceStatusResult> {
+    return setActiveStudioAssetVersion(params);
   }
 
   async publishAssetToMeta(params: PublishAssetToMetaParams): Promise<PublishAssetToMetaResult> {

@@ -463,6 +463,7 @@ export async function listStudioAssetsForTenant(params: {
   tenantId: string;
   type?: 'image' | 'video' | 'copy';
   status?: 'pending' | 'approved' | 'rejected';
+  archived?: boolean;
   page: number;
   limit: number;
 }): Promise<{
@@ -471,9 +472,9 @@ export async function listStudioAssetsForTenant(params: {
   page: number;
   totalPages: number;
 }> {
-  const { type, status, page, limit } = params;
+  const { type, status, archived, page, limit } = params;
   const repo = new StudioRepository(params.tenantId);
-  const { rows, total, modificationsRemainingByRootId } = await repo.listAssets({ type, status, page, limit });
+  const { rows, total } = await repo.listAssets({ type, status, archived, page, limit });
 
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
 
@@ -486,7 +487,7 @@ export async function listStudioAssetsForTenant(params: {
       complianceNotes: r.complianceNotes ?? null,
       metaAssetId: r.metaAssetId ?? null,
       createdAt: r.createdAt.toISOString(),
-      modificationsRemaining: modificationsRemainingByRootId.get(r.rootAssetId ?? r.id) ?? null,
+      modificationsRemaining: r.modificationsRemaining ?? null,
       ...extractCreativeCopyFromComplianceNotes(r.complianceNotes ?? null),
     })),
     total,
