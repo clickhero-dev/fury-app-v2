@@ -12,6 +12,10 @@ const mockApiDelete = vi.hoisted(() => vi.fn());
 const mockApiPost = vi.hoisted(() => vi.fn() as any);
 const neverResolving = vi.hoisted(() => () => new Promise(() => {}));
 
+vi.mock('@/hooks/useBilling', () => ({
+  useSubscription: vi.fn(() => ({ data: { currentPeriodEnd: null } })),
+}));
+
 vi.mock('@/lib/api', () => ({
   default: {
     defaults: { baseURL: 'http://localhost/api' },
@@ -85,7 +89,7 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
 
     const badge = await screen.findByTestId('usage-badge');
     expect(badge.getAttribute('data-tone')).toBe('normal');
-    expect(screen.getByTestId('usage-label').textContent).toContain('10/20 usados');
+    expect(screen.getByTestId('usage-pct').textContent).toContain('10 de 20');
     expect(screen.getByTestId('usage-bar')).toBeInTheDocument();
   });
 
@@ -104,7 +108,7 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
 
     const badge = await screen.findByTestId('usage-badge');
     expect(badge.getAttribute('data-tone')).toBe('error');
-    expect(screen.getByTestId('usage-label').textContent).toMatch(/limite do mês atingido/i);
+    expect(screen.getByTestId('usage-renew').textContent).toMatch(/limite do mês atingido/i);
     expect(screen.getByTestId('usage-upgrade-cta')).toBeInTheDocument();
   });
 

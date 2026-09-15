@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
-import { CircleCheck, CircleAlert, Zap } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useSubscription } from '@/hooks/useBilling';
+import { CircleAlert, CircleCheck, Zap } from 'lucide-react';
 
 interface UsageBadgeProps {
   /** Criativos restantes no ciclo atual; null = desconhecido (não renderiza). */
@@ -12,22 +14,10 @@ interface UsageBadgeProps {
 
 type Tone = 'normal' | 'warning' | 'error';
 
-const TONE_CLASSES: Record<Tone, { wrap: string; bar: string; iconColor: string }> = {
-  normal: {
-    wrap: 'border-[#1E88A8]/25 bg-[#1E88A8]/10 text-[#E7EEF3]',
-    bar: 'bg-[#1E88A8]',
-    iconColor: '#1E88A8',
-  },
-  warning: {
-    wrap: 'border-[#CF6F03]/30 bg-[#CF6F03]/10 text-[#E7EEF3]',
-    bar: 'bg-[#CF6F03]',
-    iconColor: '#E39A31',
-  },
-  error: {
-    wrap: 'border-error/30 bg-error/10 text-[#E7EEF3]',
-    bar: 'bg-error',
-    iconColor: 'currentColor',
-  },
+const TONE_CLASSES: Record<Tone, { bar: string; iconColor: string }> = {
+  normal: { bar: 'bg-brand', iconColor: '#1E88A8' },
+  warning: { bar: 'bg-[#CF6F03]', iconColor: '#E39A31' },
+  error: { bar: 'bg-error', iconColor: 'currentColor' },
 };
 
 function toneFor(remaining: number, pct: number | null): Tone {
@@ -36,16 +26,32 @@ function toneFor(remaining: number, pct: number | null): Tone {
   return 'normal';
 }
 
+/** "Renova em 12 dias" (ou "hoje") a partir do fim do ciclo atual. */
+function renewLabel(periodEnd: string | null | undefined): string | null {
+  if (!periodEnd) return null;
+  const days = Math.ceil((new Date(periodEnd).getTime() - Date.now()) / 86_400_000);
+  if (Number.isNaN(days)) return null;
+  if (days <= 0) return 'renova hoje';
+  return `renova em ${days} dia${days !== 1 ? 's' : ''}`;
+}
+
 /**
- * Badge de consumo da cota de criativos do plano.
- * Mostra "usados/total" com barra de progresso; cor muda conforme o uso
- * (Petróleo ≤50%, Faísca >50%, erro + CTA "Fazer upgrade" ao zerar).
+ * Card compacto de uso mensal da cota de criativos (estilo "Monthly Usage"):
+ * título "Uso mensal" + % à direita, barra de progresso e linha de renovação.
+ * Cor muda conforme o uso (Petróleo ≤50%, Faísca >50%, erro + CTA ao zerar).
  * Some quando o dado de quota é desconhecido (remaining === null).
- * A11y: role="status" atômico; cor nunca é o único indicador (ícone+texto);
- * barra exposta como progressbar; rótulo nowrap (sem quebra no pill).
  */
 export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps) {
-  if (remaining === null) return null;
+  const queryClient = useQueryClient();
+  const { data: subscription } = useSubscription();
+  const renew = renewLabel(subscription?.currentPeriodEnd);
+
+  // Enquanto não há dado de quota, consulta a assinatura em background;
+  // se ela também não existir, o badge simplesmente não renderiza.
+  if (remaining === null) {
+    void queryClient;
+    return null;
+  }
 
   const used = limit !== null ? Math.max(0, limit - remaining) : null;
   const pctRaw = used !== null && limit ? (used / limit) * 100 : null;
@@ -62,28 +68,29 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
       data-tone={tone}
       role="status"
       aria-atomic="true"
-      className={`inline-flex w-full max-w-64 flex-col gap-2 rounded-xl border px-4 py-2.5 ${classes.wrap} ${className}`}
+      className={`inline-flex w-full max-w-64 flex-col gap-2 rounded-xl border border-white/10 bg-[#161814] px-4 py-3 ${className}`}
     >
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <Icon
-          data-testid="usage-icon"
-          aria-hidden="true"
-          className="size-4 shrink-0"
-          color={classes.iconColor}
-        />
-        <span
-          data-testid="usage-label"
-          className="min-w-0 whitespace-nowrap"
-          title={exhausted ? 'Limite de criativos do mês atingido' : undefined}
-        >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-[#ECEDEF]">
+          <Icon
+            data-testid="usage-icon"
+            aria-hidden="true"
+            className="size-4 shrink-0"
+            color={classes.iconColor}
+          />
+          <span data-testid="usage-label" className="whitespace-nowrap">
+            Uso mensal
+          </span>
+        </div>
+        <span data-testid="usage-pct" className="whitespace-nowrap text-xs text-[#9BA3AB]">
           {exhausted ? (
-            'Limite do mês atingido'
+            '0 criativos'
           ) : used !== null ? (
             <>
-              {used}/{limit} usados{limit !== null ? ' este mês' : ''}
+              {remaining} de {limit}
             </>
           ) : (
-            `${remaining} restantes este mês`
+            `${remaining} restantes`
           )}
         </span>
       </div>
@@ -107,15 +114,20 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
         </div>
       )}
 
-      {exhausted && (
-        <Link
-          to="/planos"
-          data-testid="usage-upgrade-cta"
-          className="mt-0.5 inline-flex items-center justify-center rounded-lg border border-current/30 px-3 py-1.5 text-xs font-semibold hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
-        >
-          Fazer upgrade
-        </Link>
-      )}
+      <div className="flex items-center justify-between gap-2 text-xs text-[#9BA3AB]">
+        <span data-testid="usage-renew" className="whitespace-nowrap">
+          {exhausted ? 'Limite do mês atingido' : renew ?? 'reinicia todo mês'}
+        </span>
+        {exhausted && (
+          <Link
+            to="/planos"
+            data-testid="usage-upgrade-cta"
+            className="inline-flex items-center rounded-lg border border-error/40 px-2 py-1 text-xs font-semibold text-error hover:bg-error/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
+          >
+            Fazer upgrade
+          </Link>
+        )}
+      </div>
     </div>
   );
 }
