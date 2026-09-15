@@ -476,10 +476,10 @@ export function EstudioHome() {
                     )}
                     Gerar imagem
                   </button>
-                  <UsageBadge remaining={creativesRemaining} limit={creativesLimit} />
                 </div>
               </CardContent>
             </Card>
+            <UsageBadge remaining={creativesRemaining} limit={creativesLimit} className="mt-3" />
           </div>
         )}
 
