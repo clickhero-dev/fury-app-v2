@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -259,38 +259,63 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
   });
 });
 
-describe('EstudioHome — exclusão de criativo', () => {
+describe('EstudioHome — arquivar criativo (Fase 6)', () => {
   beforeEach(() => {
     mockApiGet.mockReset();
     mockApiDelete.mockReset();
     mockApiGet.mockResolvedValue({ data: MOCK_ASSETS });
   });
 
-  it('exibe snack de sucesso ao excluir criativo', async () => {
+  it('clicar em excluir abre modal de confirmação (não exclui direto)', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+
+    await screen.findByText(/Anúncio de imagem/i);
+
+    const trashBtn = screen.getByTitle(/Excluir anúncio/i);
+    await user.click(trashBtn);
+
+    expect(screen.getByText(/Arquivar este criativo\?/i)).toBeInTheDocument();
+    expect(mockApiDelete).not.toHaveBeenCalled();
+  });
+
+  it('confirmar no modal arquiva o criativo (DELETE) e mostra snack de sucesso', async () => {
     mockApiDelete.mockResolvedValue({ data: { success: true } });
     renderWithProviders();
     const user = userEvent.setup();
 
-    // Aguarda assets aparecerem na tela
     await screen.findByText(/Anúncio de imagem/i);
 
-    // Clica no ícone de lixeira
     const trashBtn = screen.getByTitle(/Excluir anúncio/i);
     await user.click(trashBtn);
 
-    // Confirma a exclusão
-    const confirmBtn = screen.getByRole('button', { name: /Confirmar/i });
+    const confirmBtn = screen.getByRole('button', { name: /^Arquivar$/i });
     await user.click(confirmBtn);
 
-    // SnackBar de sucesso deve aparecer
     await waitFor(() => {
-      expect(screen.getByText(/Criativo excluído com sucesso/i)).toBeInTheDocument();
+      expect(screen.getByText(/Criativo arquivado com sucesso/i)).toBeInTheDocument();
     });
 
     expect(mockApiDelete).toHaveBeenCalledWith('/studio/assets/asset-1');
   });
 
-  it('exibe snack de erro ao falhar exclusão do criativo', async () => {
+  it('cancelar no modal não arquiva nada', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+
+    await screen.findByText(/Anúncio de imagem/i);
+
+    const trashBtn = screen.getByTitle(/Excluir anúncio/i);
+    await user.click(trashBtn);
+
+    const cancelBtn = screen.getByRole('button', { name: /Cancelar/i });
+    await user.click(cancelBtn);
+
+    expect(screen.queryByText(/Arquivar este criativo\?/i)).not.toBeInTheDocument();
+    expect(mockApiDelete).not.toHaveBeenCalled();
+  });
+
+  it('exibe snack de erro ao falhar o arquivamento', async () => {
     mockApiDelete.mockRejectedValue(new Error('API error'));
     renderWithProviders();
     const user = userEvent.setup();
@@ -300,11 +325,64 @@ describe('EstudioHome — exclusão de criativo', () => {
     const trashBtn = screen.getByTitle(/Excluir anúncio/i);
     await user.click(trashBtn);
 
-    const confirmBtn = screen.getByRole('button', { name: /Confirmar/i });
+    const confirmBtn = screen.getByRole('button', { name: /^Arquivar$/i });
     await user.click(confirmBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/Erro ao excluir o criativo/i)).toBeInTheDocument();
+      expect(screen.getByText(/Erro ao arquivar o criativo/i)).toBeInTheDocument();
+    });
+  });
+});
+
+const MOCK_ARCHIVED_ASSET = {
+  id: 'asset-archived-1',
+  name: 'Anúncio arquivado',
+  type: 'image' as const,
+  url: 'https://example.com/archived.png',
+  complianceStatus: 'approved' as const,
+  complianceNotes: '{}',
+  modificationsRemaining: 1,
+};
+
+describe('EstudioHome — modal de Arquivados (Fase 6)', () => {
+  beforeEach(() => {
+    mockApiGet.mockReset();
+    mockApiPost.mockReset();
+    mockApiGet.mockImplementation((_url: string, config?: { params?: { archived?: string } }) => {
+      if (config?.params?.archived === 'true') {
+        return Promise.resolve({ data: { assets: [MOCK_ARCHIVED_ASSET], creativesRemaining: null, creativesLimit: null } });
+      }
+      return Promise.resolve({ data: MOCK_ASSETS });
+    });
+  });
+
+  it('botão "Arquivados" abre modal listando só os arquivados, com "Restaurar anúncio" e sem excluir/usar em campanha', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+
+    await screen.findByText(/Anúncio de imagem/i);
+    await user.click(screen.getByRole('button', { name: /^Arquivados$/i }));
+
+    await screen.findByText('Anúncio arquivado');
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: /Restaurar anúncio/i })).toBeInTheDocument();
+    expect(within(dialog).queryByTitle(/Excluir anúncio/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: /^Usar em campanha$/i })).not.toBeInTheDocument();
+  });
+
+  it('restaurar chama POST .../restore e atualiza as duas listagens', async () => {
+    mockApiPost.mockResolvedValue({ data: { success: true } });
+    renderWithProviders();
+    const user = userEvent.setup();
+
+    await screen.findByText(/Anúncio de imagem/i);
+    await user.click(screen.getByRole('button', { name: /^Arquivados$/i }));
+    await screen.findByText('Anúncio arquivado');
+
+    await user.click(screen.getByRole('button', { name: /Restaurar anúncio/i }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/studio/assets/asset-archived-1/restore');
     });
   });
 });

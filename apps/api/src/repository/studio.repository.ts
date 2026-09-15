@@ -100,6 +100,26 @@ export class StudioRepository extends TenantScopedRepository {
     return row ?? null;
   }
 
+  /** Arquiva o grupo inteiro (soft — `archivedAt`), só na linha raiz. Nenhuma linha é apagada. */
+  async archiveGroup(rootId: string): Promise<CreativeAsset | null> {
+    const [row] = await this.db
+      .update(creativeAssets)
+      .set({ archivedAt: new Date() })
+      .where(and(eq(creativeAssets.id, rootId), eq(creativeAssets.tenantId, this.tenantId)))
+      .returning();
+    return row ?? null;
+  }
+
+  /** Restaura o grupo (limpa `archivedAt`), só na linha raiz. */
+  async restoreGroup(rootId: string): Promise<CreativeAsset | null> {
+    const [row] = await this.db
+      .update(creativeAssets)
+      .set({ archivedAt: null })
+      .where(and(eq(creativeAssets.id, rootId), eq(creativeAssets.tenantId, this.tenantId)))
+      .returning();
+    return row ?? null;
+  }
+
   /**
    * Listagem paginada de GRUPOS (1 linha por linhagem: raiz + modificações),
    * não 1 linha por versão. Cada grupo é representado pela versão "em

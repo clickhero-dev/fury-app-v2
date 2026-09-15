@@ -10,8 +10,10 @@ import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatDuration, formatCost } from '@/lib/studio-metrics';
-import type { StudioAsset } from '@/types/studio';
+import type { StudioAsset, GenerateCreativeResponse } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
+import { ArchiveConfirmDialog } from './components/ArchiveConfirmDialog';
+import { ArchivedAssetsModal } from './components/ArchivedAssetsModal';
 
 type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create';
 
@@ -36,25 +38,16 @@ interface StudioAssetResponse {
   creativesLimit: number | null;
 }
 
-interface GenerationResult {
-  type: 'image';
-  assetId: string;
-  imageUrl: string;
-  creativeData: { headline: string; primary_text: string; cta: string };
-  modificationsRemaining: number | null;
-  complianceStatus?: string;
-  complianceNotes?: string;
-}
-
 export function EstudioHome() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { setPreSelectedAsset } = useCampaignWizardContext();
   const [view, setView] = useState<ViewState>('library');
-  const [generationResult, setGenerationResult] = useState<GenerationResult | null>(null);
+  const [generationResult, setGenerationResult] = useState<GenerateCreativeResponse | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'>('all');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmArchiveAsset, setConfirmArchiveAsset] = useState<StudioAsset | null>(null);
+  const [showArchivedModal, setShowArchivedModal] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // ─── OpenRouter state ──────────────────────────────────────────────
@@ -91,14 +84,13 @@ export function EstudioHome() {
       await api.delete(`/studio/assets/${assetId}`);
     },
     onSuccess: () => {
-      setDeletingId(null);
-      setToast({ message: 'Criativo excluído com sucesso', type: 'success' });
+      setConfirmArchiveAsset(null);
+      setToast({ message: 'Criativo arquivado com sucesso', type: 'success' });
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
       setTimeout(() => setToast(null), 3000);
     },
     onError: () => {
-      setDeletingId(null);
-      setToast({ message: 'Erro ao excluir o criativo. Tente novamente.', type: 'error' });
+      setToast({ message: 'Erro ao arquivar o criativo. Tente novamente.', type: 'error' });
       setTimeout(() => setToast(null), 3000);
     },
   });
@@ -378,6 +370,14 @@ export function EstudioHome() {
                 })}
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowArchivedModal(true)}
+                  className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-semibold text-text-tertiary transition-all hover:bg-surface-hover hover:text-text-primary"
+                >
+                  Arquivados
+                </button>
               </div>
 
               {isLoading ? (
@@ -408,11 +408,7 @@ export function EstudioHome() {
                     <AssetCard
                       key={asset.id}
                       asset={asset}
-                      isDeleting={deletingId === asset.id}
-                      deletePending={deleteMutation.isPending}
-                      onDeleteRequest={() => setDeletingId(asset.id)}
-                      onDeleteConfirm={() => deleteMutation.mutate(asset.id)}
-                      onDeleteCancel={() => setDeletingId(null)}
+                      onDeleteRequest={() => setConfirmArchiveAsset(asset)}
                       onViewDetails={() => handleViewDetails(asset)}
                       onUseInCampaign={() => handleUseInCampaign(asset)}
                     />
@@ -573,19 +569,37 @@ export function EstudioHome() {
           </div>
         )}
       </div>
+
+      {confirmArchiveAsset && (
+        <ArchiveConfirmDialog
+          loading={deleteMutation.isPending}
+          onConfirm={() => deleteMutation.mutate(confirmArchiveAsset.id)}
+          onClose={() => setConfirmArchiveAsset(null)}
+        />
+      )}
+
+      {showArchivedModal && (
+        <ArchivedAssetsModal
+          onClose={() => setShowArchivedModal(false)}
+          onViewDetails={(asset) => {
+            setShowArchivedModal(false);
+            handleViewDetails(asset);
+          }}
+        />
+      )}
     </AppLayout>
   );
 }
 
 interface AssetCardProps {
   asset: StudioAsset;
-  isDeleting: boolean;
-  deletePending: boolean;
-  onDeleteRequest: () => void;
-  onDeleteConfirm: () => void;
-  onDeleteCancel: () => void;
   onViewDetails: () => void;
-  onUseInCampaign: () => void;
+  /** Card em modo arquivado: sem excluir, "Usar em campanha" vira "Restaurar anúncio". */
+  archived?: boolean;
+  onDeleteRequest?: () => void;
+  onUseInCampaign?: () => void;
+  onRestore?: () => void;
+  restorePending?: boolean;
 }
 
 const BACKEND_URL = api.defaults.baseURL?.replace(/\/api$/, '') ?? '';
@@ -596,7 +610,7 @@ function resolveAssetUrl(url: string | null | undefined): string | null {
   return url.startsWith('data:') || url.startsWith('http') ? url : `${BACKEND_URL}${url}`;
 }
 
-function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDeleteConfirm, onDeleteCancel, onViewDetails, onUseInCampaign }: AssetCardProps) {
+export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onUseInCampaign, onRestore, restorePending }: AssetCardProps) {
   const imageUrl = resolveAssetUrl(asset.url);
   const badge = complianceBadge(asset.complianceStatus, asset.complianceNotes);
   return (
@@ -683,39 +697,29 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
           <h3 className="line-clamp-2 flex-1 text-sm font-semibold text-text-primary transition-colors group-hover:text-text-primary">
             {asset.name ?? `Anúncio de ${asset.type === 'image' ? 'imagem' : asset.type}`}
           </h3>
-          <button
-            type="button"
-            onClick={onDeleteRequest}
-            className="shrink-0 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-hover hover:text-destructive"
-            title="Excluir anúncio"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {!archived && (
+            <button
+              type="button"
+              onClick={onDeleteRequest}
+              className="shrink-0 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-hover hover:text-destructive"
+              title="Excluir anúncio"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
-        {isDeleting ? (
-          <div className="space-y-2 pt-1">
-            <p className="text-xs font-medium text-destructive">Excluir este anúncio?</p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onDeleteConfirm}
-                disabled={deletePending}
-                className="flex-1 rounded-full bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground transition-all hover:opacity-90 disabled:opacity-50"
-              >
-                {deletePending ? 'Excluindo...' : 'Confirmar'}
-              </button>
-              <button
-                type="button"
-                onClick={onDeleteCancel}
-                className="flex-1 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-text-primary transition-all hover:bg-surface-hover"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex gap-2 pt-2">
+        <div className="flex gap-2 pt-2">
+          {archived ? (
+            <button
+              type="button"
+              onClick={onRestore}
+              disabled={restorePending}
+              className="flex-1 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand transition-all duration-200 hover:bg-brand hover:text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+            >
+              {restorePending ? 'Restaurando...' : 'Restaurar anúncio'}
+            </button>
+          ) : (
             <button
               type="button"
               onClick={onUseInCampaign}
@@ -723,15 +727,15 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
             >
               Usar em campanha
             </button>
-            <button
-              type="button"
-              onClick={onViewDetails}
-              className="flex-1 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-brand/90 hover:scale-[1.02] active:scale-[0.98]"
-            >
-              Ver detalhes
-            </button>
-          </div>
-        )}
+          )}
+          <button
+            type="button"
+            onClick={onViewDetails}
+            className="flex-1 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-brand/90 hover:scale-[1.02] active:scale-[0.98]"
+          >
+            Ver detalhes
+          </button>
+        </div>
       </div>
     </div>
   );

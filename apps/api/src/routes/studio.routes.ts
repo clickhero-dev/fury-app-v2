@@ -33,6 +33,7 @@ router.get('/storage-check', async (_req: any, res: any) => {
 // Assets + geração de imagem única (StudiopublishingController via DI).
 router.get('/assets', authMiddleware, tenantMiddleware, controllers.studioPublishing.listAssets);
 router.delete('/assets/:assetId', authMiddleware, tenantMiddleware, controllers.studioPublishing.deleteAsset);
+router.post('/assets/:assetId/restore', authMiddleware, tenantMiddleware, controllers.studioPublishing.restoreAsset);
 router.get('/assets/:assetId', authMiddleware, tenantMiddleware, controllers.studioPublishing.getAsset);
 router.get('/assets/:assetId/compliance-status', authMiddleware, tenantMiddleware, controllers.studioPublishing.getComplianceStatus);
 router.post('/assets/:assetId/set-active', authMiddleware, tenantMiddleware, controllers.studioPublishing.setActive);

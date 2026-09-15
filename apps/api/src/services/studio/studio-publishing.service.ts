@@ -1,6 +1,7 @@
 import {
   listStudioAssetsForTenant,
   deleteStudioAsset,
+  restoreStudioAsset,
   type StudioAssetListItem,
 } from './studio.service.js';
 import {
@@ -69,6 +70,10 @@ export class StudioPublishingService {
 
   async deleteStudioAsset(params: { tenantId: string; assetId: string }): Promise<void> {
     return deleteStudioAsset(params);
+  }
+
+  async restoreStudioAsset(params: { tenantId: string; assetId: string }): Promise<void> {
+    return restoreStudioAsset(params);
   }
 
   async getCreativeQuotaSnapshot(
