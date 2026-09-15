@@ -85,7 +85,7 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
 
     const badge = await screen.findByTestId('usage-badge');
     expect(badge.getAttribute('data-tone')).toBe('normal');
-    expect(screen.getByText(/10 de 20 criativos usados este mês/i)).toBeInTheDocument();
+    expect(screen.getByTestId('usage-label').textContent).toContain('10/20 usados');
     expect(screen.getByTestId('usage-bar')).toBeInTheDocument();
   });
 
@@ -104,7 +104,7 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
 
     const badge = await screen.findByTestId('usage-badge');
     expect(badge.getAttribute('data-tone')).toBe('error');
-    expect(screen.getByText(/limite de criativos do mês atingido/i)).toBeInTheDocument();
+    expect(screen.getByTestId('usage-label').textContent).toMatch(/limite do mês atingido/i);
     expect(screen.getByTestId('usage-upgrade-cta')).toBeInTheDocument();
   });
 

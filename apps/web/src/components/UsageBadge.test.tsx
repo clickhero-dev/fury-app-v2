@@ -14,13 +14,13 @@ describe('UsageBadge', () => {
   it('mostra usados e total quando limit é conhecido', () => {
     renderBadge(<UsageBadge remaining={70} limit={100} />);
     expect(screen.getByTestId('usage-badge')).toBeInTheDocument();
-    expect(screen.getByText(/30 de 100/i)).toBeInTheDocument();
+    expect(screen.getByTestId('usage-label').textContent).toContain('30/100 usados');
   });
 
   it('mostra apenas restantes quando limit é desconhecido (null)', () => {
     renderBadge(<UsageBadge remaining={5} limit={null} />);
     expect(screen.getByTestId('usage-badge')).toBeInTheDocument();
-    expect(screen.getByText(/5 criativos restantes/i)).toBeInTheDocument();
+    expect(screen.getByTestId('usage-label').textContent).toContain('5 restantes');
   });
 
   it('usa cor neutra (petróleo) com uso ≤ 50%', () => {
@@ -60,6 +60,51 @@ describe('UsageBadge', () => {
     renderBadge(<UsageBadge remaining={102} limit={100} />);
     const bar = screen.getByTestId('usage-bar');
     expect(bar.getAttribute('data-pct')).toBe('0');
-    expect(screen.getByText(/0 de 100/i)).toBeInTheDocument();
+    expect(screen.getByTestId('usage-label').textContent).toContain('0/100 usados');
+  });
+
+  // — UX polish (ui-ux-pro-max): acessibilidade + rótulo compacto —
+
+  it('rótulo compacto sem risco de quebra: "30/100 usados" em nowrap', () => {
+    renderBadge(<UsageBadge remaining={70} limit={100} />);
+    const label = screen.getByTestId('usage-label');
+    expect(label.textContent).toContain('30/100 usados');
+    expect(label.className).toContain('whitespace-nowrap');
+  });
+
+  it('não depende só de cor: ícone + texto em todos os tons', () => {
+    const { container: c1, unmount: u1 } = renderBadge(<UsageBadge remaining={60} limit={100} />);
+    expect(c1.querySelector('[data-testid="usage-icon"]')).not.toBeNull();
+    u1();
+    const { unmount: u2 } = renderBadge(<UsageBadge remaining={20} limit={100} />);
+    expect(document.querySelector('[data-testid="usage-icon"]')).not.toBeNull();
+    u2();
+    const { unmount: u3 } = renderBadge(<UsageBadge remaining={0} limit={100} />);
+    expect(document.querySelector('[data-testid="usage-icon"]')).not.toBeNull();
+    u3();
+  });
+
+  it('status anunciável: role="status" com mensagem atômica (não número puro)', () => {
+    renderBadge(<UsageBadge remaining={5} limit={20} />);
+    const badge = screen.getByTestId('usage-badge');
+    expect(badge.getAttribute('role')).toBe('status');
+    expect(badge.getAttribute('aria-atomic')).toBe('true');
+    expect(screen.getByTestId('usage-label').textContent).toContain('15/20 usados');
+  });
+
+  it('barra exposta a AT: role="progressbar" com valuemin/now/max', () => {
+    renderBadge(<UsageBadge remaining={10} limit={20} />);
+    const bar = screen.getByTestId('usage-bar-wrap');
+    expect(bar.getAttribute('role')).toBe('progressbar');
+    expect(bar.getAttribute('aria-valuemin')).toBe('0');
+    expect(bar.getAttribute('aria-valuenow')).toBe('50');
+    expect(bar.getAttribute('aria-valuemax')).toBe('100');
+    expect(bar.getAttribute('aria-label')).toContain('Cota de criativos');
+  });
+
+  it('CTA upgrade com anel de foco visível', () => {
+    renderBadge(<UsageBadge remaining={0} limit={100} />);
+    const link = screen.getByTestId('usage-upgrade-cta');
+    expect(link.className).toContain('focus-visible:ring-2');
   });
 });

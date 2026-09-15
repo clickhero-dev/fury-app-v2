@@ -22,7 +22,7 @@ describe('IdleStatus — destaque do consumo de crédito', () => {
     renderIdle({ creativesRemaining: 3, creativesLimit: 8 });
     const badge = screen.getByTestId('usage-badge');
     expect(badge.getAttribute('data-tone')).toBe('warning');
-    expect(screen.getByText(/5 de 8 criativos usados este mês/i)).toBeInTheDocument();
+    expect(screen.getByTestId('usage-label').textContent).toContain('5/8 usados');
     expect(screen.getByTestId('usage-bar')).toBeInTheDocument();
   });
 
