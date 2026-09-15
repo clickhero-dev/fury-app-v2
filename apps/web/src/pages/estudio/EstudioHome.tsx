@@ -240,9 +240,8 @@ export function EstudioHome() {
         <PageHeader
           title="Estúdio de anúncios"
           description="Peças prontas para publicar, criadas a partir de uma frase"
-        >
-          <UsageBadge remaining={creativesRemaining} limit={creativesLimit} />
-        </PageHeader>
+          actions={<UsageBadge remaining={creativesRemaining} limit={creativesLimit} />}
+        />
       );
     }
 
