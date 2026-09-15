@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@/hooks/useBilling';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CircleAlert, CircleCheck, Zap } from 'lucide-react';
 
 interface UsageBadgeProps {
@@ -62,6 +63,15 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
 
   const Icon = exhausted ? CircleAlert : pct !== null && pct > 50 ? Zap : CircleCheck;
 
+  const tooltipText =
+    limit !== null
+      ? exhausted
+        ? `Seu plano tem ${limit} criativos por mês e você já usou todos. Não é possível criar novos criativos este mês — faça upgrade do plano ou aguarde a renovação.`
+        : `Seu plano tem ${limit} criativos por mês. Você já usou ${used} e pode criar ainda ${remaining} criativos este mês.`
+      : exhausted
+        ? 'Não é possível criar novos criativos este mês — faça upgrade do plano ou aguarde a renovação.'
+        : `Você pode criar ainda ${remaining} criativos este mês.`;
+
   return (
     <div
       data-testid="usage-badge"
@@ -71,17 +81,30 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
       className={`inline-flex w-full max-w-64 flex-col gap-2 rounded-xl border border-white/10 bg-[#161814] px-4 py-3 ${className}`}
     >
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm font-semibold text-[#ECEDEF]">
-          <Icon
-            data-testid="usage-icon"
-            aria-hidden="true"
-            className="size-4 shrink-0"
-            color={classes.iconColor}
-          />
-          <span data-testid="usage-label" className="whitespace-nowrap">
-            Uso mensal
-          </span>
-        </div>
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                data-testid="usage-tooltip-trigger"
+                aria-label={tooltipText}
+                className="flex cursor-help items-center gap-2 text-sm font-semibold text-[#ECEDEF]"
+              >
+                <Icon
+                  data-testid="usage-icon"
+                  aria-hidden="true"
+                  className="size-4 shrink-0"
+                  color={classes.iconColor}
+                />
+                <span data-testid="usage-label" className="whitespace-nowrap">
+                  Uso mensal
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-64 bg-[#1A1B17] text-text-primary border-white/10">
+              {tooltipText}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <span data-testid="usage-pct" className="whitespace-nowrap text-xs text-[#9BA3AB]">
           {exhausted ? (
             '0 criativos'
