@@ -240,7 +240,9 @@ export function EstudioHome() {
         <PageHeader
           title="Estúdio de anúncios"
           description="Peças prontas para publicar, criadas a partir de uma frase"
-        />
+        >
+          <UsageBadge remaining={creativesRemaining} limit={creativesLimit} />
+        </PageHeader>
       );
     }
 
@@ -313,9 +315,6 @@ export function EstudioHome() {
                     <Sparkles className="h-4 w-4 shrink-0" />
                     Criação rápida
                   </button>
-
-                  {/* Informação do número de criativos dinâmica */}
-                  <UsageBadge remaining={creativesRemaining} limit={creativesLimit} className="items-center" />
                 </div>
               </div>
             </section>

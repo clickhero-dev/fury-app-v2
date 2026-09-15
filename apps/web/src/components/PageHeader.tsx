@@ -49,10 +49,10 @@ export function PageHeader({
               {description}
             </p>
           )}
+          {children && <div className="pt-1">{children}</div>}
         </div>
         {actions && <div className="flex items-center gap-2">{actions}</div>}
       </div>
-      {children}
     </div>
   );
 }
