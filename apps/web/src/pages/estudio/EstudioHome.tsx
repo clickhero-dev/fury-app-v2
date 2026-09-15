@@ -479,7 +479,7 @@ export function EstudioHome() {
                 </div>
               </CardContent>
             </Card>
-            <UsageBadge remaining={creativesRemaining} limit={creativesLimit} className="mt-3" />
+            <UsageBadge remaining={creativesRemaining} limit={creativesLimit} className="mt-1 w-full max-w-none" />
           </div>
         )}
 
