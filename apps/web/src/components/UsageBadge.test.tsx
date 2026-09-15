@@ -1,9 +1,24 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { UsageBadge } from './UsageBadge';
 
-const renderBadge = (ui: React.ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>);
+const mockUseSubscription = vi.hoisted(() => vi.fn(() => ({ data: null })));
+vi.mock('@/hooks/useBilling', () => ({ useSubscription: mockUseSubscription }));
+
+const renderBadge = (ui: React.ReactElement) => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>,
+  );
+};
+
+beforeEach(() => {
+  mockUseSubscription.mockReturnValue({ data: { currentPeriodEnd: null } });
+});
 
 describe('UsageBadge', () => {
   it('não renderiza nada quando remaining é null (comportamento atual preservado)', () => {
@@ -14,13 +29,13 @@ describe('UsageBadge', () => {
   it('mostra usados e total quando limit é conhecido', () => {
     renderBadge(<UsageBadge remaining={70} limit={100} />);
     expect(screen.getByTestId('usage-badge')).toBeInTheDocument();
-    expect(screen.getByTestId('usage-label').textContent).toContain('30/100 usados');
+    expect(screen.getByTestId('usage-label').textContent).toBe('Uso mensal');
   });
 
   it('mostra apenas restantes quando limit é desconhecido (null)', () => {
     renderBadge(<UsageBadge remaining={5} limit={null} />);
     expect(screen.getByTestId('usage-badge')).toBeInTheDocument();
-    expect(screen.getByTestId('usage-label').textContent).toContain('5 restantes');
+    expect(screen.getByTestId('usage-pct').textContent).toContain('5 restantes');
   });
 
   it('usa cor neutra (petróleo) com uso ≤ 50%', () => {
@@ -60,7 +75,7 @@ describe('UsageBadge', () => {
     renderBadge(<UsageBadge remaining={102} limit={100} />);
     const bar = screen.getByTestId('usage-bar');
     expect(bar.getAttribute('data-pct')).toBe('0');
-    expect(screen.getByTestId('usage-label').textContent).toContain('0/100 usados');
+    expect(screen.getByTestId('usage-pct').textContent).toContain('102 de 100');
   });
 
   // — UX polish (ui-ux-pro-max): acessibilidade + rótulo compacto —
@@ -68,7 +83,7 @@ describe('UsageBadge', () => {
   it('rótulo compacto sem risco de quebra: "30/100 usados" em nowrap', () => {
     renderBadge(<UsageBadge remaining={70} limit={100} />);
     const label = screen.getByTestId('usage-label');
-    expect(label.textContent).toContain('30/100 usados');
+    expect(label.textContent).toBe('Uso mensal');
     expect(label.className).toContain('whitespace-nowrap');
   });
 
@@ -89,7 +104,8 @@ describe('UsageBadge', () => {
     const badge = screen.getByTestId('usage-badge');
     expect(badge.getAttribute('role')).toBe('status');
     expect(badge.getAttribute('aria-atomic')).toBe('true');
-    expect(screen.getByTestId('usage-label').textContent).toContain('15/20 usados');
+    expect(badge.textContent).toContain('Uso mensal');
+    expect(badge.textContent).toContain('5 de 20');
   });
 
   it('barra exposta a AT: role="progressbar" com valuemin/now/max', () => {
@@ -100,6 +116,21 @@ describe('UsageBadge', () => {
     expect(bar.getAttribute('aria-valuenow')).toBe('50');
     expect(bar.getAttribute('aria-valuemax')).toBe('100');
     expect(bar.getAttribute('aria-label')).toContain('Cota de criativos');
+  });
+
+  it('mostra "renova em N dias" vindo da assinatura', () => {
+    mockUseSubscription.mockReturnValue({
+      data: { currentPeriodEnd: new Date(Date.now() + 12 * 86400000).toISOString() },
+    });
+    renderBadge(<UsageBadge remaining={10} limit={20} />);
+    expect(screen.getByTestId('usage-renew').textContent).toContain('renova em 12 dias');
+  });
+
+  it('layout estilo "Uso mensal": título à esquerda, cota à direita, % na barra', () => {
+    renderBadge(<UsageBadge remaining={5} limit={20} />);
+    expect(screen.getByTestId('usage-label').textContent).toBe('Uso mensal');
+    expect(screen.getByTestId('usage-pct').textContent).toContain('5 de 20');
+    expect(screen.getByTestId('usage-bar').getAttribute('data-pct')).toBe('75');
   });
 
   it('CTA upgrade com anel de foco visível', () => {
