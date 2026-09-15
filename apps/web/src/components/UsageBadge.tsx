@@ -78,7 +78,7 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
       data-tone={tone}
       role="status"
       aria-atomic="true"
-      className={`inline-flex w-full max-w-64 flex-col gap-2 rounded-xl border border-white/10 bg-[#161814] px-4 py-3 ${className}`}
+      className={`group inline-flex w-full max-w-64 flex-col gap-2 rounded-xl border border-white/10 bg-[#161814] px-4 py-3 ${className}`}
     >
       <div className="flex items-center justify-between gap-3">
         <TooltipProvider delayDuration={200}>
@@ -137,19 +137,24 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-2 text-xs text-[#9BA3AB]">
-        <span data-testid="usage-renew" className="whitespace-nowrap">
-          {exhausted ? 'Limite do mês atingido' : renew ?? 'reinicia todo mês'}
-        </span>
-        {exhausted && (
-          <Link
-            to="/planos"
-            data-testid="usage-upgrade-cta"
-            className="inline-flex items-center rounded-lg border border-error/40 px-2 py-1 text-xs font-semibold text-error hover:bg-error/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
-          >
-            Fazer upgrade
-          </Link>
-        )}
+      <div
+        data-testid="usage-renew"
+        className="max-h-0 overflow-hidden text-xs text-[#9BA3AB] opacity-0 transition-all duration-200 ease-out group-hover:max-h-8 group-hover:opacity-100"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="whitespace-nowrap">
+            {exhausted ? 'Limite do mês atingido' : renew ?? 'reinicia todo mês'}
+          </span>
+          {exhausted && (
+            <Link
+              to="/planos"
+              data-testid="usage-upgrade-cta"
+              className="inline-flex items-center rounded-lg border border-error/40 px-2 py-1 text-xs font-semibold text-error hover:bg-error/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
+            >
+              Fazer upgrade
+            </Link>
+          )}
+        </div>
       </div>
     </div>
   );

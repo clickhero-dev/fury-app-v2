@@ -146,6 +146,36 @@ describe('UsageBadge', () => {
     expect(trigger.getAttribute('aria-label')).toMatch(/não é possível criar novos criativos/i);
   });
 
+  it('compacto por padrão: sem linha de renovação visível', () => {
+    mockUseSubscription.mockReturnValue({
+      data: { currentPeriodEnd: new Date(Date.now() + 12 * 86400000).toISOString() },
+    });
+    renderBadge(<UsageBadge remaining={10} limit={20} />);
+    const renew = screen.getByTestId('usage-renew');
+    expect(renew.className).toContain('max-h-0');
+    expect(renew.className).toContain('opacity-0');
+  });
+
+  it('no hover expande: linha de renovação visível ("renova em 12 dias")', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    mockUseSubscription.mockReturnValue({
+      data: { currentPeriodEnd: new Date(Date.now() + 12 * 86400000).toISOString() },
+    });
+    renderBadge(<UsageBadge remaining={10} limit={20} />);
+    const badge = screen.getByTestId('usage-badge');
+    await user.hover(badge);
+    const renew = screen.getByTestId('usage-renew');
+    expect(renew.className).toContain('max-h-8');
+    expect(renew.className).toContain('opacity-100');
+    expect(renew.textContent).toContain('renova em 12 dias');
+  });
+
+  it('transição de altura suave (transition-[max-height,opacity])', () => {
+    renderBadge(<UsageBadge remaining={10} limit={20} />);
+    const renew = screen.getByTestId('usage-renew');
+    expect(String(renew.className)).toMatch(/transition|duration/);
+  });
+
   it('CTA upgrade com anel de foco visível', () => {
     renderBadge(<UsageBadge remaining={0} limit={100} />);
     const link = screen.getByTestId('usage-upgrade-cta');
