@@ -133,6 +133,19 @@ describe('UsageBadge', () => {
     expect(screen.getByTestId('usage-bar').getAttribute('data-pct')).toBe('75');
   });
 
+  it('tooltip explica: "Seu plano tem X criativos por mês. Você pode criar ainda Y neste mês."', () => {
+    renderBadge(<UsageBadge remaining={5} limit={20} />);
+    const trigger = screen.getByTestId('usage-tooltip-trigger');
+    expect(trigger.getAttribute('aria-label')).toMatch(/plano tem 20 criativos/i);
+    expect(trigger.getAttribute('aria-label')).toMatch(/pode criar ainda 5/i);
+  });
+
+  it('tooltip em cota zerada explica que não é possível criar mais este mês', () => {
+    renderBadge(<UsageBadge remaining={0} limit={20} />);
+    const trigger = screen.getByTestId('usage-tooltip-trigger');
+    expect(trigger.getAttribute('aria-label')).toMatch(/não é possível criar novos criativos/i);
+  });
+
   it('CTA upgrade com anel de foco visível', () => {
     renderBadge(<UsageBadge remaining={0} limit={100} />);
     const link = screen.getByTestId('usage-upgrade-cta');
