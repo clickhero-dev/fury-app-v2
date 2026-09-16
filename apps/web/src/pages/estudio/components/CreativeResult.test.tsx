@@ -112,6 +112,43 @@ describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
     });
   });
 
+  it('setas de anterior/próximo navegam entre versões e ficam desabilitadas nas pontas', async () => {
+    mockApiPost.mockImplementation((url: string) => {
+      if (url === '/studio/assets/v1/set-active') return Promise.resolve({ data: GROUP_3_VERSIONS });
+      if (url === '/studio/assets/v2/set-active') return Promise.resolve({ data: { ...GROUP_3_VERSIONS, activeVersionId: 'v2' } });
+      if (url === '/studio/assets/v3/set-active') return Promise.resolve({ data: { ...GROUP_3_VERSIONS, activeVersionId: 'v3' } });
+      return Promise.resolve({ data: {} });
+    });
+
+    const user = userEvent.setup();
+    renderWithProviders();
+
+    await screen.findByRole('tab', { name: /versão 1 de 3/i });
+    const image = screen.getByAltText('Criativo gerado') as HTMLImageElement;
+
+    const previous = screen.getByRole('button', { name: /versão anterior/i });
+    const next = screen.getByRole('button', { name: /próxima versão/i });
+
+    // Na primeira versão, "anterior" fica desabilitado
+    expect(previous).toBeDisabled();
+    expect(next).not.toBeDisabled();
+
+    await user.click(next);
+    expect(image.src).toBe('https://example.com/v2.png');
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/studio/assets/v2/set-active'));
+
+    await user.click(next);
+    expect(image.src).toBe('https://example.com/v3.png');
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/studio/assets/v3/set-active'));
+
+    // Na última versão, "próxima" fica desabilitado
+    expect(next).toBeDisabled();
+    expect(previous).not.toBeDisabled();
+
+    await user.click(previous);
+    expect(image.src).toBe('https://example.com/v2.png');
+  });
+
   it('o selo de compliance troca junto com a versão selecionada', async () => {
     mockApiPost.mockImplementation((url: string) => {
       if (url === '/studio/assets/v1/set-active') return Promise.resolve({ data: GROUP_3_VERSIONS });
