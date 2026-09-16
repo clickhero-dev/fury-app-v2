@@ -37,7 +37,7 @@ export function PageHeader({
   description, 
   actions, 
   children,
-  titleClassName = "text-2xl font-bold text-[#ECEDEF]" // Mantém a regra do título por padrão
+  titleClassName = "text-2xl font-bold text-text-primary" // token semântico: adapta ao modo claro/escuro
 }: PageHeaderProps) {
   return (
     <div className="space-y-4">
