@@ -153,6 +153,9 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
       if (url.includes('/enhance-prompt')) {
         return Promise.resolve({ data: { enhancedPrompt: 'prompt melhorado', brand: {} } });
       }
+      if (url.includes('/brand-kit/photos')) {
+        return Promise.resolve({ data: { data: { urls: ['https://cdn/upload-b.png'] } } });
+      }
       return Promise.resolve({ data: { type: 'image', creativeAssetId: 'asset-new', imageUrl: 'https://cdn/n.png', costUsd: 0.04, processingTimeMs: 3200 } });
     });
     // jsdom não implementa canvas — CreativeResult usa clearRect no mount
@@ -188,6 +191,119 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     await waitFor(() => {
       expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ model: 'openai/gpt-image-1' }));
     });
+  });
+
+  it('sem tocar no seletor de formato, envia aspect_ratio 1:1 (comportamento padrão preservado)', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ aspect_ratio: '1:1' }));
+    });
+  });
+
+  it('seletor de formato alterna visualmente e selecionar Vertical envia aspect_ratio 9:16', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+
+    const quadrado = screen.getByRole('button', { name: /quadrado/i });
+    const vertical = screen.getByRole('button', { name: /vertical/i });
+    expect(quadrado).toHaveAttribute('aria-pressed', 'true');
+    expect(vertical).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(vertical);
+    expect(vertical).toHaveAttribute('aria-pressed', 'true');
+    expect(quadrado).toHaveAttribute('aria-pressed', 'false');
+
+    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ aspect_ratio: '9:16' }));
+    });
+  });
+
+  it('sem imagem de referência, gera sem reference_image_urls (comportamento preservado)', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith(
+        '/studio/ai/generate-image',
+        expect.objectContaining({ reference_image_urls: undefined }),
+      );
+    });
+  });
+
+  it('Upload B envia a foto, mostra miniatura removível e inclui reference_image_urls na geração', async () => {
+    const { container } = renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+
+    // Upload B fica no formulário principal — vem antes do painel lateral no DOM
+    const fileInputs = container.querySelectorAll('input[type="file"]');
+    const uploadBInput = fileInputs[0] as HTMLInputElement;
+    const file = new File(['conteudo'], 'produto.png', { type: 'image/png' });
+    await user.upload(uploadBInput, file);
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/brand-kit/photos', expect.any(FormData), expect.anything());
+    });
+    const removeBtn = await screen.findByRole('button', { name: /remover imagem de referência/i });
+    expect(removeBtn).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith(
+        '/studio/ai/generate-image',
+        expect.objectContaining({ reference_image_urls: ['https://cdn/upload-b.png'] }),
+      );
+    });
+
+    // remover a miniatura tira ela do contexto
+    await user.click(removeBtn);
+    expect(screen.queryByRole('button', { name: /remover imagem de referência/i })).not.toBeInTheDocument();
+  });
+
+  it('regra de substituição: já com 2 no contexto, novo upload B substitui a mais antiga (com aviso)', async () => {
+    const { container } = renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+
+    const fileInputs = container.querySelectorAll('input[type="file"]');
+    const uploadBInput = fileInputs[0] as HTMLInputElement;
+
+    let callCount = 0;
+    (mockApiPost as any).mockImplementation((url: string) => {
+      if (url.includes('/brand-kit/photos')) {
+        callCount += 1;
+        return Promise.resolve({ data: { data: { urls: [`https://cdn/foto-${callCount}.png`] } } });
+      }
+      if (url.includes('/enhance-prompt')) return Promise.resolve({ data: { enhancedPrompt: 'x', brand: {} } });
+      return Promise.resolve({ data: { type: 'image', creativeAssetId: 'a', imageUrl: 'https://cdn/n.png' } });
+    });
+
+    await user.upload(uploadBInput, new File(['a'], 'a.png', { type: 'image/png' }));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /remover imagem de referência/i })).toHaveLength(1));
+
+    await user.upload(uploadBInput, new File(['b'], 'b.png', { type: 'image/png' }));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /remover imagem de referência/i })).toHaveLength(2));
+
+    await user.upload(uploadBInput, new File(['c'], 'c.png', { type: 'image/png' }));
+    await waitFor(() => {
+      // ainda só 2 miniaturas — a mais antiga foi substituída, não acumulou 3
+      expect(screen.getAllByRole('button', { name: /remover imagem de referência/i })).toHaveLength(2);
+    });
+    expect(screen.getByText(/limite de 2 imagens de referência/i)).toBeInTheDocument();
   });
 
   it('mostra cronômetro (Xs) desde o clique, mesmo durante o enhance-prompt', async () => {

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { AppError } from '../../middleware/errorHandler.js';
 import { StudioRepository } from '../../repository/studio.repository.js';
 import { openrouterService } from '../llms/openrouter.service.js';
 import { saveTemporaryStudioImage, ensureStudioAssetsDir, studioAssetsDir } from '../../lib/temp-storage.js';
@@ -160,8 +161,22 @@ export class StudioAiService {
 
   async generateImage(
     tenantId: string,
-    payload: { model: string; prompt: string; aspect_ratio: string; resolution: string },
+    payload: { model: string; prompt: string; aspect_ratio: string; resolution: string; reference_image_urls?: string[] },
   ): Promise<Record<string, any>> {
+    const referenceImageUrls = payload.reference_image_urls?.length ? payload.reference_image_urls : undefined;
+
+    // Validação de posse — feita ANTES de consumir cota, então uma URL
+    // inválida (fora da biblioteca do tenant) não custa nada ao usuário.
+    // O zod só garante formato de URL, não que ela pertence a este tenant.
+    if (referenceImageUrls) {
+      const brandKit = await this.repo(tenantId).findBrandKit();
+      const ownedUrls = (brandKit?.photoUrls as string[] | undefined) ?? [];
+      const allOwned = referenceImageUrls.every((url) => ownedUrls.includes(url));
+      if (!allOwned) {
+        throw new AppError(400, 'INVALID_REFERENCE_IMAGE', 'Uma ou mais imagens de referência não pertencem à sua biblioteca.');
+      }
+    }
+
     await this.quota.consumeCreativeQuota(tenantId);
     const startedAt = performance.now();
     try {
@@ -172,6 +187,11 @@ export class StudioAiService {
         aspect_ratio: payload.aspect_ratio,
         resolution: payload.resolution,
         logoUrl: brand.logoUrl,
+        referenceImageUrls,
+        // Só a Criação Rápida pede garantia de pixel exato — ver plan.md
+        // (Decisão 1) da spec de formato/referência: o Planejador IA já
+        // manda aspect_ratio hoje e NÃO deve ser afetado por esta flag.
+        normalizePixels: true,
       });
       const imageUrl = await uploadImageToStorage(dataUrl);
       const processingTimeMs = Math.round(performance.now() - startedAt);
@@ -190,6 +210,8 @@ export class StudioAiService {
           generatedAt: new Date().toISOString(),
           source: 'openrouter-quick-create',
           brand: { businessName: brand.businessName, primaryColor: brand.primaryColor },
+          aspectRatio: payload.aspect_ratio,
+          referenceImageUrls: referenceImageUrls ?? [],
         }),
       });
       return {

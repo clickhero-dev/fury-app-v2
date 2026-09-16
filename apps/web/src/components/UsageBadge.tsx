@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@/hooks/useBilling';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CircleAlert, CircleCheck, Zap } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface UsageBadgeProps {
   /** Criativos restantes no ciclo atual; null = desconhecido (não renderiza). */
@@ -78,7 +79,7 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
       data-tone={tone}
       role="status"
       aria-atomic="true"
-      className={`group inline-flex w-full max-w-64 flex-col gap-2 rounded-xl border border-white/10 bg-[#161814] px-4 py-3 ${className}`}
+      className={cn('group inline-flex w-full max-w-64 flex-col gap-2 rounded-xl border border-white/10 bg-[#161814] px-4 py-3', className)}
     >
       <div className="flex items-center justify-between gap-3">
         <TooltipProvider delayDuration={200}>

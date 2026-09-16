@@ -38,17 +38,63 @@ export function ModelSelect({
   onSelect,
   typeLabel = 'imagem',
   id = 'studio-model-select',
+  compact = false,
 }: {
   models: StudioModelOption[];
   selectedModel: string;
   onSelect: (id: string) => void;
   typeLabel?: string;
   id?: string;
+  /** Pill compacta sem label/descrição — usado inline junto de outros controles (ex.: Criação Rápida). */
+  compact?: boolean;
 }) {
   const fluxModels = models.filter((m) => m.family === 'flux-2');
   const otherModels = models.filter((m) => m.family !== 'flux-2');
   const selected = models.find((m) => m.id === selectedModel);
   const otherLabel = fluxModels.length > 0 ? 'Outras famílias' : 'Modelos de vídeo';
+
+  const options = (
+    <>
+      {models.length === 0 ? (
+        // Fallback enquanto o catálogo carrega (sempre selecionável)
+        FALLBACK_MODELS.map((m) => (
+          <option key={m.id} value={m.id}>{m.label}</option>
+        ))
+      ) : (
+        <>
+          {fluxModels.length > 0 && (
+            <optgroup label="Família FLUX 2">
+              {fluxModels.map((m) => (
+                <option key={m.id} value={m.id}>{optionText(m)}</option>
+              ))}
+            </optgroup>
+          )}
+          {otherModels.length > 0 && (
+            <optgroup label={otherLabel}>
+              {otherModels.map((m) => (
+                <option key={m.id} value={m.id}>{optionText(m)}</option>
+              ))}
+            </optgroup>
+          )}
+        </>
+      )}
+    </>
+  );
+
+  if (compact) {
+    return (
+      <Select
+        id={id}
+        value={selectedModel}
+        onChange={(e) => onSelect(e.target.value)}
+        data-testid={id}
+        aria-label={`Modelo de ${typeLabel}`}
+        className="w-auto max-w-[200px] rounded-full border-border bg-surface-muted py-2 pl-4 pr-9 text-xs font-semibold"
+      >
+        {options}
+      </Select>
+    );
+  }
 
   return (
     <div className="space-y-2">
@@ -61,29 +107,7 @@ export function ModelSelect({
         onChange={(e) => onSelect(e.target.value)}
         data-testid={id}
       >
-        {models.length === 0 ? (
-          // Fallback enquanto o catálogo carrega (sempre selecionável)
-          FALLBACK_MODELS.map((m) => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))
-        ) : (
-          <>
-            {fluxModels.length > 0 && (
-              <optgroup label="Família FLUX 2">
-                {fluxModels.map((m) => (
-                  <option key={m.id} value={m.id}>{optionText(m)}</option>
-                ))}
-              </optgroup>
-            )}
-            {otherModels.length > 0 && (
-              <optgroup label={otherLabel}>
-                {otherModels.map((m) => (
-                  <option key={m.id} value={m.id}>{optionText(m)}</option>
-                ))}
-              </optgroup>
-            )}
-          </>
-        )}
+        {options}
       </Select>
       {selected?.description && (
         <p className="text-xs text-text-tertiary">{selected.description}</p>

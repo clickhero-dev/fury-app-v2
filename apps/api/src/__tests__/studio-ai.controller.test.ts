@@ -93,4 +93,45 @@ describe('StudioAiController', () => {
     await controller.generateImage(makeReq({ body: { model: 'openai/gpt-image-1', prompt: 'p'.repeat(20) } }), res, vi.fn());
     expect(res.statusCode).toBe(200);
   });
+
+  it('generateImage: 400 para reference_image_urls com mais de 2 itens', async () => {
+    const controller = new StudioAiController(service);
+    const res = makeRes();
+    await controller.generateImage(makeReq({
+      body: {
+        model: 'black-forest-labs/flux.2-max',
+        prompt: 'p'.repeat(20),
+        reference_image_urls: ['https://cdn/a.png', 'https://cdn/b.png', 'https://cdn/c.png'],
+      },
+    }), res, vi.fn());
+    expect(res.statusCode).toBe(400);
+    expect(service.generateImage).not.toHaveBeenCalled();
+  });
+
+  it('generateImage: 400 para reference_image_urls com string que não é URL válida', async () => {
+    const controller = new StudioAiController(service);
+    const res = makeRes();
+    await controller.generateImage(makeReq({
+      body: { model: 'black-forest-labs/flux.2-max', prompt: 'p'.repeat(20), reference_image_urls: ['nao-e-url'] },
+    }), res, vi.fn());
+    expect(res.statusCode).toBe(400);
+    expect(service.generateImage).not.toHaveBeenCalled();
+  });
+
+  it('generateImage: 200 repassa reference_image_urls válidas pro service', async () => {
+    const controller = new StudioAiController(service);
+    const res = makeRes();
+    await controller.generateImage(makeReq({
+      body: {
+        model: 'black-forest-labs/flux.2-max',
+        prompt: 'p'.repeat(20),
+        reference_image_urls: ['https://cdn/a.png', 'https://cdn/b.png'],
+      },
+    }), res, vi.fn());
+    expect(res.statusCode).toBe(200);
+    expect(service.generateImage).toHaveBeenCalledWith(
+      't-1',
+      expect.objectContaining({ reference_image_urls: ['https://cdn/a.png', 'https://cdn/b.png'] }),
+    );
+  });
 });
