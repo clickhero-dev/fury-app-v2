@@ -9,8 +9,6 @@ type BrandKitRepo = Pick<
 >;
 type Storage = { uploadAsset: typeof uploadAsset; deleteAsset: typeof deleteAsset };
 
-export const MAX_PHOTOS = 20;
-
 function toResponse(brandKit: BrandKitRow) {
   return {
     id: brandKit.id,
@@ -68,20 +66,13 @@ export class BrandKitService {
     return { url };
   }
 
-  /**
-   * Faz upload das fotos respeitando MAX_PHOTOS.
-   * Retorna null (em vez de lançar) quando excede o limite — o controller devolve 400.
-   */
+  /** Faz upload das fotos — sem limite de quantidade na biblioteca do tenant. */
   async uploadPhotos(
     tenantId: string,
     files: UploadFile[],
-  ): Promise<{ urls: string[] } | { error: string; existingPhotos: number }> {
+  ): Promise<{ urls: string[] }> {
     const existing = await this.repo(tenantId).findBrandKit();
     const existingPhotos = (existing?.photoUrls as string[] | null) ?? [];
-
-    if (existingPhotos.length + files.length > MAX_PHOTOS) {
-      return { error: `Limite de ${MAX_PHOTOS} fotos excedido. Você já tem ${existingPhotos.length} foto(s).`, existingPhotos: existingPhotos.length };
-    }
 
     const extensionByMime: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg' };
     const uploadedUrls: string[] = [];

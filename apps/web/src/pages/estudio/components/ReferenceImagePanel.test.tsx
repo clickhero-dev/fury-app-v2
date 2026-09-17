@@ -20,13 +20,16 @@ vi.mock('@/lib/api', () => ({
 
 const PHOTO_URLS = ['https://cdn/produto.png', 'https://cdn/pessoa.png', 'https://cdn/bolsa.png'];
 
-function renderPanel(onAddToContext = vi.fn()) {
+function renderPanel(contextUrls: string[] = [], onAdd = vi.fn(), onRemove = vi.fn()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-  const utils = render(<ReferenceImagePanel onAddToContext={onAddToContext} />, { wrapper });
-  return { ...utils, onAddToContext };
+  const utils = render(
+    <ReferenceImagePanel contextUrls={contextUrls} onAdd={onAdd} onRemove={onRemove} />,
+    { wrapper },
+  );
+  return { ...utils, onAdd, onRemove };
 }
 
 describe('ReferenceImagePanel', () => {
@@ -51,7 +54,7 @@ describe('ReferenceImagePanel', () => {
   });
 
   it('upload chama POST /brand-kit/photos com os arquivos e não afeta o contexto (Upload A)', async () => {
-    const { onAddToContext } = renderPanel();
+    const { onAdd } = renderPanel();
     const user = userEvent.setup();
     await screen.findAllByRole('button', { name: /selecionar imagem de referência/i });
 
@@ -62,33 +65,34 @@ describe('ReferenceImagePanel', () => {
     await waitFor(() => {
       expect(mockApiPost).toHaveBeenCalledWith('/brand-kit/photos', expect.any(FormData), expect.anything());
     });
-    expect(onAddToContext).not.toHaveBeenCalled();
+    expect(onAdd).not.toHaveBeenCalled();
   });
 
-  it('seleciona até 2 miniaturas, bloqueia a 3ª, e confirmar chama onAddToContext com as URLs certas', async () => {
-    const { onAddToContext } = renderPanel();
+  it('clicar numa miniatura já chama onAdd na hora, sem passo de confirmação', async () => {
+    const { onAdd } = renderPanel();
     const user = userEvent.setup();
     const thumbs = await screen.findAllByRole('button', { name: /selecionar imagem de referência/i });
 
     await user.click(thumbs[0]);
-    await user.click(thumbs[1]);
-    expect(thumbs[0]).toHaveAttribute('aria-pressed', 'true');
-    expect(thumbs[1]).toHaveAttribute('aria-pressed', 'true');
 
-    // 3ª fica desabilitada com 2 já selecionadas
-    expect(thumbs[2]).toBeDisabled();
-    await user.click(thumbs[2]);
-    expect(thumbs[2]).toHaveAttribute('aria-pressed', 'false');
-
-    const confirmBtn = screen.getByRole('button', { name: /adicionar à criação/i });
-    await user.click(confirmBtn);
-
-    expect(onAddToContext).toHaveBeenCalledWith([PHOTO_URLS[0], PHOTO_URLS[1]]);
-    // seleção local limpa após confirmar
+    expect(onAdd).toHaveBeenCalledWith([PHOTO_URLS[0]]);
+    // Não existe mais botão de confirmação
     expect(screen.queryByRole('button', { name: /adicionar à criação/i })).not.toBeInTheDocument();
   });
 
-  it('sem fotos na biblioteca, não mostra grade nem botão de confirmar', async () => {
+  it('miniatura já presente no contexto aparece selecionada, e clicar nela chama onRemove', async () => {
+    const { onRemove } = renderPanel([PHOTO_URLS[1]]);
+    const user = userEvent.setup();
+    const thumbs = await screen.findAllByRole('button', { name: /selecionar imagem de referência/i });
+
+    expect(thumbs[1]).toHaveAttribute('aria-pressed', 'true');
+    expect(thumbs[0]).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(thumbs[1]);
+    expect(onRemove).toHaveBeenCalledWith(PHOTO_URLS[1]);
+  });
+
+  it('sem fotos na biblioteca, não mostra grade nenhuma', async () => {
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/brand-kit') return Promise.resolve({ data: { data: { photo_urls: [] } } });
       return Promise.reject(new Error('unexpected'));
@@ -96,6 +100,5 @@ describe('ReferenceImagePanel', () => {
     renderPanel();
     await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/brand-kit'));
     expect(screen.queryByRole('button', { name: /selecionar imagem de referência/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /adicionar à criação/i })).not.toBeInTheDocument();
   });
 });

@@ -279,6 +279,27 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     expect(screen.queryByRole('button', { name: /remover imagem de referência/i })).not.toBeInTheDocument();
   });
 
+  it('Upload B com mais de 2 arquivos: mostra modal de limite, não envia nada', async () => {
+    const { container } = renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+
+    const fileInputs = container.querySelectorAll('input[type="file"]');
+    const uploadBInput = fileInputs[0] as HTMLInputElement;
+    const files = [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+      new File(['c'], 'c.png', { type: 'image/png' }),
+    ];
+    await user.upload(uploadBInput, files);
+
+    expect(await screen.findByText(/máximo de 2 fotos por vez/i)).toBeInTheDocument();
+    expect(mockApiPost).not.toHaveBeenCalledWith('/brand-kit/photos', expect.anything(), expect.anything());
+
+    await user.click(screen.getByRole('button', { name: /entendi/i }));
+    expect(screen.queryByText(/máximo de 2 fotos por vez/i)).not.toBeInTheDocument();
+  });
+
   it('regra de substituição: já com 2 no contexto, novo upload B substitui a mais antiga (com aviso)', async () => {
     const { container } = renderWithProviders();
     const user = userEvent.setup();

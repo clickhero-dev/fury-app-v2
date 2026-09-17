@@ -77,10 +77,6 @@ export class BrandKitController {
         tenantId,
         files.map((f) => ({ buffer: f.buffer, mimetype: f.mimetype })),
       );
-      if ('error' in result) {
-        res.status(400).json({ success: false, message: result.error, timestamp: new Date().toISOString() });
-        return;
-      }
       res.json({ success: true, data: { urls: result.urls }, timestamp: new Date().toISOString() });
     } catch (err) {
       next(err);

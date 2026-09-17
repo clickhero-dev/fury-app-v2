@@ -14,6 +14,7 @@ import { formatDuration, formatCost } from '@/lib/studio-metrics';
 import type { StudioAsset, GenerateCreativeResponse } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
 import { ArchiveConfirmDialog } from './components/ArchiveConfirmDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ArchivedAssetsModal } from './components/ArchivedAssetsModal';
 import { ReferenceImagePanel } from './components/ReferenceImagePanel';
 
@@ -179,9 +180,15 @@ export function EstudioHome() {
   // vez, salva na mesma biblioteca (Upload A/painel reflete junto) E já
   // entra automaticamente no contexto da geração, sem passo de seleção.
   const uploadReferenceB = useUploadPhotos();
+  const [showUploadBLimitAlert, setShowUploadBLimitAlert] = useState(false);
   const handleUploadB = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []).slice(0, 2);
+    const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
+    if (files.length > 2) {
+      setShowUploadBLimitAlert(true);
+      e.target.value = '';
+      return;
+    }
     uploadReferenceB.mutate(files, {
       onSuccess: (data) => addToReferenceContext(data.urls),
     });
@@ -529,7 +536,11 @@ export function EstudioHome() {
                     </button>
                   </div>
 
-                  <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-brand/40 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand/20">
+                  <label
+                    className={`flex items-center gap-1.5 rounded-full border border-brand/40 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand/20 ${
+                      uploadReferenceB.isPending ? 'cursor-wait opacity-60' : 'cursor-pointer'
+                    }`}
+                  >
                     <input
                       type="file"
                       accept="image/png,image/jpeg"
@@ -540,11 +551,16 @@ export function EstudioHome() {
                       aria-label="Enviar fotos"
                     />
                     {uploadReferenceB.isPending ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Enviando...
+                      </>
                     ) : (
-                      <Upload className="h-3.5 w-3.5" />
+                      <>
+                        <Upload className="h-3.5 w-3.5" />
+                        Enviar fotos
+                      </>
                     )}
-                    Enviar fotos
                   </label>
 
                   <button
@@ -585,7 +601,11 @@ export function EstudioHome() {
             <UsageBadge remaining={creativesRemaining} limit={creativesLimit} className="mt-1 w-full max-w-none" />
             </div>
 
-            <ReferenceImagePanel onAddToContext={addToReferenceContext} />
+            <ReferenceImagePanel
+              contextUrls={referenceContextUrls}
+              onAdd={addToReferenceContext}
+              onRemove={removeFromReferenceContext}
+            />
             </div>
           </div>
         )}
@@ -698,6 +718,27 @@ export function EstudioHome() {
           }}
         />
       )}
+
+      <Dialog open={showUploadBLimitAlert} onOpenChange={setShowUploadBLimitAlert}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Máximo de 2 fotos por vez</DialogTitle>
+            <DialogDescription>
+              Esse botão aceita no máximo 2 fotos de cada vez. Selecione até 2 fotos e envie novamente ou use o
+              painel lateral, que aceita quantas fotos você quiser.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setShowUploadBLimitAlert(false)}
+              className="px-5 py-2.5 rounded-xl bg-brand hover:opacity-90 text-brand-foreground text-sm font-medium transition-colors"
+            >
+              Entendi
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

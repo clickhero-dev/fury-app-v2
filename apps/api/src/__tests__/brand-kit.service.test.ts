@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { BrandKitService, MAX_PHOTOS } from '../services/brand-kit/brand-kit.service.js';
+import { BrandKitService } from '../services/brand-kit/brand-kit.service.js';
 
 const row = {
   id: 'bk-1',
@@ -52,11 +52,14 @@ describe('BrandKitService', () => {
     expect(storage.uploadAsset).toHaveBeenCalled();
   });
 
-  it('uploadPhotos respeita MAX_PHOTOS', async () => {
-    repo = makeRepo({ findBrandKit: vi.fn(async () => ({ ...row, photoUrls: Array(MAX_PHOTOS).fill('x') })) });
+  it('uploadPhotos não tem limite de quantidade — aceita mesmo com uma biblioteca grande já existente', async () => {
+    repo = makeRepo({ findBrandKit: vi.fn(async () => ({ ...row, photoUrls: Array(500).fill('x') })) });
     const res = await svc.uploadPhotos('t-1', [{ buffer: Buffer.from('a'), mimetype: 'image/png' }]);
-    expect('error' in res).toBe(true);
-    expect((res as any).existingPhotos).toBe(MAX_PHOTOS);
+    expect('urls' in res).toBe(true);
+    expect(repo.upsertTenantBrandKit).toHaveBeenCalledWith(
+      expect.objectContaining({ photoUrls: expect.arrayContaining(['https://cdn/new.png']) }),
+    );
+    expect((repo.upsertTenantBrandKit as any).mock.calls[0][0].photoUrls).toHaveLength(501);
   });
 
   it('uploadPhotos concatena com fotos existentes', async () => {
