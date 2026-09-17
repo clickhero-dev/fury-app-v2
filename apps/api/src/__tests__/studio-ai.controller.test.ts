@@ -54,9 +54,9 @@ describe('StudioAiController', () => {
     expect([...VIDEO_MODEL_IDS].sort()).toEqual(catalogIds);
   });
 
-  it('cataloga image: 9 modelos (3 FLUX.2 + 6 outras — MAI/MS removido por custo)', () => {
+  it('cataloga image: 7 modelos (3 FLUX.2 + 4 outras — MAI/MS removido por custo)', () => {
     const { image } = new StudioAiService().getModels();
-    expect(image).toHaveLength(9);
+    expect(image).toHaveLength(7);
     expect(image.filter((m) => m.family === 'flux-2')).toHaveLength(3);
     expect(image.some((m) => m.id.includes('microsoft/mai'))).toBe(false);
   });
@@ -87,10 +87,10 @@ describe('StudioAiController', () => {
     expect(res.body.imageUrl).toBe('https://cdn/a.png');
   });
 
-  it('generateImage: 200 com modelo novo/edge do catálogo (gpt-image-1)', async () => {
+  it('generateImage: 200 com modelo novo/edge do catálogo (seedream)', async () => {
     const controller = new StudioAiController(service);
     const res = makeRes();
-    await controller.generateImage(makeReq({ body: { model: 'openai/gpt-image-1', prompt: 'p'.repeat(20) } }), res, vi.fn());
+    await controller.generateImage(makeReq({ body: { model: 'bytedance-seed/seedream-5-0-pro', prompt: 'p'.repeat(20) } }), res, vi.fn());
     expect(res.statusCode).toBe(200);
   });
 

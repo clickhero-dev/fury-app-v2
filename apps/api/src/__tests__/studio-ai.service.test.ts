@@ -28,13 +28,13 @@ const quota = {
 const svc = new StudioAiService(() => repo as any, llm as any, quota as any);
 
 describe('StudioAiService', () => {
-  it('getModels retorna catálogo de 9 imagens (3 FLUX.2 + 6 outras) e 3 vídeos', () => {
+  it('getModels retorna catálogo de 7 imagens (3 FLUX.2 + 4 outras) e 3 vídeos', () => {
     const { image, video } = svc.getModels();
-    expect(image).toHaveLength(9);
+    expect(image).toHaveLength(7);
     expect(image.filter((m) => m.family === 'flux-2')).toHaveLength(3);
-    expect(image.filter((m) => m.family === 'outras')).toHaveLength(6);
+    expect(image.filter((m) => m.family === 'outras')).toHaveLength(4);
     expect(video).toHaveLength(3);
-    expect(new Set(image.map((m) => m.id)).size).toBe(9);
+    expect(new Set(image.map((m) => m.id)).size).toBe(7);
     for (const m of [...image, ...video]) {
       expect(m.id).toBeTruthy();
       expect(m.label).toBeTruthy();

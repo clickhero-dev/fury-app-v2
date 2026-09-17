@@ -52,8 +52,7 @@ const MOCK_MODELS = {
     { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 Klein 4B', description: 'Rápido', category: 'custo-beneficio', family: 'flux-2', type: 'image' },
     { id: 'black-forest-labs/flux.2-max', label: 'FLUX.2 Max', description: 'Qualidade', category: 'qualidade', family: 'flux-2', type: 'image' },
     { id: 'black-forest-labs/flux.2-pro', label: 'FLUX.2 Pro', description: 'Pro', category: 'qualidade', family: 'flux-2', type: 'image' },
-    { id: 'openai/gpt-image-1', label: 'GPT Image 1', description: 'OpenAI', category: 'qualidade', family: 'outras', type: 'image' },
-    { id: 'bytedance-seed/seedream-5.0-pro', label: 'Seedream 5.0 Pro', description: 'ByteDance', category: 'barato', family: 'outras', type: 'image' },
+    { id: 'bytedance-seed/seedream-5-0-pro', label: 'Seedream 5.0 Pro', description: 'ByteDance', category: 'barato', family: 'outras', type: 'image' },
   ],
   video: [],
 };
@@ -177,7 +176,7 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
 
     expect(await screen.findByText('Família FLUX 2')).toBeInTheDocument();
     expect(screen.getByText('Outras famílias')).toBeInTheDocument();
-    expect(screen.getByText(/GPT Image 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Seedream 5.0 Pro/)).toBeInTheDocument();
     expect(screen.getByText(/FLUX.2 Klein 4B/)).toBeInTheDocument();
   });
 
@@ -188,13 +187,13 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
 
     const trigger = await screen.findByRole('button', { name: /modelo de imagem/i });
     await user.click(trigger);
-    await user.click(await screen.findByText(/GPT Image 1/));
+    await user.click(await screen.findByText(/Seedream 5.0 Pro/));
 
     await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
     await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
 
     await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ model: 'openai/gpt-image-1' }));
+      expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ model: 'bytedance-seed/seedream-5-0-pro' }));
     });
   });
 
