@@ -164,9 +164,7 @@ describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
 
     await user.click(screen.getByRole('tab', { name: /versão 2 de 3/i }));
 
-    await waitFor(() => {
-      expect(screen.getByText('Reprovado pelo compliance')).toBeInTheDocument();
-    });
+    expect(screen.getByText('Reprovado')).toBeInTheDocument();
     expect(screen.queryByText('Aprovado')).not.toBeInTheDocument();
   });
 
