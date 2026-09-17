@@ -23,4 +23,15 @@ describe('PageHeader — badge de cota alinhado ao bloco do título', () => {
     expect(title.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(slot.closest('.space-y-1')).not.toBeNull();
   });
+
+  it('título usa token semântico de cor (não branco hardcoded) para funcionar no modo claro', () => {
+    render(
+      <MemoryRouter>
+        <PageHeader title="Estúdio de anúncios" />
+      </MemoryRouter>,
+    );
+    const title = screen.getByRole('heading', { name: /estúdio de anúncios/i });
+    expect(title.className).toContain('text-text-primary');
+    expect(title.className).not.toContain('#ECEDEF');
+  });
 });

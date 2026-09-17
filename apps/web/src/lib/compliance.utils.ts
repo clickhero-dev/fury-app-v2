@@ -73,7 +73,7 @@ export function complianceBadge(
 
   if (complianceStatus === 'rejected' || parsed.approved === false) {
     return {
-      label: 'Reprovado pelo compliance',
+      label: 'Reprovado',
       tone: 'rejected',
       reasons: parsed.issues,
       hint: COMPLIANCE_REJECTED_HINT,
