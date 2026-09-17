@@ -3,9 +3,10 @@
  * verdade única para o seletor do front, validação e UI.
  *
  * Regras de produto (decididas 2026-09):
- * - 9 modelos de IMAGEM no total: 3 da família FLUX 2 + 6 de outras
+ * - 7 modelos de IMAGEM no total: 3 da família FLUX 2 + 4 de outras
  *   famílias (para testar modelos diferentes do OpenRouter). Microsoft
- *   MAI foi REMOVIDO por custo (não aprovado).
+ *   MAI foi REMOVIDO por custo (não aprovado); GPT Image 1 e Recraft
+ *   v4.1 Pro foram RETIRADOS do catálogo (decisão de produto).
  * - Custo exibido ao usuário é SEMPRE o custo real devolvido pelo
  *   OpenRouter (usage.cost) — sem preço/s estimativa aqui.
  * - Modelo novo = adicionar 1 entrada AQUI + 1 id no zod enum do
@@ -50,20 +51,14 @@ export const IMAGE_MODELS: StudioModel[] = [
     family: 'flux-2',
     type: 'image',
   },
-  // ─── Outras famílias (6 modelos, 6 provedores distintos) ──────────
+  // ─── Outras famílias (4 modelos, 4 provedores distintos) ──────────
   {
-    id: 'bytedance-seed/seedream-5.0-pro',
+    // Slug real no OpenRouter usa hífen na versão ("5-0-pro"), não ponto
+    // — https://openrouter.ai/bytedance-seed/seedream-5-0-pro
+    id: 'bytedance-seed/seedream-5-0-pro',
     label: 'Seedream 5.0 Pro',
     description: 'ByteDance — Renderização realista com bom custo-benefício.',
     category: 'barato',
-    family: 'outras',
-    type: 'image',
-  },
-  {
-    id: 'recraft/recraft-v4.1-pro',
-    label: 'Recraft v4.1 Pro',
-    description: 'Recraft — Referência em design, tipografia e elementos vetoriais.',
-    category: 'qualidade',
     family: 'outras',
     type: 'image',
   },
@@ -80,14 +75,6 @@ export const IMAGE_MODELS: StudioModel[] = [
     label: 'Qwen Image 3 Pro',
     description: 'Alibaba — Equilíbrio entre qualidade e texto na imagem.',
     category: 'barato',
-    family: 'outras',
-    type: 'image',
-  },
-  {
-    id: 'openai/gpt-image-1',
-    label: 'GPT Image 1',
-    description: 'OpenAI — Referência em fidelidade ao prompt e texto.',
-    category: 'qualidade',
     family: 'outras',
     type: 'image',
   },

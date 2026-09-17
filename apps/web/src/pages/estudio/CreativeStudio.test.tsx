@@ -27,11 +27,9 @@ const FLUX_2_MODELS = [
   { id: 'black-forest-labs/flux.2-pro', label: 'FLUX.2 Pro', description: 'Pro', category: 'qualidade', family: 'flux-2', type: 'image' },
 ];
 const OUTRAS_MODELS = [
-  { id: 'bytedance-seed/seedream-5.0-pro', label: 'Seedream 5.0 Pro', description: 'ByteDance', category: 'barato', family: 'outras', type: 'image' },
-  { id: 'recraft/recraft-v4.1-pro', label: 'Recraft v4.1 Pro', description: 'Recraft', category: 'qualidade', family: 'outras', type: 'image' },
+  { id: 'bytedance-seed/seedream-5-0-pro', label: 'Seedream 5.0 Pro', description: 'ByteDance — Renderização realista com bom custo-benefício.', category: 'barato', family: 'outras', type: 'image' },
   { id: 'x-ai/grok-imagine-image-2.0', label: 'Grok Imagine 2.0', description: 'xAI', category: 'custo-beneficio', family: 'outras', type: 'image' },
   { id: 'qwen/qwen-image-3-pro', label: 'Qwen Image 3 Pro', description: 'Alibaba', category: 'barato', family: 'outras', type: 'image' },
-  { id: 'openai/gpt-image-1', label: 'GPT Image 1', description: 'OpenAI — Referência em fidelidade ao prompt e texto.', category: 'qualidade', family: 'outras', type: 'image' },
   { id: 'google/gemini-3.1-flash-image', label: 'Gemini 3.1 Flash Image', description: 'Google', category: 'custo-beneficio', family: 'outras', type: 'image' },
 ];
 const VIDEO_MODELS = [
@@ -89,13 +87,13 @@ describe('CreativeStudio — seletor de modelos, tempo e custo', () => {
     vi.useRealTimers();
   });
 
-  it('seletor compacto: combobox com 9 opções agrupadas (FLUX 2 / Outras famílias)', async () => {
+  it('seletor compacto: combobox com 7 opções agrupadas (FLUX 2 / Outras famílias)', async () => {
       const { container } = renderWithProviders();
       const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
       // espera o catálogo carregar (fallback tem só 3 opções)
-      await waitFor(() => expect(container.querySelectorAll('option')).toHaveLength(9));
+      await waitFor(() => expect(container.querySelectorAll('option')).toHaveLength(7));
       const options = screen.getAllByRole('option');
-      expect(options).toHaveLength(9);
+      expect(options).toHaveLength(7);
       // agrupamento por família
       const groups = [...select.querySelectorAll('optgroup')].map((g) => g.label);
       expect(groups).toEqual(['Família FLUX 2', 'Outras famílias']);
@@ -103,7 +101,6 @@ describe('CreativeStudio — seletor de modelos, tempo e custo', () => {
       expect(screen.queryByText(/MAI Image 2.5/i)).not.toBeInTheDocument();
       // opções das duas famílias presentes
       expect(screen.getByRole('option', { name: /FLUX.2 Klein 4B/ })).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: /GPT Image 1/ })).toBeInTheDocument();
       expect(screen.getByRole('option', { name: /Seedream 5.0 Pro/ })).toBeInTheDocument();
     });
 
@@ -111,24 +108,24 @@ describe('CreativeStudio — seletor de modelos, tempo e custo', () => {
       const user = userEvent.setup();
       renderWithProviders();
       const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-      await waitFor(() => expect(screen.getByRole('option', { name: /GPT Image 1/ })).toBeInTheDocument());
-      fireEvent.change(select, { target: { value: 'openai/gpt-image-1' } });
+      await waitFor(() => expect(screen.getByRole('option', { name: /Seedream 5.0 Pro/ })).toBeInTheDocument());
+      fireEvent.change(select, { target: { value: 'bytedance-seed/seedream-5-0-pro' } });
       await user.type(screen.getByPlaceholderText(/Descreva o estilo/i), 'Anúncio fashion minimalista com luz natural');
 
       const generateBtn = screen.getByRole('button', { name: /Gerar imagem/i });
       await user.click(generateBtn);
 
       await waitFor(() => {
-        expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ model: 'openai/gpt-image-1' }));
+        expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ model: 'bytedance-seed/seedream-5-0-pro' }));
       });
     });
 
     it('mostra a descrição do modelo selecionado abaixo do seletor', async () => {
       renderWithProviders();
       const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-      await waitFor(() => expect(screen.getByRole('option', { name: /GPT Image 1/ })).toBeInTheDocument());
-      fireEvent.change(select, { target: { value: 'openai/gpt-image-1' } });
-      expect(screen.getByText(/OpenAI — Referência em fidelidade ao prompt/)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole('option', { name: /Seedream 5.0 Pro/ })).toBeInTheDocument());
+      fireEvent.change(select, { target: { value: 'bytedance-seed/seedream-5-0-pro' } });
+      expect(screen.getByText(/ByteDance — Renderização realista/)).toBeInTheDocument();
     });
 
   it('exibe cronômetro (Xs) enquanto a imagem está sendo gerada', async () => {
