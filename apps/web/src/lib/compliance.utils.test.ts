@@ -29,7 +29,7 @@ describe('parseComplianceNotes', () => {
 describe('complianceBadge', () => {
   it('reprovado → label + motivos legíveis', () => {
     const badge = complianceBadge('rejected', REJECTED_NOTES);
-    expect(badge.label).toBe('Reprovado pelo compliance');
+    expect(badge.label).toBe('Reprovado');
     expect(badge.tone).toBe('rejected');
     expect(badge.reasons).toContain('Logotipo de odontologia em anúncio de padaria.');
     expect(badge.reasons).toContain('Texto proibido na imagem.');
