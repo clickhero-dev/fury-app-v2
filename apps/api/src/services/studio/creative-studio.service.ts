@@ -339,7 +339,19 @@ export class StudioService {
             const { fileName } = await savePNG(pngBuffer);
             imageUrl = `${publicBaseUrl.replace(/\/+$/, '')}/studio-assets/${fileName}`;
           }
-          return { creativeData, imageUrl, fixType: 'direct_replace' };
+          // ponytail: precisa persistir como as demais modificações (mesma
+          // linhagem via rootAssetId) — senão este "ajuste direto" vira um
+          // asset fantasma sem assetId, quebrando a próxima regeneração.
+          const directFixMetadata = JSON.stringify({ ...creativeData, context: savedContext, feedback: input.feedback });
+          const directFixAsset = await this.repo(tenantId).createAsset({
+            tenantId,
+            type: 'image',
+            url: imageUrl,
+            complianceStatus: 'pending_compliance',
+            rootAssetId: asset.rootAssetId ?? asset.id,
+            complianceNotes: directFixMetadata,
+          });
+          return { assetId: directFixAsset.id, creativeData, imageUrl, fixType: 'direct_replace' };
         }
       }
     } catch { /* context not recoverable */ }
@@ -386,6 +398,7 @@ export class StudioService {
       type: 'image',
       url: imageUrl,
       complianceStatus: 'pending_compliance',
+      rootAssetId: asset.rootAssetId ?? asset.id,
       complianceNotes: metadata,
     });
     return {

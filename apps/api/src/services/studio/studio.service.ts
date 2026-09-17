@@ -408,6 +408,12 @@ export async function uploadCreativeAssetToMeta(params: {
   return { metaAssetId };
 }
 
+/**
+ * "Excluir" um criativo não apaga mais nada — arquiva o grupo inteiro
+ * (raiz + todas as modificações). `assetId` pode ser qualquer versão do
+ * grupo, resolve a raiz internamente. Idempotente: arquivar de novo um
+ * grupo já arquivado não é erro.
+ */
 export async function deleteStudioAsset(params: { tenantId: string; assetId: string }): Promise<void> {
   const repo = new StudioRepository(params.tenantId);
   const asset = await repo.findAssetById(params.assetId);
@@ -416,7 +422,30 @@ export async function deleteStudioAsset(params: { tenantId: string; assetId: str
     throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
   }
 
-  await repo.deleteAssetAndChildren(params.assetId);
+  const rootId = asset.rootAssetId ?? asset.id;
+  await repo.archiveGroup(rootId);
+}
+
+/**
+ * Restaura um grupo arquivado — devolve pra listagem principal, preservando
+ * a versão em evidência de antes do arquivamento. Erro se o grupo não
+ * estiver arquivado (chamada inválida, não sucesso silencioso).
+ */
+export async function restoreStudioAsset(params: { tenantId: string; assetId: string }): Promise<void> {
+  const repo = new StudioRepository(params.tenantId);
+  const asset = await repo.findAssetById(params.assetId);
+
+  if (!asset) {
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+  }
+
+  const rootId = asset.rootAssetId ?? asset.id;
+  const root = await repo.findAssetById(rootId);
+  if (!root?.archivedAt) {
+    throw new AppError(400, 'CREATIVE_GROUP_NOT_ARCHIVED', 'Este criativo nao esta arquivado.');
+  }
+
+  await repo.restoreGroup(rootId);
 }
 
 export type StudioAssetListItem = {
@@ -463,6 +492,7 @@ export async function listStudioAssetsForTenant(params: {
   tenantId: string;
   type?: 'image' | 'video' | 'copy';
   status?: 'pending' | 'approved' | 'rejected';
+  archived?: boolean;
   page: number;
   limit: number;
 }): Promise<{
@@ -471,9 +501,9 @@ export async function listStudioAssetsForTenant(params: {
   page: number;
   totalPages: number;
 }> {
-  const { type, status, page, limit } = params;
+  const { type, status, archived, page, limit } = params;
   const repo = new StudioRepository(params.tenantId);
-  const { rows, total, modificationsRemainingByRootId } = await repo.listAssets({ type, status, page, limit });
+  const { rows, total } = await repo.listAssets({ type, status, archived, page, limit });
 
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
 
@@ -486,7 +516,7 @@ export async function listStudioAssetsForTenant(params: {
       complianceNotes: r.complianceNotes ?? null,
       metaAssetId: r.metaAssetId ?? null,
       createdAt: r.createdAt.toISOString(),
-      modificationsRemaining: modificationsRemainingByRootId.get(r.rootAssetId ?? r.id) ?? null,
+      modificationsRemaining: r.modificationsRemaining ?? null,
       ...extractCreativeCopyFromComplianceNotes(r.complianceNotes ?? null),
     })),
     total,

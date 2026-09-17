@@ -1,5 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StudioService } from '../services/studio/creative-studio.service.js';
+
+vi.mock('../services/studio/html-to-png.service.js', () => ({
+  convertHTMLToPNG: vi.fn(async () => Buffer.from('fake-png')),
+}));
 
 function makeRepo(override: Record<string, any> = {}) {
   return {
@@ -61,5 +65,64 @@ describe('StudioService', () => {
     const out = await svc.validateContext('t-1', { product: 'p', promise: 'q', offer: 'r', audience: 'a' });
     expect(deps.llm.chat).toHaveBeenCalled();
     expect(out).toEqual({ valid: true, resumo: 'ok' });
+  });
+
+  describe('regenerateCreative — linhagem (rootAssetId)', () => {
+    const originalR2Endpoint = process.env.R2_ENDPOINT;
+    const originalR2PublicUrl = process.env.R2_PUBLIC_URL;
+
+    beforeEach(() => {
+      // Força o branch de upload (deps.storage, já mockado) em vez de
+      // savePNG (grava em disco de verdade) — só o que importa aqui é a
+      // linhagem (rootAssetId), não a persistência de arquivo.
+      process.env.R2_ENDPOINT = 'https://r2.test';
+      process.env.R2_PUBLIC_URL = 'https://cdn.test';
+    });
+
+    afterEach(() => {
+      if (originalR2Endpoint === undefined) delete process.env.R2_ENDPOINT; else process.env.R2_ENDPOINT = originalR2Endpoint;
+      if (originalR2PublicUrl === undefined) delete process.env.R2_PUBLIC_URL; else process.env.R2_PUBLIC_URL = originalR2PublicUrl;
+    });
+
+    it('branch "ajuste direto" (regex) persiste asset novo com rootAssetId e assetId no retorno', async () => {
+      repo = makeRepo({
+        findAssetById: vi.fn(async () => ({
+          id: 'a1',
+          tenantId: 't-1',
+          rootAssetId: null,
+          complianceNotes: JSON.stringify({
+            headline: 'Compre agora',
+            context: { layout: 'offer_burst', businessName: 'Loja X' },
+          }),
+        })),
+      });
+      const out = await svc.regenerateCreative('t-1', { assetId: 'a1', feedback: 'corrigir "agora" para "hoje"' }, 'https://app.test');
+
+      expect(out.fixType).toBe('direct_replace');
+      expect(out.assetId).toBeTruthy();
+      expect(repo.createAsset).toHaveBeenCalledWith(expect.objectContaining({ rootAssetId: 'a1' }));
+    });
+
+    it('branch "completo" (via LLM) persiste asset novo com rootAssetId, inclusive a partir de uma modificação (não só da raiz)', async () => {
+      repo = makeRepo({
+        findAssetById: vi.fn(async () => ({
+          id: 'a2',
+          tenantId: 't-1',
+          rootAssetId: 'raiz-0', // a2 já é uma modificação — a nova versão deve apontar pra mesma raiz, não pra a2
+          complianceNotes: JSON.stringify({
+            headline: 'Old headline',
+            context: { layout: 'offer_burst', businessName: 'Loja X' },
+          }),
+        })),
+      });
+      (deps.llm.chat as ReturnType<typeof vi.fn>).mockResolvedValue(
+        '{"headline":"Novo headline","cta":"Compre já"}',
+      );
+
+      const out = await svc.regenerateCreative('t-1', { assetId: 'a2', feedback: 'deixe o texto mais persuasivo' }, 'https://app.test');
+
+      expect(out.assetId).toBeTruthy();
+      expect(repo.createAsset).toHaveBeenCalledWith(expect.objectContaining({ rootAssetId: 'raiz-0' }));
+    });
   });
 });

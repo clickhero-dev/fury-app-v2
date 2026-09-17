@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -153,6 +153,9 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
       if (url.includes('/enhance-prompt')) {
         return Promise.resolve({ data: { enhancedPrompt: 'prompt melhorado', brand: {} } });
       }
+      if (url.includes('/brand-kit/photos')) {
+        return Promise.resolve({ data: { data: { urls: ['https://cdn/upload-b.png'] } } });
+      }
       return Promise.resolve({ data: { type: 'image', creativeAssetId: 'asset-new', imageUrl: 'https://cdn/n.png', costUsd: 0.04, processingTimeMs: 3200 } });
     });
     // jsdom não implementa canvas — CreativeResult usa clearRect no mount
@@ -164,30 +167,169 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     vi.useRealTimers();
   });
 
-  it('quick-create mostra seletor compacto com optgroups (Família FLUX 2 / Outras famílias)', async () => {
+  it('quick-create mostra seletor compacto com grupos (Família FLUX 2 / Outras famílias)', async () => {
     renderWithProviders();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
 
-    const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-    const groups = [...select.querySelectorAll('optgroup')].map((g) => g.label);
-    expect(groups).toEqual(['Família FLUX 2', 'Outras famílias']);
-    expect(screen.getByRole('option', { name: /GPT Image 1/ })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /FLUX.2 Klein 4B/ })).toBeInTheDocument();
+    const trigger = await screen.findByRole('button', { name: /modelo de imagem/i });
+    await user.click(trigger);
+
+    expect(await screen.findByText('Família FLUX 2')).toBeInTheDocument();
+    expect(screen.getByText('Outras famílias')).toBeInTheDocument();
+    expect(screen.getByText(/GPT Image 1/)).toBeInTheDocument();
+    expect(screen.getByText(/FLUX.2 Klein 4B/)).toBeInTheDocument();
   });
 
   it('Gerar imagem usa o modelo selecionado no seletor', async () => {
     renderWithProviders();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
-    const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-    fireEvent.change(select, { target: { value: 'openai/gpt-image-1' } });
+
+    const trigger = await screen.findByRole('button', { name: /modelo de imagem/i });
+    await user.click(trigger);
+    await user.click(await screen.findByText(/GPT Image 1/));
+
     await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
     await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
 
     await waitFor(() => {
       expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ model: 'openai/gpt-image-1' }));
     });
+  });
+
+  it('sem tocar no seletor de formato, envia aspect_ratio 1:1 (comportamento padrão preservado)', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ aspect_ratio: '1:1' }));
+    });
+  });
+
+  it('seletor de formato alterna visualmente e selecionar Vertical envia aspect_ratio 9:16', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+
+    const quadrado = screen.getByRole('button', { name: /quadrado/i });
+    const vertical = screen.getByRole('button', { name: /vertical/i });
+    expect(quadrado).toHaveAttribute('aria-pressed', 'true');
+    expect(vertical).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(vertical);
+    expect(vertical).toHaveAttribute('aria-pressed', 'true');
+    expect(quadrado).toHaveAttribute('aria-pressed', 'false');
+
+    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ aspect_ratio: '9:16' }));
+    });
+  });
+
+  it('sem imagem de referência, gera sem reference_image_urls (comportamento preservado)', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith(
+        '/studio/ai/generate-image',
+        expect.objectContaining({ reference_image_urls: undefined }),
+      );
+    });
+  });
+
+  it('Upload B envia a foto, mostra miniatura removível e inclui reference_image_urls na geração', async () => {
+    const { container } = renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+
+    // Upload B fica no formulário principal — vem antes do painel lateral no DOM
+    const fileInputs = container.querySelectorAll('input[type="file"]');
+    const uploadBInput = fileInputs[0] as HTMLInputElement;
+    const file = new File(['conteudo'], 'produto.png', { type: 'image/png' });
+    await user.upload(uploadBInput, file);
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/brand-kit/photos', expect.any(FormData), expect.anything());
+    });
+    const removeBtn = await screen.findByRole('button', { name: /remover imagem de referência/i });
+    expect(removeBtn).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith(
+        '/studio/ai/generate-image',
+        expect.objectContaining({ reference_image_urls: ['https://cdn/upload-b.png'] }),
+      );
+    });
+
+    // remover a miniatura tira ela do contexto
+    await user.click(removeBtn);
+    expect(screen.queryByRole('button', { name: /remover imagem de referência/i })).not.toBeInTheDocument();
+  });
+
+  it('Upload B com mais de 2 arquivos: mostra modal de limite, não envia nada', async () => {
+    const { container } = renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+
+    const fileInputs = container.querySelectorAll('input[type="file"]');
+    const uploadBInput = fileInputs[0] as HTMLInputElement;
+    const files = [
+      new File(['a'], 'a.png', { type: 'image/png' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+      new File(['c'], 'c.png', { type: 'image/png' }),
+    ];
+    await user.upload(uploadBInput, files);
+
+    expect(await screen.findByText(/máximo de 2 fotos por vez/i)).toBeInTheDocument();
+    expect(mockApiPost).not.toHaveBeenCalledWith('/brand-kit/photos', expect.anything(), expect.anything());
+
+    await user.click(screen.getByRole('button', { name: /entendi/i }));
+    expect(screen.queryByText(/máximo de 2 fotos por vez/i)).not.toBeInTheDocument();
+  });
+
+  it('regra de substituição: já com 2 no contexto, novo upload B substitui a mais antiga (com aviso)', async () => {
+    const { container } = renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+
+    const fileInputs = container.querySelectorAll('input[type="file"]');
+    const uploadBInput = fileInputs[0] as HTMLInputElement;
+
+    let callCount = 0;
+    (mockApiPost as any).mockImplementation((url: string) => {
+      if (url.includes('/brand-kit/photos')) {
+        callCount += 1;
+        return Promise.resolve({ data: { data: { urls: [`https://cdn/foto-${callCount}.png`] } } });
+      }
+      if (url.includes('/enhance-prompt')) return Promise.resolve({ data: { enhancedPrompt: 'x', brand: {} } });
+      return Promise.resolve({ data: { type: 'image', creativeAssetId: 'a', imageUrl: 'https://cdn/n.png' } });
+    });
+
+    await user.upload(uploadBInput, new File(['a'], 'a.png', { type: 'image/png' }));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /remover imagem de referência/i })).toHaveLength(1));
+
+    await user.upload(uploadBInput, new File(['b'], 'b.png', { type: 'image/png' }));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /remover imagem de referência/i })).toHaveLength(2));
+
+    await user.upload(uploadBInput, new File(['c'], 'c.png', { type: 'image/png' }));
+    await waitFor(() => {
+      // ainda só 2 miniaturas — a mais antiga foi substituída, não acumulou 3
+      expect(screen.getAllByRole('button', { name: /remover imagem de referência/i })).toHaveLength(2);
+    });
+    expect(screen.getByText(/limite de 2 imagens de referência/i)).toBeInTheDocument();
   });
 
   it('mostra cronômetro (Xs) desde o clique, mesmo durante o enhance-prompt', async () => {
@@ -259,38 +401,63 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
   });
 });
 
-describe('EstudioHome — exclusão de criativo', () => {
+describe('EstudioHome — arquivar criativo (Fase 6)', () => {
   beforeEach(() => {
     mockApiGet.mockReset();
     mockApiDelete.mockReset();
     mockApiGet.mockResolvedValue({ data: MOCK_ASSETS });
   });
 
-  it('exibe snack de sucesso ao excluir criativo', async () => {
+  it('clicar em excluir abre modal de confirmação (não exclui direto)', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+
+    await screen.findByText(/Anúncio de imagem/i);
+
+    const trashBtn = screen.getByTitle(/Excluir anúncio/i);
+    await user.click(trashBtn);
+
+    expect(screen.getByText(/Arquivar este criativo\?/i)).toBeInTheDocument();
+    expect(mockApiDelete).not.toHaveBeenCalled();
+  });
+
+  it('confirmar no modal arquiva o criativo (DELETE) e mostra snack de sucesso', async () => {
     mockApiDelete.mockResolvedValue({ data: { success: true } });
     renderWithProviders();
     const user = userEvent.setup();
 
-    // Aguarda assets aparecerem na tela
     await screen.findByText(/Anúncio de imagem/i);
 
-    // Clica no ícone de lixeira
     const trashBtn = screen.getByTitle(/Excluir anúncio/i);
     await user.click(trashBtn);
 
-    // Confirma a exclusão
-    const confirmBtn = screen.getByRole('button', { name: /Confirmar/i });
+    const confirmBtn = screen.getByRole('button', { name: /^Arquivar$/i });
     await user.click(confirmBtn);
 
-    // SnackBar de sucesso deve aparecer
     await waitFor(() => {
-      expect(screen.getByText(/Criativo excluído com sucesso/i)).toBeInTheDocument();
+      expect(screen.getByText(/Criativo arquivado com sucesso/i)).toBeInTheDocument();
     });
 
     expect(mockApiDelete).toHaveBeenCalledWith('/studio/assets/asset-1');
   });
 
-  it('exibe snack de erro ao falhar exclusão do criativo', async () => {
+  it('cancelar no modal não arquiva nada', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+
+    await screen.findByText(/Anúncio de imagem/i);
+
+    const trashBtn = screen.getByTitle(/Excluir anúncio/i);
+    await user.click(trashBtn);
+
+    const cancelBtn = screen.getByRole('button', { name: /Cancelar/i });
+    await user.click(cancelBtn);
+
+    expect(screen.queryByText(/Arquivar este criativo\?/i)).not.toBeInTheDocument();
+    expect(mockApiDelete).not.toHaveBeenCalled();
+  });
+
+  it('exibe snack de erro ao falhar o arquivamento', async () => {
     mockApiDelete.mockRejectedValue(new Error('API error'));
     renderWithProviders();
     const user = userEvent.setup();
@@ -300,11 +467,64 @@ describe('EstudioHome — exclusão de criativo', () => {
     const trashBtn = screen.getByTitle(/Excluir anúncio/i);
     await user.click(trashBtn);
 
-    const confirmBtn = screen.getByRole('button', { name: /Confirmar/i });
+    const confirmBtn = screen.getByRole('button', { name: /^Arquivar$/i });
     await user.click(confirmBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/Erro ao excluir o criativo/i)).toBeInTheDocument();
+      expect(screen.getByText(/Erro ao arquivar o criativo/i)).toBeInTheDocument();
+    });
+  });
+});
+
+const MOCK_ARCHIVED_ASSET = {
+  id: 'asset-archived-1',
+  name: 'Anúncio arquivado',
+  type: 'image' as const,
+  url: 'https://example.com/archived.png',
+  complianceStatus: 'approved' as const,
+  complianceNotes: '{}',
+  modificationsRemaining: 1,
+};
+
+describe('EstudioHome — modal de Arquivados (Fase 6)', () => {
+  beforeEach(() => {
+    mockApiGet.mockReset();
+    mockApiPost.mockReset();
+    mockApiGet.mockImplementation((_url: string, config?: { params?: { archived?: string } }) => {
+      if (config?.params?.archived === 'true') {
+        return Promise.resolve({ data: { assets: [MOCK_ARCHIVED_ASSET], creativesRemaining: null, creativesLimit: null } });
+      }
+      return Promise.resolve({ data: MOCK_ASSETS });
+    });
+  });
+
+  it('botão "Arquivados" abre modal listando só os arquivados, com "Restaurar anúncio" e sem excluir/usar em campanha', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+
+    await screen.findByText(/Anúncio de imagem/i);
+    await user.click(screen.getByRole('button', { name: /^Arquivados$/i }));
+
+    await screen.findByText('Anúncio arquivado');
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: /Restaurar anúncio/i })).toBeInTheDocument();
+    expect(within(dialog).queryByTitle(/Excluir anúncio/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: /^Usar em campanha$/i })).not.toBeInTheDocument();
+  });
+
+  it('restaurar chama POST .../restore e atualiza as duas listagens', async () => {
+    mockApiPost.mockResolvedValue({ data: { success: true } });
+    renderWithProviders();
+    const user = userEvent.setup();
+
+    await screen.findByText(/Anúncio de imagem/i);
+    await user.click(screen.getByRole('button', { name: /^Arquivados$/i }));
+    await screen.findByText('Anúncio arquivado');
+
+    await user.click(screen.getByRole('button', { name: /Restaurar anúncio/i }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith('/studio/assets/asset-archived-1/restore');
     });
   });
 });

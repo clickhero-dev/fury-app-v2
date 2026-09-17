@@ -81,6 +81,56 @@ describe('StudioAiService', () => {
     expect(quota.refundCreativeQuota).toHaveBeenCalledWith('t-1');
   });
 
+  it('generateImage rejeita reference_image_urls fora da biblioteca do tenant, sem gastar cota nem chamar o LLM', async () => {
+    repo = makeRepo({ findBrandKit: vi.fn(async () => ({ photoUrls: ['https://cdn/owned.png'] })) });
+    (quota.consumeCreativeQuota as any).mockClear();
+    (llm.generateImageWithMeta as any).mockClear();
+
+    await expect(
+      svc.generateImage('t-1', {
+        model: 'x',
+        prompt: 'p'.repeat(20),
+        aspect_ratio: '1:1',
+        resolution: '2K',
+        reference_image_urls: ['https://cdn/nao-pertence.png'],
+      }),
+    ).rejects.toThrow();
+
+    expect(quota.consumeCreativeQuota).not.toHaveBeenCalled();
+    expect(llm.generateImageWithMeta).not.toHaveBeenCalled();
+    repo = makeRepo();
+  });
+
+  it('generateImage aceita reference_image_urls pertencentes ao tenant e repassa pro LLM + complianceNotes', async () => {
+    repo = makeRepo({ findBrandKit: vi.fn(async () => ({ photoUrls: ['https://cdn/a.png', 'https://cdn/b.png'] })) });
+
+    const out = await svc.generateImage('t-1', {
+      model: 'x',
+      prompt: 'p'.repeat(20),
+      aspect_ratio: '9:16',
+      resolution: '2K',
+      reference_image_urls: ['https://cdn/a.png', 'https://cdn/b.png'],
+    });
+
+    expect(out.type).toBe('image');
+    expect(llm.generateImageWithMeta).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceImageUrls: ['https://cdn/a.png', 'https://cdn/b.png'] }),
+    );
+    expect(repo.createAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        complianceNotes: expect.stringContaining('"referenceImageUrls":["https://cdn/a.png","https://cdn/b.png"]'),
+      }),
+    );
+    repo = makeRepo();
+  });
+
+  it('generateImage sem reference_image_urls continua idêntico a hoje (não passa referenceImageUrls pro LLM)', async () => {
+    await svc.generateImage('t-1', { model: 'x', prompt: 'p'.repeat(20), aspect_ratio: '1:1', resolution: '2K' });
+    expect(llm.generateImageWithMeta).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceImageUrls: undefined }),
+    );
+  });
+
   it('generateVideo cria asset de vídeo', async () => {
     const out = await svc.generateVideo('t-1', { model: 'v', prompt: 'p'.repeat(20), duration: 4, resolution: '720p', aspect_ratio: '16:9', generate_audio: true });
     expect(out.type).toBe('video');

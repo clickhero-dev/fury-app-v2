@@ -32,6 +32,7 @@ const uploadToMetaSchema = z.object({
 const listAssetsQuerySchema = z.object({
   type: z.enum(['image', 'video', 'copy']).optional(),
   status: z.enum(['pending', 'approved', 'rejected']).optional(),
+  archived: z.enum(['true', 'false']).optional().default('false').transform((v) => v === 'true'),
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
 });
@@ -90,6 +91,7 @@ export class StudioPublishingController {
           tenantId,
           type: query.type,
           status: query.status,
+          archived: query.archived,
           page: query.page,
           limit: query.limit,
         }),
@@ -119,6 +121,21 @@ export class StudioPublishingController {
 
   getComplianceStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     return this.getAsset(req, res, next);
+  };
+
+  setActive = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tenantId = this.tenantId(req);
+      if (!tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+
+      const assetId = z.string().min(1).parse(req.params.assetId);
+      const result = await this.service.setActiveAssetVersion({ tenantId, assetId });
+      res.status(200).json(result);
+    } catch (error) {
+      if (!this.zodError(res, error)) next(error);
+    }
   };
 
   publishAsset = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -192,6 +209,21 @@ export class StudioPublishingController {
 
       const assetId = z.string().min(1).parse(req.params.assetId);
       await this.service.deleteStudioAsset({ tenantId, assetId });
+      res.status(200).json({ success: true });
+    } catch (error) {
+      if (!this.zodError(res, error)) next(error);
+    }
+  };
+
+  restoreAsset = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tenantId = this.tenantId(req);
+      if (!tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+
+      const assetId = z.string().min(1).parse(req.params.assetId);
+      await this.service.restoreStudioAsset({ tenantId, assetId });
       res.status(200).json({ success: true });
     } catch (error) {
       if (!this.zodError(res, error)) next(error);

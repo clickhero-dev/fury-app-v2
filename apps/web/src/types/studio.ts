@@ -22,6 +22,25 @@ export interface StudioAsset {
   modificationsRemaining?: number | null;
 }
 
+/** Uma versão dentro do histórico de um grupo de criativo (raiz + modificações). */
+export interface StudioAssetVersion {
+  id: string;
+  url: string;
+  complianceStatus: 'pending' | 'pending_compliance' | 'approved' | 'rejected';
+  createdAt: string;
+}
+
+/** Histórico completo do grupo — devolvido por GET/POST .../assets/:assetId(/set-active). */
+export interface StudioAssetGroupDetail {
+  /** Id da raiz do grupo (linhagem: original + modificações). */
+  groupId: string;
+  /** Id da versão "em evidência" — mesma versão dos campos de imagem/status abaixo. */
+  activeVersionId: string;
+  /** Todas as versões do grupo, ordenadas por criação — para o carrossel/numeração. */
+  versions: StudioAssetVersion[];
+  archivedAt: string | null;
+}
+
 /** Payload para geração de imagem via DALL-E 3. */
 export interface GenerateImagePayload {
   prompt: string;
@@ -255,4 +274,6 @@ export interface GenerateCreativeResponse {
   };
   /** Modificações restantes deste criativo (raiz da linhagem). null = sem limite. */
   modificationsRemaining?: number | null;
+  complianceStatus?: 'pending' | 'pending_compliance' | 'approved' | 'rejected';
+  complianceNotes?: string | null;
 }

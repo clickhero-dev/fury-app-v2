@@ -190,12 +190,17 @@ export const creativeAssets = pgTable(
     processingTimeMs: integer('processing_time_ms'),
     rootAssetId: uuid('root_asset_id').references((): AnyPgColumn => creativeAssets.id),
     modificationsRemaining: integer('modifications_remaining'),
+    // Só significativos na linha raiz do grupo (rootAssetId IS NULL) — mesmo
+    // padrão de "campo vive na raiz" que modificationsRemaining já usa.
+    activeAssetId: uuid('active_asset_id').references((): AnyPgColumn => creativeAssets.id, { onDelete: 'set null' }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
     tenantIdIdx: index('creative_assets_tenant_id_idx').on(table.tenantId),
     metaAssetIdIdx: index('creative_assets_meta_asset_id_idx').on(table.metaAssetId),
     rootAssetIdIdx: index('creative_assets_root_asset_id_idx').on(table.rootAssetId),
+    activeAssetIdIdx: index('creative_assets_active_asset_id_idx').on(table.activeAssetId),
   })
 );
 

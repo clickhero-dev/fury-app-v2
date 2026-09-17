@@ -3,6 +3,17 @@ import { persistOpenRouterImageResponse } from './openrouter-image-response.js';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
+/**
+ * Tamanho exato de pixel por formato — usado só quando o chamador pede
+ * `normalizePixels: true` explicitamente (hoje, só a Criação Rápida do
+ * Estúdio). Outros chamadores (Planejador IA, regenerate-ad, etc.) já
+ * mandam `aspect_ratio` sem pedir normalização — não são afetados.
+ */
+const ASPECT_RATIO_TARGET_PX: Record<string, { width: number; height: number }> = {
+  '1:1': { width: 1080, height: 1080 },
+  '9:16': { width: 1080, height: 1920 },
+};
+
 function getClient() {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new AppError(500, 'OPENROUTER_API_KEY_MISSING', 'OPENROUTER_API_KEY não configurada.');
@@ -165,8 +176,15 @@ export const openrouterService = {
     resolution?: string;
     logoUrl?: string;
     previousImageUrl?: string;
+    /** Só a Criação Rápida do Estúdio passa `true` — garante pixel exato (ver ASPECT_RATIO_TARGET_PX). */
+    normalizePixels?: boolean;
+    /** Fotos de referência do tenant (máx. 2, já validadas como pertencentes a ele) — array oficial do OpenRouter. */
+    referenceImageUrls?: string[];
   }): Promise<{ dataUrl: string; costUsd: number | null; model: string }> {
     const apiKey = getClient();
+    const target = options.normalizePixels && options.aspect_ratio
+      ? ASPECT_RATIO_TARGET_PX[options.aspect_ratio]
+      : undefined;
     const response = await fetchWithTimeout(`${OPENROUTER_BASE}/images`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -175,7 +193,14 @@ export const openrouterService = {
         prompt: options.prompt,
         ...(options.aspect_ratio ? { aspect_ratio: options.aspect_ratio } : {}),
         ...(options.resolution ? { resolution: options.resolution } : {}),
-        ...(options.previousImageUrl ? { image: options.previousImageUrl } : options.logoUrl ? { image: options.logoUrl } : {}),
+        // Referência de produto/pessoa (array, formato oficial do OpenRouter) tem
+        // prioridade sobre o campo `image` — não são combinados na mesma chamada
+        // (a logo continua aparecendo via composite visual, ver mais abaixo).
+        ...(options.referenceImageUrls?.length
+          ? { input_references: options.referenceImageUrls.map((url) => ({ type: 'image_url', image_url: { url } })) }
+          : options.previousImageUrl ? { image: options.previousImageUrl }
+          : options.logoUrl ? { image: options.logoUrl }
+          : {}),
       }),
     });
     if (!response.ok) {
@@ -196,6 +221,26 @@ export const openrouterService = {
       result = `data:image/png;base64,${Buffer.from(buffer).toString('base64')}`;
     } else throw new AppError(502, 'OPENROUTER_IMAGE_EMPTY', 'OpenRouter não retornou imagem.');
 
+    // Normaliza pro pixel exato do formato pedido — só quando normalizePixels
+    // foi pedido explicitamente (Criação Rápida). O OpenRouter não garante
+    // pixel exato por `aspect_ratio`/`resolution` (tiers normalizados por
+    // provedor), então confiar cegamente no parâmetro não é suficiente.
+    if (target) {
+      try {
+        const { default: sharp } = await import('sharp');
+        const match = result.match(/^data:image\/\w+;base64,(.+)$/);
+        if (match) {
+          const normalized = await sharp(Buffer.from(match[1], 'base64'))
+            .resize(target.width, target.height, { fit: 'cover', position: 'centre' })
+            .png()
+            .toBuffer();
+          result = `data:image/png;base64,${normalized.toString('base64')}`;
+        }
+      } catch (err) {
+        console.warn('[openrouter] Pixel normalization failed:', (err as Error).message);
+      }
+    }
+
     // ponytail: composite logo onto generated image if provided
     if (options.logoUrl) {
       try {
@@ -206,7 +251,10 @@ export const openrouterService = {
           const logoResp = await fetch(options.logoUrl);
           const logoBuf = Buffer.from(await logoResp.arrayBuffer());
           const logoResized = await sharp(logoBuf).resize(120, null, { fit: 'inside', withoutEnlargement: true }).png().toBuffer();
-          const composited = await sharp(imgBuf).resize(1080, 1080, { fit: 'inside' }).composite([
+          // Canvas segue o formato pedido (`target`, só quando normalizePixels
+          // foi pedido); a logo em si (tamanho/posição acima) nunca muda —
+          // são duas operações independentes, ver plan.md da spec de formato.
+          const composited = await sharp(imgBuf).resize(target?.width ?? 1080, target?.height ?? 1080, { fit: 'inside' }).composite([
             { input: logoResized, top: 20, left: 20 },
           ]).png().toBuffer();
           result = `data:image/png;base64,${composited.toString('base64')}`;

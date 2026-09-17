@@ -101,22 +101,11 @@ describe('StudioRepository', () => {
     expect(asset?.url).toBe('https://cdn/x.png');
   });
 
-  it('listAssets retorna rows, total e mapa de modificationsRemaining por raiz', async () => {
-    const { db, select } = makeDb();
-    const rootRow = { id: 'root-1', modificationsRemaining: 2 };
-    db.query.creativeAssets.findMany.mockResolvedValueOnce([
-      mockRow({ id: 'a1', rootAssetId: 'root-1' }),
-      mockRow({ id: 'a2', rootAssetId: 'root-1' }),
-    ]).mockResolvedValueOnce([rootRow]);
-
-    const repo = new StudioRepository(tenantId, db);
-    const result = await repo.listAssets({ page: 1, limit: 20 });
-
-    expect(select).toHaveBeenCalledTimes(1);
-    expect(result.rows.length).toBe(2);
-    expect(result.total).toBe(3);
-    expect(result.modificationsRemainingByRootId.get('root-1')).toBe(2);
-  });
+  // `listAssets` agora faz um self-join real (agrupamento por linhagem +
+  // resolução da versão em evidência) — cobertura de verdade fica em
+  // studio-assets.test.ts (integração, banco real), não aqui: mockar a
+  // cadeia .select().from().innerJoin().where() só validaria que o código
+  // CHAMA esses métodos, não que a lógica de agrupamento/filtro está certa.
 
   it('deleteAssetAndChildren faz UPDATE set rootAssetId=null nos filhos antes do DELETE', async () => {
     const { db, del, update } = makeDb();
