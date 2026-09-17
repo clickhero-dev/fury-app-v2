@@ -1,4 +1,13 @@
+import { Check, ChevronDown } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export interface StudioModelOption {
   id: string;
@@ -82,17 +91,58 @@ export function ModelSelect({
   );
 
   if (compact) {
+    const items = (modelList: StudioModelOption[]) =>
+      modelList.map((m) => (
+        <DropdownMenuItem
+          key={m.id}
+          onSelect={() => onSelect(m.id)}
+          className="flex items-center justify-between gap-3"
+        >
+          <span className="truncate">{optionText(m)}</span>
+          {m.id === selectedModel && <Check className="h-3.5 w-3.5 shrink-0 text-brand" />}
+        </DropdownMenuItem>
+      ));
+
     return (
-      <Select
-        id={id}
-        value={selectedModel}
-        onChange={(e) => onSelect(e.target.value)}
-        data-testid={id}
-        aria-label={`Modelo de ${typeLabel}`}
-        className="w-auto max-w-[200px] rounded-full border-border bg-surface-muted py-2 pl-4 pr-9 text-xs font-semibold"
-      >
-        {options}
-      </Select>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            id={id}
+            data-testid={id}
+            aria-label={`Modelo de ${typeLabel}`}
+            className="flex w-auto max-w-[220px] items-center gap-2 rounded-full border border-border bg-surface-muted py-2 pl-4 pr-3 text-xs font-semibold text-text-primary transition hover:border-brand/40"
+          >
+            <span className="truncate">{selected ? selected.label : 'Selecione um modelo'}</span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-tertiary" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
+          {models.length === 0 ? (
+            FALLBACK_MODELS.map((m) => (
+              <DropdownMenuItem key={m.id} onSelect={() => onSelect(m.id)}>
+                {m.label}
+              </DropdownMenuItem>
+            ))
+          ) : (
+            <>
+              {fluxModels.length > 0 && (
+                <>
+                  <DropdownMenuLabel>Família FLUX 2</DropdownMenuLabel>
+                  {items(fluxModels)}
+                </>
+              )}
+              {otherModels.length > 0 && (
+                <>
+                  {fluxModels.length > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuLabel>{otherLabel}</DropdownMenuLabel>
+                  {items(otherModels)}
+                </>
+              )}
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     );
   }
 

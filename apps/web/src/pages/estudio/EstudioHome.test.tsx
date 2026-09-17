@@ -167,24 +167,29 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     vi.useRealTimers();
   });
 
-  it('quick-create mostra seletor compacto com optgroups (Família FLUX 2 / Outras famílias)', async () => {
+  it('quick-create mostra seletor compacto com grupos (Família FLUX 2 / Outras famílias)', async () => {
     renderWithProviders();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
 
-    const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-    const groups = [...select.querySelectorAll('optgroup')].map((g) => g.label);
-    expect(groups).toEqual(['Família FLUX 2', 'Outras famílias']);
-    expect(screen.getByRole('option', { name: /GPT Image 1/ })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /FLUX.2 Klein 4B/ })).toBeInTheDocument();
+    const trigger = await screen.findByRole('button', { name: /modelo de imagem/i });
+    await user.click(trigger);
+
+    expect(await screen.findByText('Família FLUX 2')).toBeInTheDocument();
+    expect(screen.getByText('Outras famílias')).toBeInTheDocument();
+    expect(screen.getByText(/GPT Image 1/)).toBeInTheDocument();
+    expect(screen.getByText(/FLUX.2 Klein 4B/)).toBeInTheDocument();
   });
 
   it('Gerar imagem usa o modelo selecionado no seletor', async () => {
     renderWithProviders();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
-    const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-    fireEvent.change(select, { target: { value: 'openai/gpt-image-1' } });
+
+    const trigger = await screen.findByRole('button', { name: /modelo de imagem/i });
+    await user.click(trigger);
+    await user.click(await screen.findByText(/GPT Image 1/));
+
     await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
     await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
 

@@ -261,7 +261,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
         {/* Preview area — video or image */}
         <div className="overflow-hidden rounded-2xl border border-[#E6E8EC]">
-          <div className="relative w-full" style={{ aspectRatio: '1 / 1' }}>
+          <div className="relative w-full">
             {isVideo && displayUrl ? (
               <video
                 src={displayUrl}
@@ -270,7 +270,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
                 loop
                 muted
                 playsInline
-                className="w-full h-full object-cover block rounded-lg"
+                className="block w-full h-auto max-h-[80vh] rounded-lg"
                 style={{ opacity: regenerateMutation.isPending ? 0.5 : 1, transition: 'opacity 0.2s' }}
                 onError={(e) => {
                   console.error('=== Video failed to load:', displayUrl);
@@ -282,7 +282,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
                 <img
                   src={displayUrl}
                   alt="Criativo gerado"
-                  className="w-full h-full object-cover block rounded-lg"
+                  className="block w-full h-auto max-h-[80vh] rounded-lg object-contain"
                   style={{ opacity: regenerateMutation.isPending ? 0.5 : 1, transition: 'opacity 0.2s' }}
                   onError={(e) => {
                     console.error('=== Image failed to load:', displayUrl);
