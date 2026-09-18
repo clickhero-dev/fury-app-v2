@@ -79,4 +79,34 @@ describe('SubscriptionRepository', () => {
     expect(insert).toHaveBeenCalledTimes(1);
     expect(rec.tenantId).toBe(tenantId);
   });
+
+  describe('renovação mensal (GLOBAL — job boot + 2h)', () => {
+    it('listSubscriptionsDueForRenewal consulta subscriptions.findMany', async () => {
+      const { db } = makeDb();
+      const repo = new SubscriptionRepository('', db);
+      await repo.listSubscriptionsDueForRenewal(new Date('2026-09-01T00:00:00Z'));
+      expect(db.query.subscriptions.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('getPlanCreativesLimit retorna null sem plano', async () => {
+      const { db } = makeDb();
+      const repo = new SubscriptionRepository('', db);
+      db.query.plans.findFirst.mockResolvedValue(null);
+      expect(await repo.getPlanCreativesLimit('p-1')).toBeNull();
+    });
+
+    it('getPlanCreativesLimit lê creativesPerMonth do limits do plano', async () => {
+      const { db } = makeDb();
+      const repo = new SubscriptionRepository('', db);
+      db.query.plans.findFirst.mockResolvedValue({ id: 'p-1', limits: { creativesPerMonth: 30 } });
+      expect(await repo.getPlanCreativesLimit('p-1')).toBe(30);
+    });
+
+    it('renewSubscription atualiza a assinatura (periodo + cota)', async () => {
+      const { db, update } = makeDb();
+      const repo = new SubscriptionRepository('', db);
+      await repo.renewSubscription('s-1', new Date('2026-10-10T00:00:00Z'), 12);
+      expect(update).toHaveBeenCalledTimes(1);
+    });
+  });
 });
