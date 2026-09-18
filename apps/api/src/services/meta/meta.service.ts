@@ -70,6 +70,12 @@ export interface StoredMetaConnection {
   tokenExpiresAt: Date | null;
   adAccounts: MetaAdAccount[];
   selectedAdAccountId: string | null;
+  /** Páginas escolhidas no onboarding (filtram os ativos exibidos). */
+  selectedPageIds: string[];
+  /** Instagram Business vinculado ao calendário — publish-due publica SOMENTE nele. */
+  selectedInstagramUserId: string | null;
+  /** @username do perfil vinculado (exibido na UI de integrações). */
+  selectedInstagramUsername: string | null;
   createdAt: Date;
 }
 
@@ -449,6 +455,29 @@ export class MetaService {
       throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
     }
 
+    // Vinculação do Instagram do calendário resolvida SERVER-SIDE: o id do
+    // Instagram Business vem do owned_pages das businesses selecionadas — o
+    // front NÃO manda o id (sem chance de id trocado/inventado). O publish-due
+    // só publica neste perfil (resolveInstagramAccount). Página sem IG ou fora
+    // das businesses ⇒ null (falha segura: sem vinculação, não publica).
+    let selectedInstagramUserId: string | null = null;
+    let selectedInstagramUsername: string | null = null;
+    if (selection.pageIds.length > 0 && selection.businessIds.length > 0) {
+      try {
+        const ownedPages = await this.resolvePagesByBusiness(tenantId, selection.businessIds);
+        const selected = ownedPages.find((p) => selection.pageIds.includes(p.pageId));
+        selectedInstagramUserId = selected?.instagramUserId ?? null;
+        selectedInstagramUsername = selected?.instagramUsername ?? null;
+      } catch (err) {
+        // Falha na consulta Meta não pode bloquear o save da seleção — mas
+        // deixa a vinculação null (publish-due não publica até re-vincular).
+        console.error('[meta] save-selection: falha ao resolver Instagram da página selecionada:', err);
+        selectedInstagramUserId = null;
+        selectedInstagramUsername = null;
+      }
+    }
+    console.log(`[meta] save-selection: tenant=${tenantId} pages=${JSON.stringify(selection.pageIds)} instagramVinculado=${selectedInstagramUserId ? `@${selectedInstagramUsername ?? selectedInstagramUserId}` : 'nenhum'}`);
+
     // Preserva a conta de anuncios ja escolhida pelo usuario (via "Conta ativa
     // para metricas" em Configuracoes > Integracoes) se ela ainda estiver entre
     // as contas selecionadas no onboarding. Sobrescrever sempre com
@@ -465,6 +494,8 @@ export class MetaService {
         selectedAdAccountIds: selection.adAccountIds,
         selectedWhatsappNumberIds: selection.whatsappNumberIds,
         selectedAdAccountId,
+        selectedInstagramUserId,
+        selectedInstagramUsername,
         updatedAt: new Date(),
       });
   }
@@ -698,6 +729,11 @@ export class MetaService {
         tokenExpiresAt: connection.tokenExpiresAt,
         adAccounts,
         selectedAdAccountId: connection.selectedAdAccountId ?? null,
+        // Seleção do onboarding + perfil Instagram vinculado ao calendário
+        // (publish-due publica SOMENTE neste perfil — ver resolveInstagramAccount).
+        selectedPageIds: (connection.selectedPageIds as string[] | null) ?? [],
+        selectedInstagramUserId: connection.selectedInstagramUserId ?? null,
+        selectedInstagramUsername: connection.selectedInstagramUsername ?? null,
         createdAt: connection.createdAt,
       },
     ];
