@@ -20,6 +20,7 @@ import { closeComplianceQueue, closeStudioQueue, closeRedisConnection, closeFury
 import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
 import { startRuleEngine, stopRuleEngine } from './lib/rule-engine-manager.js';
 import { startFuryEngine, stopFuryEngine } from './lib/fury-engine-manager.js';
+import { startSubscriptionRenewalManager, stopSubscriptionRenewalManager } from './lib/subscription-renewal-manager.js';
 import { ensureStudioAssetsDir, studioAssetsDir } from './lib/temp-storage.js';
 import { startStudioGenerationWorker, stopStudioGenerationWorker } from './workers/studio-generation.worker.js';
 import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
@@ -255,6 +256,7 @@ app.use((req, res) => {
       // Rede de segurança: varre a cada 5min por análises de compliance órfãs
       // (assets pendentes há >10min sem job em fila) e re-enfileira.
       startComplianceSweeper();
+      startSubscriptionRenewalManager();
       void startBudgetOptimizerWorker().catch((error) => {
         console.error('Failed to start Budget optimizer worker:', error);
       });
@@ -288,6 +290,7 @@ app.use((req, res) => {
         await stopStudioGenerationWorker();
         await stopComplianceCheckWorker();
         stopComplianceSweeper();
+        stopSubscriptionRenewalManager();
         await stopBudgetOptimizerWorker();
         await stopFuryEngine();
         await stopPlannerWorker();
