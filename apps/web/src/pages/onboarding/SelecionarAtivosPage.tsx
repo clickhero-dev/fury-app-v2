@@ -18,6 +18,10 @@ interface MetaPageOption {
   name: string;
   businessId: string;
   hasInstagram: boolean;
+  /** Instagram Business vinculado à página (o calendário publica NELE). */
+  instagramUserId?: string | null;
+  /** @username do Instagram vinculado (exibido no badge/resumo). */
+  instagramUsername?: string | null;
 }
 
 interface MetaAdAccountOption {
@@ -538,7 +542,7 @@ export function SelecionarAtivosPage() {
                       subtitle={page.pageId}
                       badge={
                         page.hasInstagram
-                          ? { label: "Instagram vinculado", tone: "green" }
+                          ? { label: `Instagram: @${page.instagramUsername || "vinculado"}`, tone: "green" }
                           : undefined
                       }
                       onClick={() =>
@@ -609,6 +613,21 @@ export function SelecionarAtivosPage() {
                     {selectedPageNames.length > 0
                       ? selectedPageNames.join(", ")
                       : "Nenhuma"}
+                  </div>
+                </div>
+
+                <div className="p-4">
+                  <div className="text-xs font-bold text-admin-text-faint uppercase tracking-wide mb-1">
+                    Instagram do calendário
+                  </div>
+                  <div className="text-sm font-medium text-admin-text">
+                    {(() => {
+                      const selectedPage = pages.find((p) => pageIds.includes(p.pageId));
+                      if (selectedPage?.hasInstagram && selectedPage.instagramUsername) {
+                        return `@${selectedPage.instagramUsername}`;
+                      }
+                      return "Nenhum — a publicação automática do calendário ficará desativada";
+                    })()}
                   </div>
                 </div>
               </div>

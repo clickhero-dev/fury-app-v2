@@ -468,7 +468,15 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
 
   // ===== Calendário Editorial: Publicação Automática =====
 
-  /** Resolve a conta Instagram do tenant. Prioriza páginas selecionadas com IG; senão fallback para qualquer página com IG. */
+  /**
+   * Resolve a conta Instagram do tenant para publicação no calendário.
+   *
+   * GARANTIA DE CONTA: publica SOMENTE no perfil vinculado explicitamente
+   * (meta_connections.selected_instagram_user_id, gravado server-side no
+   * save-selection). Sem vinculação, vinculação revogada ou página sem IG ⇒
+   * null (não publica — falha segura). O antigo fallback `pagesWithIg[0]`
+   * publicava em contas erradas (bug: velora_studio → jeanvdentz, 2026-09).
+   */
   async resolveInstagramAccount(tenantId: string): Promise<InstagramAccount | null> {
     const conn = await this.repo(tenantId).findLatestMetaConnection();
 
@@ -481,32 +489,37 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
       return null;
     }
 
+    // Fonte de verdade da autorização: vinculação explícita gravada no
+    // save-selection. Sem ela, NÃO publica — nem com outras contas à mão.
+    const authorizedIgUserId: string | null = (conn as any).selectedInstagramUserId ?? null;
+    if (!authorizedIgUserId) {
+      console.warn(`[resolveInstagram] tenant ${tenantId}: Instagram NÃO vinculado — publicação do calendário desativada. Vincule o perfil em Configurações > Integrações (ou refaça o onboarding).`);
+      return null;
+    }
+
     const accessToken = decryptMetaToken(conn.accessToken);
-    const selectedPageIds: string[] = (conn.selectedPageIds as any[]) || [];
     const pages = await this.deps.getUserFacebookPages(accessToken);
 
     console.log(`[resolveInstagram] tenant ${tenantId}: Facebook retornou ${pages.length} páginas:`,
       JSON.stringify(pages.map(p => ({ pageId: p.pageId, name: p.name, hasInstagram: p.hasInstagram, instagramUserId: p.instagramUserId }))));
 
-    const pagesWithIg = pages.filter((p) => p.instagramUserId);
-    if (pagesWithIg.length === 0) {
-      console.log(`[resolveInstagram] tenant ${tenantId}: nenhuma das ${pages.length} páginas tem Instagram vinculado`);
+    // A conta vinculada precisa continuar acessível pelo token (presente em
+    // /me/accounts com IG). Revogada/removida ⇒ não publica.
+    const authorized = pages.find(
+      (p) => p.instagramUserId && p.instagramUserId === authorizedIgUserId,
+    );
+    if (!authorized) {
+      console.warn(`[resolveInstagram] tenant ${tenantId}: perfil vinculado (${authorizedIgUserId}) não está acessível/sem Instagram — NÃO publicando (falha segura). Páginas com IG disponíveis: ${JSON.stringify(pages.filter(p => p.instagramUserId).map(p => p.instagramUsername ?? p.pageId))}`);
       return null;
     }
 
-    const buildAccount = (p: typeof pagesWithIg[number], source: string) => {
-      console.log(`[resolveInstagram] tenant ${tenantId}: ${source} — "${p.name}" IG=${p.instagramUserId} (@${p.instagramUsername || 'sem @'})`);
-      return { igUserId: p.instagramUserId!, accessToken, pageName: p.name, instagramUsername: p.instagramUsername };
+    console.log(`[resolveInstagram] tenant ${tenantId}: publicando no perfil AUTORIZADO — "${authorized.name}" IG=${authorized.instagramUserId} (@${authorized.instagramUsername || 'sem @'})`);
+    return {
+      igUserId: authorized.instagramUserId!,
+      accessToken,
+      pageName: authorized.name,
+      instagramUsername: authorized.instagramUsername,
     };
-
-    if (selectedPageIds.length > 0) {
-      const selected = pagesWithIg.find((p) => selectedPageIds.includes(p.pageId));
-      if (selected) return buildAccount(selected, 'selecionada');
-    }
-
-    const fallback = pagesWithIg[0];
-    console.log(`[resolveInstagram] tenant ${tenantId}: fallback — usando "${fallback.name}"`);
-    return buildAccount(fallback, 'fallback');
   }
 
   /**

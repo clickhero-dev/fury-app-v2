@@ -203,16 +203,20 @@ export interface MetaOwnedPage {
   name: string;
   businessId: string;
   hasInstagram: boolean;
+  /** Instagram Business vinculado à página (id) — base da vinculação do calendário. */
+  instagramUserId: string | null;
+  /** @username do Instagram Business (quando a Meta o retorna em owned_pages). */
+  instagramUsername: string | null;
 }
 
 interface MetaOwnedPagesResponse {
-  data: Array<{ id: string; name?: string; instagram_business_account?: { id: string } }>;
+  data: Array<{ id: string; name?: string; instagram_business_account?: { id: string; username?: string } }>;
 }
 
 /** Lista as Paginas pertencentes a uma Business Manager (/{business_id}/owned_pages). */
 export async function getBusinessOwnedPages(businessId: string, accessToken: string): Promise<MetaOwnedPage[]> {
   const url = new URL(`${META_GRAPH_BASE_URL}/${businessId}/owned_pages`);
-  url.searchParams.set('fields', 'id,name,instagram_business_account');
+  url.searchParams.set('fields', 'id,name,instagram_business_account{id,username}');
   url.searchParams.set('access_token', accessToken);
 
   const response = await fetch(url, { method: 'GET' });
@@ -226,6 +230,8 @@ export async function getBusinessOwnedPages(businessId: string, accessToken: str
     name: page.name ?? page.id,
     businessId,
     hasInstagram: Boolean(page.instagram_business_account?.id),
+    instagramUserId: page.instagram_business_account?.id ?? null,
+    instagramUsername: page.instagram_business_account?.username ?? null,
   }));
 }
 

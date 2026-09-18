@@ -93,6 +93,33 @@ function ConnectionCard({
           </span>
         </div>
 
+        {/* Instagram vinculado ao calendário — o perfil em que a publicação
+            automática vai postar. Sem vínculo ⇒ alerta (não publica). */}
+        <div
+          data-testid="instagram-calendario"
+          className={
+            connection.selectedInstagramUserId
+              ? 'rounded-xl border border-brand/20 bg-brand/5 px-3 py-2.5'
+              : 'rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5'
+          }
+        >
+          <div className="text-xs font-medium text-text-secondary">
+            Instagram do calendário
+          </div>
+          {connection.selectedInstagramUserId ? (
+            <div className="mt-0.5 flex items-center gap-2 text-sm font-semibold text-text-primary">
+              <span>@{connection.selectedInstagramUsername || connection.selectedInstagramUserId}</span>
+              <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#17708A] dark:text-[#2A9BC0]">
+                Autorizado
+              </span>
+            </div>
+          ) : (
+            <div className="mt-0.5 text-sm font-medium text-warning">
+              Não vinculado — a publicação automática do calendário está desativada. Reconecte e selecione a página com Instagram no onboarding.
+            </div>
+          )}
+        </div>
+
         {/* Quantidade de Contas de Anúncios */}
         <div className="pt-2 text-xs font-semibold uppercase tracking-wider text-text-secondary">
           Contas de Anúncios ({totalAccounts})
