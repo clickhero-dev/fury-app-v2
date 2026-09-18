@@ -25,5 +25,11 @@ export interface MetaConnection {
   adAccounts: MetaAdAccount[];
   /** ID da conta de anúncio selecionada pelo tenant para uso na plataforma. */
   selectedAdAccountId: string | null;
+  /** Páginas escolhidas no onboarding. */
+  selectedPageIds?: string[];
+  /** Instagram Business vinculado ao calendário — publicação automática usa SOMENTE este perfil. */
+  selectedInstagramUserId?: string | null;
+  /** @username do perfil vinculado (exibido na UI). */
+  selectedInstagramUsername?: string | null;
   createdAt: string;
 }

@@ -89,6 +89,29 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
     expect(screen.getByRole('button', { name: /Conectar conta Meta/i })).toBeInTheDocument();
   });
 
+  it('exibe o @perfil Instagram vinculado ao calendário com badge "Autorizado"', async () => {
+    mockApi([connection({ selectedInstagramUserId: 'ig_velora', selectedInstagramUsername: 'velora_studio' })]);
+
+    render(<IntegracoesContent />, { wrapper: makeWrapper() });
+
+    const section = await screen.findByTestId('instagram-calendario');
+    expect(section.textContent).toContain('Instagram do calendário');
+    expect(section.textContent).toContain('@velora_studio');
+    expect(section.textContent).toContain('Autorizado');
+    expect(section.textContent).not.toContain('desativada');
+  });
+
+  it('exibe alerta quando o Instagram NÃO está vinculado (publicação automática desativada)', async () => {
+    mockApi([connection({ selectedInstagramUserId: null, selectedInstagramUsername: null })]);
+
+    render(<IntegracoesContent />, { wrapper: makeWrapper() });
+
+    const section = await screen.findByTestId('instagram-calendario');
+    expect(section.textContent).toContain('Não vinculado');
+    expect(section.textContent).toContain('desativada');
+    expect(section.textContent).not.toContain('Autorizado');
+  });
+
   it('envia frontendUrl = window.location.origin ao iniciar o OAuth (volta ao MESMO domínio)', async () => {
     mockApi([]);
     // /meta/auth/url é chamado ao clicar em "Conectar conta"
