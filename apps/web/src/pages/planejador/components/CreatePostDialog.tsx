@@ -25,6 +25,16 @@ const TYPE_OPTIONS = [
 
 const MAX_CAROUSEL_IMAGES = 5;
 
+/** Resposta completa de GET /studio/assets (mesmo shape cacheado pelo EstudioHome). */
+interface StudioAssetsResponse {
+  assets: StudioAsset[];
+  total: number;
+  page: number;
+  totalPages: number;
+  creativesRemaining?: number | null;
+  creativesLimit?: number | null;
+}
+
 const MEDIA_SOURCE_OPTIONS = [
   { value: 'upload', label: 'Enviar mídia', icon: Upload, desc: 'Carregar do seu dispositivo' },
   { value: 'library', label: 'Biblioteca do Estúdio', icon: FolderOpen, desc: 'Usar imagem já gerada' },
@@ -50,13 +60,15 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   const { data: studioAssetsData, isLoading: assetsLoading } = useQuery({
     queryKey: ['studio/assets'],
     queryFn: async () => {
-      const response = await api.get('/studio/assets');
-      return response.data.assets as StudioAsset[];
+      const response = await api.get<StudioAssetsResponse>('/studio/assets');
+      return response.data;
     },
     retry: 1,
   });
 
-  const libraryImages = studioAssetsData?.filter(a => a.type === 'image' && a.url && a.complianceStatus === 'approved') ?? [];
+  // Mesma chave ['studio/assets'] do EstudioHome → cache compartilhado traz o
+  // CORPO COMPLETO (não o array). Lê `assets` para não quebrar com `.filter`.
+  const libraryImages = studioAssetsData?.assets?.filter(a => a.type === 'image' && a.url && a.complianceStatus === 'approved') ?? [];
 
   // Fase 8: Prioriza preselectedDate (novo) sobre preselectedDay (legado)
   const getEffectiveDate = (): string => {
