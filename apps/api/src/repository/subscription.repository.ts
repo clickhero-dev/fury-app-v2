@@ -7,7 +7,7 @@ import {
   budgetOptimizations,
   creativeAssets,
 } from '@fury/db';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type Subscription = typeof subscriptions.$inferSelect;
@@ -194,6 +194,37 @@ export class SubscriptionRepository extends TenantScopedRepository {
         .set({ creativesRemaining: creativesLimit, updatedAt: new Date() })
         .where(eq(subscriptions.id, sub.id));
     }
+  }
+
+  // ── Renovação mensal (GLOBAL — job boot + 2h) ───────────────────
+
+  /** Assinaturas ativas vencidas: status active, não-expirável false, current_period_end <= now. */
+  async listSubscriptionsDueForRenewal(now: Date = new Date()) {
+    return this.db.query.subscriptions.findMany({
+      where: and(
+        eq(subscriptions.status, 'active'),
+        eq(subscriptions.isNonExpirable, false),
+        lte(subscriptions.currentPeriodEnd, now),
+      ),
+    });
+  }
+
+  /** Teto mensal de criativos do plano (creativesPerMonth) — null se plano/teto ausente. */
+  async getPlanCreativesLimit(planId: string): Promise<number | null> {
+    const plan = await this.findPlanById(planId);
+    return readLimits(plan?.limits)?.creativesPerMonth ?? null;
+  }
+
+  /** Avança o ciclo (nextPeriodEnd já calculado) e reseta a cota ao teto (null = sem teto). */
+  async renewSubscription(id: string, nextPeriodEnd: Date, creativesLimit: number | null): Promise<void> {
+    await this.db
+      .update(subscriptions)
+      .set({
+        currentPeriodEnd: nextPeriodEnd,
+        creativesRemaining: creativesLimit,
+        updatedAt: new Date(),
+      })
+      .where(eq(subscriptions.id, id));
   }
 }
 
