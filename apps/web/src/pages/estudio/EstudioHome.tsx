@@ -308,7 +308,7 @@ export function EstudioHome() {
                     type="button"
                     onClick={handleStartQuickCreate}
                     disabled={quotaReached}
-                    className={`quick-create-btn inline-flex items-center justify-center gap-2 rounded-full bg-brand px-6 py-2.5 text-sm font-semibold text-brand-foreground shadow-md ${BUTTON_HOVER} hover:bg-brand/90 disabled:opacity-50`}
+                    className={`quick-create-btn inline-flex items-center justify-center gap-2 rounded-full bg-brand-hover px-6 py-2.5 text-sm font-semibold text-white shadow-md ${BUTTON_HOVER} hover:bg-brand-hover/90 disabled:opacity-50`}
                   >
                     <Sparkles className="h-4 w-4 shrink-0" />
                     Criação rápida
@@ -477,7 +477,7 @@ export function EstudioHome() {
                     type="button"
                     onClick={handleQuickCreate}
                     disabled={orPrompt.trim().length < 10 || orImageMutation.isPending || quotaReached}
-                    className={`inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand py-2.5 text-sm font-semibold text-brand-foreground ${BUTTON_HOVER} disabled:opacity-50`}
+                    className={`inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand-hover py-2.5 text-sm font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50`}
                   >
                     {orImageMutation.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -572,7 +572,7 @@ export function EstudioHome() {
               <button
                 type="button"
                 onClick={handleStartQuickCreate}
-                className={`rounded-full bg-brand px-5 py-2 text-sm font-semibold text-brand-foreground ${BUTTON_HOVER}`}
+                className={`rounded-full bg-brand-hover px-5 py-2 text-sm font-semibold text-white ${BUTTON_HOVER}`}
               >
                 Tentar novamente
               </button>
@@ -715,7 +715,7 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
             <button
               type="button"
               onClick={onViewDetails}
-              className="flex-1 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-brand/90 hover:scale-[1.02] active:scale-[0.98]"
+              className="flex-1 rounded-full bg-brand-hover px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-brand-hover/90 hover:scale-[1.02] active:scale-[0.98]"
             >
               Ver detalhes
             </button>
