@@ -140,6 +140,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0037_policy_tables' },
   { tag: '0038_creative_asset_versioning_archive' },
   { tag: '0039_add_selected_instagram_binding' },
+  { tag: '0040_policy_reorder_reembolso' },
 ];
 
 /** Nomes de todas as tabelas do schema (28 tabelas) — usados para validação. */

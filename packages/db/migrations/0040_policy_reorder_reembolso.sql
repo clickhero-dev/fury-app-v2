@@ -1,4 +1,11 @@
-================================================================================
+-- Migration 0040: Policy de uso v1.1 — bloco de reembolso movido para o final
+-- (card ClickUp 86e3a8rjy). O reembolso deixa de ser a Seção 1 (destaque na
+-- caixa de aceite) e passa a ser a última seção numerada, antes do CONTATO.
+-- Nova versão = novo aceite (policy_versions é versionado; "vigente" = inserção
+-- mais recente). Texto de docs/politicas-de-uso-ady.txt (sem as notas internas).
+
+INSERT INTO "policy_versions" ("version", "content")
+SELECT '1.1', '================================================================================
                         POLÍTICAS DE USO — ADY
 ================================================================================
 
@@ -246,27 +253,5 @@ contato pelo canal de suporte oficial do Ady.
 ================================================================================
                     FIM — POLÍTICAS DE USO — ADY
 ================================================================================
-
-
-================================================================================
-NOTAS PARA REVISÃO INTERNA (remover antes da publicação)
-================================================================================
-
-Pontos ainda pendentes de decisão com o Diogo/jurídico antes de publicar:
-
-1. Definir prazo de processamento do reembolso por arrependimento (Seção 7).
-2. Confirmar se a plataforma usa dado de campanha do cliente para treinar
-   modelo próprio — se sim, precisa de cláusula específica (pendente de
-   resposta do Diogo).
-3. Definir prazo de retenção de dados pós-cancelamento (Seção 4).
-4. Confirmar lista completa e nominal de subprocessadores (infraestrutura,
-   hospedagem, IA) — pendente de detalhamento pelo Diogo.
-5. Definir identificação legal completa (razão social CloserX Ltda, CNPJ,
-   encarregado de dados/DPO e canal de contato específico) — hoje o
-   documento só cita "canal de suporte", que é vago para fins de LGPD
-   Art. 41.
-6. Decidir se este documento permanece único ou se é dividido em Termo de
-   Uso, Política de Privacidade e Política de Cookies separados — o fluxo
-   de aceite é diferente para cada um (cookie é opcional; termo de uso
-   bloqueia acesso).
-================================================================================
+'
+WHERE NOT EXISTS (SELECT 1 FROM "policy_versions" WHERE "version" = '1.1');
