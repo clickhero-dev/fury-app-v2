@@ -136,6 +136,8 @@ export const metaConnections = pgTable(
     tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
     adAccounts: jsonb('ad_accounts').default(sql`'[]'::jsonb`),
     selectedAdAccountId: varchar('selected_ad_account_id', { length: 255 }),
+    selectedInstagramUserId: varchar('selected_instagram_user_id', { length: 255 }),
+    selectedInstagramUsername: varchar('selected_instagram_username', { length: 255 }),
     selectedBusinessIds: jsonb('selected_business_ids').default(sql`'[]'::jsonb`),
     selectedPageIds: jsonb('selected_page_ids').default(sql`'[]'::jsonb`),
     selectedAdAccountIds: jsonb('selected_ad_account_ids').default(sql`'[]'::jsonb`),
