@@ -134,7 +134,7 @@ export function PoliticaDeUsoPage() {
               type="button"
               onClick={handleAccept}
               disabled={!agreed || acceptMutation.isPending}
-              className="mt-6 w-full sm:w-auto rounded-lg bg-accent px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              className="mt-6 w-full sm:w-auto rounded-lg bg-[#B55F02] hover:bg-[#B55F02]/90 px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
               data-testid="policy-accept-button"
             >
               {acceptMutation.isPending ? 'Registrando…' : 'Aceitar'}
