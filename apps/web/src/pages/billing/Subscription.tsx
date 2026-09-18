@@ -104,7 +104,7 @@ export function Subscription() {
               Você ainda não possui uma assinatura. Escolha um plano para começar.
             </p>
             <Link to="/planos">
-              <Button variant="primary" size="md" className="bg-[#1E88A8] hover:bg-[#1E88A8]/80 text-white">
+              <Button variant="primary" size="md" className="bg-[#17708A] hover:bg-[#17708A]/80 text-white">
                 Ver planos disponíveis
               </Button>
             </Link>
