@@ -143,7 +143,9 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
           (state.objective !== 'whatsapp' ||
             (state.whatsapp.pageId &&
               state.whatsapp.destinations.length > 0 &&
-              (!state.whatsapp.destinations.includes('whatsapp') || state.whatsapp.phoneNumberId)))
+              (!state.whatsapp.destinations.includes('whatsapp') || state.whatsapp.phoneNumberId))) &&
+          (state.objective !== 'leads' ||
+            (state.whatsapp.pageId && state.whatsapp.phoneNumberId))
       ),
       2: isCreativesStepValid(state.creatives, state.objective),
       3: Boolean(

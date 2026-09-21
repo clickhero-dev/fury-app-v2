@@ -44,7 +44,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
     destinationUrl: value[0]?.destinationUrl ?? '',
   }));
 
-  const canUseInstagramPost = objective === 'engagement' || objective === 'messages' || objective === 'whatsapp';
+  const canUseInstagramPost = objective === 'engagement' || objective === 'messages' || objective === 'whatsapp' || objective === 'leads';
   const atCapacity = value.length >= MAX_CREATIVES;
   const canAddMore = !atCapacity;
 

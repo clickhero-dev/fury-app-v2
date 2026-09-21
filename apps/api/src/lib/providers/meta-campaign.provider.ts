@@ -42,6 +42,19 @@ export interface IMetaCampaignProvider {
     body: Record<string, unknown>
   ): Promise<{ id: string }>;
 
+  createLeadForm(
+    pageId: string,
+    accessToken: string,
+    body: Record<string, unknown>
+  ): Promise<{ id: string }>;
+
+  archiveLeadForm(formId: string, accessToken: string): Promise<void>;
+
+  getLeadFormData(
+    formId: string,
+    accessToken: string
+  ): Promise<{ data: Array<Record<string, unknown>> }>;
+
   deleteCampaign(campaignId: string, accessToken: string): Promise<void>;
 
   deleteAdSet(adSetId: string, accessToken: string): Promise<void>;

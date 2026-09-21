@@ -57,7 +57,7 @@ export interface CampaignListItem {
   ctr: number; cpc: number; roas: number; cpa: number; conversions: number;
 }
 
-export type WizardObjective = 'visits' | 'whatsapp_conv' | 'engagement' | 'messages' | 'whatsapp';
+export type WizardObjective = 'visits' | 'whatsapp_conv' | 'engagement' | 'messages' | 'whatsapp' | 'leads';
 export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'messenger';
 
 export interface CreateWizardCampaignArgs {
@@ -125,6 +125,7 @@ const WIZARD_OBJECTIVE_MAP: Record<WizardObjective, {
   engagement: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'POST_ENGAGEMENT', cta: 'LIKE_PAGE', destinationType: 'ON_POST', label: 'Engajamento' },
   messages: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'CONVERSATIONS', cta: 'MESSAGE_PAGE', destinationType: 'MESSENGER', label: 'Atração de Clientes' },
   whatsapp: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'CONVERSATIONS', cta: 'WHATSAPP_MESSAGE', destinationType: 'WHATSAPP', label: 'Gerar Conversas' },
+  leads: { metaObjective: 'OUTCOME_LEADS', optimizationGoal: 'LEAD_GENERATION', cta: 'SIGN_UP', destinationType: 'ON_AD', label: 'Formulário' },
 };
 
 // ── Pure helper functions (exported for testing) ────────────────────────────
@@ -709,6 +710,12 @@ export class CampaignsService {
       if (messagingDestinations.includes('whatsapp') && !args.whatsappPhoneNumber) throw new AppError(400, 'WHATSAPP_NUMBER_REQUIRED', 'Selecione o número de WhatsApp que receberá as mensagens.');
       if (messagingDestinations.includes('instagram_direct') && !args.instagramUserId) throw new AppError(400, 'INSTAGRAM_USER_ID_REQUIRED', 'Conecte uma conta do Instagram à Página no Meta Business para usar Instagram Direct.');
     }
+    // Objetivo 'leads': o formulário instantâneo (nome/email/telefone) é criado na
+    // Página e o botão da tela de agradecimento abre o WhatsApp do anunciante.
+    if (args.objective === 'leads') {
+      if (!args.whatsappPageId) throw new AppError(400, 'LEADS_PAGE_REQUIRED', 'Selecione a Página do Facebook que receberá o formulário.');
+      if (!args.whatsappPhoneNumber) throw new AppError(400, 'LEADS_WHATSAPP_REQUIRED', 'Informe o número de WhatsApp que receberá os clientes após o formulário.');
+    }
 
     const creatives = normalizeWizardCreatives(args);
     const createdAdCreativeIds: string[] = [];
@@ -783,7 +790,9 @@ export class CampaignsService {
     const campaignName = creatives[0].headline;
 
     const selectedPageIds = (metaConn.selectedPageIds as string[] | null) ?? [];
-    let pageId = args.objective === 'whatsapp' ? args.whatsappPageId! : selectedPageIds[0] || process.env.META_PAGE_ID || '';
+    let pageId = args.objective === 'whatsapp' || args.objective === 'leads'
+      ? args.whatsappPageId!
+      : selectedPageIds[0] || process.env.META_PAGE_ID || '';
     // ponytail: fallback para primeira página disponível se selectedPageIds vazio
     if (!pageId && args.objective !== 'whatsapp') {
       try {
@@ -802,7 +811,7 @@ export class CampaignsService {
       messagingDestinationType = messagingDestinations.length > 1 ? 'MESSAGING_APPS'
         : messagingDestinations[0] === 'whatsapp' ? 'WHATSAPP'
         : messagingDestinations[0] === 'instagram_direct' ? 'INSTAGRAM_DIRECT' : 'MESSENGER';
-    } else if (args.objective === 'visits' || args.objective === 'whatsapp_conv' || args.objective === 'engagement' || args.objective === 'messages') {
+    } else if (args.objective === 'visits' || args.objective === 'whatsapp_conv' || args.objective === 'engagement' || args.objective === 'messages' || args.objective === 'leads') {
       promotedObject = { page_id: pageId };
     }
 
@@ -811,6 +820,7 @@ export class CampaignsService {
     let metaCampaignId: string | undefined;
     let adSetId: string | undefined;
     let dbCampaignId: string | undefined;
+    let leadFormId: string | undefined;
 
     // Rollback de "limpeza total": se a criação falhar em qualquer etapa, remove
     // do Meta os objetos já criados (ads → adcreatives → adset → campaign, todos
@@ -818,6 +828,10 @@ export class CampaignsService {
     // cleanup só são logadas.
     const rollback = async (step: string): Promise<void> => {
       const pendingDeletes: Array<{ id: string; label: string; del: () => Promise<void> }> = [];
+      if (leadFormId) {
+        // Formulário leadgen não suporta DELETE — melhor esforço: arquivar.
+        pendingDeletes.push({ id: leadFormId, label: 'lead_form', del: () => this.meta.archiveLeadForm(leadFormId!, accessToken) });
+      }
       for (const id of [...createdAdIds].reverse()) {
         pendingDeletes.push({ id, label: 'ad', del: () => this.meta.deleteAd(id, accessToken) });
       }
@@ -854,6 +868,30 @@ export class CampaignsService {
 
       const campaignResponse = await this.meta.createCampaign(adAccountId, accessToken, campaignBody);
       metaCampaignId = campaignResponse.id;
+
+      // Objetivo 'leads': cria o formulário instantâneo na Página ANTES do adset —
+      // o criativo e o botão de WhatsApp da tela final dependem do ID do formulário.
+      if (args.objective === 'leads') {
+        const businessPhoneDigits = args.whatsappPhoneNumber!.replace(/\D/g, '');
+        const leadFormBody = {
+          name: `Formulário — ${campaignName}`,
+          locale: 'PT_BR',
+          questions: [
+            { type: 'FULL_NAME', key: 'question1' },
+            { type: 'EMAIL', key: 'question2' },
+            { type: 'PHONE', key: 'question3' },
+          ],
+          thank_you_page: {
+            title: 'Obrigado!',
+            body: 'Agora é só falar com a gente no WhatsApp.',
+            button_type: 'WHATSAPP',
+            button_text: 'Falar no WhatsApp',
+            business_phone_number: businessPhoneDigits,
+          },
+        };
+        const leadFormResponse = await this.meta.createLeadForm(pageId, accessToken, leadFormBody);
+        leadFormId = leadFormResponse.id;
+      }
 
       const targeting: Record<string, unknown> = {
         geo_locations: { cities: [{ key: parseInt(cityKey!, 10), radius: args.locationRadiusKm || 30, distance_unit: 'kilometer' }] },
@@ -908,6 +946,13 @@ export class CampaignsService {
             ? `${LP_BASE_URL}/l/${lpSlug}`
             : `https://www.facebook.com/${pageId}`;
 
+      // Objetivo 'leads': o call_to_action aponta pro formulário instantâneo
+      // (lead_gen_form_id) em vez de link externo.
+      const leadsCtaFor = () => ({
+        type: 'SIGN_UP',
+        value: { lead_gen_form_id: leadFormId! },
+      });
+
       for (let i = 0; i < creatives.length; i++) {
         const c = creatives[i];
         const imageUrl = resolved[i];
@@ -919,7 +964,7 @@ export class CampaignsService {
 
         const creativeBody: Record<string, unknown> = isInstagramCreative
           ? { object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: c.creativeInstagramMediaId, call_to_action: JSON.stringify({ type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: c.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
-          : { name: `Creative — FURY #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, link: creativeLinkFor(c) } } };
+          : { name: `Creative — FURY #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads' ? {} : { link: creativeLinkFor(c) }) } } };
 
         const adCreativeResponse = await this.meta.createAdCreative(adAccountId, accessToken, creativeBody);
         createdAdCreativeIds.push(adCreativeResponse.id);
@@ -965,6 +1010,12 @@ export class CampaignsService {
             instagram_user_id: messagingDestinations.includes('instagram_direct') ? args.instagramUserId ?? null : null,
             instagram_username: messagingDestinations.includes('instagram_direct') ? args.instagramUsername ?? null : null,
           } : {}),
+          ...(args.objective === 'leads' ? {
+            lead_form_id: leadFormId ?? null,
+            lead_page_id: args.whatsappPageId ?? null,
+            whatsapp_page_id: args.whatsappPageId ?? null,
+            whatsapp_phone_number: args.whatsappPhoneNumber ?? null,
+          } : {}),
         },
       } as any);
       dbCampaignId = campaign.id;
@@ -976,6 +1027,43 @@ export class CampaignsService {
     }
 
     return { success: true, campaign_id: dbCampaignId, meta_campaign_id: metaCampaignId, campaign_name: campaignName };
+  }
+
+  /**
+   * Leads coletados pelo formulário instantâneo de uma campanha do objetivo 'leads'.
+   * Busca em tempo real na Meta (GET /{lead_form_id}/leads) e normaliza field_data
+   * para { name, email, phone, createdAt }.
+   */
+  async getCampaignLeads(args: { tenantId: string; campaignId: string }): Promise<{
+    leads: Array<{ name: string | null; email: string | null; phone: string | null; createdAt: string | null }>;
+  }> {
+    const campaign = await this.repo.findCampaignByTenantAndId(args.tenantId, args.campaignId);
+    if (!campaign) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campanha não encontrada.');
+
+    const budget = (campaign.budget ?? {}) as Record<string, unknown>;
+    const leadFormId = typeof budget.lead_form_id === 'string' ? budget.lead_form_id : null;
+    if (!leadFormId) return { leads: [] };
+
+    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+    const response = await this.meta.getLeadFormData(leadFormId, accessToken);
+
+    const leadValue = (lead: Record<string, unknown>, candidates: string[]): string | null => {
+      const fields = (lead.field_data ?? []) as Array<{ name?: string; values?: string[] }>;
+      for (const candidate of candidates) {
+        const field = fields.find((f) => f.name === candidate);
+        if (field?.values?.[0]) return field.values[0];
+      }
+      return null;
+    };
+
+    const leads = response.data.map((lead) => ({
+      name: leadValue(lead, ['full_name', 'first_name']),
+      email: leadValue(lead, ['email']),
+      phone: leadValue(lead, ['phone_number', 'phone']),
+      createdAt: (lead.created_time as string | undefined) ?? null,
+    }));
+
+    return { leads };
   }
 
   async searchMetaLocations(args: { tenantId: string; query: string }): Promise<any[]> {
@@ -1048,5 +1136,6 @@ export const updateCampaignStatus = (args: Parameters<CampaignsService['updateCa
 export const softDeleteCampaign = (args: Parameters<CampaignsService['softDeleteCampaign']>[0]) => defaultService.softDeleteCampaign(args);
 export const getCampaignInsights = (args: Parameters<CampaignsService['getCampaignInsights']>[0]) => defaultService.getCampaignInsights(args);
 export const createCampaignFromWizard = (args: Parameters<CampaignsService['createCampaignFromWizard']>[0]) => defaultService.createCampaignFromWizard(args);
+export const getCampaignLeads = (args: Parameters<CampaignsService['getCampaignLeads']>[0]) => defaultService.getCampaignLeads(args);
 export const searchMetaLocations = (args: Parameters<CampaignsService['searchMetaLocations']>[0]) => defaultService.searchMetaLocations(args);
 export const searchMetaInterests = (args: Parameters<CampaignsService['searchMetaInterests']>[0]) => defaultService.searchMetaInterests(args);

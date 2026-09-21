@@ -694,3 +694,129 @@ describe('CampaignsService.searchMetaLocations', () => {
     expect(results[0].key).toBe('sp_key');
   });
 });
+
+// ── Service: objetivo 'leads' (formulário + WhatsApp no fim) ────────────────
+
+function makeLeadsEnv(meta: MockMetaCampaignProvider, repo: MockCampaignRepository) {
+  repo.metaConnections.push({
+    tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+    adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+    createdAt: new Date(),
+  } as any);
+  meta.locationsResult = [{ key: 'city_key_1' }];
+  meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+  meta.uploadAdImageResult = 'img_hash';
+  meta.leadFormResult = { id: 'form_1' };
+}
+
+const leadsArgs = {
+  tenantId: TENANT_ID, objective: 'leads' as const,
+  headline: 'Promoção', primaryText: 'Cadastre-se',
+  locationCity: 'Sao Paulo', locationRadiusKm: 30,
+  ageMin: 18, ageMax: 65, gender: 'all' as const, dailyBudgetBrl: 100,
+  creativeUploadUrl: 'https://example.com/img.jpg',
+  whatsappPageId: 'page_1', whatsappPhoneNumber: '5511999999999',
+};
+
+describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
+  it('cria lead form com nome/email/telefone e botão WhatsApp, adset LEAD_GENERATION e creative SIGN_UP', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+
+    const result = await service.createCampaignFromWizard(leadsArgs as any);
+
+    expect(result.success).toBe(true);
+    // formulário criado na página com as 3 perguntas
+    expect(meta.createdLeadForms).toHaveLength(1);
+    const formBody = meta.createdLeadForms[0];
+    expect(formBody.page_id).toBe('page_1');
+    expect(formBody.body.questions.map((q: any) => q.type)).toEqual(['FULL_NAME', 'EMAIL', 'PHONE']);
+    expect(formBody.body.thank_you_page.button_type).toBe('WHATSAPP');
+    expect(formBody.body.thank_you_page.business_phone_number).toBe('5511999999999');
+    // adset otimizado pra lead generation
+    expect(meta.createdAdSets[0].optimization_goal).toBe('LEAD_GENERATION');
+    expect(meta.createdAdSets[0].destination_type).toBe('ON_AD');
+    expect(meta.createdAdSets[0].promoted_object).toEqual({ page_id: 'page_1' });
+    // creative aponta pro formulário
+    const creativeSpec = meta.createdAdCreatives[0].object_story_spec;
+    expect(creativeSpec.link_data.call_to_action.type).toBe('SIGN_UP');
+    expect(creativeSpec.link_data.call_to_action.value).toEqual({ lead_gen_form_id: 'form_1' });
+    // persistência local guarda o id do form
+    expect(repo.campaigns[0].budget.lead_form_id).toBe('form_1');
+    expect(repo.campaigns[0].budget.lead_page_id).toBe('page_1');
+  });
+
+  it('arquiva o formulário no rollback quando a criação do adset falha', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.failCreateStep = 'adset';
+
+    await expect(service.createCampaignFromWizard(leadsArgs as any)).rejects.toThrow(AppError);
+
+    expect(meta.archivedLeadForms).toEqual(['form_1']);
+    expect(meta.deletedCampaigns).toEqual(['meta_campaign_1']);
+    expect(repo.campaigns).toHaveLength(0);
+  });
+
+  it('rejeita leads sem whatsappPageId', async () => {
+    const { service, repo, meta } = makeService();
+    makeLeadsEnv(meta, repo);
+
+    await expect(service.createCampaignFromWizard({
+      ...leadsArgs, whatsappPageId: undefined,
+    } as any)).rejects.toThrow(AppError);
+    expect(meta.createdLeadForms).toHaveLength(0);
+  });
+
+  it('rejeita leads sem whatsappPhoneNumber (botão WhatsApp do fim do form)', async () => {
+    const { service, repo, meta } = makeService();
+    makeLeadsEnv(meta, repo);
+
+    await expect(service.createCampaignFromWizard({
+      ...leadsArgs, whatsappPhoneNumber: undefined,
+    } as any)).rejects.toThrow(AppError);
+    expect(meta.createdLeadForms).toHaveLength(0);
+  });
+});
+
+describe('CampaignsService.getCampaignLeads', () => {
+  it('retorna leads normalizados (nome/email/telefone) do formulário da campanha', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    repo.campaigns.push({ id: 'campaign_1', tenantId: TENANT_ID, budget: { lead_form_id: 'form_1' } } as any);
+    meta.leadsResult = {
+      data: [{
+        created_time: '2026-09-21T12:00:00Z',
+        field_data: [
+          { name: 'full_name', values: ['Maria Souza'] },
+          { name: 'email', values: ['maria@exemplo.com'] },
+          { name: 'phone_number', values: ['11999999999'] },
+        ],
+      }],
+    };
+
+    const result = await service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'campaign_1' });
+
+    expect(result.leads).toHaveLength(1);
+    expect(result.leads[0]).toEqual({
+      name: 'Maria Souza', email: 'maria@exemplo.com', phone: '11999999999', createdAt: '2026-09-21T12:00:00Z',
+    });
+  });
+
+  it('retorna lista vazia para campanha sem formulário', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    repo.campaigns.push({ id: 'campaign_1', tenantId: TENANT_ID, budget: {} } as any);
+
+    const result = await service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'campaign_1' });
+    expect(result.leads).toEqual([]);
+  });
+
+  it('retorna 404 para campanha de outro tenant', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    repo.campaigns.push({ id: 'campaign_1', tenantId: 'outro-tenant', budget: { lead_form_id: 'form_1' } } as any);
+
+    await expect(service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'campaign_1' })).rejects.toThrow(AppError);
+  });
+});
