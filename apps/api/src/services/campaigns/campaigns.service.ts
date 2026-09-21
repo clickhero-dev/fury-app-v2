@@ -212,6 +212,9 @@ export function mapWizardMetaError(err: unknown, step: string): never {
     throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão com Meta expirada. Reconecte em Configurações');
   }
   if (metaType === 'OAuthException' && (metaCode === 200 || metaCode === 10)) {
+    if (step === 'lead_form') {
+      throw new AppError(403, 'META_PERMISSION_DENIED', 'O Meta recusou a criação do Formulário por falta de permissão (pages_manage_metadata). Reconecte o Meta em Configurações → Integrações para conceder as novas permissões e tente novamente.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+    }
     throw new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para publicar campanhas. Verifique ads_management, pages_show_list e business_management em Configurações → Integrações.');
   }
   if (lowerMessage.includes('insufficient') || lowerMessage.includes('saldo') || lowerMessage.includes('fund')) {

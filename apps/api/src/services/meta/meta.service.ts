@@ -36,6 +36,10 @@ const META_SCOPES = [
   // 2) Paginas (vinculadas as BMs selecionadas)
   'pages_show_list',
   'pages_read_engagement',
+  // 2b) Formularios de leads (objetivo 'leads'): criar leadgen form na Pagina
+  // (pages_manage_metadata) e ler os leads coletados (leads_retrieval).
+  'pages_manage_metadata',
+  'leads_retrieval',
   // 2b) WhatsApp Business (WABAs vinculadas as Paginas/BM) — necessario para
   // listar numeros WhatsApp em campanhas com destino WHATSAPP
   'whatsapp_business_management',

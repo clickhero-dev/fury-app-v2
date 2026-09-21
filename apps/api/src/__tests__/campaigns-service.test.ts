@@ -92,6 +92,18 @@ describe('mapWizardMetaError', () => {
       .toThrowError(AppError);
   });
 
+  it('OAuthException 200 no lead_form → mensagem aponta pages_manage_metadata', () => {
+    try {
+      mapWizardMetaError({ metaCode: 200, metaType: 'OAuthException' }, 'lead_form');
+      expect.unreachable('deveria ter lançado');
+    } catch (err) {
+      const appErr = err as AppError;
+      expect(appErr.code).toBe('META_PERMISSION_DENIED');
+      expect(appErr.message).toContain('pages_manage_metadata');
+      expect(appErr.message).toContain('Formulário');
+    }
+  });
+
   it('subcode 3858258 → META_IMAGE_DOWNLOAD_FAILED', () => {
     expect(() => mapWizardMetaError({ metaSubcode: 3858258 }, 'creative'))
       .toThrowError(AppError);
