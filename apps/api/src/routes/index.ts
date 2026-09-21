@@ -22,6 +22,7 @@ import brandKitRoutes from "./brand-kit.routes.js";
 import superadminRoutes from "./superadmin.routes.js";
 import policyRoutes from "./policy.routes.js";
 import plannerRoutes from "./planner.routes.js"; // NOVO
+import wppRoutes from "./wpp.routes.js";
 
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { tenantMiddleware } from "../middleware/tenant.middleware.js";
@@ -67,5 +68,6 @@ router.use(
 router.use("/admin", superadminRoutes);
 router.use("/admin/queues", bullBoardRoutes);
 router.use("/planner", ...AUTH_TENANT_SUB, plannerRoutes); // NOVO
+router.use("/wpp", wppRoutes);
 
 export default router;
