@@ -120,6 +120,8 @@ export interface CampaignResponse {
   id: string;
   name: string;
   status: 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
+  /** Objetivo da campanha na Meta (quando a listagem o retorna). */
+  objective?: string;
   metrics: {
     spend: number;
     clicks: number;

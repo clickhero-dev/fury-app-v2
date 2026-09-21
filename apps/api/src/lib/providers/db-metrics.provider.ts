@@ -303,6 +303,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
             id: campaignId,
             name: meta?.name || `Campaign ${campaignId}`,
             status: normalizedStatus,
+            objective: meta?.objective,
             metrics: {
               spend: 0,
               clicks: 0,
@@ -333,6 +334,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
           id: campaignId,
           name: insight.campaign_name || meta?.name || `Campaign ${campaignId}`,
           status: normalizedStatus,
+          objective: meta?.objective,
           metrics: {
             spend: spendReais,
             clicks,

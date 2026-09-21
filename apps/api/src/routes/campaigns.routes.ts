@@ -34,6 +34,7 @@ router.patch('/:id/resume', campaigns.resumeCampaign);
 router.patch('/:id/status', campaigns.updateCampaignStatus);
 router.patch('/:id/budget', campaigns.updateBudget);
 router.get('/:id/insights', campaigns.getCampaignInsights);
+router.get('/:id/leads', campaigns.getCampaignLeads);
 
 // Generic /:id routes last
 router.get('/:id', campaigns.getCampaign);

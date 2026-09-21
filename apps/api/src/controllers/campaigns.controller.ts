@@ -73,7 +73,7 @@ const wizardCreativeItemSchema = z.object({
 
 const createWizardSchema = z
   .object({
-    objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp', 'whatsapp_conv']),
+    objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp', 'whatsapp_conv', 'leads']),
 
     creatives: z.array(wizardCreativeItemSchema).min(1).max(4).optional(),
     // campos únicos legados — mantidos para clientes antigos
@@ -163,6 +163,20 @@ const createWizardSchema = z
     {
       message: 'Conecte uma conta do Instagram à Página no Meta Business para usar Instagram Direct.',
       path: ['instagram_user_id'],
+    }
+  )
+  .refine(
+    (data) => data.objective !== 'leads' || Boolean(data.whatsapp_page_id),
+    {
+      message: 'Selecione a Página do Facebook que receberá o formulário.',
+      path: ['whatsapp_page_id'],
+    }
+  )
+  .refine(
+    (data) => data.objective !== 'leads' || Boolean(data.whatsapp_phone_number),
+    {
+      message: 'Informe o número de WhatsApp que receberá os clientes após o formulário.',
+      path: ['whatsapp_phone_number'],
     }
   );
 
@@ -651,6 +665,34 @@ export class CampaignsController {
     }
   };
 
+  /** GET /campaigns/:id/leads — leads coletados pelo formulário instantâneo (objetivo 'leads'). */
+  getCampaignLeads = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const tenantId = req.tenant?.tenantId || '';
+
+      if (!tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+      }
+      if (!id) {
+        throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
+      }
+
+      const result = await this.campaignsService.getCampaignLeads({
+        tenantId,
+        campaignId: id,
+      });
+
+      res.json({
+        success: true,
+        data: result.leads,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   createWizardCampaign = async (req: Request, res: Response, next: NextFunction) => {
     // Timeout de 120s — se estourar, retorna JSON 504 em vez de deixar o proxy
     // (Traefik) retornar 502 HTML. Operações de upload de imagem ao Meta podem
@@ -1004,6 +1046,7 @@ export const updateCampaignHandler = campaignsController.updateCampaign;
 export const updateCampaignStatusHandler = campaignsController.updateCampaignStatus;
 export const softDeleteCampaignHandler = campaignsController.softDeleteCampaign;
 export const getCampaignInsightsHandler = campaignsController.getCampaignInsights;
+export const getCampaignLeadsHandler = campaignsController.getCampaignLeads;
 export const createWizardCampaignHandler = campaignsController.createWizardCampaign;
 export const mcpLogWizardHandler = campaignsController.mcpLogWizard;
 export const searchMetaLocationsHandler = campaignsController.searchMetaLocations;

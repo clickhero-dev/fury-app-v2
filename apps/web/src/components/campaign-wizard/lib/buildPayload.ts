@@ -22,13 +22,13 @@ export function buildWizardCampaignPayload(state: WizardState): CreateWizardCamp
     audience_interests: audience.audienceInterests,
     daily_budget_brl: state.budget.dailyBudgetBrl,
     duration_days: state.budget.durationDays,
-    ...(state.objective === 'whatsapp'
+    ...((state.objective === 'whatsapp' || state.objective === 'leads')
       ? {
           whatsapp_page_id: state.whatsapp.pageId,
           whatsapp_page_name: state.whatsapp.pageName,
           whatsapp_phone_number_id: state.whatsapp.phoneNumberId,
           whatsapp_phone_number: state.whatsapp.phoneNumberDisplay,
-          destinations: state.whatsapp.destinations,
+          destinations: state.objective === 'whatsapp' ? state.whatsapp.destinations : undefined,
           instagram_user_id: state.whatsapp.instagramUserId,
           instagram_username: state.whatsapp.instagramUsername,
         }

@@ -82,6 +82,37 @@ export class DefaultMetaCampaignProvider implements IMetaCampaignProvider {
     );
   }
 
+  async createLeadForm(
+    pageId: string,
+    accessToken: string,
+    body: Record<string, unknown>
+  ): Promise<{ id: string }> {
+    return metaApiCall<{ id: string }>(
+      `/${encodeURIComponent(pageId)}/leadgen_forms`,
+      accessToken,
+      { method: 'POST', body }
+    );
+  }
+
+  // Formulários leadgen NÃO suportam DELETE na Graph API — o "rollback" possível é arquivar.
+  async archiveLeadForm(formId: string, accessToken: string): Promise<void> {
+    await metaApiCall(
+      `/${encodeURIComponent(formId)}`,
+      accessToken,
+      { method: 'POST', body: { status: 'ARCHIVED' } }
+    );
+  }
+
+  async getLeadFormData(
+    formId: string,
+    accessToken: string
+  ): Promise<{ data: Array<Record<string, unknown>> }> {
+    return metaApiCall<{ data: Array<Record<string, unknown>> }>(
+      `/${encodeURIComponent(formId)}/leads?fields=field_data,created_time`,
+      accessToken
+    );
+  }
+
   async deleteCampaign(campaignId: string, accessToken: string): Promise<void> {
     await metaApiCall(`/${encodeURIComponent(campaignId)}`, accessToken, { method: 'DELETE' });
   }

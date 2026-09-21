@@ -15,7 +15,7 @@ export class MockMetaCampaignProvider implements IMetaCampaignProvider {
   locationsResult: any[] = [];
   uploadAdImageResult: string | undefined = 'mock_hash';
   downloadImageResult: { buffer: Buffer; contentType: string } | null = null;
-  failCreateStep?: 'campaign' | 'adset' | 'creative' | 'ad';
+  failCreateStep?: 'campaign' | 'adset' | 'creative' | 'ad' | 'lead_form';
 
   async createCampaign(adAccountId: string, accessToken: string, body: any) {
     if (this.failCreateStep === 'campaign') throw new Error('Campaign fail');
@@ -51,6 +51,25 @@ export class MockMetaCampaignProvider implements IMetaCampaignProvider {
     const id = `meta_ad_${this.createdAds.length + 1}`;
     this.createdAds.push(body);
     return { id };
+  }
+
+  createdLeadForms: Array<{ page_id: string; body: any }> = [];
+  archivedLeadForms: string[] = [];
+  leadFormResult: { id: string } = { id: 'meta_form_1' };
+  leadsResult: { data: Array<Record<string, unknown>> } = { data: [] };
+
+  async createLeadForm(pageId: string, accessToken: string, body: any) {
+    if (this.failCreateStep === 'lead_form') throw new Error('LeadForm fail');
+    this.createdLeadForms.push({ page_id: pageId, body });
+    return this.leadFormResult;
+  }
+
+  async archiveLeadForm(formId: string, accessToken: string): Promise<void> {
+    this.archivedLeadForms.push(formId);
+  }
+
+  async getLeadFormData(formId: string, accessToken: string) {
+    return this.leadsResult;
   }
 
   async deleteCampaign(campaignId: string, accessToken: string): Promise<void> {

@@ -11,6 +11,7 @@ const OBJECTIVE_LABELS: Record<NonNullable<WizardState['objective']>, string> = 
   messages: 'Atração de Clientes',
   whatsapp: 'Conversas no WhatsApp',
   whatsapp_conv: 'Conversas WhatsApp',
+  leads: 'Formulário de captação',
 };
 
 const GENDER_LABELS: Record<WizardState['audience']['gender'], string> = {
@@ -120,6 +121,18 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
               {state.whatsapp.destinations.includes('messenger') && (
                 <div>Facebook da Página {state.whatsapp.pageName}</div>
               )}
+            </div>
+          </div>
+        )}
+
+        {state.objective === 'leads' && (
+          <div className="p-4">
+            <div className="text-xs font-bold text-text-tertiary uppercase tracking-wide mb-1">
+              Formulário e WhatsApp
+            </div>
+            <div className="text-sm font-medium text-text-primary">{state.whatsapp.pageName}</div>
+            <div className="text-xs text-text-secondary mt-1">
+              Coleta nome, e-mail e telefone. No fim, botão abre o WhatsApp {state.whatsapp.phoneNumberDisplay}.
             </div>
           </div>
         )}

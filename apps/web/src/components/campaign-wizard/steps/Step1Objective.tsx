@@ -29,6 +29,12 @@ const OBJECTIVE_OPTIONS: ObjectiveOption[] = [
     title: 'Gerar Conversas',
     description: 'Receba mensagens de clientes interessados no Facebook Messenger ou Instagram.',
   },
+  {
+    value: 'leads',
+    emoji: '📋',
+    title: 'Formulário de captação',
+    description: 'Colete nome, e-mail e telefone dos interessados e leve eles pro seu WhatsApp.',
+  },
 ];
 
 interface Step1ObjectiveProps {
@@ -80,7 +86,11 @@ export function Step1Objective({ value, onChange, whatsapp, onWhatsappChange }: 
       </div>
 
       {value === 'whatsapp' && whatsapp && onWhatsappChange && (
-        <MessagingDestinationFields whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} />
+        <MessagingDestinationFields whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} mode="destinations" />
+      )}
+
+      {value === 'leads' && whatsapp && onWhatsappChange && (
+        <MessagingDestinationFields whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} mode="whatsapp_only" />
       )}
     </div>
   );
@@ -91,9 +101,11 @@ export function Step1Objective({ value, onChange, whatsapp, onWhatsappChange }: 
 function MessagingDestinationFields({
   whatsapp,
   onWhatsappChange,
+  mode = 'destinations',
 }: {
   whatsapp: WizardWhatsappState;
   onWhatsappChange: (updates: Partial<WizardWhatsappState>) => void;
+  mode?: 'destinations' | 'whatsapp_only';
 }) {
   const { data: assetSelection, isLoading: isLoadingPages, isError: isPagesError } = useMetaAssetSelection();
   const pages = assetSelection?.pages ?? [];
@@ -123,7 +135,9 @@ function MessagingDestinationFields({
     onWhatsappChange({
       pageId: page.pageId, pageName: page.name,
       hasWhatsApp: page.hasWhatsApp, hasInstagram: page.hasInstagram,
-      destinations: page.hasWhatsApp || page.hasInstagram ? [] : ['messenger'],
+      destinations: mode === 'whatsapp_only'
+        ? ['whatsapp']
+        : page.hasWhatsApp || page.hasInstagram ? [] : ['messenger'],
       phoneNumberId: undefined, phoneNumberDisplay: undefined,
       instagramUserId: page.hasInstagram ? page.instagramUserId ?? undefined : undefined,
       instagramUsername: page.hasInstagram ? page.instagramUsername ?? undefined : undefined,
@@ -154,8 +168,14 @@ function MessagingDestinationFields({
   return (
     <div className="rounded-xl border border-border p-4 space-y-4 bg-surface-secondary/50">
       <div>
-        <h4 className="text-sm font-bold text-text-primary">Destino das mensagens</h4>
-        <p className="text-xs text-text-secondary mt-0.5">Escolha onde deseja receber as conversas.</p>
+        <h4 className="text-sm font-bold text-text-primary">
+          {mode === 'whatsapp_only' ? 'Página e WhatsApp' : 'Destino das mensagens'}
+        </h4>
+        <p className="text-xs text-text-secondary mt-0.5">
+          {mode === 'whatsapp_only'
+            ? 'Escolha a Página que receberá o formulário e o número do WhatsApp que atenderá os clientes.'
+            : 'Escolha onde deseja receber as conversas.'}
+        </p>
       </div>
 
       {isLoadingPages && (
@@ -191,26 +211,33 @@ function MessagingDestinationFields({
 
       {whatsapp.pageId && (
         <div>
-          <label className="text-sm font-bold text-text-primary mb-2 block">Onde quer receber as mensagens?</label>
-          {onlyMessengerAvailable && (
+          {mode === 'destinations' && (
+            <label className="text-sm font-bold text-text-primary mb-2 block">Onde quer receber as mensagens?</label>
+          )}
+          {mode === 'destinations' && onlyMessengerAvailable && (
             <p className="text-xs text-warning mb-2">
               Este negócio só tem Facebook disponível. Para usar WhatsApp, vincule um número WABA. Para usar Instagram, conecte sua conta Instagram à Página no Meta Business.
             </p>
           )}
           <div className="space-y-3">
-            {whatsapp.hasWhatsApp && (
+            {(mode === 'whatsapp_only' || (mode === 'destinations' && whatsapp.hasWhatsApp)) && (
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={whatsapp.destinations.includes('whatsapp')}
-                    onChange={() => toggleDestination('whatsapp')}
+                    checked={mode === 'whatsapp_only' || whatsapp.destinations.includes('whatsapp')}
+                    onChange={() => mode === 'destinations' && toggleDestination('whatsapp')}
+                    disabled={mode === 'whatsapp_only'}
                     className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
                   />
                   WhatsApp
                 </label>
-                <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo WhatsApp</p>
-                {whatsapp.destinations.includes('whatsapp') && (
+                <p className="text-xs text-text-secondary ml-6">
+                  {mode === 'whatsapp_only'
+                    ? 'O botão no fim do formulário abre o WhatsApp deste número'
+                    : 'As pessoas vão te chamar pelo WhatsApp'}
+                </p>
+                {(mode === 'whatsapp_only' || (mode === 'destinations' && whatsapp.destinations.includes('whatsapp'))) && (
                   <div className="mt-2 ml-6">
                     <div className="relative">
                       <Select
@@ -247,7 +274,7 @@ function MessagingDestinationFields({
               </div>
             )}
 
-            {whatsapp.hasInstagram && (
+            {mode === 'destinations' && whatsapp.hasInstagram && (
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
                   <input
@@ -265,18 +292,20 @@ function MessagingDestinationFields({
               </div>
             )}
 
-            <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={whatsapp.destinations.includes('messenger')}
-                  onChange={() => toggleDestination('messenger')}
-                  className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
-                />
-                Facebook
-              </label>
-              <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo Facebook</p>
-            </div>
+            {mode === 'destinations' && (
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={whatsapp.destinations.includes('messenger')}
+                    onChange={() => toggleDestination('messenger')}
+                    className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
+                  />
+                  Facebook
+                </label>
+                <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo Facebook</p>
+              </div>
+            )}
           </div>
         </div>
       )}
