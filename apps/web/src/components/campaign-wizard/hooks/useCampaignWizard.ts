@@ -144,8 +144,10 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
             (state.whatsapp.pageId &&
               state.whatsapp.destinations.length > 0 &&
               (!state.whatsapp.destinations.includes('whatsapp') || state.whatsapp.phoneNumberId))) &&
+          // Formulário: Página + número de WhatsApp (Brand Kit, pré-preenchido) —
+          // não exige WABA/phoneNumberId (o botão do fim do form é telefone comum).
           (state.objective !== 'leads' ||
-            (state.whatsapp.pageId && state.whatsapp.phoneNumberId))
+            (state.whatsapp.pageId && (state.whatsapp.phoneNumberDisplay?.replace(/\D/g, '').length ?? 0) >= 12))
       ),
       2: isCreativesStepValid(state.creatives, state.objective),
       3: Boolean(
