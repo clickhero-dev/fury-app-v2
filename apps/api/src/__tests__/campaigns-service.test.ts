@@ -777,6 +777,40 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
     } as any)).rejects.toThrow(AppError);
     expect(meta.createdLeadForms).toHaveLength(0);
   });
+
+  it('normaliza business_phone_number: completa DDI 55 em número nacional (inclui DDD 55 do RS)', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+
+    await service.createCampaignFromWizard({
+      ...leadsArgs, whatsappPhoneNumber: '55981286344', // (55) 98128-6344 — DDD 55 é RS, não DDI!
+    } as any);
+
+    const thankYou = meta.createdLeadForms[0].body.thank_you_page;
+    expect(thankYou.business_phone_number).toBe('5555981286344');
+  });
+
+  it('não duplica DDI quando o número já veio com DDI (12/13 dígitos)', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+
+    await service.createCampaignFromWizard({
+      ...leadsArgs, whatsappPhoneNumber: '5511999999999',
+    } as any);
+
+    expect(meta.createdLeadForms[0].body.thank_you_page.business_phone_number).toBe('5511999999999');
+  });
+
+  it('número nacional de 11 dígitos com DDD comum ganha DDI', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+
+    await service.createCampaignFromWizard({
+      ...leadsArgs, whatsappPhoneNumber: '11932734241',
+    } as any);
+
+    expect(meta.createdLeadForms[0].body.thank_you_page.business_phone_number).toBe('5511932734241');
+  });
 });
 
 describe('CampaignsService.getCampaignLeads', () => {

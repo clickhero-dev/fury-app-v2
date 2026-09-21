@@ -1,4 +1,5 @@
 import { decryptMetaToken } from '../../utils/crypto.js';
+import { normalizePhoneToMetaE164 } from '../../utils/phone-normalize.js';
 import {
   parseConversionsFromActions,
   parseRoasFromPurchaseRoas,
@@ -877,7 +878,6 @@ export class CampaignsService {
       // Objetivo 'leads': cria o formulário instantâneo na Página ANTES do adset —
       // o criativo e o botão de WhatsApp da tela final dependem do ID do formulário.
       if (args.objective === 'leads') {
-        const businessPhoneDigits = args.whatsappPhoneNumber!.replace(/\D/g, '');
         const leadFormBody = {
           name: `Formulário — ${campaignName}`,
           locale: 'PT_BR',
@@ -891,7 +891,7 @@ export class CampaignsService {
             body: 'Agora é só falar com a gente no WhatsApp.',
             button_type: 'WHATSAPP',
             button_text: 'Falar no WhatsApp',
-            business_phone_number: businessPhoneDigits,
+            business_phone_number: normalizePhoneToMetaE164(args.whatsappPhoneNumber!),
           },
         };
         const leadFormResponse = await this.meta.createLeadForm(pageId, accessToken, leadFormBody);

@@ -3,6 +3,7 @@ import { CheckCircle2, ImagePlus, Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCreateCampaign } from '../hooks/useCreateCampaign';
 import { buildWizardCampaignPayload } from '../lib/buildPayload';
+import { formatPhoneDisplay } from '../lib/phone-format';
 import type { WizardState } from '../types';
 
 const OBJECTIVE_LABELS: Record<NonNullable<WizardState['objective']>, string> = {
@@ -132,7 +133,7 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
             </div>
             <div className="text-sm font-medium text-text-primary">{state.whatsapp.pageName}</div>
             <div className="text-xs text-text-secondary mt-1">
-              Coleta nome, e-mail e telefone. No fim, botão abre o WhatsApp {state.whatsapp.phoneNumberDisplay}.
+              Coleta nome, e-mail e telefone. No fim, botão abre o WhatsApp {formatPhoneDisplay(state.whatsapp.phoneNumberDisplay ?? '')}.
             </div>
           </div>
         )}
