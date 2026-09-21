@@ -870,16 +870,11 @@ export class CampaignsService {
     };
 
     try {
-      const campaignBody = {
-        name: campaignName, objective: objectiveConfig.metaObjective, status: 'ACTIVE',
-        special_ad_categories: [], is_adset_budget_sharing_enabled: false,
-      };
-
-      const campaignResponse = await this.meta.createCampaign(adAccountId, accessToken, campaignBody);
-      metaCampaignId = campaignResponse.id;
-
-      // Objetivo 'leads': cria o formulário instantâneo na Página ANTES do adset —
-      // o criativo e o botão de WhatsApp da tela final dependem do ID do formulário.
+      // Objetivo 'leads': cria o formulário instantâneo na Página ANTES da campanha —
+      // falha rápido (ex.: token sem pages_manage_metadata) sem criar objetos no Meta.
+      // Try PRÓPRIO: o erro precisa ser reportado como step 'lead_form' — dentro do
+      // try abaixo o catch computaria 'campaign'/'adset' e o branch lead_form do
+      // mapeador (mensagem com a permissão exata) seria código morto.
       if (args.objective === 'leads') {
         const leadFormBody = {
           name: `Formulário — ${campaignName}`,
@@ -900,6 +895,19 @@ export class CampaignsService {
         const leadFormResponse = await this.meta.createLeadForm(pageId, accessToken, leadFormBody);
         leadFormId = leadFormResponse.id;
       }
+    } catch (err) {
+      await rollback('lead_form');
+      mapWizardMetaError(err, 'lead_form');
+    }
+
+    try {
+      const campaignBody = {
+        name: campaignName, objective: objectiveConfig.metaObjective, status: 'ACTIVE',
+        special_ad_categories: [], is_adset_budget_sharing_enabled: false,
+      };
+
+      const campaignResponse = await this.meta.createCampaign(adAccountId, accessToken, campaignBody);
+      metaCampaignId = campaignResponse.id;
 
       const targeting: Record<string, unknown> = {
         geo_locations: { cities: [{ key: parseInt(cityKey!, 10), radius: args.locationRadiusKm || 30, distance_unit: 'kilometer' }] },
