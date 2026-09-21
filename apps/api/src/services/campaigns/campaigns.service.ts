@@ -222,6 +222,11 @@ export function mapWizardMetaError(err: unknown, step: string): never {
   if (metaSubcode === 1487110) {
     throw new AppError(400, 'META_LOCATION_RADIUS', metaUserMsg || 'O raio geografico selecionado nao esta dentro dos limites. Aumente o raio (ex: Sao Paulo precisa de 15km ou mais).', { step, meta_code: metaCode, meta_subcode: metaSubcode });
   }
+  // Código 192 = "Invalid phone number" — hoje só acontece no thank_you_page do
+  // formulário de leads (business_phone_number inválido/sem WhatsApp).
+  if (metaCode === 192) {
+    throw new AppError(400, 'META_INVALID_PHONE_NUMBER', 'O Meta rejeitou o número de WhatsApp informado. Verifique se o número está correto (com DDI e DDD) e se possui WhatsApp ativo, e tente novamente.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+  }
   const userMessage = metaUserMsg || metaUserTitle ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}` : (message || 'Erro ao publicar no Meta. Tente novamente.');
   throw new AppError(400, 'META_API_ERROR', userMessage, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...(metaBlameField ? { blame_field: metaBlameField } : {}) });
 }

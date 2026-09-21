@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 import { useMetaPageWhatsappNumbers } from '../hooks/useMetaPages';
 import { useMetaAssetSelection } from '../hooks/useMetaAssetSelection';
+import { useBrandKit } from '@/hooks/useBrandKit';
 import type {
   WizardObjective,
   WizardMessagingDestination,
@@ -219,25 +221,23 @@ function MessagingDestinationFields({
               Este negócio só tem Facebook disponível. Para usar WhatsApp, vincule um número WABA. Para usar Instagram, conecte sua conta Instagram à Página no Meta Business.
             </p>
           )}
+          {mode === 'whatsapp_only' ? (
+            <BrandKitPhoneField whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} />
+          ) : (
           <div className="space-y-3">
-            {(mode === 'whatsapp_only' || (mode === 'destinations' && whatsapp.hasWhatsApp)) && (
+            {whatsapp.hasWhatsApp && (
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={mode === 'whatsapp_only' || whatsapp.destinations.includes('whatsapp')}
-                    onChange={() => mode === 'destinations' && toggleDestination('whatsapp')}
-                    disabled={mode === 'whatsapp_only'}
+                    checked={whatsapp.destinations.includes('whatsapp')}
+                    onChange={() => toggleDestination('whatsapp')}
                     className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
                   />
                   WhatsApp
                 </label>
-                <p className="text-xs text-text-secondary ml-6">
-                  {mode === 'whatsapp_only'
-                    ? 'O botão no fim do formulário abre o WhatsApp deste número'
-                    : 'As pessoas vão te chamar pelo WhatsApp'}
-                </p>
-                {(mode === 'whatsapp_only' || (mode === 'destinations' && whatsapp.destinations.includes('whatsapp'))) && (
+                <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo WhatsApp</p>
+                {whatsapp.destinations.includes('whatsapp') && (
                   <div className="mt-2 ml-6">
                     <div className="relative">
                       <Select
@@ -274,7 +274,7 @@ function MessagingDestinationFields({
               </div>
             )}
 
-            {mode === 'destinations' && whatsapp.hasInstagram && (
+            {whatsapp.hasInstagram && (
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
                   <input
@@ -292,22 +292,85 @@ function MessagingDestinationFields({
               </div>
             )}
 
-            {mode === 'destinations' && (
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={whatsapp.destinations.includes('messenger')}
-                    onChange={() => toggleDestination('messenger')}
-                    className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
-                  />
-                  Facebook
-                </label>
-                <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo Facebook</p>
-              </div>
-            )}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={whatsapp.destinations.includes('messenger')}
+                  onChange={() => toggleDestination('messenger')}
+                  className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
+                />
+                Facebook
+              </label>
+              <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo Facebook</p>
+            </div>
           </div>
+          )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Campo de telefone do Brand Kit (objetivo 'leads') ────────────────────────
+
+const PHONE_FMT = (v: string) => {
+  const d = v.replace(/\D/g, '').slice(0, 13);
+  if (d.length <= 2) return d;
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `+${d.slice(0, 2)} (${d.slice(2, 4)}) ${d.slice(4, 9)}-${d.slice(9, 13)}`;
+};
+
+/**
+ * Telefone que recebe o cliente no fim do formulário de leads. O botão WhatsApp
+ * do thank-you page NÃO exige WABA vinculado — é um telefone comercial comum —
+ * então usamos o número cadastrado em Configurações → Brand Kit como padrão,
+ * editável aqui. A existência do WhatsApp no número é validada pela Meta na
+ * hora de criar o formulário (erro 192 → mensagem amigável).
+ */
+function BrandKitPhoneField({
+  whatsapp,
+  onWhatsappChange,
+}: {
+  whatsapp: WizardWhatsappState;
+  onWhatsappChange: (updates: Partial<WizardWhatsappState>) => void;
+}) {
+  const { brandKit, isLoading: isLoadingBrandKit } = useBrandKit();
+  const brandKitDigits = brandKit?.whatsapp_number?.replace(/\D/g, '') ?? '';
+
+  // Pre-preenche uma unica vez com o numero do Brand Kit (usuario pode editar).
+  useEffect(() => {
+    if (!isLoadingBrandKit && brandKitDigits && !whatsapp.phoneNumberDisplay) {
+      onWhatsappChange({ phoneNumberDisplay: brandKitDigits });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingBrandKit, brandKitDigits]);
+
+  const digits = whatsapp.phoneNumberDisplay?.replace(/\D/g, '') ?? '';
+  const isValid = digits.length >= 12 && digits.startsWith('55');
+
+  return (
+    <div>
+      <label className="text-sm font-bold text-text-primary mb-1 block">WhatsApp que vai atender</label>
+      <input
+        type="text"
+        inputMode="tel"
+        value={whatsapp.phoneNumberDisplay ? PHONE_FMT(whatsapp.phoneNumberDisplay) : ''}
+        onChange={(e) => onWhatsappChange({ phoneNumberDisplay: e.target.value.replace(/\D/g, '') })}
+        placeholder={isLoadingBrandKit ? 'Carregando número do Brand Kit...' : '+55 (11) 99999-9999'}
+        className="w-full px-4 py-3 border border-border rounded-lg bg-surface text-text-primary placeholder-text-tertiary transition-all focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+      />
+      {digits.length > 0 && !isValid && (
+        <p className="text-xs text-warning mt-1">
+          Informe o número com DDI (55) + DDD + número, ex.: 5511999999999.
+        </p>
+      )}
+      {digits.length > 0 && isValid && (
+        <p className="text-xs text-text-secondary mt-1">
+          No fim do formulário, o botão &quot;Falar no WhatsApp&quot; abre uma conversa com este número. O Meta valida
+          se o número tem WhatsApp ativo ao publicar a campanha.
+        </p>
       )}
     </div>
   );
