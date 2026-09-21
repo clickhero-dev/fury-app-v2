@@ -60,7 +60,7 @@ function renderWithProviders() {
   return render(<CreativeStudio />, { wrapper });
 }
 
-describe('CreativeStudio — seletor de modelos, tempo e custo', () => {
+describe('CreativeStudio — seletor de modelos', () => {
   beforeEach(() => {
     mockApiGet.mockReset();
     mockApiPost.mockReset();
@@ -77,8 +77,6 @@ describe('CreativeStudio — seletor de modelos, tempo e custo', () => {
         imageUrl: 'https://cdn/a.png',
         model: 'black-forest-labs/flux.2-klein-4b',
         status: 'pending_compliance',
-        costUsd: 0.04,
-        processingTimeMs: 3200,
       },
     });
   });
@@ -143,34 +141,14 @@ describe('CreativeStudio — seletor de modelos, tempo e custo', () => {
     }
   });
 
-  it('mostra tempo de processamento e custo quando a imagem fica pronta', async () => {
+  it('não exibe tempo de processamento nem custo quando a imagem fica pronta', async () => {
     const user = userEvent.setup();
     renderWithProviders();
     await user.click(screen.getByRole('button', { name: /Gerar imagem/i }));
 
-    expect(await screen.findByText(/Tempo de processamento/i)).toBeInTheDocument();
-    expect(screen.getByText(/3,2s/)).toBeInTheDocument();
-    expect(screen.getByText(/US\$ 0,04/)).toBeInTheDocument();
-  });
-
-  it('oculta o custo quando o OpenRouter não retorna usage.cost', async () => {
-    mockApiPost.mockResolvedValue({
-      data: {
-        type: 'image',
-        creativeAssetId: 'asset-1',
-        imageUrl: 'https://cdn/a.png',
-        model: 'black-forest-labs/flux.2-klein-4b',
-        status: 'pending_compliance',
-        costUsd: null,
-        processingTimeMs: 2100,
-      },
-    });
-    const user = userEvent.setup();
-    renderWithProviders();
-    await user.click(screen.getByRole('button', { name: /Gerar imagem/i }));
-
-    expect(await screen.findByText(/Tempo de processamento/i)).toBeInTheDocument();
-    expect(screen.getByText(/2,1s/)).toBeInTheDocument();
+    expect(await screen.findByText(/Explicação detalhada sobre seu anúncio/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Tempo de processamento/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Custo da imagem/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/US\$/)).not.toBeInTheDocument();
   });
 });

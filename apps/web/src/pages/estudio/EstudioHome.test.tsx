@@ -369,33 +369,16 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     expect(screen.getByText(/\(3s\)/)).toBeInTheDocument();
   });
 
-  it('mostra tempo de processamento e custo quando a imagem fica pronta', async () => {
+  it('não exibe tempo de processamento nem custo na tela de resultado', async () => {
     renderWithProviders();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
     await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
     await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
 
-    expect(await screen.findByText(/Tempo de processamento/i)).toBeInTheDocument();
-    expect(screen.getByText(/3,2s/)).toBeInTheDocument();
-    expect(screen.getByText(/US\$ 0,04/)).toBeInTheDocument();
-  });
-
-  it('oculta o custo quando o OpenRouter não retorna usage.cost', async () => {
-    mockApiPost.mockImplementation((url: string) => {
-      if (url.includes('/enhance-prompt')) {
-        return Promise.resolve({ data: { enhancedPrompt: 'prompt melhorado', brand: {} } });
-      }
-      return Promise.resolve({ data: { type: 'image', creativeAssetId: 'asset-new', imageUrl: 'https://cdn/n.png', costUsd: null, processingTimeMs: 2100 } });
-    });
-    renderWithProviders();
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
-    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
-    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
-
-    expect(await screen.findByText(/Tempo de processamento/i)).toBeInTheDocument();
-    expect(screen.getByText(/2,1s/)).toBeInTheDocument();
+    expect((await screen.findAllByText('Seu anúncio')).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Tempo de processamento/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Custo da imagem/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/US\$/)).not.toBeInTheDocument();
   });
 });
