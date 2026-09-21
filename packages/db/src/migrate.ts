@@ -141,9 +141,10 @@ const STEPS: MigrationStep[] = [
   { tag: '0038_creative_asset_versioning_archive' },
   { tag: '0039_add_selected_instagram_binding' },
   { tag: '0040_policy_reorder_reembolso' },
+  { tag: '0041_wpp_verification' },
 ];
 
-/** Nomes de todas as tabelas do schema (28 tabelas) — usados para validação. */
+/** Nomes de todas as tabelas do schema (30 tabelas) — usados para validação. */
 export const REQUIRED_TABLES = [
   'tenants',
   'users',
@@ -173,6 +174,8 @@ export const REQUIRED_TABLES = [
   'google_sync_logs',
   'policy_versions',
   'policy_acceptances',
+  'wpp_verifications',
+  'wpp_webhook_events',
 ];
 
 /**

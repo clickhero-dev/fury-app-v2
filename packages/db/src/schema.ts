@@ -856,6 +856,72 @@ export const policyAcceptancesRelations = relations(policyAcceptances, ({ one })
   }),
 }));
 
+// ===== WhatsApp (uazapi) — verificação de número + inbox de webhooks =====
+
+export const wppVerificationStatusEnum = pgEnum('wpp_verification_status', [
+  'pending',
+  'verified',
+  'failed',
+  'expired',
+]);
+
+export const wppVerifications = pgTable(
+  'wpp_verifications',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    /** Número com DDI (ex.: 5511999999999) — dígitos apenas. */
+    phone: varchar('phone', { length: 40 }).notNull(),
+    status: wppVerificationStatusEnum('status').notNull().default('pending'),
+    /** sha256(code + tenantId) — código nunca armazenado em texto puro. */
+    codeHash: varchar('code_hash', { length: 128 }).notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    sentCount: integer('sent_count').notNull().default(1),
+    lastSentAt: timestamp('last_sent_at', { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('wpp_verifications_tenant_id_idx').on(table.tenantId),
+    phoneStatusIdx: index('wpp_verifications_phone_status_idx').on(table.phone, table.status),
+  })
+);
+
+export const wppVerificationsRelations = relations(wppVerifications, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [wppVerifications.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+/**
+ * Inbox durável de eventos do webhook uazapi. GLOBAL (sem tenant): o evento
+ * chega antes de qualquer sessão; roteamento para tenant acontece no
+ * processamento (worker futuro). Payload cru preservado para auditoria.
+ */
+export const wppWebhookEvents = pgTable(
+  'wpp_webhook_events',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    eventType: varchar('event_type', { length: 64 }),
+    instanceName: varchar('instance_name', { length: 255 }),
+    owner: varchar('owner', { length: 32 }),
+    payload: jsonb('payload').notNull(),
+    status: varchar('status', { length: 32 }).notNull().default('received'),
+    receivedAt: timestamp('received_at', { withTimezone: true }).defaultNow().notNull(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+  },
+  (table) => ({
+    receivedAtIdx: index('wpp_webhook_events_received_at_idx').on(table.receivedAt),
+    eventTypeIdx: index('wpp_webhook_events_event_type_idx').on(table.eventType),
+    statusIdx: index('wpp_webhook_events_status_idx').on(table.status),
+  })
+);
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -886,4 +952,6 @@ export const allTables = {
   googleSyncLogs,
   policyVersions,
   policyAcceptances,
+  wppVerifications,
+  wppWebhookEvents,
 };
