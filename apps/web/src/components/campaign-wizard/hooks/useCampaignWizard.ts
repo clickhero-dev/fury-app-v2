@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { WizardCreativeState, WizardObjective, WizardState } from '../types';
 import { createEmptyCreative, MAX_CREATIVES } from '../types';
 import { isCreativesStepValid } from '../lib/creativeValidation';
+import { isValidBusinessPhone } from '../lib/phone-format';
 import api from '@/lib/api';
 
 const TOTAL_STEPS = 5;
@@ -144,10 +145,11 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
             (state.whatsapp.pageId &&
               state.whatsapp.destinations.length > 0 &&
               (!state.whatsapp.destinations.includes('whatsapp') || state.whatsapp.phoneNumberId))) &&
-          // Formulário: Página + número de WhatsApp (Brand Kit, pré-preenchido) —
-          // não exige WABA/phoneNumberId (o botão do fim do form é telefone comum).
+          // Formulário: Página + número de WhatsApp (Brand Kit, pré-preenchido).
+          // isValidBusinessPhone aceita nacional 10/11 (DDD 55 do RS incluso)
+          // ou completo 12/13 com DDI — não exige WABA/phoneNumberId.
           (state.objective !== 'leads' ||
-            (state.whatsapp.pageId && (state.whatsapp.phoneNumberDisplay?.replace(/\D/g, '').length ?? 0) >= 12))
+            (state.whatsapp.pageId && isValidBusinessPhone(state.whatsapp.phoneNumberDisplay ?? '')))
       ),
       2: isCreativesStepValid(state.creatives, state.objective),
       3: Boolean(

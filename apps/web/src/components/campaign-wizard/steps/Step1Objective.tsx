@@ -5,6 +5,7 @@ import { Select } from '@/components/ui/select';
 import { useMetaPageWhatsappNumbers } from '../hooks/useMetaPages';
 import { useMetaAssetSelection } from '../hooks/useMetaAssetSelection';
 import { useBrandKit } from '@/hooks/useBrandKit';
+import { formatPhoneDisplay, isValidBusinessPhone } from '../lib/phone-format';
 import type {
   WizardObjective,
   WizardMessagingDestination,
@@ -314,20 +315,15 @@ function MessagingDestinationFields({
 
 // ── Campo de telefone do Brand Kit (objetivo 'leads') ────────────────────────
 
-const PHONE_FMT = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 13);
-  if (d.length <= 2) return d;
-  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
-  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
-  return `+${d.slice(0, 2)} (${d.slice(2, 4)}) ${d.slice(4, 9)}-${d.slice(9, 13)}`;
-};
-
 /**
  * Telefone que recebe o cliente no fim do formulário de leads. O botão WhatsApp
  * do thank-you page NÃO exige WABA vinculado — é um telefone comercial comum —
  * então usamos o número cadastrado em Configurações → Brand Kit como padrão,
  * editável aqui. A existência do WhatsApp no número é validada pela Meta na
  * hora de criar o formulário (erro 192 → mensagem amigável).
+ *
+ * Formatação/validação em lib/phone-format.ts — DDD 55 (RS) é válido e NUNCA
+ * deve ser interpretado como DDI (caso 55981286344 → (55) 98128-6344).
  */
 function BrandKitPhoneField({
   whatsapp,
@@ -348,7 +344,7 @@ function BrandKitPhoneField({
   }, [isLoadingBrandKit, brandKitDigits]);
 
   const digits = whatsapp.phoneNumberDisplay?.replace(/\D/g, '') ?? '';
-  const isValid = digits.length >= 12 && digits.startsWith('55');
+  const valid = isValidBusinessPhone(digits);
 
   return (
     <div>
@@ -356,17 +352,17 @@ function BrandKitPhoneField({
       <input
         type="text"
         inputMode="tel"
-        value={whatsapp.phoneNumberDisplay ? PHONE_FMT(whatsapp.phoneNumberDisplay) : ''}
+        value={formatPhoneDisplay(digits)}
         onChange={(e) => onWhatsappChange({ phoneNumberDisplay: e.target.value.replace(/\D/g, '') })}
-        placeholder={isLoadingBrandKit ? 'Carregando número do Brand Kit...' : '+55 (11) 99999-9999'}
+        placeholder={isLoadingBrandKit ? 'Carregando número do Brand Kit...' : '(55) 98128-6344 ou +55 (11) 99999-9999'}
         className="w-full px-4 py-3 border border-border rounded-lg bg-surface text-text-primary placeholder-text-tertiary transition-all focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
       />
-      {digits.length > 0 && !isValid && (
+      {digits.length > 0 && !valid && (
         <p className="text-xs text-warning mt-1">
-          Informe o número com DDI (55) + DDD + número, ex.: 5511999999999.
+          Informe DDD + número (ex.: 55981286344) ou com DDI (ex.: 5511999999999).
         </p>
       )}
-      {digits.length > 0 && isValid && (
+      {digits.length > 0 && valid && (
         <p className="text-xs text-text-secondary mt-1">
           No fim do formulário, o botão &quot;Falar no WhatsApp&quot; abre uma conversa com este número. O Meta valida
           se o número tem WhatsApp ativo ao publicar a campanha.
