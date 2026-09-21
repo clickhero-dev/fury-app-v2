@@ -89,7 +89,7 @@ describe('Step5Review — erro de permissão do Meta oferece reconexão', () => 
     fireEvent.click(screen.getByRole('button', { name: 'Reconectar Meta' }));
     await waitFor(() => {
       expect(mockApiGet).toHaveBeenCalledWith('/meta/auth/url', {
-        params: { context: 'settings', frontendUrl: window.location.origin },
+        params: { context: 'settings', frontendUrl: window.location.origin, rerequest: 'true' },
       });
       expect(window.location.href).toBe('https://www.facebook.com/v23.0/dialog/oauth?client_id=x');
     });

@@ -213,7 +213,9 @@ export function mapWizardMetaError(err: unknown, step: string): never {
   }
   if (metaType === 'OAuthException' && (metaCode === 200 || metaCode === 10)) {
     if (step === 'lead_form') {
-      throw new AppError(403, 'META_PERMISSION_DENIED', 'O Meta recusou a criação do Formulário por falta de permissão (pages_manage_metadata). Reconecte o Meta em Configurações → Integrações para conceder as novas permissões e tente novamente.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+      // Doc Lead Ads (marketing-api/guides/lead-ads/create/): criar leadgen_forms
+      // exige pages_manage_ads (pages_manage_metadata é só p/ webhooks).
+      throw new AppError(403, 'META_PERMISSION_DENIED', 'O Meta recusou a criação do Formulário por falta de permissão (pages_manage_ads). Reconecte o Meta em Configurações → Integrações para conceder as novas permissões e tente novamente.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
     }
     throw new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para publicar campanhas. Verifique ads_management, pages_show_list e business_management em Configurações → Integrações.');
   }

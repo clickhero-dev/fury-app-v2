@@ -295,8 +295,10 @@ export function IntegracoesContent() {
 
   const connectMutation = useMutation({
     mutationFn: async () => {
+      // rerequest=true: reconexão explícita força o Login Dialog a re-exibir
+      // permissões já declinadas (ex.: pages_manage_ads do Formulário de leads).
       const response = await api.get<MetaAuthUrlResponse>('/meta/auth/url', {
-        params: { context: 'settings', frontendUrl: window.location.origin },
+        params: { context: 'settings', frontendUrl: window.location.origin, rerequest: 'true' },
       });
       return response.data.data.authUrl;
     },

@@ -72,12 +72,46 @@ describe('MetaController', () => {
 
     await localController.getAuthUrl(req, res, next);
 
-    expect(generateMetaAuthUrl).toHaveBeenCalledWith('t-1', 'settings', 'https://app.useady.com.br');
+    expect(generateMetaAuthUrl).toHaveBeenCalledWith('t-1', 'settings', 'https://app.useady.com.br', { rerequest: false });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ success: true, data: { authUrl: expect.any(String) } })
     );
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it('getAuthUrl propaga rerequest=true (botão Reconectar Meta → auth_type=rerequest no OAuth)', async () => {
+    const generateMetaAuthUrl = vi.fn(() => 'https://www.facebook.com/dialog/oauth?state=x');
+    const localController = new MetaController({ generateMetaAuthUrl } as any);
+    const req = {
+      user: { tenantId: 't-1' },
+      query: { context: 'settings', rerequest: 'true' },
+      headers: { origin: 'https://hmg.example' },
+    } as any;
+    const res = mockRes();
+    const next = vi.fn();
+
+    await localController.getAuthUrl(req, res, next);
+
+    expect(generateMetaAuthUrl).toHaveBeenCalledWith('t-1', 'settings', 'https://hmg.example', { rerequest: true });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('getAuthUrl rejeita rerequest inválido (400 via ZodError, sem chamar o service)', async () => {
+    const generateMetaAuthUrl = vi.fn(() => 'https://www.facebook.com/dialog/oauth?state=x');
+    const localController = new MetaController({ generateMetaAuthUrl } as any);
+    const req = {
+      user: { tenantId: 't-1' },
+      query: { context: 'settings', rerequest: 'yes' },
+      headers: {},
+    } as any;
+    const res = mockRes();
+    const next = vi.fn();
+
+    await localController.getAuthUrl(req, res, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+    expect(generateMetaAuthUrl).not.toHaveBeenCalled();
   });
 
   it('authCallback redireciona para a frontendUrl embutida no state (domínio de origem do fluxo)', async () => {

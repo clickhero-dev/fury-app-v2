@@ -136,7 +136,7 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
 
     await waitFor(() => {
       expect(mockApiGet).toHaveBeenCalledWith('/meta/auth/url', {
-        params: { context: 'settings', frontendUrl: window.location.origin },
+        params: { context: 'settings', frontendUrl: window.location.origin, rerequest: 'true' },
       });
     });
   });

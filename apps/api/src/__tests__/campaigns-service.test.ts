@@ -92,14 +92,15 @@ describe('mapWizardMetaError', () => {
       .toThrowError(AppError);
   });
 
-  it('OAuthException 200 no lead_form → mensagem aponta pages_manage_metadata', () => {
+  it('OAuthException 200 no lead_form → mensagem aponta pages_manage_ads', () => {
     try {
       mapWizardMetaError({ metaCode: 200, metaType: 'OAuthException' }, 'lead_form');
       expect.unreachable('deveria ter lançado');
     } catch (err) {
       const appErr = err as AppError;
       expect(appErr.code).toBe('META_PERMISSION_DENIED');
-      expect(appErr.message).toContain('pages_manage_metadata');
+      // Doc Lead Ads: criar leadgen_forms exige pages_manage_ads (não pages_manage_metadata).
+      expect(appErr.message).toContain('pages_manage_ads');
       expect(appErr.message).toContain('Formulário');
     }
   });
@@ -773,7 +774,7 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
   it('falha do lead form → step "lead_form" (não "adset") + rollback sem deletar campanha', async () => {
     const { service, meta, repo } = makeService();
     makeLeadsEnv(meta, repo);
-    // Simula OAuthException 200 do Meta ao criar o form (falta pages_manage_metadata)
+    // Simula OAuthException 200 do Meta ao criar o form (falta pages_manage_ads)
     meta.createLeadForm = async () => {
       const err = new Error('(#200) Permission error') as Error & { metaCode: number; metaType: string };
       err.metaCode = 200;
@@ -789,7 +790,7 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
       // Erro do FORMULÁRIO nunca deve ser reportado como step 'adset'
       // (que caía na mensagem genérica — branch lead_form do mapeador era morto)
       expect(appErr.code).toBe('META_PERMISSION_DENIED');
-      expect(appErr.message).toContain('pages_manage_metadata');
+      expect(appErr.message).toContain('pages_manage_ads');
       expect(appErr.message).toContain('Formulário');
     }
     // Campanha nem chegou a ser criada no Meta (form vem antes) — nada a rolar back
