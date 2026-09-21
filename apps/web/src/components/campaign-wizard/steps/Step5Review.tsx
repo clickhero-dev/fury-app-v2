@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { CheckCircle2, ImagePlus, Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import api from '@/lib/api';
 import { useCreateCampaign } from '../hooks/useCreateCampaign';
 import { buildWizardCampaignPayload } from '../lib/buildPayload';
 import { formatPhoneDisplay } from '../lib/phone-format';
@@ -33,6 +35,25 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
   const mutation = useCreateCampaign();
   const [showSlowWarning, setShowSlowWarning] = useState(false);
   const slowWarningTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Token sem permissão (ex.: pages_manage_metadata p/ Formulário) ou expirado:
+  // refazer o OAuth concede os scopes atuais e volta para esta tela.
+  const reconnectMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.get<{ data: { authUrl: string } }>('/meta/auth/url', {
+        params: { context: 'settings', frontendUrl: window.location.origin },
+      });
+      return response.data.data.authUrl;
+    },
+    onSuccess: (authUrl) => {
+      window.location.href = authUrl;
+    },
+  });
+
+  const publishError = (mutation.error as { response?: { data?: { error?: { code?: string; message?: string } } } })
+    ?.response?.data?.error;
+  const isReconnectError =
+    publishError?.code === 'META_TOKEN_EXPIRED' || publishError?.code === 'META_PERMISSION_DENIED';
 
   const audience = state.audience;
 
@@ -249,9 +270,26 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
       )}
 
       {mutation.isError && (
-        <div className="rounded-lg bg-error/10 border border-error/20 p-3 text-sm text-error">
-          {(mutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error
-            ?.message || 'Erro ao publicar no Meta. Tente novamente.'}
+        <div className="rounded-lg bg-error/10 border border-error/20 p-3 text-sm text-error space-y-3">
+          <span>{publishError?.message || 'Erro ao publicar no Meta. Tente novamente.'}</span>
+          {isReconnectError && (
+            <Button
+              variant="primary"
+              size="sm"
+              className="w-full"
+              onClick={() => reconnectMutation.mutate()}
+              disabled={reconnectMutation.isPending}
+            >
+              {reconnectMutation.isPending ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Redirecionando...
+                </span>
+              ) : (
+                'Reconectar Meta'
+              )}
+            </Button>
+          )}
         </div>
       )}
 
