@@ -770,6 +770,35 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
     expect(repo.campaigns).toHaveLength(0);
   });
 
+  it('falha do lead form → step "lead_form" (não "adset") + rollback sem deletar campanha', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    // Simula OAuthException 200 do Meta ao criar o form (falta pages_manage_metadata)
+    meta.createLeadForm = async () => {
+      const err = new Error('(#200) Permission error') as Error & { metaCode: number; metaType: string };
+      err.metaCode = 200;
+      err.metaType = 'OAuthException';
+      throw err;
+    };
+
+    try {
+      await service.createCampaignFromWizard(leadsArgs as any);
+      expect.unreachable('deveria ter lançado');
+    } catch (err) {
+      const appErr = err as AppError;
+      // Erro do FORMULÁRIO nunca deve ser reportado como step 'adset'
+      // (que caía na mensagem genérica — branch lead_form do mapeador era morto)
+      expect(appErr.code).toBe('META_PERMISSION_DENIED');
+      expect(appErr.message).toContain('pages_manage_metadata');
+      expect(appErr.message).toContain('Formulário');
+    }
+    // Campanha nem chegou a ser criada no Meta (form vem antes) — nada a rolar back
+    expect(meta.createdCampaigns).toHaveLength(0);
+    expect(meta.deletedCampaigns).toHaveLength(0);
+    expect(repo.campaigns).toHaveLength(0);
+  });
+
+
   it('rejeita leads sem whatsappPageId', async () => {
     const { service, repo, meta } = makeService();
     makeLeadsEnv(meta, repo);
