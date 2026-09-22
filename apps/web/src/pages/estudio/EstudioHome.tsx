@@ -8,7 +8,6 @@ import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 // import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
-import { formatDuration, formatCost } from '@/lib/studio-metrics';
 import type { StudioAsset } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
 
@@ -63,7 +62,6 @@ export function EstudioHome() {
   const [selectedImageModel, setSelectedImageModel] = useState(IMAGE_MODEL);
   const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
-  const [lastResultInfo, setLastResultInfo] = useState<{ processingTimeMs?: number | null; costUsd?: number | null } | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -109,7 +107,7 @@ export function EstudioHome() {
       const res = await api.post('/studio/ai/generate-image', payload);
       return res.data;
     },
-    onSuccess: (data: { creativeAssetId: string; imageUrl: string; processingTimeMs?: number | null; costUsd?: number | null; modificationsRemaining?: number | null }) => {
+    onSuccess: (data: { creativeAssetId: string; imageUrl: string; modificationsRemaining?: number | null }) => {
       setGenerationResult({
         type: 'image',
         assetId: data.creativeAssetId,
@@ -117,7 +115,6 @@ export function EstudioHome() {
         creativeData: { headline: '', primary_text: '', cta: '' },
         modificationsRemaining: data.modificationsRemaining ?? null,
       });
-      setLastResultInfo({ processingTimeMs: data.processingTimeMs, costUsd: data.costUsd });
       setGenerationStartedAt(null);
       setView('result');
       setProgressMessage('');
@@ -166,7 +163,6 @@ export function EstudioHome() {
     setProgressMessage('Aprimorando explicação detalhada...');
     // cronômetro começa no clique — cobre enhance-prompt + geração
     setGenerationStartedAt(Date.now());
-    setLastResultInfo(null);
 
     try {
       const enhanceRes = await api.post('/studio/ai/enhance-prompt', {
@@ -526,22 +522,6 @@ export function EstudioHome() {
             <div className="pt-1">
               <p className="text-sm text-text-tertiary">Regenere com ajustes, salve ou publique direto na sua conta</p>
             </div>
-            {(lastResultInfo?.processingTimeMs != null || lastResultInfo?.costUsd != null) && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {lastResultInfo?.processingTimeMs != null && (
-                  <div className={`${SURFACE} p-4`}>
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">Tempo de processamento</p>
-                    <p className="mt-1 text-2xl font-bold text-text-primary">{formatDuration(lastResultInfo.processingTimeMs)}</p>
-                  </div>
-                )}
-                {lastResultInfo?.costUsd != null && (
-                  <div className={`${SURFACE} p-4`}>
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">Custo da imagem</p>
-                    <p className="mt-1 text-2xl font-bold text-text-primary">{formatCost(lastResultInfo.costUsd)}</p>
-                  </div>
-                )}
-              </div>
-            )}
             <CreativeResult
               result={generationResult}
               onBack={handleBackToLibrary}

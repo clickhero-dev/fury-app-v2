@@ -7,7 +7,6 @@ import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 // OCULTO: seletor de IAs removido — import volta no unhide
 // import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
-import { formatDuration, formatCost } from '@/lib/studio-metrics';
 import type {
   StudioComplianceStatusResponse,
   StudioTemplate,
@@ -17,8 +16,6 @@ interface GenerateImageResponse {
   creativeAssetId: string;
   imageUrl: string;
   model?: string;
-  processingTimeMs?: number | null;
-  costUsd?: number | null;
 }
 
 const TEMPLATES: StudioTemplate[] = [
@@ -70,7 +67,6 @@ export function CreativeStudio() {
   const [pollStartedAt, setPollStartedAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
-  const [lastResultInfo, setLastResultInfo] = useState<{ processingTimeMs?: number | null; costUsd?: number | null } | null>(null);
 
   // ─── OpenRouter state ──────────────────────────────────────
   const [creativeType, setCreativeType] = useState<'image' | 'video'>('image');
@@ -110,13 +106,11 @@ export function CreativeStudio() {
     },
     onMutate: () => {
       setGenerationStartedAt(Date.now());
-      setLastResultInfo(null);
     },
     onSuccess: (data: GenerateImageResponse) => {
       setCurrentAssetId(data.creativeAssetId);
       setPollStartedAt(Date.now());
       setGeneratedUrl(data.imageUrl);
-      setLastResultInfo({ processingTimeMs: data.processingTimeMs, costUsd: data.costUsd });
       setGenerationStartedAt(null);
       queryClient.setQueryData(['studio', 'asset', data.creativeAssetId], data);
     },
@@ -130,12 +124,10 @@ export function CreativeStudio() {
     },
     onMutate: () => {
       setGenerationStartedAt(Date.now());
-      setLastResultInfo(null);
     },
-    onSuccess: (data: { creativeAssetId: string; videoUrl: string; processingTimeMs?: number | null }) => {
+    onSuccess: (data: { creativeAssetId: string; videoUrl: string }) => {
       setCurrentAssetId(data.creativeAssetId);
       setGeneratedUrl(data.videoUrl);
-      setLastResultInfo({ processingTimeMs: data.processingTimeMs });
       setGenerationStartedAt(null);
     },
     onError: () => setGenerationStartedAt(null),
@@ -454,23 +446,6 @@ export function CreativeStudio() {
                       <p className="mt-2 text-sm text-[#101828]">{new Date(currentCompliance.createdAt).toLocaleString('pt-BR')}</p>
                     </div>
                   </div>
-
-                  {(lastResultInfo?.processingTimeMs != null || lastResultInfo?.costUsd != null) && (
-                    <div className="grid gap-4 md:grid-cols-3">
-                      {lastResultInfo?.processingTimeMs != null && (
-                        <div className="rounded-2xl bg-[#FCFCFD] p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-[#667085]">Tempo de processamento</p>
-                          <p className="mt-2 text-sm text-[#101828]">{formatDuration(lastResultInfo.processingTimeMs)}</p>
-                        </div>
-                      )}
-                      {lastResultInfo?.costUsd != null && (
-                        <div className="rounded-2xl bg-[#FCFCFD] p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-[#667085]">Custo da imagem</p>
-                          <p className="mt-2 text-sm text-[#101828]">{formatCost(lastResultInfo.costUsd)}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   {currentCompliance.complianceStatus === 'rejected' && currentCompliance.issues.length > 0 && (
                     <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
