@@ -969,6 +969,30 @@ export class CampaignsController {
     }
   };
 
+  /**
+   * Debug — Fase 1 da spec de segmentação por bairro/cidade (spec-segmentacao-bairro-cidade).
+   * Endpoint temporário, remover depois que a Fase 1 for concluída (ver tasks.md dessa spec).
+   */
+  debugSearchNeighborhoods = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const query = metaLocationsSchema.parse(req.query);
+      const tenantId = req.tenant?.tenantId || '';
+      if (!tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+      }
+
+      const result = await this.campaignsService.debugSearchNeighborhoods({ tenantId, query: query.q });
+
+      res.json({
+        success: true,
+        data: result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   createWizardCampaignDiag = async (req: any, res: any) => {
     // DIAG: Test if createCampaignFromWizard is importable and callable
     try {
@@ -1053,4 +1077,5 @@ export const searchMetaLocationsHandler = campaignsController.searchMetaLocation
 export const uploadWizardCreativeHandler = campaignsController.uploadWizardCreative;
 export const createWizardCampaignDiagHandler = campaignsController.createWizardCampaignDiag;
 export const searchMetaInterestsHandler = campaignsController.searchMetaInterests;
+export const debugSearchNeighborhoodsHandler = campaignsController.debugSearchNeighborhoods;
 export const suggestTextHandler = campaignsController.suggestText;

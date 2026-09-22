@@ -44,6 +44,11 @@ export function PublicoContent() {
   const [audienceInterests, setAudienceInterests] = useState<{ id: string; name: string }[]>([]);
   const [interestQuery, setInterestQuery] = useState('');
   const [showInterestDropdown, setShowInterestDropdown] = useState(false);
+  // DEBUG temporário — Fase 1 da spec spec-segmentacao-bairro-cidade. Remover depois de validado.
+  const [debugQuery, setDebugQuery] = useState('');
+  const [debugLoading, setDebugLoading] = useState(false);
+  const [debugResult, setDebugResult] = useState<unknown>(null);
+  const [debugError, setDebugError] = useState('');
   const { locations, isLoading: loadingLocations } = useMetaLocations(cityQuery);
   const { interests, isLoading: loadingInterests } = useMetaInterests(interestQuery);
 
@@ -75,6 +80,24 @@ export function PublicoContent() {
     setCity(label);
     setCityKey(location.key);
     setShowDropdown(false);
+  }
+
+  // DEBUG temporário — Fase 1 da spec spec-segmentacao-bairro-cidade. Remover depois de validado.
+  async function handleDebugSearch() {
+    if (!debugQuery.trim()) return;
+    setDebugLoading(true);
+    setDebugError('');
+    setDebugResult(null);
+    try {
+      const res = await api.get<{ success: boolean; data: unknown }>('/campaigns/debug-meta-neighborhoods', {
+        params: { q: debugQuery },
+      });
+      setDebugResult(res.data.data);
+    } catch (err) {
+      setDebugError(err instanceof Error ? err.message : 'Falha na busca de debug');
+    } finally {
+      setDebugLoading(false);
+    }
   }
 
   async function handleSave() {
@@ -170,6 +193,32 @@ export function PublicoContent() {
                     </button>
                   ))}
                 </div>
+              )}
+            </div>
+
+            {/* DEBUG temporário — Fase 1 da spec spec-segmentacao-bairro-cidade. Remover depois de validado. */}
+            <div className="border border-dashed border-amber-400 rounded-lg p-4 bg-amber-50 space-y-3">
+              <p className="text-xs font-bold text-amber-800">
+                🔧 Debug — validação de busca de bairro (temporário, remover após Fase 1)
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={debugQuery}
+                  onChange={(e) => setDebugQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleDebugSearch()}
+                  placeholder="Ex: Copacabana"
+                  className="flex-1 px-3 py-2 border border-amber-300 rounded-md bg-white text-sm"
+                />
+                <Button variant="outline" size="sm" disabled={debugLoading} onClick={handleDebugSearch}>
+                  {debugLoading ? 'Buscando...' : 'Buscar na Meta (real)'}
+                </Button>
+              </div>
+              {debugError && <p className="text-xs text-red-600">{debugError}</p>}
+              {debugResult !== null && (
+                <pre className="text-xs bg-white border border-amber-200 rounded-md p-3 overflow-auto max-h-96 whitespace-pre-wrap">
+                  {JSON.stringify(debugResult, null, 2)}
+                </pre>
               )}
             </div>
 

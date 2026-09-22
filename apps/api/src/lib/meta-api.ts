@@ -1606,6 +1606,30 @@ function cleanRegionLabel(region?: string): string | undefined {
   return cleaned || undefined;
 }
 
+/**
+ * Debug — Fase 1 da spec de segmentação por bairro/cidade (spec-segmentacao-bairro-cidade).
+ * Roda a mesma busca com e sem `location_types=["neighborhood"]` e devolve o JSON bruto dos dois,
+ * pra confirmar ao vivo o que a Meta devolve pra bairro. Não usar fora dessa validação pontual.
+ */
+export async function debugSearchNeighborhoods(
+  query: string,
+  accessToken: string
+): Promise<{ withFilter: unknown; withoutFilter: unknown }> {
+  const run = async (withFilter: boolean) => {
+    const path =
+      `/search?type=adgeolocation&q=${encodeURIComponent(query)}` +
+      (withFilter ? `&location_types=${encodeURIComponent(JSON.stringify(['neighborhood']))}` : '');
+    try {
+      return await metaApiCall<MetaLocationSearchResponse>(path, accessToken);
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  };
+
+  const [withFilter, withoutFilter] = await Promise.all([run(true), run(false)]);
+  return { withFilter, withoutFilter };
+}
+
 /** Busca localizacoes (cidades) do Brasil via Meta Graph API para uso no targeting de campanhas. */
 export async function searchMetaCityLocations(query: string, accessToken: string): Promise<MetaLocationResult[]> {
   // `country_codes` (plural) nao e um parametro valido para /search?type=adgeolocation

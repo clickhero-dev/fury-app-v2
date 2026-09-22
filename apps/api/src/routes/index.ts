@@ -28,7 +28,7 @@ import { authMiddleware } from "../middleware/auth.middleware.js";
 import { tenantMiddleware } from "../middleware/tenant.middleware.js";
 import { tenantOrSuperadminMiddleware } from "../middleware/tenantOrSuperadmin.middleware.js";
 import { checkSubscriptionActive } from "../middleware/checkSubscriptionActive.js";
-import { searchMetaLocationsHandler, searchMetaInterestsHandler } from "../controllers/campaigns.controller.js";
+import { searchMetaLocationsHandler, searchMetaInterestsHandler, debugSearchNeighborhoodsHandler } from "../controllers/campaigns.controller.js";
 
 const AUTH_TENANT_SUB = [authMiddleware, tenantMiddleware, checkSubscriptionActive];
 
@@ -46,6 +46,8 @@ router.use("/studio", studioRoutes);
 // Allow superadmin to access meta-locations with explicit tenantId (query param or header)
 router.get("/campaigns/meta-locations", authMiddleware, checkSubscriptionActive, tenantOrSuperadminMiddleware, searchMetaLocationsHandler);
 router.get("/campaigns/meta-interests", authMiddleware, checkSubscriptionActive, tenantOrSuperadminMiddleware, searchMetaInterestsHandler);
+// Debug temporário — Fase 1 da spec de segmentação por bairro/cidade (spec-segmentacao-bairro-cidade). Remover depois.
+router.get("/campaigns/debug-meta-neighborhoods", authMiddleware, checkSubscriptionActive, tenantOrSuperadminMiddleware, debugSearchNeighborhoodsHandler);
 
 router.use("/campaigns", ...AUTH_TENANT_SUB, campaignRoutes);
 router.use("/budget", budgetRoutes);
