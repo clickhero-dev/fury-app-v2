@@ -434,16 +434,16 @@ export function EstudioHome() {
               Descreva o anúncio que deseja gerar para criar a imagem ideal
             </p>
 
+            {/* OCULTO: seletor de modelo removido — modelo fixo qwen. Volta no unhide
             <div className={`${SURFACE} p-5`}>
-              {/* OCULTO: seletor de modelo removido — modelo fixo qwen. Volta no unhide
               <ModelSelect
                 models={imageModels}
                 selectedModel={selectedImageModel}
                 onSelect={setSelectedImageModel}
                 id="quick-create-model-select"
               />
-              */}
             </div>
+            */}
 
             {quotaReached && (
               <div className="flex items-start gap-2.5 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-text-primary">
