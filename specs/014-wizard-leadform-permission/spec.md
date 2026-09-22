@@ -183,6 +183,27 @@ objetivo `leads`.
 5. **Given** o Meta responde subcode 1892075, **When** o mapeador trata o passo `lead_form`, **Then**
    retorna `META_LEGAL_CONTENT_REQUIRED` com mensagem clara.
 
+### User Story 6 — Criativo do Formulário exige o campo link (https://fb.me/) (P1)
+
+O `link_data` do criativo de Formulário (objetivo `leads`) deve incluir o campo `link` — a doc
+Lead Ads exige `https://fb.me/` como valor reservado (o clique real abre o form via
+`call_to_action.lead_gen_form_id`). Sem o campo, o Meta rejeita com subcode 2061015
+*"Required field is missing: the link field is required"*.
+
+**Why this priority**: é o erro em produção após a correção da política de privacidade — bloqueia a
+criação do criativo do Formulário.
+
+**Independent Test**: `createCampaignFromWizard` com objetivo `leads` monta `link_data` com
+`link: 'https://fb.me/'` e `call_to_action` SIGN_UP com `lead_gen_form_id`.
+
+**Acceptance Scenarios**:
+1. **Given** o wizard publica um Formulário, **When** o criativo é montado, **Then** o `link_data`
+   contém `link: 'https://fb.me/'`.
+2. **Given** o criativo é de Formulário, **When** o `link_data` é montado, **Then** o `call_to_action`
+   é `SIGN_UP` com `value.lead_gen_form_id` (não um link externo).
+3. **Given** o Meta responde subcode 2061015, **When** o mapeador trata o passo `creative`, **Then**
+   retorna `META_LINK_REQUIRED`.
+
 ## Edge Cases
 
 - **Token expirado** (erro 190): mapeado para `META_TOKEN_EXPIRED`, reconexão disponível.
@@ -197,3 +218,5 @@ objetivo `leads`.
   Anunciante/Administrador na Página.
 - **Legal content missing** (subcode 1892075): `META_LEGAL_CONTENT_REQUIRED` — a URL da política de
   privacidade não foi aceita pelo Meta; orienta tentar novamente.
+- **Link field required** (subcode 2061015): `META_LINK_REQUIRED` — criativo de Formulário sem o
+  campo `link` no `link_data`; o wizard envia `https://fb.me/` (valor reservado da doc Lead Ads).

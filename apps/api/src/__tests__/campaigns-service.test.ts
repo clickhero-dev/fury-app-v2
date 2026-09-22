@@ -143,6 +143,16 @@ describe('mapWizardMetaError', () => {
     }
   });
 
+  it('subcode 2061015 (link field required) → META_LINK_REQUIRED', () => {
+    try {
+      mapWizardMetaError({ metaSubcode: 2061015, metaCode: 100, metaType: 'OAuthException' }, 'creative');
+      expect.unreachable('deveria ter lançado');
+    } catch (err) {
+      const appErr = err as AppError;
+      expect(appErr.code).toBe('META_LINK_REQUIRED');
+    }
+  });
+
   it('mensagem insufficient → META_INSUFFICIENT_FUNDS', () => {
     expect(() => mapWizardMetaError({ message: 'insufficient balance' }, 'ad'))
       .toThrowError(AppError);
@@ -787,6 +797,8 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
     const creativeSpec = meta.createdAdCreatives[0].object_story_spec;
     expect(creativeSpec.link_data.call_to_action.type).toBe('SIGN_UP');
     expect(creativeSpec.link_data.call_to_action.value).toEqual({ lead_gen_form_id: 'form_1' });
+    // Doc Lead Ads: o campo link no link_data é obrigatório e deve ser https://fb.me/
+    expect(creativeSpec.link_data.link).toBe('https://fb.me/');
     // persistência local guarda o id do form
     expect(repo.campaigns[0].budget.lead_form_id).toBe('form_1');
     expect(repo.campaigns[0].budget.lead_page_id).toBe('page_1');
