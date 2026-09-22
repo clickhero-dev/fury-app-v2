@@ -12,17 +12,11 @@ import {
 export interface StudioModelOption {
   id: string;
   label: string;
+  /** Característica curta do modelo (1-4 palavras), ex.: "Mais rápido". */
   description: string;
-  category: string;
   family: 'flux-2' | 'outras' | 'video';
   type: 'image' | 'video';
 }
-
-const CATEGORY_LABEL: Record<string, string> = {
-  barato: 'Barato',
-  'custo-beneficio': 'Custo-benefício',
-  qualidade: 'Qualidade',
-};
 
 const FALLBACK_MODELS: Array<{ id: string; label: string }> = [
   { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 Klein 4B' },
@@ -31,8 +25,7 @@ const FALLBACK_MODELS: Array<{ id: string; label: string }> = [
 ];
 
 function optionText(model: StudioModelOption): string {
-  const category = CATEGORY_LABEL[model.category] ?? model.category;
-  return `${model.label} — ${category}`;
+  return `${model.label} — ${model.description}`;
 }
 
 /**
