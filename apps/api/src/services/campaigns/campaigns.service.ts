@@ -213,7 +213,17 @@ export function mapWizardMetaError(err: unknown, step: string): never {
   }
   if (metaType === 'OAuthException' && (metaCode === 200 || metaCode === 10)) {
     if (step === 'lead_form') {
-      throw new AppError(403, 'META_PERMISSION_DENIED', 'O Meta recusou a criação do Formulário por falta de permissão (pages_manage_metadata). Reconecte o Meta em Configurações → Integrações para conceder as novas permissões e tente novamente.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+      // Doc Lead Ads (marketing-api/guides/lead-ads/create/): criar leadgen_forms
+      // exige pages_manage_ads (pages_manage_metadata é só p/ webhooks).
+      // O Meta pode recusar por outra causa que NÃO é o scope (ex.: pessoa sem a
+      // task ADVERTISE na Página selecionada). Quando ele manda metaUserMsg, a
+      // mensagem real chega ao usuário para diagnóstico — sem substituir por genérico.
+      const realMetaMessage = metaUserMsg || metaUserTitle
+        ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}`
+        : '';
+      const hint = 'O Meta recusou a criação do Formulário. Reconecte o Meta em Configurações → Integrações para conceder pages_manage_ads (criação de Formulário de leads) e tente novamente.';
+      const message = realMetaMessage ? `${hint}\n\nDetalhes do Meta: ${realMetaMessage}` : hint;
+      throw new AppError(403, 'META_PERMISSION_DENIED', message, { step, meta_code: metaCode, meta_subcode: metaSubcode });
     }
     throw new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para publicar campanhas. Verifique ads_management, pages_show_list e business_management em Configurações → Integrações.');
   }
@@ -830,6 +840,8 @@ export class CampaignsService {
     let adSetId: string | undefined;
     let dbCampaignId: string | undefined;
     let leadFormId: string | undefined;
+    /** Page access token usado na criação do leadgen_forms (null = user token fallback). */
+    let leadFormToken: string | undefined;
 
     // Rollback de "limpeza total": se a criação falhar em qualquer etapa, remove
     // do Meta os objetos já criados (ads → adcreatives → adset → campaign, todos
@@ -839,7 +851,8 @@ export class CampaignsService {
       const pendingDeletes: Array<{ id: string; label: string; del: () => Promise<void> }> = [];
       if (leadFormId) {
         // Formulário leadgen não suporta DELETE — melhor esforço: arquivar.
-        pendingDeletes.push({ id: leadFormId, label: 'lead_form', del: () => this.meta.archiveLeadForm(leadFormId!, accessToken) });
+        // Usa o MESMO token da criação (Page token) — user token como fallback.
+        pendingDeletes.push({ id: leadFormId, label: 'lead_form', del: () => this.meta.archiveLeadForm(leadFormId!, leadFormToken ?? accessToken) });
       }
       for (const id of [...createdAdIds].reverse()) {
         pendingDeletes.push({ id, label: 'ad', del: () => this.meta.deleteAd(id, accessToken) });
@@ -871,11 +884,26 @@ export class CampaignsService {
 
     try {
       // Objetivo 'leads': cria o formulário instantâneo na Página ANTES da campanha —
-      // falha rápido (ex.: token sem pages_manage_metadata) sem criar objetos no Meta.
+      // falha rápido (ex.: token sem pages_manage_ads) sem criar objetos no Meta.
       // Try PRÓPRIO: o erro precisa ser reportado como step 'lead_form' — dentro do
       // try abaixo o catch computaria 'campaign'/'adset' e o branch lead_form do
       // mapeador (mensagem com a permissão exata) seria código morto.
       if (args.objective === 'leads') {
+        // Doc Lead Ads (marketing-api/guides/lead-ads/create/): criar leadgen_forms
+        // exige um Page access token de quem pode performar a task ADVERTISE na Página.
+        // /me/accounts devolve token + tasks tanto para páginas de admin direto quanto
+        // para as acessadas via Business Manager (permissão business_management no OAuth).
+        const pageAccess = await this.meta.getPageAccessToken(pageId, accessToken);
+        if (!pageAccess || !pageAccess.accessToken) {
+          throw new AppError(403, 'META_PAGE_NOT_MANAGED',
+            'Você não tem acesso para anunciar nesta Página (é preciso ter papel de administrador ou acesso via Business Manager). Selecione outra Página ou solicite acesso ao dono da página.', { step: 'lead_form' });
+        }
+        if (!pageAccess.tasks.includes('ADVERTISE')) {
+          throw new AppError(403, 'META_PAGE_ADVERTISE_TASK_REQUIRED',
+            'Você tem acesso à Página, mas sem a permissão de anunciar (task ADVERTISE). Peça ao administrador da Página que conceda o papel de Anunciante ou Administrador.', { step: 'lead_form' });
+        }
+        leadFormToken = pageAccess.accessToken;
+
         const leadFormBody = {
           name: `Formulário — ${campaignName}`,
           locale: 'PT_BR',
@@ -892,7 +920,7 @@ export class CampaignsService {
             business_phone_number: normalizePhoneToMetaE164(args.whatsappPhoneNumber!),
           },
         };
-        const leadFormResponse = await this.meta.createLeadForm(pageId, accessToken, leadFormBody);
+        const leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, leadFormBody);
         leadFormId = leadFormResponse.id;
       }
     } catch (err) {

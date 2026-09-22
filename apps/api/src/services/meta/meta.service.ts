@@ -36,8 +36,12 @@ const META_SCOPES = [
   // 2) Paginas (vinculadas as BMs selecionadas)
   'pages_show_list',
   'pages_read_engagement',
-  // 2b) Formularios de leads (objetivo 'leads'): criar leadgen form na Pagina
-  // (pages_manage_metadata) e ler os leads coletados (leads_retrieval).
+  // 2b) Formularios de leads (objetivo 'leads'): criar leadgen form na Pagina.
+  // Doc oficial (marketing-api/guides/lead-ads/create/): a CRIACAO do form exige
+  // pages_manage_ads (nao pages_manage_metadata — essa so serve p/ webhooks leadgen).
+  'pages_manage_ads',
+  // pages_manage_metadata: webhooks de leadgen (futuro). leads_retrieval: ler leads
+  // ("Ver leads" no Painel) — exige App Review p/ usuarios sem papel no app.
   'pages_manage_metadata',
   'leads_retrieval',
   // 2b) WhatsApp Business (WABAs vinculadas as Paginas/BM) — necessario para
@@ -59,6 +63,8 @@ interface OAuthStatePayload {
   context: OAuthContext;
   returnUrl?: string;
   frontendUrl?: string;
+  /** Fluxo pediu auth_type=rerequest (re-exibir permissão já declinada). */
+  rerequest?: boolean;
 }
 
 const RETURN_URLS: Record<OAuthContext, string> = {
@@ -289,7 +295,8 @@ export class MetaService {
   generateMetaAuthUrl(
     tenantId: string,
     context: OAuthContext = 'onboarding',
-    frontendUrl?: string
+    frontendUrl?: string,
+    opts?: { rerequest?: boolean }
   ): string {
     const appId = getRequiredEnv('META_APP_ID');
     const redirectUri = this.getRedirectUri();
@@ -301,12 +308,19 @@ export class MetaService {
       // redirecionar de volta ao MESMO ambiente (localhost/HMG/prod), sem
       // depender de FRONTEND_URL fixo.
       frontendUrl: frontendUrl && isAllowedFrontendOrigin(frontendUrl) ? frontendUrl : undefined,
+      // Reconexão explícita: força o Login Dialog a re-exibir permissões que já
+      // foram declinadas uma vez (sem isso o dialog omite e o token novo nasce
+      // sem a permissão de novo — loop "reconectei e não resolve").
+      rerequest: opts?.rerequest === true ? true : undefined,
     });
 
     const authUrl = new URL(META_OAUTH_URL);
     authUrl.searchParams.set('client_id', appId);
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('scope', META_SCOPES.join(','));
+    if (opts?.rerequest === true) {
+      authUrl.searchParams.set('auth_type', 'rerequest');
+    }
     authUrl.searchParams.set('state', state);
 
     // Alternativa para forcar a ordem/agrupamento das telas de consentimento:

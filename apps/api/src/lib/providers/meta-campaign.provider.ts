@@ -4,6 +4,7 @@ import type {
   MetaLocationResult,
   MetaAdImageUploadResponse,
 } from '../meta-api.js';
+import type { MetaPageAccess } from '../meta-api.js';
 
 export interface IMetaCampaignProvider {
   createCampaign(
@@ -47,6 +48,13 @@ export interface IMetaCampaignProvider {
     accessToken: string,
     body: Record<string, unknown>
   ): Promise<{ id: string }>;
+
+  /**
+   * Page access token + tasks de uma Página do usuário (via /me/accounts).
+   * Cobre páginas de admin direto e as acessadas via Business Manager.
+   * Retorna null quando o usuário não tem papel na Página.
+   */
+  getPageAccessToken(pageId: string, userAccessToken: string): Promise<MetaPageAccess | null>;
 
   archiveLeadForm(formId: string, accessToken: string): Promise<void>;
 

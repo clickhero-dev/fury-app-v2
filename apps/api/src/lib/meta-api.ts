@@ -512,6 +512,73 @@ export async function getUserFacebookPages(
   }));
 }
 
+export interface MetaPageAccess {
+  pageId: string;
+  name: string;
+  accessToken: string;
+  /** Tasks do usuário na Página (ex.: ADVERTISE, MANAGE, ANALYZE). */
+  tasks: string[];
+}
+
+interface MetaPagesAccessResponse {
+  data: Array<{
+    id: string;
+    name?: string;
+    access_token?: string;
+    tasks?: string[];
+  }>;
+  paging?: {
+    cursors?: { before: string; after: string };
+    next?: string;
+  };
+}
+
+/**
+ * Busca o Page access token de uma Página via /me/accounts — fonte única que
+ * devolve token por Página (cobre páginas onde o usuário é admin direto E as
+ * concedidas via Business Manager, desde que o OAuth tenha business_management).
+ *
+ * Usado na criação de leadgen_forms (doc Lead Ads exige Page access token de
+ * alguém com a task ADVERTISE na Página). Retorna null quando o usuário não tem
+ * papel na Página.
+ */
+export async function getPageAccessToken(
+  accessToken: string,
+  pageId: string
+): Promise<MetaPageAccess | null> {
+  let after: string | undefined;
+  const target = String(pageId);
+
+  do {
+    const url = new URL(`${META_GRAPH_BASE_URL}/me/accounts`);
+    url.searchParams.set('fields', 'id,name,access_token,tasks');
+    url.searchParams.set('limit', '100');
+    url.searchParams.set('access_token', accessToken);
+    if (after) url.searchParams.set('after', after);
+
+    const response = await fetch(url, { method: 'GET' });
+    const payload = await parseMetaResponse<MetaPagesAccessResponse>(
+      response,
+      'Falha ao buscar as Paginas do usuario no Meta.'
+    );
+
+    for (const page of payload.data || []) {
+      if (String(page.id) === target) {
+        return {
+          pageId: page.id,
+          name: page.name ?? page.id,
+          accessToken: page.access_token ?? '',
+          tasks: page.tasks ?? [],
+        };
+      }
+    }
+
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return null;
+}
+
 export interface MetaWhatsappNumber {
   phoneNumberId: string;
   displayPhoneNumber: string;

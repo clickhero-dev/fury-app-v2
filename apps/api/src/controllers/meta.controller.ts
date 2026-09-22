@@ -14,6 +14,9 @@ const callbackQuerySchema = z.object({
 const authUrlQuerySchema = z.object({
   context: z.enum(['onboarding', 'settings']).default('onboarding'),
   frontendUrl: z.string().url('frontendUrl invalida').optional(),
+  // Reconexão explícita (botão "Reconectar Meta"): auth_type=rerequest na URL de
+  // OAuth — re-exibe permissões já declinadas, que sem a flag são omitidas.
+  rerequest: z.union([z.literal('true'), z.literal('1')]).optional(),
 });
 
 const connectionIdSchema = z.object({
@@ -33,12 +36,14 @@ export class MetaController {
       if (!req.user?.tenantId) {
         throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no token JWT.');
       }
-      const { context, frontendUrl } = authUrlQuerySchema.parse(req.query);
+      const { context, frontendUrl, rerequest } = authUrlQuerySchema.parse(req.query);
       // Origin do frontend que iniciou o fluxo: query explícita OU header Origin
       // do browser (fallback). O redirect pós-OAuth volta ao MESMO ambiente
       // (app.useady.com.br / HMG / localhost), sem depender de FRONTEND_URL.
       const origin = frontendUrl ?? (req.headers.origin as string | undefined);
-      const authUrl = this.metaService.generateMetaAuthUrl(req.user.tenantId, context, origin);
+      const authUrl = this.metaService.generateMetaAuthUrl(req.user.tenantId, context, origin, {
+        rerequest: rerequest === 'true' || rerequest === '1',
+      });
       res.status(200).json({
         success: true,
         data: { authUrl },

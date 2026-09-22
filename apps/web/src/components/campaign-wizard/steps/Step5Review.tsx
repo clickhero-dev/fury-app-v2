@@ -36,12 +36,14 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
   const [showSlowWarning, setShowSlowWarning] = useState(false);
   const slowWarningTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Token sem permissão (ex.: pages_manage_metadata p/ Formulário) ou expirado:
+  // Token sem permissão (ex.: pages_manage_ads p/ Formulário) ou expirado:
   // refazer o OAuth concede os scopes atuais e volta para esta tela.
+  // rerequest=true → auth_type=rerequest no OAuth: força o Login Dialog a
+  // re-exibir permissões já declinadas (sem isso ele omite e o erro volta igual).
   const reconnectMutation = useMutation({
     mutationFn: async () => {
       const response = await api.get<{ data: { authUrl: string } }>('/meta/auth/url', {
-        params: { context: 'settings', frontendUrl: window.location.origin },
+        params: { context: 'settings', frontendUrl: window.location.origin, rerequest: 'true' },
       });
       return response.data.data.authUrl;
     },
@@ -52,6 +54,10 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
 
   const publishError = (mutation.error as { response?: { data?: { error?: { code?: string; message?: string } } } })
     ?.response?.data?.error;
+  // Erros de reconexão: token expirado ou falta de permissão no escopo — refazer o
+  // OAuth concede os scopes atuais. Erros de Página (META_PAGE_NOT_MANAGED /
+  // META_PAGE_ADVERTISE_TASK_REQUIRED) NÃO entram aqui: reconectar não resolve, a
+  // mensagem do backend já orienta a trocar de Página / solicitar papel ADVERTISE.
   const isReconnectError =
     publishError?.code === 'META_TOKEN_EXPIRED' || publishError?.code === 'META_PERMISSION_DENIED';
 

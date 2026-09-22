@@ -92,15 +92,38 @@ describe('mapWizardMetaError', () => {
       .toThrowError(AppError);
   });
 
-  it('OAuthException 200 no lead_form → mensagem aponta pages_manage_metadata', () => {
+  it('OAuthException 200 no lead_form → mensagem aponta pages_manage_ads', () => {
     try {
       mapWizardMetaError({ metaCode: 200, metaType: 'OAuthException' }, 'lead_form');
       expect.unreachable('deveria ter lançado');
     } catch (err) {
       const appErr = err as AppError;
       expect(appErr.code).toBe('META_PERMISSION_DENIED');
-      expect(appErr.message).toContain('pages_manage_metadata');
+      // Doc Lead Ads: criar leadgen_forms exige pages_manage_ads (não pages_manage_metadata).
+      expect(appErr.message).toContain('pages_manage_ads');
       expect(appErr.message).toContain('Formulário');
+    }
+  });
+
+  it('OAuthException 200 no lead_form preserva a mensagem real do Meta (metaUserMsg) para diagnóstico', () => {
+    // O Meta pode recusar o leadgen_forms por uma causa que NÃO é o scope do token
+    // (ex.: a pessoa não tem a task ADVERTISE na Página selecionada). Nesse caso a
+    // mensagem real do Meta deve chegar ao usuário, não ser substituída por texto genérico.
+    try {
+      mapWizardMetaError(
+        {
+          metaCode: 200,
+          metaType: 'OAuthException',
+          metaUserMsg: 'The user is not an admin of the page and cannot create lead forms.',
+          metaUserTitle: '(#200)',
+        },
+        'lead_form'
+      );
+      expect.unreachable('deveria ter lançado');
+    } catch (err) {
+      const appErr = err as AppError;
+      expect(appErr.code).toBe('META_PERMISSION_DENIED');
+      expect(appErr.message).toContain('not an admin of the page');
     }
   });
 
@@ -773,7 +796,7 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
   it('falha do lead form → step "lead_form" (não "adset") + rollback sem deletar campanha', async () => {
     const { service, meta, repo } = makeService();
     makeLeadsEnv(meta, repo);
-    // Simula OAuthException 200 do Meta ao criar o form (falta pages_manage_metadata)
+    // Simula OAuthException 200 do Meta ao criar o form (falta pages_manage_ads)
     meta.createLeadForm = async () => {
       const err = new Error('(#200) Permission error') as Error & { metaCode: number; metaType: string };
       err.metaCode = 200;
@@ -789,7 +812,7 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
       // Erro do FORMULÁRIO nunca deve ser reportado como step 'adset'
       // (que caía na mensagem genérica — branch lead_form do mapeador era morto)
       expect(appErr.code).toBe('META_PERMISSION_DENIED');
-      expect(appErr.message).toContain('pages_manage_metadata');
+      expect(appErr.message).toContain('pages_manage_ads');
       expect(appErr.message).toContain('Formulário');
     }
     // Campanha nem chegou a ser criada no Meta (form vem antes) — nada a rolar back
@@ -851,6 +874,86 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
     } as any);
 
     expect(meta.createdLeadForms[0].body.thank_you_page.business_phone_number).toBe('5511932734241');
+  });
+
+  // ── Page access token na criação do Formulário (issue #213) ────────────────
+
+  it('usa o Page access token (não o user token) na criação do leadgen_forms', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    // mock default: Página admin com task ADVERTISE → page_token_page_1
+
+    await service.createCampaignFromWizard(leadsArgs as any);
+
+    expect(meta.createdLeadForms).toHaveLength(1);
+    expect(meta.createdLeadForms[0].access_token).toBe('page_token_page_1');
+    // getPageAccessToken foi consultado com o user token da conexão
+    expect(meta.pageAccessRequests).toEqual([{ pageId: 'page_1', userAccessToken: 'tok_decrypted' }]);
+  });
+
+  it('funciona com Página acessada via Business Manager (mesmo fluxo /me/accounts)', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.pageAccessByPageId.set('page_1', {
+      pageId: 'page_1', name: 'Página BM', accessToken: 'page_token_bm_1', tasks: ['ADVERTISE'],
+    });
+
+    await service.createCampaignFromWizard(leadsArgs as any);
+
+    expect(meta.createdLeadForms[0].access_token).toBe('page_token_bm_1');
+    expect(meta.createdLeadForms[0].body.name).toBe('Formulário — Promoção');
+  });
+
+  it('sem acesso à Página → META_PAGE_NOT_MANAGED e nada criado no Meta', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.pageAccessByPageId.set('page_1', null);
+
+    try {
+      await service.createCampaignFromWizard(leadsArgs as any);
+      expect.unreachable('deveria ter lançado');
+    } catch (err) {
+      const appErr = err as AppError;
+      expect(appErr.code).toBe('META_PAGE_NOT_MANAGED');
+      expect(appErr.message).toContain('não tem acesso para anunciar nesta Página');
+    }
+    expect(meta.createdLeadForms).toHaveLength(0);
+    expect(meta.createdCampaigns).toHaveLength(0);
+    expect(repo.campaigns).toHaveLength(0);
+  });
+
+  it('Página sem task ADVERTISE → META_PAGE_ADVERTISE_TASK_REQUIRED e nada criado', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.pageAccessByPageId.set('page_1', {
+      pageId: 'page_1', name: 'Página Analyst', accessToken: 'page_token_analyst', tasks: ['ANALYZE'],
+    });
+
+    try {
+      await service.createCampaignFromWizard(leadsArgs as any);
+      expect.unreachable('deveria ter lançado');
+    } catch (err) {
+      const appErr = err as AppError;
+      expect(appErr.code).toBe('META_PAGE_ADVERTISE_TASK_REQUIRED');
+      expect(appErr.message).toContain('ADVERTISE');
+    }
+    expect(meta.createdLeadForms).toHaveLength(0);
+    expect(meta.createdCampaigns).toHaveLength(0);
+    expect(repo.campaigns).toHaveLength(0);
+  });
+
+  it('rollback do lead_form arquiva usando o MESMO Page token da criação', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.failCreateStep = 'adset'; // campanha criada, adset falha → rollback do form
+
+    await expect(service.createCampaignFromWizard(leadsArgs as any)).rejects.toThrow(AppError);
+
+    expect(meta.archivedLeadForms).toEqual(['form_1']);
+    // O archive usa o MESMO token da criação (Page token), não o user token
+    expect(meta.archivedLeadFormsWithToken).toEqual([
+      { formId: 'form_1', accessToken: 'page_token_page_1' },
+    ]);
   });
 });
 

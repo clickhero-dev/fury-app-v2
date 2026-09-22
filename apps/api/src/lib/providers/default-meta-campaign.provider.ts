@@ -3,14 +3,20 @@ import {
   getMetaInsights,
   searchMetaCityLocations,
   uploadAdImage as metaUploadAdImage,
+  getPageAccessToken as metaGetPageAccessToken,
   type MetaCampaignCreateResponse,
   type MetaInsightsResponse,
   type MetaLocationResult,
   type MetaAdImageUploadResponse,
+  type MetaPageAccess,
 } from '../meta-api.js';
 import type { IMetaCampaignProvider } from './meta-campaign.provider.js';
 
 export class DefaultMetaCampaignProvider implements IMetaCampaignProvider {
+  async getPageAccessToken(pageId: string, userAccessToken: string): Promise<MetaPageAccess | null> {
+    return metaGetPageAccessToken(userAccessToken, pageId);
+  }
+
   async createCampaign(
     adAccountId: string,
     accessToken: string,

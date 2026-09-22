@@ -81,6 +81,39 @@ describe('MetaService (deep DI)', () => {
     expect(decoded.context).toBe('settings');
   });
 
+  it('generateMetaAuthUrl pede pages_manage_ads no scope (criação de leadgen_forms — doc Lead Ads)', () => {
+    const svc = makeSvc(makeRepo());
+    const url = svc.generateMetaAuthUrl('t1', 'onboarding');
+    const scope = new URL(url).searchParams.get('scope') ?? '';
+    const scopes = scope.split(',');
+    // Doc oficial (developers.facebook.com/docs/marketing-api/guides/lead-ads/create/):
+    // criar form exige ads_management + pages_manage_ads + pages_read_engagement + pages_show_list.
+    expect(scopes).toContain('pages_manage_ads');
+    expect(scopes).toContain('pages_manage_metadata'); // webhooks leadgen (futuro) — não remover
+    expect(scopes).toContain('leads_retrieval'); // leitura de leads ("Ver leads")
+  });
+
+  it('generateMetaAuthUrl com rerequest: auth_type=rerequest na URL + flag no state', () => {
+    const svc = makeSvc(makeRepo());
+    const url = svc.generateMetaAuthUrl('t1', 'settings', 'https://hmg.example', { rerequest: true });
+    // Login Dialog NÃO re-pede permissão declinada sem auth_type=rerequest
+    // (developers.facebook.com/docs/facebook-login/web/permissions).
+    expect(url).toContain('auth_type=rerequest');
+
+    const stateParam = new URL(url).searchParams.get('state') ?? '';
+    const decoded = jwt.verify(stateParam, 'test-jwt-secret') as { rerequest?: boolean };
+    expect(decoded.rerequest).toBe(true);
+  });
+
+  it('generateMetaAuthUrl sem opts NÃO manda auth_type (onboarding byte-idêntico)', () => {
+    const svc = makeSvc(makeRepo());
+    const url = svc.generateMetaAuthUrl('t1', 'settings', 'https://app.useady.com.br');
+    expect(url).not.toContain('auth_type');
+    const stateParam = new URL(url).searchParams.get('state') ?? '';
+    const decoded = jwt.decode(stateParam) as { rerequest?: boolean };
+    expect(decoded.rerequest).toBeUndefined();
+  });
+
   it('getTenantAssetSelection retorna null quando o tenant não tem conexão', async () => {
     const repo = makeRepo();
     const selection = await makeSvc(repo).getTenantAssetSelection('t1');
