@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
-import { Search, Loader2, Pause, Play, Trash2, ChevronDown, Plus, Users } from 'lucide-react';
+import { Search, Loader2, Pause, Play, Trash2, ChevronDown, Plus } from 'lucide-react';
 import { DataTable, StatusBadge, PageHeader } from '@/components';
 import { PeriodSelector } from '@/components/PeriodSelector';
 import {
@@ -15,7 +15,6 @@ import {
 import { useCampaigns } from '@/hooks/useCampaigns';
 import { usePauseCampaign, getFriendlyPauseError } from '@/hooks/usePauseCampaign';
 import { useDeleteCampaign, getDeleteCampaignError } from '@/hooks/useDeleteCampaign';
-import { useCampaignLeads } from '@/hooks/useCampaignLeads';
 import type { CampaignData } from '@/types/campaigns';
 import {
   formatConversions,
@@ -50,7 +49,6 @@ export function PainelCampanhas() {
   const [page, setPage] = useState(1);
   const [campaignToPause, setCampaignToPause] = useState<CampaignData | null>(null);
   const [campaignToDelete, setCampaignToDelete] = useState<CampaignData | null>(null);
-  const [leadsCampaign, setLeadsCampaign] = useState<CampaignData | null>(null);
   const [actionError, setActionError] = useState<string>('');
   const [period, setPeriod] = useState<Period>('this_month');
 
@@ -60,8 +58,6 @@ export function PainelCampanhas() {
   const subscriptionError = result.subscriptionError;
   const pauseMutation = usePauseCampaign();
   const deleteMutation = useDeleteCampaign();
-  // Coluna "Ver leads" só existe quando há campanhas do objetivo Formulário na lista.
-  const showLeadsColumn = campaigns.some((c) => c.objective === 'OUTCOME_LEADS');
   const handleCreateCampaign = () => {
     clearPreSelectedAsset();
     navigate('/criar-campanha');
@@ -177,23 +173,10 @@ export function PainelCampanhas() {
         <span className="text-text-primary font-medium">{formatConversions(value as number | null)}</span>
       ),
     },
-    ...(showLeadsColumn
-      ? [{
-          key: 'leadsAction' as unknown as keyof CampaignData,
-          label: 'Leads',
-          align: 'right' as const,
-          render: (_value: unknown, row: CampaignData) => (
-            <button
-              type="button"
-              onClick={() => setLeadsCampaign(row)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-brand bg-brand/10 hover:bg-brand/25 rounded-full border border-brand/20 transition-all cursor-pointer"
-            >
-              <Users className="w-3.5 h-3.5" />
-              Ver leads
-            </button>
-          ),
-        }]
-      : []),
+    
+    
+    
+    
     {
       key: 'id' as const,
       label: 'Ações',
@@ -478,79 +461,6 @@ export function PainelCampanhas() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <LeadsModal campaign={leadsCampaign} onClose={() => setLeadsCampaign(null)} />
     </div>
-  );
-}
-
-// ── Modal de leads do formulário (objetivo 'leads') ──────────────────────────
-
-function LeadsModal({ campaign, onClose }: { campaign: CampaignData | null; onClose: () => void }) {
-  const { leads, isLoading, isError, errorMessage } = useCampaignLeads(campaign?.id ?? null, campaign !== null);
-
-  return (
-    <Dialog open={campaign !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-surface border border-border-light text-text-primary rounded-2xl max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="text-text-primary text-lg">Leads — {campaign?.name}</DialogTitle>
-          <DialogDescription className="text-text-secondary">
-            Pessoas que preencheram o formulário do anúncio, buscadas direto do Meta Ads.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="max-h-80 overflow-y-auto mt-2 rounded-xl border border-border divide-y divide-border">
-          {isLoading && (
-            <div className="flex items-center justify-center gap-2 py-10 text-sm text-text-secondary">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Carregando leads...
-            </div>
-          )}
-
-          {!isLoading && isError && (
-            <div className="py-10 px-4 text-sm text-error text-center">
-              {errorMessage || 'Não foi possível carregar os leads. Tente novamente.'}
-            </div>
-          )}
-
-          {!isLoading && !isError && leads.length === 0 && (
-            <div className="py-10 px-4 text-sm text-text-secondary text-center">
-              Nenhum lead preencheu o formulário ainda.
-            </div>
-          )}
-
-          {!isLoading && !isError && leads.length > 0 && (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-surface-secondary/40">
-                  <th className="text-left uppercase text-[11px] text-text-tertiary tracking-wider font-semibold py-3 px-4">Nome</th>
-                  <th className="text-left uppercase text-[11px] text-text-tertiary tracking-wider font-semibold py-3 px-4">E-mail</th>
-                  <th className="text-left uppercase text-[11px] text-text-tertiary tracking-wider font-semibold py-3 px-4">Telefone</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leads.map((lead, i) => (
-                  <tr key={`${lead.email ?? 'lead'}-${i}`} className="text-text-primary">
-                    <td className="py-2.5 px-4">{lead.name ?? '—'}</td>
-                    <td className="py-2.5 px-4 break-all">{lead.email ?? '—'}</td>
-                    <td className="py-2.5 px-4 whitespace-nowrap">{lead.phone ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <DialogFooter className="mt-4 gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold rounded-full border border-border-light bg-surface-secondary text-text-primary hover:bg-surface-secondary/80 transition-colors"
-          >
-            Fechar
-          </button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

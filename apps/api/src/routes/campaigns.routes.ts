@@ -35,6 +35,8 @@ router.patch('/:id/status', campaigns.updateCampaignStatus);
 router.patch('/:id/budget', campaigns.updateBudget);
 router.get('/:id/insights', campaigns.getCampaignInsights);
 router.get('/:id/leads', campaigns.getCampaignLeads);
+// Agregado de leads de todas as campanhas de Formulário (antes de /:id genérico)
+router.get('/leads', campaigns.getAllCampaignLeads);
 
 // Generic /:id routes last
 router.get('/:id', campaigns.getCampaign);

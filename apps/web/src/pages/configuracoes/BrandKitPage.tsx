@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { AppLayout, PageHeader, ErrorBoundary, Button, Card, CardContent, CardHeader, CardTitle } from '@/components';
 import { Select } from '@/components/ui/select';
 import { useBrandKit, useSaveBrandKit, useUploadLogo, useUploadPhotos, useDeletePhoto } from '@/hooks/useBrandKit';
-import { WhatsappVerificationCard } from './WhatsappVerificationCard';
+// OCULTO (feature em teste) — volta no unhide
+// import { WhatsappVerificationCard } from './WhatsappVerificationCard';
 import type { VoiceTone } from '@/types/brandKit';
 import { FURY_COLORS } from '@/lib/constants';
 import { Upload, X, Trash2, Image as ImageIcon } from 'lucide-react';
@@ -336,7 +337,8 @@ export function BrandKitContent() {
             </CardContent>
           </Card>
 
-          <WhatsappVerificationCard whatsappNumber={phoneValid ? digitsOnly : null} />
+          {/* OCULTO (feature em teste) — volta no unhide */}
+          {/* <WhatsappVerificationCard whatsappNumber={phoneValid ? digitsOnly : null} /> */}
 
           {/* ponytail: Biblioteca de Fotos oculta — reactivar quando Estúdio precisar de upload dedicado */}
           {false && (
