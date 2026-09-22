@@ -1047,3 +1047,65 @@ describe('CampaignsService.getCampaignLeads', () => {
     await expect(service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'campaign_1' })).rejects.toThrow(AppError);
   });
 });
+
+describe('CampaignsService.getAllCampaignLeads', () => {
+  it('agrega leads apenas das campanhas de Formulário (OUTCOME_LEADS), com campaignId/Name', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    repo.campaigns.push(
+      { id: 'form_1', name: 'Camp Formulário', tenantId: TENANT_ID, budget: { lead_form_id: 'lf_1', objective: 'OUTCOME_LEADS' } } as any,
+      { id: 'traffic_1', name: 'Camp Tráfego', tenantId: TENANT_ID, budget: { objective: 'OUTCOME_TRAFFIC' } } as any,
+      { id: 'form_2', name: 'Camp Formulário 2', tenantId: TENANT_ID, budget: { lead_form_id: 'lf_2', objective: 'OUTCOME_LEADS' } } as any,
+    );
+    meta.leadsResult = {
+      data: [{
+        created_time: '2026-09-21T12:00:00Z',
+        field_data: [
+          { name: 'full_name', values: ['Maria Souza'] },
+          { name: 'email', values: ['maria@exemplo.com'] },
+          { name: 'phone_number', values: ['11999999999'] },
+        ],
+      }],
+    };
+
+    const result = await service.getAllCampaignLeads({ tenantId: TENANT_ID });
+
+    // 2 campanhas de Formulário × 1 lead cada (tráfego fica fora)
+    expect(result.leads).toHaveLength(2);
+    const [first, second] = result.leads;
+    expect(first).toMatchObject({
+      name: 'Maria Souza', email: 'maria@exemplo.com', phone: '11999999999',
+      campaignId: 'form_1', campaignName: 'Camp Formulário',
+    });
+    expect(second.campaignId).toBe('form_2');
+  });
+
+  it('retorna vazio quando nenhuma campanha é de Formulário', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    repo.campaigns.push(
+      { id: 't1', name: 'Tráfego', tenantId: TENANT_ID, budget: { objective: 'OUTCOME_TRAFFIC' } } as any,
+    );
+
+    const result = await service.getAllCampaignLeads({ tenantId: TENANT_ID });
+    expect(result.leads).toEqual([]);
+  });
+
+  it('falha em uma campanha não derruba a listagem das demais', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    repo.campaigns.push(
+      { id: 'ok_1', name: 'OK', tenantId: TENANT_ID, budget: { lead_form_id: 'lf_ok', objective: 'OUTCOME_LEADS' } } as any,
+      { id: 'bad_1', name: 'Ruim', tenantId: TENANT_ID, budget: { lead_form_id: 'lf_bad', objective: 'OUTCOME_LEADS' } } as any,
+    );
+    // leadsResult só tem o lead; para a campanha bad_1 o getLeadFormData lança
+    meta.getLeadFormData = async (formId: string) => {
+      if (formId === 'lf_bad') throw new Error('Meta down');
+      return { data: [{ created_time: '2026-09-21T00:00:00Z', field_data: [] }] };
+    };
+
+    const result = await service.getAllCampaignLeads({ tenantId: TENANT_ID });
+    expect(result.leads).toHaveLength(1);
+    expect(result.leads[0].campaignId).toBe('ok_1');
+  });
+});

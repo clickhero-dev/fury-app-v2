@@ -38,8 +38,9 @@ describe('StudioAiService', () => {
     for (const m of [...image, ...video]) {
       expect(m.id).toBeTruthy();
       expect(m.label).toBeTruthy();
-      expect(m.category).toBeTruthy();
+      expect(m.family).toBeTruthy();
       expect(m.description).toBeTruthy();
+      expect(m.type).toBeTruthy();
     }
     expect(video).toHaveLength(3);
   });

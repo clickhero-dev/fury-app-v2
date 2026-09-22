@@ -6,6 +6,8 @@ export interface CampaignLead {
   email: string | null;
   phone: string | null;
   createdAt: string | null;
+  campaignId?: string;
+  campaignName?: string;
 }
 
 interface CampaignLeadsResponse {
@@ -13,19 +15,26 @@ interface CampaignLeadsResponse {
   data: CampaignLead[];
 }
 
-export function useCampaignLeads(campaignId: string | null, enabled: boolean) {
+/**
+ * Busca leads de formulário.
+ * - `campaignId` definido: GET /campaigns/:id/leads (campanha específica).
+ * - `campaignId` null + `all=true`: GET /campaigns/leads (agregado de todas as
+ *   campanhas de Formulário, usado na visão "Todas as campanhas" da página de Leads).
+ */
+export function useCampaignLeads(campaignId: string | null, enabled: boolean, all = false) {
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['campaigns/leads', campaignId],
+    queryKey: ['campaigns/leads', campaignId ?? 'all'],
     queryFn: async () => {
-      const response = await api.get<CampaignLeadsResponse>(`/campaigns/${campaignId}/leads`);
+      const url = campaignId ? `/campaigns/${campaignId}/leads` : '/campaigns/leads';
+      const response = await api.get<CampaignLeadsResponse>(url);
       return response.data.data;
     },
-    enabled: enabled && Boolean(campaignId),
+    enabled: enabled && (all || Boolean(campaignId)),
     staleTime: 60_000,
   });
 
   return {
-    leads: data ?? [],
+    leads: (data ?? []) as CampaignLead[],
     isLoading: enabled && isLoading,
     isError,
     errorMessage:

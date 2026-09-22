@@ -693,6 +693,26 @@ export class CampaignsController {
     }
   };
 
+  /** GET /campaigns/leads — leads agregados de todas as campanhas de Formulário do tenant. */
+  getAllCampaignLeads = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tenantId = req.tenant?.tenantId || '';
+      if (!tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+      }
+
+      const result = await this.campaignsService.getAllCampaignLeads({ tenantId });
+
+      res.json({
+        success: true,
+        data: result.leads,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   createWizardCampaign = async (req: Request, res: Response, next: NextFunction) => {
     // Timeout de 120s — se estourar, retorna JSON 504 em vez de deixar o proxy
     // (Traefik) retornar 502 HTML. Operações de upload de imagem ao Meta podem

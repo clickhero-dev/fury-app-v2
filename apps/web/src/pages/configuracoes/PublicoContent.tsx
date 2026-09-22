@@ -126,7 +126,7 @@ export function PublicoContent() {
             <h3 className="text-lg font-bold text-text-primary mb-1">Contexto do Negócio</h3>
             <p className="text-sm text-text-secondary">
               Descreva o nicho, os clientes e o contexto da empresa. Esse texto é usado como contexto
-              pela IA do FURY ao gerar criativos e recomendações.
+              pela IA ao gerar criativos e recomendações.
             </p>
           </div>
 
