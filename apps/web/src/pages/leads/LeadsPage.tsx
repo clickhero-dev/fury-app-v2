@@ -149,7 +149,7 @@ export function LeadsPage() {
                 <tr key={`${lead.email ?? 'lead'}-${i}`} className="hover:bg-surface-secondary/30 transition-colors">
                   {columns.map((col) => (
                     <td key={col.key as string} className="py-3 px-4">
-                      {col.render(lead[col.key], lead)}
+                      {col.render(lead[col.key])}
                     </td>
                   ))}
                 </tr>
