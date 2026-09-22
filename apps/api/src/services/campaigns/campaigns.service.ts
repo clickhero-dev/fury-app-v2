@@ -243,6 +243,12 @@ export function mapWizardMetaError(err: unknown, step: string): never {
   if (metaSubcode === 1487110) {
     throw new AppError(400, 'META_LOCATION_RADIUS', metaUserMsg || 'O raio geografico selecionado nao esta dentro dos limites. Aumente o raio (ex: Sao Paulo precisa de 15km ou mais).', { step, meta_code: metaCode, meta_subcode: metaSubcode });
   }
+  // "Required field is missing: the link field is required" — criativo de leads
+  // sem o campo `link` no link_data. O wizard envia https://fb.me/ (doc Lead Ads);
+  // se o Meta ainda rejeitar, orienta sem substituir a mensagem real.
+  if (metaSubcode === 2061015) {
+    throw new AppError(400, 'META_LINK_REQUIRED', metaUserMsg || 'O Meta exigiu um link no criativo do Formulário. Verifique o criativo e tente novamente.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+  }
   // Código 192 = "Invalid phone number" — hoje só acontece no thank_you_page do
   // formulário de leads (business_phone_number inválido/sem WhatsApp).
   if (metaCode === 192) {
@@ -1030,7 +1036,14 @@ export class CampaignsService {
 
         const creativeBody: Record<string, unknown> = isInstagramCreative
           ? { object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: c.creativeInstagramMediaId, call_to_action: JSON.stringify({ type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: c.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
-          : { name: `Creative — FURY #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads' ? {} : { link: creativeLinkFor(c) }) } } };
+          : { name: `Creative — FURY #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads'
+            // Doc Lead Ads: o campo link no link_data é OBRIGATÓRIO mesmo para
+            // formulários instantâneos, e o valor deve ser https://fb.me/ (o
+            // clique real abre o form via call_to_action.lead_gen_form_id). Sem
+            // ele o Meta rejeita com subcode 2061015 ("link field is required");
+            // com URL externa rejeita com 1815316.
+            ? { link: 'https://fb.me/' }
+            : { link: creativeLinkFor(c) }) } } };
 
         const adCreativeResponse = await this.meta.createAdCreative(adAccountId, accessToken, creativeBody);
         createdAdCreativeIds.push(adCreativeResponse.id);
