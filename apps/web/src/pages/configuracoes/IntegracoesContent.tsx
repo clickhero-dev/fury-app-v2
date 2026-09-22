@@ -275,7 +275,7 @@ export function IntegracoesContent() {
     refetchOnMount: true,
   });
 
-  const { data: scopes = [] } = useQuery<string[]>({
+  const { data: scopes = [], isFetched: scopesFetched } = useQuery<string[]>({
     queryKey: ['meta-scopes'],
     queryFn: async () => {
       try {
@@ -289,9 +289,14 @@ export function IntegracoesContent() {
     placeholderData: [],
   });
 
-  const REQUIRED_SCOPES = ['pages_show_list', 'ads_management', 'ads_read', 'instagram_content_publish'];
+  // pages_manage_ads destrava a criação de leadgen_forms (Formulário de leads);
+  // leads_retrieval destrava a leitura dos leads. Sem elas o banner de reconexão
+  // não apareceria para o objetivo Formulário (bug: "reconectei e o erro persiste").
+  const REQUIRED_SCOPES = ['pages_show_list', 'ads_management', 'ads_read', 'instagram_content_publish', 'pages_manage_ads', 'leads_retrieval'];
+  // isFetched: só avalia o banner com os scopes REAIS já carregados — com
+  // placeholderData [] o banner piscava durante o fetch (falso-positivo).
   const needsScopeReconnect =
-    connections.length > 0 && REQUIRED_SCOPES.some((scope) => !scopes.includes(scope));
+    connections.length > 0 && scopesFetched && REQUIRED_SCOPES.some((scope) => !scopes.includes(scope));
 
   const connectMutation = useMutation({
     mutationFn: async () => {

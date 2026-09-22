@@ -54,6 +54,10 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
 
   const publishError = (mutation.error as { response?: { data?: { error?: { code?: string; message?: string } } } })
     ?.response?.data?.error;
+  // Erros de reconexão: token expirado ou falta de permissão no escopo — refazer o
+  // OAuth concede os scopes atuais. Erros de Página (META_PAGE_NOT_MANAGED /
+  // META_PAGE_ADVERTISE_TASK_REQUIRED) NÃO entram aqui: reconectar não resolve, a
+  // mensagem do backend já orienta a trocar de Página / solicitar papel ADVERTISE.
   const isReconnectError =
     publishError?.code === 'META_TOKEN_EXPIRED' || publishError?.code === 'META_PERMISSION_DENIED';
 

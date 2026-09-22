@@ -1,4 +1,5 @@
 import type { IMetaCampaignProvider } from './meta-campaign.provider.js';
+import type { MetaPageAccess } from '../meta-api.js';
 
 export class MockMetaCampaignProvider implements IMetaCampaignProvider {
   createdCampaigns: any[] = [];
@@ -16,6 +17,19 @@ export class MockMetaCampaignProvider implements IMetaCampaignProvider {
   uploadAdImageResult: string | undefined = 'mock_hash';
   downloadImageResult: { buffer: Buffer; contentType: string } | null = null;
   failCreateStep?: 'campaign' | 'adset' | 'creative' | 'ad' | 'lead_form';
+
+  /** Resultado de getPageAccessToken por pageId (default: admin com ADVERTISE). */
+  pageAccessByPageId: Map<string, MetaPageAccess | null> = new Map();
+  pageAccessRequests: Array<{ pageId: string; userAccessToken: string }> = [];
+
+  async getPageAccessToken(pageId: string, userAccessToken: string): Promise<MetaPageAccess | null> {
+    this.pageAccessRequests.push({ pageId, userAccessToken });
+    if (this.pageAccessByPageId.has(pageId)) {
+      return this.pageAccessByPageId.get(pageId) ?? null;
+    }
+    // Default: página administrada com task ADVERTISE (Page token distinto do user token).
+    return { pageId, name: `Página ${pageId}`, accessToken: `page_token_${pageId}`, tasks: ['ADVERTISE', 'MANAGE'] };
+  }
 
   async createCampaign(adAccountId: string, accessToken: string, body: any) {
     if (this.failCreateStep === 'campaign') throw new Error('Campaign fail');
@@ -53,19 +67,21 @@ export class MockMetaCampaignProvider implements IMetaCampaignProvider {
     return { id };
   }
 
-  createdLeadForms: Array<{ page_id: string; body: any }> = [];
+  createdLeadForms: Array<{ page_id: string; access_token: string; body: any }> = [];
   archivedLeadForms: string[] = [];
+  archivedLeadFormsWithToken: Array<{ formId: string; accessToken: string }> = [];
   leadFormResult: { id: string } = { id: 'meta_form_1' };
   leadsResult: { data: Array<Record<string, unknown>> } = { data: [] };
 
   async createLeadForm(pageId: string, accessToken: string, body: any) {
     if (this.failCreateStep === 'lead_form') throw new Error('LeadForm fail');
-    this.createdLeadForms.push({ page_id: pageId, body });
+    this.createdLeadForms.push({ page_id: pageId, access_token: accessToken, body });
     return this.leadFormResult;
   }
 
   async archiveLeadForm(formId: string, accessToken: string): Promise<void> {
     this.archivedLeadForms.push(formId);
+    this.archivedLeadFormsWithToken.push({ formId, accessToken });
   }
 
   async getLeadFormData(formId: string, accessToken: string) {

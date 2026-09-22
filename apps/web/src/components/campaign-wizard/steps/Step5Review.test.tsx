@@ -56,6 +56,20 @@ function permissionDeniedError(): unknown {
   };
 }
 
+function permissionDeniedWithMetaDetails(): unknown {
+  return {
+    response: {
+      data: {
+        error: {
+          code: 'META_PERMISSION_DENIED',
+          message:
+            'O Meta recusou a criação do Formulário. Reconecte o Meta em Configurações → Integrações para conceder pages_manage_ads (criação de Formulário de leads) e tente novamente.\n\nDetalhes do Meta: (#200): The user is not an admin of the page and cannot create lead forms.',
+        },
+      },
+    },
+  };
+}
+
 describe('Step5Review — erro de permissão do Meta oferece reconexão', () => {
   it('erro META_PERMISSION_DENIED mostra botão "Reconectar Meta" além da mensagem', async () => {
     mockApiPost.mockRejectedValueOnce(permissionDeniedError());
@@ -105,6 +119,64 @@ describe('Step5Review — erro de permissão do Meta oferece reconexão', () => 
 
     await waitFor(() => {
       expect(screen.getByText('Erro qualquer')).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('button', { name: 'Reconectar Meta' })).not.toBeInTheDocument();
+  });
+
+  it('erro de permissão do Formulário exibe os Detalhes do Meta (diagnóstico da causa real)', async () => {
+    // Causa raiz do "reconectei e o erro persiste": o token pode ter o scope
+    // pages_manage_ads, mas o Meta recusa porque a pessoa não tem a task ADVERTISE
+    // na Página. A mensagem real do Meta precisa chegar ao usuário.
+    mockApiPost.mockRejectedValueOnce(permissionDeniedWithMetaDetails());
+
+    renderReview();
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar Campanha' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/not an admin of the page/i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Reconectar Meta' })).toBeInTheDocument();
+  });
+
+  it('erro META_PAGE_NOT_MANAGED mostra orientação e NÃO oferece Reconectar Meta', async () => {
+    mockApiPost.mockRejectedValueOnce({
+      response: {
+        data: {
+          error: {
+            code: 'META_PAGE_NOT_MANAGED',
+            message: 'Você não tem acesso para anunciar nesta Página (é preciso ter papel de administrador ou acesso via Business Manager). Selecione outra Página ou solicite acesso ao dono da página.',
+          },
+        },
+      },
+    });
+
+    renderReview();
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar Campanha' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Selecione outra Página/i)).toBeInTheDocument();
+    });
+    // Reconectar o OAuth NÃO resolve — sem botão de reconexão
+    expect(screen.queryByRole('button', { name: 'Reconectar Meta' })).not.toBeInTheDocument();
+  });
+
+  it('erro META_PAGE_ADVERTISE_TASK_REQUIRED mostra orientação e NÃO oferece Reconectar Meta', async () => {
+    mockApiPost.mockRejectedValueOnce({
+      response: {
+        data: {
+          error: {
+            code: 'META_PAGE_ADVERTISE_TASK_REQUIRED',
+            message: 'Você tem acesso à Página, mas sem a permissão de anunciar (task ADVERTISE). Peça ao administrador da Página que conceda o papel de Anunciante ou Administrador.',
+          },
+        },
+      },
+    });
+
+    renderReview();
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar Campanha' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/conceda o papel de Anunciante/i)).toBeInTheDocument();
     });
     expect(screen.queryByRole('button', { name: 'Reconectar Meta' })).not.toBeInTheDocument();
   });
