@@ -200,6 +200,12 @@ const metaLocationsSchema = z.object({
   q: z.string().min(2, 'Digite ao menos 2 caracteres'),
 });
 
+// Debug — Fase 1 da spec de segmentação por bairro/cidade (spec-segmentacao-bairro-cidade). Remover depois.
+const debugRadiusSchema = z.object({
+  latitude: z.coerce.number().min(-90).max(90),
+  longitude: z.coerce.number().min(-180).max(180),
+});
+
 const suggestTextSchema = z.object({
   imageUrl: z.string().url(),
 });
@@ -1013,6 +1019,34 @@ export class CampaignsController {
     }
   };
 
+  /**
+   * Debug — Fase 1 da spec de segmentação por bairro/cidade (spec-segmentacao-bairro-cidade).
+   * Endpoint temporário, remover depois que a Fase 1 for concluída (ver tasks.md dessa spec).
+   */
+  debugSuggestRadius = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const params = debugRadiusSchema.parse(req.query);
+      const tenantId = req.tenant?.tenantId || '';
+      if (!tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+      }
+
+      const result = await this.campaignsService.debugSuggestRadius({
+        tenantId,
+        latitude: params.latitude,
+        longitude: params.longitude,
+      });
+
+      res.json({
+        success: true,
+        data: result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   createWizardCampaignDiag = async (req: any, res: any) => {
     // DIAG: Test if createCampaignFromWizard is importable and callable
     try {
@@ -1098,4 +1132,5 @@ export const uploadWizardCreativeHandler = campaignsController.uploadWizardCreat
 export const createWizardCampaignDiagHandler = campaignsController.createWizardCampaignDiag;
 export const searchMetaInterestsHandler = campaignsController.searchMetaInterests;
 export const debugSearchNeighborhoodsHandler = campaignsController.debugSearchNeighborhoods;
+export const debugSuggestRadiusHandler = campaignsController.debugSuggestRadius;
 export const suggestTextHandler = campaignsController.suggestText;

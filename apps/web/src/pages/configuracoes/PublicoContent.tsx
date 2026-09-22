@@ -49,6 +49,11 @@ export function PublicoContent() {
   const [debugLoading, setDebugLoading] = useState(false);
   const [debugResult, setDebugResult] = useState<unknown>(null);
   const [debugError, setDebugError] = useState('');
+  const [debugLat, setDebugLat] = useState('');
+  const [debugLng, setDebugLng] = useState('');
+  const [debugRadiusLoading, setDebugRadiusLoading] = useState(false);
+  const [debugRadiusResult, setDebugRadiusResult] = useState<unknown>(null);
+  const [debugRadiusError, setDebugRadiusError] = useState('');
   const { locations, isLoading: loadingLocations } = useMetaLocations(cityQuery);
   const { interests, isLoading: loadingInterests } = useMetaInterests(interestQuery);
 
@@ -97,6 +102,24 @@ export function PublicoContent() {
       setDebugError(err instanceof Error ? err.message : 'Falha na busca de debug');
     } finally {
       setDebugLoading(false);
+    }
+  }
+
+  // DEBUG temporário — Fase 1 da spec spec-segmentacao-bairro-cidade. Remover depois de validado.
+  async function handleDebugRadius() {
+    if (!debugLat.trim() || !debugLng.trim()) return;
+    setDebugRadiusLoading(true);
+    setDebugRadiusError('');
+    setDebugRadiusResult(null);
+    try {
+      const res = await api.get<{ success: boolean; data: unknown }>('/campaigns/debug-suggest-radius', {
+        params: { latitude: debugLat, longitude: debugLng },
+      });
+      setDebugRadiusResult(res.data.data);
+    } catch (err) {
+      setDebugRadiusError(err instanceof Error ? err.message : 'Falha ao buscar raio sugerido');
+    } finally {
+      setDebugRadiusLoading(false);
     }
   }
 
@@ -218,6 +241,36 @@ export function PublicoContent() {
               {debugResult !== null && (
                 <pre className="text-xs bg-white border border-amber-200 rounded-md p-3 overflow-auto max-h-96 whitespace-pre-wrap">
                   {JSON.stringify(debugResult, null, 2)}
+                </pre>
+              )}
+
+              <p className="text-xs font-bold text-amber-800 pt-2 border-t border-amber-200">
+                🔧 Debug — raio sugerido (Plano B, custom_locations)
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={debugLat}
+                  onChange={(e) => setDebugLat(e.target.value)}
+                  placeholder="Latitude ex: -23.4205"
+                  className="flex-1 px-3 py-2 border border-amber-300 rounded-md bg-white text-sm"
+                />
+                <input
+                  type="text"
+                  value={debugLng}
+                  onChange={(e) => setDebugLng(e.target.value)}
+                  placeholder="Longitude ex: -51.9331"
+                  className="flex-1 px-3 py-2 border border-amber-300 rounded-md bg-white text-sm"
+                />
+                <Button variant="outline" size="sm" disabled={debugRadiusLoading} onClick={handleDebugRadius}>
+                  {debugRadiusLoading ? 'Buscando...' : 'Sugerir raio'}
+                </Button>
+              </div>
+              <p className="text-xs text-amber-700">Pegue lat/long no Google Maps: botão direito no ponto → copiar coordenadas.</p>
+              {debugRadiusError && <p className="text-xs text-red-600">{debugRadiusError}</p>}
+              {debugRadiusResult !== null && (
+                <pre className="text-xs bg-white border border-amber-200 rounded-md p-3 overflow-auto max-h-96 whitespace-pre-wrap">
+                  {JSON.stringify(debugRadiusResult, null, 2)}
                 </pre>
               )}
             </div>

@@ -1614,11 +1614,11 @@ function cleanRegionLabel(region?: string): string | undefined {
 export async function debugSearchNeighborhoods(
   query: string,
   accessToken: string
-): Promise<{ withFilter: unknown; withoutFilter: unknown }> {
-  const run = async (withFilter: boolean) => {
+): Promise<{ withFilter: unknown; subcity: unknown; withoutFilter: unknown }> {
+  const run = async (locationType: 'neighborhood' | 'subcity' | null) => {
     const path =
       `/search?type=adgeolocation&q=${encodeURIComponent(query)}` +
-      (withFilter ? `&location_types=${encodeURIComponent(JSON.stringify(['neighborhood']))}` : '');
+      (locationType ? `&location_types=${encodeURIComponent(JSON.stringify([locationType]))}` : '');
     try {
       return await metaApiCall<MetaLocationSearchResponse>(path, accessToken);
     } catch (err) {
@@ -1626,8 +1626,31 @@ export async function debugSearchNeighborhoods(
     }
   };
 
-  const [withFilter, withoutFilter] = await Promise.all([run(true), run(false)]);
-  return { withFilter, withoutFilter };
+  const [withFilter, subcity, withoutFilter] = await Promise.all([
+    run('neighborhood'),
+    run('subcity'),
+    run(null),
+  ]);
+  return { withFilter, subcity, withoutFilter };
+}
+
+/**
+ * Debug — Fase 1 da spec de segmentação por bairro/cidade (spec-segmentacao-bairro-cidade).
+ * Consulta o raio sugerido pela Meta (type=adradiussuggestion) pra um ponto lat/long — usado
+ * pra validar o "Plano B" de geo_locations.custom_locations quando o bairro não está indexado
+ * como neighborhood/subcity. Não usar fora dessa validação pontual.
+ */
+export async function debugSuggestRadius(
+  latitude: number,
+  longitude: number,
+  accessToken: string
+): Promise<unknown> {
+  const path = `/search?type=adradiussuggestion&latitude=${latitude}&longitude=${longitude}`;
+  try {
+    return await metaApiCall<unknown>(path, accessToken);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /** Busca localizacoes (cidades) do Brasil via Meta Graph API para uso no targeting de campanhas. */
