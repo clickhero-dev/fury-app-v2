@@ -19,6 +19,7 @@ import { CampaignWizardProvider } from '@/contexts/CampaignWizardContext';
 import { Dashboard } from './pages/dashboard/Dashboard';
 import { Metas } from './pages/dashboard/Metas';
 import { PainelCampanhas } from './pages/campanhas/PainelCampanhas';
+import { LeadsPage } from './pages/leads/LeadsPage';
 import { RegrasCampanhas } from './pages/campanhas/RegrasCampanhas';
 import { InsightsCampanha } from './pages/campanhas/InsightsCampanha';
 import { CriarCampanhaPage } from './pages/campanhas/CriarCampanhaPage';
@@ -119,6 +120,14 @@ export const router = createBrowserRouter([
         element: (
           <AppLayout>
             <PainelCampanhas />
+          </AppLayout>
+        )
+      },
+      {
+        path: '/leads',
+        element: (
+          <AppLayout>
+            <LeadsPage />
           </AppLayout>
         )
       },

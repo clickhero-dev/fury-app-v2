@@ -1145,6 +1145,50 @@ export class CampaignsService {
     return { leads };
   }
 
+  /**
+   * Leads agregados de TODAS as campanhas do objetivo Formulário (OUTCOME_LEADS)
+   * do tenant. Usado pela página dedicada de Leads (visão "Todas as campanhas").
+   * Cada lead carrega campaignId/campaignName para o frontend exibir/filtrar.
+   */
+  async getAllCampaignLeads(args: { tenantId: string }): Promise<{
+    leads: Array<{
+      name: string | null;
+      email: string | null;
+      phone: string | null;
+      createdAt: string | null;
+      campaignId: string;
+      campaignName: string;
+    }>;
+  }> {
+    const { items } = await this.repo.findCampaigns(args.tenantId, undefined, 100, 0);
+    const formCampaigns = items.filter((c) => {
+      const budget = (c.budget ?? {}) as Record<string, unknown>;
+      return budget.objective === 'OUTCOME_LEADS';
+    });
+
+    const leads: Array<{
+      name: string | null; email: string | null; phone: string | null; createdAt: string | null;
+      campaignId: string; campaignName: string;
+    }> = [];
+
+    for (const campaign of formCampaigns) {
+      try {
+        const { leads: campaignLeads } = await this.getCampaignLeads({
+          tenantId: args.tenantId,
+          campaignId: campaign.id,
+        });
+        for (const lead of campaignLeads) {
+          leads.push({ ...lead, campaignId: campaign.id, campaignName: campaign.name });
+        }
+      } catch (err) {
+        // Falha em uma campanha não derruba a listagem das demais.
+        console.error(`[CampaignLeads] falha ao buscar leads da campanha ${campaign.id}:`, (err as Error).message);
+      }
+    }
+
+    return { leads };
+  }
+
   async searchMetaLocations(args: { tenantId: string; query: string }): Promise<any[]> {
     const cached = await this.deps.getMetaLocationsCache(args.query);
     if (cached) return cached;

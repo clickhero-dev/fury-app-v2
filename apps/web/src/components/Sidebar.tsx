@@ -9,6 +9,7 @@ import {
   Palette,
   Plug,
   Settings,
+  Users,
   ChevronLeft,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -25,6 +26,7 @@ interface SidebarProps {
 const nav = [
   { to: '/dashboard', label: 'Painel', icon: LayoutGrid },
   { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
+  { to: '/leads', label: 'Leads', icon: Users },
   // OCULTO (feature em teste) — volta no unhide
   // { to: '/planejador', label: 'Planejador IA', icon: BrainCircuit },
   // { to: '/calendario', label: 'Calendário', icon: CalendarDays },

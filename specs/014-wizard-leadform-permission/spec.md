@@ -204,6 +204,34 @@ criação do criativo do Formulário.
 3. **Given** o Meta responde subcode 2061015, **When** o mapeador trata o passo `creative`, **Then**
    retorna `META_LINK_REQUIRED`.
 
+### User Story 7 — Página dedicada de Leads com filtro por campanha de Formulário (P1)
+
+Leads coletados pelos formulários ficam disponíveis em uma página dedicada (acessível pela sidebar),
+com filtro por campanha. O filtro lista **somente campanhas do objetivo Formulário**
+(`OUTCOME_LEADS`) — as demais não geram dados de formulário. O padrão é "Todas as campanhas"
+(visão agregada), com opção de filtrar por uma campanha específica. O modal de leads no painel de
+campanhas é removido (a página dedicada substitui).
+
+**Why this priority**: a visualização de leads dentro da tabela de campanhas era estética e
+funcionalmente pobre (modal apertado, sem filtro agregado). A página dedicada centraliza a consulta.
+
+**Independent Test**: `GET /campaigns/leads` retorna os leads agregados de todas as campanhas
+`OUTCOME_LEADS` com `campaignId`/`campaignName`; a página `LeadsPage` filtra o dropdown por
+campanhas de Formulário e busca `GET /campaigns/:id/leads` ao selecionar uma.
+
+**Acceptance Scenarios**:
+1. **Given** o usuário acessa a sidebar, **When** clica em "Leads", **Then** é levado a `/leads`.
+2. **Given** a página abre sem seleção, **When** os leads carregam, **Then** exibe a visão "Todas as
+   campanhas" com a coluna **Campanha** ao lado de Nome/E-mail/Telefone/Data.
+3. **Given** existem campanhas de vários objetivos, **When** o dropdown de filtro é aberto, **Then**
+   aparecem apenas as campanhas `OUTCOME_LEADS` (exclui tráfego/engajamento etc.).
+4. **Given** o usuário seleciona uma campanha no filtro, **When** a seleção muda, **Then** a página
+   busca `GET /campaigns/:id/leads` e esconde a coluna Campanha.
+5. **Given** não existem campanhas de Formulário, **When** a página carrega, **Then** exibe o estado
+   vazio "Nenhuma campanha de Formulário".
+6. **Given** a campanha de Formulário existe mas não tem leads, **When** a página carrega, **Then**
+   exibe "Nenhum lead ainda".
+
 ## Edge Cases
 
 - **Token expirado** (erro 190): mapeado para `META_TOKEN_EXPIRED`, reconexão disponível.
