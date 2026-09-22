@@ -18,15 +18,11 @@ export interface StudioModelOption {
   type: 'image' | 'video';
 }
 
-const FALLBACK_MODELS: Array<{ id: string; label: string }> = [
-  { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 Klein 4B' },
-  { id: 'black-forest-labs/flux.2-max', label: 'FLUX.2 Max' },
-  { id: 'black-forest-labs/flux.2-pro', label: 'FLUX.2 Pro' },
+const FALLBACK_MODELS: Array<{ id: string; description: string }> = [
+  { id: 'black-forest-labs/flux.2-klein-4b', description: 'Mais rápido' },
+  { id: 'black-forest-labs/flux.2-max', description: 'Qualidade' },
+  { id: 'black-forest-labs/flux.2-pro', description: 'Alta fidelidade' },
 ];
-
-function optionText(model: StudioModelOption): string {
-  return `${model.label} — ${model.description}`;
-}
 
 /**
  * Seletor compacto de modelo (select nativo estilizado, agrupado por família).
@@ -60,21 +56,21 @@ export function ModelSelect({
       {models.length === 0 ? (
         // Fallback enquanto o catálogo carrega (sempre selecionável)
         FALLBACK_MODELS.map((m) => (
-          <option key={m.id} value={m.id}>{m.label}</option>
+          <option key={m.id} value={m.id}>{m.description}</option>
         ))
       ) : (
         <>
           {fluxModels.length > 0 && (
             <optgroup label="Família FLUX 2">
               {fluxModels.map((m) => (
-                <option key={m.id} value={m.id}>{optionText(m)}</option>
+                <option key={m.id} value={m.id}>{m.description}</option>
               ))}
             </optgroup>
           )}
           {otherModels.length > 0 && (
             <optgroup label={otherLabel}>
               {otherModels.map((m) => (
-                <option key={m.id} value={m.id}>{optionText(m)}</option>
+                <option key={m.id} value={m.id}>{m.description}</option>
               ))}
             </optgroup>
           )}
@@ -91,7 +87,7 @@ export function ModelSelect({
           onSelect={() => onSelect(m.id)}
           className="flex items-center justify-between gap-3"
         >
-          <span className="truncate">{optionText(m)}</span>
+          <span className="truncate">{m.description}</span>
           {m.id === selectedModel && <Check className="h-3.5 w-3.5 shrink-0 text-brand" />}
         </DropdownMenuItem>
       ));
@@ -106,7 +102,7 @@ export function ModelSelect({
             aria-label={`Modelo de ${typeLabel}`}
             className="flex w-auto max-w-[220px] items-center gap-2 rounded-full border border-border bg-surface-muted py-2 pl-4 pr-3 text-xs font-semibold text-text-primary transition hover:border-brand/40"
           >
-            <span className="truncate">{selected ? selected.label : 'Selecione um modelo'}</span>
+            <span className="truncate">{selected ? selected.description : 'Selecione um modelo'}</span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-tertiary" />
           </button>
         </DropdownMenuTrigger>
@@ -114,7 +110,7 @@ export function ModelSelect({
           {models.length === 0 ? (
             FALLBACK_MODELS.map((m) => (
               <DropdownMenuItem key={m.id} onSelect={() => onSelect(m.id)}>
-                {m.label}
+                {m.description}
               </DropdownMenuItem>
             ))
           ) : (
@@ -152,9 +148,6 @@ export function ModelSelect({
       >
         {options}
       </Select>
-      {selected?.description && (
-        <p className="text-xs text-text-tertiary">{selected.description}</p>
-      )}
     </div>
   );
 }

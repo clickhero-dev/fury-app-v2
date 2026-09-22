@@ -15,6 +15,8 @@
  *   deste ambiente não lista flux.2* — não servir de fonte p/ removê-los).
  * - `description`: característica real do modelo (checada em
  *   openrouter.ai/<id>), 1-4 palavras — sem preço, sem "barato/caro".
+ *   Sem palavra-chave repetida entre modelos do mesmo `type` (a UI só
+ *   mostra a descrição, sem o nome — termo repetido confunde a escolha).
  */
 
 export interface StudioModel {
@@ -57,7 +59,7 @@ export const IMAGE_MODELS: StudioModel[] = [
     // — https://openrouter.ai/bytedance-seed/seedream-5-0-pro
     id: 'bytedance-seed/seedream-5-0-pro',
     label: 'Seedream 5.0 Pro',
-    description: 'Mais realista',
+    description: 'Realista',
     family: 'outras',
     type: 'image',
   },
@@ -78,7 +80,7 @@ export const IMAGE_MODELS: StudioModel[] = [
   {
     id: 'google/gemini-3.1-flash-image',
     label: 'Gemini 3.1 Flash Image',
-    description: 'Rápido e nítido',
+    description: 'Mais nítido',
     family: 'outras',
     type: 'image',
   },
