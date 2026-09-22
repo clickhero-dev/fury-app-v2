@@ -159,6 +159,30 @@ Formulário — o usuário não é avisado na origem.
 2. **Given** a conexão existe, **When** os scopes incluem todas as exigidas, **Then** o banner não é
    exibido.
 
+### User Story 5 — Política de privacidade obrigatória no Formulário (P1)
+
+A Meta passou a exigir `privacy_policy` (url + link_text) **ou** `legal_content_id` na criação do
+`leadgen_forms` (code 100 / subcode 1892075 *"Legal content missing"*). O wizard envia
+`privacy_policy` apontando para uma **página pública de política de privacidade** do anunciante,
+servida server-side (como a LP) com o nome da organização substituído.
+
+**Why this priority**: sem esse campo, a criação do Formulário falha com 400 — é bloqueante para o
+objetivo `leads`.
+
+**Independent Test**: `createCampaignFromWizard` envia `privacy_policy.url` =
+`https://app.useady.com.br/privacidade/<slug>` e `link_text` = "Política de Privacidade".
+
+**Acceptance Scenarios**:
+1. **Given** o wizard publica um Formulário, **When** o `leadgen_forms` é montado, **Then** o body
+   contém `privacy_policy` com URL pública e `link_text` ≤ 70 caracteres.
+2. **Given** a organização tem nome, **When** a URL é montada, **Then** o slug deriva do nome
+   (`slugify`), com fallback para `tenants.slug` e depois `tenantId`.
+3. **Given** um visitante acessa `GET /privacidade/:slug`, **When** o tenant existe, **Then** recebe
+   HTML da política de privacidade com o nome da organização substituído no template padrão.
+4. **Given** o tenant não existe, **When** acessa `GET /privacidade/:slug`, **Then** recebe 404.
+5. **Given** o Meta responde subcode 1892075, **When** o mapeador trata o passo `lead_form`, **Then**
+   retorna `META_LEGAL_CONTENT_REQUIRED` com mensagem clara.
+
 ## Edge Cases
 
 - **Token expirado** (erro 190): mapeado para `META_TOKEN_EXPIRED`, reconexão disponível.
@@ -171,3 +195,5 @@ Formulário — o usuário não é avisado na origem.
   de acesso direto ou via BM; reconectar o OAuth não resolve.
 - **Página sem task ADVERTISE**: `META_PAGE_ADVERTISE_TASK_REQUIRED` — usuário precisa do papel de
   Anunciante/Administrador na Página.
+- **Legal content missing** (subcode 1892075): `META_LEGAL_CONTENT_REQUIRED` — a URL da política de
+  privacidade não foi aceita pelo Meta; orienta tentar novamente.
