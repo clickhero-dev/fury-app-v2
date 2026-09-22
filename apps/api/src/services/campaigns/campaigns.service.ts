@@ -12,6 +12,7 @@ import { invalidateCampaignsCache } from '../../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../../lib/locations-cache.js';
 import { getResolvedTenantAssetSelection } from '../meta/meta.service.js';
 import { slugify } from '../../lib/slug.js';
+import { privacyPolicyUrl } from '../../lib/privacy-policy.js';
 import { getCampaignAds, getCampaignAdCreatives, getVideoSourceUrl, searchMetaInterests as searchMetaInterestsLib } from '../../lib/meta-api.js';
 import type { IMetaCampaignProvider } from '../../lib/providers/meta-campaign.provider.js';
 import type {
@@ -232,6 +233,12 @@ export function mapWizardMetaError(err: unknown, step: string): never {
   }
   if (metaSubcode === 3858258) {
     throw new AppError(400, 'META_IMAGE_DOWNLOAD_FAILED', 'O Meta nao conseguiu baixar a imagem do criativo. A URL pode estar bloqueada (robots.txt) ou o formato pode ser invalido. Use uma imagem JPEG ou PNG hospedada em um servidor acessivel.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+  }
+  // "Legal content missing" — Meta exige privacy_policy ou legal_content_id na
+  // criação do leadgen_forms. O wizard já envia a página pública de política de
+  // privacidade; se ainda assim o Meta rejeitar (ex.: URL com problema), orienta.
+  if (metaSubcode === 1892075) {
+    throw new AppError(400, 'META_LEGAL_CONTENT_REQUIRED', 'O Meta exigiu uma política de privacidade na criação do Formulário. Não foi possível validar a URL da política. Tente novamente em instantes.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
   }
   if (metaSubcode === 1487110) {
     throw new AppError(400, 'META_LOCATION_RADIUS', metaUserMsg || 'O raio geografico selecionado nao esta dentro dos limites. Aumente o raio (ex: Sao Paulo precisa de 15km ou mais).', { step, meta_code: metaCode, meta_subcode: metaSubcode });
@@ -904,6 +911,17 @@ export class CampaignsService {
         }
         leadFormToken = pageAccess.accessToken;
 
+        // A Meta exige privacy_policy (url pública + link_text) ou legal_content_id
+        // na criação do leadgen_forms (code 100 / subcode 1892075). Usamos a página
+        // pública de política de privacidade com o slug da organização (mesmo padrão
+        // da LP de WhatsApp): slugify(name) → fallback tenants.slug → tenantId.
+        let privacySlug = args.tenantId;
+        try {
+          const t = await new CampaignRepository(args.tenantId).findTenant();
+          if (t?.name) privacySlug = slugify(t.name);
+          else if (t?.slug) privacySlug = t.slug;
+        } catch { /* fallback ao tenantId */ }
+
         const leadFormBody = {
           name: `Formulário — ${campaignName}`,
           locale: 'PT_BR',
@@ -912,6 +930,10 @@ export class CampaignsService {
             { type: 'EMAIL', key: 'question2' },
             { type: 'PHONE', key: 'question3' },
           ],
+          privacy_policy: {
+            url: privacyPolicyUrl(privacySlug),
+            link_text: 'Política de Privacidade',
+          },
           thank_you_page: {
             title: 'Obrigado!',
             body: 'Agora é só falar com a gente no WhatsApp.',

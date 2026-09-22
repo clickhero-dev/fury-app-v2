@@ -132,6 +132,17 @@ describe('mapWizardMetaError', () => {
       .toThrowError(AppError);
   });
 
+  it('subcode 1892075 (legal content missing) → META_LEGAL_CONTENT_REQUIRED', () => {
+    try {
+      mapWizardMetaError({ metaSubcode: 1892075, metaCode: 100, metaType: 'OAuthException' }, 'lead_form');
+      expect.unreachable('deveria ter lançado');
+    } catch (err) {
+      const appErr = err as AppError;
+      expect(appErr.code).toBe('META_LEGAL_CONTENT_REQUIRED');
+      expect(appErr.message).toContain('política de privacidade');
+    }
+  });
+
   it('mensagem insufficient → META_INSUFFICIENT_FUNDS', () => {
     expect(() => mapWizardMetaError({ message: 'insufficient balance' }, 'ad'))
       .toThrowError(AppError);
@@ -779,6 +790,32 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
     // persistência local guarda o id do form
     expect(repo.campaigns[0].budget.lead_form_id).toBe('form_1');
     expect(repo.campaigns[0].budget.lead_page_id).toBe('page_1');
+  });
+
+  it('envia privacy_policy com URL pública da política de privacidade (nome slugificado)', async () => {
+    const mockDb = await import('@fury/db');
+    (mockDb.db.query.tenants.findFirst as any).mockResolvedValue({ name: 'Meu Negócio Test', slug: 'slug-antigo' });
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+
+    await service.createCampaignFromWizard(leadsArgs as any);
+
+    const privacy = meta.createdLeadForms[0].body.privacy_policy;
+    expect(privacy).toBeDefined();
+    // Slug derivado do NOME da organização (não do tenants.slug desatualizado)
+    expect(privacy.url).toBe('https://app.useady.com.br/privacidade/meu-negocio-test');
+    expect(privacy.link_text).toBe('Política de Privacidade');
+    (mockDb.db.query.tenants.findFirst as any).mockReset();
+  });
+
+  it('privacy_policy cai no tenantId quando o nome da organização não está disponível', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+
+    await service.createCampaignFromWizard(leadsArgs as any);
+
+    const privacy = meta.createdLeadForms[0].body.privacy_policy;
+    expect(privacy.url).toBe(`https://app.useady.com.br/privacidade/${TENANT_ID}`);
   });
 
   it('arquiva o formulário no rollback quando a criação do adset falha', async () => {

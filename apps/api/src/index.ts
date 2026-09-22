@@ -140,6 +140,37 @@ Converse Comigo
   }
 });
 
+// Public privacy policy page (per tenant) — no auth.
+// Usada no campo `privacy_policy` da criação de leadgen_forms (a Meta exige
+// uma URL pública e acessível). Espelha o padrão da LP: resolve o tenant pelo
+// slug (UUID, slug, codigo ou nome slugificado) e renderiza HTML server-side.
+app.get('/privacidade/:slug', async (req, res) => {
+  try {
+    const { db, tenants } = await import('@fury/db');
+    const { eq } = await import('drizzle-orm');
+    const { renderPrivacyPolicyHtml } = await import('./lib/privacy-policy.js');
+
+    const tenantId = await resolveTenantId(req.params.slug);
+    if (!tenantId) {
+      res.status(404).send('Página não encontrada');
+      return;
+    }
+
+    const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
+    if (!tenant) {
+      res.status(404).send('Página não encontrada');
+      return;
+    }
+
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.send(renderPrivacyPolicyHtml(tenant.name));
+  } catch (e) {
+    console.error('[Privacidade] erro:', e);
+    res.status(500).send('Erro interno');
+  }
+});
+
 // Public JSON endpoint for frontend LP — no auth
 app.get('/api/public/brand-kit/:slug', async (req, res) => {
   try {
