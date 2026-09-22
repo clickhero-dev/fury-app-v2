@@ -49,10 +49,10 @@ const MOCK_ASSETS = {
 
 const MOCK_MODELS = {
   image: [
-    { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 Klein 4B', description: 'Rápido', category: 'custo-beneficio', family: 'flux-2', type: 'image' },
-    { id: 'black-forest-labs/flux.2-max', label: 'FLUX.2 Max', description: 'Qualidade', category: 'qualidade', family: 'flux-2', type: 'image' },
-    { id: 'black-forest-labs/flux.2-pro', label: 'FLUX.2 Pro', description: 'Pro', category: 'qualidade', family: 'flux-2', type: 'image' },
-    { id: 'bytedance-seed/seedream-5-0-pro', label: 'Seedream 5.0 Pro', description: 'ByteDance', category: 'barato', family: 'outras', type: 'image' },
+    { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 Klein 4B', description: 'Mais rápido', family: 'flux-2', type: 'image' },
+    { id: 'black-forest-labs/flux.2-max', label: 'FLUX.2 Max', description: 'Qualidade', family: 'flux-2', type: 'image' },
+    { id: 'black-forest-labs/flux.2-pro', label: 'FLUX.2 Pro', description: 'Alta fidelidade', family: 'flux-2', type: 'image' },
+    { id: 'bytedance-seed/seedream-5-0-pro', label: 'Seedream 5.0 Pro', description: 'Realista', family: 'outras', type: 'image' },
   ],
   video: [],
 };
@@ -176,8 +176,9 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
 
     expect(await screen.findByText('Família FLUX 2')).toBeInTheDocument();
     expect(screen.getByText('Outras famílias')).toBeInTheDocument();
-    expect(screen.getByText(/Seedream 5.0 Pro/)).toBeInTheDocument();
-    expect(screen.getByText(/FLUX.2 Klein 4B/)).toBeInTheDocument();
+    // sem nome técnico do modelo na UI — só a característica identifica a opção
+    expect(screen.getByText('Realista')).toBeInTheDocument();
+    expect(screen.getByText('Mais rápido')).toBeInTheDocument();
   });
 
   it('Gerar imagem usa o modelo selecionado no seletor', async () => {
@@ -187,7 +188,7 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
 
     const trigger = await screen.findByRole('button', { name: /modelo de imagem/i });
     await user.click(trigger);
-    await user.click(await screen.findByText(/Seedream 5.0 Pro/));
+    await user.click(await screen.findByText('Realista'));
 
     await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
     await user.click(screen.getByRole('button', { name: /gerar imagem/i }));

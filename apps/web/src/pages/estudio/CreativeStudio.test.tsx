@@ -22,18 +22,18 @@ vi.mock('@/lib/api', () => ({
 }));
 
 const FLUX_2_MODELS = [
-  { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 Klein 4B', description: 'Rápido', category: 'custo-beneficio', family: 'flux-2', type: 'image' },
-  { id: 'black-forest-labs/flux.2-max', label: 'FLUX.2 Max', description: 'Qualidade', category: 'qualidade', family: 'flux-2', type: 'image' },
-  { id: 'black-forest-labs/flux.2-pro', label: 'FLUX.2 Pro', description: 'Pro', category: 'qualidade', family: 'flux-2', type: 'image' },
+  { id: 'black-forest-labs/flux.2-klein-4b', label: 'FLUX.2 Klein 4B', description: 'Mais rápido', family: 'flux-2', type: 'image' },
+  { id: 'black-forest-labs/flux.2-max', label: 'FLUX.2 Max', description: 'Qualidade', family: 'flux-2', type: 'image' },
+  { id: 'black-forest-labs/flux.2-pro', label: 'FLUX.2 Pro', description: 'Alta fidelidade', family: 'flux-2', type: 'image' },
 ];
 const OUTRAS_MODELS = [
-  { id: 'bytedance-seed/seedream-5-0-pro', label: 'Seedream 5.0 Pro', description: 'ByteDance — Renderização realista com bom custo-benefício.', category: 'barato', family: 'outras', type: 'image' },
-  { id: 'x-ai/grok-imagine-image-2.0', label: 'Grok Imagine 2.0', description: 'xAI', category: 'custo-beneficio', family: 'outras', type: 'image' },
-  { id: 'qwen/qwen-image-3-pro', label: 'Qwen Image 3 Pro', description: 'Alibaba', category: 'barato', family: 'outras', type: 'image' },
-  { id: 'google/gemini-3.1-flash-image', label: 'Gemini 3.1 Flash Image', description: 'Google', category: 'custo-beneficio', family: 'outras', type: 'image' },
+  { id: 'bytedance-seed/seedream-5-0-pro', label: 'Seedream 5.0 Pro', description: 'Realista', family: 'outras', type: 'image' },
+  { id: 'x-ai/grok-imagine-image-2.0', label: 'Grok Imagine 2.0', description: 'Estilo fotográfico', family: 'outras', type: 'image' },
+  { id: 'qwen/qwen-image-3-pro', label: 'Qwen Image 3 Pro', description: 'Detalhes e texto', family: 'outras', type: 'image' },
+  { id: 'google/gemini-3.1-flash-image', label: 'Gemini 3.1 Flash Image', description: 'Mais nítido', family: 'outras', type: 'image' },
 ];
 const VIDEO_MODELS = [
-  { id: 'google/veo-3.1-lite', label: 'Veo 3.1 Lite', description: 'Google', category: 'barato', family: 'video', type: 'video' },
+  { id: 'google/veo-3.1-lite', label: 'Veo 3.1 Lite', description: 'Ágil e versátil', family: 'video', type: 'video' },
 ];
 
 const MODELS_RESPONSE = { image: [...FLUX_2_MODELS, ...OUTRAS_MODELS], video: VIDEO_MODELS };
@@ -97,16 +97,16 @@ describe('CreativeStudio — seletor de modelos', () => {
       expect(groups).toEqual(['Família FLUX 2', 'Outras famílias']);
       // nenhum modelo Microsoft MAI
       expect(screen.queryByText(/MAI Image 2.5/i)).not.toBeInTheDocument();
-      // opções das duas famílias presentes
-      expect(screen.getByRole('option', { name: /FLUX.2 Klein 4B/ })).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: /Seedream 5.0 Pro/ })).toBeInTheDocument();
+      // opções identificadas só pela característica — sem nome técnico do modelo
+      expect(screen.getByRole('option', { name: 'Mais rápido' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Realista' })).toBeInTheDocument();
     });
 
     it('selecionar modelo de outra família e Gerar envia o model escolhido', async () => {
       const user = userEvent.setup();
       renderWithProviders();
       const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-      await waitFor(() => expect(screen.getByRole('option', { name: /Seedream 5.0 Pro/ })).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Realista' })).toBeInTheDocument());
       fireEvent.change(select, { target: { value: 'bytedance-seed/seedream-5-0-pro' } });
       await user.type(screen.getByPlaceholderText(/Descreva o estilo/i), 'Anúncio fashion minimalista com luz natural');
 
@@ -118,12 +118,13 @@ describe('CreativeStudio — seletor de modelos', () => {
       });
     });
 
-    it('mostra a descrição do modelo selecionado abaixo do seletor', async () => {
+    it('select mostra a descrição do modelo selecionado (sem nome técnico)', async () => {
       renderWithProviders();
-      const select = await screen.findByRole('combobox', { name: /modelo de imagem/i });
-      await waitFor(() => expect(screen.getByRole('option', { name: /Seedream 5.0 Pro/ })).toBeInTheDocument());
+      const select = await screen.findByRole('combobox', { name: /modelo de imagem/i }) as HTMLSelectElement;
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Realista' })).toBeInTheDocument());
       fireEvent.change(select, { target: { value: 'bytedance-seed/seedream-5-0-pro' } });
-      expect(screen.getByText(/ByteDance — Renderização realista/)).toBeInTheDocument();
+      expect(select.value).toBe('bytedance-seed/seedream-5-0-pro');
+      expect(screen.getByRole('option', { name: 'Realista', selected: true })).toBeInTheDocument();
     });
 
   it('exibe cronômetro (Xs) enquanto a imagem está sendo gerada', async () => {
