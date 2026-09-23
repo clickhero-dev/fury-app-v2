@@ -57,7 +57,7 @@ const MOCK_MODELS = {
   video: [],
 };
 
-function renderWithProviders() {
+function renderWithProviders(entry = '/estudio') {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -66,7 +66,7 @@ function renderWithProviders() {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <CampaignWizardProvider>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>{children}</MemoryRouter>
+        <MemoryRouter initialEntries={[entry]}>{children}</MemoryRouter>
       </QueryClientProvider>
     </CampaignWizardProvider>
   );
@@ -509,5 +509,29 @@ describe('EstudioHome — modal de Arquivados (Fase 6)', () => {
     await waitFor(() => {
       expect(mockApiPost).toHaveBeenCalledWith('/studio/assets/asset-archived-1/restore');
     });
+  });
+});
+
+describe('EstudioHome — deep-link ?criar=rapida (FAB "Criar imagem")', () => {
+  beforeEach(() => {
+    mockApiGet.mockReset();
+    mockApiGet.mockResolvedValue({
+      data: { assets: [], creativesRemaining: null, creativesLimit: null },
+    });
+    mockApiPost.mockImplementation(neverResolving);
+  });
+
+  it('abre a Criação rápida quando a URL tem ?criar=rapida', async () => {
+    renderWithProviders('/estudio?criar=rapida');
+
+    expect(await screen.findByRole('heading', { name: /criação rápida/i })).toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toBeInTheDocument();
+  });
+
+  it('não abre a Criação rápida sem o parâmetro (biblioteca)', async () => {
+    renderWithProviders('/estudio');
+
+    expect(await screen.findByRole('heading', { name: /estúdio de anúncios/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /criação rápida/i })).toBeNull();
   });
 });

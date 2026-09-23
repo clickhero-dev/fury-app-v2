@@ -48,13 +48,13 @@ describe('FabActions — ações flutuantes de criação', () => {
     expect(screen.getByTestId('location-probe').textContent).toBe('/criar-campanha');
   });
 
-  it('navega para o gerador de imagem ao clicar em "Criar imagem"', async () => {
+  it('navega para a Criação rápida do Estúdio ao clicar em "Criar imagem" (deep-link ?criar=rapida)', async () => {
     const user = userEvent.setup();
     renderFab();
 
     await user.click(screen.getByRole('button', { name: /criar imagem/i }));
 
-    expect(screen.getByTestId('location-probe').textContent).toBe('/estudio/imagem');
+    expect(screen.getByTestId('location-probe').textContent).toBe('/estudio?criar=rapida');
   });
 
   it('abre o fluxo de postagem no Calendário (deep-link ?criar=post)', async () => {
