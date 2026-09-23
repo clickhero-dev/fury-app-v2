@@ -92,6 +92,8 @@ function resolveChannel(post: Record<string, unknown>): Channel {
 
 function resolveStatus(post: Record<string, unknown>): Status {
   const raw = String(post.status ?? '').toLowerCase();
+  // 'publishing' ANTES de includes('publi') — publishing ≠ publicado (claim em andamento).
+  if (raw === 'publishing') return 'agendado';
   if (raw.includes('publi') || raw === 'published' || raw === 'posted') return 'publicado';
   if (raw.includes('schedul') || raw.includes('agend')) return 'agendado';
   if (!raw || raw.includes('draft') || raw.includes('pend') || raw.includes('review')) return 'acao';

@@ -56,6 +56,43 @@ export function generatePayload(postsCount?: number): { postsCount: number } {
   return { postsCount: postsCount ?? 8 };
 }
 
+// ── Publish-now ("Postar agora") ────────────────────────────────────────────
+
+/** Label do status 'publishing' (claim de publicação) no side panel. */
+export const PUBLISHING_LABEL = 'Publicando…';
+
+/** Toast do desfecho do publish-now — mostra o ERRO REAL, sem mensagens enganosas. */
+export function publishNowToast(
+  res: {
+    data?: { status?: string; lastPublishError?: string | null; id?: string } | null;
+    error?: { code?: string } | null;
+  } | null,
+): string {
+  if (res?.error?.code === 'POST_CLAIMED') {
+    return 'Este post está em andamento ou já publicado — não foi possível republicar.';
+  }
+  const data = res?.data;
+  if (data?.status === 'published') return 'Post publicado com sucesso!';
+  if (data?.status === 'failed') {
+    const err = String(data.lastPublishError ?? '');
+    if (err.includes('no_instagram_account')) {
+      return 'Post criado como falha. Conecte o Instagram em Configurações → Integrações e tente publicar novamente.';
+    }
+    return `Não foi possível publicar: ${err || 'erro desconhecido'}`;
+  }
+  return 'Post criado, mas não foi possível publicar agora.';
+}
+
+/** Mensagem do "Tentar novamente" (retry com key nova + retryPostId). */
+export function publishNowResultMessage(result: { status: string; lastPublishError?: string | null; instagramUsername?: string | null }): string {
+  if (result.status === 'published') {
+    return result.instagramUsername
+      ? `Post publicado com sucesso! @${result.instagramUsername}`
+      : 'Post publicado com sucesso!';
+  }
+  return `Falha ao publicar (${result.lastPublishError ?? 'erro desconhecido'}). Tente novamente.`;
+}
+
 /**
  * Watchdog do polling do job: desiste após `maxMs` sem mudança de estado
  * (status de espera: generating/running/pending). Ponto de verdade do FRONT —
