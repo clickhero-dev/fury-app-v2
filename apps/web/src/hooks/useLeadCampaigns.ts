@@ -16,11 +16,12 @@ export function useLeadCampaigns() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['campaigns/leads/filter'],
     queryFn: async () => {
-      const response = await api.get<CampaignsResponse>('/campaigns', { params: { limit: 100 } });
+      // Fonte da verdade: Meta — o backend lista OUTCOME_LEADS direto da conta
+      // de anúncios (inclui campanhas criadas fora do Fury). O `id` retornado é
+      // o meta campaign id, usado em GET /campaigns/:id/leads.
+      const response = await api.get<CampaignsResponse>('/campaigns/lead-campaigns');
       const items = response.data?.data ?? [];
-      return items
-        .filter((c) => c.objective === 'OUTCOME_LEADS')
-        .map((c) => ({ id: c.id, name: c.name }));
+      return items.map((c) => ({ id: c.id, name: c.name }));
     },
     staleTime: 60_000,
   });
