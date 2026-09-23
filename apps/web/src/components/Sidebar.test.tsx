@@ -13,9 +13,9 @@ vi.mock('./SidebarUserCard', () => ({
   SidebarUserCard: () => <div data-testid="sidebar-user-card" />,
 }));
 
-function renderSidebar() {
+function renderSidebar(entry = '/dashboard') {
   return render(
-    <MemoryRouter initialEntries={['/dashboard']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Sidebar />
     </MemoryRouter>,
   );
@@ -26,11 +26,33 @@ describe('Sidebar — navegação', () => {
     vi.clearAllMocks();
   });
 
-  it('renderiza o link do Calendário apontando para /calendario', () => {
+  it('agrupa a navegação em seções por tarefa (Gestão / Criação / Conta)', () => {
     renderSidebar();
 
-    const calendario = screen.getByRole('link', { name: /calendário/i });
-    expect(calendario).toHaveAttribute('href', '/calendario');
+    expect(screen.getByText('Gestão')).toBeInTheDocument();
+    expect(screen.getByText('Criação')).toBeInTheDocument();
+    expect(screen.getByText('Conta')).toBeInTheDocument();
+  });
+
+  it('renomeia Calendário para Planejamento apontando para /calendario', () => {
+    renderSidebar();
+
+    const planejamento = screen.getByRole('link', { name: /planejamento/i });
+    expect(planejamento).toHaveAttribute('href', '/calendario');
+  });
+
+  it('marca Planejamento como ativo em /calendario', () => {
+    renderSidebar('/calendario');
+
+    const planejamento = screen.getByRole('link', { name: /planejamento/i });
+    expect(planejamento.className).toContain('bg-sidebar-active');
+  });
+
+  it('marca Planejamento como ativo também quando navega em /planejador', () => {
+    renderSidebar('/planejador');
+
+    const planejamento = screen.getByRole('link', { name: /planejamento/i });
+    expect(planejamento.className).toContain('bg-sidebar-active');
   });
 
   it('mantém o Planejador IA oculto (feature ainda em teste)', () => {
@@ -39,15 +61,29 @@ describe('Sidebar — navegação', () => {
     expect(screen.queryByRole('link', { name: /planejador ia/i })).toBeNull();
   });
 
-  it('renderiza os demais itens de navegação principais', () => {
+  it('renderiza os itens principais de cada seção com seus destinos', () => {
     renderSidebar();
 
     expect(screen.getByRole('link', { name: /painel/i })).toHaveAttribute('href', '/dashboard');
     expect(screen.getByRole('link', { name: /campanhas/i })).toHaveAttribute('href', '/campanhas');
     expect(screen.getByRole('link', { name: /leads/i })).toHaveAttribute('href', '/leads');
     expect(screen.getByRole('link', { name: /estúdio/i })).toHaveAttribute('href', '/estudio');
-    expect(screen.getByRole('link', { name: /integrações/i })).toHaveAttribute('href', '/configuracoes/integracoes');
     expect(screen.getByRole('link', { name: /configurações/i })).toHaveAttribute('href', '/configuracoes');
     expect(screen.getByRole('link', { name: /assinatura/i })).toHaveAttribute('href', '/assinatura');
+  });
+
+  it('mantém Integrações como sub-item acessível', () => {
+    renderSidebar();
+
+    expect(screen.getByRole('link', { name: /integrações/i })).toHaveAttribute(
+      'href',
+      '/configuracoes/integracoes',
+    );
+  });
+
+  it('não exibe Orçamento Smart na navegação', () => {
+    renderSidebar();
+
+    expect(screen.queryByRole('link', { name: /orçamento/i })).toBeNull();
   });
 });
