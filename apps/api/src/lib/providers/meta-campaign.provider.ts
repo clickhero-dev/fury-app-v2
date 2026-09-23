@@ -63,6 +63,33 @@ export interface IMetaCampaignProvider {
     accessToken: string
   ): Promise<{ data: Array<Record<string, unknown>> }>;
 
+  /**
+   * Lista TODAS as campanhas de uma conta de anúncios (paginação completa).
+   * Fonte da verdade do filtro de leads — inclui campanhas criadas fora do Fury.
+   */
+  listCampaigns(
+    adAccountId: string,
+    accessToken: string
+  ): Promise<Array<{ id: string; name: string; objective: string | null; status: string | null }>>;
+
+  /** Lista os ads de uma campanha (id + name), com paginação completa. */
+  getCampaignAds(
+    campaignId: string,
+    accessToken: string
+  ): Promise<Array<{ id: string; name?: string }>>;
+
+  /** Lista os leads de um AD (paginação completa), com field_data/created_time/form_id. */
+  getAdLeads(
+    adId: string,
+    accessToken: string
+  ): Promise<Array<Record<string, unknown>>>;
+
+  /** Perguntas de um leadgen form — mapeia key tokenizado → type. */
+  getLeadFormQuestions(
+    formId: string,
+    accessToken: string
+  ): Promise<Array<{ key: string; type: string; label?: string }>>;
+
   deleteCampaign(campaignId: string, accessToken: string): Promise<void>;
 
   deleteAdSet(adSetId: string, accessToken: string): Promise<void>;

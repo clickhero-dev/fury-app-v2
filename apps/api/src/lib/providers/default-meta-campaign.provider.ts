@@ -4,6 +4,10 @@ import {
   searchMetaCityLocations,
   uploadAdImage as metaUploadAdImage,
   getPageAccessToken as metaGetPageAccessToken,
+  listAccountCampaigns as metaListAccountCampaigns,
+  listCampaignAds as metaListCampaignAds,
+  listAdLeads as metaListAdLeads,
+  getLeadFormQuestions as metaGetLeadFormQuestions,
   type MetaCampaignCreateResponse,
   type MetaInsightsResponse,
   type MetaLocationResult,
@@ -117,6 +121,34 @@ export class DefaultMetaCampaignProvider implements IMetaCampaignProvider {
       `/${encodeURIComponent(formId)}/leads?fields=field_data,created_time`,
       accessToken
     );
+  }
+
+  async listCampaigns(
+    adAccountId: string,
+    accessToken: string
+  ): Promise<Array<{ id: string; name: string; objective: string | null; status: string | null }>> {
+    return metaListAccountCampaigns(adAccountId, accessToken);
+  }
+
+  async getCampaignAds(
+    campaignId: string,
+    accessToken: string
+  ): Promise<Array<{ id: string; name?: string }>> {
+    return metaListCampaignAds(campaignId, accessToken);
+  }
+
+  async getAdLeads(
+    adId: string,
+    accessToken: string
+  ): Promise<Array<Record<string, unknown>>> {
+    return metaListAdLeads(adId, accessToken);
+  }
+
+  async getLeadFormQuestions(
+    formId: string,
+    accessToken: string
+  ): Promise<Array<{ key: string; type: string; label?: string }>> {
+    return metaGetLeadFormQuestions(formId, accessToken);
   }
 
   async deleteCampaign(campaignId: string, accessToken: string): Promise<void> {

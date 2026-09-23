@@ -1735,3 +1735,120 @@ export async function publishInstagramMedia(
 
   return response.id;
 }
+
+// ── Leads: fonte da verdade Meta (campanhas da conta + ads + forms) ─────────
+
+export interface MetaCampaignSummary {
+  id: string;
+  name: string;
+  objective: string | null;
+  status: string | null;
+}
+
+interface MetaCampaignsResponse {
+  data: MetaCampaignSummary[];
+  paging?: { cursors?: { after?: string } };
+}
+
+/**
+ * Lista TODAS as campanhas de uma conta de anúncios (paginação completa).
+ * Fonte da verdade do filtro de leads: inclui campanhas criadas fora do Fury.
+ * GET /act_{id}/campaigns?fields=id,name,objective,status
+ */
+export async function listAccountCampaigns(
+  adAccountId: string,
+  accessToken: string,
+): Promise<MetaCampaignSummary[]> {
+  const all: MetaCampaignSummary[] = [];
+  let after: string | undefined;
+
+  do {
+    const query = `fields=id,name,objective,status&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const payload = await metaApiCall<MetaCampaignsResponse>(
+      `/${encodeURIComponent(adAccountId)}/campaigns?${query}`,
+      accessToken,
+    );
+    all.push(...(payload.data || []));
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return all;
+}
+
+interface MetaCampaignAdsResponse {
+  data: Array<{ id: string; name?: string }>;
+  paging?: { cursors?: { after?: string } };
+}
+
+/** Lista os ads de uma campanha (id + name), com paginação completa. */
+export async function listCampaignAds(
+  campaignId: string,
+  accessToken: string,
+): Promise<Array<{ id: string; name?: string }>> {
+  const all: Array<{ id: string; name?: string }> = [];
+  let after: string | undefined;
+
+  do {
+    const query = `fields=id,name&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const payload = await metaApiCall<MetaCampaignAdsResponse>(
+      `/${encodeURIComponent(campaignId)}/ads?${query}`,
+      accessToken,
+    );
+    all.push(...(payload.data || []));
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return all;
+}
+
+interface MetaAdLeadsResponse {
+  data: Array<Record<string, unknown>>;
+  paging?: { cursors?: { after?: string } };
+}
+
+/**
+ * Lista os leads de um AD (paginação completa).
+ * O lead pertence ao ad — atribuição correta de campanha mesmo com forms
+ * compartilhados. Campos: field_data, created_time, form_id.
+ */
+export async function listAdLeads(
+  adId: string,
+  accessToken: string,
+): Promise<Array<Record<string, unknown>>> {
+  const all: Array<Record<string, unknown>> = [];
+  let after: string | undefined;
+
+  do {
+    const query = `fields=field_data,created_time,form_id&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const payload = await metaApiCall<MetaAdLeadsResponse>(
+      `/${encodeURIComponent(adId)}/leads?${query}`,
+      accessToken,
+    );
+    all.push(...(payload.data || []));
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return all;
+}
+
+export interface MetaLeadFormQuestion {
+  key: string;
+  type: string;
+  label?: string;
+}
+
+/**
+ * Perguntas de um leadgen form: mapeia o `key` tokenizado para o `type`.
+ * GET /{form_id}?fields=questions — usado para traduzir field_data com keys
+ * customizados (ex.: question1/2/3 criados pelo wizard) em nome/email/telefone.
+ */
+export async function getLeadFormQuestions(
+  formId: string,
+  accessToken: string,
+): Promise<MetaLeadFormQuestion[]> {
+  const payload = await metaApiCall<{ questions?: MetaLeadFormQuestion[] }>(
+    `/${encodeURIComponent(formId)}?fields=questions`,
+    accessToken,
+  );
+  return payload.questions || [];
+}
