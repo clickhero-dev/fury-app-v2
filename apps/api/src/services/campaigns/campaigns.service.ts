@@ -13,7 +13,7 @@ import { getMetaLocationsCache, setMetaLocationsCache } from '../../lib/location
 import { getResolvedTenantAssetSelection } from '../meta/meta.service.js';
 import { slugify } from '../../lib/slug.js';
 import { privacyPolicyUrl } from '../../lib/privacy-policy.js';
-import { getCampaignAds, getCampaignAdCreatives, getVideoSourceUrl, searchMetaInterests as searchMetaInterestsLib, debugSearchNeighborhoods as debugSearchNeighborhoodsLib, debugSuggestRadius as debugSuggestRadiusLib } from '../../lib/meta-api.js';
+import { getCampaignAds, getCampaignAdCreatives, getVideoSourceUrl, searchMetaInterests as searchMetaInterestsLib } from '../../lib/meta-api.js';
 import type { IMetaCampaignProvider } from '../../lib/providers/meta-campaign.provider.js';
 import type {
   ICampaignRepository,
@@ -1224,25 +1224,6 @@ export class CampaignsService {
     try { results = await searchMetaInterestsLib(args.query, accessToken); }
     catch (err) { return []; }
     return results;
-  }
-
-  /**
-   * Debug — Fase 1 da spec de segmentação por bairro/cidade (spec-segmentacao-bairro-cidade).
-   * Chamada real e crua à Meta, sem cache e sem fallback pra mock — precisa ver o erro de verdade
-   * se o token não estiver conectado. Remover depois que a Fase 1 for concluída.
-   */
-  async debugSearchNeighborhoods(args: { tenantId: string; query: string }): Promise<{ withFilter: unknown; subcity: unknown; withoutFilter: unknown }> {
-    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
-    return debugSearchNeighborhoodsLib(args.query, accessToken);
-  }
-
-  /**
-   * Debug — Fase 1 da spec de segmentação por bairro/cidade (spec-segmentacao-bairro-cidade).
-   * Remover depois que a Fase 1 for concluída.
-   */
-  async debugSuggestRadius(args: { tenantId: string; latitude: number; longitude: number }): Promise<unknown> {
-    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
-    return debugSuggestRadiusLib(args.latitude, args.longitude, accessToken);
   }
 }
 
