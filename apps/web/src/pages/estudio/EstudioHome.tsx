@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Loader2, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Wand2, X } from 'lucide-react';
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
@@ -153,6 +153,32 @@ export function EstudioHome() {
     setReferenceContextUrls([]);
     setView('quick-create');
   };
+
+  // Deep-link do FAB "Criar imagem": /estudio?criar=rapida abre a Criação
+  // rápida direto (mesmo comportamento do botão da biblioteca). Mesmo padrão
+  // do CalendarView ("adjusting state when a prop changes"): compara o valor
+  // anterior do param durante o render e dispara o setState direto — cobre
+  // tanto o mount (FAB a partir de outra rota) quanto a transição na mesma
+  // rota (usuário já estava em /estudio; initializer do useState não roda).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const criarParam = searchParams.get('criar');
+  const [prevCriarParam, setPrevCriarParam] = useState<string | null>(null);
+  if (criarParam !== prevCriarParam) {
+    setPrevCriarParam(criarParam);
+    if (criarParam === 'rapida') {
+      handleStartQuickCreate();
+    }
+  }
+
+  // O parâmetro sai da URL em seguida (replace) para não reabrir em navegações
+  // futuras — remoção em efeito (setSearchParams não é setState local).
+  useEffect(() => {
+    if (criarParam === 'rapida') {
+      const next = new URLSearchParams(searchParams);
+      next.delete('criar');
+      setSearchParams(next, { replace: true });
+    }
+  }, [criarParam, searchParams, setSearchParams]);
 
   // Regra de precedência (Decisão 6, plan.md): contexto atual = últimas até
   // 2 imagens adicionadas, venham do painel lateral (RF-09) ou do Upload B

@@ -4,8 +4,9 @@ import { captureEvent } from '@/lib/posthog';
 
 /**
  * Ações flutuantes de criação (canto inferior direito):
- * Criar campanha → wizard · Criar imagem → gerador do Estúdio · Postar → fluxo
- * de postagem do Calendário (deep-link ?criar=post — abre o diálogo direto).
+ * Criar campanha → wizard · Criar imagem → Criação rápida do Estúdio
+ * (deep-link ?criar=rapida) · Postar → fluxo de postagem do Calendário
+ * (deep-link ?criar=post — abre o diálogo direto).
  *
  * Ícone-only por decisão de UX — cada botão exige nome acessível (aria-label)
  * além do tooltip nativo (title).
@@ -21,7 +22,7 @@ const EXCLUDED_PREFIXES = [
 
 const actions = [
   { key: 'criar-campanha', label: 'Criar campanha', icon: Megaphone, to: '/criar-campanha' },
-  { key: 'criar-imagem', label: 'Criar imagem', icon: ImagePlus, to: '/estudio/imagem' },
+  { key: 'criar-imagem', label: 'Criar imagem', icon: ImagePlus, to: '/estudio?criar=rapida' },
   { key: 'postar', label: 'Postar', icon: Send, to: '/calendario?criar=post' },
 ] as const;
 
