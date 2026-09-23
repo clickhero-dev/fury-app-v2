@@ -34,6 +34,14 @@ function makeService(overrides: Partial<{
 
 const TENANT_ID = 'tenant-1';
 
+/** Cria um erro META no formato real do metaApiCall: Error simples com metaCode anexado (NÃO AppError). */
+function metaError(metaCode: number, message: string, extra: Record<string, unknown> = {}) {
+  const err = new Error(message) as Error & { metaCode: number; [k: string]: unknown };
+  err.metaCode = metaCode;
+  Object.assign(err, extra);
+  return err;
+}
+
 // ── Pure functions ──────────────────────────────────────────────────────────
 
 describe('normalizeCampaignPanelMetrics', () => {
@@ -220,6 +228,15 @@ describe('CampaignsService.pauseCampaign & resumeCampaign', () => {
     const resumed = await service.resumeCampaign({ tenantId: TENANT_ID, campaignId: 'meta_camp_1' });
     expect(resumed.status).toBe('ACTIVE');
   });
+
+  it('pause: campanha inexistente no Meta (code 100 + does not exist) → 404 CAMPAIGN_NOT_FOUND (não 500)', async () => {
+    const { service, meta, repo } = makeService();
+    repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
+    meta.getCampaign = async () => { throw metaError(100, 'Unsupported get request. Object with ID x does not exist'); };
+
+    await expect(service.pauseCampaign({ tenantId: TENANT_ID, campaignId: 'meta_apagada' }))
+      .rejects.toMatchObject({ code: 'CAMPAIGN_NOT_FOUND', statusCode: 404 });
+  });
 });
 
 // ── Service: getCampaign / getCampaigns ─────────────────────────────────────
@@ -272,6 +289,16 @@ describe('CampaignsService.updateCampaignStatus & softDeleteCampaign', () => {
     expect(deleted.status).toBe('archived');
     expect(repo.furyInsights).toHaveLength(1);
     expect(repo.furyInsights[0].suggestionType).toBe('campaign_archived');
+  });
+
+  it('softDelete bloqueia campanha local de outro tenant (403 FORBIDDEN)', async () => {
+    const { service, repo } = makeService();
+    repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
+    const otherCampaign = await repo.createCampaign({ tenantId: 'tenant-2', metaCampaignId: 'mc2', name: 'Other' } as any);
+
+    await expect(service.softDeleteCampaign({ tenantId: TENANT_ID, campaignId: otherCampaign.id, userId: 'u1' }))
+      .rejects.toMatchObject({ code: 'FORBIDDEN', statusCode: 403 });
+    expect(repo.campaigns.find((c) => c.id === otherCampaign.id)?.status).not.toBe('archived');
   });
 });
 
@@ -1031,6 +1058,33 @@ describe('CampaignsService.getLeadCampaigns (fonte da verdade: Meta)', () => {
     await expect(service.getLeadCampaigns({ tenantId: TENANT_ID }))
       .rejects.toMatchObject({ code: 'META_CONNECTION_NOT_FOUND' });
   });
+
+  it('mapeia metaCode 190 → META_TOKEN_EXPIRED (401)', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.listCampaigns = async () => { throw metaError(190, 'Access token has expired'); };
+
+    await expect(service.getLeadCampaigns({ tenantId: TENANT_ID }))
+      .rejects.toMatchObject({ code: 'META_TOKEN_EXPIRED', statusCode: 401 });
+  });
+
+  it('mapeia metaCode 100 → INVALID_PARAMETER (400)', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.listCampaigns = async () => { throw metaError(100, 'Invalid parameter'); };
+
+    await expect(service.getLeadCampaigns({ tenantId: TENANT_ID }))
+      .rejects.toMatchObject({ code: 'INVALID_PARAMETER', statusCode: 400 });
+  });
+
+  it('mapeia (#200) Permission error (ex.: fallback META_SYSTEM_ACCESS_TOKEN) → META_PERMISSION_DENIED (403)', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.listCampaigns = async () => { throw metaError(200, '(#200) Permission error', { metaType: 'OAuthException' }); };
+
+    await expect(service.getLeadCampaigns({ tenantId: TENANT_ID }))
+      .rejects.toMatchObject({ code: 'META_PERMISSION_DENIED', statusCode: 403 });
+  });
 });
 
 describe('CampaignsService.getCampaignLeads', () => {
@@ -1123,13 +1177,70 @@ describe('CampaignsService.getCampaignLeads', () => {
   it('erro da Meta ao buscar campanha inexistente é propagado (não vira lista vazia)', async () => {
     const { service, meta, repo } = makeService();
     makeLeadsEnv(meta, repo);
+    // Erro REAL do metaApiCall: Error simples com metaCode anexado (não AppError).
     meta.getCampaignAds = async (campaignId: string) => {
-      if (campaignId === 'meta_inexistente') throw new AppError(400, 'META_API_ERROR', 'Campanha desconhecida');
+      if (campaignId === 'meta_inexistente') throw metaError(100, '[Meta API] 100: Invalid parameter');
       return [];
     };
 
     await expect(service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_inexistente' }))
-      .rejects.toMatchObject({ code: 'META_API_ERROR' });
+      .rejects.toMatchObject({ code: 'INVALID_PARAMETER', statusCode: 400 });
+  });
+
+  it('getCampaignAds com metaCode 190 → META_TOKEN_EXPIRED (401)', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.getCampaignAds = async () => { throw metaError(190, 'Access token has expired'); };
+
+    await expect(service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_ext_1' }))
+      .rejects.toMatchObject({ code: 'META_TOKEN_EXPIRED', statusCode: 401 });
+  });
+
+  it('getAdLeads com metaCode 100 → INVALID_PARAMETER (400)', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.campaignAdsByCampaign.set('meta_ext_2', ['ad_x']);
+    meta.getAdLeads = async () => { throw metaError(100, 'Invalid parameter'); };
+
+    await expect(service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_ext_2' }))
+      .rejects.toMatchObject({ code: 'INVALID_PARAMETER', statusCode: 400 });
+  });
+
+  it('getLeadFormData com metaCode 190 → META_TOKEN_EXPIRED (401)', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    repo.campaigns.push({ id: 'campaign_form', tenantId: TENANT_ID, budget: { lead_form_id: 'form_1' } } as any);
+    meta.getLeadFormData = async () => { throw metaError(190, 'expired'); };
+
+    await expect(service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'campaign_form' }))
+      .rejects.toMatchObject({ code: 'META_TOKEN_EXPIRED', statusCode: 401 });
+  });
+
+  it('campanha inexistente no Meta (code 100 + "does not exist") → 404 CAMPAIGN_NOT_FOUND', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.getCampaignAds = async () => {
+      throw metaError(100, 'Unsupported get request. Object with ID 123 does not exist');
+    };
+
+    await expect(service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_apagada' }))
+      .rejects.toMatchObject({ code: 'CAMPAIGN_NOT_FOUND', statusCode: 404 });
+  });
+
+  it('fallback META_SYSTEM_ACCESS_TOKEN sem leads_retrieval (#200) → META_PERMISSION_DENIED (403)', async () => {
+    const prev = process.env.META_SYSTEM_ACCESS_TOKEN;
+    process.env.META_SYSTEM_ACCESS_TOKEN = 'system_token_for_test';
+    try {
+      const { service, meta } = makeService();
+      // Sem conexão Meta local → usa o token de sistema; o Meta responde #200 (falta leads_retrieval).
+      meta.getCampaignAds = async () => { throw metaError(200, '(#200) Permission error', { metaType: 'OAuthException' }); };
+
+      await expect(service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_externa' }))
+        .rejects.toMatchObject({ code: 'META_PERMISSION_DENIED', statusCode: 403 });
+    } finally {
+      if (prev === undefined) delete process.env.META_SYSTEM_ACCESS_TOKEN;
+      else process.env.META_SYSTEM_ACCESS_TOKEN = prev;
+    }
   });
 });
 
@@ -1200,6 +1311,15 @@ describe('CampaignsService.getAllCampaignLeads', () => {
     const result = await service.getAllCampaignLeads({ tenantId: TENANT_ID });
     expect(result.leads).toHaveLength(1);
     expect(result.leads[0].campaignId).toBe('ok_1');
+  });
+
+  it('falha do getLeadCampaigns (metaCode 190) propaga META_TOKEN_EXPIRED — não vira 500 silencioso', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.listCampaigns = async () => { throw metaError(190, 'Access token has expired'); };
+
+    await expect(service.getAllCampaignLeads({ tenantId: TENANT_ID }))
+      .rejects.toMatchObject({ code: 'META_TOKEN_EXPIRED', statusCode: 401 });
   });
 });
 
