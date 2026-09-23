@@ -127,7 +127,7 @@ function MetaBanner() {
       </div>
 
       <Link
-        to="/integracoes"
+        to="/configuracoes/integracoes"
         className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#CF6F03]/40 px-4 py-2 text-sm font-semibold text-[#9A4F02] dark:text-[#E08A2E] transition-colors hover:bg-[#CF6F03]/10"
       >
         Conectar agora <ArrowRight className="size-3.5" />
@@ -634,7 +634,7 @@ function InstagramEngagementSection({
         >
           <p className="text-sm text-slate-600 dark:text-[#9A9D96]">Conecte seu Instagram para ver as métricas</p>
           <Link
-            to="/integracoes"
+            to="/configuracoes/integracoes"
             className="inline-flex items-center gap-1 text-sm font-medium text-[#17708A] dark:text-[#2A9BC0] hover:underline"
           >
             Ir para integrações <ArrowRight className="size-3.5" />
