@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from '../Sidebar';
 import { SnackHost } from './SnackHost';
+import { FabActions } from '../fab/FabActions';
 import api from '../../lib/api';
 import { useSubscription } from '../../hooks/useBilling';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
@@ -193,6 +194,9 @@ export function AuthenticatedShell() {
       )}
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
       <SnackHost />
+      {/* Ações flutuantes de criação (fora das rotas: sobrevivem à navegação).
+          FabActions retorna null em telas onde não fazem sentido. */}
+      <FabActions />
       {/* Outlet renderiza a página da rota ativa com acesso ao ShellContext */}
       <Outlet context={{ setMobileOpen } satisfies ShellContext} />
     </div>

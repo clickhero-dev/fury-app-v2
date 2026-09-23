@@ -102,14 +102,19 @@ function resolveStatus(post: Record<string, unknown>): Status {
 
 // ===== CalendarView =====
 
-export function CalendarView() {
+export function CalendarView({ initialAction = null }: { initialAction?: 'new-post' | null }) {
   const now = useMemo(() => new Date(), []);
   const calendarRef = useRef<FullCalendar | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedPost, setSelectedPost] = useState<CalendarPost | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [showPostTypeDialog, setShowPostTypeDialog] = useState(false);
+  // Deep-link do FAB "Postar": ?criar=post abre o fluxo de postagem direto.
+  // O estado INICIALIZA da prop (sem efeito → sem cascading render); o caso
+  // "já estava no calendário" já tem o mesmo fluxo no toolbar, então perder o
+  // re-disparo por prop-change não é regressão — e evita key/remount, que
+  // quebraria a seleção múltipla do FullCalendar.
+  const [showPostTypeDialog, setShowPostTypeDialog] = useState(initialAction === 'new-post');
   const [createMode, setCreateMode] = useState<'schedule' | 'now'>('schedule');
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
