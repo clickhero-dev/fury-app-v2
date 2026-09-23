@@ -56,6 +56,9 @@ function formatWaitSeconds(seconds: number): string {
 
 const RETRY_BACKOFF_MINUTES = [1, 5, 15];
 
+/** Lease do claim de publicação (publish-now) — espelha PUBLISH_LEASE_MINUTES do repository. */
+const PUBLISH_LEASE_MINUTES = 5;
+
 interface InstagramAccount {
   igUserId: string;
   accessToken: string;
@@ -587,6 +590,12 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
       // ponytail: só image e reel são suportados no Instagram v1
       if (post.postType !== 'image' && post.postType !== 'reel') continue;
 
+      // Claim atômico ANTES de publicar: disputa com o trigger manual
+      // (publish-now). Quem perde pula o post sem marcar nada — o dono
+      // do claim é o único responsável pelo resultado.
+      const claimed = await repo.claimPostForPublish(post.id);
+      if (!claimed) continue;
+
       const attempts = (post.publishAttempts ?? 0) + 1;
 
       try {
@@ -613,6 +622,87 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
     }
 
     return { published, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })), pageName: account.pageName, instagramUsername: account.instagramUsername };
+  }
+
+  /**
+   * "Postar agora" (publish-now): cria o post JÁ com claim de publicação
+   * (status 'publishing' + lease nextRetryAt +5min) e publica no mesmo
+   * request. Falha de publicação = markPostFailed NA HORA (sem retry
+   * automático — o retry é o clique do usuário com key idempotência nova).
+   * Carrossel recusado até a Fase 2 (containers filhos na Graph API).
+   */
+  async publishNow(
+    tenantId: string,
+    payload: { postType: string; caption?: string; imageUrl?: string; imageUrls?: string[] | null; title?: string; platform?: string },
+  ) {
+    if (payload.postType === 'carousel') {
+      throw new AppError(400, 'CAROUSEL_NOT_SUPPORTED', 'Carrossel ainda não é suportado no "Postar agora". Crie um post único ou agende.');
+    }
+    const repo = this.repo(tenantId);
+    const now = new Date();
+    const leaseUntil = new Date(now.getTime() + PUBLISH_LEASE_MINUTES * 60_000);
+    const post = await repo.createPost({
+      tenantId,
+      planId: null,
+      caption: payload.caption || '',
+      postType: payload.postType as any,
+      dayIndex: now.getUTCDate(),
+      calendarDate: now.toISOString().split('T')[0],
+      platform: payload.platform || 'instagram',
+      scheduledAt: now,
+      title: payload.title || null,
+      imageUrl: payload.imageUrl || null,
+      imageUrls: payload.imageUrls ?? null,
+      status: 'publishing',
+      nextRetryAt: leaseUntil,
+    } as any);
+    return this.attemptPublish(repo, post, tenantId);
+  }
+
+  /**
+   * "Tentar novamente" (retry do publish-now): republica o post EXISTENTE via
+   * claim atômico — nunca cria outro. Perdeu o claim (published / publishing
+   * com lease fresco) ⇒ 409 POST_CLAIMED.
+   */
+  async publishRetry(tenantId: string, postId: string) {
+    const repo = this.repo(tenantId);
+    const claimed = await repo.claimPostForPublish(postId);
+    if (!claimed) {
+      throw new AppError(409, 'POST_CLAIMED', 'Post não pode ser republicado agora (já publicado ou publicação em andamento).');
+    }
+    const post = await repo.findPostById(postId);
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    return this.attemptPublish(repo, post, tenantId);
+  }
+
+  /** Resolve conta, publica, marca resultado e devolve o estado final do post. */
+  private async attemptPublish(
+    repo: PlannerRepository,
+    post: { id: string; postType: string; caption?: string | null; imageUrl?: string | null; publishAttempts?: number | null },
+    tenantId: string,
+  ) {
+    const account = await this.resolveInstagramAccount(tenantId);
+    const attempts = (post.publishAttempts ?? 0) + 1;
+
+    if (!account) {
+      const msg = 'no_instagram_account: Instagram não vinculado/revogado — publicação desativada. Vincule o perfil em Configurações > Integrações.';
+      await repo.markPostFailed(post.id, attempts, msg, new Date());
+      return { id: post.id, status: 'failed' as const, lastPublishError: msg };
+    }
+
+    try {
+      const { mediaId } = await this.publishSinglePost(
+        { id: post.id, postType: post.postType, caption: post.caption, imageUrl: post.imageUrl },
+        account.igUserId,
+        account.accessToken,
+      );
+      await repo.markPostPublished(post.id, new Date(), mediaId, attempts);
+      return { id: post.id, status: 'published' as const, platformPostId: mediaId, instagramUsername: account.instagramUsername ?? null };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await repo.markPostFailed(post.id, attempts, msg, new Date());
+      return { id: post.id, status: 'failed' as const, lastPublishError: msg };
+    }
   }
 
   getAgentLabels(): AgentLabelsResponse {
