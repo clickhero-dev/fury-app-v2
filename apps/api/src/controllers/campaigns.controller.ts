@@ -665,6 +665,26 @@ export class CampaignsController {
     }
   };
 
+  /** GET /campaigns/lead-campaigns — campanhas OUTCOME_LEADS direto da Meta (filtro da página de Leads). */
+  getLeadCampaigns = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tenantId = req.tenant?.tenantId || '';
+      if (!tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+      }
+
+      const data = await this.campaignsService.getLeadCampaigns({ tenantId });
+
+      res.json({
+        success: true,
+        data,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   /** GET /campaigns/:id/leads — leads coletados pelo formulário instantâneo (objetivo 'leads'). */
   getCampaignLeads = async (req: Request, res: Response, next: NextFunction) => {
     try {

@@ -23,8 +23,10 @@ const TRAFFIC_CAMPAIGN = { id: 'traffic_1', name: 'Camp Tráfego', objective: 'O
 
 function mockApi(leads: unknown[] = [], campaigns: unknown[] = [FORM_CAMPAIGN, TRAFFIC_CAMPAIGN]) {
   mockApiGet.mockImplementation((url: string) => {
-    if (url === '/campaigns') {
-      return Promise.resolve({ data: { success: true, data: campaigns } });
+    if (url === '/campaigns/lead-campaigns') {
+      // Contrato do backend: JÁ retorna só OUTCOME_LEADS (filtro é server-side)
+      const leadCampaigns = (campaigns as Array<{ objective?: string }>).filter((c) => c.objective === 'OUTCOME_LEADS');
+      return Promise.resolve({ data: { success: true, data: leadCampaigns } });
     }
     if (url === '/campaigns/leads') {
       return Promise.resolve({ data: { success: true, data: leads } });
@@ -62,17 +64,20 @@ describe('LeadsPage', () => {
     await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/campaigns/leads'));
   });
 
-  it('filtro lista apenas campanhas de Formulário (não campanhas de tráfego)', async () => {
+  it('filtro usa a fonte Meta (/campaigns/lead-campaigns) e lista as campanhas retornadas', async () => {
     mockApi([]);
 
     render(<LeadsPage />, { wrapper: makeWrapper() });
 
-    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/campaigns', expect.any(Object)));
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/campaigns/lead-campaigns'));
     const select = await screen.findByRole('combobox', { name: /Filtrar por campanha/i });
     const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
     expect(options).toContain('Todas as campanhas');
     expect(options).toContain('Camp Formulário');
+    // O filtro de Formulário é server-side: o backend já retorna só OUTCOME_LEADS.
     expect(options).not.toContain('Camp Tráfego');
+    // O filtro não consulta mais a listagem genérica de campanhas
+    expect(mockApiGet).not.toHaveBeenCalledWith('/campaigns', expect.any(Object));
   });
 
   it('selecionar uma campanha busca leads da campanha específica', async () => {

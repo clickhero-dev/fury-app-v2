@@ -1006,6 +1006,33 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
   });
 });
 
+describe('CampaignsService.getLeadCampaigns (fonte da verdade: Meta)', () => {
+  it('retorna campanhas OUTCOME_LEADS da Meta, incluindo as criadas FORA do Fury', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.listCampaignsResult = [
+      { id: 'meta_camp_externa', name: 'Externa', objective: 'OUTCOME_LEADS', status: 'ACTIVE' },
+      { id: 'meta_camp_trafego', name: 'Tráfego', objective: 'OUTCOME_TRAFFIC', status: 'ACTIVE' },
+      { id: 'meta_camp_pausada', name: 'Pausada', objective: 'OUTCOME_LEADS', status: 'PAUSED' },
+    ];
+
+    const result = await service.getLeadCampaigns({ tenantId: TENANT_ID });
+
+    expect(result).toEqual([
+      { id: 'meta_camp_externa', name: 'Externa' },
+      { id: 'meta_camp_pausada', name: 'Pausada' },
+    ]);
+    // Usa o ad account selecionado da conexão
+    expect(meta.listCampaignsRequests[0].adAccountId).toBe('act_123');
+  });
+
+  it('lança 403 sem conexão Meta', async () => {
+    const { service } = makeService();
+    await expect(service.getLeadCampaigns({ tenantId: TENANT_ID }))
+      .rejects.toMatchObject({ code: 'META_CONNECTION_NOT_FOUND' });
+  });
+});
+
 describe('CampaignsService.getCampaignLeads', () => {
   it('retorna leads normalizados (nome/email/telefone) do formulário da campanha', async () => {
     const { service, meta, repo } = makeService();
@@ -1030,6 +1057,60 @@ describe('CampaignsService.getCampaignLeads', () => {
     });
   });
 
+  it('BUG FIX: campanha externa (sem registro local) resolve via ads e mapeia keys tokenizadas pelas questions do form', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    // Nenhuma campanha no banco local — criada fora do Fury
+    meta.campaignAdsByCampaign.set('meta_camp_1', ['ad_1']);
+    meta.adLeadsByAd.set('ad_1', [{
+      created_time: '2026-09-23T12:00:00Z', form_id: 'form_tok',
+      field_data: [
+        { name: 'question1', values: ['Maria Souza'] },
+        { name: 'question2', values: ['maria@exemplo.com'] },
+        { name: 'question3', values: ['11999999999'] },
+      ],
+    }]);
+    meta.formQuestionsByForm.set('form_tok', [
+      { key: 'question1', type: 'FULL_NAME' },
+      { key: 'question2', type: 'EMAIL' },
+      { key: 'question3', type: 'PHONE' },
+    ]);
+
+    const result = await service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_camp_1' });
+
+    expect(result.leads).toEqual([{
+      name: 'Maria Souza', email: 'maria@exemplo.com', phone: '11999999999', createdAt: '2026-09-23T12:00:00Z',
+    }]);
+  });
+
+  it('fallback: campo tokenizado sem questions disponíveis usa nomes fixos', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.campaignAdsByCampaign.set('meta_camp_2', ['ad_2']);
+    meta.adLeadsByAd.set('ad_2', [{
+      created_time: '2026-09-23T12:00:00Z', form_id: 'form_sem_q',
+      field_data: [
+        { name: 'full_name', values: ['João'] },
+        { name: 'email', values: ['joao@x.com'] },
+        { name: 'phone_number', values: ['21988887777'] },
+      ],
+    }]);
+    // formQuestionsByForm vazio → cai nos nomes fixos
+
+    const result = await service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_camp_2' });
+    expect(result.leads[0]).toEqual({
+      name: 'João', email: 'joao@x.com', phone: '21988887777', createdAt: '2026-09-23T12:00:00Z',
+    });
+  });
+
+  it('campanha externa sem ads → leads vazios', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    // nenhum ad registrado para meta_camp_3
+    const result = await service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_camp_3' });
+    expect(result.leads).toEqual([]);
+  });
+
   it('retorna lista vazia para campanha sem formulário', async () => {
     const { service, meta, repo } = makeService();
     makeLeadsEnv(meta, repo);
@@ -1039,53 +1120,64 @@ describe('CampaignsService.getCampaignLeads', () => {
     expect(result.leads).toEqual([]);
   });
 
-  it('retorna 404 para campanha de outro tenant', async () => {
+  it('erro da Meta ao buscar campanha inexistente é propagado (não vira lista vazia)', async () => {
     const { service, meta, repo } = makeService();
     makeLeadsEnv(meta, repo);
-    repo.campaigns.push({ id: 'campaign_1', tenantId: 'outro-tenant', budget: { lead_form_id: 'form_1' } } as any);
+    meta.getCampaignAds = async (campaignId: string) => {
+      if (campaignId === 'meta_inexistente') throw new AppError(400, 'META_API_ERROR', 'Campanha desconhecida');
+      return [];
+    };
 
-    await expect(service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'campaign_1' })).rejects.toThrow(AppError);
+    await expect(service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_inexistente' }))
+      .rejects.toMatchObject({ code: 'META_API_ERROR' });
   });
 });
 
 describe('CampaignsService.getAllCampaignLeads', () => {
-  it('agrega leads apenas das campanhas de Formulário (OUTCOME_LEADS), com campaignId/Name', async () => {
+  it('agrega leads das campanhas OUTCOME_LEADS da Meta (inclui externas), com campaignId/Name', async () => {
     const { service, meta, repo } = makeService();
     makeLeadsEnv(meta, repo);
-    repo.campaigns.push(
-      { id: 'form_1', name: 'Camp Formulário', tenantId: TENANT_ID, budget: { lead_form_id: 'lf_1', objective: 'OUTCOME_LEADS' } } as any,
-      { id: 'traffic_1', name: 'Camp Tráfego', tenantId: TENANT_ID, budget: { objective: 'OUTCOME_TRAFFIC' } } as any,
-      { id: 'form_2', name: 'Camp Formulário 2', tenantId: TENANT_ID, budget: { lead_form_id: 'lf_2', objective: 'OUTCOME_LEADS' } } as any,
-    );
-    meta.leadsResult = {
-      data: [{
-        created_time: '2026-09-21T12:00:00Z',
-        field_data: [
-          { name: 'full_name', values: ['Maria Souza'] },
-          { name: 'email', values: ['maria@exemplo.com'] },
-          { name: 'phone_number', values: ['11999999999'] },
-        ],
-      }],
-    };
+    meta.listCampaignsResult = [
+      { id: 'meta_form_1', name: 'Camp Formulário', objective: 'OUTCOME_LEADS', status: 'ACTIVE' },
+      { id: 'meta_traffic', name: 'Camp Tráfego', objective: 'OUTCOME_TRAFFIC', status: 'ACTIVE' },
+      { id: 'meta_form_2', name: 'Camp Formulário 2', objective: 'OUTCOME_LEADS', status: 'PAUSED' },
+    ];
+    meta.campaignAdsByCampaign.set('meta_form_1', ['ad_f1']);
+    meta.campaignAdsByCampaign.set('meta_form_2', ['ad_f2']);
+    meta.adLeadsByAd.set('ad_f1', [{
+      created_time: '2026-09-21T12:00:00Z',
+      field_data: [
+        { name: 'full_name', values: ['Maria Souza'] },
+        { name: 'email', values: ['maria@exemplo.com'] },
+        { name: 'phone_number', values: ['11999999999'] },
+      ],
+    }]);
+    meta.adLeadsByAd.set('ad_f2', [{
+      created_time: '2026-09-22T12:00:00Z',
+      field_data: [
+        { name: 'full_name', values: ['João'] },
+        { name: 'email', values: ['joao@x.com'] },
+        { name: 'phone_number', values: ['21988887777'] },
+      ],
+    }]);
 
     const result = await service.getAllCampaignLeads({ tenantId: TENANT_ID });
 
-    // 2 campanhas de Formulário × 1 lead cada (tráfego fica fora)
     expect(result.leads).toHaveLength(2);
     const [first, second] = result.leads;
     expect(first).toMatchObject({
       name: 'Maria Souza', email: 'maria@exemplo.com', phone: '11999999999',
-      campaignId: 'form_1', campaignName: 'Camp Formulário',
+      campaignId: 'meta_form_1', campaignName: 'Camp Formulário',
     });
-    expect(second.campaignId).toBe('form_2');
+    expect(second).toMatchObject({ campaignId: 'meta_form_2', name: 'João' });
   });
 
-  it('retorna vazio quando nenhuma campanha é de Formulário', async () => {
+  it('retorna vazio quando a Meta não tem campanhas de Formulário', async () => {
     const { service, meta, repo } = makeService();
     makeLeadsEnv(meta, repo);
-    repo.campaigns.push(
-      { id: 't1', name: 'Tráfego', tenantId: TENANT_ID, budget: { objective: 'OUTCOME_TRAFFIC' } } as any,
-    );
+    meta.listCampaignsResult = [
+      { id: 't1', name: 'Tráfego', objective: 'OUTCOME_TRAFFIC', status: 'ACTIVE' },
+    ];
 
     const result = await service.getAllCampaignLeads({ tenantId: TENANT_ID });
     expect(result.leads).toEqual([]);
@@ -1094,14 +1186,15 @@ describe('CampaignsService.getAllCampaignLeads', () => {
   it('falha em uma campanha não derruba a listagem das demais', async () => {
     const { service, meta, repo } = makeService();
     makeLeadsEnv(meta, repo);
-    repo.campaigns.push(
-      { id: 'ok_1', name: 'OK', tenantId: TENANT_ID, budget: { lead_form_id: 'lf_ok', objective: 'OUTCOME_LEADS' } } as any,
-      { id: 'bad_1', name: 'Ruim', tenantId: TENANT_ID, budget: { lead_form_id: 'lf_bad', objective: 'OUTCOME_LEADS' } } as any,
-    );
-    // leadsResult só tem o lead; para a campanha bad_1 o getLeadFormData lança
-    meta.getLeadFormData = async (formId: string) => {
-      if (formId === 'lf_bad') throw new Error('Meta down');
-      return { data: [{ created_time: '2026-09-21T00:00:00Z', field_data: [] }] };
+    meta.listCampaignsResult = [
+      { id: 'ok_1', name: 'OK', objective: 'OUTCOME_LEADS', status: 'ACTIVE' },
+      { id: 'bad_1', name: 'Ruim', objective: 'OUTCOME_LEADS', status: 'ACTIVE' },
+    ];
+    meta.campaignAdsByCampaign.set('ok_1', ['ad_ok']);
+    meta.adLeadsByAd.set('ad_ok', [{ created_time: '2026-09-21T00:00:00Z', field_data: [] }]);
+    meta.getCampaignAds = async (campaignId: string) => {
+      if (campaignId === 'bad_1') throw new Error('Meta down');
+      return [{ id: 'ad_ok' }];
     };
 
     const result = await service.getAllCampaignLeads({ tenantId: TENANT_ID });

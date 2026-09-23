@@ -9,6 +9,9 @@ import {
 import { and, desc, eq, gte, gt, inArray, isNull, lt, lte, not, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
+/** Lease do claim de publicação: publishing volta a ser elegível após este prazo. */
+const PUBLISH_LEASE_MINUTES = 5;
+
 type CampaignPlan = typeof campaignPlans.$inferSelect;
 type SocialPost = typeof socialPosts.$inferSelect;
 
@@ -216,10 +219,50 @@ export class PlannerRepository extends TenantScopedRepository {
         eq(socialPosts.tenantId, this.tenantId),
         sql`${socialPosts.scheduledAt} IS NOT NULL`,
         sql`${socialPosts.scheduledAt} <= ${now.toISOString()}::timestamptz`,
-        eq(socialPosts.status, 'approved'),
-        or(isNull(socialPosts.nextRetryAt), lte(socialPosts.nextRetryAt, now)),
+        or(
+          // approved: retry nunca tentado ou vencido
+          and(
+            eq(socialPosts.status, 'approved'),
+            or(isNull(socialPosts.nextRetryAt), lte(socialPosts.nextRetryAt, now)),
+          ),
+          // publishing com lease vencido (crash pós-claim → self-healing)
+          and(
+            eq(socialPosts.status, 'publishing'),
+            lte(socialPosts.nextRetryAt, now),
+          ),
+        ),
       ),
     });
+  }
+
+  /**
+   * Claim atômico de publicação (publish-now / corrida com o scheduler).
+   * UPDATE condicional: só ganha quem está approved/failed OU publishing com
+   * lease (nextRetryAt) vencido. Quem ganha vira 'publishing' com lease
+   * +5min — se o processo morrer no meio, o lease vence e o post volta a ser
+   * elegível (self-healing). Retorna true só se o UPDATE pegou a linha.
+   */
+  async claimPostForPublish(postId: string): Promise<boolean> {
+    const now = new Date();
+    const leaseUntil = new Date(now.getTime() + PUBLISH_LEASE_MINUTES * 60_000);
+    const rows = await this.db
+      .update(socialPosts)
+      .set({ status: 'publishing', nextRetryAt: leaseUntil, updatedAt: now })
+      .where(
+        and(
+          eq(socialPosts.id, postId),
+          eq(socialPosts.tenantId, this.tenantId),
+          or(
+            inArray(socialPosts.status, ['approved', 'failed']),
+            and(
+              eq(socialPosts.status, 'publishing'),
+              lte(socialPosts.nextRetryAt, now),
+            ),
+          ),
+        ),
+      )
+      .returning({ id: socialPosts.id });
+    return rows.length > 0;
   }
 
   async markPostPublished(postId: string, publishedAt: Date, platformPostId: string, attempts: number) {
@@ -254,6 +297,8 @@ export class PlannerRepository extends TenantScopedRepository {
     await this.db
       .update(socialPosts)
       .set({
+        // volta p/ approved: post vindo do claim (publishing) não pode ficar preso
+        status: 'approved',
         publishAttempts: attempts,
         lastPublishError: errorMsg,
         nextRetryAt,

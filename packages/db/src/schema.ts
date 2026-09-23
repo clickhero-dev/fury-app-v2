@@ -530,7 +530,7 @@ export const requestLogs = pgTable(
 // ===== Planejador IA tables =====
 
 export const postTypeEnum = pgEnum('post_type', ['reel', 'carousel', 'image', 'stories']);
-export const postStatusEnum = pgEnum('post_status', ['draft', 'approved', 'scheduled', 'rejected', 'published', 'confirmed', 'failed']);
+export const postStatusEnum = pgEnum('post_status', ['draft', 'approved', 'scheduled', 'rejected', 'published', 'confirmed', 'failed', 'publishing']);
 export const planStatusEnum = pgEnum('plan_status', ['draft', 'active', 'completed', 'cancelled']);
 
 export const campaignPlans = pgTable(

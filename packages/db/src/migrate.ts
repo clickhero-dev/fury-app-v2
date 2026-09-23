@@ -142,6 +142,13 @@ const STEPS: MigrationStep[] = [
   { tag: '0039_add_selected_instagram_binding' },
   { tag: '0040_policy_reorder_reembolso' },
   { tag: '0041_wpp_verification' },
+  {
+    tag: '0042_add_post_status_publishing',
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "post_status" ADD VALUE IF NOT EXISTS 'publishing'`);
+      console.log('    + added publishing to post_status');
+    },
+  },
 ];
 
 /** Nomes de todas as tabelas do schema (30 tabelas) — usados para validação. */

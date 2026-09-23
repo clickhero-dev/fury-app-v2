@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
+import { idempotencyMiddleware } from '../middleware/idempotency.middleware.js';
 import { controllers } from '../di.js';
 
 const planner = controllers.planner;
@@ -38,6 +39,7 @@ router.post('/posts', tenantMiddleware, planner.handleCreatePost);
 router.post('/posts/upload', tenantMiddleware, mediaUpload.single('file'), planner.handleUploadMedia);
 router.patch('/posts/:postId/move', tenantMiddleware, planner.handleMovePost);
 router.post('/posts/publish-due', tenantMiddleware, planner.handlePublishDue);
+router.post('/posts/publish-now', tenantMiddleware, idempotencyMiddleware, planner.handlePublishNow);
 
 // Cron: publish-due sem auth (usa API key)
 router.post('/cron/publish-due', planner.handlePublishDue);

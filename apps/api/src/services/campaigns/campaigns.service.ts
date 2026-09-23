@@ -1109,46 +1109,128 @@ export class CampaignsService {
   }
 
   /**
-   * Leads coletados pelo formulário instantâneo de uma campanha do objetivo 'leads'.
-   * Busca em tempo real na Meta (GET /{lead_form_id}/leads) e normaliza field_data
-   * para { name, email, phone, createdAt }.
+   * Campanhas de Formulário (OUTCOME_LEADS) — FONTE DA VERDADE: Meta.
+   * Lista as campanhas da conta de anúncios direto na Meta (inclui as criadas
+   * fora do Fury). Usado pelo filtro da página de Leads.
+   */
+  async getLeadCampaigns(args: { tenantId: string }): Promise<Array<{ id: string; name: string }>> {
+    const metaConn = await this.repo.findMetaConnection(args.tenantId);
+    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Conexão Meta não encontrada.');
+    const adAccountId = metaConn.selectedAdAccountId;
+    if (!adAccountId) throw new AppError(400, 'AD_ACCOUNT_NOT_SELECTED', 'Nenhuma conta de anúncios selecionada.');
+
+    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+    const campaigns = await this.meta.listCampaigns(adAccountId, accessToken);
+
+    return campaigns
+      .filter((c) => c.objective === 'OUTCOME_LEADS')
+      .map((c) => ({ id: c.id, name: c.name }));
+  }
+
+  /**
+   * Leads coletados pelo formulário instantâneo de uma campanha.
+   *
+   * FONTE DA VERDADE: Meta. Para campanha local (Fury) com `budget.lead_form_id`,
+   * busca direto no form; caso contrário (campanha criada FORA do Fury, ou sem
+   * form gravado), resolve via os ads da campanha (`/{campaign_id}/ads` →
+   * `/{ad_id}/leads`; o lead pertence ao ad, então a atribuição à campanha fica
+   * correta mesmo com forms compartilhados).
+   *
+   * Parsing robusto: o wizard cria perguntas com `key` customizado (`question1/2/3`)
+   * e a Meta retorna ESSES keys como `name` no field_data. Resolvemos o mapeamento
+   * real via `GET /{form_id}?fields=questions` (type → key); sem questions
+   * disponíveis, cai para os nomes fixos conhecidos (degradação graciosa).
    */
   async getCampaignLeads(args: { tenantId: string; campaignId: string }): Promise<{
     leads: Array<{ name: string | null; email: string | null; phone: string | null; createdAt: string | null }>;
   }> {
-    const campaign = await this.repo.findCampaignByTenantAndId(args.tenantId, args.campaignId);
-    if (!campaign) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campanha não encontrada.');
-
-    const budget = (campaign.budget ?? {}) as Record<string, unknown>;
-    const leadFormId = typeof budget.lead_form_id === 'string' ? budget.lead_form_id : null;
-    if (!leadFormId) return { leads: [] };
-
     const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
-    const response = await this.meta.getLeadFormData(leadFormId, accessToken);
 
-    const leadValue = (lead: Record<string, unknown>, candidates: string[]): string | null => {
-      const fields = (lead.field_data ?? []) as Array<{ name?: string; values?: string[] }>;
-      for (const candidate of candidates) {
-        const field = fields.find((f) => f.name === candidate);
+    // 1) Campanha local com lead_form_id → caminho direto pelo form.
+    const local = await this.repo.findCampaignByTenantAndId(args.tenantId, args.campaignId);
+    const budget = (local?.budget ?? {}) as Record<string, unknown>;
+    const leadFormId = typeof budget.lead_form_id === 'string' ? budget.lead_form_id : null;
+
+    if (leadFormId) {
+      const [response, questions] = await Promise.all([
+        this.meta.getLeadFormData(leadFormId, accessToken),
+        this.safeGetFormQuestions(leadFormId, accessToken),
+      ]);
+      return { leads: (response.data || []).map((lead) => this.normalizeLeadValue(lead, questions)) };
+    }
+
+    // 2) Campanha externa (ou local sem form): via ads da campanha.
+    const metaCampaignId = local?.metaCampaignId || args.campaignId;
+    const ads = await this.meta.getCampaignAds(metaCampaignId, accessToken);
+
+    const formQuestions: Map<string, Array<{ key: string; type: string }>> = new Map();
+    const leads: Array<{ name: string | null; email: string | null; phone: string | null; createdAt: string | null }> = [];
+
+    for (const ad of ads) {
+      const adLeads = await this.meta.getAdLeads(ad.id, accessToken);
+      for (const lead of adLeads) {
+        const formId = typeof lead.form_id === 'string' ? lead.form_id : null;
+        if (formId && !formQuestions.has(formId)) {
+          formQuestions.set(formId, await this.safeGetFormQuestions(formId, accessToken));
+        }
+        leads.push(this.normalizeLeadValue(lead, formId ? (formQuestions.get(formId) ?? []) : []));
+      }
+    }
+
+    return { leads };
+  }
+
+  /** Busca questions do form SEM quebrar a listagem (degradação graciosa → []). */
+  private async safeGetFormQuestions(
+    formId: string,
+    accessToken: string,
+  ): Promise<Array<{ key: string; type: string }>> {
+    try {
+      const questions = await this.meta.getLeadFormQuestions(formId, accessToken);
+      return Array.isArray(questions) ? questions : [];
+    } catch (err) {
+      console.warn(`[CampaignLeads] falha ao buscar questions do form ${formId}:`, (err as Error).message);
+      return [];
+    }
+  }
+
+  /**
+   * Normaliza field_data → { name, email, phone, createdAt }.
+   * Primeiro tenta o mapeamento type→key vindo das questions do form (cobre
+   * keys tokenizados `question1/2/3`); sem questions ou sem match, cai para os
+   * nomes fixos conhecidos da Meta (full_name/first_name, email,
+   * phone_number/phone).
+   */
+  private normalizeLeadValue(
+    lead: Record<string, unknown>,
+    questions: Array<{ key: string; type: string }>,
+  ): { name: string | null; email: string | null; phone: string | null; createdAt: string | null } {
+    const fields = (lead.field_data ?? []) as Array<{ name?: string; values?: string[] }>;
+
+    const getValue = (questionTypes: string[], fallbackNames: string[]): string | null => {
+      const keys = [
+        ...questionTypes.map((t) => questions.find((q) => q.type === t)?.key).filter(Boolean),
+        ...fallbackNames,
+      ];
+      for (const key of keys) {
+        const field = fields.find((f) => f.name === key);
         if (field?.values?.[0]) return field.values[0];
       }
       return null;
     };
 
-    const leads = response.data.map((lead) => ({
-      name: leadValue(lead, ['full_name', 'first_name']),
-      email: leadValue(lead, ['email']),
-      phone: leadValue(lead, ['phone_number', 'phone']),
+    return {
+      name: getValue(['FULL_NAME', 'FIRST_NAME'], ['full_name', 'first_name']),
+      email: getValue(['EMAIL', 'WORK_EMAIL'], ['email']),
+      phone: getValue(['PHONE', 'WHATSAPP_NUMBER', 'USER_PROVIDED_PHONE_NUMBER', 'WORK_PHONE_NUMBER'], ['phone_number', 'phone']),
       createdAt: (lead.created_time as string | undefined) ?? null,
-    }));
-
-    return { leads };
+    };
   }
 
   /**
-   * Leads agregados de TODAS as campanhas do objetivo Formulário (OUTCOME_LEADS)
-   * do tenant. Usado pela página dedicada de Leads (visão "Todas as campanhas").
-   * Cada lead carrega campaignId/campaignName para o frontend exibir/filtrar.
+   * Leads agregados de TODAS as campanhas de Formulário (OUTCOME_LEADS) do tenant.
+   * FONTE DA VERDADE: Meta — itera `getLeadCampaigns` (inclui campanhas criadas
+   * fora do Fury). Cada lead carrega campaignId/campaignName para o frontend.
    */
   async getAllCampaignLeads(args: { tenantId: string }): Promise<{
     leads: Array<{
@@ -1160,18 +1242,14 @@ export class CampaignsService {
       campaignName: string;
     }>;
   }> {
-    const { items } = await this.repo.findCampaigns(args.tenantId, undefined, 100, 0);
-    const formCampaigns = items.filter((c) => {
-      const budget = (c.budget ?? {}) as Record<string, unknown>;
-      return budget.objective === 'OUTCOME_LEADS';
-    });
+    const campaigns = await this.getLeadCampaigns(args);
 
     const leads: Array<{
       name: string | null; email: string | null; phone: string | null; createdAt: string | null;
       campaignId: string; campaignName: string;
     }> = [];
 
-    for (const campaign of formCampaigns) {
+    for (const campaign of campaigns) {
       try {
         const { leads: campaignLeads } = await this.getCampaignLeads({
           tenantId: args.tenantId,
@@ -1260,5 +1338,6 @@ export const softDeleteCampaign = (args: Parameters<CampaignsService['softDelete
 export const getCampaignInsights = (args: Parameters<CampaignsService['getCampaignInsights']>[0]) => defaultService.getCampaignInsights(args);
 export const createCampaignFromWizard = (args: Parameters<CampaignsService['createCampaignFromWizard']>[0]) => defaultService.createCampaignFromWizard(args);
 export const getCampaignLeads = (args: Parameters<CampaignsService['getCampaignLeads']>[0]) => defaultService.getCampaignLeads(args);
+export const getLeadCampaigns = (args: Parameters<CampaignsService['getLeadCampaigns']>[0]) => defaultService.getLeadCampaigns(args);
 export const searchMetaLocations = (args: Parameters<CampaignsService['searchMetaLocations']>[0]) => defaultService.searchMetaLocations(args);
 export const searchMetaInterests = (args: Parameters<CampaignsService['searchMetaInterests']>[0]) => defaultService.searchMetaInterests(args);

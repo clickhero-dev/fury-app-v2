@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { LayoutGrid, Image, Sparkles, Film, Upload, Trash2, X, Plus, FolderOpen, Image as ImageIcon, Loader2, Check } from 'lucide-react';
 import api from '@/lib/api';
 import type { StudioAsset } from '@/types/studio';
+import { publishNowToast } from '../plannerPage.utils';
 
 interface Props {
   mode: 'schedule' | 'now';
@@ -127,78 +128,103 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   };
 
   const isNow = mode === 'now';
-  const submitLabel = isNow ? 'Postar agora' : 'Criar post';
+  // Edições limpas o estado de retry (o retry republica o conteúdo GRAVADO no
+  // post failed; mudar o form sem isso enganaria o usuário).
+  const clearRetryState = () => setFailedPostId(null);
+
+  // Publish-now: key de idempotência NOVA a cada clique (gerada no início do
+  // mutationFn): o replay estrito do servidor protege reenvio de rede do MESMO
+  // clique; duplo-clique é bloqueado pelo disabled do botão + inflight 409.
+  // Retry usa key nova + retryPostId — republica o post failed SEM criar outro.
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
+  // Post failed aguardando decisão do usuário (retry no próprio dialog).
+  const [failedPostId, setFailedPostId] = useState<string | null>(null);
+
+  const submitLabel = isNow ? (failedPostId ? 'Tentar novamente' : 'Postar agora') : 'Criar post';
   const loadingLabel = isNow ? 'Publicando...' : 'Criando...';
+
+  const uploadMedia = async (): Promise<{ imageUrl?: string; imageUrls?: string[] }> => {
+    // Handle library selection
+    if (mediaSource === 'library' && selectedLibraryAsset?.url) {
+      return { imageUrl: selectedLibraryAsset.url };
+    }
+    let imageUrl: string | undefined;
+    let imageUrls: string[] | undefined;
+    // Upload single image/video
+    if (mediaFile) {
+      const formData = new FormData();
+      formData.append('file', mediaFile);
+      const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      imageUrl = uploadRes.data.url;
+    }
+    // Upload carousel images
+    if (postType === 'carousel' && carouselFiles.length > 0) {
+      const uploadedUrls: string[] = [];
+      for (const file of carouselFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        uploadedUrls.push(uploadRes.data.url);
+      }
+      imageUrls = uploadedUrls.length > 0 ? uploadedUrls : undefined;
+    }
+    return { imageUrl, imageUrls };
+  };
 
   const mutation = useMutation({
     mutationFn: async () => {
-      let imageUrl: string | undefined;
-      let imageUrls: string[] | undefined;
+      // Key NOVA por clique — cada submissão é uma intenção única no servidor.
+      idempotencyKeyRef.current = crypto.randomUUID();
 
-      // Handle library selection
-      if (mediaSource === 'library' && selectedLibraryAsset?.url) {
-        imageUrl = selectedLibraryAsset.url;
-      } else {
-        // Upload single image/video
-        if (mediaFile) {
-          const formData = new FormData();
-          formData.append('file', mediaFile);
-          const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
-          imageUrl = uploadRes.data.url;
-        }
-        // Fase 8: Enviar `date` (novo formato) ao invés de `dayIndex` (legado)
-        // API aceita ambos (z.union), mas novo formato é preferido
-
-        // Upload carousel images
-        if (postType === 'carousel' && carouselFiles.length > 0) {
-          const uploadedUrls: string[] = [];
-          for (const file of carouselFiles) {
-            const formData = new FormData();
-            formData.append('file', file);
-            const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
-              headers: { 'Content-Type': 'multipart/form-data' },
-            });
-            uploadedUrls.push(uploadRes.data.url);
-          }
-          imageUrls = uploadedUrls.length > 0 ? uploadedUrls : undefined;
-        }
+      // Retry: republica o post failed existente (conteúdo gravado no post —
+      // edições no dialog não entram no retry; editar limpa o estado de retry).
+      if (isNow && failedPostId) {
+        const { data: pubRes } = await api.post('/planner/posts/publish-now',
+          { retryPostId: failedPostId },
+          { headers: { 'Idempotency-Key': idempotencyKeyRef.current } },
+        );
+        return pubRes;
       }
 
+      const media = await uploadMedia();
+
+      if (isNow) {
+        // Postar agora: cria + publica num request (endpoint idempotente)
+        const { data: pubRes } = await api.post('/planner/posts/publish-now',
+          { caption, postType, imageUrl: media.imageUrl, imageUrls: media.imageUrls },
+          { headers: { 'Idempotency-Key': idempotencyKeyRef.current } },
+        );
+        return pubRes;
+      }
+
+      // Fase 8: Enviar `date` (novo formato) ao invés de `dayIndex` (legado)
       await api.post('/planner/posts', {
         caption,
         postType,
         date: scheduledDate || effectiveDate, // ISO string: "2026-08-19"
-        scheduledAt: scheduledAt || (isNow ? new Date().toISOString() : undefined),
-        imageUrl,
-        imageUrls,
+        scheduledAt: scheduledAt || undefined,
+        imageUrl: media.imageUrl,
+        imageUrls: media.imageUrls,
       });
+      return null;
     },
-    onSuccess: async () => {
+    onSuccess: (pubRes) => {
       if (isNow) {
-        try {
-          const { data: pubRes } = await api.post('/planner/posts/publish-due');
-          if (pubRes.data?.published > 0) {
-            onCreated('Post publicado com sucesso!');
-          } else {
-            const reason = pubRes.data?.reason;
-            if (reason === 'no_instagram_account') {
-              onCreated('Post criado! Conecte o Instagram em Configurações → Integrações.');
-            } else if (reason === 'no_due_posts') {
-              onCreated('Post criado! Aguardando processamento.');
-            } else if (reason === 'publish_failed') {
-              onCreated('Post criado, mas a publicação falhou. Verifique o token do Meta em Configurações → Integrações.');
-            } else {
-              onCreated('Post criado com sucesso! Verifique a conexão com o Instagram.');
-            }
-          }
-        } catch {
-          onCreated('Post criado com sucesso! Não foi possível publicar agora.');
+        if (pubRes?.data?.status === 'failed') {
+          // Post existe como failed: dialog PERMANECE aberto com botão
+          // "Tentar novamente" (nova key + retryPostId). Toast mostra o erro real.
+          setFailedPostId(pubRes.data.id);
+          onError?.(publishNowToast({ data: pubRes.data }));
+          return;
         }
-      } else {
-        onCreated('Post criado com sucesso!');
+        onCreated(publishNowToast({ data: pubRes?.data }));
+        return;
       }
+      onCreated('Post criado com sucesso!');
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.message || err?.response?.data?.error?.message || err?.message || 'Erro ao criar post';
@@ -244,6 +270,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                       if (opt.value === 'upload') {
                         setSelectedLibraryAsset(null);
                       }
+                      clearRetryState();
                     }}
                     className={clsx(
                       'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border transition-all text-sm font-medium',
@@ -495,7 +522,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
               </label>
               <textarea
                 value={caption}
-                onChange={e => setCaption(e.target.value)}
+                onChange={e => { setCaption(e.target.value); clearRetryState(); }}
                 rows={4}
                 className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2.5 text-text-primary text-sm resize-none focus:border-accent focus:outline-none transition-colors"
                 placeholder="Escreva a legenda do post..."

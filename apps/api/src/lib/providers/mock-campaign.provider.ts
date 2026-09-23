@@ -88,6 +88,30 @@ export class MockMetaCampaignProvider implements IMetaCampaignProvider {
     return this.leadsResult;
   }
 
+  // ── Fonte da verdade Meta: listagem de campanhas e leads por ad/form ──────
+  listCampaignsResult: Array<{ id: string; name: string; objective: string | null; status: string | null }> = [];
+  campaignAdsByCampaign: Map<string, string[]> = new Map();
+  adLeadsByAd: Map<string, Array<Record<string, unknown>>> = new Map();
+  formQuestionsByForm: Map<string, Array<{ key: string; type: string }>> = new Map();
+  listCampaignsRequests: Array<{ adAccountId: string; accessToken: string }> = [];
+
+  async listCampaigns(adAccountId: string, accessToken: string) {
+    this.listCampaignsRequests.push({ adAccountId, accessToken });
+    return this.listCampaignsResult;
+  }
+
+  async getCampaignAds(campaignId: string, accessToken: string) {
+    return (this.campaignAdsByCampaign.get(campaignId) ?? []).map((id) => ({ id }));
+  }
+
+  async getAdLeads(adId: string, accessToken: string) {
+    return (this.adLeadsByAd.get(adId) ?? []);
+  }
+
+  async getLeadFormQuestions(formId: string, accessToken: string) {
+    return this.formQuestionsByForm.get(formId) ?? [];
+  }
+
   async deleteCampaign(campaignId: string, accessToken: string): Promise<void> {
     this.deletedCampaigns.push(campaignId);
   }

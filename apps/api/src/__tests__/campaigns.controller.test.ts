@@ -305,4 +305,75 @@ describe('CampaignsController', () => {
       expect(JSON.stringify(lastNextError()?.issues)).toContain('URL inválida. Use http:// ou https://');
     });
   });
+
+  describe('getLeadCampaigns (filtro da página de Leads — fonte Meta)', () => {
+    it('retorna campanhas OUTCOME_LEADS da Meta (happy path)', async () => {
+      const leadCampaigns = [{ id: 'meta_1', name: 'Camp Formulário' }];
+      const ctrl = makeController({ getLeadCampaigns: vi.fn().mockResolvedValue(leadCampaigns) });
+      const req = makeReq();
+      const res = makeRes();
+
+      await ctrl.getLeadCampaigns(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, data: leadCampaigns }));
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('retorna 401 sem tenant', async () => {
+      const ctrl = makeController({ getLeadCampaigns: vi.fn() });
+      const req = makeReq({ tenant: undefined } as any);
+      const res = makeRes();
+
+      await ctrl.getLeadCampaigns(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'UNAUTHORIZED' }));
+      expect(ctrl['campaignsService']['getLeadCampaigns']).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getCampaignLeads / getAllCampaignLeads', () => {
+    it('retorna leads de uma campanha (happy path)', async () => {
+      const leads = [{ name: 'Maria Souza', email: 'maria@exemplo.com', phone: '11999999999', createdAt: null }];
+      const ctrl = makeController({ getCampaignLeads: vi.fn().mockResolvedValue({ leads }) });
+      const req = makeReq({ params: { id: 'meta_1' } });
+      const res = makeRes();
+
+      await ctrl.getCampaignLeads(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, data: leads }));
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('retorna 401 sem tenant', async () => {
+      const ctrl = makeController({ getCampaignLeads: vi.fn() });
+      const req = makeReq({ params: { id: 'meta_1' }, tenant: undefined } as any);
+      const res = makeRes();
+
+      await ctrl.getCampaignLeads(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'UNAUTHORIZED' }));
+    });
+
+    it('retorna leads agregados de todas as campanhas (happy path)', async () => {
+      const leads = [{ name: 'João', campaignId: 'meta_1', campaignName: 'Camp' }];
+      const ctrl = makeController({ getAllCampaignLeads: vi.fn().mockResolvedValue({ leads }) });
+      const req = makeReq();
+      const res = makeRes();
+
+      await ctrl.getAllCampaignLeads(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, data: leads }));
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('agregado retorna 401 sem tenant', async () => {
+      const ctrl = makeController({ getAllCampaignLeads: vi.fn() });
+      const req = makeReq({ tenant: undefined } as any);
+      const res = makeRes();
+
+      await ctrl.getAllCampaignLeads(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'UNAUTHORIZED' }));
+    });
+  });
 });

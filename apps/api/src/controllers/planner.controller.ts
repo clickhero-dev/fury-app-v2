@@ -235,6 +235,39 @@ export class PlannerController {
     } catch (err) { next(err); }
   };
 
+  /**
+   * POST /planner/posts/publish-now — "Postar agora" idempotente.
+   * Chega aqui JÁ envelopado pelo idempotencyMiddleware (req.idempotencyKey).
+   * Body: payload de criação OU { retryPostId } p/ republicar post failed.
+   * 201 sempre que o request é processado — o DESFECHO vem em data.status
+   * ('published' | 'failed'); erros de negócio (400 carousel, 409 claim)
+   * viram AppError → errorHandler → release da key (retry é novo request).
+   */
+  handlePublishNow = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tenantId = req.tenant!.tenantId;
+
+      if ('retryPostId' in req.body) {
+        const { retryPostId } = z.object({ retryPostId: z.string().uuid() }).parse(req.body);
+        const result = await this.plannerService.publishRetry(tenantId, retryPostId);
+        res.status(201).json({ success: true, data: result, timestamp: new Date().toISOString() });
+        return;
+      }
+
+      const bodySchema = z.object({
+        caption: z.string().max(5000).optional(),
+        postType: z.enum(['image', 'carousel', 'reel', 'stories']),
+        platform: z.string().max(50).optional(),
+        title: z.string().max(255).optional(),
+        imageUrl: z.string().url().optional(),
+        imageUrls: z.array(z.string().url()).max(5).optional(),
+      });
+      const payload = bodySchema.parse(req.body);
+      const result = await this.plannerService.publishNow(tenantId, payload);
+      res.status(201).json({ success: true, data: result, timestamp: new Date().toISOString() });
+    } catch (err) { next(err); }
+  };
+
   handleUploadMedia = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { tenantId } = req.tenant!;

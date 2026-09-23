@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { useMutation } from '@tanstack/react-query';
 import api from '@/lib/api';
 import type { Post } from '../types';
+import { PUBLISHING_LABEL } from '../plannerPage.utils';
 
 interface PostSidePanelProps {
   post: Post;
@@ -37,6 +38,8 @@ const statusLabels: Record<string, string> = {
   rejected: 'Rejeitado',
   confirmed: 'Confirmado',
   published: 'Publicado',
+  publishing: PUBLISHING_LABEL,
+  failed: 'Falhou',
 };
 
 const statusColors: Record<string, string> = {
@@ -45,6 +48,8 @@ const statusColors: Record<string, string> = {
   rejected: 'text-error bg-error/10',
   confirmed: 'text-success bg-success/10',
   published: 'text-blue-500 bg-blue-500/10',
+  publishing: 'text-amber-500 bg-amber-500/10',
+  failed: 'text-error bg-error/10',
 };
 
 const typeBg: Record<string, string> = {
