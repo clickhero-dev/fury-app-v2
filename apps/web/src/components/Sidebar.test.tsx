@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
+import { captureEvent } from '@/lib/posthog';
 
 vi.mock('@/lib/posthog', () => ({ captureEvent: vi.fn() }));
+
+const mockCaptureEvent = vi.mocked(captureEvent);
 
 vi.mock('@/hooks/useLogout', () => ({ useLogout: () => vi.fn() }));
 
@@ -85,5 +88,54 @@ describe('Sidebar — navegação', () => {
     renderSidebar();
 
     expect(screen.queryByRole('link', { name: /orçamento/i })).toBeNull();
+  });
+
+  it('aria-current="page" apenas no destino exato (não duplica parent + child)', () => {
+    renderSidebar('/configuracoes/integracoes');
+
+    // O sub-item Integrações está na página atual.
+    expect(screen.getByRole('link', { name: /integrações/i })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    // O parent Configurações segue visualmente ativo (prefix-match), mas NÃO
+    // deve anunciar como página atual — leitores de tela veriam 2 páginas.
+    expect(screen.getByRole('link', { name: /configurações/i })).not.toHaveAttribute(
+      'aria-current',
+    );
+  });
+
+  it('aria-current="page" no parent quando está exatamente no seu destino', () => {
+    renderSidebar('/configuracoes');
+
+    expect(screen.getByRole('link', { name: /configurações/i })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.getByRole('link', { name: /integrações/i })).not.toHaveAttribute(
+      'aria-current',
+    );
+  });
+
+  it('registra nav_click com o destino/label do CHILD ao clicar em sub-item', () => {
+    renderSidebar();
+
+    fireEvent.click(screen.getByRole('link', { name: /integrações/i }));
+
+    expect(mockCaptureEvent).toHaveBeenCalledWith('nav_click', {
+      to: '/configuracoes/integracoes',
+      label: 'Integrações',
+    });
+  });
+
+  it('registra nav_click com o destino/label do item pai', () => {
+    renderSidebar();
+
+    fireEvent.click(screen.getByRole('link', { name: /configurações/i }));
+
+    expect(mockCaptureEvent).toHaveBeenCalledWith('nav_click', {
+      to: '/configuracoes',
+      label: 'Configurações',
+    });
   });
 });

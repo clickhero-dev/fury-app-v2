@@ -9,13 +9,16 @@ export function CalendarioPage() {
   // Deep-link do FAB "Postar": /calendario?criar=post abre o fluxo de
   // postagem direto (o CalendarView consome via prop initialAction) e o
   // parâmetro sai da URL em seguida, para não reabrir em navegações após.
+  // Remove SOMENTE `criar`, preservando filtros/data que a URL carregue.
   const initialAction = searchParams.get('criar') === 'post' ? 'new-post' : null;
 
   useEffect(() => {
     if (initialAction) {
-      setSearchParams({}, { replace: true });
+      const next = new URLSearchParams(searchParams);
+      next.delete('criar');
+      setSearchParams(next, { replace: true });
     }
-  }, [initialAction, setSearchParams]);
+  }, [initialAction, searchParams, setSearchParams]);
 
   return (
     <AppLayout>
