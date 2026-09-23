@@ -16,7 +16,7 @@ import { useLogout } from '@/hooks/useLogout';
 import { AdySymbol } from '@/components/AdySymbol';
 import { SidebarUserCard } from './SidebarUserCard';
 import { captureEvent } from '@/lib/posthog';
-import { isNavItemActive, type NavItemShape } from './sidebarNav';
+import { isNavItemActive, isNavItemCurrent, type NavItemShape } from './sidebarNav';
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -73,7 +73,7 @@ function SidebarItem({
 }: {
   item: NavItem;
   collapsed: boolean;
-  onNavigate: () => void;
+  onNavigate: (target?: NavItem) => void;
 }) {
   const location = useLocation();
   const isActive = isNavItemActive(item, location.pathname);
@@ -90,9 +90,9 @@ function SidebarItem({
     <>
       <Link
         to={item.to}
-        onClick={onNavigate}
+        onClick={() => onNavigate()}
         title={collapsed ? item.label : undefined}
-        aria-current={isActive ? 'page' : undefined}
+        aria-current={isNavItemCurrent(item, location.pathname) ? 'page' : undefined}
         className={`flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm transition-all ${
           collapsed ? 'justify-center' : ''
         } ${activeClass}`}
@@ -106,8 +106,8 @@ function SidebarItem({
             <Link
               key={child.to}
               to={child.to}
-              onClick={onNavigate}
-              aria-current={isNavItemActive(child, location.pathname) ? 'page' : undefined}
+              onClick={() => onNavigate(child)}
+              aria-current={isNavItemCurrent(child, location.pathname) ? 'page' : undefined}
               className={`flex items-center gap-3.5 rounded-xl px-3.5 py-2 text-sm transition-all ${
                 isNavItemActive(child, location.pathname)
                   ? 'bg-sidebar-active text-[#17708A] dark:text-[#2A9BC0] font-semibold shadow-xs'
@@ -166,9 +166,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                 key={item.to}
                 item={item}
                 collapsed={collapsed}
-                onNavigate={() => {
+                onNavigate={(target) => {
                   onMobileClose?.();
-                  captureEvent('nav_click', { to: item.to, label: item.label });
+                  captureEvent('nav_click', { to: target?.to ?? item.to, label: target?.label ?? item.label });
                 }}
               />
             ))}

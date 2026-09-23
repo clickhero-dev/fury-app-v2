@@ -110,10 +110,9 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
   const [selectedPost, setSelectedPost] = useState<CalendarPost | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   // Deep-link do FAB "Postar": ?criar=post abre o fluxo de postagem direto.
-  // O estado INICIALIZA da prop (sem efeito → sem cascading render); o caso
-  // "já estava no calendário" já tem o mesmo fluxo no toolbar, então perder o
-  // re-disparo por prop-change não é regressão — e evita key/remount, que
-  // quebraria a seleção múltipla do FullCalendar.
+  // O estado inicializa da prop; o bloco abaixo reage à TRANSIÇÃO da prop
+  // (null → 'new-post') quando o usuário já está em /calendario e o componente
+  // NÃO remonta — o initializer do useState não roda de novo nesse caso.
   const [showPostTypeDialog, setShowPostTypeDialog] = useState(initialAction === 'new-post');
   const [createMode, setCreateMode] = useState<'schedule' | 'now'>('schedule');
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
@@ -124,6 +123,22 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
   const [title, setTitle] = useState('');
   const [currentView, setCurrentView] = useState<string>('dayGridMonth');
   const queryClient = useQueryClient();
+
+  // Deep-link na mesma rota: o param ?criar=post muda mas o CalendarView segue
+  // montado (não remonta), então o initializer do useState não roda de novo.
+  // Padrão recomendado do React ("adjusting state when a prop changes"):
+  // compara o valor anterior da prop durante o render e dispara o setState
+  // direto (render-phase update, sem efeito/cascading render) — preservando a
+  // seleção múltipla do FullCalendar (sem key/remount).
+  const [prevInitialAction, setPrevInitialAction] = useState(initialAction);
+  if (initialAction !== prevInitialAction) {
+    setPrevInitialAction(initialAction);
+    if (initialAction === 'new-post') {
+      setPreselectedDay(null);
+      setCreateMode('schedule');
+      setShowPostTypeDialog(true);
+    }
+  }
 
   const api_ = () => calendarRef.current?.getApi();
 
