@@ -5,6 +5,7 @@ import { parseAgentJSON } from '../../agents/utils.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { createInstagramMedia, getMediaContainerStatus, publishInstagramMedia, getUserFacebookPages } from '../../lib/meta-api.js';
 import { decryptMetaToken } from '../../utils/crypto.js';
+import { todaySaoPauloYMD } from '../../utils/date-sao-paulo.js';
 import { plannerStore } from '../../planner-store.js';
 import { enqueuePlanGeneration } from '../../workers/planner.worker.js';
 import { snapshotToJobStatus } from '../../agents/job-status-adapter.js';
@@ -547,16 +548,15 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
       mediaType: isReel ? 'REELS' : undefined,
     });
 
-    // 2. Se vídeo: polling até FINISHED (3 tentativas, backoff 3s/6s/12s)
-    if (isReel) {
-      const pollDelays = [3_000, 6_000, 12_000];
-      for (let i = 0; i < pollDelays.length; i++) {
-        await new Promise((r) => setTimeout(r, pollDelays[i]));
-        const status = await this.deps.getMediaContainerStatus(containerId, accessToken);
-        if (status === 'FINISHED') break;
-        if (i === pollDelays.length - 1) {
-          throw new Error(`Video container ${containerId} still IN_PROGRESS after ${pollDelays.length} polls`);
-        }
+    // 2. Polling até FINISHED (3 tentativas) — a Meta responde 9007 se
+    // media_publish for chamado antes do container terminar o processamento.
+    const pollDelays = [3_000, 3_000, 12_000];
+    for (let i = 0; i < pollDelays.length; i++) {
+      await new Promise((r) => setTimeout(r, pollDelays[i]));
+      const status = await this.deps.getMediaContainerStatus(containerId, accessToken);
+      if (status === 'FINISHED') break;
+      if (i === pollDelays.length - 1) {
+        throw new Error(`Media container ${containerId} still IN_PROGRESS after ${pollDelays.length} polls`);
       }
     }
 
@@ -641,13 +641,17 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
     const repo = this.repo(tenantId);
     const now = new Date();
     const leaseUntil = new Date(now.getTime() + PUBLISH_LEASE_MINUTES * 60_000);
+    // "Postar agora" cai no calendário do dia de São Paulo (não UTC): entre
+    // 21h–23h59 BRT o UTC já virou o dia seguinte. dayIndex deriva da mesma
+    // data para manter calendarDate e dayIndex sempre consistentes.
+    const calendarDate = todaySaoPauloYMD();
     const post = await repo.createPost({
       tenantId,
       planId: null,
       caption: payload.caption || '',
       postType: payload.postType as any,
-      dayIndex: now.getUTCDate(),
-      calendarDate: now.toISOString().split('T')[0],
+      dayIndex: Number(calendarDate.slice(8, 10)),
+      calendarDate,
       platform: payload.platform || 'instagram',
       scheduledAt: now,
       title: payload.title || null,
@@ -666,12 +670,14 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
    */
   async publishRetry(tenantId: string, postId: string) {
     const repo = this.repo(tenantId);
+    // 404 primeiro: post inexistente não deve passar pelo claim (que é UPDATE
+    // condicional e devolveria 409 POST_CLAIMED enganoso para 0 linhas).
+    const post = await repo.findPostById(postId);
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
     const claimed = await repo.claimPostForPublish(postId);
     if (!claimed) {
       throw new AppError(409, 'POST_CLAIMED', 'Post não pode ser republicado agora (já publicado ou publicação em andamento).');
     }
-    const post = await repo.findPostById(postId);
-    if (!post) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
     return this.attemptPublish(repo, post, tenantId);
   }
 

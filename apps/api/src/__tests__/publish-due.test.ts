@@ -27,22 +27,33 @@ beforeEach(() => {
 describe('publishSinglePost', () => {
   it('publica imagem com sucesso', async () => {
     createInstagramMedia.mockResolvedValue('container_1');
+    getMediaContainerStatus.mockResolvedValue('FINISHED');
     publishInstagramMedia.mockResolvedValue('media_123');
 
-    const result = await publishSinglePost(
-      { id: 'post-1', postType: 'image', caption: 'Minha legenda', imageUrl: 'https://cdn.example.com/img.png' },
-      igUserId,
-      accessToken,
-    );
+    vi.useFakeTimers();
+    try {
+      const resultPromise = publishSinglePost(
+        { id: 'post-1', postType: 'image', caption: 'Minha legenda', imageUrl: 'https://cdn.example.com/img.png' },
+        igUserId,
+        accessToken,
+      );
 
-    expect(result.mediaId).toBe('media_123');
-    expect(createInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, {
-      imageUrl: 'https://cdn.example.com/img.png',
-      caption: 'Minha legenda',
-      mediaType: undefined,
-    });
-    expect(getMediaContainerStatus).not.toHaveBeenCalled(); // imagem não precisa de polling
-    expect(publishInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, 'container_1');
+      // 1º poll (3s): FINISHED → publica na primeira checagem
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      const result = await resultPromise;
+
+      expect(result.mediaId).toBe('media_123');
+      expect(createInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, {
+        imageUrl: 'https://cdn.example.com/img.png',
+        caption: 'Minha legenda',
+        mediaType: undefined,
+      });
+      expect(getMediaContainerStatus).toHaveBeenCalledTimes(1);
+      expect(publishInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, 'container_1');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('publica reel (vídeo) com polling', async () => {
@@ -88,6 +99,98 @@ describe('publishSinglePost', () => {
         accessToken,
       ),
     ).rejects.toThrow('não tem imageUrl');
+  });
+
+  // ── RED: garantia do 9007 (issue docs/issues/erro-publish-now.md) ─────────
+  // A Meta responde 9007 "Media ID is not available" quando media_publish é
+  // chamado antes do container ficar FINISHED. Para image/stories o código
+  // atual NÃO faz polling — publica imediatamente. Estes testes exigem o
+  // mesmo polling de FINISHED que já existe para reel.
+
+  it('stories: NÃO publica enquanto container IN_PROGRESS — espera FINISHED antes do media_publish', async () => {
+    createInstagramMedia.mockResolvedValue('container_story');
+    getMediaContainerStatus
+      .mockResolvedValueOnce('IN_PROGRESS')
+      .mockResolvedValueOnce('FINISHED');
+    publishInstagramMedia.mockResolvedValue('media_story');
+
+    vi.useFakeTimers();
+    try {
+      const resultPromise = publishSinglePost(
+        { id: 'post-story', postType: 'stories', caption: 'aloo', imageUrl: 'https://cdn.example.com/story.png' },
+        igUserId,
+        accessToken,
+      );
+
+      // antes de avançar o tempo: NENHUM media_publish (container ainda IN_PROGRESS)
+      await vi.advanceTimersByTimeAsync(0);
+      expect(publishInstagramMedia).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(3_000); // 1º poll: IN_PROGRESS
+      expect(publishInstagramMedia).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(3_000); // 2º poll: FINISHED → publica
+      const result = await resultPromise;
+
+      expect(result.mediaId).toBe('media_story');
+      expect(getMediaContainerStatus).toHaveBeenCalledTimes(2);
+      expect(publishInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, 'container_story');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('image: NÃO publica enquanto container IN_PROGRESS — espera FINISHED antes do media_publish', async () => {
+    createInstagramMedia.mockResolvedValue('container_img');
+    getMediaContainerStatus
+      .mockResolvedValueOnce('IN_PROGRESS')
+      .mockResolvedValueOnce('FINISHED');
+    publishInstagramMedia.mockResolvedValue('media_img');
+
+    vi.useFakeTimers();
+    try {
+      const resultPromise = publishSinglePost(
+        { id: 'post-img', postType: 'image', caption: 'promo', imageUrl: 'https://cdn.example.com/img.png' },
+        igUserId,
+        accessToken,
+      );
+
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(publishInstagramMedia).not.toHaveBeenCalled(); // ainda IN_PROGRESS
+
+      await vi.advanceTimersByTimeAsync(3_000);
+      const result = await resultPromise;
+
+      expect(result.mediaId).toBe('media_img');
+      expect(publishInstagramMedia).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stories: lança erro se container fica IN_PROGRESS após o limite de polls (sem media_publish)', async () => {
+    createInstagramMedia.mockResolvedValue('container_stuck_story');
+    getMediaContainerStatus.mockResolvedValue('IN_PROGRESS'); // nunca termina
+
+    vi.useFakeTimers();
+    try {
+      const resultPromise = publishSinglePost(
+        { id: 'post-stuck', postType: 'stories', imageUrl: 'https://cdn.example.com/story.png' },
+        igUserId,
+        accessToken,
+      );
+
+      const rejection = expect(resultPromise).rejects.toThrow('still IN_PROGRESS');
+
+      await vi.advanceTimersByTimeAsync(3_000);
+      await vi.advanceTimersByTimeAsync(6_000);
+      await vi.advanceTimersByTimeAsync(12_000);
+
+      await rejection;
+      expect(publishInstagramMedia).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('lança erro se container de vídeo fica IN_PROGRESS após 3 polls', async () => {

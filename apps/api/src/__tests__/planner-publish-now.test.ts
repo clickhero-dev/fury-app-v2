@@ -131,6 +131,30 @@ describe('PlannerService.publishNow', () => {
     expect(repo.createPost).not.toHaveBeenCalled();
   });
 
+  it('Cenário: 22:00 em São Paulo (01:00 UTC do dia seguinte) → calendarDate e dayIndex usam o dia de São Paulo, não o UTC', async () => {
+    // 2026-09-23T01:00:00Z == 2026-09-22 22:00 BRT (America/Sao_Paulo = UTC-3).
+    // O bug antigo (UTC) gravava calendarDate '2026-09-23' (dia seguinte).
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-23T01:00:00.000Z'));
+      const repo = makeRepoFake();
+      const deps = makeDeps();
+      const svc = new PlannerService(() => repo as never, deps as never);
+
+      // publishNow → publishSinglePost agora faz polling (1º check em 3s,
+      // getMediaContainerStatus → FINISHED). Avança o timer fake para o poll.
+      const publishPromise = svc.publishNow('t1', PAYLOAD_IMAGE);
+      await vi.advanceTimersByTimeAsync(3_000);
+      await publishPromise;
+
+      const created = repo.createPost.mock.calls[0][0];
+      expect(created.calendarDate).toBe('2026-09-22'); // dia de São Paulo
+      expect(created.dayIndex).toBe(22); // consistente com calendarDate
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('Cenário: sem Instagram vinculado → falha segura: post failed com motivo, nenhuma chamada à Graph API', async () => {
     const repo = makeRepoFake();
     repo.findLatestMetaConnection.mockResolvedValue({
@@ -188,6 +212,33 @@ describe('PlannerService.publishRetry', () => {
     await expect(svc.publishRetry('t1', 'post-1'))
       .rejects.toMatchObject({ statusCode: 409, code: 'POST_CLAIMED' });
     expect(repo.markPostPublished).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: post já publicado (existe mas não reclamável) → AppError 409 POST_CLAIMED, não publica de novo', async () => {
+    const repo = makeRepoFake({ status: 'published' });
+    repo.claimPostForPublish.mockResolvedValue(false);
+    const deps = makeDeps();
+    const svc = new PlannerService(() => repo as never, deps as never);
+
+    await expect(svc.publishRetry('t1', 'post-1'))
+      .rejects.toMatchObject({ statusCode: 409, code: 'POST_CLAIMED' });
+    expect(deps.publishInstagramMedia).not.toHaveBeenCalled();
+    expect(repo.markPostPublished).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: post inexistente → AppError 404 NOT_FOUND e o claim NÃO é tentado', async () => {
+    const repo = makeRepoFake();
+    repo.findPostById.mockResolvedValue(null);
+    // claim=false espelha o UPDATE condicional real: post inexistente afeta 0
+    // linhas → claim retorna false. O bug antigo lançava 409 POST_CLAIMED aqui.
+    repo.claimPostForPublish.mockResolvedValue(false);
+    const deps = makeDeps();
+    const svc = new PlannerService(() => repo as never, deps as never);
+
+    await expect(svc.publishRetry('t1', 'post-inexistente'))
+      .rejects.toMatchObject({ statusCode: 404, code: 'NOT_FOUND' });
+    expect(repo.claimPostForPublish).not.toHaveBeenCalled();
+    expect(deps.publishInstagramMedia).not.toHaveBeenCalled();
   });
 
   it('Cenário: retry que falha de novo → markPostFailed com attempts incrementado', async () => {
