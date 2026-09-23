@@ -29,7 +29,7 @@ const nav = [
   { to: '/leads', label: 'Leads', icon: Users },
   // OCULTO (feature em teste) — volta no unhide
   // { to: '/planejador', label: 'Planejador IA', icon: BrainCircuit },
-  // { to: '/calendario', label: 'Calendário', icon: CalendarDays },
+  { to: '/calendario', label: 'Calendário', icon: CalendarDays },
   { to: '/estudio', label: 'Estúdio', icon: Palette },
   { to: '/configuracoes/integracoes', label: 'Integrações', icon: Plug },
   { to: '/configuracoes', label: 'Configurações', icon: Settings },
