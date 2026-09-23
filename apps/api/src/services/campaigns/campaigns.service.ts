@@ -274,18 +274,40 @@ export class CampaignsService {
   ) {}
 
   private handleMetaError(err: unknown): never {
+    if (err instanceof AppError) throw err;
     const metaCode = (err as any).metaCode;
     const metaSubcode = (err as any).metaSubcode;
+    const metaType = (err as any).metaType;
+    const httpStatus = (err as any).httpStatus;
+    const message = (err as Error).message || '';
+
+    // Erro que NÃO veio da Graph API (ex.: falha interna de rede/DB) — propaga como está.
+    if (metaCode === undefined && metaType === undefined && httpStatus === undefined) throw err;
+
     if (metaCode === 190) {
       throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
     }
     if (metaCode === 100 && metaSubcode === 1487566) {
       throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser pausada. Se quiser reativar, duplique a campanha.');
     }
-    if (metaCode === 100) {
-      throw new AppError(400, 'INVALID_PARAMETER', (err as Error).message);
+    // Campanha/objeto não existe mais no Meta (Graph API responde code 100/803
+    // com "does not exist" para GET de node inexistente) → 404 informativo.
+    if (
+      (metaCode === 100 || metaCode === 803) &&
+      /does not exist|doesn't exist|not exist|não existe|no longer/i.test(message)
+    ) {
+      throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campanha não encontrada no Meta.');
     }
-    throw err;
+    if (metaCode === 100) {
+      throw new AppError(400, 'INVALID_PARAMETER', message);
+    }
+    // (#200) OAuthException — típico de token sem a permissão necessária
+    // (ex.: fallback META_SYSTEM_ACCESS_TOKEN sem leads_retrieval na leitura de leads).
+    if (metaCode === 200 || metaType === 'OAuthException') {
+      throw new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para esta operação. Reconecte sua conta em Configurações > Integrações.');
+    }
+    // Qualquer outro erro da Graph API → 4xx tratado (nunca 500 silencioso).
+    throw new AppError(400, 'META_API_ERROR', message);
   }
 
   async createCampaign(args: {
@@ -373,7 +395,13 @@ export class CampaignsService {
     const accessToken = await this.getAccessToken(args.tenantId);
     const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
 
-    const campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status');
+    let campaignMeta: Record<string, unknown>;
+    try {
+      campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status');
+    } catch (err) {
+      // Campanha inexistente no Meta → 404 CAMPAIGN_NOT_FOUND; 190 → 401; demais Meta → 4xx.
+      this.handleMetaError(err);
+    }
     if (await this.checkDeletedOnMeta(campaignMeta, localId)) {
       throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser pausada.');
     }
@@ -400,7 +428,13 @@ export class CampaignsService {
     const accessToken = await this.getAccessToken(args.tenantId);
     const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
 
-    const campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status');
+    let campaignMeta: Record<string, unknown>;
+    try {
+      campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status');
+    } catch (err) {
+      // Campanha inexistente no Meta → 404 CAMPAIGN_NOT_FOUND; 190 → 401; demais Meta → 4xx.
+      this.handleMetaError(err);
+    }
     if (await this.checkDeletedOnMeta(campaignMeta, localId)) {
       throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser reativada.');
     }
@@ -532,6 +566,12 @@ export class CampaignsService {
     const accessToken = await this.getAccessToken(args.tenantId);
     const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
     if (!localId) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
+
+    // Isolamento de tenant: `resolveCampaignIds` pode resolver uma campanha local
+    // de OUTRO tenant (a busca por id não é tenant-filtered) — valida ownership
+    // antes de arquivar no banco.
+    const localCampaign = await this.repo.findCampaignById(localId);
+    if (localCampaign) await this.verifyCampaignOwnership(localCampaign, args.tenantId);
 
     // Check if already deleted on Meta before calling update.
     // If this fails (e.g. already removed by Meta), fall through to local archive.
@@ -1120,7 +1160,14 @@ export class CampaignsService {
     if (!adAccountId) throw new AppError(400, 'AD_ACCOUNT_NOT_SELECTED', 'Nenhuma conta de anúncios selecionada.');
 
     const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
-    const campaigns = await this.meta.listCampaigns(adAccountId, accessToken);
+    let campaigns: Array<{ id: string; name: string; objective: string | null; status: string | null }>;
+    try {
+      campaigns = await this.meta.listCampaigns(adAccountId, accessToken);
+    } catch (err) {
+      // metaCode 190 → 401 META_TOKEN_EXPIRED; 100 → 400; 200/OAuth → 403;
+      // campanha inexistente → 404; demais erros Meta → 4xx (nunca 500).
+      this.handleMetaError(err);
+    }
 
     return campaigns
       .filter((c) => c.objective === 'OUTCOME_LEADS')
@@ -1147,27 +1194,50 @@ export class CampaignsService {
     const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
 
     // 1) Campanha local com lead_form_id → caminho direto pelo form.
-    const local = await this.repo.findCampaignByTenantAndId(args.tenantId, args.campaignId);
+    // O `campaignId` pode ser um META id (campanha criada fora do Fury) — a
+    // coluna local `campaigns.id` é UUID, então a query local falha para ids
+    // não-UUID. Degradação graciosa: sem registro local, segue para a Meta.
+    let local: CampaignRecord | null;
+    try {
+      local = await this.repo.findCampaignByTenantAndId(args.tenantId, args.campaignId);
+    } catch {
+      // Não é um UUID local (ex.: META campaign id de campanha externa) — segue via Meta.
+      local = null;
+    }
     const budget = (local?.budget ?? {}) as Record<string, unknown>;
     const leadFormId = typeof budget.lead_form_id === 'string' ? budget.lead_form_id : null;
 
     if (leadFormId) {
-      const [response, questions] = await Promise.all([
-        this.meta.getLeadFormData(leadFormId, accessToken),
-        this.safeGetFormQuestions(leadFormId, accessToken),
-      ]);
-      return { leads: (response.data || []).map((lead) => this.normalizeLeadValue(lead, questions)) };
+      try {
+        const [response, questions] = await Promise.all([
+          this.meta.getLeadFormData(leadFormId, accessToken),
+          this.safeGetFormQuestions(leadFormId, accessToken),
+        ]);
+        return { leads: (response.data || []).map((lead) => this.normalizeLeadValue(lead, questions)) };
+      } catch (err) {
+        this.handleMetaError(err);
+      }
     }
 
     // 2) Campanha externa (ou local sem form): via ads da campanha.
     const metaCampaignId = local?.metaCampaignId || args.campaignId;
-    const ads = await this.meta.getCampaignAds(metaCampaignId, accessToken);
+    let ads: Array<{ id: string }>;
+    try {
+      ads = await this.meta.getCampaignAds(metaCampaignId, accessToken);
+    } catch (err) {
+      this.handleMetaError(err);
+    }
 
     const formQuestions: Map<string, Array<{ key: string; type: string }>> = new Map();
     const leads: Array<{ name: string | null; email: string | null; phone: string | null; createdAt: string | null }> = [];
 
     for (const ad of ads) {
-      const adLeads = await this.meta.getAdLeads(ad.id, accessToken);
+      let adLeads: Array<Record<string, unknown>>;
+      try {
+        adLeads = await this.meta.getAdLeads(ad.id, accessToken);
+      } catch (err) {
+        this.handleMetaError(err);
+      }
       for (const lead of adLeads) {
         const formId = typeof lead.form_id === 'string' ? lead.form_id : null;
         if (formId && !formQuestions.has(formId)) {

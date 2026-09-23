@@ -119,4 +119,44 @@ describe('LeadsPage', () => {
 
     expect(await screen.findByText('Nenhum lead ainda')).toBeInTheDocument();
   });
+
+  it('exibe a mensagem de erro da API quando a busca de leads falha (ex.: 401 token Meta expirado)', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/campaigns/lead-campaigns') {
+        return Promise.resolve({ data: { success: true, data: [FORM_CAMPAIGN] } });
+      }
+      if (url === '/campaigns/leads') {
+        return Promise.reject({
+          response: {
+            data: {
+              error: { message: 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações' },
+            },
+          },
+        });
+      }
+      return Promise.resolve({ data: { success: true, data: [] } });
+    });
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    expect(
+      await screen.findByText('Token Meta expirado. Reconecte sua conta em Configurações > Integrações')
+    ).toBeInTheDocument();
+  });
+
+  it('exibe fallback genérico quando a API falha sem mensagem de erro', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/campaigns/lead-campaigns') {
+        return Promise.resolve({ data: { success: true, data: [FORM_CAMPAIGN] } });
+      }
+      if (url === '/campaigns/leads') {
+        return Promise.reject(new Error('network down'));
+      }
+      return Promise.resolve({ data: { success: true, data: [] } });
+    });
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText('Não foi possível carregar os leads. Tente novamente.')).toBeInTheDocument();
+  });
 });

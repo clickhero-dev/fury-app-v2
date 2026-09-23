@@ -329,6 +329,34 @@ describe('CampaignsController', () => {
       expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'UNAUTHORIZED' }));
       expect(ctrl['campaignsService']['getLeadCampaigns']).not.toHaveBeenCalled();
     });
+
+    it('propaga erro mapeado do service (META_TOKEN_EXPIRED 401)', async () => {
+      const ctrl = makeController({
+        getLeadCampaigns: vi.fn().mockRejectedValue(
+          Object.assign(new Error('expired'), { code: 'META_TOKEN_EXPIRED', statusCode: 401 })
+        ),
+      });
+      const req = makeReq();
+      const res = makeRes();
+
+      await ctrl.getLeadCampaigns(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'META_TOKEN_EXPIRED', statusCode: 401 }));
+    });
+
+    it('propaga 403 do service (sem conexão Meta)', async () => {
+      const ctrl = makeController({
+        getLeadCampaigns: vi.fn().mockRejectedValue(
+          Object.assign(new Error('conn'), { code: 'META_CONNECTION_NOT_FOUND', statusCode: 403 })
+        ),
+      });
+      const req = makeReq();
+      const res = makeRes();
+
+      await ctrl.getLeadCampaigns(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'META_CONNECTION_NOT_FOUND', statusCode: 403 }));
+    });
   });
 
   describe('getCampaignLeads / getAllCampaignLeads', () => {
@@ -374,6 +402,59 @@ describe('CampaignsController', () => {
       await ctrl.getAllCampaignLeads(req, res, next);
 
       expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'UNAUTHORIZED' }));
+    });
+
+    it('retorna 400 quando id ausente em /:id/leads', async () => {
+      const ctrl = makeController({ getCampaignLeads: vi.fn() });
+      const req = makeReq({ params: {} });
+      const res = makeRes();
+
+      await ctrl.getCampaignLeads(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'MISSING_CAMPAIGN_ID', statusCode: 400 }));
+      expect(ctrl['campaignsService']['getCampaignLeads']).not.toHaveBeenCalled();
+    });
+
+    it('propaga 404 do service (campanha inexistente)', async () => {
+      const ctrl = makeController({
+        getCampaignLeads: vi.fn().mockRejectedValue(
+          Object.assign(new Error('nf'), { code: 'CAMPAIGN_NOT_FOUND', statusCode: 404 })
+        ),
+      });
+      const req = makeReq({ params: { id: 'meta_apagada' } });
+      const res = makeRes();
+
+      await ctrl.getCampaignLeads(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'CAMPAIGN_NOT_FOUND', statusCode: 404 }));
+    });
+
+    it('propaga erro mapeado do service (401 META_TOKEN_EXPIRED)', async () => {
+      const ctrl = makeController({
+        getCampaignLeads: vi.fn().mockRejectedValue(
+          Object.assign(new Error('exp'), { code: 'META_TOKEN_EXPIRED', statusCode: 401 })
+        ),
+      });
+      const req = makeReq({ params: { id: 'meta_1' } });
+      const res = makeRes();
+
+      await ctrl.getCampaignLeads(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'META_TOKEN_EXPIRED', statusCode: 401 }));
+    });
+
+    it('propaga 403 do service (sem conexão Meta)', async () => {
+      const ctrl = makeController({
+        getAllCampaignLeads: vi.fn().mockRejectedValue(
+          Object.assign(new Error('conn'), { code: 'META_CONNECTION_NOT_FOUND', statusCode: 403 })
+        ),
+      });
+      const req = makeReq();
+      const res = makeRes();
+
+      await ctrl.getAllCampaignLeads(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'META_CONNECTION_NOT_FOUND', statusCode: 403 }));
     });
   });
 });
