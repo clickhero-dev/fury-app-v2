@@ -7,6 +7,7 @@ import type { SocialAuthService } from '../services/core/social-auth.service.js'
 import { AppError } from '../middleware/errorHandler.js';
 import { checkEmailVerificationRateLimit, checkForgotPasswordRateLimit, checkResetPasswordRateLimit, checkSocialLoginRateLimit, checkSetPasswordRateLimit, getClientIp } from '../middleware/rate-limit.middleware.js';
 import { passwordSchema } from '../lib/shared.js';
+import { audienceGeoSchema } from '../lib/audience-geo.js';
 
 const updateMeSchema = z.object({
   name: z.string().min(1).max(255).optional(),
@@ -26,6 +27,7 @@ const updateMeSchema = z.object({
       id: z.string(),
       name: z.string(),
     })).optional(),
+    geo: audienceGeoSchema.optional(),
   }).optional(),
   businessContext: z.string().optional(),
 });

@@ -6,6 +6,41 @@ export const AGE_OPTIONS = [18, 21, 25, 30, 35, 40, 45, 50, 55, 60, 65] as const
 
 export const MAX_CREATIVES = 4;
 
+export const MAX_GEO_CITIES = 4;
+export const MAX_GEO_POINTS = 4;
+export const DEFAULT_POINT_RADIUS_KM = 1.5;
+
+// Formato salvo em audienceDefaults.geo (o back converte para a Meta)
+export interface AudienceGeo {
+  mode: 'cities' | 'custom';
+  cities: { key: string; name: string; region?: string }[];
+  base?: { label: string; lat: number; lng: number };
+  points: { lat: number; lng: number; radiusKm: number }[];
+}
+
+// Só o modo ativo conta (igual ao back)
+export function hasGeoLocations(geo: AudienceGeo | undefined): geo is AudienceGeo {
+  if (!geo) return false;
+  return geo.mode === 'cities' ? geo.cities.length > 0 : geo.points.length > 0;
+}
+
+const round = (n: number, d: number) => Number(n.toFixed(d));
+
+// Prévia do geo_locations (espelho de apps/api/src/lib/audience-geo.ts)
+export function buildGeoLocations(geo: AudienceGeo): Record<string, unknown> {
+  if (geo.mode === 'cities') {
+    return { cities: geo.cities.map((c) => ({ key: parseInt(c.key, 10) })) };
+  }
+  return {
+    custom_locations: geo.points.map((p) => ({
+      latitude: round(p.lat, 6),
+      longitude: round(p.lng, 6),
+      radius: round(p.radiusKm, 3),
+      distance_unit: 'kilometer',
+    })),
+  };
+}
+
 export interface WizardCreativeState {
   id: string; // chave estável p/ listas (crypto.randomUUID)
   assetId?: string;
@@ -35,6 +70,7 @@ export interface WizardAudienceState {
   ageMax: number;
   gender: WizardGender;
   audienceInterests: { id: string; name: string }[];
+  geo?: AudienceGeo;
 }
 
 export interface WizardBudgetState {
@@ -89,6 +125,7 @@ export interface CreateWizardCampaignPayload {
   destination_url?: string;
   location_city: string;
   location_city_key?: string;
+  geo?: AudienceGeo;
   age_min: number;
   age_max: number;
   gender: WizardGender;

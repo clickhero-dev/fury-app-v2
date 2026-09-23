@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildWizardCampaignPayload } from './buildPayload';
 import type { WizardState } from '../types';
+import { buildGeoLocations } from '../types';
 
 function makeState(overrides: Partial<WizardState> = {}): WizardState {
   return {
@@ -114,5 +115,38 @@ describe('buildWizardCampaignPayload', () => {
     expect(payload.creatives[1].creative_media_url).toBe('https://ig.jpg');
     expect(payload.creatives[0].creative_instagram_media_id).toBeUndefined();
     expect(payload.creatives[0].creative_media_url).toBeUndefined();
+  });
+});
+describe('buildWizardCampaignPayload — geo', () => {
+  const audience = makeState().audience;
+
+  it('sem geo: payload igual ao de hoje', () => {
+    const payload = buildWizardCampaignPayload(makeState());
+    expect(payload).not.toHaveProperty('geo');
+    expect(payload.location_city_key).toBe('sp');
+  });
+
+  it('envia geo quando o modo ativo tem localização', () => {
+    const geo = { mode: 'custom' as const, cities: [], points: [{ lat: -23.42, lng: -51.93, radiusKm: 1.5 }] };
+    const payload = buildWizardCampaignPayload(makeState({ audience: { ...audience, geo } }));
+    expect(payload.geo).toEqual(geo);
+  });
+
+  it('não envia geo quando o modo ativo está vazio', () => {
+    const geo = { mode: 'custom' as const, cities: [{ key: '1', name: 'X' }], points: [] };
+    const payload = buildWizardCampaignPayload(makeState({ audience: { ...audience, geo } }));
+    expect(payload).not.toHaveProperty('geo');
+  });
+});
+
+describe('buildGeoLocations (prévia igual ao back)', () => {
+  it('cidades sem raio', () => {
+    expect(buildGeoLocations({ mode: 'cities', cities: [{ key: '2788395', name: 'Maringá' }], points: [] }))
+      .toEqual({ cities: [{ key: 2788395 }] });
+  });
+
+  it('pontos com raio em km', () => {
+    expect(buildGeoLocations({ mode: 'custom', cities: [], points: [{ lat: -23.4207481, lng: -51.9331, radiusKm: 1.5 }] }))
+      .toEqual({ custom_locations: [{ latitude: -23.420748, longitude: -51.9331, radius: 1.5, distance_unit: 'kilometer' }] });
   });
 });

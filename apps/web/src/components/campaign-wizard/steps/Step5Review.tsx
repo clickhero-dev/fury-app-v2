@@ -7,6 +7,7 @@ import { useCreateCampaign } from '../hooks/useCreateCampaign';
 import { buildWizardCampaignPayload } from '../lib/buildPayload';
 import { formatPhoneDisplay } from '../lib/phone-format';
 import type { WizardState } from '../types';
+import { hasGeoLocations } from '../types';
 
 const OBJECTIVE_LABELS: Record<NonNullable<WizardState['objective']>, string> = {
   visits: 'Visitas',
@@ -52,7 +53,7 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
     },
   });
 
-  const publishError = (mutation.error as { response?: { data?: { error?: { code?: string; message?: string } } } })
+  const publishError = (mutation.error as { response?: { data?: { error?: { code?: string; message?: string; details?: Record<string, unknown> } } } })
     ?.response?.data?.error;
   // Erros de reconexão: token expirado ou falta de permissão no escopo — refazer o
   // OAuth concede os scopes atuais. Erros de Página (META_PAGE_NOT_MANAGED /
@@ -223,6 +224,13 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
           {audience.city ? (
             <>
               <div className="text-sm font-medium text-text-primary">{audience.city}</div>
+              {hasGeoLocations(audience.geo) && (
+                <div className="text-xs text-text-secondary mt-1">
+                  {audience.geo.mode === 'cities'
+                    ? `Cidades inteiras: ${audience.geo.cities.map((c) => c.name).join(', ')}`
+                    : `${audience.geo.points.length} ponto(s): ${audience.geo.points.map((p) => `${p.radiusKm.toLocaleString('pt-BR')} km`).join(', ')}`}
+                </div>
+              )}
               <div className="text-xs text-text-secondary mt-1">
                 {audience.ageMin || 18}-{audience.ageMax || 65} anos •{' '}
                 {GENDER_LABELS[audience.gender || 'all']}
@@ -277,7 +285,13 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
 
       {mutation.isError && (
         <div className="rounded-lg bg-error/10 border border-error/20 p-3 text-sm text-error space-y-3">
-          <span>{publishError?.message || 'Erro ao publicar no Meta. Tente novamente.'}</span>
+          <span className="whitespace-pre-line">{publishError?.message || 'Erro ao publicar no Meta. Tente novamente.'}</span>
+          {publishError?.details && (
+            <details className="text-xs">
+              <summary className="cursor-pointer">Detalhes técnicos</summary>
+              <pre className="mt-2 whitespace-pre-wrap break-all">{JSON.stringify({ code: publishError.code, ...publishError.details }, null, 2)}</pre>
+            </details>
+          )}
           {isReconnectError && (
             <Button
               variant="primary"

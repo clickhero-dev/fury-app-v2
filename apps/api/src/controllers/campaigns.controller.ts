@@ -17,6 +17,7 @@ const CACHE_PATHS_METRICS_GOALS = ['/api/metrics', '/api/goals'];
 import { openrouterService, type ChatMessage } from '../services/llms/openrouter.service.js';
 import { emailService } from '../services/email/email.service.js';
 import { sendToTenant } from '../services/email/notify.js';
+import { audienceGeoSchema } from '../lib/audience-geo.js';
 
 const createCampaignSchema = z.object({
   name: z.string().min(3, 'Campaign name must be at least 3 characters'),
@@ -90,6 +91,7 @@ const createWizardSchema = z
     location_city: z.string().min(1),
     location_city_key: z.string().min(1).optional(),
     location_radius_km: z.number().int().min(1).default(30).optional(),
+    geo: audienceGeoSchema.optional(),
     age_min: z.number().int().min(18).max(65),
     age_max: z.number().int().min(18).max(65),
     gender: z.enum(['all', 'male', 'female']),
@@ -779,6 +781,7 @@ export class CampaignsController {
         locationCity: data.location_city,
         locationCityKey: data.location_city_key,
         locationRadiusKm: data.location_radius_km ?? 30,
+        geo: data.geo,
         ageMin: data.age_min,
         ageMax: data.age_max,
         gender: data.gender,
@@ -895,6 +898,7 @@ export class CampaignsController {
           locationCity: data.location_city,
           locationCityKey: data.location_city_key,
           locationRadiusKm: data.location_radius_km ?? 30,
+          geo: data.geo,
           ageMin: data.age_min,
           ageMax: data.age_max,
           gender: data.gender,
