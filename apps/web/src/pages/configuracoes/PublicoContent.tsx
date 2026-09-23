@@ -337,7 +337,7 @@ export function PublicoContent() {
                       placeholder={geoCities[0] ? cityLabel(geoCities[0]) : 'Ex.: Maringá ou Paraná'}
                       className="flex-1 px-4 py-3 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/20"
                     />
-                    <Button variant="secondary" size="md" onClick={handleSearchBase} disabled={baseLoading}>
+                    <Button variant="outline" size="md" onClick={handleSearchBase} disabled={baseLoading}>
                       {baseLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Buscar'}
                     </Button>
                   </div>
