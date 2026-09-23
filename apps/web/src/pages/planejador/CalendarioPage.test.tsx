@@ -55,4 +55,12 @@ describe('CalendarioPage — deep-link de criação de post', () => {
 
     expect(calendarViewProps).toEqual([null]);
   });
+
+  it('remove apenas o parâmetro criar, preservando outros query params da URL', async () => {
+    renderPage('/calendario?criar=post&data=2026-10-01');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('search-probe').textContent).toBe('data=2026-10-01');
+    });
+  });
 });
