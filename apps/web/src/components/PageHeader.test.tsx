@@ -24,7 +24,10 @@ describe('PageHeader — badge de cota alinhado ao bloco do título', () => {
     expect(slot.closest('.space-y-1')).not.toBeNull();
   });
 
-  it('título usa token semântico de cor (não branco hardcoded) para funcionar no modo claro', () => {
+});
+
+describe('PageHeader — título', () => {
+  it('usa token semântico de cor (não branco hardcoded) para funcionar no modo claro', () => {
     render(
       <MemoryRouter>
         <PageHeader title="Estúdio de anúncios" />
