@@ -5,8 +5,11 @@ import { useMetaLocations } from '@/components/campaign-wizard/hooks/useMetaLoca
 import { useMetaInterests } from '@/components/campaign-wizard/hooks/useMetaInterests';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components';
-import type { WizardGender } from '@/components/campaign-wizard/types';
-import { AGE_OPTIONS } from '@/components/campaign-wizard/types';
+import type { AudienceGeo, WizardGender } from '@/components/campaign-wizard/types';
+import {
+  AGE_OPTIONS, MAX_GEO_CITIES, MAX_GEO_POINTS, DEFAULT_POINT_RADIUS_KM, hasGeoLocations, buildGeoLocations,
+} from '@/components/campaign-wizard/types';
+import { GeoPointsMap } from './GeoPointsMap';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 
@@ -17,7 +20,15 @@ interface AudienceDefaults {
   ageMax?: number;
   gender?: WizardGender;
   audienceInterests?: { id: string; name: string }[];
+  geo?: AudienceGeo;
 }
+
+type GeoCity = AudienceGeo['cities'][number];
+const cityLabel = (c: GeoCity) => (c.region ? `${c.name}, ${c.region}` : c.name);
+// Faixa aceita pela Meta em custom_locations (só aviso)
+const isRadiusOutOfRange = (r: number) => r < 1 || r > 80;
+// Mesma precisão enviada à Meta
+const round6 = (n: number) => Number(n.toFixed(6));
 
 interface MeResponse {
   audienceDefaults?: AudienceDefaults;
@@ -34,6 +45,18 @@ export function PublicoContent() {
   const [cityQuery, setCityQuery] = useState('');
   const [city, setCity] = useState('');
   const [cityKey, setCityKey] = useState('');
+  const [geoMode, setGeoMode] = useState<AudienceGeo['mode']>('cities');
+  const [geoCities, setGeoCities] = useState<GeoCity[]>([]);
+  const [geoPoints, setGeoPoints] = useState<AudienceGeo['points']>([]);
+  const [geoBase, setGeoBase] = useState<AudienceGeo['base']>();
+  const [newRadiusKm, setNewRadiusKm] = useState(DEFAULT_POINT_RADIUS_KM);
+  const [baseQuery, setBaseQuery] = useState('');
+  const [baseLoading, setBaseLoading] = useState(false);
+  const [baseError, setBaseError] = useState('');
+  // Padrão antigo (só city/cityKey) só vira geo quando o usuário mexe
+  const [geoTouched, setGeoTouched] = useState(false);
+  const [hasSavedGeo, setHasSavedGeo] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [ageMin, setAgeMin] = useState(18);
   const [ageMax, setAgeMax] = useState(65);
   const [gender, setGender] = useState<WizardGender>('all');
@@ -53,11 +76,18 @@ export function PublicoContent() {
       const data = res.data.data;
       const defaults = data.audienceDefaults;
       if (defaults) {
-        if (defaults.city) {
-          setCity(defaults.city);
-          setCityQuery(defaults.city);
-        }
+        if (defaults.city) setCity(defaults.city);
         if (defaults.cityKey) setCityKey(defaults.cityKey);
+        if (defaults.geo) {
+          setHasSavedGeo(true);
+          setGeoMode(defaults.geo.mode);
+          setGeoCities(defaults.geo.cities ?? []);
+          setGeoPoints(defaults.geo.points ?? []);
+          setGeoBase(defaults.geo.base);
+          if (defaults.geo.base) setBaseQuery(defaults.geo.base.label);
+        } else if (defaults.city && defaults.cityKey) {
+          setGeoCities([{ key: defaults.cityKey, name: defaults.city }]);
+        }
         if (defaults.ageMin) setAgeMin(defaults.ageMin);
         if (defaults.ageMax) setAgeMax(defaults.ageMax);
         if (defaults.gender) setGender(defaults.gender);
@@ -69,26 +99,96 @@ export function PublicoContent() {
     });
   }, []);
 
+  const geo: AudienceGeo = { mode: geoMode, cities: geoCities, base: geoBase, points: geoPoints };
+  const saveGeo = hasSavedGeo || geoTouched;
+  const hasInvalidRadius = geoPoints.some((p) => !Number.isFinite(p.radiusKm) || p.radiusKm <= 0);
+  // O que o envio usa hoje: geo novo ou cidade + 30 km
+  const sentPreview = saveGeo && hasGeoLocations(geo)
+    ? buildGeoLocations(geo)
+    : cityKey ? { cities: [{ key: parseInt(cityKey, 10), radius: 30, distance_unit: 'kilometer' }] } : null;
+
+  function touchGeo() {
+    setGeoTouched(true);
+  }
+
   function handleSelectLocation(location: { key: string; name: string; region?: string }) {
-    const label = location.region ? `${location.name}, ${location.region}` : location.name;
-    setCityQuery(label);
-    setCity(label);
-    setCityKey(location.key);
     setShowDropdown(false);
+    setCityQuery('');
+    if (geoCities.length >= MAX_GEO_CITIES || geoCities.some((c) => c.key === location.key)) return;
+    setGeoCities([...geoCities, { key: location.key, name: location.name, region: location.region }]);
+    touchGeo();
+  }
+
+  function handleAddPoint(lat: number, lng: number) {
+    if (geoPoints.length >= MAX_GEO_POINTS) return;
+    setGeoPoints((prev) => [...prev, { lat: round6(lat), lng: round6(lng), radiusKm: newRadiusKm }]);
+    touchGeo();
+  }
+
+  function handleMovePoint(index: number, lat: number, lng: number) {
+    setGeoPoints((prev) => prev.map((p, i) => (i === index ? { ...p, lat: round6(lat), lng: round6(lng) } : p)));
+    touchGeo();
+  }
+
+  // Base do mapa via Nominatim (só centraliza, não é enviada)
+  async function handleSearchBase() {
+    const q = baseQuery.trim() || (geoCities[0] ? cityLabel(geoCities[0]) : '');
+    if (!q) return;
+    setBaseLoading(true);
+    setBaseError('');
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(q.replace(/\s*\(state\)/i, ''))}`);
+      const [first] = (await res.json()) as { lat: string; lon: string; display_name: string }[];
+      if (!first) {
+        setBaseError('Local não encontrado.');
+        return;
+      }
+      const label = first.display_name.split(',').slice(0, 2).join(',').trim();
+      setGeoBase({ label, lat: Number(first.lat), lng: Number(first.lon) });
+      setBaseQuery(label);
+      touchGeo();
+    } catch {
+      setBaseError('Não foi possível buscar o local.');
+    } finally {
+      setBaseLoading(false);
+    }
   }
 
   async function handleSave() {
     setSaving(true);
     setSaved(false);
+    setSaveError('');
+    // Campos antigos seguem preenchidos (wizard, revisão e planner leem city)
+    let legacyCity = city;
+    let legacyKey = cityKey;
+    if (saveGeo) {
+      if (geoMode === 'custom' && geoPoints.length > 0) {
+        legacyCity = geoBase?.label || 'Pontos personalizados';
+        legacyKey = '';
+      } else if (geoCities[0]) {
+        legacyCity = cityLabel(geoCities[0]);
+        legacyKey = geoCities[0].key;
+      } else {
+        legacyCity = '';
+        legacyKey = '';
+      }
+    }
     try {
       await api.patch('/auth/me', {
-        audienceDefaults: { city, cityKey, ageMin, ageMax, gender, audienceInterests },
+        audienceDefaults: {
+          city: legacyCity, cityKey: legacyKey, ageMin, ageMax, gender, audienceInterests,
+          ...(saveGeo ? { geo } : {}),
+        },
         businessContext: businessContext || undefined,
       });
+      setCity(legacyCity);
+      setCityKey(legacyKey);
+      if (saveGeo) setHasSavedGeo(true);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch {
-      // save failed silently
+    } catch (err) {
+      const apiError = (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error;
+      setSaveError(apiError?.message || 'Não foi possível salvar.');
     } finally {
       setSaving(false);
     }
@@ -136,41 +236,196 @@ export function PublicoContent() {
           </div>
 
           <div className="space-y-5">
-            {/* Cidade */}
-            <div className="relative">
-              <label className="text-sm font-bold text-gray-900 mb-1 block">Cidade</label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={cityQuery}
-                  onChange={(e) => {
-                    setCityQuery(e.target.value);
-                    setCity(e.target.value);
-                    setCityKey('');
-                    setShowDropdown(true);
-                  }}
-                  onFocus={() => setShowDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-                  placeholder="Digite o nome da cidade"
-                  className="w-full pl-10 pr-4 py-3 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/20"                />
-                {loadingLocations && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
+            {/* Localização */}
+            <div className="space-y-3">
+              <label className="text-sm font-bold text-gray-900 block">Localização</label>
+              <div className="grid grid-cols-2 gap-2">
+                {([['cities', 'Cidades'], ['custom', 'Personalizado']] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => { setGeoMode(mode); touchGeo(); }}
+                    className={cn(
+                      'py-3 rounded-lg border-2 text-sm font-bold transition-all duration-200 cursor-pointer',
+                      geoMode === mode
+                        ? 'border-admin-petrol bg-admin-petrol/10 text-admin-petrol'
+                        : 'border-border text-muted-foreground bg-background hover:border-admin-petrol/40'
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
-              {showDropdown && locations.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
-                  {locations.map((location) => (
-                    <button
-                      key={location.key}
-                      type="button"
-                      onMouseDown={() => handleSelectLocation(location)}
-                      className="w-full text-left px-4 py-2 hover:bg-orange-50 text-sm text-gray-900"
-                    >
-                      {location.region ? `${location.name}, ${location.region}` : location.name}
-                    </button>
-                  ))}
+              {!saveGeo && cityKey && (
+                <p className="text-xs text-amber-700">
+                  Padrão antigo: {city} com raio de 30 km. Ao alterar e salvar, passa a valer o formato novo.
+                </p>
+              )}
+
+              {geoMode === 'cities' ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-500">
+                    Até {MAX_GEO_CITIES} cidades. A cidade inteira é usada, sem raio.
+                  </p>
+                  {geoCities.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {geoCities.map((c) => (
+                        <span
+                          key={c.key}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-orange-50 text-[#E8631A] text-sm rounded-full border border-[#E8631A]/20"
+                        >
+                          {cityLabel(c)}
+                          <button
+                            type="button"
+                            aria-label={`Remover ${c.name}`}
+                            onClick={() => { setGeoCities(geoCities.filter((x) => x.key !== c.key)); touchGeo(); }}
+                            className="hover:text-red-600"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={cityQuery}
+                      onChange={(e) => {
+                        setCityQuery(e.target.value);
+                        setShowDropdown(true);
+                      }}
+                      onFocus={() => setShowDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+                      placeholder="Digite o nome da cidade"
+                      disabled={geoCities.length >= MAX_GEO_CITIES}
+                      className="w-full pl-10 pr-4 py-3 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                    {loadingLocations && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
+                    {showDropdown && locations.length > 0 && (
+                      <div className="absolute z-10 mt-1 left-0 right-0 top-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                        {locations.map((location) => (
+                          <button
+                            key={location.key}
+                            type="button"
+                            onMouseDown={() => handleSelectLocation(location)}
+                            className="w-full text-left px-4 py-2 hover:bg-orange-50 text-sm text-gray-900"
+                          >
+                            {location.region ? `${location.name}, ${location.region}` : location.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {geoCities.length >= MAX_GEO_CITIES && (
+                    <p className="text-xs text-amber-700">Máximo de {MAX_GEO_CITIES} cidades atingido.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-500">
+                    A cidade ou o estado só centraliza o mapa e não é enviado. Clique no mapa para pôr até {MAX_GEO_POINTS} pontos; arraste o pino para mover.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={baseQuery}
+                      onChange={(e) => setBaseQuery(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchBase(); } }}
+                      placeholder={geoCities[0] ? cityLabel(geoCities[0]) : 'Ex.: Maringá ou Paraná'}
+                      className="flex-1 px-4 py-3 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/20"
+                    />
+                    <Button variant="outline" size="md" onClick={handleSearchBase} disabled={baseLoading}>
+                      {baseLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Buscar'}
+                    </Button>
+                  </div>
+                  {baseError && <p className="text-xs text-red-600">{baseError}</p>}
+
+                  <GeoPointsMap
+                    center={geoBase ? { lat: geoBase.lat, lng: geoBase.lng } : undefined}
+                    points={geoPoints}
+                    onAdd={handleAddPoint}
+                    onMove={handleMovePoint}
+                  />
+
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <label className="flex items-center gap-2 text-gray-700">
+                      Raio dos novos pontos (km)
+                      <input
+                        type="number"
+                        min={0.1}
+                        step={0.1}
+                        value={newRadiusKm}
+                        onChange={(e) => setNewRadiusKm(Number(e.target.value))}
+                        className="w-20 px-2 py-1 border border-border rounded-md bg-background"
+                      />
+                    </label>
+                    <span className={cn('text-gray-500', geoPoints.length >= MAX_GEO_POINTS && 'text-amber-700')}>
+                      Pontos: {geoPoints.length}/{MAX_GEO_POINTS}
+                    </span>
+                  </div>
+
+                  {geoPoints.length > 0 && (
+                    <ul className="space-y-2">
+                      {geoPoints.map((p, i) => (
+                        <li key={i} className="flex flex-wrap items-center gap-3 text-sm border border-border rounded-lg px-3 py-2">
+                          <span className="font-bold text-[#E8631A]">Ponto {i + 1}</span>
+                          <span className="text-gray-500 font-mono text-xs">{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</span>
+                          <label className="flex items-center gap-1 text-gray-700 ml-auto">
+                            Raio (km)
+                            <input
+                              type="number"
+                              min={0.1}
+                              step={0.1}
+                              value={Number.isFinite(p.radiusKm) ? p.radiusKm : ''}
+                              onChange={(e) => {
+                                const radiusKm = e.target.value === '' ? NaN : Number(e.target.value);
+                                setGeoPoints(geoPoints.map((x, j) => (j === i ? { ...x, radiusKm } : x)));
+                                touchGeo();
+                              }}
+                              className="w-20 px-2 py-1 border border-border rounded-md bg-background"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            aria-label={`Remover ponto ${i + 1}`}
+                            onClick={() => { setGeoPoints(geoPoints.filter((_, j) => j !== i)); touchGeo(); }}
+                            className="text-gray-400 hover:text-red-600"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                          {Number.isFinite(p.radiusKm) && p.radiusKm > 0 && isRadiusOutOfRange(p.radiusKm) && (
+                            <span className="w-full text-xs text-amber-700">
+                              Fora da faixa da Meta (1 a 80 km). Pode ser recusado no envio.
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {hasInvalidRadius && <p className="text-xs text-red-600">Informe um raio maior que zero em todos os pontos.</p>}
                 </div>
               )}
+
+              <details className="text-xs">
+                <summary className="cursor-pointer text-gray-600">Ver o JSON (salvo e enviado à Meta)</summary>
+                <div className="mt-2 space-y-2">
+                  <div>
+                    <p className="font-bold text-gray-700">Salvo em audienceDefaults.geo</p>
+                    <pre className="p-2 bg-gray-50 rounded border border-border whitespace-pre-wrap break-all">
+                      {saveGeo ? JSON.stringify(geo, null, 2) : '(nada — padrão antigo)'}
+                    </pre>
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-700">Enviado à Meta em targeting.geo_locations</p>
+                    <pre className="p-2 bg-gray-50 rounded border border-border whitespace-pre-wrap break-all">
+                      {sentPreview ? JSON.stringify(sentPreview, null, 2) : '(nenhuma localização)'}
+                    </pre>
+                  </div>
+                </div>
+              </details>
             </div>
 
             {/* Faixa etária */}
@@ -307,10 +562,11 @@ export function PublicoContent() {
 
       {/* Botão salvar */}
       <div className="flex items-center gap-3 pt-4 border-t border-border">
-        <Button variant="primary" size="md" disabled={saving} onClick={handleSave}>
+        <Button variant="primary" size="md" disabled={saving || hasInvalidRadius} onClick={handleSave}>
           {saving ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar'}
         </Button>
         {saved && <span className="text-sm text-green-600">Configurações salvas.</span>}
+        {saveError && <span className="text-sm text-red-600">{saveError}</span>}
       </div>
     </div>
   );
