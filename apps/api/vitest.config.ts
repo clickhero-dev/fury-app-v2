@@ -8,7 +8,7 @@ export default defineConfig({
     globals: true,
     testTimeout: 30000,
     pool: 'forks',
-    singleFork: true,
+    fileParallelism: false,
     env: {
       JWT_SECRET: 'test-jwt-secret-not-for-production',
       JWT_REFRESH_SECRET: 'test-jwt-refresh-secret-not-for-production',

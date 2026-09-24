@@ -35,11 +35,18 @@ describe('complianceBadge', () => {
     expect(badge.reasons).toContain('Texto proibido na imagem.');
   });
 
-  it('aprovado → sem motivos', () => {
+  it('aprovado → sem motivos + hint do tooltip', () => {
     const badge = complianceBadge('approved', '[COMPLIANCE] approved=true | data={"approved":true,"issues":[],"text_percentage":5}');
     expect(badge.label).toBe('Aprovado');
     expect(badge.tone).toBe('approved');
     expect(badge.reasons).toEqual([]);
+    expect(badge.hint).toBe('Seu anúncio passou pela verificação de conteúdo e está liberado para publicar.');
+  });
+
+  it('hint em todos os status (tooltip em todo badge)', () => {
+    expect(complianceBadge('rejected', null).hint).toBe('Encontramos problemas no conteúdo deste anúncio. Veja os motivos indicados e gere uma nova versão.');
+    expect(complianceBadge('pending_compliance', null).hint).toBe('Estamos verificando o conteúdo do anúncio. O status se atualiza sozinho em instantes.');
+    expect(complianceBadge(null, null).hint).toBe('Este anúncio ainda não passou pela verificação de conteúdo.');
   });
 
   it('pendente → Analisando', () => {

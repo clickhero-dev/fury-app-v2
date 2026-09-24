@@ -4,6 +4,12 @@ import { Copy, Check, PenTool } from 'lucide-react';
 import { AppLayout, PageHeader, EmptyState, LoadingSpinner, Button } from '@/components';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import {
+  COMPLIANCE_APPROVED_HINT,
+  COMPLIANCE_REJECTED_HINT,
+  COMPLIANCE_PENDING_HINT,
+} from '@/lib/compliance.utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import api from '@/lib/api';
 import type { CopyVariacao, CopyType, CopyTone, GenerateCopyPayload } from '@/types/studio';
 
@@ -206,9 +212,28 @@ function CopyCard({
 
       <div className="flex items-center gap-2">
         {variacao.compliance_status && (
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#F3F4F6] text-text-secondary">
-            {variacao.compliance_status === 'approved' ? '✅ Compliance OK' : variacao.compliance_status === 'rejected' ? '⛔ Rejeitado' : '⚠️ Pendente'}
-          </span>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#F3F4F6] text-text-secondary cursor-help">
+                  {variacao.compliance_status === 'approved' ? '✅ Compliance OK' : variacao.compliance_status === 'rejected' ? '⛔ Rejeitado' : '⚠️ Pendente'}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className={
+                variacao.compliance_status === 'approved'
+                  ? 'max-w-56 bg-green-700 text-white border-green-700'
+                  : variacao.compliance_status === 'rejected'
+                    ? 'max-w-56 bg-red-700 text-white border-red-700'
+                    : 'max-w-56 bg-amber-600 text-white border-amber-600'
+              }>
+                {variacao.compliance_status === 'approved'
+                  ? COMPLIANCE_APPROVED_HINT
+                  : variacao.compliance_status === 'rejected'
+                    ? COMPLIANCE_REJECTED_HINT
+                    : COMPLIANCE_PENDING_HINT}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
         <span
           className={cn(

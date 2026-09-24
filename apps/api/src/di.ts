@@ -26,6 +26,13 @@ import { AutomationController } from './controllers/automation.controller.js';
 import { AuthService } from './services/core/auth.service.js';
 import { SocialAuthService } from './services/core/social-auth.service.js';
 import { AuthController } from './controllers/auth.controller.js';
+import { UazapiClient } from './lib/uazapi-client.js';
+import { WppWebhookRepository } from './repository/wpp-webhook.repository.js';
+import { WppVerificationRepository } from './repository/wpp-verification.repository.js';
+import { WppWebhookService } from './services/wpp/wpp-webhook.service.js';
+import { WppVerificationService } from './services/wpp/wpp-verification.service.js';
+import { WppWebhookController } from './controllers/wpp-webhook.controller.js';
+import { WppVerificationController } from './controllers/wpp-verification.controller.js';
 import { MetricsService } from './services/campaigns/metrics.service.js';
 import { MetricsController } from './controllers/metrics.controller.js';
 import { GoogleService, googleService } from './services/google/google.service.js';
@@ -77,6 +84,19 @@ export const budgetOptimizerService = new BudgetOptimizerService();
 // SuperAdmin (GLOBAL) — único repositório/controller não escopado por tenant.
 export const superAdminRepository = new SuperAdminRepository("");
 
+// WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
+// verificação tenant-bound via factory (padrão CampaignRepository).
+export const uazapiClient = new UazapiClient();
+export const wppWebhookRepository = new WppWebhookRepository();
+export const wppWebhookService = new WppWebhookService(
+  wppWebhookRepository,
+  (tenantId: string) => new WppVerificationRepository(tenantId),
+);
+export const wppVerificationService = new WppVerificationService(
+  uazapiClient,
+  (tenantId: string) => new WppVerificationRepository(tenantId),
+);
+
 export const controllers = {
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),
@@ -102,6 +122,8 @@ export const controllers = {
     campaignsService,
     (tenantId: string) => new CampaignRepository(tenantId),
   ),
+  wppWebhook: new WppWebhookController(wppWebhookService),
+  wppVerify: new WppVerificationController(wppVerificationService),
 };
 
 export { metricsProvider };

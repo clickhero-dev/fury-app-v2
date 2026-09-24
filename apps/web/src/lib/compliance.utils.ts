@@ -8,7 +8,15 @@ export type ComplianceBadgeInfo = {
   label: string;
   tone: 'approved' | 'pending' | 'rejected' | 'unknown';
   reasons: string[];
+  /** Texto do tooltip: explica o status em linguagem simples (só no approved). */
+  hint: string;
 };
+
+/** Texto do tooltip exibido nos badges de compliance do Estúdio, por status. */
+export const COMPLIANCE_APPROVED_HINT = 'Seu anúncio passou pela verificação de conteúdo e está liberado para publicar.';
+export const COMPLIANCE_REJECTED_HINT = 'Encontramos problemas no conteúdo deste anúncio. Veja os motivos indicados e gere uma nova versão.';
+export const COMPLIANCE_PENDING_HINT = 'Estamos verificando o conteúdo do anúncio. O status se atualiza sozinho em instantes.';
+export const COMPLIANCE_UNKNOWN_HINT = 'Este anúncio ainda não passou pela verificação de conteúdo.';
 
 /** Extrai {approved, issues, text_percentage} do compliance_notes (formato `data={json}` do worker). */
 export function parseComplianceNotes(notes: string | null | undefined): ComplianceParsed {
@@ -60,7 +68,7 @@ export function complianceBadge(
   const parsed = parseComplianceNotes(notes);
 
   if (complianceStatus === 'approved' || parsed.approved === true) {
-    return { label: 'Aprovado', tone: 'approved', reasons: [] };
+    return { label: 'Aprovado', tone: 'approved', reasons: [], hint: COMPLIANCE_APPROVED_HINT };
   }
 
   if (complianceStatus === 'rejected' || parsed.approved === false) {
@@ -68,12 +76,13 @@ export function complianceBadge(
       label: 'Reprovado',
       tone: 'rejected',
       reasons: parsed.issues,
+      hint: COMPLIANCE_REJECTED_HINT,
     };
   }
 
   if (complianceStatus === 'pending_compliance' || complianceStatus === 'pending') {
-    return { label: 'Analisando...', tone: 'pending', reasons: [] };
+    return { label: 'Analisando...', tone: 'pending', reasons: [], hint: COMPLIANCE_PENDING_HINT };
   }
 
-  return { label: 'Sem análise', tone: 'unknown', reasons: [] };
+  return { label: 'Sem análise', tone: 'unknown', reasons: [], hint: COMPLIANCE_UNKNOWN_HINT };
 }

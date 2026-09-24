@@ -58,7 +58,6 @@ export function PainelCampanhas() {
   const subscriptionError = result.subscriptionError;
   const pauseMutation = usePauseCampaign();
   const deleteMutation = useDeleteCampaign();
-
   const handleCreateCampaign = () => {
     clearPreSelectedAsset();
     navigate('/criar-campanha');
@@ -170,10 +169,14 @@ export function PainelCampanhas() {
       key: 'conversoes' as const,
       label: 'Clientes',
       align: 'right' as const,
-      render: (value: unknown) => (
+      render: (value: unknown, row: CampaignData) => (
         <span className="text-text-primary font-medium">{formatConversions(value as number | null)}</span>
       ),
     },
+    
+    
+    
+    
     {
       key: 'id' as const,
       label: 'Ações',

@@ -15,6 +15,13 @@ export type StudioImageGenerationResult = {
   status: 'pending_compliance';
 };
 
+export type StudioAssetVersion = {
+  id: string;
+  url: string;
+  complianceStatus: 'pending' | 'pending_compliance' | 'approved' | 'rejected';
+  createdAt: string;
+};
+
 export type StudioComplianceStatusResult = {
   assetId: string;
   tenantId: string;
@@ -26,6 +33,14 @@ export type StudioComplianceStatusResult = {
   textPercentage: number | null;
   metaAssetId: string | null;
   createdAt: string;
+  /** Id da raiz do grupo (linhagem: original + modificações). */
+  groupId: string;
+  /** Id da versão "em evidência" — mesma versão dos campos acima. */
+  activeVersionId: string;
+  /** Todas as versões do grupo, ordenadas por criação (para o carrossel). */
+  versions: StudioAssetVersion[];
+  modificationsRemaining: number | null;
+  archivedAt: string | null;
 };
 
 function normalizePublicBaseUrl(publicBaseUrl: string) {
@@ -196,30 +211,78 @@ export async function generateImage(prompt: string, tenantId: string, publicBase
   });
 }
 
+/**
+ * Resolve o grupo (linhagem) a partir de QUALQUER assetId dele — raiz ou
+ * modificação — e devolve os dados da versão em EVIDÊNCIA (não
+ * necessariamente a do `assetId` pedido). `versions` traz o grupo inteiro
+ * ordenado, para o carrossel/numeração da tela de detalhes.
+ */
 export async function getStudioAssetById(params: {
   tenantId: string;
   assetId: string;
 }): Promise<StudioComplianceStatusResult> {
-  const asset = await new StudioRepository(params.tenantId).findAssetById(params.assetId);
+  const repo = new StudioRepository(params.tenantId);
+  const asset = await repo.findAssetById(params.assetId);
 
   if (!asset) {
     throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
   }
 
-  const parsed = parseComplianceNotes(asset.complianceNotes ?? null);
+  const rootId = asset.rootAssetId ?? asset.id;
+  const groupVersions = await repo.findGroupVersions(rootId);
+  const root = groupVersions.find((v) => v.id === rootId) ?? asset;
+  const activeVersionId = root.activeAssetId ?? root.id;
+  // Fallback defensivo: se por algum motivo a versão ativa não estiver no
+  // grupo carregado (não deveria acontecer — ON DELETE SET NULL cobre o
+  // caso de exclusão), cai pra raiz.
+  const displayAsset = groupVersions.find((v) => v.id === activeVersionId) ?? root;
+
+  const parsed = parseComplianceNotes(displayAsset.complianceNotes ?? null);
 
   return {
-    assetId: asset.id,
-    tenantId: asset.tenantId,
-    imageUrl: asset.url,
-    complianceStatus: asset.complianceStatus,
-    complianceNotes: asset.complianceNotes ?? null,
+    assetId: displayAsset.id,
+    tenantId: displayAsset.tenantId,
+    imageUrl: displayAsset.url,
+    complianceStatus: displayAsset.complianceStatus,
+    complianceNotes: displayAsset.complianceNotes ?? null,
     approved: parsed.approved,
     issues: parsed.issues,
     textPercentage: parsed.textPercentage,
-    metaAssetId: asset.metaAssetId ?? null,
-    createdAt: asset.createdAt.toISOString(),
+    metaAssetId: displayAsset.metaAssetId ?? null,
+    createdAt: displayAsset.createdAt.toISOString(),
+    groupId: rootId,
+    activeVersionId,
+    versions: groupVersions.map((v) => ({
+      id: v.id,
+      url: v.url,
+      complianceStatus: v.complianceStatus,
+      createdAt: v.createdAt.toISOString(),
+    })),
+    modificationsRemaining: root.modificationsRemaining ?? null,
+    archivedAt: root.archivedAt ? root.archivedAt.toISOString() : null,
   };
+}
+
+/**
+ * Marca `assetId` como a versão em evidência do grupo — chamado quando o
+ * usuário navega até uma versão no carrossel (RF-02/RF-03). Funciona também
+ * em grupos arquivados (RF-10).
+ */
+export async function setActiveStudioAssetVersion(params: {
+  tenantId: string;
+  assetId: string;
+}): Promise<StudioComplianceStatusResult> {
+  const repo = new StudioRepository(params.tenantId);
+  const asset = await repo.findAssetById(params.assetId);
+
+  if (!asset) {
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+  }
+
+  const rootId = asset.rootAssetId ?? asset.id;
+  await repo.setActiveAsset(rootId, asset.id);
+
+  return getStudioAssetById(params);
 }
 
 export async function publishStudioAssetToMeta(params: {

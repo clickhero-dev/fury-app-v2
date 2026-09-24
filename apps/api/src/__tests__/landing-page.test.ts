@@ -57,4 +57,31 @@ describe('Landing Page (public)', () => {
       secondary_color: '#00FF00',
     });
   });
+
+  it('GET /privacidade/:slug → 200 com HTML contendo o nome do tenant (política padrão)', async () => {
+    const id = uniqueId();
+    const [tenant] = await db.insert(tenants).values({ name: `Padaria ${id}`, slug: `padaria-${id}` }).returning();
+
+    const res = await request(app).get(`/privacidade/${tenant.slug}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+    expect(res.text).toContain(`Política de Privacidade — Padaria ${id}`);
+    expect(res.text).toContain('LGPD');
+    // link_text usado pelo leadgen_forms: título da página
+    expect(res.text).toContain('privacidade');
+  });
+
+  it('GET /privacidade/:slug → 200 pelo UUID do tenant', async () => {
+    const id = uniqueId();
+    const [tenant] = await db.insert(tenants).values({ name: `Loja ${id}`, slug: `loja-slug-${id}` }).returning();
+
+    const res = await request(app).get(`/privacidade/${tenant.id}`);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(`Loja ${id}`);
+  });
+
+  it('GET /privacidade/:slug → 404 para tenant inexistente', async () => {
+    const res = await request(app).get('/privacidade/nao-existe');
+    expect(res.status).toBe(404);
+  });
 });

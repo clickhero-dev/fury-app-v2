@@ -28,18 +28,19 @@ const quota = {
 const svc = new StudioAiService(() => repo as any, llm as any, quota as any);
 
 describe('StudioAiService', () => {
-  it('getModels retorna catálogo de 9 imagens (3 FLUX.2 + 6 outras) e 3 vídeos', () => {
+  it('getModels retorna catálogo de 7 imagens (3 FLUX.2 + 4 outras) e 3 vídeos', () => {
     const { image, video } = svc.getModels();
-    expect(image).toHaveLength(9);
+    expect(image).toHaveLength(7);
     expect(image.filter((m) => m.family === 'flux-2')).toHaveLength(3);
-    expect(image.filter((m) => m.family === 'outras')).toHaveLength(6);
+    expect(image.filter((m) => m.family === 'outras')).toHaveLength(4);
     expect(video).toHaveLength(3);
-    expect(new Set(image.map((m) => m.id)).size).toBe(9);
+    expect(new Set(image.map((m) => m.id)).size).toBe(7);
     for (const m of [...image, ...video]) {
       expect(m.id).toBeTruthy();
       expect(m.label).toBeTruthy();
-      expect(m.category).toBeTruthy();
+      expect(m.family).toBeTruthy();
       expect(m.description).toBeTruthy();
+      expect(m.type).toBeTruthy();
     }
     expect(video).toHaveLength(3);
   });
@@ -79,6 +80,56 @@ describe('StudioAiService', () => {
     (llm.generateImageWithMeta as any).mockRejectedValueOnce(new Error('boom'));
     await expect(svc.generateImage('t-1', { model: 'x', prompt: 'p'.repeat(20), aspect_ratio: '1:1', resolution: '2K' })).rejects.toThrow();
     expect(quota.refundCreativeQuota).toHaveBeenCalledWith('t-1');
+  });
+
+  it('generateImage rejeita reference_image_urls fora da biblioteca do tenant, sem gastar cota nem chamar o LLM', async () => {
+    repo = makeRepo({ findBrandKit: vi.fn(async () => ({ photoUrls: ['https://cdn/owned.png'] })) });
+    (quota.consumeCreativeQuota as any).mockClear();
+    (llm.generateImageWithMeta as any).mockClear();
+
+    await expect(
+      svc.generateImage('t-1', {
+        model: 'x',
+        prompt: 'p'.repeat(20),
+        aspect_ratio: '1:1',
+        resolution: '2K',
+        reference_image_urls: ['https://cdn/nao-pertence.png'],
+      }),
+    ).rejects.toThrow();
+
+    expect(quota.consumeCreativeQuota).not.toHaveBeenCalled();
+    expect(llm.generateImageWithMeta).not.toHaveBeenCalled();
+    repo = makeRepo();
+  });
+
+  it('generateImage aceita reference_image_urls pertencentes ao tenant e repassa pro LLM + complianceNotes', async () => {
+    repo = makeRepo({ findBrandKit: vi.fn(async () => ({ photoUrls: ['https://cdn/a.png', 'https://cdn/b.png'] })) });
+
+    const out = await svc.generateImage('t-1', {
+      model: 'x',
+      prompt: 'p'.repeat(20),
+      aspect_ratio: '9:16',
+      resolution: '2K',
+      reference_image_urls: ['https://cdn/a.png', 'https://cdn/b.png'],
+    });
+
+    expect(out.type).toBe('image');
+    expect(llm.generateImageWithMeta).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceImageUrls: ['https://cdn/a.png', 'https://cdn/b.png'] }),
+    );
+    expect(repo.createAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        complianceNotes: expect.stringContaining('"referenceImageUrls":["https://cdn/a.png","https://cdn/b.png"]'),
+      }),
+    );
+    repo = makeRepo();
+  });
+
+  it('generateImage sem reference_image_urls continua idêntico a hoje (não passa referenceImageUrls pro LLM)', async () => {
+    await svc.generateImage('t-1', { model: 'x', prompt: 'p'.repeat(20), aspect_ratio: '1:1', resolution: '2K' });
+    expect(llm.generateImageWithMeta).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceImageUrls: undefined }),
+    );
   });
 
   it('generateVideo cria asset de vídeo', async () => {

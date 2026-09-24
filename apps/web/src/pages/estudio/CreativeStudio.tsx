@@ -4,9 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle2, Copy, Loader2, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { AppLayout, Button, Card, CardContent, PageHeader, StatusBadge } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
-// OCULTO: seletor de IAs removido — import volta no unhide
-// import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
+import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
+import { COMPLIANCE_APPROVED_HINT, COMPLIANCE_REJECTED_HINT, COMPLIANCE_PENDING_HINT } from '@/lib/compliance.utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type {
   StudioComplianceStatusResponse,
   StudioTemplate,
@@ -70,19 +71,18 @@ export function CreativeStudio() {
 
   // ─── OpenRouter state ──────────────────────────────────────
   const [creativeType, setCreativeType] = useState<'image' | 'video'>('image');
-  const [selectedImageModel, setSelectedImageModel] = useState('qwen/qwen-image-3-pro'); // OCULTO: seletor removido, modelo fixo qwen (volta no unhide)
+  const [selectedImageModel, setSelectedImageModel] = useState('black-forest-labs/flux.2-klein-4b');
   const [selectedVideoModel, setSelectedVideoModel] = useState('google/veo-3.1-lite');
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
 
-  // OCULTO: catálogo/seletor de IAs removido da UI (feature incompleta) — volta no unhide
-  // const modelsQuery = useQuery({
-  //   queryKey: ['studio-ai', 'models'],
-  //   queryFn: async () => {
-  //     const res = await api.get('/studio/ai/models');
-  //     return res.data as { image: StudioModelOption[]; video: StudioModelOption[] };
-  //   },
-  //   staleTime: 1000 * 60 * 60, // 1h
-  // });
+  const modelsQuery = useQuery({
+    queryKey: ['studio-ai', 'models'],
+    queryFn: async () => {
+      const res = await api.get('/studio/ai/models');
+      return res.data as { image: StudioModelOption[]; video: StudioModelOption[] };
+    },
+    staleTime: 1000 * 60 * 60, // 1h
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -198,12 +198,12 @@ export function CreativeStudio() {
     navigate('/criar-campanha');
   };
 
-  // OCULTO: seletor de IAs removido (defaults fixos: qwen imagem / veo vídeo) — volta no unhide
-  // const currentModels = creativeType === 'image'
-  //   ? (modelsQuery.data?.image ?? [])
-  //   : (modelsQuery.data?.video ?? []);
-  // const selectedModel = creativeType === 'image' ? selectedImageModel : selectedVideoModel;
-  // const setSelectedModel = creativeType === 'image' ? setSelectedImageModel : setSelectedVideoModel;
+  const currentModels = creativeType === 'image'
+    ? (modelsQuery.data?.image ?? [])
+    : (modelsQuery.data?.video ?? []);
+
+  const selectedModel = creativeType === 'image' ? selectedImageModel : selectedVideoModel;
+  const setSelectedModel = creativeType === 'image' ? setSelectedImageModel : setSelectedVideoModel;
 
   return (
     <AppLayout header={<div className="flex items-center justify-between" />}>
@@ -244,7 +244,7 @@ export function CreativeStudio() {
                 </div>
               </div>
 
-              {/* OCULTO: seletor de modelo removido — modelo fixo qwen (imagem) / veo (vídeo). Volta no unhide
+              {/* Seletor de modelo (compacto) */}
               <ModelSelect
                 models={currentModels}
                 selectedModel={selectedModel}
@@ -252,7 +252,6 @@ export function CreativeStudio() {
                 typeLabel={creativeType === 'image' ? 'imagem' : 'vídeo'}
                 id="creative-studio-model-select"
               />
-              */}
 
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Templates por nicho</p>
@@ -423,10 +422,29 @@ export function CreativeStudio() {
                           className="h-full w-full object-cover"
                         />
                       )}
-                      <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
-                        <CheckCircle2 className="h-4 w-4" />
-                        {currentCompliance.complianceStatus === 'approved' ? 'Aprovado' : currentCompliance.complianceStatus === 'rejected' ? 'Reprovado' : 'Em análise'}
-                      </div>
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur cursor-help">
+                              <CheckCircle2 className="h-4 w-4" />
+                              {currentCompliance.complianceStatus === 'approved' ? 'Aprovado' : currentCompliance.complianceStatus === 'rejected' ? 'Reprovado' : 'Em análise'}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent className={
+                            currentCompliance.complianceStatus === 'approved'
+                              ? 'max-w-56 bg-green-700 text-white border-green-700'
+                              : currentCompliance.complianceStatus === 'rejected'
+                                ? 'max-w-56 bg-red-700 text-white border-red-700'
+                                : 'max-w-56 bg-amber-600 text-white border-amber-600'
+                          }>
+                            {currentCompliance.complianceStatus === 'approved'
+                              ? COMPLIANCE_APPROVED_HINT
+                              : currentCompliance.complianceStatus === 'rejected'
+                                ? COMPLIANCE_REJECTED_HINT
+                                : COMPLIANCE_PENDING_HINT}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </div>
                   </div>
 

@@ -89,6 +89,91 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
     expect(screen.getByRole('button', { name: /Conectar conta Meta/i })).toBeInTheDocument();
   });
 
+  it('exibe o @perfil Instagram vinculado ao calendário com badge "Autorizado"', async () => {
+    mockApi([connection({ selectedInstagramUserId: 'ig_velora', selectedInstagramUsername: 'velora_studio' })]);
+
+    render(<IntegracoesContent />, { wrapper: makeWrapper() });
+
+    const section = await screen.findByTestId('instagram-calendario');
+    expect(section.textContent).toContain('Instagram do calendário');
+    expect(section.textContent).toContain('@velora_studio');
+    expect(section.textContent).toContain('Autorizado');
+    expect(section.textContent).not.toContain('desativada');
+  });
+
+  it('exibe alerta quando o Instagram NÃO está vinculado (publicação automática desativada)', async () => {
+    mockApi([connection({ selectedInstagramUserId: null, selectedInstagramUsername: null })]);
+
+    render(<IntegracoesContent />, { wrapper: makeWrapper() });
+
+    const section = await screen.findByTestId('instagram-calendario');
+    expect(section.textContent).toContain('Não vinculado');
+    expect(section.textContent).toContain('desativada');
+    expect(section.textContent).not.toContain('Autorizado');
+  });
+
+  it('exibe o alerta de reconexão quando falta pages_manage_ads (criação de Formulário de leads)', async () => {
+    // Bug reportado: erro "Meta recusou criação do Formulário" persiste após reconexão.
+    // pages_manage_ads é a permissão que destrava o leadgen_forms — o banner de Integrações
+    // deve avisar quando ela faltar, mesmo com os demais scopes presentes.
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/meta/connections') {
+        return Promise.resolve({ data: { success: true, data: [connection({})] } });
+      }
+      if (url === '/meta/scopes') {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: {
+              // Todos os scopes "comuns" presentes, mas SEM pages_manage_ads
+              scopes: ['pages_show_list', 'ads_management', 'ads_read', 'instagram_content_publish'],
+            },
+          },
+        });
+      }
+      return Promise.resolve({ data: { success: true, data: null } });
+    });
+
+    render(<IntegracoesContent />, { wrapper: makeWrapper() });
+
+    await screen.findByText('Ativa');
+    // waitFor: garante a avaliação APÓS a query de scopes resolver (evita falso-positivo
+    // do placeholderData [] — o banner pendente some quando os scopes reais chegam).
+    await waitFor(() => {
+      expect(screen.getByText(/Reconecte sua conta Meta/i)).toBeInTheDocument();
+    });
+  });
+
+  it('NÃO exibe o alerta de reconexão quando pages_manage_ads está concedida', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/meta/connections') {
+        return Promise.resolve({ data: { success: true, data: [connection({})] } });
+      }
+      if (url === '/meta/scopes') {
+        return Promise.resolve({
+          data: {
+            success: true,
+            data: {
+              scopes: [
+                'pages_show_list', 'ads_management', 'ads_read',
+                'instagram_content_publish', 'pages_manage_ads', 'leads_retrieval',
+              ],
+            },
+          },
+        });
+      }
+      return Promise.resolve({ data: { success: true, data: null } });
+    });
+
+    render(<IntegracoesContent />, { wrapper: makeWrapper() });
+
+    await screen.findByText('Ativa');
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledWith('/meta/scopes');
+    });
+    expect(screen.queryByText(/Reconecte sua conta Meta/i)).not.toBeInTheDocument();
+  });
+
   it('envia frontendUrl = window.location.origin ao iniciar o OAuth (volta ao MESMO domínio)', async () => {
     mockApi([]);
     // /meta/auth/url é chamado ao clicar em "Conectar conta"
@@ -113,7 +198,7 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
 
     await waitFor(() => {
       expect(mockApiGet).toHaveBeenCalledWith('/meta/auth/url', {
-        params: { context: 'settings', frontendUrl: window.location.origin },
+        params: { context: 'settings', frontendUrl: window.location.origin, rerequest: 'true' },
       });
     });
   });

@@ -1,4 +1,5 @@
 import { decryptMetaToken } from '../../utils/crypto.js';
+import { normalizePhoneToMetaE164 } from '../../utils/phone-normalize.js';
 import {
   parseConversionsFromActions,
   parseRoasFromPurchaseRoas,
@@ -11,6 +12,7 @@ import { invalidateCampaignsCache } from '../../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../../lib/locations-cache.js';
 import { getResolvedTenantAssetSelection } from '../meta/meta.service.js';
 import { slugify } from '../../lib/slug.js';
+import { privacyPolicyUrl } from '../../lib/privacy-policy.js';
 import { getCampaignAds, getCampaignAdCreatives, getVideoSourceUrl, searchMetaInterests as searchMetaInterestsLib } from '../../lib/meta-api.js';
 import type { IMetaCampaignProvider } from '../../lib/providers/meta-campaign.provider.js';
 import type {
@@ -57,7 +59,7 @@ export interface CampaignListItem {
   ctr: number; cpc: number; roas: number; cpa: number; conversions: number;
 }
 
-export type WizardObjective = 'visits' | 'whatsapp_conv' | 'engagement' | 'messages' | 'whatsapp';
+export type WizardObjective = 'visits' | 'whatsapp_conv' | 'engagement' | 'messages' | 'whatsapp' | 'leads';
 export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'messenger';
 
 export interface CreateWizardCampaignArgs {
@@ -125,6 +127,7 @@ const WIZARD_OBJECTIVE_MAP: Record<WizardObjective, {
   engagement: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'POST_ENGAGEMENT', cta: 'LIKE_PAGE', destinationType: 'ON_POST', label: 'Engajamento' },
   messages: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'CONVERSATIONS', cta: 'MESSAGE_PAGE', destinationType: 'MESSENGER', label: 'Atração de Clientes' },
   whatsapp: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'CONVERSATIONS', cta: 'WHATSAPP_MESSAGE', destinationType: 'WHATSAPP', label: 'Gerar Conversas' },
+  leads: { metaObjective: 'OUTCOME_LEADS', optimizationGoal: 'LEAD_GENERATION', cta: 'SIGN_UP', destinationType: 'ON_AD', label: 'Formulário' },
 };
 
 // ── Pure helper functions (exported for testing) ────────────────────────────
@@ -195,10 +198,34 @@ export function mapWizardMetaError(err: unknown, step: string): never {
   if (httpStatus === 504 || message.toLowerCase().includes('timeout')) {
     throw new AppError(504, 'META_TIMEOUT', 'A conexão com os servidores do Meta está lenta no momento. Por favor, tente novamente mais tarde.');
   }
+  // Checkpoint de verificação de identidade ("Autentique sua conta") — pode vir
+  // com code 10/200 + OAuthException, então DEVE ser checado antes desses casos.
+  // Sem code/subcode estável (incidente 2026-09-14): match por texto pt/en.
+  // Mensagem ORIGINAL do Meta é repassada (title: msg) — não substituir, o texto
+  // do Meta é atualizado por eles e já instrui o usuário corretamente.
+  const verificationHints = ['autentique sua conta', 'authenticate your account', 'confirm your identity', 'secure your account', 'checkpoint'];
+  const normalizedErrText = `${metaUserTitle ?? ''} ${metaUserMsg ?? ''} ${message}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (verificationHints.some((hint) => normalizedErrText.includes(hint))) {
+    const metaOriginalMessage = `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}`.trim() || message || 'Erro ao publicar no Meta. Tente novamente.';
+    throw new AppError(403, 'META_ACCOUNT_VERIFICATION', metaOriginalMessage, { step, meta_code: metaCode, meta_subcode: metaSubcode, verification_url: 'https://www.facebook.com/accountquality' });
+  }
   if (metaCode === 190) {
     throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão com Meta expirada. Reconecte em Configurações');
   }
   if (metaType === 'OAuthException' && (metaCode === 200 || metaCode === 10)) {
+    if (step === 'lead_form') {
+      // Doc Lead Ads (marketing-api/guides/lead-ads/create/): criar leadgen_forms
+      // exige pages_manage_ads (pages_manage_metadata é só p/ webhooks).
+      // O Meta pode recusar por outra causa que NÃO é o scope (ex.: pessoa sem a
+      // task ADVERTISE na Página selecionada). Quando ele manda metaUserMsg, a
+      // mensagem real chega ao usuário para diagnóstico — sem substituir por genérico.
+      const realMetaMessage = metaUserMsg || metaUserTitle
+        ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}`
+        : '';
+      const hint = 'O Meta recusou a criação do Formulário. Reconecte o Meta em Configurações → Integrações para conceder pages_manage_ads (criação de Formulário de leads) e tente novamente.';
+      const message = realMetaMessage ? `${hint}\n\nDetalhes do Meta: ${realMetaMessage}` : hint;
+      throw new AppError(403, 'META_PERMISSION_DENIED', message, { step, meta_code: metaCode, meta_subcode: metaSubcode });
+    }
     throw new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para publicar campanhas. Verifique ads_management, pages_show_list e business_management em Configurações → Integrações.');
   }
   if (lowerMessage.includes('insufficient') || lowerMessage.includes('saldo') || lowerMessage.includes('fund')) {
@@ -207,8 +234,25 @@ export function mapWizardMetaError(err: unknown, step: string): never {
   if (metaSubcode === 3858258) {
     throw new AppError(400, 'META_IMAGE_DOWNLOAD_FAILED', 'O Meta nao conseguiu baixar a imagem do criativo. A URL pode estar bloqueada (robots.txt) ou o formato pode ser invalido. Use uma imagem JPEG ou PNG hospedada em um servidor acessivel.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
   }
+  // "Legal content missing" — Meta exige privacy_policy ou legal_content_id na
+  // criação do leadgen_forms. O wizard já envia a página pública de política de
+  // privacidade; se ainda assim o Meta rejeitar (ex.: URL com problema), orienta.
+  if (metaSubcode === 1892075) {
+    throw new AppError(400, 'META_LEGAL_CONTENT_REQUIRED', 'O Meta exigiu uma política de privacidade na criação do Formulário. Não foi possível validar a URL da política. Tente novamente em instantes.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+  }
   if (metaSubcode === 1487110) {
     throw new AppError(400, 'META_LOCATION_RADIUS', metaUserMsg || 'O raio geografico selecionado nao esta dentro dos limites. Aumente o raio (ex: Sao Paulo precisa de 15km ou mais).', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+  }
+  // "Required field is missing: the link field is required" — criativo de leads
+  // sem o campo `link` no link_data. O wizard envia https://fb.me/ (doc Lead Ads);
+  // se o Meta ainda rejeitar, orienta sem substituir a mensagem real.
+  if (metaSubcode === 2061015) {
+    throw new AppError(400, 'META_LINK_REQUIRED', metaUserMsg || 'O Meta exigiu um link no criativo do Formulário. Verifique o criativo e tente novamente.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+  }
+  // Código 192 = "Invalid phone number" — hoje só acontece no thank_you_page do
+  // formulário de leads (business_phone_number inválido/sem WhatsApp).
+  if (metaCode === 192) {
+    throw new AppError(400, 'META_INVALID_PHONE_NUMBER', 'O Meta rejeitou o número de WhatsApp informado. Verifique se o número está correto (com DDI e DDD) e se possui WhatsApp ativo, e tente novamente.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
   }
   const userMessage = metaUserMsg || metaUserTitle ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}` : (message || 'Erro ao publicar no Meta. Tente novamente.');
   throw new AppError(400, 'META_API_ERROR', userMessage, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...(metaBlameField ? { blame_field: metaBlameField } : {}) });
@@ -230,18 +274,40 @@ export class CampaignsService {
   ) {}
 
   private handleMetaError(err: unknown): never {
+    if (err instanceof AppError) throw err;
     const metaCode = (err as any).metaCode;
     const metaSubcode = (err as any).metaSubcode;
+    const metaType = (err as any).metaType;
+    const httpStatus = (err as any).httpStatus;
+    const message = (err as Error).message || '';
+
+    // Erro que NÃO veio da Graph API (ex.: falha interna de rede/DB) — propaga como está.
+    if (metaCode === undefined && metaType === undefined && httpStatus === undefined) throw err;
+
     if (metaCode === 190) {
       throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
     }
     if (metaCode === 100 && metaSubcode === 1487566) {
       throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser pausada. Se quiser reativar, duplique a campanha.');
     }
-    if (metaCode === 100) {
-      throw new AppError(400, 'INVALID_PARAMETER', (err as Error).message);
+    // Campanha/objeto não existe mais no Meta (Graph API responde code 100/803
+    // com "does not exist" para GET de node inexistente) → 404 informativo.
+    if (
+      (metaCode === 100 || metaCode === 803) &&
+      /does not exist|doesn't exist|not exist|não existe|no longer/i.test(message)
+    ) {
+      throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campanha não encontrada no Meta.');
     }
-    throw err;
+    if (metaCode === 100) {
+      throw new AppError(400, 'INVALID_PARAMETER', message);
+    }
+    // (#200) OAuthException — típico de token sem a permissão necessária
+    // (ex.: fallback META_SYSTEM_ACCESS_TOKEN sem leads_retrieval na leitura de leads).
+    if (metaCode === 200 || metaType === 'OAuthException') {
+      throw new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para esta operação. Reconecte sua conta em Configurações > Integrações.');
+    }
+    // Qualquer outro erro da Graph API → 4xx tratado (nunca 500 silencioso).
+    throw new AppError(400, 'META_API_ERROR', message);
   }
 
   async createCampaign(args: {
@@ -329,7 +395,13 @@ export class CampaignsService {
     const accessToken = await this.getAccessToken(args.tenantId);
     const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
 
-    const campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status');
+    let campaignMeta: Record<string, unknown>;
+    try {
+      campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status');
+    } catch (err) {
+      // Campanha inexistente no Meta → 404 CAMPAIGN_NOT_FOUND; 190 → 401; demais Meta → 4xx.
+      this.handleMetaError(err);
+    }
     if (await this.checkDeletedOnMeta(campaignMeta, localId)) {
       throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser pausada.');
     }
@@ -356,7 +428,13 @@ export class CampaignsService {
     const accessToken = await this.getAccessToken(args.tenantId);
     const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
 
-    const campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status');
+    let campaignMeta: Record<string, unknown>;
+    try {
+      campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status');
+    } catch (err) {
+      // Campanha inexistente no Meta → 404 CAMPAIGN_NOT_FOUND; 190 → 401; demais Meta → 4xx.
+      this.handleMetaError(err);
+    }
     if (await this.checkDeletedOnMeta(campaignMeta, localId)) {
       throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser reativada.');
     }
@@ -488,6 +566,12 @@ export class CampaignsService {
     const accessToken = await this.getAccessToken(args.tenantId);
     const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
     if (!localId) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
+
+    // Isolamento de tenant: `resolveCampaignIds` pode resolver uma campanha local
+    // de OUTRO tenant (a busca por id não é tenant-filtered) — valida ownership
+    // antes de arquivar no banco.
+    const localCampaign = await this.repo.findCampaignById(localId);
+    if (localCampaign) await this.verifyCampaignOwnership(localCampaign, args.tenantId);
 
     // Check if already deleted on Meta before calling update.
     // If this fails (e.g. already removed by Meta), fall through to local archive.
@@ -698,6 +782,12 @@ export class CampaignsService {
       if (messagingDestinations.includes('whatsapp') && !args.whatsappPhoneNumber) throw new AppError(400, 'WHATSAPP_NUMBER_REQUIRED', 'Selecione o número de WhatsApp que receberá as mensagens.');
       if (messagingDestinations.includes('instagram_direct') && !args.instagramUserId) throw new AppError(400, 'INSTAGRAM_USER_ID_REQUIRED', 'Conecte uma conta do Instagram à Página no Meta Business para usar Instagram Direct.');
     }
+    // Objetivo 'leads': o formulário instantâneo (nome/email/telefone) é criado na
+    // Página e o botão da tela de agradecimento abre o WhatsApp do anunciante.
+    if (args.objective === 'leads') {
+      if (!args.whatsappPageId) throw new AppError(400, 'LEADS_PAGE_REQUIRED', 'Selecione a Página do Facebook que receberá o formulário.');
+      if (!args.whatsappPhoneNumber) throw new AppError(400, 'LEADS_WHATSAPP_REQUIRED', 'Informe o número de WhatsApp que receberá os clientes após o formulário.');
+    }
 
     const creatives = normalizeWizardCreatives(args);
     const createdAdCreativeIds: string[] = [];
@@ -772,7 +862,9 @@ export class CampaignsService {
     const campaignName = creatives[0].headline;
 
     const selectedPageIds = (metaConn.selectedPageIds as string[] | null) ?? [];
-    let pageId = args.objective === 'whatsapp' ? args.whatsappPageId! : selectedPageIds[0] || process.env.META_PAGE_ID || '';
+    let pageId = args.objective === 'whatsapp' || args.objective === 'leads'
+      ? args.whatsappPageId!
+      : selectedPageIds[0] || process.env.META_PAGE_ID || '';
     // ponytail: fallback para primeira página disponível se selectedPageIds vazio
     if (!pageId && args.objective !== 'whatsapp') {
       try {
@@ -791,7 +883,7 @@ export class CampaignsService {
       messagingDestinationType = messagingDestinations.length > 1 ? 'MESSAGING_APPS'
         : messagingDestinations[0] === 'whatsapp' ? 'WHATSAPP'
         : messagingDestinations[0] === 'instagram_direct' ? 'INSTAGRAM_DIRECT' : 'MESSENGER';
-    } else if (args.objective === 'visits' || args.objective === 'whatsapp_conv' || args.objective === 'engagement' || args.objective === 'messages') {
+    } else if (args.objective === 'visits' || args.objective === 'whatsapp_conv' || args.objective === 'engagement' || args.objective === 'messages' || args.objective === 'leads') {
       promotedObject = { page_id: pageId };
     }
 
@@ -800,6 +892,9 @@ export class CampaignsService {
     let metaCampaignId: string | undefined;
     let adSetId: string | undefined;
     let dbCampaignId: string | undefined;
+    let leadFormId: string | undefined;
+    /** Page access token usado na criação do leadgen_forms (null = user token fallback). */
+    let leadFormToken: string | undefined;
 
     // Rollback de "limpeza total": se a criação falhar em qualquer etapa, remove
     // do Meta os objetos já criados (ads → adcreatives → adset → campaign, todos
@@ -807,6 +902,11 @@ export class CampaignsService {
     // cleanup só são logadas.
     const rollback = async (step: string): Promise<void> => {
       const pendingDeletes: Array<{ id: string; label: string; del: () => Promise<void> }> = [];
+      if (leadFormId) {
+        // Formulário leadgen não suporta DELETE — melhor esforço: arquivar.
+        // Usa o MESMO token da criação (Page token) — user token como fallback.
+        pendingDeletes.push({ id: leadFormId, label: 'lead_form', del: () => this.meta.archiveLeadForm(leadFormId!, leadFormToken ?? accessToken) });
+      }
       for (const id of [...createdAdIds].reverse()) {
         pendingDeletes.push({ id, label: 'ad', del: () => this.meta.deleteAd(id, accessToken) });
       }
@@ -834,6 +934,67 @@ export class CampaignsService {
         }
       }
     };
+
+    try {
+      // Objetivo 'leads': cria o formulário instantâneo na Página ANTES da campanha —
+      // falha rápido (ex.: token sem pages_manage_ads) sem criar objetos no Meta.
+      // Try PRÓPRIO: o erro precisa ser reportado como step 'lead_form' — dentro do
+      // try abaixo o catch computaria 'campaign'/'adset' e o branch lead_form do
+      // mapeador (mensagem com a permissão exata) seria código morto.
+      if (args.objective === 'leads') {
+        // Doc Lead Ads (marketing-api/guides/lead-ads/create/): criar leadgen_forms
+        // exige um Page access token de quem pode performar a task ADVERTISE na Página.
+        // /me/accounts devolve token + tasks tanto para páginas de admin direto quanto
+        // para as acessadas via Business Manager (permissão business_management no OAuth).
+        const pageAccess = await this.meta.getPageAccessToken(pageId, accessToken);
+        if (!pageAccess || !pageAccess.accessToken) {
+          throw new AppError(403, 'META_PAGE_NOT_MANAGED',
+            'Você não tem acesso para anunciar nesta Página (é preciso ter papel de administrador ou acesso via Business Manager). Selecione outra Página ou solicite acesso ao dono da página.', { step: 'lead_form' });
+        }
+        if (!pageAccess.tasks.includes('ADVERTISE')) {
+          throw new AppError(403, 'META_PAGE_ADVERTISE_TASK_REQUIRED',
+            'Você tem acesso à Página, mas sem a permissão de anunciar (task ADVERTISE). Peça ao administrador da Página que conceda o papel de Anunciante ou Administrador.', { step: 'lead_form' });
+        }
+        leadFormToken = pageAccess.accessToken;
+
+        // A Meta exige privacy_policy (url pública + link_text) ou legal_content_id
+        // na criação do leadgen_forms (code 100 / subcode 1892075). Usamos a página
+        // pública de política de privacidade com o slug da organização (mesmo padrão
+        // da LP de WhatsApp): slugify(name) → fallback tenants.slug → tenantId.
+        let privacySlug = args.tenantId;
+        try {
+          const t = await new CampaignRepository(args.tenantId).findTenant();
+          if (t?.name) privacySlug = slugify(t.name);
+          else if (t?.slug) privacySlug = t.slug;
+        } catch { /* fallback ao tenantId */ }
+
+        const leadFormBody = {
+          name: `Formulário — ${campaignName}`,
+          locale: 'PT_BR',
+          questions: [
+            { type: 'FULL_NAME', key: 'question1' },
+            { type: 'EMAIL', key: 'question2' },
+            { type: 'PHONE', key: 'question3' },
+          ],
+          privacy_policy: {
+            url: privacyPolicyUrl(privacySlug),
+            link_text: 'Política de Privacidade',
+          },
+          thank_you_page: {
+            title: 'Obrigado!',
+            body: 'Agora é só falar com a gente no WhatsApp.',
+            button_type: 'WHATSAPP',
+            button_text: 'Falar no WhatsApp',
+            business_phone_number: normalizePhoneToMetaE164(args.whatsappPhoneNumber!),
+          },
+        };
+        const leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, leadFormBody);
+        leadFormId = leadFormResponse.id;
+      }
+    } catch (err) {
+      await rollback('lead_form');
+      mapWizardMetaError(err, 'lead_form');
+    }
 
     try {
       const campaignBody = {
@@ -897,6 +1058,13 @@ export class CampaignsService {
             ? `${LP_BASE_URL}/l/${lpSlug}`
             : `https://www.facebook.com/${pageId}`;
 
+      // Objetivo 'leads': o call_to_action aponta pro formulário instantâneo
+      // (lead_gen_form_id) em vez de link externo.
+      const leadsCtaFor = () => ({
+        type: 'SIGN_UP',
+        value: { lead_gen_form_id: leadFormId! },
+      });
+
       for (let i = 0; i < creatives.length; i++) {
         const c = creatives[i];
         const imageUrl = resolved[i];
@@ -908,7 +1076,14 @@ export class CampaignsService {
 
         const creativeBody: Record<string, unknown> = isInstagramCreative
           ? { object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: c.creativeInstagramMediaId, call_to_action: JSON.stringify({ type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: c.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
-          : { name: `Creative — FURY #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, link: creativeLinkFor(c) } } };
+          : { name: `Creative — FURY #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads'
+            // Doc Lead Ads: o campo link no link_data é OBRIGATÓRIO mesmo para
+            // formulários instantâneos, e o valor deve ser https://fb.me/ (o
+            // clique real abre o form via call_to_action.lead_gen_form_id). Sem
+            // ele o Meta rejeita com subcode 2061015 ("link field is required");
+            // com URL externa rejeita com 1815316.
+            ? { link: 'https://fb.me/' }
+            : { link: creativeLinkFor(c) }) } } };
 
         const adCreativeResponse = await this.meta.createAdCreative(adAccountId, accessToken, creativeBody);
         createdAdCreativeIds.push(adCreativeResponse.id);
@@ -954,6 +1129,12 @@ export class CampaignsService {
             instagram_user_id: messagingDestinations.includes('instagram_direct') ? args.instagramUserId ?? null : null,
             instagram_username: messagingDestinations.includes('instagram_direct') ? args.instagramUsername ?? null : null,
           } : {}),
+          ...(args.objective === 'leads' ? {
+            lead_form_id: leadFormId ?? null,
+            lead_page_id: args.whatsappPageId ?? null,
+            whatsapp_page_id: args.whatsappPageId ?? null,
+            whatsapp_phone_number: args.whatsappPhoneNumber ?? null,
+          } : {}),
         },
       } as any);
       dbCampaignId = campaign.id;
@@ -965,6 +1146,195 @@ export class CampaignsService {
     }
 
     return { success: true, campaign_id: dbCampaignId, meta_campaign_id: metaCampaignId, campaign_name: campaignName };
+  }
+
+  /**
+   * Campanhas de Formulário (OUTCOME_LEADS) — FONTE DA VERDADE: Meta.
+   * Lista as campanhas da conta de anúncios direto na Meta (inclui as criadas
+   * fora do Fury). Usado pelo filtro da página de Leads.
+   */
+  async getLeadCampaigns(args: { tenantId: string }): Promise<Array<{ id: string; name: string }>> {
+    const metaConn = await this.repo.findMetaConnection(args.tenantId);
+    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Conexão Meta não encontrada.');
+    const adAccountId = metaConn.selectedAdAccountId;
+    if (!adAccountId) throw new AppError(400, 'AD_ACCOUNT_NOT_SELECTED', 'Nenhuma conta de anúncios selecionada.');
+
+    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+    let campaigns: Array<{ id: string; name: string; objective: string | null; status: string | null }>;
+    try {
+      campaigns = await this.meta.listCampaigns(adAccountId, accessToken);
+    } catch (err) {
+      // metaCode 190 → 401 META_TOKEN_EXPIRED; 100 → 400; 200/OAuth → 403;
+      // campanha inexistente → 404; demais erros Meta → 4xx (nunca 500).
+      this.handleMetaError(err);
+    }
+
+    return campaigns
+      .filter((c) => c.objective === 'OUTCOME_LEADS')
+      .map((c) => ({ id: c.id, name: c.name }));
+  }
+
+  /**
+   * Leads coletados pelo formulário instantâneo de uma campanha.
+   *
+   * FONTE DA VERDADE: Meta. Para campanha local (Fury) com `budget.lead_form_id`,
+   * busca direto no form; caso contrário (campanha criada FORA do Fury, ou sem
+   * form gravado), resolve via os ads da campanha (`/{campaign_id}/ads` →
+   * `/{ad_id}/leads`; o lead pertence ao ad, então a atribuição à campanha fica
+   * correta mesmo com forms compartilhados).
+   *
+   * Parsing robusto: o wizard cria perguntas com `key` customizado (`question1/2/3`)
+   * e a Meta retorna ESSES keys como `name` no field_data. Resolvemos o mapeamento
+   * real via `GET /{form_id}?fields=questions` (type → key); sem questions
+   * disponíveis, cai para os nomes fixos conhecidos (degradação graciosa).
+   */
+  async getCampaignLeads(args: { tenantId: string; campaignId: string }): Promise<{
+    leads: Array<{ name: string | null; email: string | null; phone: string | null; createdAt: string | null }>;
+  }> {
+    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+
+    // 1) Campanha local com lead_form_id → caminho direto pelo form.
+    // O `campaignId` pode ser um META id (campanha criada fora do Fury) — a
+    // coluna local `campaigns.id` é UUID, então a query local falha para ids
+    // não-UUID. Degradação graciosa: sem registro local, segue para a Meta.
+    let local: CampaignRecord | null;
+    try {
+      local = await this.repo.findCampaignByTenantAndId(args.tenantId, args.campaignId);
+    } catch {
+      // Não é um UUID local (ex.: META campaign id de campanha externa) — segue via Meta.
+      local = null;
+    }
+    const budget = (local?.budget ?? {}) as Record<string, unknown>;
+    const leadFormId = typeof budget.lead_form_id === 'string' ? budget.lead_form_id : null;
+
+    if (leadFormId) {
+      try {
+        const [response, questions] = await Promise.all([
+          this.meta.getLeadFormData(leadFormId, accessToken),
+          this.safeGetFormQuestions(leadFormId, accessToken),
+        ]);
+        return { leads: (response.data || []).map((lead) => this.normalizeLeadValue(lead, questions)) };
+      } catch (err) {
+        this.handleMetaError(err);
+      }
+    }
+
+    // 2) Campanha externa (ou local sem form): via ads da campanha.
+    const metaCampaignId = local?.metaCampaignId || args.campaignId;
+    let ads: Array<{ id: string }>;
+    try {
+      ads = await this.meta.getCampaignAds(metaCampaignId, accessToken);
+    } catch (err) {
+      this.handleMetaError(err);
+    }
+
+    const formQuestions: Map<string, Array<{ key: string; type: string }>> = new Map();
+    const leads: Array<{ name: string | null; email: string | null; phone: string | null; createdAt: string | null }> = [];
+
+    for (const ad of ads) {
+      let adLeads: Array<Record<string, unknown>>;
+      try {
+        adLeads = await this.meta.getAdLeads(ad.id, accessToken);
+      } catch (err) {
+        this.handleMetaError(err);
+      }
+      for (const lead of adLeads) {
+        const formId = typeof lead.form_id === 'string' ? lead.form_id : null;
+        if (formId && !formQuestions.has(formId)) {
+          formQuestions.set(formId, await this.safeGetFormQuestions(formId, accessToken));
+        }
+        leads.push(this.normalizeLeadValue(lead, formId ? (formQuestions.get(formId) ?? []) : []));
+      }
+    }
+
+    return { leads };
+  }
+
+  /** Busca questions do form SEM quebrar a listagem (degradação graciosa → []). */
+  private async safeGetFormQuestions(
+    formId: string,
+    accessToken: string,
+  ): Promise<Array<{ key: string; type: string }>> {
+    try {
+      const questions = await this.meta.getLeadFormQuestions(formId, accessToken);
+      return Array.isArray(questions) ? questions : [];
+    } catch (err) {
+      console.warn(`[CampaignLeads] falha ao buscar questions do form ${formId}:`, (err as Error).message);
+      return [];
+    }
+  }
+
+  /**
+   * Normaliza field_data → { name, email, phone, createdAt }.
+   * Primeiro tenta o mapeamento type→key vindo das questions do form (cobre
+   * keys tokenizados `question1/2/3`); sem questions ou sem match, cai para os
+   * nomes fixos conhecidos da Meta (full_name/first_name, email,
+   * phone_number/phone).
+   */
+  private normalizeLeadValue(
+    lead: Record<string, unknown>,
+    questions: Array<{ key: string; type: string }>,
+  ): { name: string | null; email: string | null; phone: string | null; createdAt: string | null } {
+    const fields = (lead.field_data ?? []) as Array<{ name?: string; values?: string[] }>;
+
+    const getValue = (questionTypes: string[], fallbackNames: string[]): string | null => {
+      const keys = [
+        ...questionTypes.map((t) => questions.find((q) => q.type === t)?.key).filter(Boolean),
+        ...fallbackNames,
+      ];
+      for (const key of keys) {
+        const field = fields.find((f) => f.name === key);
+        if (field?.values?.[0]) return field.values[0];
+      }
+      return null;
+    };
+
+    return {
+      name: getValue(['FULL_NAME', 'FIRST_NAME'], ['full_name', 'first_name']),
+      email: getValue(['EMAIL', 'WORK_EMAIL'], ['email']),
+      phone: getValue(['PHONE', 'WHATSAPP_NUMBER', 'USER_PROVIDED_PHONE_NUMBER', 'WORK_PHONE_NUMBER'], ['phone_number', 'phone']),
+      createdAt: (lead.created_time as string | undefined) ?? null,
+    };
+  }
+
+  /**
+   * Leads agregados de TODAS as campanhas de Formulário (OUTCOME_LEADS) do tenant.
+   * FONTE DA VERDADE: Meta — itera `getLeadCampaigns` (inclui campanhas criadas
+   * fora do Fury). Cada lead carrega campaignId/campaignName para o frontend.
+   */
+  async getAllCampaignLeads(args: { tenantId: string }): Promise<{
+    leads: Array<{
+      name: string | null;
+      email: string | null;
+      phone: string | null;
+      createdAt: string | null;
+      campaignId: string;
+      campaignName: string;
+    }>;
+  }> {
+    const campaigns = await this.getLeadCampaigns(args);
+
+    const leads: Array<{
+      name: string | null; email: string | null; phone: string | null; createdAt: string | null;
+      campaignId: string; campaignName: string;
+    }> = [];
+
+    for (const campaign of campaigns) {
+      try {
+        const { leads: campaignLeads } = await this.getCampaignLeads({
+          tenantId: args.tenantId,
+          campaignId: campaign.id,
+        });
+        for (const lead of campaignLeads) {
+          leads.push({ ...lead, campaignId: campaign.id, campaignName: campaign.name });
+        }
+      } catch (err) {
+        // Falha em uma campanha não derruba a listagem das demais.
+        console.error(`[CampaignLeads] falha ao buscar leads da campanha ${campaign.id}:`, (err as Error).message);
+      }
+    }
+
+    return { leads };
   }
 
   async searchMetaLocations(args: { tenantId: string; query: string }): Promise<any[]> {
@@ -1037,5 +1407,7 @@ export const updateCampaignStatus = (args: Parameters<CampaignsService['updateCa
 export const softDeleteCampaign = (args: Parameters<CampaignsService['softDeleteCampaign']>[0]) => defaultService.softDeleteCampaign(args);
 export const getCampaignInsights = (args: Parameters<CampaignsService['getCampaignInsights']>[0]) => defaultService.getCampaignInsights(args);
 export const createCampaignFromWizard = (args: Parameters<CampaignsService['createCampaignFromWizard']>[0]) => defaultService.createCampaignFromWizard(args);
+export const getCampaignLeads = (args: Parameters<CampaignsService['getCampaignLeads']>[0]) => defaultService.getCampaignLeads(args);
+export const getLeadCampaigns = (args: Parameters<CampaignsService['getLeadCampaigns']>[0]) => defaultService.getLeadCampaigns(args);
 export const searchMetaLocations = (args: Parameters<CampaignsService['searchMetaLocations']>[0]) => defaultService.searchMetaLocations(args);
 export const searchMetaInterests = (args: Parameters<CampaignsService['searchMetaInterests']>[0]) => defaultService.searchMetaInterests(args);

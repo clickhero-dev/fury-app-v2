@@ -93,6 +93,33 @@ function ConnectionCard({
           </span>
         </div>
 
+        {/* Instagram vinculado ao calendário — o perfil em que a publicação
+            automática vai postar. Sem vínculo ⇒ alerta (não publica). */}
+        <div
+          data-testid="instagram-calendario"
+          className={
+            connection.selectedInstagramUserId
+              ? 'rounded-xl border border-brand/20 bg-brand/5 px-3 py-2.5'
+              : 'rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5'
+          }
+        >
+          <div className="text-xs font-medium text-text-secondary">
+            Instagram do calendário
+          </div>
+          {connection.selectedInstagramUserId ? (
+            <div className="mt-0.5 flex items-center gap-2 text-sm font-semibold text-text-primary">
+              <span>@{connection.selectedInstagramUsername || connection.selectedInstagramUserId}</span>
+              <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#17708A] dark:text-[#2A9BC0]">
+                Autorizado
+              </span>
+            </div>
+          ) : (
+            <div className="mt-0.5 text-sm font-medium text-warning">
+              Não vinculado — a publicação automática do calendário está desativada. Reconecte e selecione a página com Instagram no onboarding.
+            </div>
+          )}
+        </div>
+
         {/* Quantidade de Contas de Anúncios */}
         <div className="pt-2 text-xs font-semibold uppercase tracking-wider text-text-secondary">
           Contas de Anúncios ({totalAccounts})
@@ -248,7 +275,7 @@ export function IntegracoesContent() {
     refetchOnMount: true,
   });
 
-  const { data: scopes = [] } = useQuery<string[]>({
+  const { data: scopes = [], isFetched: scopesFetched } = useQuery<string[]>({
     queryKey: ['meta-scopes'],
     queryFn: async () => {
       try {
@@ -262,14 +289,21 @@ export function IntegracoesContent() {
     placeholderData: [],
   });
 
-  const REQUIRED_SCOPES = ['pages_show_list', 'ads_management', 'ads_read', 'instagram_content_publish'];
+  // pages_manage_ads destrava a criação de leadgen_forms (Formulário de leads);
+  // leads_retrieval destrava a leitura dos leads. Sem elas o banner de reconexão
+  // não apareceria para o objetivo Formulário (bug: "reconectei e o erro persiste").
+  const REQUIRED_SCOPES = ['pages_show_list', 'ads_management', 'ads_read', 'instagram_content_publish', 'pages_manage_ads', 'leads_retrieval'];
+  // isFetched: só avalia o banner com os scopes REAIS já carregados — com
+  // placeholderData [] o banner piscava durante o fetch (falso-positivo).
   const needsScopeReconnect =
-    connections.length > 0 && REQUIRED_SCOPES.some((scope) => !scopes.includes(scope));
+    connections.length > 0 && scopesFetched && REQUIRED_SCOPES.some((scope) => !scopes.includes(scope));
 
   const connectMutation = useMutation({
     mutationFn: async () => {
+      // rerequest=true: reconexão explícita força o Login Dialog a re-exibir
+      // permissões já declinadas (ex.: pages_manage_ads do Formulário de leads).
       const response = await api.get<MetaAuthUrlResponse>('/meta/auth/url', {
-        params: { context: 'settings', frontendUrl: window.location.origin },
+        params: { context: 'settings', frontendUrl: window.location.origin, rerequest: 'true' },
       });
       return response.data.data.authUrl;
     },

@@ -1,11 +1,13 @@
 import {
   listStudioAssetsForTenant,
   deleteStudioAsset,
+  restoreStudioAsset,
   type StudioAssetListItem,
 } from './studio.service.js';
 import {
   generateImage as generateStudioImage,
   getStudioAssetById,
+  setActiveStudioAssetVersion,
   publishStudioAssetToMeta,
   type StudioImageGenerationResult,
   type StudioComplianceStatusResult,
@@ -17,6 +19,7 @@ type ListStudioAssetsParams = {
   tenantId: string;
   type?: 'image' | 'video' | 'copy';
   status?: 'pending' | 'approved' | 'rejected';
+  archived?: boolean;
   page: number;
   limit: number;
 };
@@ -53,6 +56,10 @@ export class StudioPublishingService {
     return getStudioAssetById(params);
   }
 
+  async setActiveAssetVersion(params: { tenantId: string; assetId: string }): Promise<StudioComplianceStatusResult> {
+    return setActiveStudioAssetVersion(params);
+  }
+
   async publishAssetToMeta(params: PublishAssetToMetaParams): Promise<PublishAssetToMetaResult> {
     return publishStudioAssetToMeta(params);
   }
@@ -63,6 +70,10 @@ export class StudioPublishingService {
 
   async deleteStudioAsset(params: { tenantId: string; assetId: string }): Promise<void> {
     return deleteStudioAsset(params);
+  }
+
+  async restoreStudioAsset(params: { tenantId: string; assetId: string }): Promise<void> {
+    return restoreStudioAsset(params);
   }
 
   async getCreativeQuotaSnapshot(

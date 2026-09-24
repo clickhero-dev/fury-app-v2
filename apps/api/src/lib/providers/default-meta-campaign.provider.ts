@@ -3,14 +3,24 @@ import {
   getMetaInsights,
   searchMetaCityLocations,
   uploadAdImage as metaUploadAdImage,
+  getPageAccessToken as metaGetPageAccessToken,
+  listAccountCampaigns as metaListAccountCampaigns,
+  listCampaignAds as metaListCampaignAds,
+  listAdLeads as metaListAdLeads,
+  getLeadFormQuestions as metaGetLeadFormQuestions,
   type MetaCampaignCreateResponse,
   type MetaInsightsResponse,
   type MetaLocationResult,
   type MetaAdImageUploadResponse,
+  type MetaPageAccess,
 } from '../meta-api.js';
 import type { IMetaCampaignProvider } from './meta-campaign.provider.js';
 
 export class DefaultMetaCampaignProvider implements IMetaCampaignProvider {
+  async getPageAccessToken(pageId: string, userAccessToken: string): Promise<MetaPageAccess | null> {
+    return metaGetPageAccessToken(userAccessToken, pageId);
+  }
+
   async createCampaign(
     adAccountId: string,
     accessToken: string,
@@ -80,6 +90,65 @@ export class DefaultMetaCampaignProvider implements IMetaCampaignProvider {
       accessToken,
       { method: 'POST', body }
     );
+  }
+
+  async createLeadForm(
+    pageId: string,
+    accessToken: string,
+    body: Record<string, unknown>
+  ): Promise<{ id: string }> {
+    return metaApiCall<{ id: string }>(
+      `/${encodeURIComponent(pageId)}/leadgen_forms`,
+      accessToken,
+      { method: 'POST', body }
+    );
+  }
+
+  // Formulários leadgen NÃO suportam DELETE na Graph API — o "rollback" possível é arquivar.
+  async archiveLeadForm(formId: string, accessToken: string): Promise<void> {
+    await metaApiCall(
+      `/${encodeURIComponent(formId)}`,
+      accessToken,
+      { method: 'POST', body: { status: 'ARCHIVED' } }
+    );
+  }
+
+  async getLeadFormData(
+    formId: string,
+    accessToken: string
+  ): Promise<{ data: Array<Record<string, unknown>> }> {
+    return metaApiCall<{ data: Array<Record<string, unknown>> }>(
+      `/${encodeURIComponent(formId)}/leads?fields=field_data,created_time`,
+      accessToken
+    );
+  }
+
+  async listCampaigns(
+    adAccountId: string,
+    accessToken: string
+  ): Promise<Array<{ id: string; name: string; objective: string | null; status: string | null }>> {
+    return metaListAccountCampaigns(adAccountId, accessToken);
+  }
+
+  async getCampaignAds(
+    campaignId: string,
+    accessToken: string
+  ): Promise<Array<{ id: string; name?: string }>> {
+    return metaListCampaignAds(campaignId, accessToken);
+  }
+
+  async getAdLeads(
+    adId: string,
+    accessToken: string
+  ): Promise<Array<Record<string, unknown>>> {
+    return metaListAdLeads(adId, accessToken);
+  }
+
+  async getLeadFormQuestions(
+    formId: string,
+    accessToken: string
+  ): Promise<Array<{ key: string; type: string; label?: string }>> {
+    return metaGetLeadFormQuestions(formId, accessToken);
   }
 
   async deleteCampaign(campaignId: string, accessToken: string): Promise<void> {

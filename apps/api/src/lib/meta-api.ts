@@ -203,16 +203,20 @@ export interface MetaOwnedPage {
   name: string;
   businessId: string;
   hasInstagram: boolean;
+  /** Instagram Business vinculado à página (id) — base da vinculação do calendário. */
+  instagramUserId: string | null;
+  /** @username do Instagram Business (quando a Meta o retorna em owned_pages). */
+  instagramUsername: string | null;
 }
 
 interface MetaOwnedPagesResponse {
-  data: Array<{ id: string; name?: string; instagram_business_account?: { id: string } }>;
+  data: Array<{ id: string; name?: string; instagram_business_account?: { id: string; username?: string } }>;
 }
 
 /** Lista as Paginas pertencentes a uma Business Manager (/{business_id}/owned_pages). */
 export async function getBusinessOwnedPages(businessId: string, accessToken: string): Promise<MetaOwnedPage[]> {
   const url = new URL(`${META_GRAPH_BASE_URL}/${businessId}/owned_pages`);
-  url.searchParams.set('fields', 'id,name,instagram_business_account');
+  url.searchParams.set('fields', 'id,name,instagram_business_account{id,username}');
   url.searchParams.set('access_token', accessToken);
 
   const response = await fetch(url, { method: 'GET' });
@@ -226,6 +230,8 @@ export async function getBusinessOwnedPages(businessId: string, accessToken: str
     name: page.name ?? page.id,
     businessId,
     hasInstagram: Boolean(page.instagram_business_account?.id),
+    instagramUserId: page.instagram_business_account?.id ?? null,
+    instagramUsername: page.instagram_business_account?.username ?? null,
   }));
 }
 
@@ -504,6 +510,73 @@ export async function getUserFacebookPages(
     instagramUsername: page.instagram_business_account?.username ?? null,
     accessToken: (page as any).access_token ?? '',
   }));
+}
+
+export interface MetaPageAccess {
+  pageId: string;
+  name: string;
+  accessToken: string;
+  /** Tasks do usuário na Página (ex.: ADVERTISE, MANAGE, ANALYZE). */
+  tasks: string[];
+}
+
+interface MetaPagesAccessResponse {
+  data: Array<{
+    id: string;
+    name?: string;
+    access_token?: string;
+    tasks?: string[];
+  }>;
+  paging?: {
+    cursors?: { before: string; after: string };
+    next?: string;
+  };
+}
+
+/**
+ * Busca o Page access token de uma Página via /me/accounts — fonte única que
+ * devolve token por Página (cobre páginas onde o usuário é admin direto E as
+ * concedidas via Business Manager, desde que o OAuth tenha business_management).
+ *
+ * Usado na criação de leadgen_forms (doc Lead Ads exige Page access token de
+ * alguém com a task ADVERTISE na Página). Retorna null quando o usuário não tem
+ * papel na Página.
+ */
+export async function getPageAccessToken(
+  accessToken: string,
+  pageId: string
+): Promise<MetaPageAccess | null> {
+  let after: string | undefined;
+  const target = String(pageId);
+
+  do {
+    const url = new URL(`${META_GRAPH_BASE_URL}/me/accounts`);
+    url.searchParams.set('fields', 'id,name,access_token,tasks');
+    url.searchParams.set('limit', '100');
+    url.searchParams.set('access_token', accessToken);
+    if (after) url.searchParams.set('after', after);
+
+    const response = await fetch(url, { method: 'GET' });
+    const payload = await parseMetaResponse<MetaPagesAccessResponse>(
+      response,
+      'Falha ao buscar as Paginas do usuario no Meta.'
+    );
+
+    for (const page of payload.data || []) {
+      if (String(page.id) === target) {
+        return {
+          pageId: page.id,
+          name: page.name ?? page.id,
+          accessToken: page.access_token ?? '',
+          tasks: page.tasks ?? [],
+        };
+      }
+    }
+
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return null;
 }
 
 export interface MetaWhatsappNumber {
@@ -1661,4 +1734,121 @@ export async function publishInstagramMedia(
   );
 
   return response.id;
+}
+
+// ── Leads: fonte da verdade Meta (campanhas da conta + ads + forms) ─────────
+
+export interface MetaCampaignSummary {
+  id: string;
+  name: string;
+  objective: string | null;
+  status: string | null;
+}
+
+interface MetaCampaignsResponse {
+  data: MetaCampaignSummary[];
+  paging?: { cursors?: { after?: string } };
+}
+
+/**
+ * Lista TODAS as campanhas de uma conta de anúncios (paginação completa).
+ * Fonte da verdade do filtro de leads: inclui campanhas criadas fora do Fury.
+ * GET /act_{id}/campaigns?fields=id,name,objective,status
+ */
+export async function listAccountCampaigns(
+  adAccountId: string,
+  accessToken: string,
+): Promise<MetaCampaignSummary[]> {
+  const all: MetaCampaignSummary[] = [];
+  let after: string | undefined;
+
+  do {
+    const query = `fields=id,name,objective,status&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const payload = await metaApiCall<MetaCampaignsResponse>(
+      `/${encodeURIComponent(adAccountId)}/campaigns?${query}`,
+      accessToken,
+    );
+    all.push(...(payload.data || []));
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return all;
+}
+
+interface MetaCampaignAdsResponse {
+  data: Array<{ id: string; name?: string }>;
+  paging?: { cursors?: { after?: string } };
+}
+
+/** Lista os ads de uma campanha (id + name), com paginação completa. */
+export async function listCampaignAds(
+  campaignId: string,
+  accessToken: string,
+): Promise<Array<{ id: string; name?: string }>> {
+  const all: Array<{ id: string; name?: string }> = [];
+  let after: string | undefined;
+
+  do {
+    const query = `fields=id,name&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const payload = await metaApiCall<MetaCampaignAdsResponse>(
+      `/${encodeURIComponent(campaignId)}/ads?${query}`,
+      accessToken,
+    );
+    all.push(...(payload.data || []));
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return all;
+}
+
+interface MetaAdLeadsResponse {
+  data: Array<Record<string, unknown>>;
+  paging?: { cursors?: { after?: string } };
+}
+
+/**
+ * Lista os leads de um AD (paginação completa).
+ * O lead pertence ao ad — atribuição correta de campanha mesmo com forms
+ * compartilhados. Campos: field_data, created_time, form_id.
+ */
+export async function listAdLeads(
+  adId: string,
+  accessToken: string,
+): Promise<Array<Record<string, unknown>>> {
+  const all: Array<Record<string, unknown>> = [];
+  let after: string | undefined;
+
+  do {
+    const query = `fields=field_data,created_time,form_id&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const payload = await metaApiCall<MetaAdLeadsResponse>(
+      `/${encodeURIComponent(adId)}/leads?${query}`,
+      accessToken,
+    );
+    all.push(...(payload.data || []));
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return all;
+}
+
+export interface MetaLeadFormQuestion {
+  key: string;
+  type: string;
+  label?: string;
+}
+
+/**
+ * Perguntas de um leadgen form: mapeia o `key` tokenizado para o `type`.
+ * GET /{form_id}?fields=questions — usado para traduzir field_data com keys
+ * customizados (ex.: question1/2/3 criados pelo wizard) em nome/email/telefone.
+ */
+export async function getLeadFormQuestions(
+  formId: string,
+  accessToken: string,
+): Promise<MetaLeadFormQuestion[]> {
+  const payload = await metaApiCall<{ questions?: MetaLeadFormQuestion[] }>(
+    `/${encodeURIComponent(formId)}?fields=questions`,
+    accessToken,
+  );
+  return payload.questions || [];
 }

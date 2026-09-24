@@ -1,15 +1,21 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Loader2, Send, Sparkles, Trash2, Wand2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Loader2, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Wand2, X } from 'lucide-react';
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
-// OCULTO: seletor de IAs removido — import volta no unhide
-// import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
+import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
+import { UsageBadge } from '@/components/UsageBadge';
+import { useUploadPhotos } from '@/hooks/useBrandKit';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
-import type { StudioAsset } from '@/types/studio';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import type { StudioAsset, GenerateCreativeResponse } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
+import { ArchiveConfirmDialog } from './components/ArchiveConfirmDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { ArchivedAssetsModal } from './components/ArchivedAssetsModal';
+import { ReferenceImagePanel } from './components/ReferenceImagePanel';
 
 type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create';
 
@@ -18,7 +24,7 @@ const FEATURES = {
 };
 
 const CREATIVE_TYPE = 'image' as const;
-const IMAGE_MODEL = 'qwen/qwen-image-3-pro'; // OCULTO: seletor removido, modelo fixo qwen (volta no unhide)
+const IMAGE_MODEL = 'black-forest-labs/flux.2-pro';
 
 /* ── Estilos com efeito de Hover estilo Campanhas e Tokens Semânticos ── */
 const SURFACE = 'rounded-2xl border border-border bg-surface shadow-sm';
@@ -34,29 +40,22 @@ interface StudioAssetResponse {
   creativesLimit: number | null;
 }
 
-interface GenerationResult {
-  type: 'image';
-  assetId: string;
-  imageUrl: string;
-  creativeData: { headline: string; primary_text: string; cta: string };
-  modificationsRemaining: number | null;
-  complianceStatus?: string;
-  complianceNotes?: string;
-}
-
 export function EstudioHome() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { setPreSelectedAsset } = useCampaignWizardContext();
   const [view, setView] = useState<ViewState>('library');
-  const [generationResult, setGenerationResult] = useState<GenerationResult | null>(null);
+  const [generationResult, setGenerationResult] = useState<GenerateCreativeResponse | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'>('all');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmArchiveAsset, setConfirmArchiveAsset] = useState<StudioAsset | null>(null);
+  const [showArchivedModal, setShowArchivedModal] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // ─── OpenRouter state ──────────────────────────────────────────────
   const [orPrompt, setOrPrompt] = useState('');
+  const [orAspectRatio, setOrAspectRatio] = useState<'1:1' | '9:16'>('1:1');
+  const [referenceContextUrls, setReferenceContextUrls] = useState<string[]>([]);
   const [progressMessage, setProgressMessage] = useState('');
   const [quotaErrorMessage, setQuotaErrorMessage] = useState<string | null>(null);
   const [selectedImageModel, setSelectedImageModel] = useState(IMAGE_MODEL);
@@ -73,36 +72,34 @@ export function EstudioHome() {
 
   const elapsedSeconds = generationStartedAt ? Math.max(0, Math.round((nowMs - generationStartedAt) / 1000)) : 0;
 
-  // OCULTO: catálogo/seletor de IAs removido da UI (feature incompleta) — volta no unhide
-  // const modelsQuery = useQuery({
-  //   queryKey: ['studio-ai', 'models'],
-  //   queryFn: async () => {
-  //     const res = await api.get('/studio/ai/models');
-  //     return res.data as { image: StudioModelOption[]; video: StudioModelOption[] };
-  //   },
-  //   staleTime: 1000 * 60 * 60, // 1h
-  // });
-  // const imageModels = modelsQuery.data?.image ?? [];
+  const modelsQuery = useQuery({
+    queryKey: ['studio-ai', 'models'],
+    queryFn: async () => {
+      const res = await api.get('/studio/ai/models');
+      return res.data as { image: StudioModelOption[]; video: StudioModelOption[] };
+    },
+    staleTime: 1000 * 60 * 60, // 1h
+  });
+  const imageModels = modelsQuery.data?.image ?? [];
 
   const deleteMutation = useMutation({
     mutationFn: async (assetId: string) => {
       await api.delete(`/studio/assets/${assetId}`);
     },
     onSuccess: () => {
-      setDeletingId(null);
-      setToast({ message: 'Criativo excluído com sucesso', type: 'success' });
+      setConfirmArchiveAsset(null);
+      setToast({ message: 'Criativo arquivado com sucesso', type: 'success' });
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
       setTimeout(() => setToast(null), 3000);
     },
     onError: () => {
-      setDeletingId(null);
-      setToast({ message: 'Erro ao excluir o criativo. Tente novamente.', type: 'error' });
+      setToast({ message: 'Erro ao arquivar o criativo. Tente novamente.', type: 'error' });
       setTimeout(() => setToast(null), 3000);
     },
   });
 
   const orImageMutation = useMutation({
-    mutationFn: async (payload: { model: string; prompt: string }) => {
+    mutationFn: async (payload: { model: string; prompt: string; aspect_ratio: '1:1' | '9:16'; reference_image_urls?: string[] }) => {
       setProgressMessage('Gerando imagem...');
       const res = await api.post('/studio/ai/generate-image', payload);
       return res.data;
@@ -153,7 +150,72 @@ export function EstudioHome() {
   const handleStartQuickCreate = () => {
     setOrPrompt('');
     setQuotaErrorMessage(null);
+    setReferenceContextUrls([]);
     setView('quick-create');
+  };
+
+  // Deep-link do FAB "Criar imagem": /estudio?criar=rapida abre a Criação
+  // rápida direto (mesmo comportamento do botão da biblioteca). Mesmo padrão
+  // do CalendarView ("adjusting state when a prop changes"): compara o valor
+  // anterior do param durante o render e dispara o setState direto — cobre
+  // tanto o mount (FAB a partir de outra rota) quanto a transição na mesma
+  // rota (usuário já estava em /estudio; initializer do useState não roda).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const criarParam = searchParams.get('criar');
+  const [prevCriarParam, setPrevCriarParam] = useState<string | null>(null);
+  if (criarParam !== prevCriarParam) {
+    setPrevCriarParam(criarParam);
+    if (criarParam === 'rapida') {
+      handleStartQuickCreate();
+    }
+  }
+
+  // O parâmetro sai da URL em seguida (replace) para não reabrir em navegações
+  // futuras — remoção em efeito (setSearchParams não é setState local).
+  useEffect(() => {
+    if (criarParam === 'rapida') {
+      const next = new URLSearchParams(searchParams);
+      next.delete('criar');
+      setSearchParams(next, { replace: true });
+    }
+  }, [criarParam, searchParams, setSearchParams]);
+
+  // Regra de precedência (Decisão 6, plan.md): contexto atual = últimas até
+  // 2 imagens adicionadas, venham do painel lateral (RF-09) ou do Upload B
+  // (RF-10, Fase 5) — mesma função pras duas origens.
+  const MAX_REFERENCE_CONTEXT = 2;
+  const addToReferenceContext = (urls: string[]) => {
+    setReferenceContextUrls((prev) => {
+      const combined = [...prev, ...urls];
+      if (combined.length > MAX_REFERENCE_CONTEXT) {
+        setToast({ message: 'Limite de 2 imagens de referência — a mais antiga foi substituída.', type: 'success' });
+        setTimeout(() => setToast(null), 3000);
+      }
+      return combined.slice(-MAX_REFERENCE_CONTEXT);
+    });
+  };
+
+  const removeFromReferenceContext = (url: string) => {
+    setReferenceContextUrls((prev) => prev.filter((u) => u !== url));
+  };
+
+  // Upload B (RF-10) — separado do painel lateral: no máximo 2 arquivos por
+  // vez, salva na mesma biblioteca (Upload A/painel reflete junto) E já
+  // entra automaticamente no contexto da geração, sem passo de seleção.
+  const uploadReferenceB = useUploadPhotos();
+  const [showUploadBLimitAlert, setShowUploadBLimitAlert] = useState(false);
+  const handleUploadB = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    if (files.length > 2) {
+      setShowUploadBLimitAlert(true);
+      e.target.value = '';
+      return;
+    }
+    uploadReferenceB.mutate(files, {
+      onSuccess: (data) => addToReferenceContext(data.urls),
+    });
+    e.target.value = '';
   };
 
   const handleQuickCreate = async () => {
@@ -171,10 +233,20 @@ export function EstudioHome() {
       });
       const { enhancedPrompt } = enhanceRes.data as { enhancedPrompt: string };
       setProgressMessage('Gerando imagem...');
-      orImageMutation.mutate({ model: selectedImageModel, prompt: enhancedPrompt });
+      orImageMutation.mutate({
+        model: selectedImageModel,
+        prompt: enhancedPrompt,
+        aspect_ratio: orAspectRatio,
+        reference_image_urls: referenceContextUrls.length ? referenceContextUrls : undefined,
+      });
     } catch {
       setProgressMessage('Gerando imagem...');
-      orImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt });
+      orImageMutation.mutate({
+        model: selectedImageModel,
+        prompt: finalPrompt,
+        aspect_ratio: orAspectRatio,
+        reference_image_urls: referenceContextUrls.length ? referenceContextUrls : undefined,
+      });
     }
   };
 
@@ -236,6 +308,7 @@ export function EstudioHome() {
         <PageHeader
           title="Estúdio de anúncios"
           description="Peças prontas para publicar, criadas a partir de uma frase"
+          actions={<UsageBadge remaining={creativesRemaining} limit={creativesLimit} />}
         />
       );
     }
@@ -267,7 +340,7 @@ export function EstudioHome() {
 
   return (
     <AppLayout>
-      <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 sm:px-10">
+      <div className={`mx-auto w-full space-y-6 px-6 pt-2 pb-8 sm:px-10 ${view === 'quick-create' ? '' : 'max-w-5xl'}`}>
         {toast && (
           <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
             toast.type === 'success'
@@ -309,15 +382,6 @@ export function EstudioHome() {
                     <Sparkles className="h-4 w-4 shrink-0" />
                     Criação rápida
                   </button>
-
-                  {/* Informação do número de criativos dinâmica */}
-                  {creativesRemaining !== null && (
-                    <p className="text-xs text-text-tertiary">
-                      {quotaReached
-                        ? 'Limite de criativos do mês atingido — faça upgrade do plano para continuar'
-                        : `${creativesRemaining}${creativesLimit !== null ? ` de ${creativesLimit}` : ''} criativo${creativesRemaining !== 1 ? 's' : ''} restante${creativesRemaining !== 1 ? 's' : ''} este mês`}
-                    </p>
-                  )}
                 </div>
               </div>
             </section>
@@ -382,6 +446,14 @@ export function EstudioHome() {
                 })}
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowArchivedModal(true)}
+                  className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-semibold text-text-tertiary transition-all hover:bg-surface-hover hover:text-text-primary"
+                >
+                  Arquivados
+                </button>
               </div>
 
               {isLoading ? (
@@ -412,11 +484,7 @@ export function EstudioHome() {
                     <AssetCard
                       key={asset.id}
                       asset={asset}
-                      isDeleting={deletingId === asset.id}
-                      deletePending={deleteMutation.isPending}
-                      onDeleteRequest={() => setDeletingId(asset.id)}
-                      onDeleteConfirm={() => deleteMutation.mutate(asset.id)}
-                      onDeleteCancel={() => setDeletingId(null)}
+                      onDeleteRequest={() => setConfirmArchiveAsset(asset)}
                       onViewDetails={() => handleViewDetails(asset)}
                       onUseInCampaign={() => handleUseInCampaign(asset)}
                     />
@@ -429,21 +497,10 @@ export function EstudioHome() {
 
         {/* QUICK CREATE VIEW */}
         {view === 'quick-create' && (
-          <div className="mx-auto w-full max-w-2xl space-y-5">
+          <div className="w-full space-y-5">
             <p className="text-sm text-text-tertiary">
               Descreva o anúncio que deseja gerar para criar a imagem ideal
             </p>
-
-            {/* OCULTO: seletor de modelo removido — modelo fixo qwen. Volta no unhide
-            <div className={`${SURFACE} p-5`}>
-              <ModelSelect
-                models={imageModels}
-                selectedModel={selectedImageModel}
-                onSelect={setSelectedImageModel}
-                id="quick-create-model-select"
-              />
-            </div>
-            */}
 
             {quotaReached && (
               <div className="flex items-start gap-2.5 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-text-primary">
@@ -452,7 +509,9 @@ export function EstudioHome() {
               </div>
             )}
 
-            <Card className={`${SURFACE} border-0 bg-transparent shadow-none`}>
+            <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="space-y-5">
+            <Card className={`${SURFACE} border-0 bg-transparent p-0 shadow-none`}>
               <CardContent className={`${SURFACE} space-y-3 p-5`}>
                 <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">
                   Descreva o anúncio
@@ -468,12 +527,69 @@ export function EstudioHome() {
                   <span>{orPrompt.trim().length}/1000</span>
                   <span>Imagem • explicação detalhada = melhor resultado</span>
                 </div>
-                <div className="space-y-2">
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  <ModelSelect
+                    models={imageModels}
+                    selectedModel={selectedImageModel}
+                    onSelect={setSelectedImageModel}
+                    id="quick-create-model-select"
+                    compact
+                  />
+
+                  <div className="flex items-center gap-1 rounded-full border border-border bg-surface-muted p-1">
+                    <button
+                      type="button"
+                      onClick={() => setOrAspectRatio('1:1')}
+                      aria-pressed={orAspectRatio === '1:1'}
+                      className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition ${orAspectRatio === '1:1' ? CHIP_ON : CHIP_OFF}`}
+                    >
+                      <Square className="h-3.5 w-3.5" />
+                      Quadrado
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrAspectRatio('9:16')}
+                      aria-pressed={orAspectRatio === '9:16'}
+                      className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition ${orAspectRatio === '9:16' ? CHIP_ON : CHIP_OFF}`}
+                    >
+                      <RectangleVertical className="h-3.5 w-3.5" />
+                      Vertical
+                    </button>
+                  </div>
+
+                  <label
+                    className={`flex items-center gap-1.5 rounded-full border border-brand/40 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand/20 ${
+                      uploadReferenceB.isPending ? 'cursor-wait opacity-60' : 'cursor-pointer'
+                    }`}
+                  >
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      multiple
+                      className="hidden"
+                      onChange={handleUploadB}
+                      disabled={uploadReferenceB.isPending}
+                      aria-label="Enviar fotos"
+                    />
+                    {uploadReferenceB.isPending ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Enviando...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-3.5 w-3.5" />
+                        Enviar fotos
+                      </>
+                    )}
+                  </label>
+
                   <button
                     type="button"
                     onClick={handleQuickCreate}
                     disabled={orPrompt.trim().length < 10 || orImageMutation.isPending || quotaReached}
-                    className={`inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand-hover py-2.5 text-sm font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50`}
+                    className={`ml-auto inline-flex items-center justify-center gap-2 rounded-full bg-brand-hover px-5 py-2.5 text-sm font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50`}
                   >
                     {orImageMutation.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -482,14 +598,37 @@ export function EstudioHome() {
                     )}
                     Gerar imagem
                   </button>
-                  {creativesRemaining !== null && (
-                    <p className="text-center text-xs text-text-tertiary">
-                      {creativesRemaining}{creativesLimit !== null ? ` de ${creativesLimit}` : ''} criativo{creativesRemaining !== 1 ? 's' : ''} restante{creativesRemaining !== 1 ? 's' : ''} este mês
-                    </p>
-                  )}
                 </div>
+
+                {referenceContextUrls.length > 0 && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-xs text-text-tertiary">Referências nesta criação:</span>
+                    {referenceContextUrls.map((url) => (
+                      <div key={url} className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-brand">
+                        <img src={url} alt="" className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeFromReferenceContext(url)}
+                          aria-label="Remover imagem de referência"
+                          className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-border bg-surface text-text-tertiary hover:text-destructive"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
+            <UsageBadge remaining={creativesRemaining} limit={creativesLimit} className="mt-1 w-full max-w-none" />
+            </div>
+
+            <ReferenceImagePanel
+              contextUrls={referenceContextUrls}
+              onAdd={addToReferenceContext}
+              onRemove={removeFromReferenceContext}
+            />
+            </div>
           </div>
         )}
 
@@ -567,19 +706,58 @@ export function EstudioHome() {
           </div>
         )}
       </div>
+
+      {confirmArchiveAsset && (
+        <ArchiveConfirmDialog
+          loading={deleteMutation.isPending}
+          onConfirm={() => deleteMutation.mutate(confirmArchiveAsset.id)}
+          onClose={() => setConfirmArchiveAsset(null)}
+        />
+      )}
+
+      {showArchivedModal && (
+        <ArchivedAssetsModal
+          onClose={() => setShowArchivedModal(false)}
+          onViewDetails={(asset) => {
+            setShowArchivedModal(false);
+            handleViewDetails(asset);
+          }}
+        />
+      )}
+
+      <Dialog open={showUploadBLimitAlert} onOpenChange={setShowUploadBLimitAlert}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Máximo de 2 fotos por vez</DialogTitle>
+            <DialogDescription>
+              Esse botão aceita no máximo 2 fotos de cada vez. Selecione até 2 fotos e envie novamente ou use o
+              painel lateral, que aceita quantas fotos você quiser.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setShowUploadBLimitAlert(false)}
+              className="px-5 py-2.5 rounded-xl bg-brand-hover hover:opacity-90 text-white text-sm font-medium transition-colors"
+            >
+              Entendi
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
 
 interface AssetCardProps {
   asset: StudioAsset;
-  isDeleting: boolean;
-  deletePending: boolean;
-  onDeleteRequest: () => void;
-  onDeleteConfirm: () => void;
-  onDeleteCancel: () => void;
   onViewDetails: () => void;
-  onUseInCampaign: () => void;
+  /** Card em modo arquivado: sem excluir, "Usar em campanha" vira "Restaurar anúncio". */
+  archived?: boolean;
+  onDeleteRequest?: () => void;
+  onUseInCampaign?: () => void;
+  onRestore?: () => void;
+  restorePending?: boolean;
 }
 
 const BACKEND_URL = api.defaults.baseURL?.replace(/\/api$/, '') ?? '';
@@ -590,7 +768,7 @@ function resolveAssetUrl(url: string | null | undefined): string | null {
   return url.startsWith('data:') || url.startsWith('http') ? url : `${BACKEND_URL}${url}`;
 }
 
-function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDeleteConfirm, onDeleteCancel, onViewDetails, onUseInCampaign }: AssetCardProps) {
+export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onUseInCampaign, onRestore, restorePending }: AssetCardProps) {
   const imageUrl = resolveAssetUrl(asset.url);
   const badge = complianceBadge(asset.complianceStatus, asset.complianceNotes);
   return (
@@ -606,18 +784,36 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
             }}
           />
           {badge.tone === 'approved' && (
-            <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-green-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
-              <CheckCircle2 className="h-3 w-3" />
-              {badge.label}
-            </div>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-green-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm cursor-help">
+                    <CheckCircle2 className="h-3 w-3" />
+                    {badge.label}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-56 bg-green-700 text-white border-green-700">
+                  {badge.hint}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
           {badge.tone === 'rejected' && (
-            <>
-              <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-red-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
-                <AlertCircle className="h-3 w-3" />
-                {badge.label}
-              </div>
-              {badge.reasons.length > 0 && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-red-600/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm cursor-help">
+                    <AlertCircle className="h-3 w-3" />
+                    {badge.label}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-56 bg-red-700 text-white border-red-700">
+                  {badge.hint}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {badge.reasons.length > 0 && (
                 <div className="absolute inset-x-0 bottom-0 space-y-1 bg-black/75 px-3 py-2 backdrop-blur-sm">
                   <p className="text-[11px] font-bold uppercase tracking-wide text-red-300">Motivo da reprovação</p>
                   <ul className="space-y-0.5">
@@ -632,13 +828,20 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
                   </ul>
                 </div>
               )}
-            </>
-          )}
           {badge.tone === 'pending' && (
-            <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-amber-500/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              {badge.label}
-            </div>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-amber-500/95 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm cursor-help">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {badge.label}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-56 bg-amber-600 text-white border-amber-600">
+                  {badge.hint}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       ) : (
@@ -652,39 +855,29 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
           <h3 className="line-clamp-2 flex-1 text-sm font-semibold text-text-primary transition-colors group-hover:text-text-primary">
             {asset.name ?? `Anúncio de ${asset.type === 'image' ? 'imagem' : asset.type}`}
           </h3>
-          <button
-            type="button"
-            onClick={onDeleteRequest}
-            className="shrink-0 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-hover hover:text-destructive"
-            title="Excluir anúncio"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {!archived && (
+            <button
+              type="button"
+              onClick={onDeleteRequest}
+              className="shrink-0 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-hover hover:text-destructive"
+              title="Excluir anúncio"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
-        {isDeleting ? (
-          <div className="space-y-2 pt-1">
-            <p className="text-xs font-medium text-destructive">Excluir este anúncio?</p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onDeleteConfirm}
-                disabled={deletePending}
-                className="flex-1 rounded-full bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground transition-all hover:opacity-90 disabled:opacity-50"
-              >
-                {deletePending ? 'Excluindo...' : 'Confirmar'}
-              </button>
-              <button
-                type="button"
-                onClick={onDeleteCancel}
-                className="flex-1 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-text-primary transition-all hover:bg-surface-hover"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex gap-2 pt-2">
+        <div className="flex gap-2 pt-2">
+          {archived ? (
+            <button
+              type="button"
+              onClick={onRestore}
+              disabled={restorePending}
+              className="flex-1 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand transition-all duration-200 hover:bg-brand hover:text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+            >
+              {restorePending ? 'Restaurando...' : 'Restaurar anúncio'}
+            </button>
+          ) : (
             <button
               type="button"
               onClick={onUseInCampaign}
@@ -692,15 +885,15 @@ function AssetCard({ asset, isDeleting, deletePending, onDeleteRequest, onDelete
             >
               Usar em campanha
             </button>
-            <button
-              type="button"
-              onClick={onViewDetails}
-              className="flex-1 rounded-full bg-brand-hover px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-brand-hover/90 hover:scale-[1.02] active:scale-[0.98]"
-            >
-              Ver detalhes
-            </button>
-          </div>
-        )}
+          )}
+          <button
+            type="button"
+            onClick={onViewDetails}
+            className="flex-1 rounded-full bg-brand-hover px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-brand-hover/90 hover:scale-[1.02] active:scale-[0.98]"
+          >
+            Ver detalhes
+          </button>
+        </div>
       </div>
     </div>
   );

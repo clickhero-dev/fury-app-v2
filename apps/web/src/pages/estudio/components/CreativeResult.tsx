@@ -4,9 +4,11 @@ import { AlertCircle, BookmarkCheck, Loader2, RefreshCw, Upload, X } from 'lucid
 import { Button } from '@/components';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { layoutLabel, isKnownLayout } from '@/lib/layout-labels';
-import type { GenerateCreativeResponse, StudioPublishResponse } from '@/types/studio';
+import type { GenerateCreativeResponse, StudioPublishResponse, StudioAssetGroupDetail } from '@/types/studio';
+import { VersionCarousel } from './VersionCarousel';
 
 interface Props {
   result: GenerateCreativeResponse;
@@ -53,7 +55,54 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
 
   const isQuickCreate = !!currentResult.type;
   const isVideo = currentResult.type === 'video';
-  const displayUrl = isVideo ? (currentResult.videoUrl ?? currentResult.imageUrl) : currentResult.imageUrl;
+
+  // Histórico do grupo (versões/evidência/arquivado) — carregado à parte do
+  // resultado da criação/modificação em si, porque cada versão tem seu
+  // próprio selo de compliance e a evidência é persistida no servidor.
+  const [groupDetail, setGroupDetail] = useState<StudioAssetGroupDetail | null>(null);
+  // Versão que a tela está mostrando AGORA — desacoplada do roundtrip do
+  // set-active, pra trocar de imagem/selo instantaneamente ao navegar no
+  // carrossel (ou ao regenerar) sem esperar a persistência da evidência.
+  const [selectedVersionId, setSelectedVersionId] = useState(currentResult.assetId);
+
+  useEffect(() => {
+    setSelectedVersionId(currentResult.assetId);
+  }, [currentResult.assetId]);
+
+  const setActiveMutation = useMutation({
+    mutationFn: async (assetId: string) => {
+      const res = await api.post<StudioAssetGroupDetail>(`/studio/assets/${assetId}/set-active`);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      // Defensivo: só confia na resposta se ela realmente trouxer o
+      // histórico — evita quebrar o resto da tela se algo devolver um
+      // formato inesperado (ex.: mock de teste não cobrindo esta rota).
+      if (data && Array.isArray(data.versions)) {
+        setGroupDetail(data);
+      }
+      void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+    },
+  });
+
+  // Marca a versão exibida como "em evidência" sempre que ela muda —
+  // abertura inicial dos detalhes, ou logo após criar/regenerar (RF-02).
+  useEffect(() => {
+    setActiveMutation.mutate(selectedVersionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVersionId]);
+
+  const handleSelectVersion = (versionId: string) => {
+    if (versionId === selectedVersionId) return;
+    setSelectedVersionId(versionId); // troca a exibição na hora — o set-active persiste em paralelo
+  };
+
+  const isArchived = !!groupDetail?.archivedAt;
+  const activeVersion = groupDetail?.versions.find((v) => v.id === selectedVersionId);
+  const displayUrl = isVideo
+    ? (currentResult.videoUrl ?? currentResult.imageUrl)
+    : (activeVersion?.url ?? currentResult.imageUrl);
+  const displayComplianceStatus = activeVersion?.complianceStatus ?? currentResult.complianceStatus;
 
   const clearMask = useCallback(() => {
     const c = maskCanvasRef.current;
@@ -162,19 +211,16 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
   return (
     <div className="space-y-6">
       {(() => {
-        const badge = (currentResult as any).complianceStatus
-          ? complianceBadge((currentResult as any).complianceStatus, (currentResult as any).complianceNotes)
+        // ponytail: o selo segue a versão selecionada no carrossel
+        // (displayComplianceStatus); os "motivos" detalhados (complianceNotes)
+        // só existem para a versão que já carregamos por completo — o
+        // histórico (versions[]) traz status por versão, não o texto inteiro.
+        const badge = displayComplianceStatus
+          ? complianceBadge(displayComplianceStatus, currentResult.complianceNotes)
           : null;
-        if (!badge || badge.tone === 'unknown') return null;
-        return (
-          <div
-            className={cn(
-              'rounded-2xl border px-4 py-3 text-sm',
-              badge.tone === 'rejected' && 'border-red-200 bg-red-50 text-red-800',
-              badge.tone === 'approved' && 'border-green-200 bg-green-50 text-green-800',
-              badge.tone === 'pending' && 'border-amber-200 bg-amber-50 text-amber-800'
-            )}
-          >
+        if (!badge) return null;
+        const content = (
+          <>
             <p className="font-semibold">{badge.label}</p>
             {badge.reasons.length > 0 && (
               <ul className="mt-2 space-y-1">
@@ -185,13 +231,37 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
                 ))}
               </ul>
             )}
-          </div>
+          </>
+        );
+        const toneClass =
+          badge.tone === 'approved' ? 'border-green-200 bg-green-50 text-green-800'
+          : badge.tone === 'rejected' ? 'border-red-200 bg-red-50 text-red-800'
+          : badge.tone === 'pending' ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : 'border-border bg-surface-muted text-text-secondary';
+        const tipClass =
+          badge.tone === 'approved' ? 'max-w-56 bg-green-700 text-white border-green-700'
+          : badge.tone === 'rejected' ? 'max-w-56 bg-red-700 text-white border-red-700'
+          : badge.tone === 'pending' ? 'max-w-56 bg-amber-600 text-white border-amber-600'
+          : 'max-w-56';
+        return (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div tabIndex={0} className={cn('cursor-help rounded-2xl border px-4 py-3 text-sm', toneClass)}>
+                  {content}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className={tipClass}>
+                {badge.hint}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         );
       })()}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
         {/* Preview area — video or image */}
         <div className="overflow-hidden rounded-2xl border border-[#E6E8EC]">
-          <div className="relative w-full" style={{ aspectRatio: '1 / 1' }}>
+          <div className="relative w-full">
             {isVideo && displayUrl ? (
               <video
                 src={displayUrl}
@@ -200,7 +270,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
                 loop
                 muted
                 playsInline
-                className="w-full h-full object-cover block rounded-lg"
+                className="block w-full h-auto max-h-[80vh] rounded-lg"
                 style={{ opacity: regenerateMutation.isPending ? 0.5 : 1, transition: 'opacity 0.2s' }}
                 onError={(e) => {
                   console.error('=== Video failed to load:', displayUrl);
@@ -212,7 +282,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
                 <img
                   src={displayUrl}
                   alt="Criativo gerado"
-                  className="w-full h-full object-cover block rounded-lg"
+                  className="block w-full h-auto max-h-[80vh] rounded-lg object-contain"
                   style={{ opacity: regenerateMutation.isPending ? 0.5 : 1, transition: 'opacity 0.2s' }}
                   onError={(e) => {
                     console.error('=== Image failed to load:', displayUrl);
@@ -239,6 +309,13 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
               </div>
             )}
           </div>
+          {groupDetail && (
+            <VersionCarousel
+              versions={groupDetail.versions}
+              activeVersionId={selectedVersionId}
+              onSelect={handleSelectVersion}
+            />
+          )}
         </div>
 
         {/* Painel lateral */}
@@ -282,7 +359,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
           )}
 
           {/* ponytail: pergunta pós-criação visível por padrão */}
-          {showRegenerateForm && isQuickCreate && (
+          {showRegenerateForm && isQuickCreate && !isArchived && (
             <div className="space-y-2 rounded-xl border border-border bg-surface-secondary p-4">
               <p className="text-sm font-semibold text-text-primary">Deseja incluir mais alguma coisa no anúncio?</p>
               <p className="text-xs text-[#98A2B3]">Segure e arraste sobre a imagem para marcar a área. Depois descreva o ajuste abaixo.</p>
@@ -301,7 +378,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
               />
               <div className="flex gap-2">
                 <Button
-                  onClick={() => regenerateMutation.mutate({ assetId: currentResult.assetId, feedbackText: feedback })}
+                  onClick={() => regenerateMutation.mutate({ assetId: selectedVersionId, feedbackText: feedback })}
                   disabled={feedback.trim().length < 3 || regenerateMutation.isPending || modificationsExhausted}
                   className="flex-1 flex items-center justify-center gap-2 bg-[#E8631A] hover:bg-[#D45714] text-white text-sm"
                 >
@@ -332,7 +409,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
           )}
 
           <div className="flex flex-col gap-2 pt-1">
-            {!isLegacy && !showRegenerateForm && (
+            {!isLegacy && !showRegenerateForm && !isArchived && (
               <Button variant="outline" size="sm" onClick={() => setShowRegenerateForm(true)} disabled={regenerateMutation.isPending || modificationsExhausted} className="w-full flex items-center justify-center gap-2">
                 <RefreshCw className="h-4 w-4 shrink-0" />
                 Regenerar com ajuste
@@ -344,7 +421,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
             </Button>
             <Button
               size="sm"
-              onClick={() => (onPublish ? onPublish() : publishMutation.mutate(currentResult.assetId))}
+              onClick={() => (onPublish ? onPublish() : publishMutation.mutate(selectedVersionId))}
               disabled={publishMutation.isPending || !!publishFeedback}
               className="w-full flex items-center justify-center gap-2 bg-[#E8631A] hover:bg-[#D45714] text-white"
             >

@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { CheckCircle2, ImagePlus, Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import api from '@/lib/api';
 import { useCreateCampaign } from '../hooks/useCreateCampaign';
 import { buildWizardCampaignPayload } from '../lib/buildPayload';
+import { formatPhoneDisplay } from '../lib/phone-format';
 import type { WizardState } from '../types';
 
 const OBJECTIVE_LABELS: Record<NonNullable<WizardState['objective']>, string> = {
@@ -11,6 +14,7 @@ const OBJECTIVE_LABELS: Record<NonNullable<WizardState['objective']>, string> = 
   messages: 'Atração de Clientes',
   whatsapp: 'Conversas no WhatsApp',
   whatsapp_conv: 'Conversas WhatsApp',
+  leads: 'Formulário de captação',
 };
 
 const GENDER_LABELS: Record<WizardState['audience']['gender'], string> = {
@@ -31,6 +35,31 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
   const mutation = useCreateCampaign();
   const [showSlowWarning, setShowSlowWarning] = useState(false);
   const slowWarningTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Token sem permissão (ex.: pages_manage_ads p/ Formulário) ou expirado:
+  // refazer o OAuth concede os scopes atuais e volta para esta tela.
+  // rerequest=true → auth_type=rerequest no OAuth: força o Login Dialog a
+  // re-exibir permissões já declinadas (sem isso ele omite e o erro volta igual).
+  const reconnectMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.get<{ data: { authUrl: string } }>('/meta/auth/url', {
+        params: { context: 'settings', frontendUrl: window.location.origin, rerequest: 'true' },
+      });
+      return response.data.data.authUrl;
+    },
+    onSuccess: (authUrl) => {
+      window.location.href = authUrl;
+    },
+  });
+
+  const publishError = (mutation.error as { response?: { data?: { error?: { code?: string; message?: string } } } })
+    ?.response?.data?.error;
+  // Erros de reconexão: token expirado ou falta de permissão no escopo — refazer o
+  // OAuth concede os scopes atuais. Erros de Página (META_PAGE_NOT_MANAGED /
+  // META_PAGE_ADVERTISE_TASK_REQUIRED) NÃO entram aqui: reconectar não resolve, a
+  // mensagem do backend já orienta a trocar de Página / solicitar papel ADVERTISE.
+  const isReconnectError =
+    publishError?.code === 'META_TOKEN_EXPIRED' || publishError?.code === 'META_PERMISSION_DENIED';
 
   const audience = state.audience;
 
@@ -120,6 +149,18 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
               {state.whatsapp.destinations.includes('messenger') && (
                 <div>Facebook da Página {state.whatsapp.pageName}</div>
               )}
+            </div>
+          </div>
+        )}
+
+        {state.objective === 'leads' && (
+          <div className="p-4">
+            <div className="text-xs font-bold text-text-tertiary uppercase tracking-wide mb-1">
+              Formulário e WhatsApp
+            </div>
+            <div className="text-sm font-medium text-text-primary">{state.whatsapp.pageName}</div>
+            <div className="text-xs text-text-secondary mt-1">
+              Coleta nome, e-mail e telefone. No fim, botão abre o WhatsApp {formatPhoneDisplay(state.whatsapp.phoneNumberDisplay ?? '')}.
             </div>
           </div>
         )}
@@ -235,9 +276,26 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
       )}
 
       {mutation.isError && (
-        <div className="rounded-lg bg-error/10 border border-error/20 p-3 text-sm text-error">
-          {(mutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error
-            ?.message || 'Erro ao publicar no Meta. Tente novamente.'}
+        <div className="rounded-lg bg-error/10 border border-error/20 p-3 text-sm text-error space-y-3">
+          <span>{publishError?.message || 'Erro ao publicar no Meta. Tente novamente.'}</span>
+          {isReconnectError && (
+            <Button
+              variant="primary"
+              size="sm"
+              className="w-full"
+              onClick={() => reconnectMutation.mutate()}
+              disabled={reconnectMutation.isPending}
+            >
+              {reconnectMutation.isPending ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Redirecionando...
+                </span>
+              ) : (
+                'Reconectar Meta'
+              )}
+            </Button>
+          )}
         </div>
       )}
 

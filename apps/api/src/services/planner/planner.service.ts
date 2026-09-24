@@ -5,6 +5,7 @@ import { parseAgentJSON } from '../../agents/utils.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { createInstagramMedia, getMediaContainerStatus, publishInstagramMedia, getUserFacebookPages } from '../../lib/meta-api.js';
 import { decryptMetaToken } from '../../utils/crypto.js';
+import { todaySaoPauloYMD } from '../../utils/date-sao-paulo.js';
 import { plannerStore } from '../../planner-store.js';
 import { enqueuePlanGeneration } from '../../workers/planner.worker.js';
 import { snapshotToJobStatus } from '../../agents/job-status-adapter.js';
@@ -55,6 +56,9 @@ function formatWaitSeconds(seconds: number): string {
 }
 
 const RETRY_BACKOFF_MINUTES = [1, 5, 15];
+
+/** Lease do claim de publicação (publish-now) — espelha PUBLISH_LEASE_MINUTES do repository. */
+const PUBLISH_LEASE_MINUTES = 5;
 
 interface InstagramAccount {
   igUserId: string;
@@ -468,7 +472,15 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
 
   // ===== Calendário Editorial: Publicação Automática =====
 
-  /** Resolve a conta Instagram do tenant. Prioriza páginas selecionadas com IG; senão fallback para qualquer página com IG. */
+  /**
+   * Resolve a conta Instagram do tenant para publicação no calendário.
+   *
+   * GARANTIA DE CONTA: publica SOMENTE no perfil vinculado explicitamente
+   * (meta_connections.selected_instagram_user_id, gravado server-side no
+   * save-selection). Sem vinculação, vinculação revogada ou página sem IG ⇒
+   * null (não publica — falha segura). O antigo fallback `pagesWithIg[0]`
+   * publicava em contas erradas (bug: velora_studio → jeanvdentz, 2026-09).
+   */
   async resolveInstagramAccount(tenantId: string): Promise<InstagramAccount | null> {
     const conn = await this.repo(tenantId).findLatestMetaConnection();
 
@@ -481,32 +493,37 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
       return null;
     }
 
+    // Fonte de verdade da autorização: vinculação explícita gravada no
+    // save-selection. Sem ela, NÃO publica — nem com outras contas à mão.
+    const authorizedIgUserId: string | null = (conn as any).selectedInstagramUserId ?? null;
+    if (!authorizedIgUserId) {
+      console.warn(`[resolveInstagram] tenant ${tenantId}: Instagram NÃO vinculado — publicação do calendário desativada. Vincule o perfil em Configurações > Integrações (ou refaça o onboarding).`);
+      return null;
+    }
+
     const accessToken = decryptMetaToken(conn.accessToken);
-    const selectedPageIds: string[] = (conn.selectedPageIds as any[]) || [];
     const pages = await this.deps.getUserFacebookPages(accessToken);
 
     console.log(`[resolveInstagram] tenant ${tenantId}: Facebook retornou ${pages.length} páginas:`,
       JSON.stringify(pages.map(p => ({ pageId: p.pageId, name: p.name, hasInstagram: p.hasInstagram, instagramUserId: p.instagramUserId }))));
 
-    const pagesWithIg = pages.filter((p) => p.instagramUserId);
-    if (pagesWithIg.length === 0) {
-      console.log(`[resolveInstagram] tenant ${tenantId}: nenhuma das ${pages.length} páginas tem Instagram vinculado`);
+    // A conta vinculada precisa continuar acessível pelo token (presente em
+    // /me/accounts com IG). Revogada/removida ⇒ não publica.
+    const authorized = pages.find(
+      (p) => p.instagramUserId && p.instagramUserId === authorizedIgUserId,
+    );
+    if (!authorized) {
+      console.warn(`[resolveInstagram] tenant ${tenantId}: perfil vinculado (${authorizedIgUserId}) não está acessível/sem Instagram — NÃO publicando (falha segura). Páginas com IG disponíveis: ${JSON.stringify(pages.filter(p => p.instagramUserId).map(p => p.instagramUsername ?? p.pageId))}`);
       return null;
     }
 
-    const buildAccount = (p: typeof pagesWithIg[number], source: string) => {
-      console.log(`[resolveInstagram] tenant ${tenantId}: ${source} — "${p.name}" IG=${p.instagramUserId} (@${p.instagramUsername || 'sem @'})`);
-      return { igUserId: p.instagramUserId!, accessToken, pageName: p.name, instagramUsername: p.instagramUsername };
+    console.log(`[resolveInstagram] tenant ${tenantId}: publicando no perfil AUTORIZADO — "${authorized.name}" IG=${authorized.instagramUserId} (@${authorized.instagramUsername || 'sem @'})`);
+    return {
+      igUserId: authorized.instagramUserId!,
+      accessToken,
+      pageName: authorized.name,
+      instagramUsername: authorized.instagramUsername,
     };
-
-    if (selectedPageIds.length > 0) {
-      const selected = pagesWithIg.find((p) => selectedPageIds.includes(p.pageId));
-      if (selected) return buildAccount(selected, 'selecionada');
-    }
-
-    const fallback = pagesWithIg[0];
-    console.log(`[resolveInstagram] tenant ${tenantId}: fallback — usando "${fallback.name}"`);
-    return buildAccount(fallback, 'fallback');
   }
 
   /**
@@ -531,16 +548,15 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
       mediaType: isReel ? 'REELS' : undefined,
     });
 
-    // 2. Se vídeo: polling até FINISHED (3 tentativas, backoff 3s/6s/12s)
-    if (isReel) {
-      const pollDelays = [3_000, 6_000, 12_000];
-      for (let i = 0; i < pollDelays.length; i++) {
-        await new Promise((r) => setTimeout(r, pollDelays[i]));
-        const status = await this.deps.getMediaContainerStatus(containerId, accessToken);
-        if (status === 'FINISHED') break;
-        if (i === pollDelays.length - 1) {
-          throw new Error(`Video container ${containerId} still IN_PROGRESS after ${pollDelays.length} polls`);
-        }
+    // 2. Polling até FINISHED (3 tentativas) — a Meta responde 9007 se
+    // media_publish for chamado antes do container terminar o processamento.
+    const pollDelays = [3_000, 3_000, 12_000];
+    for (let i = 0; i < pollDelays.length; i++) {
+      await new Promise((r) => setTimeout(r, pollDelays[i]));
+      const status = await this.deps.getMediaContainerStatus(containerId, accessToken);
+      if (status === 'FINISHED') break;
+      if (i === pollDelays.length - 1) {
+        throw new Error(`Media container ${containerId} still IN_PROGRESS after ${pollDelays.length} polls`);
       }
     }
 
@@ -574,6 +590,12 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
       // ponytail: só image e reel são suportados no Instagram v1
       if (post.postType !== 'image' && post.postType !== 'reel') continue;
 
+      // Claim atômico ANTES de publicar: disputa com o trigger manual
+      // (publish-now). Quem perde pula o post sem marcar nada — o dono
+      // do claim é o único responsável pelo resultado.
+      const claimed = await repo.claimPostForPublish(post.id);
+      if (!claimed) continue;
+
       const attempts = (post.publishAttempts ?? 0) + 1;
 
       try {
@@ -600,6 +622,93 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
     }
 
     return { published, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })), pageName: account.pageName, instagramUsername: account.instagramUsername };
+  }
+
+  /**
+   * "Postar agora" (publish-now): cria o post JÁ com claim de publicação
+   * (status 'publishing' + lease nextRetryAt +5min) e publica no mesmo
+   * request. Falha de publicação = markPostFailed NA HORA (sem retry
+   * automático — o retry é o clique do usuário com key idempotência nova).
+   * Carrossel recusado até a Fase 2 (containers filhos na Graph API).
+   */
+  async publishNow(
+    tenantId: string,
+    payload: { postType: string; caption?: string; imageUrl?: string; imageUrls?: string[] | null; title?: string; platform?: string },
+  ) {
+    if (payload.postType === 'carousel') {
+      throw new AppError(400, 'CAROUSEL_NOT_SUPPORTED', 'Carrossel ainda não é suportado no "Postar agora". Crie um post único ou agende.');
+    }
+    const repo = this.repo(tenantId);
+    const now = new Date();
+    const leaseUntil = new Date(now.getTime() + PUBLISH_LEASE_MINUTES * 60_000);
+    // "Postar agora" cai no calendário do dia de São Paulo (não UTC): entre
+    // 21h–23h59 BRT o UTC já virou o dia seguinte. dayIndex deriva da mesma
+    // data para manter calendarDate e dayIndex sempre consistentes.
+    const calendarDate = todaySaoPauloYMD();
+    const post = await repo.createPost({
+      tenantId,
+      planId: null,
+      caption: payload.caption || '',
+      postType: payload.postType as any,
+      dayIndex: Number(calendarDate.slice(8, 10)),
+      calendarDate,
+      platform: payload.platform || 'instagram',
+      scheduledAt: now,
+      title: payload.title || null,
+      imageUrl: payload.imageUrl || null,
+      imageUrls: payload.imageUrls ?? null,
+      status: 'publishing',
+      nextRetryAt: leaseUntil,
+    } as any);
+    return this.attemptPublish(repo, post, tenantId);
+  }
+
+  /**
+   * "Tentar novamente" (retry do publish-now): republica o post EXISTENTE via
+   * claim atômico — nunca cria outro. Perdeu o claim (published / publishing
+   * com lease fresco) ⇒ 409 POST_CLAIMED.
+   */
+  async publishRetry(tenantId: string, postId: string) {
+    const repo = this.repo(tenantId);
+    // 404 primeiro: post inexistente não deve passar pelo claim (que é UPDATE
+    // condicional e devolveria 409 POST_CLAIMED enganoso para 0 linhas).
+    const post = await repo.findPostById(postId);
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    const claimed = await repo.claimPostForPublish(postId);
+    if (!claimed) {
+      throw new AppError(409, 'POST_CLAIMED', 'Post não pode ser republicado agora (já publicado ou publicação em andamento).');
+    }
+    return this.attemptPublish(repo, post, tenantId);
+  }
+
+  /** Resolve conta, publica, marca resultado e devolve o estado final do post. */
+  private async attemptPublish(
+    repo: PlannerRepository,
+    post: { id: string; postType: string; caption?: string | null; imageUrl?: string | null; publishAttempts?: number | null },
+    tenantId: string,
+  ) {
+    const account = await this.resolveInstagramAccount(tenantId);
+    const attempts = (post.publishAttempts ?? 0) + 1;
+
+    if (!account) {
+      const msg = 'no_instagram_account: Instagram não vinculado/revogado — publicação desativada. Vincule o perfil em Configurações > Integrações.';
+      await repo.markPostFailed(post.id, attempts, msg, new Date());
+      return { id: post.id, status: 'failed' as const, lastPublishError: msg };
+    }
+
+    try {
+      const { mediaId } = await this.publishSinglePost(
+        { id: post.id, postType: post.postType, caption: post.caption, imageUrl: post.imageUrl },
+        account.igUserId,
+        account.accessToken,
+      );
+      await repo.markPostPublished(post.id, new Date(), mediaId, attempts);
+      return { id: post.id, status: 'published' as const, platformPostId: mediaId, instagramUsername: account.instagramUsername ?? null };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await repo.markPostFailed(post.id, attempts, msg, new Date());
+      return { id: post.id, status: 'failed' as const, lastPublishError: msg };
+    }
   }
 
   getAgentLabels(): AgentLabelsResponse {

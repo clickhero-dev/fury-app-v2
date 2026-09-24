@@ -19,10 +19,11 @@ import { CampaignWizardProvider } from '@/contexts/CampaignWizardContext';
 import { Dashboard } from './pages/dashboard/Dashboard';
 import { Metas } from './pages/dashboard/Metas';
 import { PainelCampanhas } from './pages/campanhas/PainelCampanhas';
+import { LeadsPage } from './pages/leads/LeadsPage';
 import { RegrasCampanhas } from './pages/campanhas/RegrasCampanhas';
 import { InsightsCampanha } from './pages/campanhas/InsightsCampanha';
 import { CriarCampanhaPage } from './pages/campanhas/CriarCampanhaPage';
-import { CreativeStudio } from './pages/estudio/CreativeStudio';
+// CreativeStudio (rota órfã duplicada do Estúdio) — import removido após canonicalização para /estudio
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
 import { PlanejadorPage } from './pages/planejador/PlanejadorPage';
@@ -123,6 +124,14 @@ export const router = createBrowserRouter([
         )
       },
       {
+        path: '/leads',
+        element: (
+          <AppLayout>
+            <LeadsPage />
+          </AppLayout>
+        )
+      },
+      {
         path: '/criar-campanha',
         element: <CriarCampanhaPage />,
       },
@@ -142,9 +151,11 @@ export const router = createBrowserRouter([
           </AppLayout>
         )
       },
-      { path: '/automacao', element: <MinhasRegras /> },
+      // /automacao é o atalho legado; a rota canônica é /automacao/minhas-regras
+      { path: '/automacao', element: <Navigate to="/automacao/minhas-regras" replace /> },
       { path: '/automacao/minhas-regras', element: <MinhasRegras /> },
-      { path: '/estudio-criativo', element: <CreativeStudio /> },
+      // /estudio-criativo é rota órfã (tela duplicada do Estúdio) — canonicaliza p/ /estudio
+      { path: '/estudio-criativo', element: <Navigate to="/estudio" replace /> },
       { path: '/estudio', element: <EstudioHome /> },
       { path: '/estudio/imagem', element: <GeradorImagem /> },
       { path: '/planejador', element: <PlanejadorPage /> },

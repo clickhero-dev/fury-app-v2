@@ -34,6 +34,11 @@ router.patch('/:id/resume', campaigns.resumeCampaign);
 router.patch('/:id/status', campaigns.updateCampaignStatus);
 router.patch('/:id/budget', campaigns.updateBudget);
 router.get('/:id/insights', campaigns.getCampaignInsights);
+router.get('/:id/leads', campaigns.getCampaignLeads);
+// Filtro da página de Leads: campanhas OUTCOME_LEADS direto da Meta (antes de /:id genérico)
+router.get('/lead-campaigns', campaigns.getLeadCampaigns);
+// Agregado de leads de todas as campanhas de Formulário (antes de /:id genérico)
+router.get('/leads', campaigns.getAllCampaignLeads);
 
 // Generic /:id routes last
 router.get('/:id', campaigns.getCampaign);

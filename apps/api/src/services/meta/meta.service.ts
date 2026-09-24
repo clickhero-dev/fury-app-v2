@@ -36,6 +36,14 @@ const META_SCOPES = [
   // 2) Paginas (vinculadas as BMs selecionadas)
   'pages_show_list',
   'pages_read_engagement',
+  // 2b) Formularios de leads (objetivo 'leads'): criar leadgen form na Pagina.
+  // Doc oficial (marketing-api/guides/lead-ads/create/): a CRIACAO do form exige
+  // pages_manage_ads (nao pages_manage_metadata — essa so serve p/ webhooks leadgen).
+  'pages_manage_ads',
+  // pages_manage_metadata: webhooks de leadgen (futuro). leads_retrieval: ler leads
+  // ("Ver leads" no Painel) — exige App Review p/ usuarios sem papel no app.
+  'pages_manage_metadata',
+  'leads_retrieval',
   // 2b) WhatsApp Business (WABAs vinculadas as Paginas/BM) — necessario para
   // listar numeros WhatsApp em campanhas com destino WHATSAPP
   'whatsapp_business_management',
@@ -55,6 +63,8 @@ interface OAuthStatePayload {
   context: OAuthContext;
   returnUrl?: string;
   frontendUrl?: string;
+  /** Fluxo pediu auth_type=rerequest (re-exibir permissão já declinada). */
+  rerequest?: boolean;
 }
 
 const RETURN_URLS: Record<OAuthContext, string> = {
@@ -70,6 +80,12 @@ export interface StoredMetaConnection {
   tokenExpiresAt: Date | null;
   adAccounts: MetaAdAccount[];
   selectedAdAccountId: string | null;
+  /** Páginas escolhidas no onboarding (filtram os ativos exibidos). */
+  selectedPageIds: string[];
+  /** Instagram Business vinculado ao calendário — publish-due publica SOMENTE nele. */
+  selectedInstagramUserId: string | null;
+  /** @username do perfil vinculado (exibido na UI de integrações). */
+  selectedInstagramUsername: string | null;
   createdAt: Date;
 }
 
@@ -279,7 +295,8 @@ export class MetaService {
   generateMetaAuthUrl(
     tenantId: string,
     context: OAuthContext = 'onboarding',
-    frontendUrl?: string
+    frontendUrl?: string,
+    opts?: { rerequest?: boolean }
   ): string {
     const appId = getRequiredEnv('META_APP_ID');
     const redirectUri = this.getRedirectUri();
@@ -291,12 +308,19 @@ export class MetaService {
       // redirecionar de volta ao MESMO ambiente (localhost/HMG/prod), sem
       // depender de FRONTEND_URL fixo.
       frontendUrl: frontendUrl && isAllowedFrontendOrigin(frontendUrl) ? frontendUrl : undefined,
+      // Reconexão explícita: força o Login Dialog a re-exibir permissões que já
+      // foram declinadas uma vez (sem isso o dialog omite e o token novo nasce
+      // sem a permissão de novo — loop "reconectei e não resolve").
+      rerequest: opts?.rerequest === true ? true : undefined,
     });
 
     const authUrl = new URL(META_OAUTH_URL);
     authUrl.searchParams.set('client_id', appId);
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('scope', META_SCOPES.join(','));
+    if (opts?.rerequest === true) {
+      authUrl.searchParams.set('auth_type', 'rerequest');
+    }
     authUrl.searchParams.set('state', state);
 
     // Alternativa para forcar a ordem/agrupamento das telas de consentimento:
@@ -449,6 +473,29 @@ export class MetaService {
       throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
     }
 
+    // Vinculação do Instagram do calendário resolvida SERVER-SIDE: o id do
+    // Instagram Business vem do owned_pages das businesses selecionadas — o
+    // front NÃO manda o id (sem chance de id trocado/inventado). O publish-due
+    // só publica neste perfil (resolveInstagramAccount). Página sem IG ou fora
+    // das businesses ⇒ null (falha segura: sem vinculação, não publica).
+    let selectedInstagramUserId: string | null = null;
+    let selectedInstagramUsername: string | null = null;
+    if (selection.pageIds.length > 0 && selection.businessIds.length > 0) {
+      try {
+        const ownedPages = await this.resolvePagesByBusiness(tenantId, selection.businessIds);
+        const selected = ownedPages.find((p) => selection.pageIds.includes(p.pageId));
+        selectedInstagramUserId = selected?.instagramUserId ?? null;
+        selectedInstagramUsername = selected?.instagramUsername ?? null;
+      } catch (err) {
+        // Falha na consulta Meta não pode bloquear o save da seleção — mas
+        // deixa a vinculação null (publish-due não publica até re-vincular).
+        console.error('[meta] save-selection: falha ao resolver Instagram da página selecionada:', err);
+        selectedInstagramUserId = null;
+        selectedInstagramUsername = null;
+      }
+    }
+    console.log(`[meta] save-selection: tenant=${tenantId} pages=${JSON.stringify(selection.pageIds)} instagramVinculado=${selectedInstagramUserId ? `@${selectedInstagramUsername ?? selectedInstagramUserId}` : 'nenhum'}`);
+
     // Preserva a conta de anuncios ja escolhida pelo usuario (via "Conta ativa
     // para metricas" em Configuracoes > Integracoes) se ela ainda estiver entre
     // as contas selecionadas no onboarding. Sobrescrever sempre com
@@ -465,6 +512,8 @@ export class MetaService {
         selectedAdAccountIds: selection.adAccountIds,
         selectedWhatsappNumberIds: selection.whatsappNumberIds,
         selectedAdAccountId,
+        selectedInstagramUserId,
+        selectedInstagramUsername,
         updatedAt: new Date(),
       });
   }
@@ -698,6 +747,11 @@ export class MetaService {
         tokenExpiresAt: connection.tokenExpiresAt,
         adAccounts,
         selectedAdAccountId: connection.selectedAdAccountId ?? null,
+        // Seleção do onboarding + perfil Instagram vinculado ao calendário
+        // (publish-due publica SOMENTE neste perfil — ver resolveInstagramAccount).
+        selectedPageIds: (connection.selectedPageIds as string[] | null) ?? [],
+        selectedInstagramUserId: connection.selectedInstagramUserId ?? null,
+        selectedInstagramUsername: connection.selectedInstagramUsername ?? null,
         createdAt: connection.createdAt,
       },
     ];

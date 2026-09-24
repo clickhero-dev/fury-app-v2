@@ -20,6 +20,8 @@ export function postToEvent(post: Post & { calendarDate?: string }): EventInput 
     'draft': 'draft',
     'agendado': 'scheduled',
     'scheduled': 'scheduled',
+    'publicando…': 'scheduled',
+    'publishing': 'scheduled', // claim em andamento ≠ publicado
     'publicado': 'published',
     'published': 'published',
     'erro': 'failed',

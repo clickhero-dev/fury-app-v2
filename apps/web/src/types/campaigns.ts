@@ -6,6 +6,8 @@ export interface CampaignApiItem {
   id: string;
   name: string;
   status: CampaignApiStatus;
+  /** Objetivo da campanha na Meta (ex.: OUTCOME_LEADS) — presente quando a listagem o envia. */
+  objective?: string;
   spend: number;
   roas: number | null;
   cpa: number | null;
@@ -31,6 +33,8 @@ export interface CampaignData {
   name: string;
   /** Status em português para exibição na UI. */
   status: 'ativo' | 'pausado' | 'finalizado';
+  /** Objetivo da campanha na Meta (quando disponível na listagem). */
+  objective?: string;
   investido: number;
   roas: number | null;
   cpa: number | null;
@@ -81,6 +85,7 @@ export function mapCampaignApiToRow(item: CampaignApiItem | Record<string, unkno
     id: String(item.id ?? ''),
     name: String(item.name ?? 'Campanha'),
     status: mapApiStatus(String(item.status ?? 'ARCHIVED')),
+    objective: typeof item.objective === 'string' ? item.objective : undefined,
     investido: spend,
     roas: toNumberOrNull(item.roas ?? metrics?.roas),
     cpa: toNumberOrNull(item.cpa ?? metrics?.cpa),
