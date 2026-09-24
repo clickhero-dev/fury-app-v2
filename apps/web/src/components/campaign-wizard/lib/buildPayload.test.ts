@@ -132,6 +132,13 @@ describe('buildWizardCampaignPayload — geo', () => {
     expect(payload.geo).toEqual(geo);
   });
 
+  it('personalizado com cityKey vazio não envia location_city_key', () => {
+    const geo = { mode: 'custom' as const, cities: [], points: [{ lat: -23.42, lng: -51.93, radiusKm: 1.5 }] };
+    const payload = buildWizardCampaignPayload(makeState({ audience: { ...audience, cityKey: '', geo } }));
+    expect(JSON.parse(JSON.stringify(payload))).not.toHaveProperty('location_city_key');
+    expect(payload.geo).toEqual(geo);
+  });
+
   it('não envia geo quando o modo ativo está vazio', () => {
     const geo = { mode: 'custom' as const, cities: [{ key: '1', name: 'X' }], points: [] };
     const payload = buildWizardCampaignPayload(makeState({ audience: { ...audience, geo } }));

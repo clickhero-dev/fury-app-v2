@@ -16,7 +16,8 @@ export function buildWizardCampaignPayload(state: WizardState): CreateWizardCamp
       destination_url: c.destinationUrl || undefined,
     })),
     location_city: audience.city || '',
-    location_city_key: audience.cityKey,
+    // Vazio vira ausente (o back rejeita "")
+    location_city_key: audience.cityKey || undefined,
     // Só envia geo com localização no modo ativo
     ...(hasGeoLocations(audience.geo) ? { geo: audience.geo } : {}),
     age_min: audience.ageMin || 18,
