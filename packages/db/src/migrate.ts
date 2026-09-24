@@ -149,6 +149,7 @@ const STEPS: MigrationStep[] = [
       console.log('    + added publishing to post_status');
     },
   },
+
 ];
 
 /** Nomes de todas as tabelas do schema (30 tabelas) — usados para validação. */
