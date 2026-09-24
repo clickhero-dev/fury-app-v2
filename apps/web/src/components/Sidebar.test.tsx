@@ -139,3 +139,69 @@ describe('Sidebar — navegação', () => {
     });
   });
 });
+
+describe('Sidebar — seções e submenu recolhíveis', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.localStorage.clear();
+  });
+
+  it('clicar no rótulo da seção recolhe o grupo (e re-clicar volta)', () => {
+    renderSidebar();
+
+    fireEvent.click(screen.getByRole('button', { name: /^conta$/i }));
+    expect(screen.queryByRole('link', { name: /configurações/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /assinatura/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /^conta$/i }));
+    expect(screen.getByRole('link', { name: /configurações/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /assinatura/i })).toBeInTheDocument();
+  });
+
+  it('headers de seção expõem aria-expanded (acessibilidade)', () => {
+    renderSidebar();
+
+    const header = screen.getByRole('button', { name: /^conta$/i });
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(header);
+    expect(screen.getByRole('button', { name: /^conta$/i })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('clicar em Configurações navega (href) E alterna o submenu Integrações', () => {
+    renderSidebar();
+
+    expect(screen.getByRole('link', { name: /integrações/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('link', { name: /configurações/i }));
+    expect(screen.queryByRole('link', { name: /integrações/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /configurações/i })).toHaveAttribute('href', '/configuracoes');
+
+    fireEvent.click(screen.getByRole('link', { name: /configurações/i }));
+    expect(screen.getByRole('link', { name: /integrações/i })).toBeInTheDocument();
+  });
+
+  it('persiste o estado no localStorage (remount mantém a seção recolhida)', () => {
+    const { unmount } = renderSidebar();
+
+    fireEvent.click(screen.getByRole('button', { name: /^gestão$/i }));
+    expect(screen.queryByRole('link', { name: /painel/i })).toBeNull();
+    unmount();
+
+    renderSidebar();
+    expect(screen.queryByRole('link', { name: /painel/i })).toBeNull();
+    // As demais seções seguem expandidas (padrão: expandido quando sem pref).
+    expect(screen.getByRole('link', { name: /configurações/i })).toBeInTheDocument();
+  });
+
+  it('deep-link em página filha oculta auto-expande o pai no load', () => {
+    window.localStorage.setItem(
+      'ady.sidebar.expanded-submenus',
+      JSON.stringify({ '/configuracoes': false }),
+    );
+
+    renderSidebar('/configuracoes/integracoes');
+
+    expect(screen.getByRole('link', { name: /integrações/i })).toBeInTheDocument();
+  });
+});

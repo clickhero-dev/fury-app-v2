@@ -10,6 +10,8 @@ import {
   Settings,
   Users,
   ChevronLeft,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useLogout } from '@/hooks/useLogout';
@@ -69,10 +71,14 @@ const sections: { label: string; items: NavItem[] }[] = [
 function SidebarItem({
   item,
   collapsed,
+  expanded,
+  onToggleSubmenu,
   onNavigate,
 }: {
   item: NavItem;
   collapsed: boolean;
+  expanded: boolean;
+  onToggleSubmenu: () => void;
   onNavigate: (target?: NavItem) => void;
 }) {
   const location = useLocation();
@@ -90,17 +96,30 @@ function SidebarItem({
     <>
       <Link
         to={item.to}
-        onClick={() => onNavigate()}
+        onClick={() => {
+          // Pai com filhos: navega E alterna o submenu no mesmo clique — o
+          // chevron indica o estado (decisão de UX desta task).
+          if ((item.children?.length ?? 0) > 0) {
+            onToggleSubmenu();
+          }
+          onNavigate();
+        }}
         title={collapsed ? item.label : undefined}
         aria-current={isNavItemCurrent(item, location.pathname) ? 'page' : undefined}
+        aria-expanded={(item.children?.length ?? 0) > 0 ? expanded : undefined}
         className={`flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm transition-all ${
           collapsed ? 'justify-center' : ''
         } ${activeClass}`}
       >
         <item.icon className={`size-[18px] shrink-0 ${iconClass}`} />
         {!collapsed && <span className="truncate">{item.label}</span>}
+        {!collapsed && (item.children?.length ?? 0) > 0 && (
+          expanded
+            ? <ChevronDown className="ml-auto size-4 shrink-0 text-text-tertiary" aria-hidden="true" />
+            : <ChevronRight className="ml-auto size-4 shrink-0 text-text-tertiary" aria-hidden="true" />
+        )}
       </Link>
-      {!collapsed && item.children && (
+      {!collapsed && expanded && item.children && (
         <div className="ml-5 flex flex-col gap-1 border-l border-border pl-3">
           {item.children.map((child) => (
             <Link
@@ -126,7 +145,76 @@ function SidebarItem({
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const location = useLocation();
   const logout = useLogout();
+
+  // Seções e submenus recolhíveis — decisão de UX: clique no rótulo da seção
+  // alterna o grupo; clique no item pai navega E alterna o submenu. Padrão
+  // SEM pref salva = tudo expandido (mantém o visual anterior). Estado
+  // persiste em localStorage e o override some quando a key some.
+  const LS_SECTIONS = 'ady.sidebar.expanded-sections';
+  const LS_SUBMENUS = 'ady.sidebar.expanded-submenus';
+
+  const readPrefs = (key: string): Record<string, boolean> | null => {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw === null) return null;
+      const parsed = JSON.parse(raw) as Record<string, boolean>;
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const writePrefs = (key: string, value: Record<string, boolean>) => {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // storage cheio/bloqueado — pref vira volátil, sem quebrar o menu
+    }
+  };
+
+  // Deep-link em página filha oculta: o pai auto-expande no mount (o ativo
+  // nunca fica escondido). Só aplica no mount — o toggle manual sempre vence
+  // depois (senão o clique "não funcionaria" com o item ativo).
+  const activeChildParent = sections
+    .flatMap((s) => s.items)
+    .find((item) => (item.children ?? []).some((c) => isNavItemActive(c, location.pathname)));
+
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
+    const saved = readPrefs(LS_SECTIONS);
+    const initial: Record<string, boolean> = {};
+    for (const s of sections) initial[s.label] = saved?.[s.label] ?? true;
+    return initial;
+  });
+  const [expandedSubmenus, setExpandedSubmenus] = useState<Record<string, boolean>>(() => {
+    const saved = readPrefs(LS_SUBMENUS);
+    const initial: Record<string, boolean> = {};
+    for (const item of sections.flatMap((s) => s.items)) {
+      if ((item.children?.length ?? 0) > 0) {
+        initial[item.to] = saved?.[item.to] ?? true;
+      }
+    }
+    // Override de mount: filho ativo força o pai expandido.
+    if (activeChildParent) initial[activeChildParent.to] = true;
+    return initial;
+  });
+
+  const toggleSection = (label: string) => {
+    setExpandedSections((prev) => {
+      const next = { ...prev, [label]: !prev[label] };
+      writePrefs(LS_SECTIONS, next);
+      return next;
+    });
+  };
+
+  const toggleSubmenu = (to: string) => {
+    setExpandedSubmenus((prev) => {
+      const next = { ...prev, [to]: !prev[to] };
+      writePrefs(LS_SUBMENUS, next);
+      return next;
+    });
+  };
 
   return (
     <aside
@@ -152,26 +240,37 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         </Link>
       </div>
 
-      {/* Navegação agrupada */}
+      {/* Navegação agrupada — seções recolhíveis (clique no rótulo) */}
       <nav className="mt-8 flex flex-1 flex-col overflow-y-auto">
         {sections.map((section) => (
           <div key={section.label} className="mb-1 flex flex-col gap-1">
             {!collapsed && (
-              <div className="px-3.5 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+              <button
+                type="button"
+                onClick={() => toggleSection(section.label)}
+                aria-expanded={expandedSections[section.label] ?? true}
+                className="flex w-full items-center justify-between rounded-md px-3.5 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
                 {section.label}
-              </div>
+                {(expandedSections[section.label] ?? true)
+                  ? <ChevronDown className="size-3" aria-hidden="true" />
+                  : <ChevronRight className="size-3" aria-hidden="true" />}
+              </button>
             )}
-            {section.items.map((item) => (
-              <SidebarItem
-                key={item.to}
-                item={item}
-                collapsed={collapsed}
-                onNavigate={(target) => {
-                  onMobileClose?.();
-                  captureEvent('nav_click', { to: target?.to ?? item.to, label: target?.label ?? item.label });
-                }}
-              />
-            ))}
+            {(expandedSections[section.label] ?? true) &&
+              section.items.map((item) => (
+                <SidebarItem
+                  key={item.to}
+                  item={item}
+                  collapsed={collapsed}
+                  expanded={expandedSubmenus[item.to] ?? true}
+                  onToggleSubmenu={() => toggleSubmenu(item.to)}
+                  onNavigate={(target) => {
+                    onMobileClose?.();
+                    captureEvent('nav_click', { to: target?.to ?? item.to, label: target?.label ?? item.label });
+                  }}
+                />
+              ))}
           </div>
         ))}
       </nav>
