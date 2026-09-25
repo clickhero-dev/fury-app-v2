@@ -750,7 +750,25 @@ export class CampaignsService {
         }));
       }
 
-      return { campaign: campaignBlock, timeseries, creatives };
+      // Pessoas ("PESSOAS") — fonte da verdade: nº de pessoas que preencheram o
+      // formulário. Insights contam `lead` por atribuição/evento e a soma diária
+      // de únicos diverge do total de preenchimentos distintos (ex.: 6 ≠ 4).
+      // Campanha Formulário (OUTCOME_LEADS) → conta os fills do form; demais
+      // objetivos mantêm a soma das conversões dos insights.
+      let conversions: number = timeseries.reduce((s, d) => s + d.conversions, 0);
+      if (campaignObjective === 'OUTCOME_LEADS') {
+        try {
+          const { leads } = await this.getCampaignLeads({
+            tenantId: args.tenantId,
+            campaignId: args.campaignId,
+          });
+          conversions = leads.length;
+        } catch (err) {
+          console.warn('[getCampaignInsights] falha ao contar fills do form:', (err as Error).message);
+        }
+      }
+
+      return { campaign: campaignBlock, timeseries, creatives, totals: { conversions } };
     } catch (err) {
       console.error('[getCampaignInsights] Meta API error:', err);
       const metaCode = (err as any).metaCode;

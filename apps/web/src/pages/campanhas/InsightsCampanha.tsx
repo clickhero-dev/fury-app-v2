@@ -208,6 +208,10 @@ export function InsightsCampanha() {
   const { data, isLoading, isError } = useCampaignInsights(id, dateRange);
 
   const totals = data ? aggregate(data.timeseries) : null;
+  // Pessoas: o backend fornece o TOTAL do período (fills do form p/ campanha
+  // Formulário) em `totals.conversions` — fonte da verdade. Sem isso, fallback
+  // para a soma diária (comportamento legado).
+  const pessoas = data?.totals?.conversions ?? totals?.conversions ?? 0;
 
   const chartData = (data?.timeseries ?? []).map((d) => ({
     date: fmtDate(d.date),
@@ -258,7 +262,7 @@ export function InsightsCampanha() {
           {/* Metric Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Card label="Investimento" value={fmtBRL(totals.spend)} />
-            <Card label="Pessoas" value={fmtInt(totals.conversions)} />
+            <Card label="Pessoas" value={fmtInt(pessoas)} />
             <Card label="Cliques" value={fmtInt(totals.clicks)} />
           </div>
 
