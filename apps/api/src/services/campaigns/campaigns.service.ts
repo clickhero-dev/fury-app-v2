@@ -1262,7 +1262,18 @@ export class CampaignsService {
           this.meta.getLeadFormData(leadFormId, accessToken),
           this.safeGetFormQuestions(leadFormId, accessToken),
         ]);
-        return { leads: (response.data || []).map((lead) => this.normalizeLeadValue(lead, questions)) };
+        // Dedup por id do lead (mesmo form entre criativos não pode contar 2x).
+        const seenFormIds = new Set<string>();
+        const leads = (response.data || [])
+          .filter((lead) => {
+            const id = typeof lead.id === 'string' && lead.id ? lead.id : null;
+            if (!id) return true;
+            if (seenFormIds.has(id)) return false;
+            seenFormIds.add(id);
+            return true;
+          })
+          .map((lead) => this.normalizeLeadValue(lead, questions));
+        return { leads };
       } catch (err) {
         this.handleMetaError(err);
       }
@@ -1279,6 +1290,10 @@ export class CampaignsService {
 
     const formQuestions: Map<string, Array<{ key: string; type: string }>> = new Map();
     const leads: Array<{ name: string | null; email: string | null; phone: string | null; createdAt: string | null }> = [];
+    // Dedup por id do lead: uma mesma submissão pode aparecer sob múltiplos ads
+    // da campanha (mesmo form compartilhado entre criativos) — não pode contar 2x.
+    // Emails iguais com ids diferentes = submissões diferentes (cada uma conta).
+    const seenLeadIds = new Set<string>();
 
     for (const ad of ads) {
       let adLeads: Array<Record<string, unknown>>;
@@ -1288,6 +1303,11 @@ export class CampaignsService {
         this.handleMetaError(err);
       }
       for (const lead of adLeads) {
+        const leadId = typeof lead.id === 'string' && lead.id ? lead.id : null;
+        if (leadId) {
+          if (seenLeadIds.has(leadId)) continue;
+          seenLeadIds.add(leadId);
+        }
         const formId = typeof lead.form_id === 'string' ? lead.form_id : null;
         if (formId && !formQuestions.has(formId)) {
           formQuestions.set(formId, await this.safeGetFormQuestions(formId, accessToken));
