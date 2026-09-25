@@ -5,6 +5,7 @@ import type {
   CampaignInsightsResponse,
   AdsetResponse,
   GoalsProgressResponse,
+  PartialFailure,
 } from '../../types/metrics.types.js';
 
 export interface IMetricsProvider {
@@ -20,7 +21,8 @@ export interface IMetricsProvider {
     endDate: string,
     status?: 'ACTIVE' | 'PAUSED' | 'ARCHIVED',
     page?: number,
-    limit?: number
+    limit?: number,
+    includeOnlyLeadForm?: boolean
   ): Promise<{
     data: CampaignResponse[];
     pagination: {
@@ -28,6 +30,7 @@ export interface IMetricsProvider {
       limit: number;
       total: number;
     };
+    partial_failures: PartialFailure[];
   }>;
 
   getCampaignInsights(

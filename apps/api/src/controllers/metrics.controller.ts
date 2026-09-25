@@ -73,25 +73,24 @@ export class MetricsController {
         });
       }
 
-      let result = { data: [] as import('../types/metrics.types.js').CampaignResponse[], pagination: { page: 1, limit: 10, total: 0 } };
-      try {
-        result = await this.metricsService.getCampaigns(
-          tenantId,
-          validation.data.startDate,
-          validation.data.endDate,
-          validation.data.status,
-          validation.data.page,
-          validation.data.limit
-        );
-      } catch {
-        // META_NOT_CONNECTED or provider error — return empty list
-      }
+      // Endpoint agregador ADR-0002: erro/exceção do provedor vira
+      // `partial_failures` (graceful degrade), nunca lista vazia silenciosa.
+      const result = await this.metricsService.getCampaigns(
+        tenantId,
+        validation.data.startDate,
+        validation.data.endDate,
+        validation.data.status,
+        validation.data.page,
+        validation.data.limit,
+        validation.data.includeOnlyLeadForm
+      );
 
       return res.status(200).json({
         success: true,
         data: {
           campaigns: result.data,
           pagination: result.pagination,
+          partial_failures: result.partial_failures,
         },
       });
     } catch (error) {

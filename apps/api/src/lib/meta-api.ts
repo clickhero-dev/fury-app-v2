@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
 import { AppError } from '../middleware/errorHandler.js';
+import { isMetaPermissionDenied, sanitizeMetaReason } from './meta-error.js';
 
 const META_API_VERSION = 'v25.0';
 const META_GRAPH_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -95,35 +96,42 @@ interface MetaUserProfileResponse {
   id: string;
 }
 
-function mapMetaErrorMessage(payload: MetaApiErrorPayload, fallback: string): string {
-  const code = payload.error?.code;
-  const message = payload.error?.message;
-
-  if (code === 190) {
-    return 'Meta token invalido ou expirado.';
-  }
-
-  if (code === 200 || code === 10) {
-    return 'Permissao negada no app Meta. Verifique ads_read, ads_management e business_management.';
-  }
-
-  return message || fallback;
-}
-
 async function parseMetaResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
   const contentType = response.headers.get('content-type');
   const isJson = contentType?.includes('application/json');
   const payload = isJson ? ((await response.json()) as unknown) : null;
 
   if (!response.ok) {
-    const message = mapMetaErrorMessage((payload || {}) as MetaApiErrorPayload, fallbackMessage);
-    throw new AppError(response.status, 'META_API_ERROR', message, {
-      status: response.status,
-      metaError: payload,
-    });
+    throw buildMetaError(response.status, (payload || {}) as MetaApiErrorPayload, fallbackMessage);
   }
 
   return (payload || {}) as T;
+}
+
+/**
+ * Constrói o AppError a partir da resposta de erro da Meta Graph.
+ * - code 190 (token) → 401 META_TOKEN_EXPIRED;
+ * - permissão REAL evidenciada (`isMetaPermissionDenied`) → 403 META_PERMISSION_DENIED;
+ * - demais (inclui o genérico `#200/OAuthException` sem evidência de permissão) →
+ *   erro de integração com a MENSAGEM REAL sanitizada (bug 2: não inventar permissão).
+ */
+function buildMetaError(
+  status: number,
+  payload: MetaApiErrorPayload,
+  fallbackMessage: string
+): AppError {
+  const code = payload?.error?.code;
+  if (code === 190) {
+    return new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta inválido ou expirado.');
+  }
+  if (isMetaPermissionDenied(payload)) {
+    return new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para esta operação. Reconecte sua conta ou peça acesso ao administrador.');
+  }
+  const message = sanitizeMetaReason(payload?.error?.message || fallbackMessage, fallbackMessage);
+  return new AppError(status, 'META_API_ERROR', message, {
+    status,
+    metaError: payload,
+  });
 }
 
 export async function exchangeCodeForToken(params: {

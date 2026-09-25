@@ -23,6 +23,11 @@ export const campaignsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(10),
   startDate: dateSchema.optional(),
   endDate: dateSchema.optional(),
+  // Só campanhas que coletam dados de formulário (OUTCOME_LEADS com lead form).
+  includeOnlyLeadForm: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
 }).refine(
   (data) => {
     if (!data.startDate || !data.endDate) return true;
@@ -199,6 +204,29 @@ export interface PaginatedResponse<T> {
     limit: number;
     total: number;
   };
+}
+
+/**
+ * Falha parcial de integração (ADR-0002). Um item que não sincronizou NÃO derruba
+ * a lista; vem descrito aqui. `reason` é CLIENT-SAFE (nunca token/payload/stack).
+ */
+export interface PartialFailure {
+  /** Chave do domínio (campaign_id, etc.). Opcional quando a falha é da conta/suíte. */
+  item_id?: string;
+  provider: string;
+  code?: string;
+  reason: string;
+}
+
+/** Resposta do GET /metrics/campaigns com envelope ADR-0002. */
+export interface CampaignsEnvelope {
+  data: CampaignResponse[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+  };
+  partial_failures: PartialFailure[];
 }
 
 // ==================== Request Types ====================
