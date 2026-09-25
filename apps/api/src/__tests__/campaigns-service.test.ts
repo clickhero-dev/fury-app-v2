@@ -792,6 +792,40 @@ describe('CampaignsService.getCampaignInsights', () => {
     expect(result.totals.conversions).toBe(4);
   });
 
+  it('BUG FIX: PESSOAS dedup — mesma submissão (mesmo id) sob 2 ads conta UMA vez (insights 6 → 4 pessoas)', async () => {
+    const { service, repo, meta } = makeService();
+    repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
+    await repo.createCampaign({
+      tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Vagas Executivo',
+      status: 'pausado', budget: { objective: 'leads' },
+    } as any);
+
+    // insights dizem 6 unique lead, mas 2 são a MESMA submissão sob 2 ads
+    meta.insightsResult = {
+      data: [
+        { date_start: '2026-09-23', spend: '8.66', impressions: '1200', clicks: '25', ctr: '2.08', cpc: '0.35', cpm: '7.2', actions: [{ action_type: 'lead', value: '6' }], unique_actions: [{ action_type: 'lead', value: '6' }], purchase_roas: [] },
+      ],
+    };
+    meta.campaignAdsByCampaign.set('mc1', ['ad_1', 'ad_2']);
+    meta.adLeadsByAd.set('ad_1', [
+      { id: 'L1', field_data: [{ name: 'email', values: ['p1@x.com'] }] },
+      { id: 'L2', field_data: [{ name: 'email', values: ['p2@x.com'] }] },
+      { id: 'L3', field_data: [{ name: 'email', values: ['p3@x.com'] }] },
+    ]);
+    // L1 (mesma pessoa) repete sob ad_2 → não pode contar 2x
+    meta.adLeadsByAd.set('ad_2', [
+      { id: 'L1', field_data: [{ name: 'email', values: ['p1@x.com'] }] },
+      { id: 'L4', field_data: [{ name: 'email', values: ['p4@x.com'] }] },
+    ]);
+
+    const result = await service.getCampaignInsights({
+      tenantId: TENANT_ID, campaignId: 'mc1', dateRange: 'last_7d',
+    });
+
+    // únicos por id = {L1,L2,L3,L4} = 4 (insights dizem 6)
+    expect(result.totals.conversions).toBe(4);
+  });
+
   it('campanha não-form mantém conversões dos insights (sem chamada de leads)', async () => {
     const { service, repo, meta } = makeService();
     repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
@@ -1183,6 +1217,43 @@ describe('CampaignsService.getCampaignLeads', () => {
     expect(result.leads[0]).toEqual({
       name: 'Maria Souza', email: 'maria@exemplo.com', phone: '11999999999', createdAt: '2026-09-21T12:00:00Z',
     });
+  });
+
+  it('BUG FIX: mesma submissão (mesmo id de lead) sob vários ads é contada UMA vez (dedup por id)', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    // campanha externa (sem registro local) → resolve via ads
+    meta.campaignAdsByCampaign.set('meta_camp_1', ['ad_a', 'ad_b']);
+    meta.adLeadsByAd.set('ad_a', [
+      { id: 'L1', field_data: [{ name: 'email', values: ['a@x.com'] }] },
+      { id: 'L2', field_data: [{ name: 'email', values: ['b@x.com'] }] },
+      { id: 'L3', field_data: [{ name: 'email', values: ['c@x.com'] }] },
+    ]);
+    // L1 (mesma pessoa) aparece de novo sob ad_b → NÃO pode contar 2x
+    meta.adLeadsByAd.set('ad_b', [
+      { id: 'L1', field_data: [{ name: 'email', values: ['a@x.com'] }] },
+      { id: 'L4', field_data: [{ name: 'email', values: ['d@x.com'] }] },
+    ]);
+
+    const result = await service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_camp_1' });
+
+    // únicos por id = {L1,L2,L3,L4} = 4 (não 5)
+    expect(result.leads).toHaveLength(4);
+    expect(result.leads.map((l) => l.email).sort()).toEqual(['a@x.com', 'b@x.com', 'c@x.com', 'd@x.com']);
+  });
+
+  it('emails iguais mas ids diferentes = submissões diferentes (conta 2, não dedup por email)', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.campaignAdsByCampaign.set('meta_camp_1', ['ad_a']);
+    meta.adLeadsByAd.set('ad_a', [
+      { id: 'L1', field_data: [{ name: 'email', values: ['x@x.com'] }, { name: 'full_name', values: ['Maria'] }] },
+      { id: 'L2', field_data: [{ name: 'email', values: ['x@x.com'] }, { name: 'full_name', values: ['Maria'] }] },
+    ]);
+
+    const result = await service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_camp_1' });
+
+    expect(result.leads).toHaveLength(2);
   });
 
   it('BUG FIX: campanha externa (sem registro local) resolve via ads e mapeia keys tokenizadas pelas questions do form', async () => {

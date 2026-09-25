@@ -1827,7 +1827,7 @@ export async function listAdLeads(
   let after: string | undefined;
 
   do {
-    const query = `fields=field_data,created_time,form_id&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const query = `fields=id,field_data,created_time,form_id&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
     const payload = await metaApiCall<MetaAdLeadsResponse>(
       `/${encodeURIComponent(adId)}/leads?${query}`,
       accessToken,
