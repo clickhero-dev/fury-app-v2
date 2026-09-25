@@ -14,6 +14,7 @@ import { getResolvedTenantAssetSelection } from '../meta/meta.service.js';
 import { slugify } from '../../lib/slug.js';
 import { type AudienceGeo, hasGeoLocations, buildGeoLocations } from '../../lib/audience-geo.js';
 import { privacyPolicyUrl } from '../../lib/privacy-policy.js';
+import { isMetaPermissionDenied, sanitizeMetaReason } from '../../lib/meta-error.js';
 import { getCampaignAds, getCampaignAdCreatives, getVideoSourceUrl, searchMetaInterests as searchMetaInterestsLib } from '../../lib/meta-api.js';
 import type { IMetaCampaignProvider } from '../../lib/providers/meta-campaign.provider.js';
 import type {
@@ -309,10 +310,20 @@ export class CampaignsService {
     if (metaCode === 100) {
       throw new AppError(400, 'INVALID_PARAMETER', message);
     }
-    // (#200) OAuthException — típico de token sem a permissão necessária
-    // (ex.: fallback META_SYSTEM_ACCESS_TOKEN sem leads_retrieval na leitura de leads).
+    // (#200) OAuthException — erro GENÉRICO do Meta. Só é falta de permissão
+    // quando há EVIDÊNCIA no text/message do Meta (isMetaPermissionDenied).
+    // Caso contrário é erro de integração com a causa real — NÃO inventar
+    // permissão: usuário com acesso legítimo recebia "Reconecte sua conta" (bug 2).
     if (metaCode === 200 || metaType === 'OAuthException') {
-      throw new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para esta operação. Reconecte sua conta em Configurações > Integrações.');
+      if (isMetaPermissionDenied(err)) {
+        throw new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para esta operação. Reconecte sua conta em Configurações > Integrações.');
+      }
+      throw new AppError(
+        502,
+        'META_INTEGRATION_ERROR',
+        sanitizeMetaReason(message, 'Não foi possível sincronizar com a Meta. Tente novamente em instantes.'),
+        { meta_code: metaCode, meta_subcode: metaSubcode }
+      );
     }
     // Qualquer outro erro da Graph API → 4xx tratado (nunca 500 silencioso).
     throw new AppError(400, 'META_API_ERROR', message);

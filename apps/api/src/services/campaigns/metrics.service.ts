@@ -4,10 +4,10 @@ import type {
   MetricsSummaryResponse,
   CampaignResponse,
   DailyMetricsResponse,
-  PaginatedResponse,
   CampaignInsightsResponse,
   AdsetResponse,
   GoalsProgressResponse,
+  PartialFailure,
 } from '../../types/metrics.types.js';
 
 export class MetricsService {
@@ -40,8 +40,13 @@ export class MetricsService {
     endDate?: string,
     status?: 'ACTIVE' | 'PAUSED' | 'ARCHIVED',
     page: number = 1,
-    limit: number = 10
-  ): Promise<PaginatedResponse<CampaignResponse>> {
+    limit: number = 10,
+    includeOnlyLeadForm = false
+  ): Promise<{
+    data: CampaignResponse[];
+    pagination: { page: number; limit: number; total: number };
+    partial_failures: PartialFailure[];
+  }> {
     const { startDate: defaultStart, endDate: defaultEnd } =
       this.getDefaultDateRange();
 
@@ -54,7 +59,8 @@ export class MetricsService {
       finalEndDate,
       status,
       page,
-      limit
+      limit,
+      includeOnlyLeadForm
     );
 
     return {
@@ -64,6 +70,7 @@ export class MetricsService {
         limit: result.pagination.limit,
         total: result.pagination.total,
       },
+      partial_failures: result.partial_failures,
     };
   }
 
