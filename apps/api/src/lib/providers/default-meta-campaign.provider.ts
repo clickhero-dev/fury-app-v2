@@ -119,7 +119,7 @@ export class DefaultMetaCampaignProvider implements IMetaCampaignProvider {
     accessToken: string
   ): Promise<{ data: Array<Record<string, unknown>> }> {
     return metaApiCall<{ data: Array<Record<string, unknown>> }>(
-      `/${encodeURIComponent(formId)}/leads?fields=field_data,created_time`,
+      `/${encodeURIComponent(formId)}/leads?fields=id,field_data,created_time`,
       accessToken
     );
   }
