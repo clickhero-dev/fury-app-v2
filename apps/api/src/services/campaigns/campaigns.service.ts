@@ -1209,7 +1209,16 @@ export class CampaignsService {
     const leadCampaigns = campaigns.filter((c) => c.objective === 'OUTCOME_LEADS');
     const withForm: Array<{ id: string; name: string; objective: string | null; status: string | null }> = [];
     for (const c of leadCampaigns) {
-      if (await this.meta.campaignHasLeadForm(c.id, accessToken)) withForm.push(c);
+      // Detecção de form é BEST-EFFORT: se a chamada à Meta falhar (token sem
+      // acesso ao ad/creativo, erro de Graph, etc.), NÃO derrubamos a listagem
+      // nem escondemos a campanha — incluímos e seguimos. Só excluímos quando
+      // a resposta CONFIRMA que o ad não referencia formulário.
+      try {
+        if (await this.meta.campaignHasLeadForm(c.id, accessToken)) withForm.push(c);
+      } catch (err) {
+        console.warn(`[getLeadCampaigns] falha ao detectar formulário da campanha ${c.id}:`, (err as Error).message);
+        withForm.push(c);
+      }
     }
     return withForm.map((c) => ({ id: c.id, name: c.name }));
   }
