@@ -42,7 +42,7 @@ const sections: { label: string; items: NavItem[] }[] = [
     items: [
       { to: '/dashboard', label: 'Painel', icon: LayoutGrid },
       { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
-      { to: '/leads', label: 'Leads', icon: Users },
+      { to: '/leads', label: 'Clientes', icon: Users },
     ],
   },
   {
