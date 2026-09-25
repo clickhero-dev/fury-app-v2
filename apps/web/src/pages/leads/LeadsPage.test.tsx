@@ -159,4 +159,66 @@ describe('LeadsPage', () => {
 
     expect(await screen.findByText('Não foi possível carregar os clientes. Tente novamente.')).toBeInTheDocument();
   });
+
+  it('mostra skeleton enquanto carrega (substitui o spinner/texto de loading)', async () => {
+    // Deixa a busca de leads pendente para observar o estado de loading.
+    let resolveLeads: (v: unknown) => void;
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/campaigns/lead-campaigns') {
+        return Promise.resolve({ data: { success: true, data: [FORM_CAMPAIGN] } });
+      }
+      if (url === '/campaigns/leads') {
+        return new Promise((resolve) => { resolveLeads = resolve; });
+      }
+      return Promise.resolve({ data: { success: true, data: [] } });
+    });
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    // Skeleton visível enquanto o agregado não resolve.
+    const skeleton = screen.getByRole('status', { name: /carregando clientes/i });
+    expect(skeleton).toBeInTheDocument();
+    expect(skeleton.getAttribute('aria-busy')).toBe('true');
+    // Ao menos uma barra de skeleton com pulse dentro.
+    const bars = skeleton.querySelectorAll('.animate-pulse');
+    expect(bars.length).toBeGreaterThan(0);
+    // O texto antigo de loading não deve existir.
+    expect(screen.queryByText(/carregando clientes\.\.\./i)).not.toBeNull();
+
+    // Resolve → skeleton sai, a tabela aparece.
+    resolveLeads!({ data: { success: true, data: [] } });
+    await waitFor(() => expect(screen.queryByRole('status', { name: /carregando clientes/i })).toBeNull());
+  });
+
+  it('linha com telefone mostra botão WhatsApp abrindo wa.me com DDI 55', async () => {
+    mockApi([
+      {
+        name: 'Ana Lima', email: 'ana@exemplo.com', phone: '11988887777',
+        createdAt: '2026-09-21T09:00:00Z', campaignId: 'form_1', campaignName: 'Camp Formulário',
+      },
+    ]);
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText('Ana Lima')).toBeInTheDocument();
+    // Botão/link de WhatsApp na coluna Ação.
+    const waLink = screen.getByRole('link', { name: /whatsapp/i });
+    expect(waLink).toHaveAttribute('href', 'https://wa.me/5511988887777');
+    expect(waLink).toHaveAttribute('target', '_blank');
+    expect(waLink).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('linha SEM telefone não mostra botão WhatsApp', async () => {
+    mockApi([
+      {
+        name: 'Sem Telefone', email: 'sem@exemplo.com', phone: null,
+        createdAt: '2026-09-21T09:00:00Z', campaignId: 'form_1', campaignName: 'Camp Formulário',
+      },
+    ]);
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText('Sem Telefone')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /whatsapp/i })).toBeNull();
+  });
 });
