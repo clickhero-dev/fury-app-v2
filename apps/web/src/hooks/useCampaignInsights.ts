@@ -38,6 +38,8 @@ export interface CampaignInsightsData {
   };
   /** Histórico diário de métricas no período solicitado. */
   timeseries: DailyInsight[];
+  /** Totais do período fornecidos pelo backend (ex.: Pessoas = fills do form). */
+  totals?: { conversions: number };
   /** Anúncios da campanha com criativos para preview visual. */
   creatives: CampaignCreative[];
 }
