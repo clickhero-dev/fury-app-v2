@@ -93,14 +93,25 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     return { accessToken, adAccountId };
   }
 
-  private normalizeInsights(insights: MetaInsightsData[], objective?: string | null): MetricsSummaryResponse {
+  private normalizeInsights(
+    insights: MetaInsightsData[],
+    objective?: string | null | ((campaignId: string) => string | null)
+  ): MetricsSummaryResponse {
     const summary = insights.reduce(
       (acc, item) => {
         const spend = parseFloat(item.spend || '0');
         const impressions = parseInt(item.impressions || '0', 10);
         const clicks = parseInt(item.clicks || '0', 10);
 
-        const conversions = parseConversionsFromActions(item.actions, objective, item.unique_actions) ?? 0;
+        // Objective-aware: cada campanha usa seu própio objetivo, para que uma
+        // campanha de Formulário conte LEADS (quem preencheu), não cliques.
+        const obj =
+          typeof objective === 'function'
+            ? item.campaign_id
+              ? objective(item.campaign_id)
+              : null
+            : objective;
+        const conversions = parseConversionsFromActions(item.actions, obj, item.unique_actions) ?? 0;
 
         const revenue = (item.action_values || [])
           .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
@@ -176,9 +187,9 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     try {
       const { accessToken, adAccountId } = await this.getConnectionAndAccount(tenantId);
 
-      type MetaCampaignRow = { id: string; status?: string };
+      type MetaCampaignRow = { id: string; status?: string; objective?: string };
       const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
-        `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,status')}`,
+        `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,status,objective')}`,
         accessToken
       );
 
@@ -187,6 +198,12 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         (campaignsResp.data || [])
           .filter((c) => includedStatuses.has((c.status || '').toUpperCase()))
           .map((c) => c.id)
+      );
+
+      // Mapa campanha → objective, para o resumo contar LEADS (quem preencheu)
+      // em campanhas de Formulário e não cliques (fallback genérico de tráfego).
+      const campaignObjective = new Map<string, string | null>(
+        (campaignsResp.data || []).map((c) => [c.id, c.objective ?? null])
       );
 
       const response = await getMetaInsights({
@@ -205,7 +222,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         return null;
       }
 
-      return this.normalizeInsights(insights);
+      return this.normalizeInsights(insights, (campaignId) => campaignObjective.get(campaignId) ?? null);
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError(500, 'META_API_ERROR', 'Erro ao buscar resumo de metricas');
@@ -321,13 +338,14 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         const impressions = parseInt(insight.impressions || '0', 10);
         const clicks = parseInt(insight.clicks || '0', 10);
 
-        // Conversões calculadas com o MESMO critério do /metrics/summary
-        // (getSummary → normalizeInsights, sem objective-aware). Assim a soma
-        // das conversões das campanhas (ACTIVE+PAUSED) desta listagem reproduz
-        // o resumo exibido no dashboard — os totais das duas telas batem.
+        // Conversões objective-aware: cada campanha usa o SEU objetivo. Sem isso,
+        // uma campanha de Formulário (OUTCOME_LEADS) caía no fallback genérico de
+        // tráfego (link_click/landing_page_view) e exibia CLIQUES como "Clientes" —
+        // divergindo da página de Leads (que conta quem preencheu o form).
         const { roas, cpa, conversions } = extractCampaignMetricsFromInsight(
           insight,
-          spendReais
+          spendReais,
+          meta?.objective
         );
 
         campaigns.push({
