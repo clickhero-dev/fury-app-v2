@@ -762,6 +762,57 @@ describe('CampaignsService.getCampaignInsights', () => {
     expect(result.timeseries).toHaveLength(1);
     expect(result.timeseries[0].spend).toBe(100);
   });
+
+  it('PESSOAS de campanha Formulário = nº de pessoas que preencheram o form (fonte da verdade), não a soma dos insights', async () => {
+    const { service, repo, meta } = makeService();
+    repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
+    await repo.createCampaign({
+      tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Vagas Executivo',
+      status: 'pausado', budget: { objective: 'leads' }, // wizard → OUTCOME_LEADS
+    } as any);
+
+    // insights dizem 6 unique lead, mas o form tem 4 preenchimentos distintos
+    meta.insightsResult = {
+      data: [
+        { date_start: '2026-09-23', spend: '8.66', impressions: '1200', clicks: '25', ctr: '2.08', cpc: '0.35', cpm: '7.2', actions: [{ action_type: 'lead', value: '6' }], unique_actions: [{ action_type: 'lead', value: '6' }], purchase_roas: [] },
+      ],
+    };
+    meta.campaignAdsByCampaign.set('mc1', ['ad_1']);
+    meta.adLeadsByAd.set('ad_1', [
+      { field_data: [{ name: 'full_name', values: ['P1'] }, { name: 'email', values: ['p1@x.com'] }] },
+      { field_data: [{ name: 'full_name', values: ['P2'] }, { name: 'email', values: ['p2@x.com'] }] },
+      { field_data: [{ name: 'full_name', values: ['P3'] }, { name: 'email', values: ['p3@x.com'] }] },
+      { field_data: [{ name: 'full_name', values: ['P4'] }, { name: 'email', values: ['p4@x.com'] }] },
+    ]);
+
+    const result = await service.getCampaignInsights({
+      tenantId: TENANT_ID, campaignId: 'mc1', dateRange: 'last_7d',
+    });
+
+    expect(result.totals.conversions).toBe(4);
+  });
+
+  it('campanha não-form mantém conversões dos insights (sem chamada de leads)', async () => {
+    const { service, repo, meta } = makeService();
+    repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
+    await repo.createCampaign({
+      tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Tráfego',
+      status: 'active', budget: { objective: 'OUTCOME_TRAFFIC' },
+    } as any);
+
+    meta.insightsResult = {
+      data: [
+        { date_start: '2026-09-23', spend: '8', impressions: '1000', clicks: '25', ctr: '2.5', cpc: '0.32', cpm: '8', actions: [{ action_type: 'link_click', value: '6' }], unique_actions: [{ action_type: 'link_click', value: '6' }], purchase_roas: [] },
+      ],
+    };
+
+    const result = await service.getCampaignInsights({
+      tenantId: TENANT_ID, campaignId: 'mc1', dateRange: 'last_7d',
+    });
+
+    expect(result.totals.conversions).toBe(6);
+    expect(meta.campaignAdsByCampaign.size).toBe(0); // não consultou ads/leads
+  });
 });
 
 // ── Service: searchMetaLocations ────────────────────────────────────────────
