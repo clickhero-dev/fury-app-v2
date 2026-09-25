@@ -11,6 +11,7 @@ import {
 interface CampaignsResult {
   data: CampaignData[];
   subscriptionError?: { code: string; message: string };
+  partialFailures?: Array<{ item_id?: string; provider: string; code?: string; reason: string }>;
 }
 
 function normalizeCampaignItems(data: unknown): CampaignApiItem[] {
@@ -41,11 +42,15 @@ export function useCampaigns(period?: CampaignsPeriod) {
     queryFn: async (): Promise<CampaignsResult> => {
       try {
         const response = await api.get<CampaignsApiResponse>('/metrics/campaigns', {
-          params: { limit: 100, startDate, endDate },
+          params: { limit: 100, startDate, endDate, includeOnlyLeadForm: true },
         });
         const items = normalizeCampaignItems(response.data?.data);
+        // ADR-0002: falha parcial de integração vem em `data.partial_failures`
+        // (nunca derruba a lista nem vira "nenhuma campanha" sem motivo).
+        const raw = (response.data?.data ?? {}) as { partial_failures?: Array<{ item_id?: string; provider: string; code?: string; reason: string }> };
         return {
           data: items.length === 0 ? [] : items.map(mapCampaignApiToRow),
+          partialFailures: Array.isArray(raw.partial_failures) ? raw.partial_failures : [],
         };
       } catch (error: any) {
         if (error?.response?.status === 403 && error?.response?.data?.error?.code === 'SUBSCRIPTION_EXPIRED') {

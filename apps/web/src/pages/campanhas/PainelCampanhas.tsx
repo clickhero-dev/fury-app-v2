@@ -56,6 +56,7 @@ export function PainelCampanhas() {
   const { data: result = { data: [] }, isLoading } = useCampaigns({ startDate, endDate });
   const campaigns = result.data ?? [];
   const subscriptionError = result.subscriptionError;
+  const partialFailures = result.partialFailures ?? [];
   const pauseMutation = usePauseCampaign();
   const deleteMutation = useDeleteCampaign();
   const handleCreateCampaign = () => {
@@ -278,6 +279,21 @@ export function PainelCampanhas() {
         </div>
       )}
 
+      {!subscriptionError && partialFailures.length > 0 && (
+        <div className="flex items-start gap-3 bg-warning-light border border-warning/20 rounded-2xl px-4 py-3.5 text-sm text-warning">
+          <span className="shrink-0 mt-0.5">⚠️</span>
+          <div className="flex-1">
+            <p className="font-semibold">Dados parcialmente sincronizados</p>
+            <p className="text-xs mt-1 opacity-80">
+              Não conseguimos sincronizar tudo com a Meta. As campanhas abaixo estão atualizadas; o restante tente novamente em instantes.
+            </p>
+            {partialFailures.slice(0, 3).map((pf, i) => (
+              <p key={i} className="text-xs mt-1 opacity-70">· {pf.reason}</p>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Toolbar: Busca + Filtro com Maior Altura e Efeitos Hover */}
       <div className="grid gap-3 sm:grid-cols-[1fr_160px] w-full">
         <div className="flex items-center gap-2.5 px-4 py-3 rounded-full border border-border bg-surface hover:border-text-tertiary/50 focus-within:border-brand focus-within:ring-1 focus-within:ring-brand/30 transition-all duration-200">
@@ -309,7 +325,7 @@ export function PainelCampanhas() {
 
       {/* Conteúdo Principal / Empty State com Maior Altura e Efeito Hover */}
       <div className="space-y-4 w-full">
-        {filteredCampaigns.length === 0 && !isLoading && !subscriptionError ? (
+        {filteredCampaigns.length === 0 && !isLoading && !subscriptionError && partialFailures.length === 0 ? (
           <div className="w-full rounded-2xl border border-border bg-surface py-32 px-6 flex flex-col items-center justify-center text-center hover:border-border-light transition-all duration-300 shadow-sm">
             <h3 className="text-base font-semibold text-text-primary mb-2">
               Nenhuma campanha por aqui ainda
