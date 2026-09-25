@@ -94,14 +94,13 @@ describe('meta-insights-parser', () => {
     });
   });
 
-  // CRITÉRIO DE ACEITE: "total de clientes em /campanhas deve representar a
-  // soma de clientes das linhas da campanha". O getCampaigns agora calcula a
-  // conversão de cada linha SEM objective-aware, com o MESMO critério que o
-  // /metrics/summary (getSummary → normalizeInsights). Isso garante que a soma
-  // das conversões das linhas = "Clientes alcançados" do dashboard.
-  describe('linha de campanha bate com o resumo do dashboard', () => {
-    it('extractCampaignMetricsFromInsight sem objective usa o mesmo fallback do summary', () => {
-      // Sem objective (como o getSummary), o fallback genérico prioriza tráfego.
+  // CRITÉRIO ATUAL: a listagem (`getCampaigns`) e o resumo (`getSummary`) agora
+  // passam o `objective` de cada campanha ao parser (objective-aware), para que
+  // uma campanha de Formulário conte LEADS (quem preencheu), não cliques.
+  // O bloco abaixo documenta apenas o FALLBACK do parser quando não há objective
+  // (ex.: insight sem campanha correspondente): prioriza tráfego.
+  describe('fallback do parser SEM objective', () => {
+    it('extractCampaignMetricsFromInsight sem objective prioriza tráfego', () => {
       const insight = {
         actions: [
           { action_type: 'link_click', value: '95' },
@@ -114,15 +113,28 @@ describe('meta-insights-parser', () => {
         action_values: [],
       };
 
-      // getSummary (parseConversionsFromActions sem objective) conta o primeiro
-      // evento válido da família fallback (landing_page_view vem antes de
-      // link_click na ordem de prioridade TRAFFIC).
-      const summaryConversions = parseConversionsFromActions(insight.actions, undefined);
-      // Linha de campanha (extractCampaignMetricsFromInsight sem objective).
       const lineConversions = extractCampaignMetricsFromInsight(insight, 100).conversions;
+      expect(lineConversions).toBe(90);
+    });
+  });
 
-      expect(summaryConversions).toBe(90);
-      expect(lineConversions).toBe(summaryConversions);
+  // OBJECTIVE-AWARE: com objective explícito, o parser NÃO usa o fallback de
+  // tráfego — campanha de Formulário conta leads (quem preencheu), não cliques.
+  describe('objective-aware (leads ≠ tráfego)', () => {
+    it('OUTCOME_LEADS com link_click+lead conta o lead, não o clique', () => {
+      const insight = {
+        actions: [
+          { action_type: 'link_click', value: '95' },
+          { action_type: 'landing_page_view', value: '90' },
+          { action_type: 'lead', value: '8' },
+        ],
+        unique_actions: undefined,
+        purchase_roas: undefined,
+        cost_per_action_type: undefined,
+        action_values: [],
+      };
+      const result = extractCampaignMetricsFromInsight(insight, 100, 'OUTCOME_LEADS');
+      expect(result.conversions).toBe(8);
     });
   });
 });
