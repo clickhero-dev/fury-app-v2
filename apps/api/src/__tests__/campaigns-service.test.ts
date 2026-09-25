@@ -1034,23 +1034,46 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
 });
 
 describe('CampaignsService.getLeadCampaigns (fonte da verdade: Meta)', () => {
-  it('retorna campanhas OUTCOME_LEADS da Meta, incluindo as criadas FORA do Fury', async () => {
+  it('retorna apenas campanhas OUTCOME_LEADS que TÊM formulário (via ads), incluindo as criadas FORA do Fury', async () => {
     const { service, meta, repo } = makeService();
     makeLeadsEnv(meta, repo);
     meta.listCampaignsResult = [
       { id: 'meta_camp_externa', name: 'Externa', objective: 'OUTCOME_LEADS', status: 'ACTIVE' },
       { id: 'meta_camp_trafego', name: 'Tráfego', objective: 'OUTCOME_TRAFFIC', status: 'ACTIVE' },
-      { id: 'meta_camp_pausada', name: 'Pausada', objective: 'OUTCOME_LEADS', status: 'PAUSED' },
+      { id: 'meta_camp_sem_form', name: 'Sem Form', objective: 'OUTCOME_LEADS', status: 'ACTIVE' },
+      { id: 'meta_camp_pausada', name: 'Pausada c/ form', objective: 'OUTCOME_LEADS', status: 'PAUSED' },
     ];
+    meta.campaignHasFormByCampaign.set('meta_camp_externa', true);
+    meta.campaignHasFormByCampaign.set('meta_camp_sem_form', false);
+    meta.campaignHasFormByCampaign.set('meta_camp_pausada', true);
 
     const result = await service.getLeadCampaigns({ tenantId: TENANT_ID });
 
     expect(result).toEqual([
       { id: 'meta_camp_externa', name: 'Externa' },
-      { id: 'meta_camp_pausada', name: 'Pausada' },
+      { id: 'meta_camp_pausada', name: 'Pausada c/ form' },
     ]);
     // Usa o ad account selecionado da conexão
     expect(meta.listCampaignsRequests[0].adAccountId).toBe('act_123');
+    // Só consulta ads das campanhas OUTCOME_LEADS (não da de tráfego)
+    expect(meta.campaignHasFormRequests.map((r) => r.campaignId)).toEqual([
+      'meta_camp_externa',
+      'meta_camp_sem_form',
+      'meta_camp_pausada',
+    ]);
+  });
+
+  it('não consulta ads para campanhas fora do objetivo OUTCOME_LEADS', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    meta.listCampaignsResult = [
+      { id: 'meta_camp_trafego', name: 'Tráfego', objective: 'OUTCOME_TRAFFIC', status: 'ACTIVE' },
+    ];
+
+    const result = await service.getLeadCampaigns({ tenantId: TENANT_ID });
+
+    expect(result).toEqual([]);
+    expect(meta.campaignHasFormRequests).toHaveLength(0);
   });
 
   it('lança 403 sem conexão Meta', async () => {
@@ -1255,6 +1278,8 @@ describe('CampaignsService.getAllCampaignLeads', () => {
     ];
     meta.campaignAdsByCampaign.set('meta_form_1', ['ad_f1']);
     meta.campaignAdsByCampaign.set('meta_form_2', ['ad_f2']);
+    meta.campaignHasFormByCampaign.set('meta_form_1', true);
+    meta.campaignHasFormByCampaign.set('meta_form_2', true);
     meta.adLeadsByAd.set('ad_f1', [{
       created_time: '2026-09-21T12:00:00Z',
       field_data: [
@@ -1302,6 +1327,8 @@ describe('CampaignsService.getAllCampaignLeads', () => {
       { id: 'bad_1', name: 'Ruim', objective: 'OUTCOME_LEADS', status: 'ACTIVE' },
     ];
     meta.campaignAdsByCampaign.set('ok_1', ['ad_ok']);
+    meta.campaignHasFormByCampaign.set('ok_1', true);
+    meta.campaignHasFormByCampaign.set('bad_1', true);
     meta.adLeadsByAd.set('ad_ok', [{ created_time: '2026-09-21T00:00:00Z', field_data: [] }]);
     meta.getCampaignAds = async (campaignId: string) => {
       if (campaignId === 'bad_1') throw new Error('Meta down');

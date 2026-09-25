@@ -6,6 +6,7 @@ import {
   getPageAccessToken as metaGetPageAccessToken,
   listAccountCampaigns as metaListAccountCampaigns,
   listCampaignAds as metaListCampaignAds,
+  campaignHasLeadForm as metaCampaignHasLeadForm,
   listAdLeads as metaListAdLeads,
   getLeadFormQuestions as metaGetLeadFormQuestions,
   type MetaCampaignCreateResponse,
@@ -135,6 +136,10 @@ export class DefaultMetaCampaignProvider implements IMetaCampaignProvider {
     accessToken: string
   ): Promise<Array<{ id: string; name?: string }>> {
     return metaListCampaignAds(campaignId, accessToken);
+  }
+
+  async campaignHasLeadForm(campaignId: string, accessToken: string): Promise<boolean> {
+    return metaCampaignHasLeadForm(campaignId, accessToken);
   }
 
   async getAdLeads(

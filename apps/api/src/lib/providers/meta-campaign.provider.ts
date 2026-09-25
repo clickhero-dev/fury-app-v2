@@ -78,6 +78,9 @@ export interface IMetaCampaignProvider {
     accessToken: string
   ): Promise<Array<{ id: string; name?: string }>>;
 
+  /** True se a campanha tem ao menos um ad vinculado a um formulário de leads (via criativo). */
+  campaignHasLeadForm(campaignId: string, accessToken: string): Promise<boolean>;
+
   /** Lista os leads de um AD (paginação completa), com field_data/created_time/form_id. */
   getAdLeads(
     adId: string,
