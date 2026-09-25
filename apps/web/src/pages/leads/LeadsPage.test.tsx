@@ -117,7 +117,7 @@ describe('LeadsPage', () => {
 
     render(<LeadsPage />, { wrapper: makeWrapper() });
 
-    expect(await screen.findByText('Nenhum lead ainda')).toBeInTheDocument();
+    expect(await screen.findByText('Nenhum cliente ainda')).toBeInTheDocument();
   });
 
   it('exibe a mensagem de erro da API quando a busca de leads falha (ex.: 401 token Meta expirado)', async () => {
@@ -157,6 +157,6 @@ describe('LeadsPage', () => {
 
     render(<LeadsPage />, { wrapper: makeWrapper() });
 
-    expect(await screen.findByText('Não foi possível carregar os leads. Tente novamente.')).toBeInTheDocument();
+    expect(await screen.findByText('Não foi possível carregar os clientes. Tente novamente.')).toBeInTheDocument();
   });
 });

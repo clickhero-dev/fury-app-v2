@@ -74,7 +74,7 @@ export function LeadsPage() {
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 sm:px-10">
       <PageHeader
-        title="Leads"
+        title="Clientes"
         description="Pessoas que preencheram o formulário dos seus anúncios, buscadas direto do Meta Ads."
       />
 
@@ -115,22 +115,22 @@ export function LeadsPage() {
         {isLoading ? (
           <div className="flex items-center justify-center gap-2 py-20 text-sm text-text-secondary">
             <Loader2 className="w-4 h-4 animate-spin" />
-            Carregando leads...
+            Carregando clientes...
           </div>
         ) : isError ? (
           <div className="py-16 px-6 text-sm text-error text-center">
-            {errorMessage || 'Não foi possível carregar os leads. Tente novamente.'}
+            {errorMessage || 'Não foi possível carregar os clientes. Tente novamente.'}
           </div>
         ) : !isLoading && campaigns.length === 0 ? (
           <EmptyState
             icon={<Users className="w-6 h-6" />}
             title="Nenhuma campanha de Formulário"
-            description="Crie uma campanha com o objetivo Formulário para coletar leads por aqui."
+            description="Crie uma campanha com o objetivo Formulário para coletar clientes por aqui."
           />
         ) : leads.length === 0 ? (
           <EmptyState
             icon={<Users className="w-6 h-6" />}
-            title="Nenhum lead ainda"
+            title="Nenhum cliente ainda"
             description="Quando alguém preencher o formulário dos seus anúncios, os contatos aparecerão aqui."
           />
         ) : (
