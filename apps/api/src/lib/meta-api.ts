@@ -1831,6 +1831,54 @@ export async function listAdLeads(
   return all;
 }
 
+/** Um ad com o criativo que referencia (ou não) um formulário de leads. */
+interface MetaAdWithCreativeResponse {
+  data: Array<{
+    id: string;
+    creative?: {
+      link_data?: MetaCreativeLinkData;
+      object_story_spec?: { link_data?: MetaCreativeLinkData };
+    };
+  }>;
+  paging?: { cursors?: { after?: string } };
+}
+
+interface MetaCreativeLinkData {
+  call_to_action?: { value?: { lead_gen_form_id?: string } };
+}
+
+/**
+ * True se a campanha tem ao menos um ad vinculado a um formulário de leads.
+ * O form NÃO é um campo top-level do Ad: vive no criativo via
+ * `link_data` (ou `object_story_spec.link_data`) → `call_to_action.value.lead_gen_form_id`.
+ * GET /{campaign_id}/ads?fields=id,creative{link_data{call_to_action{value}},object_story_spec{link_data{call_to_action{value}}}}
+ */
+export async function campaignHasLeadForm(campaignId: string, accessToken: string): Promise<boolean> {
+  let after: string | undefined;
+  do {
+    const query =
+      'fields=id,creative{link_data{call_to_action{value}},object_story_spec{link_data{call_to_action{value}}}}' +
+      `&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const payload = await metaApiCall<MetaAdWithCreativeResponse>(
+      `/${encodeURIComponent(campaignId)}/ads?${query}`,
+      accessToken,
+    );
+    for (const ad of payload.data || []) {
+      if (extractLeadFormIdFromCreative(ad.creative)) return true;
+    }
+    after = payload.paging?.cursors?.after;
+  } while (after);
+  return false;
+}
+
+function extractLeadFormIdFromCreative(creative?: MetaAdWithCreativeResponse['data'][number]['creative']): string | null {
+  const cta =
+    creative?.link_data?.call_to_action ?? creative?.object_story_spec?.link_data?.call_to_action;
+  const value = cta?.value;
+  const formId = value?.lead_gen_form_id;
+  return typeof formId === 'string' && formId ? formId : null;
+}
+
 export interface MetaLeadFormQuestion {
   key: string;
   type: string;
