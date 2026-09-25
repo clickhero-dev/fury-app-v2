@@ -1169,9 +1169,16 @@ export class CampaignsService {
       this.handleMetaError(err);
     }
 
-    return campaigns
-      .filter((c) => c.objective === 'OUTCOME_LEADS')
-      .map((c) => ({ id: c.id, name: c.name }));
+    // Filtra por objetivo AND por presença de formulário: uma campanha pode ter
+    // objetivo de leads mas nenhum ad vinculado a um form (criada fora do Fury
+    // ou com form removido). O form NÃO é campo top-level do Ad — checamos via
+    // ads → criativo (lead_gen_form_id), por campanha.
+    const leadCampaigns = campaigns.filter((c) => c.objective === 'OUTCOME_LEADS');
+    const withForm: Array<{ id: string; name: string; objective: string | null; status: string | null }> = [];
+    for (const c of leadCampaigns) {
+      if (await this.meta.campaignHasLeadForm(c.id, accessToken)) withForm.push(c);
+    }
+    return withForm.map((c) => ({ id: c.id, name: c.name }));
   }
 
   /**

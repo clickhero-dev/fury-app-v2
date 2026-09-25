@@ -104,6 +104,15 @@ export class MockMetaCampaignProvider implements IMetaCampaignProvider {
     return (this.campaignAdsByCampaign.get(campaignId) ?? []).map((id) => ({ id }));
   }
 
+  // ── Presença de formulário (via ads) ──────────────────────────────────────
+  campaignHasFormByCampaign: Map<string, boolean> = new Map();
+  campaignHasFormRequests: Array<{ campaignId: string; accessToken: string }> = [];
+
+  async campaignHasLeadForm(campaignId: string, accessToken: string): Promise<boolean> {
+    this.campaignHasFormRequests.push({ campaignId, accessToken });
+    return this.campaignHasFormByCampaign.get(campaignId) ?? false;
+  }
+
   async getAdLeads(adId: string, accessToken: string) {
     return (this.adLeadsByAd.get(adId) ?? []);
   }
