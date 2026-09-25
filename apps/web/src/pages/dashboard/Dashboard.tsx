@@ -469,7 +469,13 @@ function fmtInt(v: number | null | undefined): string {
   return Math.round(v).toLocaleString('pt-BR');
 }
 
-function ActiveCampaignsTable({ campaigns }: { campaigns: ActiveCampaign[] }) {
+function ActiveCampaignsTable({
+  campaigns,
+  partialFailures = [],
+}: {
+  campaigns: ActiveCampaign[];
+  partialFailures?: Array<{ item_id?: string; provider: string; code?: string; reason: string }>;
+}) {
   const sorted = [...campaigns]
     .sort((a, b) => (b.metrics.conversions ?? -1) - (a.metrics.conversions ?? -1))
     .slice(0, 10);
@@ -490,6 +496,18 @@ function ActiveCampaignsTable({ campaigns }: { campaigns: ActiveCampaign[] }) {
           Ver todas
         </Link>
       </div>
+
+      {partialFailures.length > 0 && (
+        <div className="mt-4 flex items-start gap-3 rounded-xl border border-[#CF6F03]/30 bg-[#CF6F03]/10 px-4 py-3 text-sm text-[#9A4F02] dark:text-[#E08A2E]">
+          <span className="shrink-0" aria-hidden>⚠️</span>
+          <div>
+            <p className="font-semibold text-xs uppercase tracking-wide">Dados parcialmente sincronizados</p>
+            <p className="text-xs mt-1 opacity-90">
+              Não foi possível atualizar tudo com a Meta. Você pode estar vendo um número <span className="font-semibold">menor</span> de campanhas do que o real. Tente novamente em instantes.
+            </p>
+          </div>
+        </div>
+      )}
 
       {sorted.length === 0 ? (
         <div className="mt-6 flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 dark:border-[#262824] px-6 py-12 text-center">
@@ -722,22 +740,29 @@ export function Dashboard() {
     placeholderData: null,
   });
 
-  const { data: activeCampaigns = [] } = useQuery({
+  const { data: activeCampaignsResult = { campaigns: [], partialFailures: [] } } = useQuery({
     queryKey: ['campaigns-active-dashboard', startDate, endDate],
     queryFn: async () => {
       try {
-        const res = await api.get<{ success: boolean; data: { campaigns: ActiveCampaign[] } }>(
-          '/metrics/campaigns',
-          { params: { status: 'ACTIVE', startDate, endDate, limit: 10 } }
-        );
-        return res.data.data.campaigns ?? [];
+        const res = await api.get<{
+          success: boolean;
+          data: { campaigns: ActiveCampaign[]; partial_failures?: Array<{ item_id?: string; provider: string; code?: string; reason: string }> };
+        }>('/metrics/campaigns', {
+          params: { status: 'ACTIVE', startDate, endDate, limit: 10, includeOnlyLeadForm: true },
+        });
+        return {
+          campaigns: res.data.data.campaigns ?? [],
+          partialFailures: Array.isArray(res.data.data.partial_failures) ? res.data.data.partial_failures : [],
+        };
       } catch {
-        return [];
+        return { campaigns: [], partialFailures: [] };
       }
     },
     staleTime: 5 * 60 * 1000,
-    placeholderData: [],
+    placeholderData: { campaigns: [], partialFailures: [] },
   });
+  const activeCampaigns = activeCampaignsResult.campaigns ?? [];
+  const activeCampaignPartialFailures = activeCampaignsResult.partialFailures ?? [];
 
   const { data: dailyData = [] } = useQuery({
     queryKey: ['metrics-daily-week', startDate, endDate],
@@ -876,7 +901,7 @@ export function Dashboard() {
 
           <WeeklyChart data={dailyData} hasRealData={hasRealData} idealLine={idealLine} />
 
-          <ActiveCampaignsTable campaigns={activeCampaigns} />
+          <ActiveCampaignsTable campaigns={activeCampaigns} partialFailures={activeCampaignPartialFailures} />
         </div>
       </ErrorBoundary>
     </AppLayout>
