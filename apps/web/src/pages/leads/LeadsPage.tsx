@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Loader2, Users } from 'lucide-react';
+import { Users, MessageCircle } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components';
 import { useCampaignLeads, type CampaignLead } from '@/hooks/useCampaignLeads';
 import { useLeadCampaigns } from '@/hooks/useLeadCampaigns';
+import { normalizePhoneToMeta } from '@/components/campaign-wizard/lib/phone-format';
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
@@ -14,6 +15,12 @@ function formatDate(dateStr: string | null): string {
     minute: '2-digit',
   });
 }
+
+type LeadColumn = {
+  key: keyof CampaignLead;
+  label: string;
+  render: (value: unknown, row?: CampaignLead) => React.ReactNode;
+};
 
 /**
  * Página dedicada de leads de formulário (objetivo 'leads').
@@ -31,7 +38,7 @@ export function LeadsPage() {
 
   const showCampaignColumn = campaignId === '';
 
-  const columns = [
+  const columns: LeadColumn[] = [
     {
       key: 'name' as const,
       label: 'Nome',
@@ -68,6 +75,29 @@ export function LeadsPage() {
       render: (value: unknown) => (
         <span className="text-text-secondary whitespace-nowrap">{formatDate(value as string | null)}</span>
       ),
+    },
+    {
+      key: 'phone' as const,
+      label: 'Ação',
+      render: (value: unknown, row: CampaignLead) => {
+        const phone = row.phone;
+        if (!phone) {
+          return <span className="text-text-tertiary">—</span>;
+        }
+        const wa = `https://wa.me/${normalizePhoneToMeta(phone)}`;
+        return (
+          <a
+            href={wa}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Conversar no WhatsApp com ${row.name ?? 'o cliente'}`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-3.5 py-1.5 text-xs font-semibold text-success hover:bg-success/20 transition-colors"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            WhatsApp
+          </a>
+        );
+      },
     },
   ];
 
@@ -113,9 +143,21 @@ export function LeadsPage() {
       {/* Lista de leads */}
       <div className="rounded-2xl border border-border bg-surface overflow-hidden hover:border-border-light transition-all duration-300">
         {isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-20 text-sm text-text-secondary">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Carregando clientes...
+          <div
+            role="status"
+            aria-label="Carregando clientes..."
+            aria-busy="true"
+            className="p-4 space-y-2.5"
+          >
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="grid grid-cols-[1.2fr_1.5fr_1fr_1fr] gap-4 rounded-xl bg-surface-secondary/40 p-3 animate-pulse">
+                <div className="h-3 rounded bg-surface-secondary/80" />
+                <div className="h-3 rounded bg-surface-secondary/80" />
+                <div className="h-3 rounded bg-surface-secondary/80" />
+                <div className="h-3 rounded bg-surface-secondary/80" />
+              </div>
+            ))}
+            <span className="sr-only">Carregando clientes...</span>
           </div>
         ) : isError ? (
           <div className="py-16 px-6 text-sm text-error text-center">
@@ -149,7 +191,7 @@ export function LeadsPage() {
                 <tr key={`${lead.email ?? 'lead'}-${i}`} className="hover:bg-surface-secondary/30 transition-colors">
                   {columns.map((col) => (
                     <td key={col.key as string} className="py-3 px-4">
-                      {col.render(lead[col.key])}
+                      {col.render(lead[col.key], lead)}
                     </td>
                   ))}
                 </tr>
