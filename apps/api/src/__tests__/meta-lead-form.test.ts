@@ -38,7 +38,10 @@ describe('metaApi.campaignHasLeadForm (detecção de campanha com formulário)',
     await expect(metaApi.campaignHasLeadForm('campaign_1', 'tok')).resolves.toBe(true);
     const url = spy.mock.calls[0][0] as string;
     expect(url).toContain('/campaign_1/ads');
-    expect(url).toContain('creative');
+    // Buscamos link_data/object_story_spec COMPLETOS, sem subcampo aninhado
+    // (call_to_action{value}) — que a Graph API pode rejeitar.
+    expect(url).toContain('creative%7Blink_data%2Cobject_story_spec%7D'); // creative{link_data,object_story_spec}
+    expect(url).not.toContain('call_to_action%7Bvalue%7D'); // call_to_action{value}
   });
 
   it('true quando o form está em object_story_spec.link_data (fallback)', async () => {

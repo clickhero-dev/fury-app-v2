@@ -1859,14 +1859,15 @@ interface MetaCreativeLinkData {
  * True se a campanha tem ao menos um ad vinculado a um formulário de leads.
  * O form NÃO é um campo top-level do Ad: vive no criativo via
  * `link_data` (ou `object_story_spec.link_data`) → `call_to_action.value.lead_gen_form_id`.
- * GET /{campaign_id}/ads?fields=id,creative{link_data{call_to_action{value}},object_story_spec{link_data{call_to_action{value}}}}
+ * Buscamos `link_data`/`object_story_spec` COMPLETOS (não sub_campos aninhados,
+ * que a Graph API pode rejeitar) e extraímos o id do form de forma tolerante.
+ * GET /{campaign_id}/ads?fields=id,creative{link_data,object_story_spec}
  */
 export async function campaignHasLeadForm(campaignId: string, accessToken: string): Promise<boolean> {
   let after: string | undefined;
   do {
     const query =
-      'fields=id,creative{link_data{call_to_action{value}},object_story_spec{link_data{call_to_action{value}}}}' +
-      `&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+      `fields=id,creative{link_data,object_story_spec}&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
     const payload = await metaApiCall<MetaAdWithCreativeResponse>(
       `/${encodeURIComponent(campaignId)}/ads?${query}`,
       accessToken,
@@ -1880,9 +1881,8 @@ export async function campaignHasLeadForm(campaignId: string, accessToken: strin
 }
 
 function extractLeadFormIdFromCreative(creative?: MetaAdWithCreativeResponse['data'][number]['creative']): string | null {
-  const cta =
-    creative?.link_data?.call_to_action ?? creative?.object_story_spec?.link_data?.call_to_action;
-  const value = cta?.value;
+  const linkData = creative?.link_data ?? creative?.object_story_spec?.link_data;
+  const value = linkData?.call_to_action?.value;
   const formId = value?.lead_gen_form_id;
   return typeof formId === 'string' && formId ? formId : null;
 }
