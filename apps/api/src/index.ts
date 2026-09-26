@@ -16,7 +16,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const swaggerJson = JSON.parse(readFileSync(join(__dirname, '..', 'swagger.json'), 'utf-8'));
 import { closeRedis, waitForRedisReady } from './lib/redis.js';
-import { closeComplianceQueue, closeStudioQueue, closeRedisConnection, closeFuryEngineQueue, closePublishDueQueue } from './lib/queue.js';
+import { closeComplianceQueue, closeStudioQueue, closeRedisConnection, closeFuryEngineQueue, closePublishDueQueue, closeMetaSyncQueue } from './lib/queue.js';
 import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
 import { startRuleEngine, stopRuleEngine } from './lib/rule-engine-manager.js';
 import { startFuryEngine, stopFuryEngine } from './lib/fury-engine-manager.js';
@@ -28,6 +28,7 @@ import { startComplianceSweeper, stopComplianceSweeper } from './services/studio
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
 import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
 import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
+import { startMetaSyncManager, stopMetaSyncManager } from './lib/meta-sync-manager.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
 import { slugify } from './lib/slug.js';
@@ -300,6 +301,9 @@ app.use((req, res) => {
       void startGoogleSyncManager().catch((error) => {
         console.error('Failed to start google-sync manager:', error);
       });
+      void startMetaSyncManager().catch((error) => {
+        console.error('Failed to start meta-sync manager:', error);
+      });
       void startPlannerWorker().then(() => {
         return recoverInterruptedPlannerWorkflows().then((count) => {
           if (count > 0) console.log(`♻️  Recuperados ${count} workflows interrompidos`);
@@ -315,6 +319,7 @@ app.use((req, res) => {
       server.close(async () => {
         await stopPublishDueManager();
         await stopGoogleSyncManager();
+        await stopMetaSyncManager();
         await flushRequestLogs();
         await stopSyncJobsWorker();
         await stopRuleEngine();
@@ -329,6 +334,7 @@ app.use((req, res) => {
         await closeComplianceQueue();
         await closeFuryEngineQueue();
         await closePublishDueQueue();
+        await closeMetaSyncQueue();
         await closeRedisConnection();
         await closeRedis();
         await flushAnalytics();

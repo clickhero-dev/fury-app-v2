@@ -192,3 +192,28 @@ export async function closePublishDueQueue() {
     publishDueQueueInstance = null;
   }
 }
+
+// ==================== Meta sync queue ====================
+export const META_SYNC_QUEUE_NAME = 'meta-sync' as const;
+
+let metaSyncQueueInstance: Queue | null = null;
+export async function getMetaSyncQueue() {
+  if (!metaSyncQueueInstance) {
+    const connection = await getRedisConnection();
+    metaSyncQueueInstance = new Queue<{ tenantId: string; reason?: string }>(META_SYNC_QUEUE_NAME, {
+      connection,
+      defaultJobOptions: {
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+      },
+    });
+  }
+  return metaSyncQueueInstance;
+}
+
+export async function closeMetaSyncQueue() {
+  if (metaSyncQueueInstance) {
+    await metaSyncQueueInstance.close();
+    metaSyncQueueInstance = null;
+  }
+}

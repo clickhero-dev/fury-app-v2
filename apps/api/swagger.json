@@ -1409,6 +1409,10 @@
     {
       "name": "Instagram",
       "description": "Integração Instagram"
+    },
+    {
+      "name": "Meta Sync V2",
+      "description": "Endpoints v2 — dados Meta direto do banco"
     }
   ],
   "paths": {
@@ -7077,6 +7081,345 @@
         "summary": "Proxy de mídia do Instagram",
         "tags": [
           "Instagram"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/v2/campaigns": {
+      "get": {
+        "operationId": "get_api_v2_campaigns",
+        "summary": "[v2] Listar campanhas da conta Meta (do banco, fallback stale)",
+        "tags": [
+          "Meta Sync V2"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/v2/campaigns/{id}": {
+      "get": {
+        "operationId": "get_api_v2_campaigns_id",
+        "summary": "[v2] Detalhe de campanha + metrics + syncedAt",
+        "tags": [
+          "Meta Sync V2"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/v2/campaigns/{id}/leads": {
+      "get": {
+        "operationId": "get_api_v2_campaigns_id_leads",
+        "summary": "[v2] Leads de uma campanha (do banco)",
+        "tags": [
+          "Meta Sync V2"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/v2/leads": {
+      "get": {
+        "operationId": "get_api_v2_leads",
+        "summary": "[v2] Todas as leads do tenant (do banco)",
+        "tags": [
+          "Meta Sync V2"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/v2/lead-campaigns": {
+      "get": {
+        "operationId": "get_api_v2_lead_campaigns",
+        "summary": "[v2] Campanhas OUTCOME_LEADS com form (do banco)",
+        "tags": [
+          "Meta Sync V2"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/v2/metrics/summary": {
+      "get": {
+        "operationId": "get_api_v2_metrics_summary",
+        "summary": "[v2] Resumo de métricas (agregado dos snapshots)",
+        "tags": [
+          "Meta Sync V2"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/v2/metrics/daily": {
+      "get": {
+        "operationId": "get_api_v2_metrics_daily",
+        "summary": "[v2] Métricas diárias (estimativa a partir dos snapshots)",
+        "tags": [
+          "Meta Sync V2"
+        ],
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/v2/metrics/goals-progress": {
+      "get": {
+        "operationId": "get_api_v2_metrics_goals_progress",
+        "summary": "[v2] Progresso de metas (a partir dos snapshots)",
+        "tags": [
+          "Meta Sync V2"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        },
+        "security": {
+          "bearerAuth": []
+        }
+      }
+    },
+    "/api/v2/dashboard/instagram-insights": {
+      "get": {
+        "operationId": "get_api_v2_dashboard_instagram_insights",
+        "summary": "[v2] Insights orgânicos do Instagram (do banco)",
+        "tags": [
+          "Meta Sync V2"
         ],
         "responses": {
           "200": {

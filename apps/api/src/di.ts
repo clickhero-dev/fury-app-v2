@@ -50,6 +50,9 @@ import { BudgetController } from './controllers/budget.controller.js';
 import { campaignsService } from './services/campaigns/campaigns.service.js';
 import { CampaignRepository } from './repository/campaign.repository.js';
 import { CampaignsController } from './controllers/campaigns.controller.js';
+import { metaSyncService } from './services/meta/meta-sync.service.js';
+import { MetaSyncV2Controller } from './controllers/meta-sync.controller.js';
+import { MetaSyncRepository } from './repository/meta-sync.repository.js';
 import { SuperAdminRepository } from './repository/superadmin.repository.js';
 import { SuperAdminController } from './controllers/superadmin.controller.js';
 
@@ -80,6 +83,7 @@ export const authService = new AuthService();
 export const socialAuthService = new SocialAuthService();
 export const metricsService = new MetricsService(metricsProvider);
 export const budgetOptimizerService = new BudgetOptimizerService();
+export { metaSyncService };
 
 // SuperAdmin (GLOBAL) — único repositório/controller não escopado por tenant.
 export const superAdminRepository = new SuperAdminRepository("");
@@ -121,6 +125,10 @@ export const controllers = {
   campaigns: new CampaignsController(
     campaignsService,
     (tenantId: string) => new CampaignRepository(tenantId),
+  ),
+  metaSyncV2: new MetaSyncV2Controller(
+    metaSyncService,
+    (tenantId: string) => new MetaSyncRepository(tenantId),
   ),
   wppWebhook: new WppWebhookController(wppWebhookService),
   wppVerify: new WppVerificationController(wppVerificationService),

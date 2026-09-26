@@ -647,6 +647,127 @@ export const workflowJobsRelations = relations(workflowJobs, ({ one }) => ({
   }),
 }));
 
+// ===== Meta async sync (fluxo de dados v2) tables =====
+
+export const metaSyncRunStatusEnum = pgEnum('meta_sync_run_status', ['running', 'success', 'partial', 'failed']);
+
+/** Snapshot das campanhas da conta Meta (todas, inclusive criadas fora do Fury). */
+export const metaCampaignSnapshots = pgTable(
+  'meta_campaign_snapshots',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    metaCampaignId: varchar('meta_campaign_id', { length: 255 }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    status: varchar('status', { length: 50 }),
+    objective: varchar('objective', { length: 50 }),
+    budget: jsonb('budget').default(sql`'{}'::jsonb`),
+    metrics: jsonb('metrics').default(sql`'{}'::jsonb`),
+    hasLeadForm: boolean('has_lead_form').notNull().default(false),
+    lastInsightsAt: timestamp('last_insights_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('meta_campaign_snapshots_tenant_id_idx').on(table.tenantId),
+    statusIdx: index('meta_campaign_snapshots_status_idx').on(table.status),
+    tenantCampaignUnique: unique('meta_campaign_snapshots_tenant_campaign_unique').on(
+      table.tenantId,
+      table.metaCampaignId
+    ),
+  })
+);
+
+/** Leads coletados dos formulários Meta (dedupe por meta_lead_id por tenant). */
+export const metaLeads = pgTable(
+  'meta_leads',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    metaLeadId: varchar('meta_lead_id', { length: 255 }).notNull(),
+    snapshotId: uuid('snapshot_id').references(() => metaCampaignSnapshots.id, { onDelete: 'cascade' }),
+    metaCampaignId: varchar('meta_campaign_id', { length: 255 }),
+    name: text('name'),
+    email: text('email'),
+    phone: text('phone'),
+    createdTime: timestamp('created_time', { withTimezone: true }),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('meta_leads_tenant_id_idx').on(table.tenantId),
+    snapshotIdIdx: index('meta_leads_snapshot_id_idx').on(table.snapshotId),
+    tenantLeadUnique: unique('meta_leads_tenant_lead_unique').on(table.tenantId, table.metaLeadId),
+  })
+);
+
+/** Mídia Instagram (orgânica) com insights por media. */
+export const metaInstagramMedia = pgTable(
+  'meta_instagram_media',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    mediaId: varchar('media_id', { length: 255 }).notNull(),
+    caption: text('caption'),
+    mediaUrl: text('media_url'),
+    thumbnailUrl: text('thumbnail_url'),
+    mediaType: varchar('media_type', { length: 32 }),
+    mediaProductType: varchar('media_product_type', { length: 32 }),
+    timestamp: timestamp('timestamp', { withTimezone: true }),
+    likeCount: integer('like_count'),
+    commentsCount: integer('comments_count'),
+    insights: jsonb('insights').default(sql`'{}'::jsonb`),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('meta_instagram_media_tenant_id_idx').on(table.tenantId),
+    tenantMediaUnique: unique('meta_instagram_media_tenant_media_unique').on(
+      table.tenantId,
+      table.mediaId
+    ),
+  })
+);
+
+/** Runs de sincronização: status, erro client-safe e contagens. */
+export const metaSyncRuns = pgTable(
+  'meta_sync_runs',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    status: metaSyncRunStatusEnum('status').notNull().default('running'),
+    errorCode: varchar('error_code', { length: 64 }),
+    errorMessage: text('error_message'),
+    partialFailures: jsonb('partial_failures').default(sql`'[]'::jsonb`),
+    campaignsCount: integer('campaigns_count').notNull().default(0),
+    leadsCount: integer('leads_count').notNull().default(0),
+    insightsCount: integer('insights_count').notNull().default(0),
+  },
+  (table) => ({
+    tenantIdIdx: index('meta_sync_runs_tenant_id_idx').on(table.tenantId),
+    tenantStartedIdx: index('meta_sync_runs_tenant_started_idx').on(table.tenantId, table.startedAt),
+  })
+);
+
+export const metaCampaignSnapshotsRelations = relations(metaCampaignSnapshots, ({ many }) => ({
+  leads: many(metaLeads),
+}));
+
+export const metaLeadsRelations = relations(metaLeads, ({ one }) => ({
+  snapshot: one(metaCampaignSnapshots, {
+    fields: [metaLeads.snapshotId],
+    references: [metaCampaignSnapshots.id],
+  }),
+}));
+
 // ===== Google Meu Negócio (Google Business Profile) tables =====
 
 export const googleConnections = pgTable(
@@ -954,4 +1075,8 @@ export const allTables = {
   policyAcceptances,
   wppVerifications,
   wppWebhookEvents,
+  metaCampaignSnapshots,
+  metaLeads,
+  metaInstagramMedia,
+  metaSyncRuns,
 };

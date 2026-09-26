@@ -627,7 +627,7 @@ function InstagramEngagementSection({
     queryFn: async () => {
       try {
         const res = await api.get<{ success: boolean; data: InstagramInsights | null }>(
-          '/dashboard/instagram-insights',
+          '/v2/dashboard/instagram-insights',
           { params: { date_from: startDate, date_to: endDate } }
         );
         return res.data.data ?? null;
@@ -728,7 +728,7 @@ export function Dashboard() {
     queryFn: async () => {
       try {
         const res = await api.get<{ success: boolean; data: { summary: MetricsSummary } }>(
-          '/metrics/summary',
+          '/v2/metrics/summary',
           { params: { startDate, endDate } }
         );
         return res.data.data.summary ?? null;
@@ -768,7 +768,7 @@ export function Dashboard() {
     queryKey: ['metrics-daily-week', startDate, endDate],
     queryFn: async () => {
       try {
-        const res = await api.get<{ success: boolean; data: DailyMetric[] }>('/metrics/daily', {
+        const res = await api.get<{ success: boolean; data: DailyMetric[] }>('/v2/metrics/daily', {
           params: { startDate, endDate },
         });
         return res.data.data ?? [];

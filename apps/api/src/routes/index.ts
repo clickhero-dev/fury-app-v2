@@ -29,6 +29,8 @@ import { tenantMiddleware } from "../middleware/tenant.middleware.js";
 import { tenantOrSuperadminMiddleware } from "../middleware/tenantOrSuperadmin.middleware.js";
 import { checkSubscriptionActive } from "../middleware/checkSubscriptionActive.js";
 import { searchMetaLocationsHandler, searchMetaInterestsHandler } from "../controllers/campaigns.controller.js";
+import { createV2Router } from "./v2.routes.js";
+import { controllers } from "../di.js";
 
 const AUTH_TENANT_SUB = [authMiddleware, tenantMiddleware, checkSubscriptionActive];
 
@@ -69,5 +71,8 @@ router.use("/admin", superadminRoutes);
 router.use("/admin/queues", bullBoardRoutes);
 router.use("/planner", ...AUTH_TENANT_SUB, plannerRoutes); // NOVO
 router.use("/wpp", wppRoutes);
+
+// Endpoints v2 (dados Meta direto do banco + fallback stale) — reversão = só não usar o path.
+router.use("/v2", authMiddleware, tenantMiddleware, createV2Router(controllers.metaSyncV2));
 
 export default router;
