@@ -50,6 +50,7 @@ import { BudgetController } from './controllers/budget.controller.js';
 import { campaignsService } from './services/campaigns/campaigns.service.js';
 import { CampaignRepository } from './repository/campaign.repository.js';
 import { CampaignsController } from './controllers/campaigns.controller.js';
+import { metaSyncService } from './services/meta/meta-sync.service.js';
 import { SuperAdminRepository } from './repository/superadmin.repository.js';
 import { SuperAdminController } from './controllers/superadmin.controller.js';
 
@@ -80,6 +81,7 @@ export const authService = new AuthService();
 export const socialAuthService = new SocialAuthService();
 export const metricsService = new MetricsService(metricsProvider);
 export const budgetOptimizerService = new BudgetOptimizerService();
+export { metaSyncService };
 
 // SuperAdmin (GLOBAL) — único repositório/controller não escopado por tenant.
 export const superAdminRepository = new SuperAdminRepository("");
