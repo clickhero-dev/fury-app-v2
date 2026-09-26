@@ -16,6 +16,17 @@ import type {
   InstagramMediaItem,
   InstagramMediaInsights,
 } from '../../lib/meta-api.js';
+import {
+  listAccountCampaigns,
+  campaignHasLeadForm,
+  getMetaInsights,
+  listCampaignAds,
+  listAdLeads,
+  getInstagramMedia,
+  getInstagramMediaInsights,
+} from '../../lib/meta-api.js';
+import { invalidateCampaignsCache } from '../../lib/campaigns-cache.js';
+import { invalidateHttpCache } from '../../lib/http-cache.js';
 
 export interface MetaSyncContext {
   accessToken: string;
@@ -188,9 +199,7 @@ export class MetaSyncService {
     const repo = this.deps.repoFactory(args.tenantId);
     const startedAt = new Date();
     const partialFailures: PartialFailure[] = [];
-    let campaignsCount = 0;
-    let leadsCount = 0;
-    let insightsCount = 0;
+    const counts = { campaignsCount: 0, leadsCount: 0, insightsCount: 0 };
 
     const recordFailed = async (err: unknown): Promise<MetaSyncRunResult> => {
       const { code, reason } = classifyError(err);
@@ -232,7 +241,7 @@ export class MetaSyncService {
       if (classified.fatal) return recordFailed(err);
       return recordFailed(err);
     }
-    campaignsCount = campaigns.length;
+    counts.campaignsCount = campaigns.length;
 
     // 2) Persiste snapshots em batch (upsert idempotente).
     await repo.upsertCampaignSnapshots(
@@ -268,7 +277,7 @@ export class MetaSyncService {
         const metrics = insightToMetrics(row, objective);
         await repo.updateLocalCampaignMetrics(row.campaign_id, metrics);
         await repo.updateSnapshotMetrics(row.campaign_id, metrics);
-        insightsCount += 1;
+        counts.insightsCount += 1;
       }
     } catch (err) {
       // Falha de insights NÃO derruba o restante (ADR-0002) — vira partial.
@@ -296,7 +305,7 @@ export class MetaSyncService {
         const leads = await this.collectLeads(repo, campaign.id, ctx.accessToken);
         if (leads.length > 0) {
           await repo.upsertLeads(leads);
-          leadsCount += leads.length;
+          counts.leadsCount += leads.length;
         }
       } catch (err) {
         const { code, reason } = classifyError(err);
@@ -336,7 +345,7 @@ export class MetaSyncService {
         }
         if (mediaUpserts.length > 0) {
           await repo.upsertInstagramMedia(mediaUpserts);
-          insightsCount += mediaUpserts.length;
+          counts.insightsCount += mediaUpserts.length;
         }
       } catch (err) {
         const { code, reason } = classifyError(err);
@@ -349,9 +358,9 @@ export class MetaSyncService {
     await repo.recordSyncRun({
       status,
       partialFailures,
-      campaignsCount,
-      leadsCount,
-      insightsCount,
+      campaignsCount: counts.campaignsCount,
+      leadsCount: counts.leadsCount,
+      insightsCount: counts.insightsCount,
     });
 
     try {
@@ -364,9 +373,9 @@ export class MetaSyncService {
     return {
       status,
       partialFailures,
-      campaignsCount,
-      leadsCount,
-      insightsCount,
+      campaignsCount: counts.campaignsCount,
+      leadsCount: counts.leadsCount,
+      insightsCount: counts.insightsCount,
       startedAt,
       finishedAt: new Date(),
     };
@@ -402,3 +411,20 @@ export class MetaSyncService {
     return leads;
   }
 }
+
+/** Singleton usado por worker/manager e pelo fallback stale dos endpoints v2 (DI). */
+export const metaSyncService = new MetaSyncService({
+  repoFactory: (tenantId: string) => new MetaSyncRepository(tenantId),
+  getMetaContext: getMetaSyncContext,
+  metaApi: {
+    listAccountCampaigns,
+    campaignHasLeadForm,
+    getMetaInsights,
+    listCampaignAds,
+    listAdLeads,
+    getInstagramMedia,
+    getInstagramMediaInsights,
+  },
+  invalidateCampaignsCache,
+  invalidateHttpCache,
+});
