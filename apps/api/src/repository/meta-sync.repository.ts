@@ -7,7 +7,7 @@ import {
   metaSyncRuns,
   campaigns,
 } from '@fury/db';
-import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type CampaignSnapshot = typeof metaCampaignSnapshots.$inferSelect;
@@ -113,6 +113,19 @@ export class MetaSyncRepository extends TenantScopedRepository {
     await this.db
       .update(metaCampaignSnapshots)
       .set({ hasLeadForm, updatedAt: new Date() })
+      .where(
+        and(
+          eq(metaCampaignSnapshots.tenantId, this.tenantId),
+          eq(metaCampaignSnapshots.metaCampaignId, metaCampaignId)
+        )
+      );
+  }
+
+  /** Atualiza metrics + lastInsightsAt de um snapshot (após insights account-level). */
+  async updateSnapshotMetrics(metaCampaignId: string, metrics: unknown): Promise<void> {
+    await this.db
+      .update(metaCampaignSnapshots)
+      .set({ metrics: metrics as any, lastInsightsAt: new Date(), updatedAt: new Date() })
       .where(
         and(
           eq(metaCampaignSnapshots.tenantId, this.tenantId),
@@ -268,6 +281,24 @@ export class MetaSyncRepository extends TenantScopedRepository {
       where: and(eq(metaSyncRuns.tenantId, this.tenantId), eq(metaSyncRuns.status, 'success')),
       orderBy: [desc(metaSyncRuns.startedAt)],
     })) ?? null;
+  }
+
+  /** Mapa metaCampaignId → budget.lead_form_id das campanhas locais do Fury (evita N+1 no 1º ciclo). */
+  async findLocalLeadFormByMetaIds(metaCampaignIds: string[]): Promise<Map<string, string | null>> {
+    if (metaCampaignIds.length === 0) return new Map();
+    const rows = await this.db
+      .select({ metaCampaignId: campaigns.metaCampaignId, budget: campaigns.budget })
+      .from(campaigns)
+      .where(
+        and(eq(campaigns.tenantId, this.tenantId), inArray(campaigns.metaCampaignId, metaCampaignIds))
+      );
+    const map = new Map<string, string | null>();
+    for (const row of rows) {
+      const budget = (row.budget as Record<string, unknown> | null) ?? {};
+      const formId = typeof budget.lead_form_id === 'string' ? budget.lead_form_id : null;
+      map.set(row.metaCampaignId, formId);
+    }
+    return map;
   }
 
   /** Espelho local: grava metrics + lastSyncedAt na tabela `campaigns` do Fury. */
