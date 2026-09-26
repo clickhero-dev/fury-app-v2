@@ -1,5 +1,6 @@
 import { getRedis } from './redis.js';
 import { emailService } from '../services/email/email.service.js';
+import { syncFailureEmailTemplate } from '../services/email/email-templates.js';
 
 /** Dedupe de 6h por (tenant, error_code) — evita spam de email no mesmo erro. */
 const SYNC_ALERT_DEDUPE_TTL_SECONDS = 6 * 60 * 60;
@@ -30,15 +31,7 @@ export async function shouldSendSyncAlert(tenantId: string, errorCode: string): 
 
 /** HTML simples do alerta de falha (substituído pelo template Ady em T006). */
 function syncFailureHtml(tenantId: string, errorCode: string, message: string): string {
-  return `
-    <h2>Sincronização Meta falhou</h2>
-    <p>Ocorreu uma falha na sincronização automática dos dados do Meta.</p>
-    <ul>
-      <li><strong>Tenant:</strong> ${tenantId}</li>
-      <li><strong>Código:</strong> ${errorCode}</li>
-      <li><strong>Detalhe:</strong> ${message || 'sem detalhes'}</li>
-    </ul>
-  `;
+  return syncFailureEmailTemplate(tenantId, errorCode, message);
 }
 
 /** Envia email de alerta de falha com dedupe de 6h por (tenant, errorCode). */
