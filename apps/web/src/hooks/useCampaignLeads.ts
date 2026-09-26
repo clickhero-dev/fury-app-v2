@@ -16,16 +16,16 @@ interface CampaignLeadsResponse {
 }
 
 /**
- * Busca leads de formulário.
- * - `campaignId` definido: GET /campaigns/:id/leads (campanha específica).
- * - `campaignId` null + `all=true`: GET /campaigns/leads (agregado de todas as
+ * Busca leads de formulário (fonte: banco via endpoints v2).
+ * - `campaignId` definido: GET /v2/campaigns/:id/leads (campanha específica).
+ * - `campaignId` null + `all=true`: GET /v2/leads (agregado de todas as
  *   campanhas de Formulário, usado na visão "Todas as campanhas" da página de Leads).
  */
 export function useCampaignLeads(campaignId: string | null, enabled: boolean, all = false) {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['campaigns/leads', campaignId ?? 'all'],
     queryFn: async () => {
-      const url = campaignId ? `/campaigns/${campaignId}/leads` : '/campaigns/leads';
+      const url = campaignId ? `/v2/campaigns/${campaignId}/leads` : '/v2/leads';
       const response = await api.get<CampaignLeadsResponse>(url);
       return response.data.data;
     },
