@@ -4,6 +4,8 @@
 **Status**: accepted
 **Deciders**: Diogo (owner), squad Ady
 
+Resumo das decisões e do fluxo implementado: [Sincronização Meta: cache-first e refresh stale](../integrations/meta-sync-cache-first.md).
+
 ## Context
 
 Os endpoints atuais de dados Meta (`/campaigns`, `/metrics/*`, `/campaigns/leads`,
