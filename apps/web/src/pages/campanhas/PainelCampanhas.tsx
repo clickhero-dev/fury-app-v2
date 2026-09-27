@@ -348,7 +348,7 @@ export function PainelCampanhas() {
               </div>
             ))}
           </div>
-        ) : filteredCampaigns.length === 0 && !isError && !subscriptionError && partialFailures.length === 0 ? (
+        ) : isError && filteredCampaigns.length === 0 ? null : filteredCampaigns.length === 0 && !subscriptionError && partialFailures.length === 0 ? (
           <div className="w-full rounded-2xl border border-border bg-surface py-32 px-6 flex flex-col items-center justify-center text-center hover:border-border-light transition-all duration-300 shadow-sm">
             <h3 className="text-base font-semibold text-text-primary mb-2">
               Nenhuma campanha por aqui ainda

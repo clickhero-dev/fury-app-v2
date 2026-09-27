@@ -106,4 +106,14 @@ describe('PainelCampanhas — Total Clientes = soma das linhas de campanha', () 
     fireEvent.click(screen.getByRole('button', { name: /tentar novamente/i }));
     expect(await screen.findByText('Nenhuma campanha por aqui ainda')).toBeInTheDocument();
   });
+
+  it('não apresenta falha de carregamento como uma lista vazia', async () => {
+    mockApiGet.mockRejectedValueOnce(new Error('offline'));
+
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText(/não foi possível carregar as campanhas/i)).toBeInTheDocument();
+    expect(screen.queryByText('Nenhum dado disponível')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nenhuma campanha por aqui ainda')).not.toBeInTheDocument();
+  });
 });
