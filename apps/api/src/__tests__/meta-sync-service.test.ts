@@ -101,6 +101,7 @@ function makeFakes(overrides: {
     getMetaInsights: vi.fn(async () => ({ data: [], paging: undefined })),
     listCampaignAds: vi.fn(async () => []),
     listAdLeads: vi.fn(async () => []),
+    getLeadFormQuestions: vi.fn(async () => []),
     getInstagramMedia: vi.fn(async () => []),
     getInstagramMediaInsights: vi.fn(async () => ({ reach: 0, saved: 0, shares: 0, replies: 0 })),
   };
@@ -218,6 +219,63 @@ describe('BDD: MetaSyncService.syncTenant', () => {
     expect(repo.upsertLeads).toHaveBeenCalledWith([
       expect.objectContaining({ metaLeadId: 'new-lead', metaCampaignId: 'new-campaign' }),
     ]);
+  });
+
+  it('Cenário: sync traduz campos tokenizados usando perguntas do formulário e atualiza leads existentes', async () => {
+    const { repo, metaApi, deps } = makeFakes({
+      existingSnapshots: [{ metaCampaignId: 'm1', hasLeadForm: true }],
+      campaigns: [{ metaCampaignId: 'm1', name: 'Camp 1', objective: 'OUTCOME_LEADS', status: 'ACTIVE' }],
+    });
+    metaApi.listAccountCampaigns.mockResolvedValue([{ id: 'm1', name: 'Camp 1', objective: 'OUTCOME_LEADS', status: 'ACTIVE' }]);
+    metaApi.listCampaignAds.mockResolvedValue([{ id: 'ad1' }, { id: 'ad2' }]);
+    metaApi.listAdLeads.mockResolvedValue([{
+      id: 'lead1', form_id: 'form1', created_time: '2026-09-23T22:05:00+0000',
+      field_data: [
+        { name: 'question1', values: ['Maria Souza'] },
+        { name: 'question2', values: ['maria@exemplo.com'] },
+        { name: 'question3', values: ['11999999999'] },
+      ],
+    }]);
+    metaApi.getLeadFormQuestions.mockResolvedValue([
+      { key: 'question1', type: 'FULL_NAME' },
+      { key: 'question2', type: 'EMAIL' },
+      { key: 'question3', type: 'PHONE' },
+    ]);
+
+    const result = await new MetaSyncService(deps as any).syncTenant({ tenantId, reason: 'test' });
+
+    expect(result.status).toBe('success');
+    expect(metaApi.getLeadFormQuestions).toHaveBeenCalledTimes(1);
+    expect(metaApi.getLeadFormQuestions).toHaveBeenCalledWith('form1', TOKEN);
+    expect(repo.upsertLeads).toHaveBeenCalledWith([expect.objectContaining({
+      metaLeadId: 'lead1', name: 'Maria Souza', email: 'maria@exemplo.com', phone: '11999999999',
+    })]);
+  });
+
+  it('Cenário: falha ao ler perguntas preserva os campos padrão e continua o sync', async () => {
+    const { repo, metaApi, deps } = makeFakes({
+      existingSnapshots: [{ metaCampaignId: 'm1', hasLeadForm: true }],
+      campaigns: [{ metaCampaignId: 'm1', name: 'Camp 1', objective: 'OUTCOME_LEADS', status: 'ACTIVE' }],
+    });
+    metaApi.listAccountCampaigns.mockResolvedValue([{ id: 'm1', name: 'Camp 1', objective: 'OUTCOME_LEADS', status: 'ACTIVE' }]);
+    metaApi.listCampaignAds.mockResolvedValue([{ id: 'ad1' }]);
+    metaApi.listAdLeads.mockResolvedValue([{
+      id: 'lead2', form_id: 'form2', field_data: [
+        { name: 'full_name', values: ['João'] },
+        { name: 'email', values: ['joao@exemplo.com'] },
+        { name: 'phone_number', values: ['21999999999'] },
+      ],
+    }]);
+    metaApi.getLeadFormQuestions.mockRejectedValue(new Error('perguntas indisponíveis'));
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await new MetaSyncService(deps as any).syncTenant({ tenantId, reason: 'test' });
+
+    expect(result.status).toBe('success');
+    expect(repo.upsertLeads).toHaveBeenCalledWith([expect.objectContaining({
+      metaLeadId: 'lead2', name: 'João', email: 'joao@exemplo.com', phone: '21999999999',
+    })]);
+    warning.mockRestore();
   });
 
   it('Cenário: token expirado (190) → failed META_TOKEN_EXPIRED', async () => {

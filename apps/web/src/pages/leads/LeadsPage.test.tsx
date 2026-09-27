@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -43,6 +43,10 @@ describe('LeadsPage', () => {
     mockApiGet.mockReset();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('carrega leads agregados por padrão (Todas as campanhas) e exibe a coluna Campanha', async () => {
     mockApi([
       {
@@ -81,6 +85,7 @@ describe('LeadsPage', () => {
   });
 
   it('selecionar uma campanha busca leads da campanha específica', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockApi([
       {
         name: 'João Silva', email: 'joao@exemplo.com', phone: '21988887777',
@@ -100,6 +105,11 @@ describe('LeadsPage', () => {
 
     await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/v2/campaigns/form_1/leads'));
     expect(await screen.findByText('João Silva')).toBeInTheDocument();
+    expect(screen.getByText('joao@exemplo.com')).toBeInTheDocument();
+    expect(screen.getByText('21988887777')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /whatsapp/i })).toHaveAttribute('href', 'https://wa.me/5521988887777');
+    expect(screen.getByText(/20 de set\. de 2026/)).toBeInTheDocument();
+    expect(consoleError.mock.calls.some((call) => call.some((arg) => String(arg).includes('same key')))).toBe(false);
     // Coluna Campanha some quando há campanha específica selecionada
     expect(screen.queryByText('Campanha')).not.toBeInTheDocument();
   });

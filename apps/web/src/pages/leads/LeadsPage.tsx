@@ -180,7 +180,7 @@ export function LeadsPage() {
             <thead>
               <tr className="border-b border-border bg-surface-secondary/40">
                 {columns.map((col) => (
-                  <th key={col.key as string} className="text-left uppercase text-[11px] text-text-tertiary tracking-wider font-semibold py-4 px-4">
+                  <th key={`${col.key}-${col.label}`} className="text-left uppercase text-[11px] text-text-tertiary tracking-wider font-semibold py-4 px-4">
                     {col.label}
                   </th>
                 ))}
@@ -190,7 +190,7 @@ export function LeadsPage() {
               {leads.map((lead, i) => (
                 <tr key={`${lead.email ?? 'lead'}-${i}`} className="hover:bg-surface-secondary/30 transition-colors">
                   {columns.map((col) => (
-                    <td key={col.key as string} className="py-3 px-4">
+                    <td key={`${col.key}-${col.label}`} className="py-3 px-4">
                       {col.render(lead[col.key], lead)}
                     </td>
                   ))}

@@ -1,5 +1,6 @@
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { normalizePhoneToMetaE164 } from '../../utils/phone-normalize.js';
+import { normalizeMetaLeadFields } from '../../utils/meta-lead-normalizer.js';
 import {
   parseConversionsFromActions,
   parseRoasFromPurchaseRoas,
@@ -1283,7 +1284,7 @@ export class CampaignsService {
             seenFormIds.add(id);
             return true;
           })
-          .map((lead) => this.normalizeLeadValue(lead, questions));
+          .map((lead) => normalizeMetaLeadFields(lead, questions));
         return { leads };
       } catch (err) {
         this.handleMetaError(err);
@@ -1323,7 +1324,7 @@ export class CampaignsService {
         if (formId && !formQuestions.has(formId)) {
           formQuestions.set(formId, await this.safeGetFormQuestions(formId, accessToken));
         }
-        leads.push(this.normalizeLeadValue(lead, formId ? (formQuestions.get(formId) ?? []) : []));
+        leads.push(normalizeMetaLeadFields(lead, formId ? (formQuestions.get(formId) ?? []) : []));
       }
     }
 
@@ -1342,39 +1343,6 @@ export class CampaignsService {
       console.warn(`[CampaignLeads] falha ao buscar questions do form ${formId}:`, (err as Error).message);
       return [];
     }
-  }
-
-  /**
-   * Normaliza field_data → { name, email, phone, createdAt }.
-   * Primeiro tenta o mapeamento type→key vindo das questions do form (cobre
-   * keys tokenizados `question1/2/3`); sem questions ou sem match, cai para os
-   * nomes fixos conhecidos da Meta (full_name/first_name, email,
-   * phone_number/phone).
-   */
-  private normalizeLeadValue(
-    lead: Record<string, unknown>,
-    questions: Array<{ key: string; type: string }>,
-  ): { name: string | null; email: string | null; phone: string | null; createdAt: string | null } {
-    const fields = (lead.field_data ?? []) as Array<{ name?: string; values?: string[] }>;
-
-    const getValue = (questionTypes: string[], fallbackNames: string[]): string | null => {
-      const keys = [
-        ...questionTypes.map((t) => questions.find((q) => q.type === t)?.key).filter(Boolean),
-        ...fallbackNames,
-      ];
-      for (const key of keys) {
-        const field = fields.find((f) => f.name === key);
-        if (field?.values?.[0]) return field.values[0];
-      }
-      return null;
-    };
-
-    return {
-      name: getValue(['FULL_NAME', 'FIRST_NAME'], ['full_name', 'first_name']),
-      email: getValue(['EMAIL', 'WORK_EMAIL'], ['email']),
-      phone: getValue(['PHONE', 'WHATSAPP_NUMBER', 'USER_PROVIDED_PHONE_NUMBER', 'WORK_PHONE_NUMBER'], ['phone_number', 'phone']),
-      createdAt: (lead.created_time as string | undefined) ?? null,
-    };
   }
 
   /**
