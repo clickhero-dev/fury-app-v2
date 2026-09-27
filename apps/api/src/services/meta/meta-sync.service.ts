@@ -1,6 +1,7 @@
 import { AppError } from '../../middleware/errorHandler.js';
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { roundToDecimals } from '../../utils/metrics-formatter.js';
+import { normalizeMetaLeadFields } from '../../utils/meta-lead-normalizer.js';
 import {
   parseConversionsFromActions,
   parseRoasFromPurchaseRoas,
@@ -15,6 +16,7 @@ import type {
   MetaInsightsResponse,
   InstagramMediaItem,
   InstagramMediaInsights,
+  MetaLeadFormQuestion,
 } from '../../lib/meta-api.js';
 import {
   listAccountCampaigns,
@@ -24,6 +26,7 @@ import {
   listAdLeads,
   getInstagramMedia,
   getInstagramMediaInsights,
+  getLeadFormQuestions,
 } from '../../lib/meta-api.js';
 import { invalidateCampaignsCache } from '../../lib/campaigns-cache.js';
 import { invalidateHttpCache } from '../../lib/http-cache.js';
@@ -49,6 +52,7 @@ export interface MetaSyncApi {
   }): Promise<MetaInsightsResponse>;
   listCampaignAds(campaignId: string, accessToken: string): Promise<Array<{ id: string; name?: string }>>;
   listAdLeads(adId: string, accessToken: string): Promise<Array<Record<string, unknown>>>;
+  getLeadFormQuestions(formId: string, accessToken: string): Promise<MetaLeadFormQuestion[]>;
   getInstagramMedia(igUserId: string, accessToken: string): Promise<InstagramMediaItem[]>;
   getInstagramMediaInsights(
     mediaId: string,
@@ -167,21 +171,15 @@ export function insightToMetrics(
 
 /** Normaliza field_data de um lead Meta → { name, email, phone, createdTime }. */
 export function normalizeLead(
-  lead: Record<string, unknown>
+  lead: Record<string, unknown>,
+  questions: MetaLeadFormQuestion[] = [],
 ): { name: string | null; email: string | null; phone: string | null; createdTime: Date | null } {
-  const fields = (lead.field_data ?? []) as Array<{ name?: string; values?: string[] }>;
-  const getValue = (names: string[]): string | null => {
-    for (const name of names) {
-      const field = fields.find((f) => f.name === name);
-      if (field?.values?.[0]) return field.values[0];
-    }
-    return null;
-  };
-  const createdTime = typeof lead.created_time === 'string' ? new Date(lead.created_time) : null;
+  const fields = normalizeMetaLeadFields(lead, questions);
+  const createdTime = fields.createdAt ? new Date(fields.createdAt) : null;
   return {
-    name: getValue(['full_name', 'first_name']),
-    email: getValue(['email']),
-    phone: getValue(['phone_number', 'phone']),
+    name: fields.name,
+    email: fields.email,
+    phone: fields.phone,
     createdTime: Number.isNaN(createdTime?.getTime()) ? null : createdTime,
   };
 }
@@ -397,6 +395,7 @@ export class MetaSyncService {
   ): Promise<MetaLeadUpsert[]> {
     const ads = await this.deps.metaApi.listCampaignAds(campaignId, accessToken);
     const seen = new Set<string>();
+    const questionsByForm = new Map<string, MetaLeadFormQuestion[]>();
     const leads: MetaLeadUpsert[] = [];
     for (const ad of ads) {
       const adLeads = await this.deps.metaApi.listAdLeads(ad.id, accessToken);
@@ -406,7 +405,16 @@ export class MetaSyncService {
           if (seen.has(leadId)) continue;
           seen.add(leadId);
         }
-        const normalized = normalizeLead(lead);
+        const formId = typeof lead.form_id === 'string' && lead.form_id ? lead.form_id : null;
+        if (formId && !questionsByForm.has(formId)) {
+          try {
+            questionsByForm.set(formId, await this.deps.metaApi.getLeadFormQuestions(formId, accessToken));
+          } catch (err) {
+            console.warn(`[MetaSync] falha ao buscar perguntas do formulário ${formId}:`, (err as Error).message);
+            questionsByForm.set(formId, []);
+          }
+        }
+        const normalized = normalizeLead(lead, formId ? questionsByForm.get(formId) : undefined);
         leads.push({
           metaLeadId: leadId ?? `lead_${Date.now()}_${leads.length}`,
           metaCampaignId: campaignId,
@@ -431,6 +439,7 @@ export const metaSyncService = new MetaSyncService({
     getMetaInsights,
     listCampaignAds,
     listAdLeads,
+    getLeadFormQuestions,
     getInstagramMedia,
     getInstagramMediaInsights,
   },
