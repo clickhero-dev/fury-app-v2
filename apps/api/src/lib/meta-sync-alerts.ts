@@ -17,9 +17,9 @@ export function getSyncAlertEmails(): string[] {
 
 /** True se o alerta (tenant, errorCode) ainda não foi enviado nas últimas 6h. */
 export async function shouldSendSyncAlert(tenantId: string, errorCode: string): Promise<boolean> {
-  const redis = getRedis();
   const key = `meta-sync:alert:${tenantId}:${errorCode}`;
   try {
+    const redis = getRedis();
     const acquired = await redis.set(key, '1', 'EX', SYNC_ALERT_DEDUPE_TTL_SECONDS, 'NX');
     return acquired === 'OK';
   } catch (err) {
@@ -40,12 +40,14 @@ export async function notifyMetaSyncFailure(args: {
   errorCode: string;
   message: string;
 }): Promise<void> {
+  const emails = getSyncAlertEmails();
+  if (emails.length === 0) return;
+
+  let acquired = false;
   try {
     const shouldSend = await shouldSendSyncAlert(args.tenantId, args.errorCode);
     if (!shouldSend) return;
-
-    const emails = getSyncAlertEmails();
-    if (emails.length === 0) return;
+    acquired = true;
 
     const html = syncFailureHtml(args.tenantId, args.errorCode, args.message);
     await Promise.all(
@@ -59,5 +61,12 @@ export async function notifyMetaSyncFailure(args: {
     );
   } catch (err) {
     console.error('[meta-sync-alert] falha ao notificar sync failure:', (err as Error).message);
+    if (acquired) {
+      try {
+        await getRedis().del(`meta-sync:alert:${args.tenantId}:${args.errorCode}`);
+      } catch (releaseErr) {
+        console.error('[meta-sync-alert] falha ao liberar dedupe:', (releaseErr as Error).message);
+      }
+    }
   }
 }

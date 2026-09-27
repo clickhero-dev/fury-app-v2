@@ -24,16 +24,16 @@ Funcionalidade: Endpoints v2 de dados Meta (direto do banco, fallback stale)
     Dado JWT sem tenantId
     Então 403 FORBIDDEN
 
-  Cenário: dado stale (>15min) dispara sync inline e retorna fresco
-    Dado último run de sucesso há mais de 15min
+  Cenário: snapshot stale (>3h) é servido e refresh é enfileirado
+    Dado último run de sucesso há mais de 3h
     Quando GET /api/v2/campaigns
-    Então metaSyncService.syncTenant é chamado (reason stale-fallback)
-    E a resposta vem com syncedAt atualizado
+    Então o snapshot é retornado com degraded=true
+    E o refresh é enfileirado sem sync inline
 
-  Cenário: Meta fora → 502 quando não há dados no banco
-    Dado sync inline retorna status failed e não há dados
+  Cenário: sem snapshot → resposta rápida de primeira sincronização
+    Dado ainda não há run ou snapshots
     Quando GET /api/v2/campaigns
-    Então 502 META_API_ERROR
+    Então 200 com coleção vazia, degraded=true e refresh enfileirado
 
   Cenário: sync parcial expõe partial_failures
     Dado sync inline retorna status partial com partial_failures
@@ -106,6 +106,10 @@ function makeFakes(overrides: Record<string, unknown> = {}) {
       ],
       total: 1,
     })),
+    findCampaignDailyInsights: vi.fn(async () => [
+      { metaCampaignId: 'm1', date: '2026-09-25', metrics: { spend: 12, conversions: 2, clicks: 5, impressions: 100 } },
+      { metaCampaignId: 'm1', date: '2026-09-26', metrics: { spend: 8, conversions: 1, clicks: 3, impressions: 80 } },
+    ]),
     findCampaignSnapshotByMetaId: vi.fn(async () => ({
       id: 's1',
       tenantId: TENANT,
@@ -192,6 +196,15 @@ describe('BDD: Endpoints v2', () => {
     expect(res.body.error?.code).toBe('VALIDATION_ERROR');
   });
 
+  it('Cenário: intervalo de campanha com data malformada → 400', async () => {
+    const app = buildApp(makeFakes().controller);
+    const res = await request(app)
+      .get('/api/v2/campaigns?startDate=2026-02-31&endDate=2026-03-01')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('VALIDATION_ERROR');
+  });
+
   it('Cenário: sem autenticação → 401', async () => {
     const { controller } = makeFakes();
     const app = buildApp(controller);
@@ -207,22 +220,48 @@ describe('BDD: Endpoints v2', () => {
     expect(res.body.error?.code).toBe('FORBIDDEN');
   });
 
-  it('Cenário: dado stale (>15min) dispara sync inline e retorna fresco', async () => {
-    const { repo, service, controller } = makeFakes({
-      repo: { lastSuccessfulRun: vi.fn(async () => ({ startedAt: new Date(Date.now() - 30 * 60 * 1000) })) },
+  it('Cenário: dado com 2h de idade não está degradado nem enfileira refresh', async () => {
+    const { service, enqueueMetaSync, controller } = makeFakes({
+      repo: { lastSuccessfulRun: vi.fn(async () => ({ startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000) })) },
     });
     const app = buildApp(controller);
 
     const res = await request(app).get('/api/v2/campaigns').set('Authorization', `Bearer ${authToken(TENANT)}`);
     expect(res.status).toBe(200);
-    expect(service.syncTenant).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: TENANT, reason: 'stale-fallback' })
-    );
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.degraded).toBe(false);
+    expect(service.syncTenant).not.toHaveBeenCalled();
+    expect(enqueueMetaSync).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: dado stale (>3h) serve snapshot e enfileira refresh sem sync inline', async () => {
+    const { repo, service, enqueueMetaSync, controller } = makeFakes({
+      repo: { lastSuccessfulRun: vi.fn(async () => ({ startedAt: new Date(Date.now() - 4 * 60 * 60 * 1000) })) },
+    });
+    const app = buildApp(controller);
+
+    const res = await request(app).get('/api/v2/campaigns').set('Authorization', `Bearer ${authToken(TENANT)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.degraded).toBe(true);
+    expect(res.body.staleForMs).toBeGreaterThan(3 * 60 * 60 * 1000);
+    expect(service.syncTenant).not.toHaveBeenCalled();
+    expect(enqueueMetaSync).toHaveBeenCalledWith({ tenantId: TENANT, reason: 'stale-fallback' });
+  });
+
+  it('Cenário: campanhas usa métricas diárias persistidas para o período selecionado', async () => {
+    const { controller, repo } = makeFakes();
+    const app = buildApp(controller);
+    const res = await request(app)
+      .get('/api/v2/campaigns?startDate=2026-09-25&endDate=2026-09-26')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`);
+    expect(repo.findCampaignDailyInsights).toHaveBeenCalledWith({ startDate: '2026-09-25', endDate: '2026-09-26' });
+    expect(res.body.data[0]).toMatchObject({ spend: 20, conversions: 3, clicks: 8, impressions: 180 });
   });
 
   it('Cenário: rotas da tela de clientes servem o snapshot stale sem esperar sync inline', async () => {
     const { repo, service, enqueueMetaSync, controller } = makeFakes({
-      repo: { lastSuccessfulRun: vi.fn(async () => ({ startedAt: new Date(Date.now() - 30 * 60 * 1000) })) },
+      repo: { lastSuccessfulRun: vi.fn(async () => ({ startedAt: new Date(Date.now() - 4 * 60 * 60 * 1000) })) },
     });
     const app = buildApp(controller);
 
@@ -242,8 +281,8 @@ describe('BDD: Endpoints v2', () => {
     expect(repo.findAllLeads).toHaveBeenCalledTimes(1);
   });
 
-  it('Cenário: Meta fora e sem dados → 502 META_API_ERROR', async () => {
-    const { repo, service, controller } = makeFakes({
+  it('Cenário: sem snapshot → 200 degradado e agenda primeira sincronização', async () => {
+    const { repo, service, enqueueMetaSync, controller } = makeFakes({
       repo: {
         lastSuccessfulRun: vi.fn(async () => null),
         findCampaignSnapshots: vi.fn(async () => ({ items: [], total: 0 })),
@@ -263,22 +302,17 @@ describe('BDD: Endpoints v2', () => {
     const app = buildApp(controller);
 
     const res = await request(app).get('/api/v2/campaigns').set('Authorization', `Bearer ${authToken(TENANT)}`);
-    expect(res.status).toBe(502);
-    expect(res.body.error?.code).toBe('META_API_ERROR');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+    expect(res.body.degraded).toBe(true);
+    expect(res.body.firstSyncPending).toBe(true);
+    expect(enqueueMetaSync).toHaveBeenCalledWith({ tenantId: TENANT, reason: 'stale-fallback' });
+    expect(service.syncTenant).not.toHaveBeenCalled();
   });
 
-  it('Cenário: sync parcial expõe partial_failures no envelope', async () => {
-    const { repo, service, controller } = makeFakes({
-      repo: { lastSuccessfulRun: vi.fn(async () => ({ startedAt: new Date(Date.now() - 30 * 60 * 1000) })) },
-      service: {
-        syncTenant: vi.fn(async () => ({
-          status: 'partial',
-          partialFailures: [{ item_id: 'm2', provider: 'meta', code: 'META_INTEGRATION_ERROR', reason: 'x' }],
-          campaignsCount: 1,
-          leadsCount: 0,
-          insightsCount: 0,
-        })),
-      },
+  it('Cenário: leituras cache-first não aguardam nem expõem o resultado de sync em background', async () => {
+    const { repo, service, enqueueMetaSync, controller } = makeFakes({
+      repo: { lastSuccessfulRun: vi.fn(async () => ({ startedAt: new Date(Date.now() - 4 * 60 * 60 * 1000) })) },
     });
     const app = buildApp(controller);
 
@@ -286,8 +320,10 @@ describe('BDD: Endpoints v2', () => {
       .get('/api/v2/metrics/summary')
       .set('Authorization', `Bearer ${authToken(TENANT)}`);
     expect(res.status).toBe(200);
-    expect(res.body.partial_failures.length).toBe(1);
-    expect(res.body.partial_failures[0].item_id).toBe('m2');
+    expect(res.body.degraded).toBe(true);
+    expect(res.body.partial_failures).toEqual([]);
+    expect(service.syncTenant).not.toHaveBeenCalled();
+    expect(enqueueMetaSync).toHaveBeenCalledOnce();
   });
 
   it('Cenário: detalhe da campanha → 200 com metrics + syncedAt; inexistente → 404', async () => {
@@ -347,5 +383,29 @@ describe('BDD: Endpoints v2', () => {
     expect(ig.status).toBe(200);
     expect(ig.body.data).toHaveProperty('comments');
     expect(ig.body.data).toHaveProperty('saves');
+  });
+
+  it('Cenário: metrics/daily retorna métricas diárias persistidas, sem rateio de totais', async () => {
+    const { controller, repo } = makeFakes();
+    const app = buildApp(controller);
+    const daily = await request(app)
+      .get('/api/v2/metrics/daily?startDate=2026-09-25&endDate=2026-09-26')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`);
+
+    expect(repo.findCampaignDailyInsights).toHaveBeenCalledWith({ startDate: '2026-09-25', endDate: '2026-09-26' });
+    expect(daily.body.data).toEqual([
+      { date: '2026-09-25', spend: 12, conversions: 2, roas: 0, clicks: 5, impressions: 100 },
+      { date: '2026-09-26', spend: 8, conversions: 1, roas: 0, clicks: 3, impressions: 80 },
+    ]);
+  });
+
+  it('Cenário: summary respeita o período usando métricas diárias persistidas', async () => {
+    const { controller, repo } = makeFakes();
+    const app = buildApp(controller);
+    const res = await request(app)
+      .get('/api/v2/metrics/summary?startDate=2026-09-25&endDate=2026-09-26')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`);
+    expect(repo.findCampaignDailyInsights).toHaveBeenCalledWith({ startDate: '2026-09-25', endDate: '2026-09-26' });
+    expect(res.body.data.summary).toMatchObject({ spend: 20, conversions: 3, clicks: 8, impressions: 180 });
   });
 });

@@ -106,7 +106,7 @@ function classifyError(err: unknown): ClassifiedError {
   if (metaCode === 190) {
     return { fatal: true, code: 'META_TOKEN_EXPIRED', reason: 'Token Meta inválido ou expirado.' };
   }
-  if (metaCode === 17 || metaCode === 4) {
+  if ([4, 17, 32, 613, 80004].includes(metaCode) || httpStatus === 429) {
     return { fatal: false, code: 'META_RATE_LIMIT', reason: 'Limite de requisições da Meta atingido.' };
   }
   if (httpStatus === 504 || httpStatus >= 500 || /timeout/i.test(message)) {
@@ -185,6 +185,7 @@ export function normalizeLead(
 }
 
 const DAYS_30_MS = 30 * 24 * 60 * 60 * 1000;
+const INSIGHTS_REFRESH_MS = 24 * 60 * 60 * 1000;
 
 /**
  * MetaSyncService — pipeline assíncrono de sincronização Meta (fluxo de dados v2).
@@ -250,6 +251,7 @@ export class MetaSyncService {
     const existingHasForm = new Map<string, boolean | null>(
       existing.items.map((s) => [s.metaCampaignId, s.hasLeadForm])
     );
+    let rateLimitReached = false;
 
     // 2) Persiste snapshots em batch (upsert idempotente).
     await repo.upsertCampaignSnapshots(
@@ -261,8 +263,14 @@ export class MetaSyncService {
       }))
     );
 
-    // 3) Insights 30d account-level (1 chamada por tenant por ciclo) → espelho local + snapshot.
-    try {
+    // Insights têm custo paginado alto: mantém histórico de 30 dias, mas atualiza no máximo 1x/dia.
+    const latestInsightsAt = existing.items.reduce<Date | null>((latest, snapshot) => {
+      const at = snapshot.lastInsightsAt;
+      return at && (!latest || at > latest) ? at : latest;
+    }, null);
+    const shouldRefreshInsights = campaigns.length > 0 &&
+      (!latestInsightsAt || Date.now() - latestInsightsAt.getTime() >= INSIGHTS_REFRESH_MS);
+    if (shouldRefreshInsights) try {
       const endDate = new Date();
       const startDate = new Date(endDate.getTime() - DAYS_30_MS);
       const iso = (d: Date) => d.toISOString().split('T')[0];
@@ -271,20 +279,49 @@ export class MetaSyncService {
         adAccountId: ctx.adAccountId,
         startDate: iso(startDate),
         endDate: iso(endDate),
+        timeIncrement: 1,
         level: 'campaign',
       });
+      const dailyRows: Array<{ metaCampaignId: string; date: string; metrics: Record<string, number | null> }> = [];
+      const totals = new Map<string, Record<string, number>>();
       for (const row of response.data ?? []) {
-        if (!row.campaign_id) continue;
+        if (!row.campaign_id || !row.date_start) continue;
         const objective = campaigns.find((c) => c.id === row.campaign_id)?.objective ?? null;
         const metrics = insightToMetrics(row, objective);
-        await repo.updateLocalCampaignMetrics(row.campaign_id, metrics);
-        await repo.updateSnapshotMetrics(row.campaign_id, metrics);
+        dailyRows.push({ metaCampaignId: row.campaign_id, date: row.date_start, metrics });
+        const total = totals.get(row.campaign_id) ?? { spend: 0, impressions: 0, clicks: 0, conversions: 0, weightedRoas: 0, roasSpend: 0 };
+        total.spend += Number(metrics.spend ?? 0);
+        total.impressions += Number(metrics.impressions ?? 0);
+        total.clicks += Number(metrics.clicks ?? 0);
+        total.conversions += Number(metrics.conversions ?? 0);
+        if (metrics.roas != null) {
+          total.weightedRoas += Number(metrics.roas) * Number(metrics.spend ?? 0);
+          total.roasSpend += Number(metrics.spend ?? 0);
+        }
+        totals.set(row.campaign_id, total);
         counts.insightsCount += 1;
+      }
+      await repo.upsertCampaignDailyInsights(dailyRows);
+      for (const [campaignId, total] of totals) {
+        const snapshotMetrics = {
+          spend: total.spend,
+          impressions: total.impressions,
+          clicks: total.clicks,
+          conversions: total.conversions,
+          roas: total.roasSpend > 0 ? total.weightedRoas / total.roasSpend : null,
+          cpa: total.conversions > 0 ? total.spend / total.conversions : null,
+        };
+        await repo.updateLocalCampaignMetrics(campaignId, snapshotMetrics);
+        await repo.updateSnapshotMetrics(campaignId, snapshotMetrics);
+      }
+      for (const campaign of campaigns) {
+        if (!totals.has(campaign.id)) await repo.markCampaignInsightsFetched(campaign.id);
       }
     } catch (err) {
       // Falha de insights NÃO derruba o restante (ADR-0002) — vira partial.
       const { code, reason } = classifyError(err);
       partialFailures.push({ provider: 'meta', code, reason });
+      rateLimitReached = code === 'META_RATE_LIMIT';
     }
 
     // 4) Leads: só campanhas OUTCOME_LEADS com form (has_lead_form cacheado no snapshot).
@@ -293,6 +330,7 @@ export class MetaSyncService {
       .sort((a, b) => Number(existingHasForm.get(b.id) === true) - Number(existingHasForm.get(a.id) === true));
     const localFormMap = await repo.findLocalLeadFormByMetaIds(leadCandidates.map((c) => c.id));
     for (const campaign of leadCandidates) {
+      if (rateLimitReached) break;
       try {
         let hasForm = existingHasForm.get(campaign.id) ?? null;
         if (hasForm === null) {
@@ -316,12 +354,15 @@ export class MetaSyncService {
         partialFailures.push({ item_id: campaign.id, provider: 'meta', code, reason });
         // Continuar repetindo chamadas após o limite da Meta só prolonga o run
         // e impede que ciclos futuros retomem pelas campanhas já cacheadas.
-        if (code === 'META_RATE_LIMIT') break;
+        if (code === 'META_RATE_LIMIT') {
+          rateLimitReached = true;
+          break;
+        }
       }
     }
 
     // 5) Instagram orgânico: mídia + insights por media (best-effort por media).
-    if (ctx.instagramUserId) {
+    if (ctx.instagramUserId && !rateLimitReached) {
       try {
         const mediaList = await this.deps.metaApi.getInstagramMedia(ctx.instagramUserId, ctx.accessToken);
         const mediaUpserts = [];
@@ -336,6 +377,10 @@ export class MetaSyncService {
           } catch (err) {
             const { code, reason } = classifyError(err);
             partialFailures.push({ item_id: media.id, provider: 'meta', code, reason });
+            if (code === 'META_RATE_LIMIT') {
+              rateLimitReached = true;
+              break;
+            }
           }
           mediaUpserts.push({
             mediaId: media.id,

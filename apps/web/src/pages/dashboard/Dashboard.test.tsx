@@ -13,10 +13,10 @@ Funcionalidade: Dashboard passa a chamar /v2/* para dados Meta do banco
     E api.get é chamado com '/v2/metrics/summary'
     E api.get é chamado com '/v2/metrics/daily'
 
-  Cenário: /metrics/campaigns (sem equivalente v2) permanece intacto
+  Cenário: campanhas ativas usam snapshots v2 cache-first
     Dado o Dashboard montado
     Quando a query de campanhas ativas executa
-    Então api.get é chamado com '/metrics/campaigns' (não v2)
+    Então api.get é chamado com '/v2/campaigns' e status ACTIVE
 
   Cenário: métricas não exibem valores antigos enquanto o novo período carrega
     Dado que o resumo do período atual já foi carregado
@@ -24,11 +24,11 @@ Funcionalidade: Dashboard passa a chamar /v2/* para dados Meta do banco
     Então o conteúdo do Dashboard é substituído por skeleton
     E os valores anteriores reaparecem substituídos pelos novos quando a consulta termina
 
-  Esquema do Cenário: manter skeleton até a última consulta do período
-    Dado que o período anterior está visível
-    Quando o resumo novo termina e <consulta> continua pendente
-    Então os valores antigos e novos permanecem ocultos pelo skeleton
-    E os dados novos aparecem quando a última consulta termina
+  Esquema do Cenário: manter a página renderizada enquanto consultas secundárias terminam
+    Dado que o novo resumo já foi carregado
+    Quando <consulta> continua pendente
+    Então o Dashboard continua renderizado com o resumo novo
+    E a consulta secundária termina sem trocar a tela por skeleton
     Exemplos:
       | consulta  |
       | campanhas |
@@ -111,7 +111,7 @@ describe('BDD: Dashboard usa endpoints v2', () => {
       if (url === '/v2/metrics/daily') {
         return Promise.resolve({ data: { success: true, data: [{ date: '2026-09-01', spend: 10, conversions: 1, roas: 1, clicks: 5, impressions: 100 }] } });
       }
-      if (url === '/metrics/campaigns') {
+      if (url === '/v2/campaigns') {
         return Promise.resolve({ data: { success: true, data: { campaigns: [], partial_failures: [] } } });
       }
       return Promise.resolve({ data: { success: true, data: [] } });
@@ -126,12 +126,12 @@ describe('BDD: Dashboard usa endpoints v2', () => {
     await waitFor(() => expect(mockApiGet.mock.calls.some((c) => c[0] === '/v2/metrics/daily')).toBe(true), { timeout: 5000 });
   });
 
-  it('Cenário: /metrics/campaigns (sem v2) permanece intacto', async () => {
+  it('Cenário: campanhas ativas usam snapshots v2 cache-first', async () => {
     render(<Dashboard />, { wrapper });
 
-    await waitFor(() => expect(mockApiGet.mock.calls.some((c) => c[0] === '/metrics/campaigns')).toBe(true), { timeout: 5000 });
+    await waitFor(() => expect(mockApiGet.mock.calls.some((c) => c[0] === '/v2/campaigns')).toBe(true), { timeout: 5000 });
     const urls = mockApiGet.mock.calls.map((c) => c[0]);
-    expect(urls.some((u) => u === '/v2/metrics/campaigns')).toBe(false);
+    expect(urls.some((u) => u === '/metrics/campaigns')).toBe(false);
   });
 
   it('mostra skeleton para o Dashboard inteiro enquanto o novo período está carregando', async () => {
@@ -154,7 +154,7 @@ describe('BDD: Dashboard usa endpoints v2', () => {
       }
       if (url === '/v2/metrics/daily') return Promise.resolve({ data: { success: true, data: [] } });
       if (url === '/v2/dashboard/instagram-insights') return Promise.resolve({ data: { success: true, data: null } });
-      if (url === '/metrics/campaigns') return Promise.resolve({ data: { success: true, data: { campaigns: [], partial_failures: [] } } });
+      if (url === '/v2/campaigns') return Promise.resolve({ data: { success: true, data: [] } });
       return Promise.resolve({ data: { success: true, data: [] } });
     });
 
@@ -172,9 +172,9 @@ describe('BDD: Dashboard usa endpoints v2', () => {
   });
 
   it.each([
-    ['campanhas', '/metrics/campaigns', { campaigns: [], partial_failures: [] }],
+    ['campanhas', '/v2/campaigns', []],
     ['diário', '/v2/metrics/daily', []],
-  ])('mantém skeleton enquanto %s está pendente após o resumo terminar', async (_name, endpoint, response) => {
+  ])('mantém o Dashboard renderizado enquanto %s está pendente após o resumo terminar', async (_name, endpoint, response) => {
     const pending = Promise.withResolvers<unknown>();
     const summary = Promise.withResolvers<unknown>();
     const initialGet = mockApiGet.getMockImplementation()!;
@@ -196,9 +196,8 @@ describe('BDD: Dashboard usa endpoints v2', () => {
       summary.resolve({ data: { success: true, data: { summary: { spend: 210, cpa: 15, conversions: 14 } } } });
       await new Promise(resolve => setTimeout(resolve, 20));
     });
-    expect(screen.getByRole('status', { name: /carregando dados do dashboard/i })).toBeInTheDocument();
-    expect(screen.queryByText('R$ 100,00')).not.toBeInTheDocument();
-    expect(screen.queryByText('R$ 210,00')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: /carregando dados do dashboard/i })).not.toBeInTheDocument();
+    expect(screen.getByText('R$ 210,00')).toBeInTheDocument();
 
     pending.resolve({ data: { success: true, data: response } });
     expect(await screen.findByText('R$ 210,00')).toBeInTheDocument();

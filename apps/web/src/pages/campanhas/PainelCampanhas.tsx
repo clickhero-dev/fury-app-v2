@@ -295,6 +295,16 @@ export function PainelCampanhas() {
         </div>
       )}
 
+      {result.degraded && (
+        <div role="status" className="flex items-start gap-3 bg-warning-light border border-warning/20 rounded-2xl px-4 py-3.5 text-sm text-warning">
+          <span className="shrink-0 mt-0.5">⚠️</span>
+          <div>
+            <p className="font-semibold">{result.firstSyncPending ? 'Preparando seus dados' : 'Dados desatualizados'}</p>
+            <p className="text-xs mt-1 opacity-80">{result.firstSyncPending ? 'A primeira sincronização está em andamento. A lista será atualizada automaticamente.' : 'Mostramos o último snapshot salvo enquanto atualizamos os dados em segundo plano.'}</p>
+          </div>
+        </div>
+      )}
+
       {isError && (
         <div role="alert" className="flex items-start gap-3 bg-warning-light border border-warning/20 rounded-2xl px-4 py-3.5 text-sm text-warning">
           <span className="shrink-0 mt-0.5">⚠️</span>
@@ -348,7 +358,11 @@ export function PainelCampanhas() {
               </div>
             ))}
           </div>
-        ) : isError && filteredCampaigns.length === 0 ? null : filteredCampaigns.length === 0 && !subscriptionError && partialFailures.length === 0 ? (
+        ) : isError && filteredCampaigns.length === 0 ? null : filteredCampaigns.length === 0 && result.firstSyncPending ? (
+          <div role="status" className="rounded-2xl border border-border bg-surface px-6 py-12 text-center text-sm text-text-secondary">
+            A primeira sincronização está em andamento. As campanhas aparecerão aqui quando os dados forem salvos.
+          </div>
+        ) : filteredCampaigns.length === 0 && !subscriptionError && partialFailures.length === 0 ? (
           <div className="w-full rounded-2xl border border-border bg-surface py-32 px-6 flex flex-col items-center justify-center text-center hover:border-border-light transition-all duration-300 shadow-sm">
             <h3 className="text-base font-semibold text-text-primary mb-2">
               Nenhuma campanha por aqui ainda

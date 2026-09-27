@@ -1,3 +1,18 @@
+/*
+Funcionalidade: projeção imediata de campanhas alteradas no Ady
+  Cenário: pausa e retomada confirmadas pela Meta atualizam o snapshot v2
+    Dado uma campanha persistida
+    Quando o Ady pausa ou retoma a campanha
+    Então o snapshot v2 recebe o novo status sem esperar o cron
+  Cenário: falha ao projetar o snapshot não desfaz ação confirmada pela Meta
+    Dado que a Meta confirmou a pausa
+    Quando a escrita do snapshot falha
+    Então a ação segue como sucesso e uma reconciliação é enfileirada
+  Cenário: criar ou arquivar no Ady atualiza a lista v2
+    Dado uma campanha criada ou arquivada pelo Ady
+    Quando a operação é concluída
+    Então a projeção v2 recebe nome, objetivo e status atuais
+*/
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CampaignsService, normalizeCampaignPanelMetrics, formatCampaignListItem, calculateDateRange, mapWizardMetaError, normalizeWizardCreatives } from '../services/campaigns/campaigns.service.js';
 import { MockMetaCampaignProvider } from '../lib/providers/mock-campaign.provider.js';
@@ -17,6 +32,9 @@ function makeService(overrides: Partial<{
   getMetaLocationsCache: () => Promise<any>;
   setMetaLocationsCache: () => Promise<void>;
   getResolvedTenantAssetSelection: () => Promise<{ pages: Array<{ instagramUserId?: string; pageId?: string }> }>;
+  upsertCampaignSnapshot: (tenantId: string, value: Record<string, unknown>) => Promise<void>;
+  updateCampaignSnapshot: (tenantId: string, metaCampaignId: string, value: Record<string, unknown>) => Promise<void>;
+  enqueueMetaSync: (args: { tenantId: string; reason: string }) => Promise<void>;
 }> = {}) {
   const meta = new MockMetaCampaignProvider();
   const repo = new MockCampaignRepository();
@@ -26,6 +44,9 @@ function makeService(overrides: Partial<{
     getMetaLocationsCache: async () => null as any,
     setMetaLocationsCache: async () => {},
     getResolvedTenantAssetSelection: async () => ({ pages: [] }),
+    upsertCampaignSnapshot: async () => {},
+    updateCampaignSnapshot: async () => {},
+    enqueueMetaSync: async () => {},
     ...overrides,
   } as any;
   const service = new CampaignsService(meta, repo, deps);
@@ -171,7 +192,8 @@ describe('mapWizardMetaError', () => {
 
 describe('CampaignsService.createCampaign', () => {
   it('cria campanha com sucesso', async () => {
-    const { service, repo, meta } = makeService();
+    const upsertCampaignSnapshot = vi.fn(async () => {});
+    const { service, repo, meta } = makeService({ upsertCampaignSnapshot });
     repo.metaConnections.push({
       tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
       adAccounts: [{ id: 'act_123' }], accessToken: 'tok', selectedPageIds: [],
@@ -186,6 +208,9 @@ describe('CampaignsService.createCampaign', () => {
     expect(result).toBeDefined();
     expect(result.metaCampaignId).toBe('meta_campaign_1');
     expect(repo.campaigns).toHaveLength(1);
+    expect(upsertCampaignSnapshot).toHaveBeenCalledWith(TENANT_ID, expect.objectContaining({
+      metaCampaignId: 'meta_campaign_1', name: 'Test', status: 'PAUSED', objective: 'OUTCOME_SALES',
+    }));
   });
 
   it('rejeita adAccount de outro tenant', async () => {
@@ -214,6 +239,37 @@ describe('CampaignsService.createCampaign', () => {
 // ── Service: pauseCampaign / resumeCampaign ─────────────────────────────────
 
 describe('CampaignsService.pauseCampaign & resumeCampaign', () => {
+  it('projeta pausa e retomada no snapshot v2 após confirmação Meta', async () => {
+    const updateCampaignSnapshot = vi.fn(async () => {});
+    const { service, repo } = makeService({ updateCampaignSnapshot });
+    repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [{ id: 'act_123' }], accessToken: 'tok', selectedPageIds: [], createdAt: new Date(),
+    } as any);
+
+    await service.pauseCampaign({ tenantId: TENANT_ID, campaignId: 'meta_camp_1' });
+    await service.resumeCampaign({ tenantId: TENANT_ID, campaignId: 'meta_camp_1' });
+
+    expect(updateCampaignSnapshot).toHaveBeenNthCalledWith(1, TENANT_ID, 'meta_camp_1', { status: 'PAUSED' });
+    expect(updateCampaignSnapshot).toHaveBeenNthCalledWith(2, TENANT_ID, 'meta_camp_1', { status: 'ACTIVE' });
+  });
+
+  it('mantém pausa bem-sucedida e enfileira reconciliação se a projeção v2 falhar', async () => {
+    const enqueueMetaSync = vi.fn(async () => {});
+    const { service, repo } = makeService({
+      updateCampaignSnapshot: async () => { throw new Error('db unavailable'); },
+      enqueueMetaSync,
+    });
+    repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [{ id: 'act_123' }], accessToken: 'tok', selectedPageIds: [], createdAt: new Date(),
+    } as any);
+
+    await expect(service.pauseCampaign({ tenantId: TENANT_ID, campaignId: 'meta_camp_1' }))
+      .resolves.toMatchObject({ status: 'PAUSED' });
+    expect(enqueueMetaSync).toHaveBeenCalledWith({ tenantId: TENANT_ID, reason: 'stale-fallback' });
+  });
+
   it('pausa e resume campanha', async () => {
     const { service, repo } = makeService();
     repo.metaConnections.push({
@@ -270,7 +326,8 @@ describe('CampaignsService.getCampaign & getCampaigns', () => {
 
 describe('CampaignsService.updateCampaignStatus & softDeleteCampaign', () => {
   it('altera status com log', async () => {
-    const { service, repo } = makeService();
+    const updateCampaignSnapshot = vi.fn(async () => {});
+    const { service, repo } = makeService({ updateCampaignSnapshot });
     repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
     const c = await repo.createCampaign({ tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Test' } as any);
 
@@ -278,10 +335,12 @@ describe('CampaignsService.updateCampaignStatus & softDeleteCampaign', () => {
     expect(updated.status).toBe('paused');
     expect(repo.furyInsights).toHaveLength(1);
     expect(repo.furyInsights[0].suggestionType).toBe('campaign_status_paused');
+    expect(updateCampaignSnapshot).toHaveBeenCalledWith(TENANT_ID, 'mc1', { status: 'PAUSED' });
   });
 
   it('softDelete arquiva campanha', async () => {
-    const { service, repo } = makeService();
+    const updateCampaignSnapshot = vi.fn(async () => {});
+    const { service, repo } = makeService({ updateCampaignSnapshot });
     repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
     const c = await repo.createCampaign({ tenantId: TENANT_ID, metaCampaignId: 'mc1' } as any);
 
@@ -289,6 +348,7 @@ describe('CampaignsService.updateCampaignStatus & softDeleteCampaign', () => {
     expect(deleted.status).toBe('archived');
     expect(repo.furyInsights).toHaveLength(1);
     expect(repo.furyInsights[0].suggestionType).toBe('campaign_archived');
+    expect(updateCampaignSnapshot).toHaveBeenCalledWith(TENANT_ID, 'mc1', { status: 'ARCHIVED' });
   });
 
   it('softDelete bloqueia campanha local de outro tenant (403 FORBIDDEN)', async () => {
@@ -332,7 +392,8 @@ describe('CampaignsService.updateCampaign', () => {
 
 describe('CampaignsService.createCampaignFromWizard', () => {
   it('cria campanha wizard completa', async () => {
-    const { service, repo, meta } = makeService();
+    const upsertCampaignSnapshot = vi.fn(async () => {});
+    const { service, repo, meta } = makeService({ upsertCampaignSnapshot });
     repo.metaConnections.push({
       tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
       adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
@@ -361,6 +422,9 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     expect(meta.createdAdSets).toHaveLength(1);
     expect(meta.createdAdCreatives).toHaveLength(1);
     expect(meta.createdAds).toHaveLength(1);
+    expect(upsertCampaignSnapshot).toHaveBeenCalledWith(TENANT_ID, expect.objectContaining({
+      metaCampaignId: 'meta_campaign_1', name: 'Oferta', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC',
+    }));
   });
 
   const wizardArgs = {

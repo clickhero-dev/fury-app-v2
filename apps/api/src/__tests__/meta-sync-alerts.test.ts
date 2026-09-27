@@ -53,6 +53,7 @@ const { fakeRedis, sendEmail } = vi.hoisted(() => {
       keys.set(key, '1');
       return 'OK';
     }),
+    del: vi.fn(async (key: string) => Number(keys.delete(key))),
     _keys: keys,
   };
   const sendEmail = vi.fn(async () => {});
@@ -112,5 +113,18 @@ describe('BDD: notifyMetaSyncFailure (integração worker + dedupe)', () => {
     vi.clearAllMocks();
     await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TOKEN_EXPIRED', message: 'b' });
     expect(sendEmail).toHaveBeenCalledTimes(2);
+  });
+
+  it('Cenário: falha no SMTP libera dedupe para tentar novamente no próximo run', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    sendEmail.mockRejectedValueOnce(new Error('SMTP indisponível'));
+
+    await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TIMEOUT', message: 'timeout' });
+    expect(fakeRedis.del).toHaveBeenCalledWith('meta-sync:alert:t1:META_TIMEOUT');
+
+    vi.clearAllMocks();
+    await notifyMetaSyncFailure({ tenantId: 't1', errorCode: 'META_TIMEOUT', message: 'timeout' });
+    expect(sendEmail).toHaveBeenCalledTimes(2);
+    log.mockRestore();
   });
 });

@@ -151,9 +151,10 @@ const STEPS: MigrationStep[] = [
   },
   { tag: '0043_meta_sync_tables' },
   { tag: '0044_meta_lead_form_unknown' },
+  { tag: '0045_meta_campaign_daily_insights' },
 ];
 
-/** Nomes de todas as tabelas do schema (34 tabelas) — usados para validação. */
+/** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
 export const REQUIRED_TABLES = [
   'tenants',
   'users',
@@ -186,6 +187,7 @@ export const REQUIRED_TABLES = [
   'wpp_verifications',
   'wpp_webhook_events',
   'meta_campaign_snapshots',
+  'meta_campaign_daily_insights',
   'meta_leads',
   'meta_instagram_media',
   'meta_sync_runs',

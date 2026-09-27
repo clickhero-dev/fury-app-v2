@@ -59,6 +59,14 @@ describe('BDD: hooks de campanhas/leads usam /v2/*', () => {
     expect(mockApiGet).toHaveBeenCalledWith('/v2/leads');
   });
 
+  it('Cenário: useCampaignLeads preserva aviso de degradação retornado pelo cache', async () => {
+    mockApiGet.mockResolvedValue({ data: { success: true, data: [], degraded: true, firstSyncPending: true, staleForMs: null } });
+    const { result } = renderHook(() => useCampaignLeads(null, true, true), { wrapper });
+    await waitFor(() => expect(result.current.firstSyncPending).toBe(true));
+    expect(result.current.degraded).toBe(true);
+    expect(result.current.leads).toEqual([]);
+  });
+
   it('Cenário: useLeadCampaigns chama /v2/lead-campaigns', async () => {
     mockApiGet.mockResolvedValue({
       data: { data: [{ id: 'm1', name: 'Camp 1' }] },

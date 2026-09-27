@@ -11,6 +11,11 @@ Funcionalidade: Repositório de sincronização Meta (snapshots, leads, IG, runs
     Quando upsertCampaignSnapshot é chamado duas vezes com o mesmo meta_campaign_id
     Então usa ON CONFLICT (tenant_id, meta_campaign_id) DO UPDATE (não duplica)
 
+  Cenário: atualização pontual do snapshot preserva métricas
+    Dado snapshot de campanha com métricas já persistidas
+    Quando atualizo apenas o status da campanha
+    Então a escrita é tenant-bound e não substitui metrics nem last_insights_at
+
   Cenário: upsert de leads é idempotente por meta_lead_id
     Dado repositório tenant-bound
     Quando upsertLeads é chamado com leads repetidos
@@ -93,7 +98,7 @@ function makeDb() {
   const calls: { method: string; args: any[] }[] = [];
 
   const query: any = {};
-  for (const table of ['metaCampaignSnapshots', 'metaLeads', 'metaInstagramMedia', 'metaSyncRuns']) {
+  for (const table of ['metaCampaignSnapshots', 'metaCampaignDailyInsights', 'metaLeads', 'metaInstagramMedia', 'metaSyncRuns']) {
     query[table] = {
       findFirst: vi.fn(async () => null),
       findMany: vi.fn(async () => []),
@@ -136,6 +141,20 @@ function makeDb() {
 }
 
 describe('BDD: MetaSyncRepository', () => {
+  it('Cenário: métricas diárias são upsertadas e consultadas dentro do tenant e período', async () => {
+    const { db, calls, query } = makeDb();
+    query.metaCampaignDailyInsights.findMany.mockResolvedValueOnce([
+      { metaCampaignId: 'm1', date: '2026-09-25', metrics: { spend: 12 } },
+    ]);
+    const repo = new MetaSyncRepository(tenantId, db);
+    await repo.upsertCampaignDailyInsights([{ metaCampaignId: 'm1', date: '2026-09-25', metrics: { spend: 12 } }]);
+    const rows = await repo.findCampaignDailyInsights({ startDate: '2026-09-25', endDate: '2026-09-26' });
+    expect(calls.some((c) => c.method === 'onConflictDoUpdate')).toBe(true);
+    expect(rows).toHaveLength(1);
+    const [queryArgs] = query.metaCampaignDailyInsights.findMany.mock.calls[0];
+    expect(whereText(queryArgs.where)).toContain(tenantId);
+    expect(whereText(queryArgs.where)).toContain('2026-09-25');
+  });
   it('Cenário: upsertCampaignSnapshot usa onConflictDoUpdate (idempotente)', async () => {
     const { db, calls } = makeDb();
     const repo = new MetaSyncRepository(tenantId, db);
@@ -160,6 +179,20 @@ describe('BDD: MetaSyncRepository', () => {
       .join(',');
     expect(targetNames).toContain('meta_campaign_id');
     expect(targetNames).toContain('tenant_id');
+  });
+
+  it('Cenário: updateCampaignSnapshot grava apenas campos enviados e escopa por tenant', async () => {
+    const { db, calls } = makeDb();
+    const repo = new MetaSyncRepository(tenantId, db);
+    await repo.updateCampaignSnapshot('meta-1', { status: 'PAUSED' });
+
+    const setCall = calls.find((call) => call.method === 'set');
+    expect(setCall?.args[0]).toMatchObject({ status: 'PAUSED' });
+    expect(setCall?.args[0]).not.toHaveProperty('metrics');
+    expect(setCall?.args[0]).not.toHaveProperty('lastInsightsAt');
+    const whereCall = calls.find((call) => call.method === 'where');
+    expect(whereText(whereCall?.args[0])).toContain(tenantId);
+    expect(whereText(whereCall?.args[0])).toContain('meta-1');
   });
 
   it('Cenário: upsertLeads usa onConflictDoUpdate por meta_lead_id', async () => {
@@ -230,6 +263,7 @@ describe('BDD: MetaSyncRepository', () => {
     const [runArgs] = query.metaSyncRuns.findFirst.mock.calls[0];
     expect(whereText(runArgs.where)).toContain(tenantId);
     expect(whereText(runArgs.where)).toContain('success');
+    expect(whereText(runArgs.where)).toContain('partial');
   });
 
   it('Cenário: findCampaignSnapshots pagina e retorna { items, total }', async () => {
