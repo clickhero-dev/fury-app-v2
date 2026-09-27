@@ -9,6 +9,8 @@ import {
 import { roundToDecimals } from '../../utils/metrics-formatter.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { CampaignRepository } from '../../repository/campaign.repository.js';
+import { MetaSyncRepository, type CampaignSnapshotUpsert } from '../../repository/meta-sync.repository.js';
+import { enqueueMetaSyncTenantRun } from '../../workers/meta-sync.worker.js';
 import { invalidateCampaignsCache } from '../../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../../lib/locations-cache.js';
 import { getResolvedTenantAssetSelection } from '../meta/meta.service.js';
@@ -280,8 +282,42 @@ export class CampaignsService {
       getMetaLocationsCache: (query: string) => Promise<any>;
       setMetaLocationsCache: (query: string, data: any) => Promise<void>;
       getResolvedTenantAssetSelection: (tenantId: string) => Promise<{ pages: Array<{ instagramUserId?: string; pageId?: string }> }>;
+      upsertCampaignSnapshot?: (tenantId: string, values: CampaignSnapshotUpsert) => Promise<unknown>;
+      updateCampaignSnapshot?: (tenantId: string, metaCampaignId: string, values: Partial<CampaignSnapshotUpsert>) => Promise<void>;
+      enqueueMetaSync?: (args: { tenantId: string; reason: string }) => Promise<void>;
     }
   ) {}
+
+  private async reconcileProjectionFailure(tenantId: string): Promise<void> {
+    console.warn('[Campaigns] projeção v2 não atualizada após ação Meta confirmada; solicitando reconciliação.');
+    try {
+      await this.deps.enqueueMetaSync?.({ tenantId, reason: 'stale-fallback' });
+    } catch {
+      console.warn('[Campaigns] não foi possível enfileirar reconciliação da projeção v2.');
+    }
+  }
+
+  private async updateCampaignProjection(
+    tenantId: string,
+    metaCampaignId: string,
+    values: Partial<CampaignSnapshotUpsert>
+  ): Promise<void> {
+    if (!this.deps.updateCampaignSnapshot) return;
+    try {
+      await this.deps.updateCampaignSnapshot(tenantId, metaCampaignId, values);
+    } catch {
+      await this.reconcileProjectionFailure(tenantId);
+    }
+  }
+
+  private async createCampaignProjection(tenantId: string, values: CampaignSnapshotUpsert): Promise<void> {
+    if (!this.deps.upsertCampaignSnapshot) return;
+    try {
+      await this.deps.upsertCampaignSnapshot(tenantId, values);
+    } catch {
+      await this.reconcileProjectionFailure(tenantId);
+    }
+  }
 
   private handleMetaError(err: unknown): never {
     if (err instanceof AppError) throw err;
@@ -351,13 +387,21 @@ export class CampaignsService {
         special_ad_categories: [], is_adset_budget_sharing_enabled: false,
       });
 
-      return this.repo.createCampaign({
+      const campaign = await this.repo.createCampaign({
         tenantId: args.tenantId,
         metaCampaignId: response.id,
         name: args.name,
         status: 'paused',
         budget: { daily_budget: args.dailyBudget, objective: args.objective },
       } as any);
+      await this.createCampaignProjection(args.tenantId, {
+        metaCampaignId: response.id,
+        name: args.name,
+        status: 'PAUSED',
+        objective: args.objective,
+        budget: { daily_budget: args.dailyBudget, objective: args.objective },
+      });
+      return campaign;
     } catch (err) { this.handleMetaError(err); }
   }
 
@@ -417,7 +461,7 @@ export class CampaignsService {
 
     let campaignMeta: Record<string, unknown>;
     try {
-      campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status');
+      campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status,name,objective');
     } catch (err) {
       // Campanha inexistente no Meta → 404 CAMPAIGN_NOT_FOUND; 190 → 401; demais Meta → 4xx.
       this.handleMetaError(err);
@@ -440,6 +484,11 @@ export class CampaignsService {
     if (localId) {
       await this.repo.updateCampaign(localId, { status: 'paused' } as any);
     }
+    await this.updateCampaignProjection(args.tenantId, metaCampaignId, {
+      status: 'PAUSED',
+      ...(typeof campaignMeta.name === 'string' ? { name: campaignMeta.name } : {}),
+      ...(typeof campaignMeta.objective === 'string' ? { objective: campaignMeta.objective } : {}),
+    });
 
     return { campaignId: args.campaignId, status: 'PAUSED' as const };
   }
@@ -450,7 +499,7 @@ export class CampaignsService {
 
     let campaignMeta: Record<string, unknown>;
     try {
-      campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status');
+      campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status,name,objective');
     } catch (err) {
       // Campanha inexistente no Meta → 404 CAMPAIGN_NOT_FOUND; 190 → 401; demais Meta → 4xx.
       this.handleMetaError(err);
@@ -473,6 +522,11 @@ export class CampaignsService {
     if (localId) {
       await this.repo.updateCampaign(localId, { status: 'active' } as any);
     }
+    await this.updateCampaignProjection(args.tenantId, metaCampaignId, {
+      status: 'ACTIVE',
+      ...(typeof campaignMeta.name === 'string' ? { name: campaignMeta.name } : {}),
+      ...(typeof campaignMeta.objective === 'string' ? { objective: campaignMeta.objective } : {}),
+    });
 
     return { campaignId: args.campaignId, status: 'ACTIVE' as const };
   }
@@ -484,9 +538,11 @@ export class CampaignsService {
     try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, { daily_budget: args.dailyBudget }); }
     catch (err) { this.handleMetaError(err); }
 
-    return this.repo.updateCampaign(args.campaignId, {
+    const updated = await this.repo.updateCampaign(args.campaignId, {
       budget: { ...(campaign.budget as Record<string, unknown>), daily_budget: args.dailyBudget },
     } as any);
+    await this.updateCampaignProjection(args.tenantId, campaign.metaCampaignId, { budget: updated.budget });
+    return updated;
   }
 
   async getCampaign(args: { tenantId: string; campaignId: string }) {
@@ -551,14 +607,20 @@ export class CampaignsService {
     try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, updateBody); }
     catch (err) { this.handleMetaError(err); }
 
-    if (args.name) return this.repo.updateCampaign(args.campaignId, { name: args.name } as any);
+    if (args.name) {
+      const updated = await this.repo.updateCampaign(args.campaignId, { name: args.name } as any);
+      await this.updateCampaignProjection(args.tenantId, campaign.metaCampaignId, { name: args.name });
+      return updated;
+    }
     if (args.budget) {
       const updatedBudget = { ...(campaign.budget as Record<string, unknown>) };
       if (args.budget.type === 'daily') updatedBudget.daily_budget = args.budget.amount;
       else updatedBudget.lifetime_budget = args.budget.amount;
       if (args.budget.startDate) updatedBudget.start_date = args.budget.startDate;
       if (args.budget.endDate) updatedBudget.end_date = args.budget.endDate;
-      return this.repo.updateCampaign(args.campaignId, { budget: updatedBudget } as any);
+      const updated = await this.repo.updateCampaign(args.campaignId, { budget: updatedBudget } as any);
+      await this.updateCampaignProjection(args.tenantId, campaign.metaCampaignId, { budget: updatedBudget });
+      return updated;
     }
     return campaign;
   }
@@ -572,6 +634,7 @@ export class CampaignsService {
 
     const localStatus = args.status === 'ACTIVE' ? 'active' : args.status === 'PAUSED' ? 'paused' : 'archived';
     const updated = await this.repo.updateCampaign(args.campaignId, { status: localStatus } as any);
+    await this.updateCampaignProjection(args.tenantId, campaign.metaCampaignId, { status: args.status });
 
     await this.repo.insertFuryInsight({
       tenantId: args.tenantId, campaignId: args.campaignId,
@@ -611,6 +674,7 @@ export class CampaignsService {
     }
 
     const deleted = await this.repo.updateCampaign(localId, { status: 'archived' } as any);
+    await this.updateCampaignProjection(args.tenantId, metaCampaignId, { status: 'ARCHIVED' });
 
     await this.repo.insertFuryInsight({
       tenantId: args.tenantId, campaignId: localId,
@@ -1184,6 +1248,13 @@ export class CampaignsService {
       } as any);
       dbCampaignId = campaign.id;
       await this.deps.invalidateCampaignsCache(args.tenantId);
+      await this.createCampaignProjection(args.tenantId, {
+        metaCampaignId: metaCampaignId!,
+        name: campaignName,
+        status: 'ACTIVE',
+        objective: objectiveConfig.metaObjective,
+        budget: { daily_budget: Math.round(args.dailyBudgetBrl * 100), objective: objectiveConfig.metaObjective },
+      });
     } catch (err) {
       // Falhou após a criação no Meta (DB ou invalidação de cache) — reverte tudo.
       await rollback('db');
@@ -1437,6 +1508,10 @@ const defaultService = new CampaignsService(
       getResolvedTenantAssetSelection(tenantId).then((r) => ({
         pages: r.pages.map((p) => ({ ...p, instagramUserId: p.instagramUserId ?? undefined })),
       }))) as (tenantId: string) => Promise<{ pages: Array<{ instagramUserId?: string; pageId?: string }> }>,
+    upsertCampaignSnapshot: (tenantId, values) => new MetaSyncRepository(tenantId).upsertCampaignSnapshot(values),
+    updateCampaignSnapshot: (tenantId, metaCampaignId, values) =>
+      new MetaSyncRepository(tenantId).updateCampaignSnapshot(metaCampaignId, values),
+    enqueueMetaSync: (args) => enqueueMetaSyncTenantRun(args),
   }
 );
 

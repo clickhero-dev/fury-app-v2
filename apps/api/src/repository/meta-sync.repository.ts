@@ -117,6 +117,21 @@ export class MetaSyncRepository extends TenantScopedRepository {
       });
   }
 
+  /** Atualiza somente os campos informados, preservando métricas e insights já persistidos. */
+  async updateCampaignSnapshot(
+    metaCampaignId: string,
+    values: Partial<Omit<CampaignSnapshotUpsert, 'metaCampaignId'>>
+  ): Promise<void> {
+    if (Object.keys(values).length === 0) return;
+    await this.db
+      .update(metaCampaignSnapshots)
+      .set({ ...values, updatedAt: new Date() } as any)
+      .where(and(
+        eq(metaCampaignSnapshots.tenantId, this.tenantId),
+        eq(metaCampaignSnapshots.metaCampaignId, metaCampaignId)
+      ));
+  }
+
   /** Marca o resultado de `campaignHasLeadForm` no snapshot (evita N+1 nos ciclos seguintes). */
   async updateSnapshotHasLeadForm(metaCampaignId: string, hasLeadForm: boolean): Promise<void> {
     await this.db

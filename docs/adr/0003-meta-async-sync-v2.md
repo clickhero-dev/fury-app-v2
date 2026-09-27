@@ -77,7 +77,15 @@ endpoints atuais permanecem intactos; a reversão é só voltar o path no front.
    não bloqueante, não troca a tela por skeleton durante refresh e só remove o
    aviso quando uma versão mais nova estiver persistida. Falha Meta mantém o
    snapshot e o aviso; não há chamada direta dos endpoints legados no browser.
-7. **Uso resiliente da quota Meta**: a camada comum das chamadas captura os
+7. **Read-your-writes para campanhas alteradas no Ady**: após a Meta confirmar
+   criação, pausa, retomada, edição de nome/orçamento ou arquivamento, o serviço
+   atualiza a projeção correspondente em `meta_campaign_snapshots` por repository
+   e invalida a lista no frontend. A atualização pontual preserva métricas e
+   insights. Se a projeção falhar depois da confirmação Meta, a ação continua
+   bem-sucedida e um run de reconciliação é enfileirado. Mudanças feitas
+   diretamente na Meta continuam sendo refletidas pelo ciclo periódico de
+   15 minutos, mais o tempo de fila/processamento e a próxima consulta da tela.
+8. **Uso resiliente da quota Meta**: a camada comum das chamadas captura os
    headers de uso em sucesso e erro (`X-Business-Use-Case-Usage`, `X-App-Usage`
    e `X-Ad-Account-Usage` quando presentes), extraindo somente métricas
    sanitizadas. Limites são observados por conta/bucket, não por tenant apenas.
@@ -86,12 +94,12 @@ endpoints atuais permanecem intactos; a reversão é só voltar o path no front.
    reportado e backoff com jitter quando ele não está disponível. Os códigos e
    subcódigos de throttling são normalizados por tipo; não se presume uma quota
    fixa universal e não se promete ausência total de throttling externo.
-8. **Coleta incremental**: leads são persistidos por upsert idempotente e
+9. **Coleta incremental**: leads são persistidos por upsert idempotente e
    checkpoints/cursors por anúncio permitem retomar sem reler todo o histórico
    em cada ciclo. Uma reconciliação integral em cadência menor cobre leads
    atrasados e mudanças na Meta. O resultado diário de insights tem chave única
    tenant + campanha + data para reexecução segura.
-9. **Notificação**: falha TOTAL de run envia email para `SYNC_ALERT_EMAILS`
+10. **Notificação**: falha TOTAL de run envia email para `SYNC_ALERT_EMAILS`
    (default `diogommtdes@gmail.com;diogo.souza@clickhero.com.br`, env var
    sobrepõe) com template `syncFailureEmailTemplate` (mensagem client-safe,
    sem token/payload/stack), com **dedupe de 6h por `(tenant, error_code)`**

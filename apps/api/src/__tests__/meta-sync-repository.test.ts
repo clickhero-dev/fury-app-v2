@@ -11,6 +11,11 @@ Funcionalidade: Repositório de sincronização Meta (snapshots, leads, IG, runs
     Quando upsertCampaignSnapshot é chamado duas vezes com o mesmo meta_campaign_id
     Então usa ON CONFLICT (tenant_id, meta_campaign_id) DO UPDATE (não duplica)
 
+  Cenário: atualização pontual do snapshot preserva métricas
+    Dado snapshot de campanha com métricas já persistidas
+    Quando atualizo apenas o status da campanha
+    Então a escrita é tenant-bound e não substitui metrics nem last_insights_at
+
   Cenário: upsert de leads é idempotente por meta_lead_id
     Dado repositório tenant-bound
     Quando upsertLeads é chamado com leads repetidos
@@ -174,6 +179,20 @@ describe('BDD: MetaSyncRepository', () => {
       .join(',');
     expect(targetNames).toContain('meta_campaign_id');
     expect(targetNames).toContain('tenant_id');
+  });
+
+  it('Cenário: updateCampaignSnapshot grava apenas campos enviados e escopa por tenant', async () => {
+    const { db, calls } = makeDb();
+    const repo = new MetaSyncRepository(tenantId, db);
+    await repo.updateCampaignSnapshot('meta-1', { status: 'PAUSED' });
+
+    const setCall = calls.find((call) => call.method === 'set');
+    expect(setCall?.args[0]).toMatchObject({ status: 'PAUSED' });
+    expect(setCall?.args[0]).not.toHaveProperty('metrics');
+    expect(setCall?.args[0]).not.toHaveProperty('lastInsightsAt');
+    const whereCall = calls.find((call) => call.method === 'where');
+    expect(whereText(whereCall?.args[0])).toContain(tenantId);
+    expect(whereText(whereCall?.args[0])).toContain('meta-1');
   });
 
   it('Cenário: upsertLeads usa onConflictDoUpdate por meta_lead_id', async () => {
