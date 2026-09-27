@@ -1,3 +1,15 @@
+/*
+# Language: pt-BR
+
+Funcionalidade: manter totais de Campanhas sincronizados com o período selecionado
+
+  Cenário: esconder os totais anteriores enquanto a nova consulta está carregando
+    Dado que a lista e os totais do período atual foram carregados
+    Quando o usuário seleciona outro período e a consulta ainda está pendente
+    Então a lista e os totais anteriores são substituídos por skeletons
+    E os totais do novo período aparecem quando a consulta termina
+*/
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -89,10 +101,15 @@ describe('PainelCampanhas — Total Clientes = soma das linhas de campanha', () 
 
     fireEvent.click(screen.getByRole('button', { name: '7 dias' }));
     expect(screen.getByRole('status', { name: /carregando campanhas/i })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: /carregando totais/i })).toBeInTheDocument();
+    expect(screen.queryByText('Total investido')).not.toBeInTheDocument();
+    expect(screen.queryByText('Total Clientes')).not.toBeInTheDocument();
     expect(screen.queryByText('Camp Ativa')).not.toBeInTheDocument();
 
     resolveNext({ data: { success: true, data: [{ id: 'b', name: 'Nova campanha', status: 'ACTIVE', conversions: 10, spend: 20 }] } });
     expect(await screen.findByText('Nova campanha')).toBeInTheDocument();
+    expect((await screen.findAllByText('R$ 20,00')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Total Clientes')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('status', { name: /carregando campanhas/i })).not.toBeInTheDocument());
   });
 

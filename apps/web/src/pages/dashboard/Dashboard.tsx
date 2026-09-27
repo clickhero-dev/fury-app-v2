@@ -723,7 +723,7 @@ export function Dashboard() {
 
   const isMetaConnected = (metaConnections?.length ?? 0) > 0;
 
-  const { data: summaryRaw } = useQuery({
+  const { data: summaryRaw, isFetching: fetchingSummary } = useQuery({
     queryKey: ['metrics-summary', startDate, endDate],
     queryFn: async () => {
       try {
@@ -740,7 +740,10 @@ export function Dashboard() {
     placeholderData: null,
   });
 
-  const { data: activeCampaignsResult = { campaigns: [], partialFailures: [] } } = useQuery({
+  const {
+    data: activeCampaignsResult = { campaigns: [], partialFailures: [] },
+    isFetching: fetchingActiveCampaigns,
+  } = useQuery({
     queryKey: ['campaigns-active-dashboard', startDate, endDate],
     queryFn: async () => {
       try {
@@ -764,7 +767,7 @@ export function Dashboard() {
   const activeCampaigns = activeCampaignsResult.campaigns ?? [];
   const activeCampaignPartialFailures = activeCampaignsResult.partialFailures ?? [];
 
-  const { data: dailyData = [] } = useQuery({
+  const { data: dailyData = [], isFetching: fetchingDaily } = useQuery({
     queryKey: ['metrics-daily-week', startDate, endDate],
     queryFn: async () => {
       try {
@@ -779,6 +782,9 @@ export function Dashboard() {
     staleTime: 5 * 60 * 1000,
     placeholderData: [],
   });
+
+  const isPeriodDataLoading =
+    fetchingGoals || fetchingSummary || fetchingActiveCampaigns || fetchingDaily;
 
   const g = goalsData;
   const primaryGoal = g?.primary_goal ?? g?.goals?.[0];
@@ -851,6 +857,20 @@ export function Dashboard() {
 
         {!isMetaConnected && <MetaBanner />}
 
+        {isPeriodDataLoading ? (
+          <div role="status" aria-label="Carregando dados do dashboard" aria-busy="true" className="space-y-6">
+            <div className="h-28 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
+            <div className="grid gap-4 sm:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-32 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
+              ))}
+            </div>
+            <div className="h-48 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
+            <div className="h-72 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
+            <div className="h-64 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
+          </div>
+        ) : (
+          <>
         {primaryGoal && (
           <HeroStrip
             goal={primaryGoal}
@@ -902,6 +922,8 @@ export function Dashboard() {
           <WeeklyChart data={dailyData} hasRealData={hasRealData} idealLine={idealLine} />
 
           <ActiveCampaignsTable campaigns={activeCampaigns} partialFailures={activeCampaignPartialFailures} />
+          </>
+        )}
         </div>
       </ErrorBoundary>
     </AppLayout>
