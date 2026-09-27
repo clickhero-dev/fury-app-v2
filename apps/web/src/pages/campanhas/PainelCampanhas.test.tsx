@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -75,5 +75,35 @@ describe('PainelCampanhas — Total Clientes = soma das linhas de campanha', () 
 
     expect(await screen.findByText('Nenhuma campanha por aqui ainda')).toBeInTheDocument();
     expect(screen.queryByText('Total Clientes')).not.toBeInTheDocument();
+  });
+
+  it('mostra skeleton ao trocar o período até os novos dados carregarem', async () => {
+    let resolveNext!: (value: { data: { success: boolean; data: unknown[] } }) => void;
+    mockApiGet.mockImplementationOnce(() => Promise.resolve({
+      data: { success: true, data: [{ id: 'a', name: 'Camp Ativa', status: 'ACTIVE', conversions: 80, spend: 100 }] },
+    }));
+    mockApiGet.mockImplementationOnce(() => new Promise((resolve) => { resolveNext = resolve; }));
+
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+    expect(await screen.findByText('Camp Ativa')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '7 dias' }));
+    expect(screen.getByRole('status', { name: /carregando campanhas/i })).toBeInTheDocument();
+    expect(screen.queryByText('Camp Ativa')).not.toBeInTheDocument();
+
+    resolveNext({ data: { success: true, data: [{ id: 'b', name: 'Nova campanha', status: 'ACTIVE', conversions: 10, spend: 20 }] } });
+    expect(await screen.findByText('Nova campanha')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('status', { name: /carregando campanhas/i })).not.toBeInTheDocument());
+  });
+
+  it('informa falha de carregamento e permite tentar novamente', async () => {
+    mockApiGet
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ data: { success: true, data: [] } });
+
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+    expect(await screen.findByText(/não foi possível carregar as campanhas/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /tentar novamente/i }));
+    expect(await screen.findByText('Nenhuma campanha por aqui ainda')).toBeInTheDocument();
   });
 });
