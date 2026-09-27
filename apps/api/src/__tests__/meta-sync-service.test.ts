@@ -194,6 +194,32 @@ describe('BDD: MetaSyncService.syncTenant', () => {
     expect(deps.invalidateHttpCache).toHaveBeenCalledWith(tenantId, expect.any(Array));
   });
 
+  it('Cenário: campanha recém descoberta verifica formulário antes do default false do banco', async () => {
+    const { repo, metaApi, deps } = makeFakes();
+    metaApi.listAccountCampaigns.mockResolvedValue([
+      { id: 'new-campaign', name: 'Nova', objective: 'OUTCOME_LEADS', status: 'ACTIVE' },
+    ]);
+    repo.findCampaignSnapshots.mockImplementation(async () =>
+      repo.upsertCampaignSnapshots.mock.calls.length === 0
+        ? { items: [], total: 0 }
+        : {
+            items: [{ metaCampaignId: 'new-campaign', hasLeadForm: false, objective: 'OUTCOME_LEADS' }],
+            total: 1,
+          }
+    );
+    metaApi.listCampaignAds.mockResolvedValue([{ id: 'new-ad' }]);
+    metaApi.listAdLeads.mockResolvedValue([{ id: 'new-lead', field_data: [] }]);
+
+    const service = new MetaSyncService(deps as any);
+    await service.syncTenant({ tenantId, reason: 'test' });
+
+    expect(metaApi.campaignHasLeadForm).toHaveBeenCalledWith('new-campaign', TOKEN);
+    expect(repo.updateSnapshotHasLeadForm).toHaveBeenCalledWith('new-campaign', true);
+    expect(repo.upsertLeads).toHaveBeenCalledWith([
+      expect.objectContaining({ metaLeadId: 'new-lead', metaCampaignId: 'new-campaign' }),
+    ]);
+  });
+
   it('Cenário: token expirado (190) → failed META_TOKEN_EXPIRED', async () => {
     const { metaApi, deps, repo } = makeFakes();
     metaApi.listAccountCampaigns.mockRejectedValue(metaApiError(190, { status: 401 }));
@@ -289,6 +315,56 @@ describe('BDD: MetaSyncService.syncTenant', () => {
 
     expect(metaApi.campaignHasLeadForm).not.toHaveBeenCalled();
     expect(repo.recordSyncRun).toHaveBeenCalledTimes(2);
+  });
+
+  it('prioriza campanhas com formulário já conhecido antes de consultar campanhas desconhecidas', async () => {
+    const { metaApi, deps, repo } = makeFakes();
+    metaApi.listAccountCampaigns.mockResolvedValue([
+      { id: 'unknown', name: 'Desconhecida', objective: 'OUTCOME_LEADS', status: 'ACTIVE' },
+      { id: 'known', name: 'Conhecida', objective: 'OUTCOME_LEADS', status: 'ACTIVE' },
+    ]);
+    repo.findCampaignSnapshots.mockResolvedValue({
+      items: [
+        { metaCampaignId: 'unknown', hasLeadForm: null, objective: 'OUTCOME_LEADS' },
+        { metaCampaignId: 'known', hasLeadForm: true, objective: 'OUTCOME_LEADS' },
+      ],
+      total: 2,
+    } as any);
+    metaApi.listCampaignAds.mockImplementation(async (id: string) => {
+      if (id === 'known') return [{ id: 'known-ad' }];
+      return [];
+    });
+
+    await new MetaSyncService(deps as any).syncTenant({ tenantId, reason: 'test' });
+
+    expect(metaApi.listCampaignAds).toHaveBeenCalledWith('known', TOKEN);
+    expect(metaApi.campaignHasLeadForm.mock.invocationCallOrder[0]).toBeGreaterThan(
+      metaApi.listCampaignAds.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('interrompe a coleta de leads após limite de requisições da Meta', async () => {
+    const { metaApi, deps, repo } = makeFakes();
+    metaApi.listAccountCampaigns.mockResolvedValue([
+      { id: 'm1', name: 'A', objective: 'OUTCOME_LEADS', status: 'ACTIVE' },
+      { id: 'm2', name: 'B', objective: 'OUTCOME_LEADS', status: 'ACTIVE' },
+    ]);
+    repo.findCampaignSnapshots.mockResolvedValue({
+      items: [
+        { metaCampaignId: 'm1', hasLeadForm: null, objective: 'OUTCOME_LEADS' },
+        { metaCampaignId: 'm2', hasLeadForm: null, objective: 'OUTCOME_LEADS' },
+      ],
+      total: 2,
+    } as any);
+    const rateLimit = metaApiError(17, { message: 'User request limit reached' });
+    metaApi.campaignHasLeadForm.mockRejectedValue(rateLimit);
+
+    const result = await new MetaSyncService(deps as any).syncTenant({ tenantId, reason: 'test' });
+
+    expect(metaApi.campaignHasLeadForm).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe('partial');
+    expect(result.partialFailures).toHaveLength(1);
+    expect(result.partialFailures[0]).toEqual(expect.objectContaining({ item_id: 'm1', code: 'META_RATE_LIMIT' }));
   });
 
   it('Cenário: sem conexão Meta → failed META_CONNECTION_NOT_FOUND', async () => {

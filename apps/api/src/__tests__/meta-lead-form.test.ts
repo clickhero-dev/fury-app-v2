@@ -28,19 +28,20 @@ describe('metaApi.campaignHasLeadForm (detecção de campanha com formulário)',
     } as unknown as Response);
   }
 
-  it('true quando um ad tem lead_gen_form_id em creative.link_data', async () => {
+  it('true quando um ad tem lead_gen_form_id em creative.object_story_spec.link_data', async () => {
     const spy = mockFetch({
       data: [
-        { id: 'ad_1', creative: { link_data: { call_to_action: { value: { lead_gen_form_id: 'form_1' } } } } },
+        { id: 'ad_1', creative: { object_story_spec: { link_data: { call_to_action: { value: { lead_gen_form_id: 'form_1' } } } } } },
       ],
     });
 
     await expect(metaApi.campaignHasLeadForm('campaign_1', 'tok')).resolves.toBe(true);
     const url = spy.mock.calls[0][0] as string;
     expect(url).toContain('/campaign_1/ads');
-    // Buscamos link_data/object_story_spec COMPLETOS, sem subcampo aninhado
-    // (call_to_action{value}) — que a Graph API pode rejeitar.
-    expect(url).toContain('creative%7Blink_data%2Cobject_story_spec%7D'); // creative{link_data,object_story_spec}
+    // link_data não é campo de AdCreative na Graph API; ele fica dentro de
+    // object_story_spec. Solicitamos o campo pai válido.
+    expect(url).toContain('creative%7Bobject_story_spec%7D');
+    expect(url).not.toContain('creative%7Blink_data');
     expect(url).not.toContain('call_to_action%7Bvalue%7D'); // call_to_action{value}
   });
 

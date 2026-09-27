@@ -1861,13 +1861,13 @@ interface MetaCreativeLinkData {
  * `link_data` (ou `object_story_spec.link_data`) → `call_to_action.value.lead_gen_form_id`.
  * Buscamos `link_data`/`object_story_spec` COMPLETOS (não sub_campos aninhados,
  * que a Graph API pode rejeitar) e extraímos o id do form de forma tolerante.
- * GET /{campaign_id}/ads?fields=id,creative{link_data,object_story_spec}
+ * GET /{campaign_id}/ads?fields=id,creative{object_story_spec}
  */
 export async function campaignHasLeadForm(campaignId: string, accessToken: string): Promise<boolean> {
   let after: string | undefined;
   do {
     const query =
-      `fields=id,creative{link_data,object_story_spec}&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+      `fields=id,creative{object_story_spec}&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
     const payload = await metaApiCall<MetaAdWithCreativeResponse>(
       `/${encodeURIComponent(campaignId)}/ads?${query}`,
       accessToken,

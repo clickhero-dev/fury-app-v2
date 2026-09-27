@@ -188,6 +188,23 @@ describe('BDD: MetaSyncRepository', () => {
     expect(targetNames).toContain('media_id');
   });
 
+  it('Cenário: ON CONFLICT referencia nomes físicos snake_case das colunas', async () => {
+    const { db, calls } = makeDb();
+    const repo = new MetaSyncRepository(tenantId, db);
+
+    await repo.upsertCampaignSnapshots([{ metaCampaignId: 'meta-1', name: 'Camp' }]);
+    let conflict = calls.filter((c) => c.method === 'onConflictDoUpdate').at(-1)!;
+    expect(whereText(conflict.args[0].set.metaCampaignId)).toBe('excluded."meta_campaign_id"');
+
+    await repo.upsertLeads([{ metaLeadId: 'lead-1', metaCampaignId: 'meta-1' }]);
+    conflict = calls.filter((c) => c.method === 'onConflictDoUpdate').at(-1)!;
+    expect(whereText(conflict.args[0].set.metaLeadId)).toBe('excluded."meta_lead_id"');
+
+    await repo.upsertInstagramMedia([{ mediaId: 'media-1', mediaProductType: 'REELS' }]);
+    conflict = calls.filter((c) => c.method === 'onConflictDoUpdate').at(-1)!;
+    expect(whereText(conflict.args[0].set.mediaProductType)).toBe('excluded."media_product_type"');
+  });
+
   it('Cenário: consultas filtram por tenantId (isolamento)', async () => {
     const { db, query } = makeDb();
     const repo = new MetaSyncRepository(tenantId, db);

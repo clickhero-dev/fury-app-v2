@@ -102,6 +102,9 @@ function classifyError(err: unknown): ClassifiedError {
   if (metaCode === 190) {
     return { fatal: true, code: 'META_TOKEN_EXPIRED', reason: 'Token Meta inválido ou expirado.' };
   }
+  if (metaCode === 17 || metaCode === 4) {
+    return { fatal: false, code: 'META_RATE_LIMIT', reason: 'Limite de requisições da Meta atingido.' };
+  }
   if (httpStatus === 504 || httpStatus >= 500 || /timeout/i.test(message)) {
     return { fatal: true, code: 'META_TIMEOUT', reason: 'Timeout ou falha na conexão com o Meta.' };
   }
@@ -243,6 +246,13 @@ export class MetaSyncService {
     }
     counts.campaignsCount = campaigns.length;
 
+    // Lê o cache antes do upsert: campanhas recém descobertas recebem o default
+    // has_lead_form=false no banco e não podem ser confundidas com um resultado cacheado.
+    const existing = await repo.findCampaignSnapshots({ limit: 1000, offset: 0 });
+    const existingHasForm = new Map<string, boolean | null>(
+      existing.items.map((s) => [s.metaCampaignId, s.hasLeadForm])
+    );
+
     // 2) Persiste snapshots em batch (upsert idempotente).
     await repo.upsertCampaignSnapshots(
       campaigns.map((c) => ({
@@ -251,12 +261,6 @@ export class MetaSyncService {
         status: c.status ?? null,
         objective: c.objective ?? null,
       }))
-    );
-
-    // has_lead_form já conhecido (ciclos anteriores) — evita N+1 do campaignHasLeadForm.
-    const existing = await repo.findCampaignSnapshots({ limit: 1000, offset: 0 });
-    const existingHasForm = new Map<string, boolean | null>(
-      existing.items.map((s) => [s.metaCampaignId, s.hasLeadForm])
     );
 
     // 3) Insights 30d account-level (1 chamada por tenant por ciclo) → espelho local + snapshot.
@@ -286,7 +290,9 @@ export class MetaSyncService {
     }
 
     // 4) Leads: só campanhas OUTCOME_LEADS com form (has_lead_form cacheado no snapshot).
-    const leadCandidates = campaigns.filter((c) => c.objective === 'OUTCOME_LEADS');
+    const leadCandidates = campaigns
+      .filter((c) => c.objective === 'OUTCOME_LEADS')
+      .sort((a, b) => Number(existingHasForm.get(b.id) === true) - Number(existingHasForm.get(a.id) === true));
     const localFormMap = await repo.findLocalLeadFormByMetaIds(leadCandidates.map((c) => c.id));
     for (const campaign of leadCandidates) {
       try {
@@ -310,6 +316,9 @@ export class MetaSyncService {
       } catch (err) {
         const { code, reason } = classifyError(err);
         partialFailures.push({ item_id: campaign.id, provider: 'meta', code, reason });
+        // Continuar repetindo chamadas após o limite da Meta só prolonga o run
+        // e impede que ciclos futuros retomem pelas campanhas já cacheadas.
+        if (code === 'META_RATE_LIMIT') break;
       }
     }
 
