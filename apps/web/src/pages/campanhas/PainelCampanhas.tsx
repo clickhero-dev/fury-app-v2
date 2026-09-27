@@ -400,7 +400,16 @@ export function PainelCampanhas() {
         )}
 
         {/* Totais */}
-        {summary && (
+        {campaignsLoading ? (
+          <div role="status" aria-label="Carregando totais" aria-busy="true" className="grid grid-cols-2 overflow-hidden rounded-2xl border border-border bg-surface">
+            {[0, 1].map((item) => (
+              <div key={item} className="space-y-3 px-6 py-5">
+                <div className="h-3 w-28 animate-pulse rounded bg-surface-secondary" />
+                <div className="h-7 w-24 animate-pulse rounded bg-surface-secondary" />
+              </div>
+            ))}
+          </div>
+        ) : summary && (
           <div className="rounded-2xl border border-border bg-surface overflow-hidden hover:border-border-light transition-all">
             <div className="grid grid-cols-2 divide-x divide-border">
               <div className="px-6 py-5">
