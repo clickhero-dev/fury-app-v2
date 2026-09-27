@@ -123,6 +123,7 @@ import {
   startMetaSyncWorker,
   stopMetaSyncWorker,
   enqueueMetaSyncRuns,
+  enqueueMetaSyncTenantRun,
   processMetaSyncRun,
   getMetaSyncTenantIds,
   windowKeyFor,
@@ -186,6 +187,13 @@ describe('BDD: MetaSyncWorker', () => {
     expect(new Set(t1Jobs.map((args) => args[2].jobId)).size).toBe(1);
   });
 
+  it('Cenário: refresh stale usa uma chave por tenant para evitar jobs por request', async () => {
+    await enqueueMetaSyncTenantRun({ tenantId: 't1', reason: 'stale-fallback', timestamp: '2026-09-25T21:30:00.000Z', queue: { add: queueAddSpy } });
+    const [call] = queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:run');
+    expect(call[2].jobId).toBe('meta-sync-stale-t1');
+    expect(call[2].removeOnComplete).toMatchObject({ age: 300 });
+  });
+
   it('Cenário: processMetaSyncRun chama syncTenant', async () => {
     mockSyncTenant.mockResolvedValue({
       status: 'success',
@@ -213,6 +221,17 @@ describe('BDD: MetaSyncWorker', () => {
     expect(mockNotifyFailure).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: 't1', errorCode: 'META_TIMEOUT' })
     );
+  });
+
+  it('Cenário: exceção inesperada no sync alerta e mantém o job como falha', async () => {
+    mockSyncTenant.mockRejectedValue(new Error('detalhe interno sensível'));
+
+    await expect(processMetaSyncRun('t1', 'tick')).rejects.toThrow('detalhe interno sensível');
+    expect(mockNotifyFailure).toHaveBeenCalledWith({
+      tenantId: 't1',
+      errorCode: 'META_SYNC_UNEXPECTED_ERROR',
+      message: 'Falha inesperada na sincronização Meta.',
+    });
   });
 
   it('Cenário: start/stop do worker', async () => {

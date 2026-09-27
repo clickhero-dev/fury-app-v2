@@ -49,7 +49,7 @@ function makeWrapper() {
 
 function mockCampaigns(rows: Record<string, unknown>[]) {
   mockApiGet.mockImplementation((url: string) => {
-    if (url === '/metrics/campaigns') {
+    if (url === '/v2/campaigns') {
       return Promise.resolve({ data: { success: true, data: rows } });
     }
     return Promise.resolve({ data: { success: true, data: [] } });

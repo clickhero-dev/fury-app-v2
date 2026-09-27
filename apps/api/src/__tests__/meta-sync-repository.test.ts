@@ -93,7 +93,7 @@ function makeDb() {
   const calls: { method: string; args: any[] }[] = [];
 
   const query: any = {};
-  for (const table of ['metaCampaignSnapshots', 'metaLeads', 'metaInstagramMedia', 'metaSyncRuns']) {
+  for (const table of ['metaCampaignSnapshots', 'metaCampaignDailyInsights', 'metaLeads', 'metaInstagramMedia', 'metaSyncRuns']) {
     query[table] = {
       findFirst: vi.fn(async () => null),
       findMany: vi.fn(async () => []),
@@ -136,6 +136,20 @@ function makeDb() {
 }
 
 describe('BDD: MetaSyncRepository', () => {
+  it('Cenário: métricas diárias são upsertadas e consultadas dentro do tenant e período', async () => {
+    const { db, calls, query } = makeDb();
+    query.metaCampaignDailyInsights.findMany.mockResolvedValueOnce([
+      { metaCampaignId: 'm1', date: '2026-09-25', metrics: { spend: 12 } },
+    ]);
+    const repo = new MetaSyncRepository(tenantId, db);
+    await repo.upsertCampaignDailyInsights([{ metaCampaignId: 'm1', date: '2026-09-25', metrics: { spend: 12 } }]);
+    const rows = await repo.findCampaignDailyInsights({ startDate: '2026-09-25', endDate: '2026-09-26' });
+    expect(calls.some((c) => c.method === 'onConflictDoUpdate')).toBe(true);
+    expect(rows).toHaveLength(1);
+    const [queryArgs] = query.metaCampaignDailyInsights.findMany.mock.calls[0];
+    expect(whereText(queryArgs.where)).toContain(tenantId);
+    expect(whereText(queryArgs.where)).toContain('2026-09-25');
+  });
   it('Cenário: upsertCampaignSnapshot usa onConflictDoUpdate (idempotente)', async () => {
     const { db, calls } = makeDb();
     const repo = new MetaSyncRepository(tenantId, db);
@@ -230,6 +244,7 @@ describe('BDD: MetaSyncRepository', () => {
     const [runArgs] = query.metaSyncRuns.findFirst.mock.calls[0];
     expect(whereText(runArgs.where)).toContain(tenantId);
     expect(whereText(runArgs.where)).toContain('success');
+    expect(whereText(runArgs.where)).toContain('partial');
   });
 
   it('Cenário: findCampaignSnapshots pagina e retorna { items, total }', async () => {

@@ -14,7 +14,7 @@ export async function startMetaSyncManager(): Promise<void> {
 
   const queue = new Queue('meta-sync', { connection });
 
-  // Cron: a cada 15 minutos (D7/D8 — casa com o stale de 15min dos endpoints v2).
+  // Cron de reconciliação a cada 15 minutos; o aviso visível só aparece após 3h stale.
   await queue.add(
     'meta-sync:tick',
     { timestamp: new Date().toISOString() },

@@ -4,24 +4,43 @@ import { AppError } from '../middleware/errorHandler.js';
 import { MetaSyncService, type PartialFailure } from '../services/meta/meta-sync.service.js';
 import { MetaSyncRepository } from '../repository/meta-sync.repository.js';
 
-const STALE_MS = 15 * 60 * 1000;
+const STALE_MS = 3 * 60 * 60 * 1000;
+
+const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+});
 
 const listSchema = z.object({
   status: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
+  startDate: dateOnlySchema.optional(),
+  endDate: dateOnlySchema.optional(),
 });
 
 const dateRangeSchema = z.object({
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  startDate: dateOnlySchema.optional(),
+  endDate: dateOnlySchema.optional(),
 });
 
 interface FreshContext {
   syncedAt: Date | null;
+  staleForMs: number | null;
+  degraded: boolean;
+  firstSyncPending: boolean;
   partialFailures: PartialFailure[];
-  failed: boolean;
   hasData: boolean;
+}
+
+function freshnessFields(fresh: FreshContext) {
+  return {
+    syncedAt: fresh.syncedAt?.toISOString() ?? null,
+    staleForMs: fresh.staleForMs,
+    degraded: fresh.degraded,
+    firstSyncPending: fresh.firstSyncPending,
+    partial_failures: fresh.partialFailures,
+  };
 }
 
 interface SnapshotView {
@@ -132,58 +151,30 @@ export class MetaSyncV2Controller {
     return tenantId;
   }
 
-  /** Verifica staleness (>15min do último run de sucesso) e sincroniza inline se preciso. */
+  /** Lê sempre do snapshot; stale só enfileira refresh, nunca bloqueia a request com Meta. */
   private async ensureFresh(tenantId: string, repo: MetaSyncRepository): Promise<FreshContext> {
     const lastRun = await repo.lastSuccessfulRun();
     const snapshots = await repo.findCampaignSnapshots({ limit: 1, offset: 0 });
     const hasData = snapshots.total > 0;
-    const stale = !lastRun || !hasData || Date.now() - lastRun.startedAt.getTime() > STALE_MS;
+    const staleForMs = lastRun ? Math.max(0, Date.now() - lastRun.startedAt.getTime()) : null;
+    const degraded = !hasData || staleForMs === null || staleForMs > STALE_MS;
 
-    if (!stale) {
-      return { syncedAt: lastRun!.startedAt, partialFailures: [], failed: false, hasData };
+    if (degraded) {
+      try {
+        await this.enqueueMetaSync({ tenantId, reason: 'stale-fallback' });
+      } catch (err) {
+        console.warn('[MetaSync] não foi possível enfileirar atualização stale:', (err as Error).message);
+      }
     }
 
-    const result = await this.metaSyncService.syncTenant({ tenantId, reason: 'stale-fallback' });
-    const after = await repo.lastSuccessfulRun();
     return {
-      syncedAt: after?.startedAt ?? null,
-      partialFailures: result.partialFailures,
-      failed: result.status === 'failed',
-      hasData: hasData || result.campaignsCount > 0,
+      syncedAt: lastRun?.startedAt ?? null,
+      staleForMs,
+      degraded,
+      firstSyncPending: !hasData,
+      partialFailures: [],
+      hasData,
     };
-  }
-
-  /**
-   * Leads já persistidos podem ser servidos imediatamente enquanto a fila atualiza
-   * snapshots stale. A tela consulta campanhas e leads em paralelo; aguardar o sync
-   * completo nas duas rotas fazia cada request bloquear pela mesma chamada à Meta.
-   */
-  private async ensureLeadData(tenantId: string, repo: MetaSyncRepository): Promise<FreshContext> {
-    const lastRun = await repo.lastSuccessfulRun();
-    const snapshots = await repo.findCampaignSnapshots({ limit: 1, offset: 0 });
-    const hasData = snapshots.total > 0;
-    const stale = !lastRun || !hasData || Date.now() - lastRun.startedAt.getTime() > STALE_MS;
-
-    if (!stale) {
-      return { syncedAt: lastRun.startedAt, partialFailures: [], failed: false, hasData };
-    }
-
-    if (!hasData) return this.ensureFresh(tenantId, repo);
-
-    try {
-      await this.enqueueMetaSync({ tenantId, reason: 'stale-fallback' });
-    } catch (err) {
-      console.warn('[MetaSync] não foi possível enfileirar atualização stale de leads:', (err as Error).message);
-    }
-
-    return { syncedAt: lastRun?.startedAt ?? null, partialFailures: [], failed: false, hasData: true };
-  }
-
-  /** Sem dados frescos e Meta fora → 502 (ADR-0002: nunca 500 silencioso). */
-  private assertData(fresh: FreshContext): void {
-    if (fresh.failed && !fresh.hasData) {
-      throw new AppError(502, 'META_API_ERROR', 'Não foi possível sincronizar com a Meta no momento. Tente novamente em instantes.');
-    }
   }
 
   getCampaigns = async (req: Request, res: Response, next: NextFunction) => {
@@ -192,20 +183,53 @@ export class MetaSyncV2Controller {
       const query = listSchema.parse(req.query);
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
-      this.assertData(fresh);
 
       const { items, total } = await repo.findCampaignSnapshots({
         status: query.status,
         limit: query.limit,
         offset: query.offset,
       });
+      let views = items.map(toSnapshotView);
+      if (query.startDate && query.endDate) {
+        const rows = await repo.findCampaignDailyInsights({ startDate: query.startDate, endDate: query.endDate });
+        const grouped = new Map<string, Record<string, number>>();
+        for (const row of rows) {
+          const metrics = (row.metrics as Record<string, unknown> | null) ?? {};
+          const current = grouped.get(row.metaCampaignId) ?? { spend: 0, impressions: 0, clicks: 0, conversions: 0, weightedRoas: 0, roasSpend: 0 };
+          const spend = num(metrics.spend);
+          current.spend += spend;
+          current.impressions += num(metrics.impressions);
+          current.clicks += num(metrics.clicks);
+          current.conversions += num(metrics.conversions);
+          if (metrics.roas != null) {
+            current.weightedRoas += num(metrics.roas) * spend;
+            current.roasSpend += spend;
+          }
+          grouped.set(row.metaCampaignId, current);
+        }
+        views = views.map((view) => {
+          const value = grouped.get(view.id) ?? { spend: 0, impressions: 0, clicks: 0, conversions: 0, weightedRoas: 0, roasSpend: 0 };
+          const roas = value.roasSpend > 0 ? value.weightedRoas / value.roasSpend : null;
+          const metrics = {
+            spend: value.spend,
+            impressions: value.impressions,
+            clicks: value.clicks,
+            conversions: value.conversions,
+            ctr: value.impressions > 0 ? value.clicks / value.impressions * 100 : 0,
+            cpc: value.clicks > 0 ? value.spend / value.clicks : 0,
+            cpm: value.impressions > 0 ? value.spend / value.impressions * 1000 : 0,
+            roas,
+            cpa: value.conversions > 0 ? value.spend / value.conversions : null,
+          };
+          return { ...view, ...metrics, metrics };
+        });
+      }
 
       res.json({
         success: true,
-        data: items.map(toSnapshotView),
+        data: views,
         pagination: { total, limit: query.limit, offset: query.offset },
-        syncedAt: fresh.syncedAt?.toISOString() ?? null,
-        partial_failures: fresh.partialFailures,
+        ...freshnessFields(fresh),
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -227,7 +251,7 @@ export class MetaSyncV2Controller {
       res.json({
         success: true,
         data: { ...toSnapshotView(snapshot), syncedAt: fresh.syncedAt?.toISOString() ?? null },
-        partial_failures: fresh.partialFailures,
+        ...freshnessFields(fresh),
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -241,16 +265,14 @@ export class MetaSyncV2Controller {
       const { id } = req.params;
       if (!id) throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
       const repo = this.repoFactory(tenantId);
-      const fresh = await this.ensureLeadData(tenantId, repo);
-      this.assertData(fresh);
+      const fresh = await this.ensureFresh(tenantId, repo);
 
       const { items } = await repo.findLeadsByCampaign(id, { limit: 500, offset: 0 });
 
       res.json({
         success: true,
         data: items.map(toLeadView),
-        syncedAt: fresh.syncedAt?.toISOString() ?? null,
-        partial_failures: fresh.partialFailures,
+        ...freshnessFields(fresh),
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -262,8 +284,7 @@ export class MetaSyncV2Controller {
     try {
       const tenantId = this.tenantOf(req);
       const repo = this.repoFactory(tenantId);
-      const fresh = await this.ensureLeadData(tenantId, repo);
-      this.assertData(fresh);
+      const fresh = await this.ensureFresh(tenantId, repo);
 
       const { items } = await repo.findAllLeads({ limit: 500, offset: 0 });
       const snapshots = await repo.findCampaignSnapshots({ limit: 1000, offset: 0 });
@@ -276,8 +297,7 @@ export class MetaSyncV2Controller {
           campaignId: l.metaCampaignId ?? null,
           campaignName: l.metaCampaignId ? (nameByMeta.get(l.metaCampaignId) ?? null) : null,
         })),
-        syncedAt: fresh.syncedAt?.toISOString() ?? null,
-        partial_failures: fresh.partialFailures,
+        ...freshnessFields(fresh),
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -289,16 +309,14 @@ export class MetaSyncV2Controller {
     try {
       const tenantId = this.tenantOf(req);
       const repo = this.repoFactory(tenantId);
-      const fresh = await this.ensureLeadData(tenantId, repo);
-      this.assertData(fresh);
+      const fresh = await this.ensureFresh(tenantId, repo);
 
       const rows = await repo.findLeadCampaigns();
 
       res.json({
         success: true,
         data: rows.map((r) => ({ id: r.metaCampaignId, name: r.name, objective: r.objective })),
-        syncedAt: fresh.syncedAt?.toISOString() ?? null,
-        partial_failures: fresh.partialFailures,
+        ...freshnessFields(fresh),
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -311,16 +329,29 @@ export class MetaSyncV2Controller {
       const tenantId = this.tenantOf(req);
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
-      this.assertData(fresh);
 
-      const { items } = await repo.findCampaignSnapshots({ limit: 1000, offset: 0 });
-      const agg = aggregateMetrics(items.map(toSnapshotView));
+      const query = dateRangeSchema.parse(req.query);
+      let agg: ReturnType<typeof aggregateMetrics>;
+      if (query.startDate && query.endDate) {
+        const rows = await repo.findCampaignDailyInsights({ startDate: query.startDate, endDate: query.endDate });
+        const spend = rows.reduce((sum, row) => sum + num((row.metrics as Record<string, unknown> | null)?.spend), 0);
+        const impressions = rows.reduce((sum, row) => sum + num((row.metrics as Record<string, unknown> | null)?.impressions), 0);
+        const clicks = rows.reduce((sum, row) => sum + num((row.metrics as Record<string, unknown> | null)?.clicks), 0);
+        const conversions = rows.reduce((sum, row) => sum + num((row.metrics as Record<string, unknown> | null)?.conversions), 0);
+        const roasValue = rows.reduce((sum, row) => {
+          const metrics = (row.metrics as Record<string, unknown> | null) ?? {};
+          return sum + num(metrics.roas) * num(metrics.spend);
+        }, 0);
+        agg = { spend, impressions, clicks, conversions, roas: spend > 0 ? roasValue / spend : 0, cpa: conversions > 0 ? spend / conversions : 0 };
+      } else {
+        const { items } = await repo.findCampaignSnapshots({ limit: 1000, offset: 0 });
+        agg = aggregateMetrics(items.map(toSnapshotView));
+      }
 
       res.json({
         success: true,
         data: { summary: agg },
-        syncedAt: fresh.syncedAt?.toISOString() ?? null,
-        partial_failures: fresh.partialFailures,
+        ...freshnessFields(fresh),
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -334,33 +365,50 @@ export class MetaSyncV2Controller {
       const query = dateRangeSchema.parse(req.query);
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
-      this.assertData(fresh);
-
-      const { items } = await repo.findCampaignSnapshots({ limit: 1000, offset: 0 });
-      const agg = aggregateMetrics(items.map(toSnapshotView));
 
       const end = query.endDate ? new Date(query.endDate) : new Date();
       const start = query.startDate ? new Date(query.startDate) : new Date(end.getTime() - 29 * 24 * 3600 * 1000);
+      if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start > end) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'Intervalo de datas inválido.');
+      }
+      const startDate = start.toISOString().slice(0, 10);
+      const endDate = end.toISOString().slice(0, 10);
+      const dailyRows = await repo.findCampaignDailyInsights({ startDate, endDate });
       const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / (24 * 3600 * 1000)) + 1);
-
+      const byDate = new Map<string, { spend: number; conversions: number; clicks: number; impressions: number; weightedRoas: number; roasSpend: number }>();
+      for (const row of dailyRows) {
+        const date = typeof row.date === 'string' ? row.date : new Date(row.date).toISOString().slice(0, 10);
+        const metrics = (row.metrics as Record<string, unknown> | null) ?? {};
+        const current = byDate.get(date) ?? { spend: 0, conversions: 0, clicks: 0, impressions: 0, weightedRoas: 0, roasSpend: 0 };
+        const spend = num(metrics.spend);
+        current.spend += spend;
+        current.conversions += num(metrics.conversions);
+        current.clicks += num(metrics.clicks);
+        current.impressions += num(metrics.impressions);
+        if (metrics.roas != null) {
+          current.weightedRoas += num(metrics.roas) * spend;
+          current.roasSpend += spend;
+        }
+        byDate.set(date, current);
+      }
       const data: Array<{ date: string; spend: number; conversions: number; roas: number; clicks: number; impressions: number }> = [];
       for (let i = 0; i < days; i++) {
         const date = new Date(start.getTime() + i * 24 * 3600 * 1000).toISOString().split('T')[0];
+        const metrics = byDate.get(date) ?? { spend: 0, conversions: 0, clicks: 0, impressions: 0, weightedRoas: 0, roasSpend: 0 };
         data.push({
           date,
-          spend: round(agg.spend / days),
-          conversions: round(agg.conversions / days),
-          roas: round(agg.roas),
-          clicks: round(agg.clicks / days),
-          impressions: round(agg.impressions / days),
+          spend: round(metrics.spend),
+          conversions: round(metrics.conversions),
+          roas: round(metrics.roasSpend > 0 ? metrics.weightedRoas / metrics.roasSpend : 0),
+          clicks: round(metrics.clicks),
+          impressions: round(metrics.impressions),
         });
       }
 
       res.json({
         success: true,
         data,
-        syncedAt: fresh.syncedAt?.toISOString() ?? null,
-        partial_failures: fresh.partialFailures,
+        ...freshnessFields(fresh),
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -371,12 +419,24 @@ export class MetaSyncV2Controller {
   getGoalsProgress = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const tenantId = this.tenantOf(req);
+      const query = dateRangeSchema.parse(req.query);
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
-      this.assertData(fresh);
 
-      const { items } = await repo.findCampaignSnapshots({ limit: 1000, offset: 0 });
-      const agg = aggregateMetrics(items.map(toSnapshotView));
+      let agg: ReturnType<typeof aggregateMetrics>;
+      if (query.startDate && query.endDate) {
+        const rows = await repo.findCampaignDailyInsights({ startDate: query.startDate, endDate: query.endDate });
+        const spend = rows.reduce((sum, row) => sum + num((row.metrics as Record<string, unknown> | null)?.spend), 0);
+        const conversions = rows.reduce((sum, row) => sum + num((row.metrics as Record<string, unknown> | null)?.conversions), 0);
+        const weightedRoas = rows.reduce((sum, row) => {
+          const metrics = (row.metrics as Record<string, unknown> | null) ?? {};
+          return sum + num(metrics.roas) * num(metrics.spend);
+        }, 0);
+        agg = { spend, conversions, impressions: 0, clicks: 0, roas: spend > 0 ? weightedRoas / spend : 0, cpa: conversions > 0 ? spend / conversions : 0 };
+      } else {
+        const { items } = await repo.findCampaignSnapshots({ limit: 1000, offset: 0 });
+        agg = aggregateMetrics(items.map(toSnapshotView));
+      }
       const goal = await repo.findClientGoal();
       const hasGoals = Boolean(goal);
       const budgetObj = (goal?.monthlyBudget as Record<string, unknown> | null) ?? {};
@@ -429,8 +489,7 @@ export class MetaSyncV2Controller {
           ideal_line: [],
           alerts: [],
         },
-        syncedAt: fresh.syncedAt?.toISOString() ?? null,
-        partial_failures: fresh.partialFailures,
+        ...freshnessFields(fresh),
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -443,7 +502,6 @@ export class MetaSyncV2Controller {
       const tenantId = this.tenantOf(req);
       const repo = this.repoFactory(tenantId);
       const fresh = await this.ensureFresh(tenantId, repo);
-      this.assertData(fresh);
 
       const media = await repo.findInstagramInsights();
       const comments = media.reduce((s, m) => s + (m.commentsCount ?? 0), 0);
@@ -455,8 +513,7 @@ export class MetaSyncV2Controller {
       res.json({
         success: true,
         data: { comments, saves, followers: 0 },
-        syncedAt: fresh.syncedAt?.toISOString() ?? null,
-        partial_failures: fresh.partialFailures,
+        ...freshnessFields(fresh),
         timestamp: new Date().toISOString(),
       });
     } catch (err) {

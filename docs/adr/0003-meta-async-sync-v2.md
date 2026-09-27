@@ -28,13 +28,19 @@ endpoints atuais permanecem intactos; a reversão é só voltar o path no front.
    idempotentes (`ON CONFLICT`):
    - `meta_campaign_snapshots` — todas as campanhas da conta Meta (inclui fora
      do Fury), com `budget`, `metrics`, `has_lead_form`, `last_insights_at`;
+   - `meta_campaign_daily_insights` — valores diários por campanha, para
+     períodos históricos sem novas consultas durante o carregamento das telas;
    - `meta_leads` — leads dos formulários (dedupe por `meta_lead_id` + tenant);
    - `meta_instagram_media` — mídia orgânica com insights por media;
    - `meta_sync_runs` — status do run, erro client-safe e contagens.
-3. **Insights**: 1 chamada account-level por tenant por ciclo
-   (`getMetaInsights` com `level=campaign` + `time_range` 30d) — nunca 1 por
-   campanha. O resultado alimenta `snapshots.metrics` e o espelho local
-   `campaigns.metrics/lastSyncedAt`.
+3. **Insights**: uma consulta lógica account-level
+   (`getMetaInsights` com `level=campaign`, `time_range` e `time_increment=1`),
+   com paginação até consumir o resultado. Nunca 1 consulta independente por
+   campanha. Persistir a série diária por campanha para períodos selecionáveis;
+   o snapshot agregado alimenta `snapshots.metrics` e o espelho local
+   `campaigns.metrics/lastSyncedAt`. Como a série pode exigir muitas páginas e
+   a granularidade útil é D-1, atualizá-la no máximo uma vez por dia; em falha,
+   tentar novamente no próximo ciclo.
 4. **Leads**: só campanhas `OUTCOME_LEADS` com formulário.
    `campaignHasLeadForm` roda no máximo 1×/campanha (gravado em
    `snapshots.has_lead_form` — evita N+1 nos ciclos seguintes). No 1º ciclo,
@@ -45,7 +51,7 @@ endpoints atuais permanecem intactos; a reversão é só voltar o path no front.
 
    | Endpoint | Lê de |
    |---|---|
-   | `GET /api/v2/campaigns` (+status/limit/offset) | `meta_campaign_snapshots` |
+   | `GET /api/v2/campaigns` (+status/limit/offset) | snapshots + insights diários persistidos |
    | `GET /api/v2/campaigns/:id` | snapshot + metrics + syncedAt |
    | `GET /api/v2/campaigns/:id/leads` | `meta_leads` |
    | `GET /api/v2/leads` | `meta_leads` |
@@ -53,14 +59,37 @@ endpoints atuais permanecem intactos; a reversão é só voltar o path no front.
    | `GET /api/v2/metrics/summary` / `daily` / `goals-progress` | snapshots (agregados) |
    | `GET /api/v2/dashboard/instagram-insights` | `meta_instagram_media` |
 
-   Toda resposta inclui `syncedAt` (idade do dado) e `partial_failures` quando
-   o sync inline teve falhas parciais.
-6. **Staleness / fallback**: dado é considerado stale quando **>15min** desde o
-   último run de sucesso (ou sem dados). Nesse caso o endpoint v2 dispara um
-   sync inline (aguardado, com timeout via wrapper ADR-0002), persiste e retorna
-   o dado fresco. Meta fora e sem dados no banco → `502 META_API_ERROR`
-   (nunca 500 silencioso).
-7. **Notificação**: falha TOTAL de run envia email para `SYNC_ALERT_EMAILS`
+   Respostas incluem `syncedAt` (quando o snapshot foi coletado), `dataThrough`
+   (data mais recente representada nas métricas) e `degraded` quando não há
+   snapshot ou ele está há mais de 3 horas sem atualização bem-sucedida. A idade
+   de coleta é distinta do atraso normal de publicação das métricas da Meta
+   (por exemplo, métricas consolidadas até D-1).
+6. **cache-first / degradação graciosa**: toda leitura v2 retorna primeiro o
+   que estiver persistido no banco; uma request de tela nunca aguarda chamadas
+   externas à Meta. Quando `syncedAt` tem **>3h**, o envelope mantém
+   `data`, inclui `degraded=true` e enfileira uma atualização deduplicada por
+   tenant (um job stale ativo por tenant, liberado até cinco minutos após
+   conclusão). Sem snapshot, responde com coleção vazia + estado de
+   primeira sincronização e agenda o bootstrap; não apresenta vazio como
+   resultado definitivo. O frontend mantém os dados disponíveis, mostra aviso
+   não bloqueante, não troca a tela por skeleton durante refresh e só remove o
+   aviso quando uma versão mais nova estiver persistida. Falha Meta mantém o
+   snapshot e o aviso; não há chamada direta dos endpoints legados no browser.
+7. **Uso resiliente da quota Meta**: a camada comum das chamadas captura os
+   headers de uso em sucesso e erro (`X-Business-Use-Case-Usage`, `X-App-Usage`
+   e `X-Ad-Account-Usage` quando presentes), extraindo somente métricas
+   sanitizadas. Limites são observados por conta/bucket, não por tenant apenas.
+   Um limite suspende o fanout restante da conta no run; workers aplicam
+   concorrência distribuída limitada, cooldown baseado no tempo de recuperação
+   reportado e backoff com jitter quando ele não está disponível. Os códigos e
+   subcódigos de throttling são normalizados por tipo; não se presume uma quota
+   fixa universal e não se promete ausência total de throttling externo.
+8. **Coleta incremental**: leads são persistidos por upsert idempotente e
+   checkpoints/cursors por anúncio permitem retomar sem reler todo o histórico
+   em cada ciclo. Uma reconciliação integral em cadência menor cobre leads
+   atrasados e mudanças na Meta. O resultado diário de insights tem chave única
+   tenant + campanha + data para reexecução segura.
+9. **Notificação**: falha TOTAL de run envia email para `SYNC_ALERT_EMAILS`
    (default `diogommtdes@gmail.com;diogo.souza@clickhero.com.br`, env var
    sobrepõe) com template `syncFailureEmailTemplate` (mensagem client-safe,
    sem token/payload/stack), com **dedupe de 6h por `(tenant, error_code)`**
@@ -75,11 +104,11 @@ endpoints atuais permanecem intactos; a reversão é só voltar o path no front.
   campanhas fora do Fury nunca entram, sem histórico/offline.
 - **Why not**: não resolve o problema de latência nem o gap de sincronização.
 
-### Alternative 2: cron de hora em hora + stale 15min
+### Alternative 2: cron de hora em hora + aviso stale 3h
 - **Pros**: menos chamadas Meta.
-- **Cons**: ~75% das leituras cairiam no fallback ao vivo (o dado só é fresco
-  por 15min após cada ciclo horário) — o pipeline quase não alivia a espera.
-- **Why not**: decisão D7 fixou stale em 15min; o cron `*/15` casa com isso.
+- **Cons**: aumenta o tempo sem coleta programada e atrasa detecção de falhas.
+- **Why not**: manter coleta a cada 15 minutos e usar 3h só como limiar de aviso
+  separa a cadência operacional da tolerância de staleness do usuário.
 
 ### Alternative 3: escrever nas tabelas `campaigns`/`metrics` existentes
 - **Pros**: sem tabelas novas.
@@ -98,15 +127,19 @@ endpoints atuais permanecem intactos; a reversão é só voltar o path no front.
 - Reversão trivial: trocar o path no front para os endpoints antigos.
 
 ### Negative
-- Dado pode ter até ~15min de idade (staleness), exigindo o fallback inline.
-- Volume de leads exige paginação e janela de coleta definida por ciclo.
-- `metrics/daily` v2 é estimativa a partir dos agregados 30d dos snapshots
-  (não há série diária persistida ainda).
+- Dados persistidos podem estar defasados; acima de 3h o usuário vê aviso enquanto
+  o snapshot anterior permanece disponível.
+- A primeira sincronização ainda não tem cache para exibir; a tela mostra estado
+  de preparação sem esperar pela Meta.
+- A coleta diária de insights aumenta o volume de linhas persistidas e exige
+  paginação/checkpoints.
 
 ### Risks
-- **Rate limit Meta**: mitigado com insights account-level (1 chamada/ciclo) e
-  `has_lead_form` cacheado no snapshot (N+1 só no 1º ciclo).
-- **Multi-pod**: jobId determinístico por tenant+ciclo + upserts idempotentes.
-- **Sync inline stale** pode levar segundos na 1ª carga — limitado pelo timeout
-  do wrapper (nunca trava o request além disso).
+- **Rate limit Meta**: observado via headers, controle distribuído por conta,
+  parada imediata de fanout e coleta incremental; a quota pode ser compartilhada
+  com outras aplicações, então bloqueios externos ainda são possíveis.
+- **Multi-pod**: jobId determinístico por tenant/conta+janelamento, lock de
+  conta + upserts idempotentes e checkpoints.
+- **Refresh assíncrono**: eventual; snapshot anterior fica disponível e o aviso
+  permanece se a atualização falhar.
 - **Email spam**: dedupe 6h por (tenant, error_code) limita notificações.

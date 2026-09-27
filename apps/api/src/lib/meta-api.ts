@@ -372,10 +372,8 @@ export interface InstagramMediaInsights {
   replies: number;
 }
 
-// Metrica usada como "alcance": Reels nao expoe `reach`, mas expoe `plays`.
 const METRIC_FIELD_MAP: Record<string, keyof InstagramMediaInsights> = {
   reach: 'reach',
-  plays: 'reach',
   saved: 'saved',
   shares: 'shares',
   replies: 'replies',
@@ -383,8 +381,9 @@ const METRIC_FIELD_MAP: Record<string, keyof InstagramMediaInsights> = {
 
 /**
  * Busca metricas de um post do Instagram, uma de cada vez, para isolar
- * metricas indisponiveis para o tipo de midia (ex.: `reach` nao existe em
- * Reels, `replies` so existe em stories). Metricas que falharem ficam em 0.
+ * metricas indisponiveis para o tipo de midia. `replies` so existe em stories;
+ * `plays` nao representa alcance e nao e aceito pela API atual.
+ * Metricas que falharem ficam em 0.
  */
 export async function getInstagramMediaInsights(
   mediaId: string,
@@ -393,8 +392,8 @@ export async function getInstagramMediaInsights(
 ): Promise<InstagramMediaInsights> {
   const insights: InstagramMediaInsights = { reach: 0, saved: 0, shares: 0, replies: 0 };
 
-  const reachMetric = mediaProductType === 'REELS' ? 'plays' : 'reach';
-  const metricsToFetch = [reachMetric, 'saved', 'shares', 'replies'];
+  const metricsToFetch = ['reach', 'saved', 'shares'];
+  if (mediaProductType === 'STORY') metricsToFetch.push('replies');
 
   for (const metric of metricsToFetch) {
     try {
@@ -1057,9 +1056,9 @@ export interface MetaInsightsData {
 export interface MetaInsightsResponse {
   data: MetaInsightsData[];
   paging?: {
-    cursors: {
-      before: string;
-      after: string;
+    cursors?: {
+      before?: string;
+      after?: string;
     };
     next?: string;
   };
@@ -1085,7 +1084,38 @@ type MetaApiError = Error & {
   metaUserMsg?: string;
   metaUserTitle?: string;
   metaBlameField?: string;
+  rateLimitUsage?: MetaUsageHeaders;
 };
+
+export interface MetaUsageHeaders {
+  app?: Record<string, unknown>;
+  adAccount?: Record<string, unknown>;
+  businessUseCase?: Record<string, unknown>;
+}
+
+/** Decodifica somente os headers de quota documentados pela Meta. */
+export function parseMetaUsageHeaders(headers: Pick<Headers, 'get'>): MetaUsageHeaders {
+  const parse = (name: string): Record<string, unknown> | undefined => {
+    const value = headers.get(name);
+    if (!value || value.length > 10_000) return undefined;
+    try {
+      const result: unknown = JSON.parse(value);
+      return result && typeof result === 'object' && !Array.isArray(result)
+        ? result as Record<string, unknown>
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const app = parse('X-App-Usage');
+  const adAccount = parse('X-Ad-Account-Usage');
+  const businessUseCase = parse('X-Business-Use-Case-Usage');
+  return {
+    ...(app ? { app } : {}),
+    ...(adAccount ? { adAccount } : {}),
+    ...(businessUseCase ? { businessUseCase } : {}),
+  };
+}
 
 export async function metaApiCall<T>(
   path: string,
@@ -1210,7 +1240,6 @@ export async function metaApiCall<T>(
         const metric = path.split('metric=')[1]?.split('&')[0];
         const mockValues: Record<string, number> = {
           reach: 1500,
-          plays: 2200,
           saved: 45,
           shares: 22,
           replies: 6,
@@ -1336,6 +1365,11 @@ export async function metaApiCall<T>(
     throw fetchErr;
   }
 
+  const usage = parseMetaUsageHeaders(res.headers ?? new Headers());
+  if (Object.keys(usage).length > 0) {
+    console.info('[Meta API] Rate-limit usage headers received', usage);
+  }
+
   const maybeErr = json as MetaApiErrorPayload2;
   if (!res.ok || maybeErr?.error) {
     const code = maybeErr?.error?.code;
@@ -1360,6 +1394,7 @@ export async function metaApiCall<T>(
     (err as MetaApiError).metaSubcode = subcode;
     (err as MetaApiError).metaType = type;
     (err as MetaApiError).httpStatus = res.status;
+    (err as MetaApiError).rateLimitUsage = usage;
     (err as MetaApiError).metaUserMsg = maybeErr?.error?.error_user_msg;
     (err as MetaApiError).metaUserTitle = maybeErr?.error?.error_user_title;
     // Extrai blame_field do error_data (JSON string como "{\"blame_field\":\"targeting\"}")
@@ -1435,7 +1470,19 @@ export async function getMetaInsights(params: {
     fullPath += `&time_increment=${params.timeIncrement}`;
   }
 
-  return metaApiCall<MetaInsightsResponse>(fullPath, params.accessToken);
+  const data: MetaInsightsData[] = [];
+  const seenCursors = new Set<string>();
+  let response: MetaInsightsResponse = { data: [] };
+  let after: string | undefined;
+  do {
+    const pagePath = after ? `${fullPath}&after=${encodeURIComponent(after)}` : fullPath;
+    response = await metaApiCall<MetaInsightsResponse>(pagePath, params.accessToken);
+    data.push(...(response.data ?? []));
+    after = response.paging?.cursors?.after;
+    if (after && seenCursors.has(after)) break;
+    if (after) seenCursors.add(after);
+  } while (after);
+  return { ...response, data };
 }
 
 export interface CampaignAdCreative {

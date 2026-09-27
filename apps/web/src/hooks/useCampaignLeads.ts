@@ -13,6 +13,9 @@ export interface CampaignLead {
 interface CampaignLeadsResponse {
   success: boolean;
   data: CampaignLead[];
+  degraded?: boolean;
+  firstSyncPending?: boolean;
+  staleForMs?: number | null;
 }
 
 /**
@@ -27,14 +30,18 @@ export function useCampaignLeads(campaignId: string | null, enabled: boolean, al
     queryFn: async () => {
       const url = campaignId ? `/v2/campaigns/${campaignId}/leads` : '/v2/leads';
       const response = await api.get<CampaignLeadsResponse>(url);
-      return response.data.data;
+      return response.data;
     },
     enabled: enabled && (all || Boolean(campaignId)),
     staleTime: 60_000,
+    refetchInterval: (query) => query.state.data?.degraded ? 30_000 : false,
   });
 
   return {
-    leads: (data ?? []) as CampaignLead[],
+    leads: (data?.data ?? []) as CampaignLead[],
+    degraded: data?.degraded ?? false,
+    firstSyncPending: data?.firstSyncPending ?? false,
+    staleForMs: data?.staleForMs ?? null,
     isLoading: enabled && isLoading,
     isError,
     errorMessage:

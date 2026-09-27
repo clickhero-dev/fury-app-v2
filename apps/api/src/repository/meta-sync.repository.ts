@@ -2,15 +2,17 @@ import {
   db as defaultDb,
   type Database,
   metaCampaignSnapshots,
+  metaCampaignDailyInsights,
   metaLeads,
   metaInstagramMedia,
   metaSyncRuns,
   campaigns,
 } from '@fury/db';
-import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type CampaignSnapshot = typeof metaCampaignSnapshots.$inferSelect;
+type CampaignDailyInsight = typeof metaCampaignDailyInsights.$inferSelect;
 type MetaLead = typeof metaLeads.$inferSelect;
 type InstagramMedia = typeof metaInstagramMedia.$inferSelect;
 type SyncRun = typeof metaSyncRuns.$inferSelect;
@@ -24,6 +26,12 @@ export interface CampaignSnapshotUpsert {
   metrics?: unknown;
   hasLeadForm?: boolean;
   lastInsightsAt?: Date | null;
+}
+
+export interface CampaignDailyInsightUpsert {
+  metaCampaignId: string;
+  date: string;
+  metrics: unknown;
 }
 
 export interface MetaLeadUpsert {
@@ -133,6 +141,37 @@ export class MetaSyncRepository extends TenantScopedRepository {
           eq(metaCampaignSnapshots.metaCampaignId, metaCampaignId)
         )
       );
+  }
+
+  async markCampaignInsightsFetched(metaCampaignId: string): Promise<void> {
+    await this.db.update(metaCampaignSnapshots)
+      .set({ lastInsightsAt: new Date(), updatedAt: new Date() })
+      .where(and(
+        eq(metaCampaignSnapshots.tenantId, this.tenantId),
+        eq(metaCampaignSnapshots.metaCampaignId, metaCampaignId),
+      ));
+  }
+
+  async upsertCampaignDailyInsights(values: CampaignDailyInsightUpsert[]): Promise<void> {
+    if (values.length === 0) return;
+    const keys = Object.keys(values[0]);
+    await this.db.insert(metaCampaignDailyInsights)
+      .values(values.map((value) => ({ ...value, tenantId: this.tenantId })) as any)
+      .onConflictDoUpdate({
+        target: [metaCampaignDailyInsights.tenantId, metaCampaignDailyInsights.metaCampaignId, metaCampaignDailyInsights.date],
+        set: { ...excludedSetFor(keys), updatedAt: sql`now()` } as any,
+      });
+  }
+
+  async findCampaignDailyInsights(opts: { startDate: string; endDate: string }): Promise<CampaignDailyInsight[]> {
+    return this.db.query.metaCampaignDailyInsights.findMany({
+      where: and(
+        eq(metaCampaignDailyInsights.tenantId, this.tenantId),
+        gte(metaCampaignDailyInsights.date, opts.startDate),
+        lte(metaCampaignDailyInsights.date, opts.endDate),
+      ),
+      orderBy: [metaCampaignDailyInsights.date],
+    });
   }
 
   /** Upsert em lote de leads (ON CONFLICT tenant+lead — dedupe 6h/lead). */
@@ -279,7 +318,7 @@ export class MetaSyncRepository extends TenantScopedRepository {
   /** Run de sucesso mais recente (para o cálculo de staleness do fallback). */
   async lastSuccessfulRun(): Promise<SyncRun | null> {
     return (await this.db.query.metaSyncRuns.findFirst({
-      where: and(eq(metaSyncRuns.tenantId, this.tenantId), eq(metaSyncRuns.status, 'success')),
+      where: and(eq(metaSyncRuns.tenantId, this.tenantId), inArray(metaSyncRuns.status, ['success', 'partial'])),
       orderBy: [desc(metaSyncRuns.startedAt)],
     })) ?? null;
   }

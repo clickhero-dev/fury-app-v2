@@ -14,10 +14,14 @@ const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..');
 const ADR_PATH = resolve(REPO_ROOT, 'docs/adr/0003-meta-async-sync-v2.md');
 
 describe('ADR-0003 — meta async sync v2', () => {
-  it('documenta cron 15min, stale 15min, endpoints v2 e política de email', () => {
+  it('documenta cache-first com aviso de 3h, endpoints v2 e política de email', () => {
     const text = readFileSync(ADR_PATH, 'utf8');
     expect(text).toContain('*/15 * * * *');
-    expect(text).toContain('>15min');
+    expect(text).toContain('>3h');
+    expect(text).toContain('cache-first');
+    expect(text).toContain('dataThrough');
+    expect(text).toContain('X-Business-Use-Case-Usage');
+    expect(text).toContain('checkpoint');
     expect(text).toContain('/api/v2/campaigns');
     expect(text).toContain('/api/v2/leads');
     expect(text).toContain('/api/v2/lead-campaigns');

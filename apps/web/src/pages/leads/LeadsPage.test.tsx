@@ -130,6 +130,20 @@ describe('LeadsPage', () => {
     expect(await screen.findByText('Nenhum cliente ainda')).toBeInTheDocument();
   });
 
+  it('exibe o snapshot stale com aviso, sem voltar ao skeleton durante a degradação', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/v2/lead-campaigns') return Promise.resolve({ data: { success: true, data: [FORM_CAMPAIGN], degraded: true, staleForMs: 4 * 60 * 60 * 1000 } });
+      if (url === '/v2/leads') return Promise.resolve({ data: { success: true, data: [{ name: 'Maria Souza', email: 'maria@exemplo.com' }], degraded: true, staleForMs: 4 * 60 * 60 * 1000 } });
+      return Promise.resolve({ data: { success: true, data: [] } });
+    });
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText('Maria Souza')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Dados desatualizados');
+    expect(screen.queryByRole('status', { name: /carregando clientes/i })).not.toBeInTheDocument();
+  });
+
   it('exibe a mensagem de erro da API quando a busca de leads falha (ex.: 401 token Meta expirado)', async () => {
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/v2/lead-campaigns') {

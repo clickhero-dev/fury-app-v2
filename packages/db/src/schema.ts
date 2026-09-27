@@ -680,6 +680,27 @@ export const metaCampaignSnapshots = pgTable(
   })
 );
 
+/** Métricas diárias Meta por campanha, preservadas para filtros de período. */
+export const metaCampaignDailyInsights = pgTable(
+  'meta_campaign_daily_insights',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    metaCampaignId: varchar('meta_campaign_id', { length: 255 }).notNull(),
+    date: date('date').notNull(),
+    metrics: jsonb('metrics').default(sql`'{}'::jsonb`).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantDateIdx: index('meta_campaign_daily_insights_tenant_date_idx').on(table.tenantId, table.date),
+    tenantCampaignDateUnique: unique('meta_campaign_daily_insights_tenant_campaign_date_unique').on(
+      table.tenantId,
+      table.metaCampaignId,
+      table.date,
+    ),
+  }),
+);
+
 /** Leads coletados dos formulários Meta (dedupe por meta_lead_id por tenant). */
 export const metaLeads = pgTable(
   'meta_leads',
@@ -1076,6 +1097,7 @@ export const allTables = {
   wppVerifications,
   wppWebhookEvents,
   metaCampaignSnapshots,
+  metaCampaignDailyInsights,
   metaLeads,
   metaInstagramMedia,
   metaSyncRuns,

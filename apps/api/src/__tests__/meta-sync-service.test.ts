@@ -89,6 +89,8 @@ function makeFakes(overrides: {
     upsertCampaignSnapshots: vi.fn(async () => {}),
     updateSnapshotHasLeadForm: vi.fn(async () => {}),
     updateSnapshotMetrics: vi.fn(async () => {}),
+    markCampaignInsightsFetched: vi.fn(async () => {}),
+    upsertCampaignDailyInsights: vi.fn(async () => {}),
     upsertLeads: vi.fn(async () => {}),
     upsertInstagramMedia: vi.fn(async () => {}),
     updateLocalCampaignMetrics: vi.fn(async () => {}),
@@ -138,6 +140,8 @@ describe('BDD: MetaSyncService.syncTenant', () => {
       data: [
         {
           campaign_id: 'm1',
+          date_start: '2026-09-25',
+          date_stop: '2026-09-25',
           campaign_name: 'Camp 1',
           spend: '100',
           impressions: '1000',
@@ -184,8 +188,11 @@ describe('BDD: MetaSyncService.syncTenant', () => {
 
     expect(result.status).toBe('success');
     expect(metaApi.getMetaInsights).toHaveBeenCalledWith(
-      expect.objectContaining({ level: 'campaign', adAccountId: AD_ACCOUNT })
+      expect.objectContaining({ level: 'campaign', adAccountId: AD_ACCOUNT, timeIncrement: 1 })
     );
+    expect(repo.upsertCampaignDailyInsights).toHaveBeenCalledWith([
+      expect.objectContaining({ metaCampaignId: 'm1', date: '2026-09-25' }),
+    ]);
     expect(repo.upsertCampaignSnapshots).toHaveBeenCalled();
     expect(repo.upsertLeads).toHaveBeenCalled();
     expect(repo.upsertInstagramMedia).toHaveBeenCalled();
@@ -375,6 +382,19 @@ describe('BDD: MetaSyncService.syncTenant', () => {
     expect(repo.recordSyncRun).toHaveBeenCalledTimes(2);
   });
 
+  it('Cenário: não consulta novamente insights diários já sincronizados no último dia', async () => {
+    const { repo, metaApi, deps } = makeFakes();
+    repo.findCampaignSnapshots.mockResolvedValue({
+      items: [{ metaCampaignId: 'm1', hasLeadForm: false, objective: 'OUTCOME_SALES', lastInsightsAt: new Date() }],
+      total: 1,
+    } as any);
+    metaApi.listAccountCampaigns.mockResolvedValue([{ id: 'm1', name: 'Camp', objective: 'OUTCOME_SALES', status: 'ACTIVE' }]);
+
+    await new MetaSyncService(deps as any).syncTenant({ tenantId, reason: 'scheduled' });
+
+    expect(metaApi.getMetaInsights).not.toHaveBeenCalled();
+  });
+
   it('prioriza campanhas com formulário já conhecido antes de consultar campanhas desconhecidas', async () => {
     const { metaApi, deps, repo } = makeFakes();
     metaApi.listAccountCampaigns.mockResolvedValue([
@@ -414,12 +434,14 @@ describe('BDD: MetaSyncService.syncTenant', () => {
       ],
       total: 2,
     } as any);
-    const rateLimit = metaApiError(17, { message: 'User request limit reached' });
+    const rateLimit = metaApiError(613, { message: 'User request limit reached' });
     metaApi.campaignHasLeadForm.mockRejectedValue(rateLimit);
+    deps.getMetaContext.mockResolvedValue({ accessToken: TOKEN, adAccountId: AD_ACCOUNT, instagramUserId: 'ig-user-1' });
 
     const result = await new MetaSyncService(deps as any).syncTenant({ tenantId, reason: 'test' });
 
     expect(metaApi.campaignHasLeadForm).toHaveBeenCalledTimes(1);
+    expect(metaApi.getInstagramMedia).not.toHaveBeenCalled();
     expect(result.status).toBe('partial');
     expect(result.partialFailures).toHaveLength(1);
     expect(result.partialFailures[0]).toEqual(expect.objectContaining({ item_id: 'm1', code: 'META_RATE_LIMIT' }));
