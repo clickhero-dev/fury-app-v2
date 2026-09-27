@@ -53,7 +53,8 @@ export function PainelCampanhas() {
   const [period, setPeriod] = useState<Period>('this_month');
 
   const { startDate, endDate } = getPeriodDates(period);
-  const { data: result = { data: [] }, isLoading } = useCampaigns({ startDate, endDate });
+  const { data: result = { data: [] }, isLoading, isPlaceholderData, isError, refetch } = useCampaigns({ startDate, endDate });
+  const campaignsLoading = isLoading || isPlaceholderData;
   const campaigns = result.data ?? [];
   const subscriptionError = result.subscriptionError;
   const partialFailures = result.partialFailures ?? [];
@@ -294,6 +295,17 @@ export function PainelCampanhas() {
         </div>
       )}
 
+      {isError && (
+        <div role="alert" className="flex items-start gap-3 bg-warning-light border border-warning/20 rounded-2xl px-4 py-3.5 text-sm text-warning">
+          <span className="shrink-0 mt-0.5">⚠️</span>
+          <div className="flex-1">
+            <p className="font-semibold">Não foi possível carregar as campanhas</p>
+            <p className="text-xs mt-1 opacity-80">Os dados podem estar temporariamente indisponíveis. Tente novamente em instantes.</p>
+          </div>
+          <button type="button" onClick={() => void refetch()} className="shrink-0 underline font-semibold">Tentar novamente</button>
+        </div>
+      )}
+
       {/* Toolbar: Busca + Filtro com Maior Altura e Efeitos Hover */}
       <div className="grid gap-3 sm:grid-cols-[1fr_160px] w-full">
         <div className="flex items-center gap-2.5 px-4 py-3 rounded-full border border-border bg-surface hover:border-text-tertiary/50 focus-within:border-brand focus-within:ring-1 focus-within:ring-brand/30 transition-all duration-200">
@@ -325,7 +337,18 @@ export function PainelCampanhas() {
 
       {/* Conteúdo Principal / Empty State com Maior Altura e Efeito Hover */}
       <div className="space-y-4 w-full">
-        {filteredCampaigns.length === 0 && !isLoading && !subscriptionError && partialFailures.length === 0 ? (
+        {campaignsLoading ? (
+          <div role="status" aria-label="Carregando campanhas" aria-busy="true" className="rounded-2xl border border-border bg-surface p-6 space-y-4">
+            <div className="grid grid-cols-4 gap-4 border-b border-border pb-4">
+              {Array.from({ length: 4 }, (_, i) => <div key={i} className="h-4 rounded bg-surface-secondary animate-pulse" />)}
+            </div>
+            {Array.from({ length: 5 }, (_, i) => (
+              <div key={i} className="grid grid-cols-4 gap-4 py-3">
+                {Array.from({ length: 4 }, (_, j) => <div key={j} className="h-4 rounded bg-surface-secondary animate-pulse" />)}
+              </div>
+            ))}
+          </div>
+        ) : isError && filteredCampaigns.length === 0 ? null : filteredCampaigns.length === 0 && !subscriptionError && partialFailures.length === 0 ? (
           <div className="w-full rounded-2xl border border-border bg-surface py-32 px-6 flex flex-col items-center justify-center text-center hover:border-border-light transition-all duration-300 shadow-sm">
             <h3 className="text-base font-semibold text-text-primary mb-2">
               Nenhuma campanha por aqui ainda
@@ -340,7 +363,7 @@ export function PainelCampanhas() {
               columns={columns}
               data={pagedCampaigns}
               keyField="id"
-              isLoading={isLoading}
+              isLoading={false}
               isEmpty={false}
               theadRowClassName="border-b border-border bg-surface-secondary/40"
               thClassName="uppercase text-[11px] text-text-tertiary tracking-wider font-semibold py-4 px-4"
