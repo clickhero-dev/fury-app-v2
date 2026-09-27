@@ -10,7 +10,6 @@ import { roundToDecimals } from '../../utils/metrics-formatter.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { CampaignRepository } from '../../repository/campaign.repository.js';
 import { MetaSyncRepository, type CampaignSnapshotUpsert } from '../../repository/meta-sync.repository.js';
-import { enqueueMetaSyncTenantRun } from '../../workers/meta-sync.worker.js';
 import { invalidateCampaignsCache } from '../../lib/campaigns-cache.js';
 import { getMetaLocationsCache, setMetaLocationsCache } from '../../lib/locations-cache.js';
 import { getResolvedTenantAssetSelection } from '../meta/meta.service.js';
@@ -1511,7 +1510,10 @@ const defaultService = new CampaignsService(
     upsertCampaignSnapshot: (tenantId, values) => new MetaSyncRepository(tenantId).upsertCampaignSnapshot(values),
     updateCampaignSnapshot: (tenantId, metaCampaignId, values) =>
       new MetaSyncRepository(tenantId).updateCampaignSnapshot(metaCampaignId, values),
-    enqueueMetaSync: (args) => enqueueMetaSyncTenantRun(args),
+    enqueueMetaSync: async (args) => {
+      const { enqueueMetaSyncTenantRun } = await import('../../workers/meta-sync.worker.js');
+      return enqueueMetaSyncTenantRun(args);
+    },
   }
 );
 
