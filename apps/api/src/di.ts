@@ -53,6 +53,7 @@ import { CampaignsController } from './controllers/campaigns.controller.js';
 import { metaSyncService } from './services/meta/meta-sync.service.js';
 import { MetaSyncV2Controller } from './controllers/meta-sync.controller.js';
 import { MetaSyncRepository } from './repository/meta-sync.repository.js';
+import { enqueueMetaSyncTenantRun } from './workers/meta-sync.worker.js';
 import { SuperAdminRepository } from './repository/superadmin.repository.js';
 import { SuperAdminController } from './controllers/superadmin.controller.js';
 
@@ -129,6 +130,7 @@ export const controllers = {
   metaSyncV2: new MetaSyncV2Controller(
     metaSyncService,
     (tenantId: string) => new MetaSyncRepository(tenantId),
+    enqueueMetaSyncTenantRun,
   ),
   wppWebhook: new WppWebhookController(wppWebhookService),
   wppVerify: new WppVerificationController(wppVerificationService),

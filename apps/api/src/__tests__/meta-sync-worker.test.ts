@@ -144,9 +144,11 @@ describe('BDD: MetaSyncManager (agendamento)', () => {
     expect(repeatCall).toBeTruthy();
     expect(repeatCall![2].repeat.pattern).toBe('*/15 * * * *');
     expect(repeatCall![0]).toBe('meta-sync:tick');
+    expect(repeatCall![2].jobId).not.toContain(':');
 
     const bootstrapCall = queueAddSpy.mock.calls.find((args) => args[0] === 'meta-sync:bootstrap');
     expect(bootstrapCall).toBeTruthy();
+    expect(bootstrapCall![2].jobId).not.toContain(':');
 
     await stopMetaSyncManager();
   });
@@ -170,7 +172,8 @@ describe('BDD: MetaSyncWorker', () => {
     const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:run');
     expect(runCalls.length).toBe(2);
     expect(runCalls[0][1].tenantId).toBe('t1');
-    expect(runCalls[0][2].jobId).toBe('meta-sync:t1:' + windowKeyFor(ts));
+    expect(runCalls[0][2].jobId).toBe('meta-sync-t1-' + windowKeyFor(ts).replace(/[:.]/g, '-'));
+    expect(runCalls[0][2].jobId).not.toContain(':');
   });
 
   it('Cenário: jobId é determinístico no mesmo ciclo (dedupe multi-pod)', async () => {

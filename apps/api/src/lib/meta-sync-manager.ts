@@ -18,14 +18,14 @@ export async function startMetaSyncManager(): Promise<void> {
   await queue.add(
     'meta-sync:tick',
     { timestamp: new Date().toISOString() },
-    { repeat: { pattern: '*/15 * * * *' }, jobId: 'meta-sync:tick' }
+    { repeat: { pattern: '*/15 * * * *' }, jobId: 'meta-sync-tick' }
   );
 
   // Bootstrap: roda imediatamente no startup (todos os tenants conectados).
   await queue.add(
     'meta-sync:bootstrap',
     { timestamp: new Date().toISOString() },
-    { jobId: 'meta-sync:bootstrap' }
+    { jobId: 'meta-sync-bootstrap' }
   );
 
   console.log('✅ Meta-sync scheduler started (every 15min + bootstrap)');

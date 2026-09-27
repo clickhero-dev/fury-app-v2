@@ -151,8 +151,9 @@ function makeFakes(overrides: Record<string, unknown> = {}) {
     ...(overrides.service ?? {}),
   };
 
-  const controller = new MetaSyncV2Controller(service as never, () => repo as never);
-  return { repo, service, controller };
+  const enqueueMetaSync = vi.fn(async () => {});
+  const controller = new MetaSyncV2Controller(service as never, () => repo as never, enqueueMetaSync);
+  return { repo, service, enqueueMetaSync, controller };
 }
 
 function buildApp(controller: MetaSyncV2Controller) {
@@ -217,6 +218,28 @@ describe('BDD: Endpoints v2', () => {
     expect(service.syncTenant).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: TENANT, reason: 'stale-fallback' })
     );
+  });
+
+  it('Cenário: rotas da tela de clientes servem o snapshot stale sem esperar sync inline', async () => {
+    const { repo, service, enqueueMetaSync, controller } = makeFakes({
+      repo: { lastSuccessfulRun: vi.fn(async () => ({ startedAt: new Date(Date.now() - 30 * 60 * 1000) })) },
+    });
+    const app = buildApp(controller);
+
+    const [campaigns, leads] = await Promise.all([
+      request(app).get('/api/v2/lead-campaigns').set('Authorization', `Bearer ${authToken(TENANT)}`),
+      request(app).get('/api/v2/leads').set('Authorization', `Bearer ${authToken(TENANT)}`),
+    ]);
+
+    expect(campaigns.status).toBe(200);
+    expect(campaigns.body.data).toHaveLength(1);
+    expect(leads.status).toBe(200);
+    expect(leads.body.data).toHaveLength(1);
+    expect(service.syncTenant).not.toHaveBeenCalled();
+    expect(enqueueMetaSync).toHaveBeenCalledTimes(2);
+    expect(enqueueMetaSync).toHaveBeenCalledWith({ tenantId: TENANT, reason: 'stale-fallback' });
+    expect(repo.findLeadCampaigns).toHaveBeenCalledTimes(1);
+    expect(repo.findAllLeads).toHaveBeenCalledTimes(1);
   });
 
   it('Cenário: Meta fora e sem dados → 502 META_API_ERROR', async () => {

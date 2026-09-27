@@ -57,7 +57,7 @@ function toSnapshotView(s: {
   objective: string | null;
   budget: unknown;
   metrics: unknown;
-  hasLeadForm: boolean;
+  hasLeadForm: boolean | null;
   lastInsightsAt: Date | null;
 }): SnapshotView {
   const metrics = (s.metrics as Record<string, unknown> | null) ?? {};
@@ -77,7 +77,7 @@ function toSnapshotView(s: {
     roas: metrics.roas == null ? null : num(metrics.roas),
     cpa: metrics.cpa == null ? null : num(metrics.cpa),
     conversions: num(metrics.conversions),
-    hasLeadForm: s.hasLeadForm,
+    hasLeadForm: s.hasLeadForm === true,
     lastInsightsAt: s.lastInsightsAt,
   };
 }
@@ -123,6 +123,7 @@ export class MetaSyncV2Controller {
   constructor(
     private metaSyncService: MetaSyncService,
     private repoFactory: (tenantId: string) => MetaSyncRepository,
+    private enqueueMetaSync: (args: { tenantId: string; reason: string }) => Promise<void> = async () => {},
   ) {}
 
   private tenantOf(req: Request): string {
@@ -150,6 +151,32 @@ export class MetaSyncV2Controller {
       failed: result.status === 'failed',
       hasData: hasData || result.campaignsCount > 0,
     };
+  }
+
+  /**
+   * Leads já persistidos podem ser servidos imediatamente enquanto a fila atualiza
+   * snapshots stale. A tela consulta campanhas e leads em paralelo; aguardar o sync
+   * completo nas duas rotas fazia cada request bloquear pela mesma chamada à Meta.
+   */
+  private async ensureLeadData(tenantId: string, repo: MetaSyncRepository): Promise<FreshContext> {
+    const lastRun = await repo.lastSuccessfulRun();
+    const snapshots = await repo.findCampaignSnapshots({ limit: 1, offset: 0 });
+    const hasData = snapshots.total > 0;
+    const stale = !lastRun || !hasData || Date.now() - lastRun.startedAt.getTime() > STALE_MS;
+
+    if (!stale) {
+      return { syncedAt: lastRun.startedAt, partialFailures: [], failed: false, hasData };
+    }
+
+    if (!hasData) return this.ensureFresh(tenantId, repo);
+
+    try {
+      await this.enqueueMetaSync({ tenantId, reason: 'stale-fallback' });
+    } catch (err) {
+      console.warn('[MetaSync] não foi possível enfileirar atualização stale de leads:', (err as Error).message);
+    }
+
+    return { syncedAt: lastRun?.startedAt ?? null, partialFailures: [], failed: false, hasData: true };
   }
 
   /** Sem dados frescos e Meta fora → 502 (ADR-0002: nunca 500 silencioso). */
@@ -214,7 +241,7 @@ export class MetaSyncV2Controller {
       const { id } = req.params;
       if (!id) throw new AppError(400, 'MISSING_CAMPAIGN_ID', 'Campaign ID is required');
       const repo = this.repoFactory(tenantId);
-      const fresh = await this.ensureFresh(tenantId, repo);
+      const fresh = await this.ensureLeadData(tenantId, repo);
       this.assertData(fresh);
 
       const { items } = await repo.findLeadsByCampaign(id, { limit: 500, offset: 0 });
@@ -235,7 +262,7 @@ export class MetaSyncV2Controller {
     try {
       const tenantId = this.tenantOf(req);
       const repo = this.repoFactory(tenantId);
-      const fresh = await this.ensureFresh(tenantId, repo);
+      const fresh = await this.ensureLeadData(tenantId, repo);
       this.assertData(fresh);
 
       const { items } = await repo.findAllLeads({ limit: 500, offset: 0 });
@@ -262,7 +289,7 @@ export class MetaSyncV2Controller {
     try {
       const tenantId = this.tenantOf(req);
       const repo = this.repoFactory(tenantId);
-      const fresh = await this.ensureFresh(tenantId, repo);
+      const fresh = await this.ensureLeadData(tenantId, repo);
       this.assertData(fresh);
 
       const rows = await repo.findLeadCampaigns();

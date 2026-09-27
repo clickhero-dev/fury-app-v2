@@ -28,14 +28,25 @@ export async function enqueueMetaSyncRuns(
   queue: { add: (...args: any[]) => Promise<unknown> }
 ): Promise<void> {
   const tenantIds = await getMetaSyncTenantIds();
-  const windowKey = windowKeyFor(timestamp);
   for (const tenantId of tenantIds) {
-    await queue.add(
-      'meta-sync:run',
-      { tenantId, reason: 'scheduled' },
-      { jobId: `meta-sync:${tenantId}:${windowKey}` }
-    );
+    await enqueueMetaSyncTenantRun({ tenantId, reason: 'scheduled', timestamp, queue });
   }
+}
+
+/** Enfileira um tenant com o mesmo dedupe por janela usado pelo cron/bootstrap. */
+export async function enqueueMetaSyncTenantRun(args: {
+  tenantId: string;
+  reason: string;
+  timestamp?: string;
+  queue?: { add: (...args: any[]) => Promise<unknown> };
+}): Promise<void> {
+  const queue = args.queue ?? await getMetaSyncQueue();
+  const windowKey = windowKeyFor(args.timestamp ?? new Date().toISOString()).replace(/:/g, '-');
+  await queue.add(
+    'meta-sync:run',
+    { tenantId: args.tenantId, reason: args.reason },
+    { jobId: `meta-sync-${args.tenantId}-${windowKey}` }
+  );
 }
 
 /** Processa um run de um tenant; run failed → email de alerta (dedupe 6h). */

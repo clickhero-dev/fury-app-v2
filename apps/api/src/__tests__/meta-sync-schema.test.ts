@@ -35,6 +35,7 @@ import { dirname, resolve } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..');
 const MIGRATION_PATH = resolve(REPO_ROOT, 'packages/db/migrations/0043_meta_sync_tables.sql');
+const LEAD_FORM_MIGRATION_PATH = resolve(REPO_ROOT, 'packages/db/migrations/0044_meta_lead_form_unknown.sql');
 
 function readMigration(): string {
   return readFileSync(MIGRATION_PATH, 'utf8');
@@ -96,5 +97,14 @@ describe('BDD: schema drizzle expõe as tabelas de sync', () => {
 
     expect(metaLeads.metaLeadId.name).toBe('meta_lead_id');
     expect(metaInstagramMedia.mediaId.name).toBe('media_id');
+  });
+
+  it('Cenário: formulário desconhecido permanece nulo até ser verificado na Meta', async () => {
+    const migration = readFileSync(LEAD_FORM_MIGRATION_PATH, 'utf8');
+    const { metaCampaignSnapshots } = await import('@fury/db');
+
+    expect(migration).toContain('ALTER COLUMN "has_lead_form" DROP NOT NULL');
+    expect(migration).toContain('SET "has_lead_form" = NULL');
+    expect(metaCampaignSnapshots.hasLeadForm.notNull).toBe(false);
   });
 });

@@ -665,7 +665,7 @@ export const metaCampaignSnapshots = pgTable(
     objective: varchar('objective', { length: 50 }),
     budget: jsonb('budget').default(sql`'{}'::jsonb`),
     metrics: jsonb('metrics').default(sql`'{}'::jsonb`),
-    hasLeadForm: boolean('has_lead_form').notNull().default(false),
+    hasLeadForm: boolean('has_lead_form'),
     lastInsightsAt: timestamp('last_insights_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

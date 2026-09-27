@@ -63,7 +63,8 @@ export interface RecordSyncRunInput {
 function excludedSetFor(keys: string[]): Record<string, SQL> {
   const set: Record<string, SQL> = {};
   for (const key of keys) {
-    set[key] = sql.raw(`excluded."${key}"`);
+    const columnName = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+    set[key] = sql.raw(`excluded."${columnName}"`);
   }
   return set;
 }
@@ -249,7 +250,7 @@ export class MetaSyncRepository extends TenantScopedRepository {
     metaCampaignId: string;
     name: string;
     objective: string | null;
-    hasLeadForm: boolean;
+      hasLeadForm: boolean | null;
   }>> {
     const rows = await this.db.query.metaCampaignSnapshots.findMany({
       where: and(
@@ -263,7 +264,7 @@ export class MetaSyncRepository extends TenantScopedRepository {
       metaCampaignId: r.metaCampaignId,
       name: r.name,
       objective: r.objective,
-      hasLeadForm: r.hasLeadForm,
+      hasLeadForm: r.hasLeadForm === true,
     }));
   }
 
