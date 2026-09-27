@@ -23,11 +23,26 @@ Funcionalidade: Dashboard passa a chamar /v2/* para dados Meta do banco
     Quando o usuário seleciona outro período e a consulta fica pendente
     Então o conteúdo do Dashboard é substituído por skeleton
     E os valores anteriores reaparecem substituídos pelos novos quando a consulta termina
+
+  Esquema do Cenário: manter skeleton até a última consulta do período
+    Dado que o período anterior está visível
+    Quando o resumo novo termina e <consulta> continua pendente
+    Então os valores antigos e novos permanecem ocultos pelo skeleton
+    E os dados novos aparecem quando a última consulta termina
+    Exemplos:
+      | consulta  |
+      | campanhas |
+      | diário    |
+
+  Cenário: sair do skeleton quando o resumo do novo período falha
+    Dado que o período anterior está visível
+    Quando a consulta do resumo do novo período falha
+    Então o skeleton desaparece e o fallback é exibido sem o total anterior
 */
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -155,4 +170,60 @@ describe('BDD: Dashboard usa endpoints v2', () => {
     expect(await screen.findByText('R$ 210,00')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('status', { name: /carregando dados do dashboard/i })).not.toBeInTheDocument());
   });
+
+  it.each([
+    ['campanhas', '/metrics/campaigns', { campaigns: [], partial_failures: [] }],
+    ['diário', '/v2/metrics/daily', []],
+  ])('mantém skeleton enquanto %s está pendente após o resumo terminar', async (_name, endpoint, response) => {
+    const pending = Promise.withResolvers<unknown>();
+    const summary = Promise.withResolvers<unknown>();
+    const initialGet = mockApiGet.getMockImplementation()!;
+    const goal = { metric: 'conversions', current_value: 5, target_value: 10, sparkline: [] };
+    mockUseGoalsProgress.mockReturnValue({
+      data: { hasGoals: true, goals: [goal], ideal_line: [] },
+      isFetching: false, isLoading: false,
+    });
+    render(<Dashboard />, { wrapper });
+    expect(await screen.findByText('R$ 100,00')).toBeInTheDocument();
+
+    mockApiGet.mockImplementation((url: string, config: unknown) => {
+      if (url === endpoint) return pending.promise;
+      if (url === '/v2/metrics/summary') return summary.promise;
+      return initialGet(url, config);
+    });
+    fireEvent.click(screen.getByRole('button', { name: '7 dias' }));
+    await act(async () => {
+      summary.resolve({ data: { success: true, data: { summary: { spend: 210, cpa: 15, conversions: 14 } } } });
+      await new Promise(resolve => setTimeout(resolve, 20));
+    });
+    expect(screen.getByRole('status', { name: /carregando dados do dashboard/i })).toBeInTheDocument();
+    expect(screen.queryByText('R$ 100,00')).not.toBeInTheDocument();
+    expect(screen.queryByText('R$ 210,00')).not.toBeInTheDocument();
+
+    pending.resolve({ data: { success: true, data: response } });
+    expect(await screen.findByText('R$ 210,00')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: /carregando dados do dashboard/i })).not.toBeInTheDocument();
+  });
+
+  it('sai do skeleton sem mostrar o total anterior quando o resumo falha', async () => {
+    const pending = Promise.withResolvers<unknown>();
+    const initialGet = mockApiGet.getMockImplementation()!;
+    const goal = { metric: 'conversions', current_value: 5, target_value: 10, sparkline: [] };
+    mockUseGoalsProgress.mockReturnValue({
+      data: { hasGoals: true, goals: [goal], ideal_line: [] },
+      isFetching: false, isLoading: false,
+    });
+    render(<Dashboard />, { wrapper });
+    expect(await screen.findByText('R$ 100,00')).toBeInTheDocument();
+    mockApiGet.mockImplementation((url: string, config: unknown) =>
+      url === '/v2/metrics/summary' ? pending.promise : initialGet(url, config));
+    fireEvent.click(screen.getByRole('button', { name: '7 dias' }));
+    expect(await screen.findByRole('status', { name: /carregando dados do dashboard/i })).toBeInTheDocument();
+    pending.reject(new Error('HTTP 502'));
+    await waitFor(() => expect(screen.queryByRole('status', { name: /carregando dados do dashboard/i })).not.toBeInTheDocument());
+    expect(screen.queryByText('R$ 100,00')).not.toBeInTheDocument();
+    expect(screen.getByText('Investimento total')).toBeInTheDocument();
+    expect(screen.getAllByText('R$ 0,00')).toHaveLength(2);
+  });
+
 });
