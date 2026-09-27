@@ -55,7 +55,33 @@ Referências de implementação: [`meta-api.ts`](../../apps/api/src/lib/meta-api
 
 **Precisão da estimativa:** baixa para o percentual/limite Meta e média para a estrutura do volume por ciclo. O número real depende da quantidade de anúncios e leads, paginação, tipo/tier do token, outros consumidores da mesma quota e headers que hoje não são registrados.
 
-## 6. Recomendações
+## 6. Exposição pelo ponto de vista de quem usa o produto
+
+Esta classificação combina impacto do caso de uso com evidência disponível. “Exposição alta” significa que o efeito compromete uma tarefa importante quando o cenário acontece; não é uma medição de frequência em produção. A frequência real permanece desconhecida até coletarmos headers e métricas por endpoint.
+
+| Prioridade | Caso de uso e cenário | O que a pessoa pode perceber | Exposição e evidência |
+|---|---|---|---|
+| **P1 — Alta** | Consultar e contatar leads da campanha em Clientes; a descoberta de formulário ou a leitura de leads falha por rate limit/permissão/paginação. | Campanha aparece sem leads ou com quantidade incompleta; contatos podem deixar de ser trabalhados no tempo esperado. | **Alta para a tarefa.** Reproduzido localmente: a campanha “Vagas Executivo Comercial” tinha 4 leads na Meta e 0 persistidos antes da coleta direcionada. O scan geral também registrou code 17 nas campanhas de leads. |
+| **P1 — Alta** | Atualizar ou conferir o desempenho no Dashboard; a chamada de insights falha ou o snapshot permanece stale. | Valores podem continuar antigos; dependendo do estado inicial, o usuário pode interpretar ausência de dados como desempenho zero ou não atualizado. | **Média/alta.** O serviço persiste resultados parciais e serve snapshots. Não temos uma série de uso nem telemetria que determine por quanto tempo os dados ficam stale em produção. |
+| **P2 — Média** | Avaliar métricas orgânicas no Dashboard; o rate limit atinge uma das métricas do Instagram. | Algumas métricas podem aparecer como `0`, indistinguíveis de um zero real, porque falhas individuais são absorvidas e os campos começam zerados. | **Média.** Confirmado pelo caminho de implementação; não foi reproduzido visualmente como incidente nessa validação. |
+| **P2 — Média** | Abrir Clientes pela primeira vez, antes de existir snapshot local. | A página ainda pode esperar a sincronização inline da Meta para popular a primeira lista. | **Média, condicional.** O caminho sem snapshots continua inline. Com snapshots existentes, as rotas agora retornam o cache e enfileiram refresh; localmente responderam em 15 ms (`/leads`) e 33 ms (`/lead-campaigns`). |
+| **P2 — Média** | Abrir Clientes com snapshot existente, mas antigo ou incompleto. | A tela carrega rápido, mas pode não mostrar imediatamente campanhas/leads recém-criados; a atualização ocorre em segundo plano. A página descreve os dados como “buscados direto do Meta Ads”, sem exibir idade/estado stale junto aos leads. | **Média, condicional à falha ou demora do job.** É o compromisso stale-while-revalidate: menor espera em troca de possível defasagem temporária, que pode não ficar clara para quem usa. |
+| **P1 — Alta** | Várias conexões/tenants usam a mesma conta de anúncios ou o usuário já consome quota em outros apps. | Um sync pode reduzir a disponibilidade de chamadas para a própria conta e atrasar outras tarefas ligadas à Meta. | **Potencialmente alta e compartilhada.** Jobs são deduplicados por tenant, não por conta; o worker pode processar dois jobs ao mesmo tempo. Não temos mapeamento de contas compartilhadas nem dados de headers para medir esse alcance. |
+
+### Bugs e lacunas que podem produzir esses efeitos
+
+- **Perda silenciosa de leads**: um resultado `false` não verificado era indistinguível de formulário inexistente; isso já foi corrigido usando `NULL` como estado desconhecido e uma migração. A coleta da campanha-alvo recuperou os quatro leads.
+- **Cache negativo sem revalidação**: depois que `has_lead_form=false` é confirmado, o sync deixa de consultar a campanha. Se o estado dos anúncios/criativos mudar e um formulário for adicionado posteriormente, a campanha pode continuar sem leads até uma reconciliação explícita; o snapshot não tem TTL/versionamento para esse resultado.
+- **Varredura ampla interrompida por quota**: campanhas desconhecidas são verificadas serialmente; no primeiro rate limit durante o loop de leads, o código agora para esse loop. Ainda não há retomada por cursor nem gestão do tempo de recuperação.
+- **Throttle não reconhecido em todos os caminhos**: apenas códigos 4 e 17 são normalizados como `META_RATE_LIMIT`. Insights pode falhar e o fluxo continuar para leads; falhas de insights individuais do Instagram são absorvidas, com zero como fallback. Códigos BUC específicos também não são tratados como interrupção global.
+- **Leitura repetida de histórico**: em cada ciclo, campanhas com formulário voltam a listar anúncios e todas as páginas de leads por anúncio. Isso pode aumentar latência e consumo sem alterar o resultado no banco, pois upsert idempotente não reduz requests de leitura.
+- **Dado stale apresentado como atual**: a tela de Clientes prioriza resposta rápida servindo o snapshot e atualizando em background. Se o job falhar, o usuário pode continuar vendo dado antigo; a descrição atual sugere consulta direta à Meta e a resposta usada pela tela não expõe idade/estado stale no componente de Clientes, então a defasagem pode passar despercebida.
+
+### Sinais de produto recomendados
+
+Para medir impacto real, além da telemetria de quota, monitorar: idade do snapshot exibida ao usuário; proporção de campanhas com leads na Meta vs. leads persistidos; idade desde o último sync bem-sucedido; campanhas/leads adicionados por ciclo; tempo de carregamento da primeira lista; taxa de runs parciais por tipo de erro; e tempo de recuperação após rate limit. Alertas devem ser baseados em atraso e falhas persistentes, não em um único run parcial.
+
+## 7. Recomendações
 
 1. Instrumentar `metaApiCall` para capturar os headers de usage em sucessos e erros, registrar métricas por `adAccountId`, tipo BUC e endpoint, e nunca logar token nem payload de leads.
 2. Normalizar todos os códigos/subcódigos de throttling documentados para uma condição comum, guardar o tempo de recuperação informado e interromper todas as chamadas daquela conta no run.
@@ -64,6 +90,6 @@ Referências de implementação: [`meta-api.ts`](../../apps/api/src/lib/meta-api
 5. Separar cadências/prioridades de insights, leads e Instagram. Usar um limiar preventivo configurável baseado nos headers, com margem, e backoff com jitter quando não houver estimativa de recuperação.
 6. Cobrir com testes: headers ausentes/malformados, cada bucket/código de throttling, pausa por conta, retomada após reset, chamadas em concorrência e falha no meio da paginação.
 
-## 7. Dados necessários para fechar a estimativa
+## 8. Dados necessários para fechar a estimativa
 
 Antes de definir um orçamento numérico, coletar por pelo menos alguns dias: `X-Business-Use-Case-Usage` (incluindo tipo e percentual), `X-App-Usage`/`X-Ad-Account-Usage` quando presentes, códigos/subcódigos e tempo de recuperação; requests por endpoint; quantidade de campanhas, anúncios, páginas de leads e mídias por ciclo; além do tier do app/token e outros processos que usam a mesma conta. A partir daí pode-se dimensionar o limiar preventivo sem assumir uma cota universal.
