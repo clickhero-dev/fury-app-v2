@@ -1673,6 +1673,44 @@ export async function searchMetaCityLocations(query: string, accessToken: string
     .map((item) => ({ ...item, region: cleanRegionLabel(item.region) }));
 }
 
+export type MetaGeoSearchType = 'country' | 'region' | 'city';
+
+/** Busca país, estado e/ou cidade do Brasil (mesmo filtro client-side da busca de cidades). */
+export async function searchMetaGeoLocations(query: string, accessToken: string, types: MetaGeoSearchType[]): Promise<MetaLocationResult[]> {
+  const path = `/search?type=adgeolocation&location_types=${encodeURIComponent(JSON.stringify(types))}&q=${encodeURIComponent(query)}`;
+  const response = await metaApiCall<MetaLocationSearchResponse>(path, accessToken);
+  return (response.data || [])
+    .filter((item) => types.includes(item.type as MetaGeoSearchType) && item.country_code === 'BR')
+    .map((item) => ({ ...item, region: cleanRegionLabel(item.region) }));
+}
+
+/** Cidade da Meta a partir de coordenadas: adradiussuggestion → city_id → adgeolocationmeta. */
+export async function findMetaCityByCoords(lat: number, lng: number, accessToken: string): Promise<MetaLocationResult | null> {
+  // Formato não documentado: aceita objeto solto ou dentro de data
+  const suggestion = await metaApiCall<Record<string, any>>(
+    `/search?type=adradiussuggestion&latitude=${lat}&longitude=${lng}`,
+    accessToken
+  );
+  const s = Array.isArray(suggestion?.data) ? suggestion.data[0] : (suggestion?.data ?? suggestion);
+  const cityId = s?.city_id ? String(s.city_id) : '';
+  if (!/^\d+$/.test(cityId)) return null;
+
+  const meta = await metaApiCall<Record<string, any>>(
+    `/search?type=adgeolocationmeta&cities=${encodeURIComponent(JSON.stringify([cityId]))}`,
+    accessToken
+  );
+  const cities = meta?.data?.cities ?? meta?.cities ?? (Array.isArray(meta?.data) ? meta.data[0]?.cities : undefined);
+  const city = cities?.[cityId];
+  if (!city?.name) return null;
+  return {
+    key: cityId,
+    name: city.name,
+    region: cleanRegionLabel(city.region),
+    country_code: city.country_code,
+    type: 'city',
+  };
+}
+
 export async function uploadAdImage(params: {
   adAccountId: string;
   base64: string;

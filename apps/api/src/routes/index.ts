@@ -28,7 +28,7 @@ import { authMiddleware } from "../middleware/auth.middleware.js";
 import { tenantMiddleware } from "../middleware/tenant.middleware.js";
 import { tenantOrSuperadminMiddleware } from "../middleware/tenantOrSuperadmin.middleware.js";
 import { checkSubscriptionActive } from "../middleware/checkSubscriptionActive.js";
-import { searchMetaLocationsHandler, searchMetaInterestsHandler } from "../controllers/campaigns.controller.js";
+import { searchMetaLocationsHandler, searchMetaInterestsHandler, findMetaCityByCoordsHandler } from "../controllers/campaigns.controller.js";
 import { createV2Router } from "./v2.routes.js";
 import { controllers } from "../di.js";
 
@@ -48,6 +48,7 @@ router.use("/studio", studioRoutes);
 // Allow superadmin to access meta-locations with explicit tenantId (query param or header)
 router.get("/campaigns/meta-locations", authMiddleware, checkSubscriptionActive, tenantOrSuperadminMiddleware, searchMetaLocationsHandler);
 router.get("/campaigns/meta-interests", authMiddleware, checkSubscriptionActive, tenantOrSuperadminMiddleware, searchMetaInterestsHandler);
+router.get("/campaigns/meta-city-by-coords", authMiddleware, checkSubscriptionActive, tenantOrSuperadminMiddleware, findMetaCityByCoordsHandler);
 
 router.use("/campaigns", ...AUTH_TENANT_SUB, campaignRoutes);
 router.use("/budget", budgetRoutes);
