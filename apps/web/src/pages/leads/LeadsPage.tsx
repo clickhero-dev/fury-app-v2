@@ -29,18 +29,30 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
 function StatusSelect({ status, name, onSelect }: { status: string; name?: string | null; onSelect: (s: string) => void }) {
   const classes = STATUS_BADGE_CLASSES[status] ?? STATUS_BADGE_CLASSES.novo;
   return (
-    <select
-      aria-label={`Alterar status de ${name ?? 'cliente'}`}
-      value={status}
-      onChange={(e) => onSelect(e.target.value)}
-      className={`w-full cursor-pointer appearance-none rounded-full border px-2.5 py-1.5 text-xs font-semibold outline-none transition-colors hover:opacity-90 focus-visible:ring-2 focus-visible:ring-brand/40 ${classes}`}
-    >
-      {LEAD_STATUS_OPTIONS.map((s) => (
-        <option key={s} value={s} className="bg-surface text-text-primary">
-          {s}
-        </option>
-      ))}
-    </select>
+    <div className="relative">
+      <select
+        aria-label={`Alterar status de ${name ?? 'cliente'}`}
+        value={status}
+        onChange={(e) => onSelect(e.target.value)}
+        className={`w-full cursor-pointer appearance-none rounded-full border py-1.5 pl-3 pr-7 text-xs font-semibold outline-none transition-colors hover:opacity-90 focus-visible:ring-2 focus-visible:ring-brand/40 ${classes}`}
+      >
+        {LEAD_STATUS_OPTIONS.map((s) => (
+          <option key={s} value={s} className="bg-surface text-text-primary">
+            {s}
+          </option>
+        ))}
+      </select>
+      <svg
+        className="pointer-events-none absolute right-2.5 top-1/2 size-3 -translate-y-1/2 text-current opacity-70"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2.5}
+        aria-hidden="true"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+      </svg>
+    </div>
   );
 }
 
@@ -224,7 +236,7 @@ export function LeadsPage() {
       )}
 
       {/* Lista de leads */}
-      <div className="rounded-2xl border border-border bg-surface overflow-hidden hover:border-border-light transition-all duration-300">
+      <div className="rounded-2xl border border-border bg-surface transition-all duration-300 hover:border-border-light overflow-x-auto">
         {isLoading ? (
           <div
             role="status"
@@ -233,11 +245,10 @@ export function LeadsPage() {
             className="p-4 space-y-2.5"
           >
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="grid grid-cols-[1.2fr_1.5fr_1fr_1fr] gap-4 rounded-xl bg-surface-secondary/40 p-3 animate-pulse">
-                <div className="h-3 rounded bg-surface-secondary/80" />
-                <div className="h-3 rounded bg-surface-secondary/80" />
-                <div className="h-3 rounded bg-surface-secondary/80" />
-                <div className="h-3 rounded bg-surface-secondary/80" />
+              <div key={i} className="grid grid-cols-7 gap-4 rounded-xl bg-surface-secondary/40 p-3 animate-pulse">
+                {[0, 1, 2, 3, 4, 5, 6].map((j) => (
+                  <div key={j} className="h-3 rounded bg-surface-secondary/80" />
+                ))}
               </div>
             ))}
             <span className="sr-only">Carregando clientes...</span>
