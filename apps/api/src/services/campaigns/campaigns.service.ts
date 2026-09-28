@@ -16,7 +16,8 @@ import { getResolvedTenantAssetSelection } from '../meta/meta.service.js';
 import { slugify } from '../../lib/slug.js';
 import { privacyPolicyUrl } from '../../lib/privacy-policy.js';
 import { isMetaPermissionDenied, sanitizeMetaReason } from '../../lib/meta-error.js';
-import { getCampaignAds, getCampaignAdCreatives, getVideoSourceUrl, searchMetaInterests as searchMetaInterestsLib } from '../../lib/meta-api.js';
+import { getCampaignAds, getCampaignAdCreatives, getVideoSourceUrl, searchMetaInterests as searchMetaInterestsLib, searchMetaGeoLocations, findMetaCityByCoords, type MetaGeoSearchType } from '../../lib/meta-api.js';
+import { type AudienceGeo, hasGeoLocations, buildGeoLocations } from '../../lib/audience-geo.js';
 import type { IMetaCampaignProvider } from '../../lib/providers/meta-campaign.provider.js';
 import type {
   ICampaignRepository,
@@ -78,6 +79,7 @@ export interface CreateWizardCampaignArgs {
   destinations?: WizardMessagingDestination[]; instagramUserId?: string;
   instagramUsername?: string;
   audienceInterests?: { id: string; name: string }[];
+  geo?: AudienceGeo;
 }
 
 export interface CreateWizardCampaignResult {
@@ -182,7 +184,7 @@ export function calculateDateRange(
   };
 }
 
-export function mapWizardMetaError(err: unknown, step: string): never {
+export function mapWizardMetaError(err: unknown, step: string, context?: Record<string, unknown>): never {
   if (err instanceof AppError) throw err;
   const metaCode = (err as any).metaCode;
   const metaSubcode = (err as any).metaSubcode;
@@ -243,8 +245,14 @@ export function mapWizardMetaError(err: unknown, step: string): never {
   if (metaSubcode === 1892075) {
     throw new AppError(400, 'META_LEGAL_CONTENT_REQUIRED', 'O Meta exigiu uma política de privacidade na criação do Formulário. Não foi possível validar a URL da política. Tente novamente em instantes.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
   }
+  // Código no texto só no ad set (onde vai a localização)
+  const codeSuffix = step === 'adset' && metaCode ? ` (erro ${metaCode}${metaSubcode ? `/${metaSubcode}` : ''})` : '';
+  if (metaSubcode === 1815946) {
+    const metaOriginal = `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || message}`;
+    throw new AppError(400, 'META_LOCATION_MULTI_RADIUS', `A Meta recusou usar raio com várias localizações${codeSuffix}.\nMensagem da Meta: ${metaOriginal}`, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...context });
+  }
   if (metaSubcode === 1487110) {
-    throw new AppError(400, 'META_LOCATION_RADIUS', metaUserMsg || 'O raio geografico selecionado nao esta dentro dos limites. Aumente o raio (ex: Sao Paulo precisa de 15km ou mais).', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+    throw new AppError(400, 'META_LOCATION_RADIUS', (metaUserMsg || 'O raio geografico selecionado nao esta dentro dos limites. Aumente o raio (ex: Sao Paulo precisa de 15km ou mais).') + codeSuffix, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...context });
   }
   // "Required field is missing: the link field is required" — criativo de leads
   // sem o campo `link` no link_data. O wizard envia https://fb.me/ (doc Lead Ads);
@@ -258,7 +266,7 @@ export function mapWizardMetaError(err: unknown, step: string): never {
     throw new AppError(400, 'META_INVALID_PHONE_NUMBER', 'O Meta rejeitou o número de WhatsApp informado. Verifique se o número está correto (com DDI e DDD) e se possui WhatsApp ativo, e tente novamente.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
   }
   const userMessage = metaUserMsg || metaUserTitle ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}` : (message || 'Erro ao publicar no Meta. Tente novamente.');
-  throw new AppError(400, 'META_API_ERROR', userMessage, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...(metaBlameField ? { blame_field: metaBlameField } : {}) });
+  throw new AppError(400, 'META_API_ERROR', userMessage + codeSuffix, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...(metaBlameField ? { blame_field: metaBlameField } : {}), ...context });
 }
 
 // ── Service class ────────────────────────────────────────────────────────────
@@ -939,8 +947,10 @@ export class CampaignsService {
       instagramCreativePageId = igPage.pageId;
     }
 
+    const useGeo = hasGeoLocations(args.geo);
     let cityKey = args.locationCityKey;
-    if (!cityKey) {
+    // Com geo não precisa buscar a cidade
+    if (!cityKey && !useGeo) {
       let locations: any[];
       try { locations = await this.meta.searchLocations(args.locationCity, accessToken); }
       catch (err) { mapWizardMetaError(err, 'location_search'); }
@@ -1089,6 +1099,7 @@ export class CampaignsService {
       mapWizardMetaError(err, 'lead_form');
     }
 
+    let sentGeoLocations: Record<string, unknown> | undefined;
     try {
       const campaignBody = {
         name: campaignName, objective: objectiveConfig.metaObjective, status: 'ACTIVE',
@@ -1098,8 +1109,12 @@ export class CampaignsService {
       const campaignResponse = await this.meta.createCampaign(adAccountId, accessToken, campaignBody);
       metaCampaignId = campaignResponse.id;
 
+      sentGeoLocations = useGeo
+        ? buildGeoLocations(args.geo!)
+        : { cities: [{ key: parseInt(cityKey!, 10), radius: args.locationRadiusKm || 30, distance_unit: 'kilometer' }] };
+
       const targeting: Record<string, unknown> = {
-        geo_locations: { cities: [{ key: parseInt(cityKey!, 10), radius: args.locationRadiusKm || 30, distance_unit: 'kilometer' }] },
+        geo_locations: sentGeoLocations,
         age_min: args.ageMin, age_max: args.ageMax,
         genders: args.gender === 'all' ? [1, 2] : args.gender === 'male' ? [1] : [2],
         targeting_automation: { advantage_audience: 0 },
@@ -1192,7 +1207,7 @@ export class CampaignsService {
     } catch (err) {
       const step = !metaCampaignId ? 'campaign' : !adSetId ? 'adset' : 'creative';
       await rollback(step);
-      mapWizardMetaError(err, step);
+      mapWizardMetaError(err, step, step === 'adset' ? { geo_locations: sentGeoLocations } : undefined);
     }
 
     let campaign: { id: string };
@@ -1440,16 +1455,21 @@ export class CampaignsService {
     return { leads };
   }
 
-  async searchMetaLocations(args: { tenantId: string; query: string }): Promise<any[]> {
-    const cached = await this.deps.getMetaLocationsCache(args.query);
+  async searchMetaLocations(args: { tenantId: string; query: string; types?: MetaGeoSearchType[] }): Promise<any[]> {
+    // Sem types: busca de cidades de sempre (mesma chave de cache)
+    const withTypes = Boolean(args.types?.length);
+    const cacheKey = withTypes ? `${args.types!.join(',')}|${args.query}` : args.query;
+    const cached = await this.deps.getMetaLocationsCache(cacheKey);
     if (cached) return cached;
-  
+
     let results: any[];
-  
+
     try {
       // 1. A busca de token AGORA fica dentro do try
       const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
-      results = await this.meta.searchLocations(args.query, accessToken);
+      results = withTypes
+        ? await searchMetaGeoLocations(args.query, accessToken, args.types!)
+        : await this.meta.searchLocations(args.query, accessToken);
     } catch (err) {
       // 2. Se falhar na busca de token OU no envio pra Meta (401, 403 ou qualquer erro em dev)
       console.warn(`[searchMetaLocations] Falha na Meta ou Token ausente/expirado localmente. Retornando mock data para query: "${args.query}"`);
@@ -1465,8 +1485,21 @@ export class CampaignsService {
       }
     }
   
-    await this.deps.setMetaLocationsCache(args.query, results);
+    await this.deps.setMetaLocationsCache(cacheKey, results);
     return results;
+  }
+
+  // "Usar minha localização": coordenadas → cidade da Meta
+  async findMetaCityByCoords(args: { tenantId: string; lat: number; lng: number }): Promise<any> {
+    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+    let city;
+    try { city = await findMetaCityByCoords(args.lat, args.lng, accessToken); }
+    catch (err) {
+      const e = err as { metaCode?: number; metaSubcode?: number; message?: string };
+      throw new AppError(502, 'META_CITY_LOOKUP_FAILED', 'Não foi possível descobrir a cidade pela Meta.', { meta_code: e.metaCode, meta_subcode: e.metaSubcode, meta_message: e.message });
+    }
+    if (!city) throw new AppError(404, 'CITY_NOT_FOUND', 'A Meta não encontrou uma cidade para a sua localização. Digite o nome da cidade.');
+    return city;
   }
 
   async searchMetaInterests(args: { tenantId: string; query: string }): Promise<any[]> {

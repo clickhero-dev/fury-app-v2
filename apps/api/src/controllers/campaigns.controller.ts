@@ -17,6 +17,7 @@ const CACHE_PATHS_METRICS_GOALS = ['/api/metrics', '/api/goals'];
 import { openrouterService, type ChatMessage } from '../services/llms/openrouter.service.js';
 import { emailService } from '../services/email/email.service.js';
 import { sendToTenant } from '../services/email/notify.js';
+import { audienceGeoSchema } from '../lib/audience-geo.js';
 
 const createCampaignSchema = z.object({
   name: z.string().min(3, 'Campaign name must be at least 3 characters'),
@@ -90,6 +91,7 @@ const createWizardSchema = z
     location_city: z.string().min(1),
     location_city_key: z.string().min(1).optional(),
     location_radius_km: z.number().int().min(1).default(30).optional(),
+    geo: audienceGeoSchema.optional(),
     age_min: z.number().int().min(18).max(65),
     age_max: z.number().int().min(18).max(65),
     gender: z.enum(['all', 'male', 'female']),
@@ -198,6 +200,17 @@ function toWizardCreativeInputs(creatives: WizardCreativeItem[] | undefined) {
 
 const metaLocationsSchema = z.object({
   q: z.string().min(2, 'Digite ao menos 2 caracteres'),
+});
+
+// Busca de localização: types opcional (ex.: "country,region,city")
+const metaGeoLocationsSchema = metaLocationsSchema.extend({
+  types: z.string().optional().transform((v) => v?.split(',').filter(Boolean))
+    .pipe(z.array(z.enum(['country', 'region', 'city'])).max(3).optional()),
+});
+
+const cityByCoordsSchema = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
 });
 
 const suggestTextSchema = z.object({
@@ -779,6 +792,7 @@ export class CampaignsController {
         locationCity: data.location_city,
         locationCityKey: data.location_city_key,
         locationRadiusKm: data.location_radius_km ?? 30,
+        geo: data.geo,
         ageMin: data.age_min,
         ageMax: data.age_max,
         gender: data.gender,
@@ -895,6 +909,7 @@ export class CampaignsController {
           locationCity: data.location_city,
           locationCityKey: data.location_city_key,
           locationRadiusKm: data.location_radius_km ?? 30,
+          geo: data.geo,
           ageMin: data.age_min,
           ageMax: data.age_max,
           gender: data.gender,
@@ -971,19 +986,35 @@ export class CampaignsController {
 
   searchMetaLocations = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const query = metaLocationsSchema.parse(req.query);
+      const query = metaGeoLocationsSchema.parse(req.query);
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) {
         throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
       }
 
-      const results = await this.campaignsService.searchMetaLocations({ tenantId, query: query.q });
+      const results = await this.campaignsService.searchMetaLocations({ tenantId, query: query.q, types: query.types });
 
       res.json({
         success: true,
         data: results,
         timestamp: new Date().toISOString(),
       });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  findMetaCityByCoords = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { lat, lng } = cityByCoordsSchema.parse(req.query);
+      const tenantId = req.tenant?.tenantId || '';
+      if (!tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
+      }
+
+      const city = await this.campaignsService.findMetaCityByCoords({ tenantId, lat, lng });
+
+      res.json({ success: true, data: city, timestamp: new Date().toISOString() });
     } catch (err) {
       next(err);
     }
@@ -1090,6 +1121,7 @@ export const getCampaignLeadsHandler = campaignsController.getCampaignLeads;
 export const createWizardCampaignHandler = campaignsController.createWizardCampaign;
 export const mcpLogWizardHandler = campaignsController.mcpLogWizard;
 export const searchMetaLocationsHandler = campaignsController.searchMetaLocations;
+export const findMetaCityByCoordsHandler = campaignsController.findMetaCityByCoords;
 export const uploadWizardCreativeHandler = campaignsController.uploadWizardCreative;
 export const createWizardCampaignDiagHandler = campaignsController.createWizardCampaignDiag;
 export const searchMetaInterestsHandler = campaignsController.searchMetaInterests;

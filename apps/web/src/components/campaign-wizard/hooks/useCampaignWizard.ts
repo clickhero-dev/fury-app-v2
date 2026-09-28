@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { WizardCreativeState, WizardObjective, WizardState } from '../types';
-import { createEmptyCreative, MAX_CREATIVES } from '../types';
+import { createEmptyCreative, MAX_CREATIVES, isValidGeo } from '../types';
 import { isCreativesStepValid } from '../lib/creativeValidation';
 import { isValidBusinessPhone } from '../lib/phone-format';
 import api from '@/lib/api';
@@ -34,7 +34,7 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
 
   // Load audience defaults from user configuration
   useEffect(() => {
-    api.get<{ success: boolean; data: { audienceDefaults?: { city?: string; cityKey?: string; ageMin?: number; ageMax?: number; gender?: 'all' | 'male' | 'female'; audienceInterests?: { id: string; name: string }[] } } }>('/auth/me')
+    api.get<{ success: boolean; data: { audienceDefaults?: { city?: string; cityKey?: string; ageMin?: number; ageMax?: number; gender?: 'all' | 'male' | 'female'; audienceInterests?: { id: string; name: string }[]; geo?: unknown } } }>('/auth/me')
       .then((res) => {
         const defaults = res.data.data?.audienceDefaults;
         if (defaults) {
@@ -48,6 +48,8 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
               ageMax: defaults.ageMax || 65,
               gender: defaults.gender || 'all',
               audienceInterests: defaults.audienceInterests || [],
+              // geo antigo/inválido é ignorado
+              geo: isValidGeo(defaults.geo) ? defaults.geo : undefined,
             },
           }));
         }
