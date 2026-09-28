@@ -51,6 +51,8 @@ export interface GoalsProgressData {
   ideal_line: IdealLinePoint[];
   /** Alertas de campanhas fora das metas configuradas. */
   alerts: FuryAlert[];
+  degraded?: boolean;
+  firstSyncPending?: boolean;
 }
 
 /** Mapa de chaves de objetivo para labels legíveis em português. */
@@ -99,10 +101,10 @@ export function useGoalsProgress(startDate?: string, endDate?: string) {
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
 
-      const res = await api.get<{ data: GoalsProgressData }>('/goals/progress', { params });
-      return res.data.data ?? null;
+      const res = await api.get<{ data: GoalsProgressData; degraded?: boolean; firstSyncPending?: boolean }>('/v2/metrics/goals-progress', { params });
+      return res.data.data ? { ...res.data.data, degraded: res.data.degraded, firstSyncPending: res.data.firstSyncPending } : null;
     },
-    refetchInterval: 5 * 60 * 1000,          // Atualiza a cada 5 minutos
+    refetchInterval: (query) => query.state.data?.degraded ? 30_000 : 5 * 60 * 1000,
     placeholderData: (previousData) => previousData, // Mantém dados anteriores durante refetch
     retry: 1,
   });

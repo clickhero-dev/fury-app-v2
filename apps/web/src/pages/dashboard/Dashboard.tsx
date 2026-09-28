@@ -472,9 +472,11 @@ function fmtInt(v: number | null | undefined): string {
 function ActiveCampaignsTable({
   campaigns,
   partialFailures = [],
+  firstSyncPending = false,
 }: {
   campaigns: ActiveCampaign[];
   partialFailures?: Array<{ item_id?: string; provider: string; code?: string; reason: string }>;
+  firstSyncPending?: boolean;
 }) {
   const sorted = [...campaigns]
     .sort((a, b) => (b.metrics.conversions ?? -1) - (a.metrics.conversions ?? -1))
@@ -511,13 +513,14 @@ function ActiveCampaignsTable({
 
       {sorted.length === 0 ? (
         <div className="mt-6 flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 dark:border-[#262824] px-6 py-12 text-center">
-          <p className="text-sm text-slate-600 dark:text-[#9A9D96]">Nenhuma campanha ativa agora</p>
-          <Link
-            to="/campanhas"
-            className="text-sm font-medium text-[#17708A] dark:text-[#2A9BC0] hover:underline"
-          >
-            Criar campanha
-          </Link>
+          {firstSyncPending ? (
+            <p className="text-sm text-slate-600 dark:text-[#9A9D96]">A primeira sincronização está em andamento.</p>
+          ) : (
+            <>
+              <p className="text-sm text-slate-600 dark:text-[#9A9D96]">Nenhuma campanha ativa agora</p>
+              <Link to="/campanhas" className="text-sm font-medium text-[#17708A] dark:text-[#2A9BC0] hover:underline">Criar campanha</Link>
+            </>
+          )}
         </div>
       ) : (
         <div className="mt-6 overflow-x-auto">
@@ -627,7 +630,7 @@ function InstagramEngagementSection({
     queryFn: async () => {
       try {
         const res = await api.get<{ success: boolean; data: InstagramInsights | null }>(
-          '/dashboard/instagram-insights',
+          '/v2/dashboard/instagram-insights',
           { params: { date_from: startDate, date_to: endDate } }
         );
         return res.data.data ?? null;
@@ -723,15 +726,15 @@ export function Dashboard() {
 
   const isMetaConnected = (metaConnections?.length ?? 0) > 0;
 
-  const { data: summaryRaw } = useQuery({
+  const { data: summaryRaw, isFetching: fetchingSummary } = useQuery({
     queryKey: ['metrics-summary', startDate, endDate],
     queryFn: async () => {
       try {
-        const res = await api.get<{ success: boolean; data: { summary: MetricsSummary } }>(
-          '/metrics/summary',
+        const res = await api.get<{ success: boolean; data: { summary: MetricsSummary }; degraded?: boolean; firstSyncPending?: boolean }>(
+          '/v2/metrics/summary',
           { params: { startDate, endDate } }
         );
-        return res.data.data.summary ?? null;
+        return res.data.data.summary ? { ...res.data.data.summary, degraded: res.data.degraded ?? false, firstSyncPending: res.data.firstSyncPending ?? false } : null;
       } catch {
         return null;
       }
@@ -740,35 +743,49 @@ export function Dashboard() {
     placeholderData: null,
   });
 
-  const { data: activeCampaignsResult = { campaigns: [], partialFailures: [] } } = useQuery({
+  const {
+    data: activeCampaignsResult,
+    isFetching: fetchingActiveCampaigns,
+  } = useQuery({
     queryKey: ['campaigns-active-dashboard', startDate, endDate],
     queryFn: async () => {
       try {
         const res = await api.get<{
           success: boolean;
-          data: { campaigns: ActiveCampaign[]; partial_failures?: Array<{ item_id?: string; provider: string; code?: string; reason: string }> };
-        }>('/metrics/campaigns', {
-          params: { status: 'ACTIVE', startDate, endDate, limit: 10, includeOnlyLeadForm: true },
+          data: Array<{ id: string; name: string; status: string; spend: number; conversions: number | null; roas: number | null; cpa: number | null }>;
+          partial_failures?: Array<{ item_id?: string; provider: string; code?: string; reason: string }>;
+          degraded?: boolean;
+          firstSyncPending?: boolean;
+        }>('/v2/campaigns', {
+          params: { status: 'ACTIVE', startDate, endDate, limit: 10 },
         });
         return {
-          campaigns: res.data.data.campaigns ?? [],
-          partialFailures: Array.isArray(res.data.data.partial_failures) ? res.data.data.partial_failures : [],
+          campaigns: (res.data.data ?? []).map((campaign) => ({
+            id: campaign.id,
+            name: campaign.name,
+            status: campaign.status,
+            metrics: { spend: campaign.spend, conversions: campaign.conversions, roas: campaign.roas, cpa: campaign.cpa },
+          })),
+          partialFailures: Array.isArray(res.data.partial_failures) ? res.data.partial_failures : [],
+          degraded: res.data.degraded ?? false,
+          firstSyncPending: res.data.firstSyncPending ?? false,
         };
       } catch {
-        return { campaigns: [], partialFailures: [] };
+        return { campaigns: [], partialFailures: [], degraded: false, firstSyncPending: false };
       }
     },
     staleTime: 5 * 60 * 1000,
-    placeholderData: { campaigns: [], partialFailures: [] },
+    placeholderData: { campaigns: [], partialFailures: [], degraded: false, firstSyncPending: false },
+    refetchInterval: (query) => query.state.data?.degraded ? 30_000 : false,
   });
-  const activeCampaigns = activeCampaignsResult.campaigns ?? [];
-  const activeCampaignPartialFailures = activeCampaignsResult.partialFailures ?? [];
+  const activeCampaigns = activeCampaignsResult?.campaigns ?? [];
+  const activeCampaignPartialFailures = activeCampaignsResult?.partialFailures ?? [];
 
-  const { data: dailyData = [] } = useQuery({
+  const { data: dailyData, isFetching: fetchingDaily } = useQuery({
     queryKey: ['metrics-daily-week', startDate, endDate],
     queryFn: async () => {
       try {
-        const res = await api.get<{ success: boolean; data: DailyMetric[] }>('/metrics/daily', {
+        const res = await api.get<{ success: boolean; data: DailyMetric[]; degraded?: boolean }>('/v2/metrics/daily', {
           params: { startDate, endDate },
         });
         return res.data.data ?? [];
@@ -779,6 +796,12 @@ export function Dashboard() {
     staleTime: 5 * 60 * 1000,
     placeholderData: [],
   });
+
+  const isPeriodDataLoading =
+    (fetchingGoals && !goalsData) || (fetchingSummary && !summaryRaw) ||
+    (fetchingActiveCampaigns && !activeCampaignsResult) || (fetchingDaily && !dailyData);
+  const isDataDegraded = Boolean(goalsData?.degraded || activeCampaignsResult?.degraded || summaryRaw?.degraded);
+  const firstSyncPending = Boolean(goalsData?.firstSyncPending || activeCampaignsResult?.firstSyncPending || summaryRaw?.firstSyncPending);
 
   const g = goalsData;
   const primaryGoal = g?.primary_goal ?? g?.goals?.[0];
@@ -851,6 +874,27 @@ export function Dashboard() {
 
         {!isMetaConnected && <MetaBanner />}
 
+        {isDataDegraded && (
+          <div role="status" className="rounded-2xl border border-[#CF6F03]/30 bg-[#CF6F03]/10 px-4 py-3 text-sm text-[#9A4F02] dark:text-[#E08A2E]">
+            <p className="font-semibold">{firstSyncPending ? 'Preparando seus dados' : 'Dados desatualizados'}</p>
+            <p className="mt-1 text-xs opacity-90">{firstSyncPending ? 'A primeira sincronização está em andamento. O painel será atualizado automaticamente.' : 'Mostramos o último snapshot salvo enquanto atualizamos a Meta em segundo plano.'}</p>
+          </div>
+        )}
+
+        {isPeriodDataLoading ? (
+          <div role="status" aria-label="Carregando dados do dashboard" aria-busy="true" className="space-y-6">
+            <div className="h-28 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
+            <div className="grid gap-4 sm:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-32 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
+              ))}
+            </div>
+            <div className="h-48 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
+            <div className="h-72 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
+            <div className="h-64 animate-pulse rounded-2xl bg-gray-200 dark:bg-[#1F211D]" />
+          </div>
+        ) : (
+          <>
         {primaryGoal && (
           <HeroStrip
             goal={primaryGoal}
@@ -899,9 +943,11 @@ export function Dashboard() {
 
           <InstagramEngagementSection startDate={startDate} endDate={endDate} />
 
-          <WeeklyChart data={dailyData} hasRealData={hasRealData} idealLine={idealLine} />
+          <WeeklyChart data={dailyData ?? []} hasRealData={hasRealData} idealLine={idealLine} />
 
-          <ActiveCampaignsTable campaigns={activeCampaigns} partialFailures={activeCampaignPartialFailures} />
+          <ActiveCampaignsTable campaigns={activeCampaigns} partialFailures={activeCampaignPartialFailures} firstSyncPending={firstSyncPending} />
+          </>
+        )}
         </div>
       </ErrorBoundary>
     </AppLayout>

@@ -311,3 +311,23 @@ export function gmbProfileVerifiedEmailTemplate(businessName: string): string {
 
   return getBaseTemplate(content);
 }
+/** Alerta de falha na sincronização automática Meta (mensagem client-safe). */
+export function syncFailureEmailTemplate(
+  tenantId: string,
+  errorCode: string,
+  message: string
+): string {
+  const content = `
+    ${eyebrow('Sincronização Meta')}
+    ${heading('Falha na sincronização automática')}
+    ${statusBadge('Atenção', ACCENT)}
+    ${bodyText('A sincronização automática dos dados do Meta encontrou um problema e precisa de atenção.', 'center')}
+    ${checkList([
+      `<strong style="color: ${TEXT};">Tenant:</strong> ${tenantId}`,
+      `<strong style="color: ${TEXT};">Código:</strong> ${errorCode}`,
+      `<strong style="color: ${TEXT};">Detalhe:</strong> ${message || 'sem detalhes'}`,
+    ])}
+    ${bodyText('Os próximos ciclos continuarão tentando sincronizar automaticamente. Se o problema persistir, verifique a conexão da conta Meta em Configurações → Integrações.')}
+  `;
+  return getBaseTemplate(content);
+}

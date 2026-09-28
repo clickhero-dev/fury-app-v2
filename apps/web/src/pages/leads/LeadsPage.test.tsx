@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -23,15 +23,15 @@ const TRAFFIC_CAMPAIGN = { id: 'traffic_1', name: 'Camp Tráfego', objective: 'O
 
 function mockApi(leads: unknown[] = [], campaigns: unknown[] = [FORM_CAMPAIGN, TRAFFIC_CAMPAIGN]) {
   mockApiGet.mockImplementation((url: string) => {
-    if (url === '/campaigns/lead-campaigns') {
+    if (url === '/v2/lead-campaigns') {
       // Contrato do backend: JÁ retorna só OUTCOME_LEADS (filtro é server-side)
       const leadCampaigns = (campaigns as Array<{ objective?: string }>).filter((c) => c.objective === 'OUTCOME_LEADS');
       return Promise.resolve({ data: { success: true, data: leadCampaigns } });
     }
-    if (url === '/campaigns/leads') {
+    if (url === '/v2/leads') {
       return Promise.resolve({ data: { success: true, data: leads } });
     }
-    if (url.startsWith('/campaigns/') && url.endsWith('/leads')) {
+    if (url.startsWith('/v2/campaigns/') && url.endsWith('/leads')) {
       return Promise.resolve({ data: { success: true, data: leads } });
     }
     return Promise.resolve({ data: { success: true, data: [] } });
@@ -41,6 +41,10 @@ function mockApi(leads: unknown[] = [], campaigns: unknown[] = [FORM_CAMPAIGN, T
 describe('LeadsPage', () => {
   beforeEach(() => {
     mockApiGet.mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('carrega leads agregados por padrão (Todas as campanhas) e exibe a coluna Campanha', async () => {
@@ -60,16 +64,16 @@ describe('LeadsPage', () => {
     expect(screen.getByText('Campanha')).toBeInTheDocument();
     // "Camp Formulário" aparece na coluna da tabela (e no option do filtro)
     expect(screen.getAllByText('Camp Formulário').length).toBeGreaterThanOrEqual(2);
-    // Chamou o agregado /campaigns/leads
-    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/campaigns/leads'));
+    // Chamou o agregado /v2/leads
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/v2/leads'));
   });
 
-  it('filtro usa a fonte Meta (/campaigns/lead-campaigns) e lista as campanhas retornadas', async () => {
+  it('filtro usa a fonte Meta (/v2/lead-campaigns) e lista as campanhas retornadas', async () => {
     mockApi([]);
 
     render(<LeadsPage />, { wrapper: makeWrapper() });
 
-    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/campaigns/lead-campaigns'));
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/v2/lead-campaigns'));
     const select = await screen.findByRole('combobox', { name: /Filtrar por campanha/i });
     const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
     expect(options).toContain('Todas as campanhas');
@@ -81,6 +85,7 @@ describe('LeadsPage', () => {
   });
 
   it('selecionar uma campanha busca leads da campanha específica', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockApi([
       {
         name: 'João Silva', email: 'joao@exemplo.com', phone: '21988887777',
@@ -98,8 +103,13 @@ describe('LeadsPage', () => {
     });
     await user.selectOptions(select, 'form_1');
 
-    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/campaigns/form_1/leads'));
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/v2/campaigns/form_1/leads'));
     expect(await screen.findByText('João Silva')).toBeInTheDocument();
+    expect(screen.getByText('joao@exemplo.com')).toBeInTheDocument();
+    expect(screen.getByText('21988887777')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /whatsapp/i })).toHaveAttribute('href', 'https://wa.me/5521988887777');
+    expect(screen.getByText(/20 de set\. de 2026/)).toBeInTheDocument();
+    expect(consoleError.mock.calls.some((call) => call.some((arg) => String(arg).includes('same key')))).toBe(false);
     // Coluna Campanha some quando há campanha específica selecionada
     expect(screen.queryByText('Campanha')).not.toBeInTheDocument();
   });
@@ -120,12 +130,26 @@ describe('LeadsPage', () => {
     expect(await screen.findByText('Nenhum cliente ainda')).toBeInTheDocument();
   });
 
+  it('exibe o snapshot stale com aviso, sem voltar ao skeleton durante a degradação', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/v2/lead-campaigns') return Promise.resolve({ data: { success: true, data: [FORM_CAMPAIGN], degraded: true, staleForMs: 4 * 60 * 60 * 1000 } });
+      if (url === '/v2/leads') return Promise.resolve({ data: { success: true, data: [{ name: 'Maria Souza', email: 'maria@exemplo.com' }], degraded: true, staleForMs: 4 * 60 * 60 * 1000 } });
+      return Promise.resolve({ data: { success: true, data: [] } });
+    });
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText('Maria Souza')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Dados desatualizados');
+    expect(screen.queryByRole('status', { name: /carregando clientes/i })).not.toBeInTheDocument();
+  });
+
   it('exibe a mensagem de erro da API quando a busca de leads falha (ex.: 401 token Meta expirado)', async () => {
     mockApiGet.mockImplementation((url: string) => {
-      if (url === '/campaigns/lead-campaigns') {
+      if (url === '/v2/lead-campaigns') {
         return Promise.resolve({ data: { success: true, data: [FORM_CAMPAIGN] } });
       }
-      if (url === '/campaigns/leads') {
+      if (url === '/v2/leads') {
         return Promise.reject({
           response: {
             data: {
@@ -146,10 +170,10 @@ describe('LeadsPage', () => {
 
   it('exibe fallback genérico quando a API falha sem mensagem de erro', async () => {
     mockApiGet.mockImplementation((url: string) => {
-      if (url === '/campaigns/lead-campaigns') {
+      if (url === '/v2/lead-campaigns') {
         return Promise.resolve({ data: { success: true, data: [FORM_CAMPAIGN] } });
       }
-      if (url === '/campaigns/leads') {
+      if (url === '/v2/leads') {
         return Promise.reject(new Error('network down'));
       }
       return Promise.resolve({ data: { success: true, data: [] } });
@@ -164,10 +188,10 @@ describe('LeadsPage', () => {
     // Deixa a busca de leads pendente para observar o estado de loading.
     let resolveLeads: (v: unknown) => void;
     mockApiGet.mockImplementation((url: string) => {
-      if (url === '/campaigns/lead-campaigns') {
+      if (url === '/v2/lead-campaigns') {
         return Promise.resolve({ data: { success: true, data: [FORM_CAMPAIGN] } });
       }
-      if (url === '/campaigns/leads') {
+      if (url === '/v2/leads') {
         return new Promise((resolve) => { resolveLeads = resolve; });
       }
       return Promise.resolve({ data: { success: true, data: [] } });

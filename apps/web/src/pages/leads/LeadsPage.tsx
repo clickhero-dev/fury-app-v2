@@ -29,8 +29,8 @@ type LeadColumn = {
  */
 export function LeadsPage() {
   const [campaignId, setCampaignId] = useState<string>('');
-  const { campaigns, isLoading: loadingCampaigns, isError: errorCampaigns } = useLeadCampaigns();
-  const { leads, isLoading, isError, errorMessage } = useCampaignLeads(
+  const { campaigns, isLoading: loadingCampaigns, isError: errorCampaigns, degraded: campaignsDegraded, firstSyncPending: campaignsFirstSync } = useLeadCampaigns();
+  const { leads, isLoading, isError, errorMessage, degraded: leadsDegraded, firstSyncPending: leadsFirstSync } = useCampaignLeads(
     campaignId || null,
     true,
     campaignId === '',
@@ -140,6 +140,17 @@ export function LeadsPage() {
         </div>
       )}
 
+      {(campaignsDegraded || leadsDegraded) && (
+        <div role="status" className="rounded-2xl border border-warning/20 bg-warning-light px-4 py-3.5 text-sm text-warning">
+          <p className="font-semibold">{campaignsFirstSync || leadsFirstSync ? 'Preparando seus dados' : 'Dados desatualizados'}</p>
+          <p className="mt-1 text-xs opacity-80">
+            {campaignsFirstSync || leadsFirstSync
+              ? 'Estamos buscando os primeiros dados da Meta. Esta página será atualizada automaticamente.'
+              : 'Exibimos os últimos dados salvos enquanto atualizamos a sincronização em segundo plano.'}
+          </p>
+        </div>
+      )}
+
       {/* Lista de leads */}
       <div className="rounded-2xl border border-border bg-surface overflow-hidden hover:border-border-light transition-all duration-300">
         {isLoading ? (
@@ -163,13 +174,13 @@ export function LeadsPage() {
           <div className="py-16 px-6 text-sm text-error text-center">
             {errorMessage || 'Não foi possível carregar os clientes. Tente novamente.'}
           </div>
-        ) : !isLoading && campaigns.length === 0 ? (
+        ) : !isLoading && campaigns.length === 0 && !(campaignsFirstSync || leadsFirstSync) ? (
           <EmptyState
             icon={<Users className="w-6 h-6" />}
             title="Nenhuma campanha de Formulário"
             description="Crie uma campanha com o objetivo Formulário para coletar clientes por aqui."
           />
-        ) : leads.length === 0 ? (
+        ) : leads.length === 0 && !(campaignsFirstSync || leadsFirstSync) ? (
           <EmptyState
             icon={<Users className="w-6 h-6" />}
             title="Nenhum cliente ainda"
@@ -180,7 +191,7 @@ export function LeadsPage() {
             <thead>
               <tr className="border-b border-border bg-surface-secondary/40">
                 {columns.map((col) => (
-                  <th key={col.key as string} className="text-left uppercase text-[11px] text-text-tertiary tracking-wider font-semibold py-4 px-4">
+                  <th key={`${col.key}-${col.label}`} className="text-left uppercase text-[11px] text-text-tertiary tracking-wider font-semibold py-4 px-4">
                     {col.label}
                   </th>
                 ))}
@@ -190,7 +201,7 @@ export function LeadsPage() {
               {leads.map((lead, i) => (
                 <tr key={`${lead.email ?? 'lead'}-${i}`} className="hover:bg-surface-secondary/30 transition-colors">
                   {columns.map((col) => (
-                    <td key={col.key as string} className="py-3 px-4">
+                    <td key={`${col.key}-${col.label}`} className="py-3 px-4">
                       {col.render(lead[col.key], lead)}
                     </td>
                   ))}
