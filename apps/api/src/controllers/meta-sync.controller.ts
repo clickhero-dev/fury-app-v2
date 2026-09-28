@@ -353,10 +353,8 @@ export class MetaSyncV2Controller {
       const { status } = updateLeadStatusSchema.parse(req.body);
 
       const repo = this.repoFactory(tenantId);
-      const existing = await repo.findLeadById(id);
-      if (!existing) throw new AppError(404, 'LEAD_NOT_FOUND', 'Lead não encontrado.');
-
-      await repo.updateLeadStatus(id, status);
+      const changed = await repo.updateLeadStatus(id, status);
+      if (!changed) throw new AppError(404, 'LEAD_NOT_FOUND', 'Lead não encontrado.');
 
       res.json({
         success: true,

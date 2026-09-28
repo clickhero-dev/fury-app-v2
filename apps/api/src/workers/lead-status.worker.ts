@@ -75,12 +75,18 @@ export async function stopLeadStatusWorker(): Promise<void> {
 export async function startLeadStatusManager(): Promise<void> {
   const { getRedisConnection } = await import('../lib/queue.js');
   const connection = await getRedisConnection();
+  await startLeadStatusWorker();
   const queue = new Queue(LEAD_STATUS_QUEUE_NAME, { connection });
 
   await queue.add(
     'lead-status:cron',
     { cutoff: null },
-    { repeat: { pattern: '0 3 * * *' }, jobId: 'lead-status-cron' }
+    {
+      repeat: { pattern: '0 3 * * *', tz: 'UTC' },
+      jobId: 'lead-status-cron',
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5_000 },
+    }
   );
 
   console.log('✅ Lead-status scheduler started (daily 03:00)');

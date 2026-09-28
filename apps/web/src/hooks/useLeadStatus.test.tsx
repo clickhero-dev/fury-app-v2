@@ -15,6 +15,11 @@ Funcionalidade: Hook de alteração de status do cliente (transições livres)
     Dado PATCH rejeitado
     Quando a mutation falha
     Então o status anterior é restaurado
+
+  Cenário: altera o status no cache da campanha selecionada
+    Dado a tela filtrada por uma campanha
+    Quando a alteração é iniciada
+    Então o cache daquela campanha também é atualizado otimisticamente
 */
 // =============================================================================
 
@@ -98,5 +103,24 @@ describe('useLeadStatus', () => {
       data: Array<{ id: string; status: string }>;
     };
     expect(cached.data[0].status).toBe('novo');
+  });
+
+  it('atualiza otimisticamente o cache da campanha selecionada', async () => {
+    mockApiPatch.mockResolvedValue({ data: { success: true, data: { id: 'l1', status: 'negociando' } } });
+    const { qc, wrapper } = makeWrapper();
+    qc.setQueryData(['campaigns/leads', 'campaign-1'], {
+      data: [{ id: 'l1', name: 'Maria', status: 'novo' }],
+    });
+    const { result } = renderHook(() => useLeadStatus(), { wrapper });
+
+    act(() => {
+      result.current.mutate({ id: 'l1', status: 'negociando' });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const cached = qc.getQueryData(['campaigns/leads', 'campaign-1']) as {
+      data: Array<{ id: string; status: string }>;
+    };
+    expect(cached.data[0].status).toBe('negociando');
   });
 });

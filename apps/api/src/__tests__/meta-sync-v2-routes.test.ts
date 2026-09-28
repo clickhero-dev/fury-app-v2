@@ -85,6 +85,11 @@ Funcionalidade: Endpoints v2 de dados Meta (direto do banco, fallback stale)
     Dado nenhum lead com o id no tenant
     Quando PATCH /api/v2/leads/:id/status
     Então 404 LEAD_NOT_FOUND
+
+  Cenário: lead removido durante a alteração → 404
+    Dado o lead deixa de existir antes da gravação
+    Quando PATCH /api/v2/leads/:id/status
+    Então 404 LEAD_NOT_FOUND sem confirmar uma alteração inexistente
 */
 // =============================================================================
 
@@ -158,11 +163,7 @@ function makeFakes(overrides: Record<string, unknown> = {}) {
     findLeadCampaigns: vi.fn(async () => [
       { metaCampaignId: 'm1', name: 'Camp 1', objective: 'OUTCOME_LEADS', hasLeadForm: true },
     ]),
-    findLeadById: vi.fn(async (id: string) => {
-      if (id !== 'l1') return null;
-      return { id: 'l1', metaLeadId: 'lead-1', metaCampaignId: 'm1', name: 'Maria', email: 'maria@x.com', phone: '5511', createdTime: new Date(), status: 'novo' };
-    }),
-    updateLeadStatus: vi.fn(async () => {}),
+    updateLeadStatus: vi.fn(async () => true),
     findInstagramInsights: vi.fn(async () => [
       { id: 'ig1', mediaId: 'media-1', commentsCount: 4, insights: { saved: 3, reach: 100 } },
     ]),
@@ -474,6 +475,7 @@ describe('BDD: Endpoints v2', () => {
 
   it('Cenário: lead inexistente → 404 LEAD_NOT_FOUND', async () => {
     const { controller, repo } = makeFakes();
+    repo.updateLeadStatus.mockResolvedValueOnce(false);
     const app = buildApp(controller);
     const res = await request(app)
       .patch('/api/v2/leads/lead-inexistente/status')
@@ -481,7 +483,20 @@ describe('BDD: Endpoints v2', () => {
       .send({ status: 'negociando' });
     expect(res.status).toBe(404);
     expect(res.body.error?.code).toBe('LEAD_NOT_FOUND');
-    expect(repo.updateLeadStatus).not.toHaveBeenCalled();
+    expect(repo.updateLeadStatus).toHaveBeenCalledWith('lead-inexistente', 'negociando');
+  });
+
+  it('Cenário: lead removido durante a alteração → 404 LEAD_NOT_FOUND', async () => {
+    const { controller, repo } = makeFakes({ repo: { updateLeadStatus: vi.fn(async () => false) } });
+    const app = buildApp(controller);
+    const res = await request(app)
+      .patch('/api/v2/leads/l1/status')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`)
+      .send({ status: 'negociando' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error?.code).toBe('LEAD_NOT_FOUND');
+    expect(repo.updateLeadStatus).toHaveBeenCalledWith('l1', 'negociando');
   });
 
   it('Cenário: sem autenticação → 401', async () => {

@@ -11,6 +11,8 @@ Funcionalidade: Regra automática de status de clientes (1º dia novo, 2º dia n
     Quando registra o repeat job
     Então o padrão é '0 3 * * *' (diário 03:00)
     E enfileira um job 'lead-status:cron' com jobId determinístico
+    E inicia o consumidor da fila para que o cron seja processado
+    E fixa o fuso UTC e retenta falhas transitórias
 
   Cenário: processamento atualiza leads novos vencidos de todos os tenants
     Dado tenants com leads
@@ -121,7 +123,11 @@ describe('BDD: LeadStatusWorker', () => {
     const cronCall = addCalls.find((c) => c[0] === 'lead-status:cron');
     expect(cronCall).toBeTruthy();
     expect(cronCall![2].repeat.pattern).toBe('0 3 * * *');
+    expect(cronCall![2].repeat.tz).toBe('UTC');
     expect(cronCall![2].jobId).toBe('lead-status-cron');
+    expect(cronCall![2].attempts).toBe(3);
+    expect(cronCall![2].backoff).toEqual({ type: 'exponential', delay: 5_000 });
+    expect(workerInstances.some((worker) => worker.name === 'lead-status')).toBe(true);
   });
 
   it('Cenário: processamento atualiza leads vencidos de todos os tenants e captura telemetria', async () => {

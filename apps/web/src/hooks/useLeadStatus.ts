@@ -18,6 +18,10 @@ interface LeadStatusResponse {
   error?: { code?: string; message?: string };
 }
 
+type LeadListCache = {
+  data: Array<{ id: string; status?: string }>;
+};
+
 /**
  * Alteração manual de status de cliente (transições livres).
  * Otimista: atualiza o cache local de leads antes do PATCH e reverte em erro.
@@ -33,12 +37,9 @@ export function useLeadStatus() {
     onMutate: async ({ id, status }) => {
       await queryClient.cancelQueries({ queryKey: ['campaigns/leads'] });
 
-      const key = ['campaigns/leads', 'all'];
-      const previous = queryClient.getQueryData<{
-        data: Array<{ id: string; status?: string }>;
-      }>(key);
+      const previous = queryClient.getQueriesData<LeadListCache>({ queryKey: ['campaigns/leads'] });
 
-      queryClient.setQueryData(key, (old: { data: Array<{ id: string; status?: string }> } | undefined) => {
+      queryClient.setQueriesData<LeadListCache>({ queryKey: ['campaigns/leads'] }, (old) => {
         if (!old) return old;
         return {
           ...old,
@@ -48,9 +49,9 @@ export function useLeadStatus() {
 
       return { previous };
     },
-    onError: (_err, _vars, context: { previous?: unknown } | undefined) => {
-      if (context?.previous) {
-        queryClient.setQueryData(['campaigns/leads', 'all'], context.previous);
+    onError: (_err, _vars, context: { previous?: Array<[readonly unknown[], LeadListCache | undefined]> } | undefined) => {
+      for (const [key, data] of context?.previous ?? []) {
+        queryClient.setQueryData(key, data);
       }
     },
     onSettled: () => {
