@@ -64,6 +64,27 @@ Funcionalidade: Endpoints v2 de dados Meta (direto do banco, fallback stale)
     Dado snapshots e mídia Instagram persistidos
     Quando GET /api/v2/metrics/daily e /api/v2/dashboard/instagram-insights
     Então 200 com os agregados e syncedAt
+
+  Cenário: alterar status de um lead (manual, transições livres)
+    Dado lead persistido no tenant
+    Quando PATCH /api/v2/leads/:id/status com { status: "negociando" }
+    Então 200 com { success, data: { id, status } }
+    E repository.updateLeadStatus chamado com status válido
+
+  Cenário: status inválido → 400
+    Dado body com status fora do enum
+    Quando PATCH /api/v2/leads/:id/status
+    Então 400 VALIDATION_ERROR
+
+  Cenário: body vazio → 400
+    Dado PATCH sem body
+    Quando PATCH /api/v2/leads/:id/status
+    Então 400 VALIDATION_ERROR
+
+  Cenário: lead inexistente → 404
+    Dado nenhum lead com o id no tenant
+    Quando PATCH /api/v2/leads/:id/status
+    Então 404 LEAD_NOT_FOUND
 */
 // =============================================================================
 
@@ -137,6 +158,11 @@ function makeFakes(overrides: Record<string, unknown> = {}) {
     findLeadCampaigns: vi.fn(async () => [
       { metaCampaignId: 'm1', name: 'Camp 1', objective: 'OUTCOME_LEADS', hasLeadForm: true },
     ]),
+    findLeadById: vi.fn(async (id: string) => {
+      if (id !== 'l1') return null;
+      return { id: 'l1', metaLeadId: 'lead-1', metaCampaignId: 'm1', name: 'Maria', email: 'maria@x.com', phone: '5511', createdTime: new Date(), status: 'novo' };
+    }),
+    updateLeadStatus: vi.fn(async () => {}),
     findInstagramInsights: vi.fn(async () => [
       { id: 'ig1', mediaId: 'media-1', commentsCount: 4, insights: { saved: 3, reach: 100 } },
     ]),
@@ -407,5 +433,73 @@ describe('BDD: Endpoints v2', () => {
       .set('Authorization', `Bearer ${authToken(TENANT)}`);
     expect(repo.findCampaignDailyInsights).toHaveBeenCalledWith({ startDate: '2026-09-25', endDate: '2026-09-26' });
     expect(res.body.data.summary).toMatchObject({ spend: 20, conversions: 3, clicks: 8, impressions: 180 });
+  });
+
+  it('Cenário: alterar status de um lead → 200 + update no repo', async () => {
+    const { controller, repo } = makeFakes();
+    const app = buildApp(controller);
+    const res = await request(app)
+      .patch('/api/v2/leads/l1/status')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`)
+      .send({ status: 'negociando' });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toMatchObject({ id: 'l1', status: 'negociando' });
+    expect(repo.updateLeadStatus).toHaveBeenCalledWith('l1', 'negociando');
+  });
+
+  it('Cenário: status inválido → 400 VALIDATION_ERROR', async () => {
+    const { controller, repo } = makeFakes();
+    const app = buildApp(controller);
+    const res = await request(app)
+      .patch('/api/v2/leads/l1/status')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`)
+      .send({ status: 'status-inexistente' });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('VALIDATION_ERROR');
+    expect(repo.updateLeadStatus).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: body vazio → 400 VALIDATION_ERROR', async () => {
+    const { controller, repo } = makeFakes();
+    const app = buildApp(controller);
+    const res = await request(app)
+      .patch('/api/v2/leads/l1/status')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`)
+      .send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('VALIDATION_ERROR');
+    expect(repo.updateLeadStatus).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: lead inexistente → 404 LEAD_NOT_FOUND', async () => {
+    const { controller, repo } = makeFakes();
+    const app = buildApp(controller);
+    const res = await request(app)
+      .patch('/api/v2/leads/lead-inexistente/status')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`)
+      .send({ status: 'negociando' });
+    expect(res.status).toBe(404);
+    expect(res.body.error?.code).toBe('LEAD_NOT_FOUND');
+    expect(repo.updateLeadStatus).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: sem autenticação → 401', async () => {
+    const { controller } = makeFakes();
+    const app = buildApp(controller);
+    const res = await request(app)
+      .patch('/api/v2/leads/l1/status')
+      .send({ status: 'negociando' });
+    expect(res.status).toBe(401);
+  });
+
+  it('Cenário: token sem tenant → 403', async () => {
+    const { controller } = makeFakes();
+    const app = buildApp(controller);
+    const res = await request(app)
+      .patch('/api/v2/leads/l1/status')
+      .set('Authorization', `Bearer ${authToken(TENANT, false)}`)
+      .send({ status: 'negociando' });
+    expect(res.status).toBe(403);
   });
 });

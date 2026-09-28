@@ -198,8 +198,40 @@ export class MetaSyncRepository extends TenantScopedRepository {
       .values(values.map((v) => ({ ...v, tenantId: this.tenantId })) as any)
       .onConflictDoUpdate({
         target: [metaLeads.tenantId, metaLeads.metaLeadId],
+        // FEAT status de clientes: NUNCA incluir `status`/`statusUpdatedAt` aqui —
+        // o sync não pode sobrescrever a alteração manual de status do usuário.
         set: excludedSetFor(keys) as any,
       });
+  }
+
+  /** Alteração manual de status de um lead (transições livres), tenant-bound. */
+  async updateLeadStatus(leadId: string, status: string): Promise<void> {
+    await this.db
+      .update(metaLeads)
+      .set({ status: status as any, statusUpdatedAt: new Date() })
+      .where(
+        and(eq(metaLeads.tenantId, this.tenantId), eq(metaLeads.id, leadId))
+      );
+  }
+
+  /**
+   * Regra automática do FEAT status de clientes: leads com status `novo` e
+   * criados antes do cutoff (2º dia sem alteração) viram `não contatado`.
+   * Tenant-bound; retorna quantos leads foram atualizados.
+   */
+  async markStaleNewLeadsAsNotContacted(cutoff: Date): Promise<number> {
+    const rows = await this.db
+      .update(metaLeads)
+      .set({ status: 'não contatado' as any, statusUpdatedAt: new Date() })
+      .where(
+        and(
+          eq(metaLeads.tenantId, this.tenantId),
+          eq(metaLeads.status, 'novo'),
+          lte(metaLeads.createdTime, cutoff)
+        )
+      )
+      .returning({ id: metaLeads.id });
+    return rows.length;
   }
 
   /** Upsert em lote de mídia Instagram (ON CONFLICT tenant+media). */
@@ -297,6 +329,16 @@ export class MetaSyncRepository extends TenantScopedRepository {
     });
     const [countRow] = await this.db.select({ count: sql<number>`count(*)::int` }).from(metaLeads).where(and(...filters));
     return { items, total: countRow?.count ?? 0 };
+  }
+
+  /** Lead por id interno do Fury (escopado por tenant) — usado na alteração de status. */
+  async findLeadById(leadId: string): Promise<MetaLead | null> {
+    return (await this.db.query.metaLeads.findFirst({
+      where: and(
+        eq(metaLeads.tenantId, this.tenantId),
+        eq(metaLeads.id, leadId)
+      ),
+    })) ?? null;
   }
 
   /** Campanhas de formulário (OUTCOME_LEADS com form) — filtro da página de Leads. */
