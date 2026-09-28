@@ -4,6 +4,8 @@ import { PageHeader, EmptyState } from '@/components';
 import { useCampaignLeads, type CampaignLead } from '@/hooks/useCampaignLeads';
 import { useLeadCampaigns } from '@/hooks/useLeadCampaigns';
 import { normalizePhoneToMeta } from '@/components/campaign-wizard/lib/phone-format';
+import { MetaSyncNotice } from '../../components/MetaSyncNotice';
+import { getLatestSync } from '../../lib/format-last-sync';
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
@@ -29,8 +31,8 @@ type LeadColumn = {
  */
 export function LeadsPage() {
   const [campaignId, setCampaignId] = useState<string>('');
-  const { campaigns, isLoading: loadingCampaigns, isError: errorCampaigns, degraded: campaignsDegraded, firstSyncPending: campaignsFirstSync } = useLeadCampaigns();
-  const { leads, isLoading, isError, errorMessage, degraded: leadsDegraded, firstSyncPending: leadsFirstSync } = useCampaignLeads(
+  const { campaigns, isLoading: loadingCampaigns, isError: errorCampaigns, degraded: campaignsDegraded, firstSyncPending: campaignsFirstSync, syncedAt: campaignsSyncedAt } = useLeadCampaigns();
+  const { leads, isLoading, isError, errorMessage, degraded: leadsDegraded, firstSyncPending: leadsFirstSync, syncedAt: leadsSyncedAt } = useCampaignLeads(
     campaignId || null,
     true,
     campaignId === '',
@@ -140,16 +142,7 @@ export function LeadsPage() {
         </div>
       )}
 
-      {(campaignsDegraded || leadsDegraded) && (
-        <div role="status" className="rounded-2xl border border-warning/20 bg-warning-light px-4 py-3.5 text-sm text-warning">
-          <p className="font-semibold">{campaignsFirstSync || leadsFirstSync ? 'Preparando seus dados' : 'Dados desatualizados'}</p>
-          <p className="mt-1 text-xs opacity-80">
-            {campaignsFirstSync || leadsFirstSync
-              ? 'Estamos buscando os primeiros dados da Meta. Esta página será atualizada automaticamente.'
-              : 'Exibimos os últimos dados salvos enquanto atualizamos a sincronização em segundo plano.'}
-          </p>
-        </div>
-      )}
+      {(campaignsDegraded || leadsDegraded) && <MetaSyncNotice firstSyncPending={campaignsFirstSync || leadsFirstSync} syncedAt={getLatestSync(campaignsSyncedAt, leadsSyncedAt)} />}
 
       {/* Lista de leads */}
       <div className="rounded-2xl border border-border bg-surface overflow-hidden hover:border-border-light transition-all duration-300">

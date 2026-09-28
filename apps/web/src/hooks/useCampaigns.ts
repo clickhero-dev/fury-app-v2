@@ -12,6 +12,7 @@ interface CampaignsResult {
   data: CampaignData[];
   degraded?: boolean;
   firstSyncPending?: boolean;
+  syncedAt?: string | null;
   subscriptionError?: { code: string; message: string };
   partialFailures?: Array<{ item_id?: string; provider: string; code?: string; reason: string }>;
 }
@@ -43,7 +44,7 @@ export function useCampaigns(period?: CampaignsPeriod) {
     queryKey: ['campaigns', startDate, endDate],
     queryFn: async (): Promise<CampaignsResult> => {
       try {
-        const response = await api.get<CampaignsApiResponse & { degraded?: boolean; firstSyncPending?: boolean; partial_failures?: CampaignsResult['partialFailures'] }>('/v2/campaigns', {
+        const response = await api.get<CampaignsApiResponse & { degraded?: boolean; firstSyncPending?: boolean; syncedAt?: string | null; partial_failures?: CampaignsResult['partialFailures'] }>('/v2/campaigns', {
           params: { limit: 100, startDate, endDate },
         });
         const items = normalizeCampaignItems(response.data?.data);
@@ -57,6 +58,7 @@ export function useCampaigns(period?: CampaignsPeriod) {
             : Array.isArray(raw.partial_failures) ? raw.partial_failures : [],
           degraded: response.data?.degraded ?? false,
           firstSyncPending: response.data?.firstSyncPending ?? false,
+          syncedAt: response.data?.syncedAt ?? null,
         };
       } catch (error: any) {
         if (error?.response?.status === 403 && error?.response?.data?.error?.code === 'SUBSCRIPTION_EXPIRED') {

@@ -12,6 +12,7 @@ interface CampaignsResponse {
   degraded?: boolean;
   firstSyncPending?: boolean;
   staleForMs?: number | null;
+  syncedAt?: string | null;
 }
 
 /** Campanhas do objetivo Formulário (OUTCOME_LEADS) para o filtro da página de Leads. */
@@ -29,6 +30,7 @@ export function useLeadCampaigns() {
         degraded: response.data?.degraded ?? false,
         firstSyncPending: response.data?.firstSyncPending ?? false,
         staleForMs: response.data?.staleForMs ?? null,
+        syncedAt: response.data?.syncedAt ?? null,
       };
     },
     staleTime: 60_000,
@@ -42,5 +44,6 @@ export function useLeadCampaigns() {
     degraded: data?.degraded ?? false,
     firstSyncPending: data?.firstSyncPending ?? false,
     staleForMs: data?.staleForMs ?? null,
+    syncedAt: data?.syncedAt ?? null,
   };
 }

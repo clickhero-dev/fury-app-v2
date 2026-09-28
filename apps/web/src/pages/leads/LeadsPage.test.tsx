@@ -1,3 +1,13 @@
+/*
+# Language: pt-BR
+
+Funcionalidade: informar discretamente quando os dados da Meta estão sendo atualizados
+
+  Cenário: exibir a última atualização enquanto novos dados são consultados
+    Dado que há dados salvos e a atualização da Meta está em andamento
+    Quando a página de Leads é exibida
+    Então o cliente vê uma faixa informativa azul com a data e hora da última atualização
+*/
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -132,15 +142,16 @@ describe('LeadsPage', () => {
 
   it('exibe o snapshot stale com aviso, sem voltar ao skeleton durante a degradação', async () => {
     mockApiGet.mockImplementation((url: string) => {
-      if (url === '/v2/lead-campaigns') return Promise.resolve({ data: { success: true, data: [FORM_CAMPAIGN], degraded: true, staleForMs: 4 * 60 * 60 * 1000 } });
-      if (url === '/v2/leads') return Promise.resolve({ data: { success: true, data: [{ name: 'Maria Souza', email: 'maria@exemplo.com' }], degraded: true, staleForMs: 4 * 60 * 60 * 1000 } });
+      if (url === '/v2/lead-campaigns') return Promise.resolve({ data: { success: true, data: [FORM_CAMPAIGN], degraded: true, syncedAt: '2026-09-28T17:30:00.000Z' } });
+      if (url === '/v2/leads') return Promise.resolve({ data: { success: true, data: [{ name: 'Maria Souza', email: 'maria@exemplo.com' }], degraded: true, syncedAt: '2026-09-28T17:30:00.000Z' } });
       return Promise.resolve({ data: { success: true, data: [] } });
     });
 
     render(<LeadsPage />, { wrapper: makeWrapper() });
 
     expect(await screen.findByText('Maria Souza')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Dados desatualizados');
+    expect(screen.getByRole('status')).toHaveTextContent('Estamos consultando seus dados na Meta');
+    expect(screen.getByRole('status')).toHaveTextContent('Última atualização: 28/09 às 14:30');
     expect(screen.queryByRole('status', { name: /carregando clientes/i })).not.toBeInTheDocument();
   });
 
