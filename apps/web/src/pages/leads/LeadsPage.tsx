@@ -3,6 +3,7 @@ import { Users, MessageCircle } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components';
 import { useCampaignLeads, type CampaignLead } from '@/hooks/useCampaignLeads';
 import { useLeadCampaigns } from '@/hooks/useLeadCampaigns';
+import { useLeadStatus, LEAD_STATUS_OPTIONS } from '@/hooks/useLeadStatus';
 import { normalizePhoneToMeta } from '@/components/campaign-wizard/lib/phone-format';
 
 function formatDate(dateStr: string | null): string {
@@ -14,6 +15,24 @@ function formatDate(dateStr: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+const STATUS_BADGE_CLASSES: Record<string, string> = {
+  novo: 'bg-surface-secondary text-text-secondary border-border',
+  'não contatado': 'bg-warning/10 text-warning border-warning/30',
+  'tentativa de contato': 'bg-brand/10 text-brand border-brand/30',
+  negociando: 'bg-info/10 text-info border-info/30',
+  comprou: 'bg-success/10 text-success border-success/30',
+  'não comprou': 'bg-error/10 text-error border-error/30',
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const classes = STATUS_BADGE_CLASSES[status] ?? STATUS_BADGE_CLASSES.novo;
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap ${classes}`}>
+      {status}
+    </span>
+  );
 }
 
 type LeadColumn = {
@@ -35,6 +54,11 @@ export function LeadsPage() {
     true,
     campaignId === '',
   );
+  const leadStatusMutation = useLeadStatus();
+
+  const onLeadStatusChange = (leadId: string, status: string) => {
+    leadStatusMutation.mutate({ id: leadId, status: status as (typeof LEAD_STATUS_OPTIONS)[number] });
+  };
 
   const showCampaignColumn = campaignId === '';
 
@@ -75,6 +99,33 @@ export function LeadsPage() {
       render: (value: unknown) => (
         <span className="text-text-secondary whitespace-nowrap">{formatDate(value as string | null)}</span>
       ),
+    },
+    {
+      key: 'status' as const,
+      label: 'Status',
+      render: (value: unknown, row?: CampaignLead) => {
+        const status = (value as string | undefined) ?? 'novo';
+        if (!row?.id) {
+          return <StatusBadge status={status} />;
+        }
+        return (
+          <div className="flex items-center gap-2">
+            <StatusBadge status={status} />
+            <select
+              aria-label={`Alterar status de ${row.name ?? 'cliente'}`}
+              value={status}
+              onChange={(e) => onLeadStatusChange(row.id!, e.target.value)}
+              className="rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-text-primary outline-none cursor-pointer hover:border-text-tertiary/50 focus:border-brand transition-colors"
+            >
+              {LEAD_STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s} className="bg-surface text-text-primary">
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      },
     },
     {
       key: 'phone' as const,
