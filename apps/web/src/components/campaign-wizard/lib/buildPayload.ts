@@ -1,5 +1,4 @@
 import type { CreateWizardCampaignPayload, WizardState } from '../types';
-import { hasGeoLocations } from '../types';
 
 export function buildWizardCampaignPayload(state: WizardState): CreateWizardCampaignPayload {
   const audience = state.audience;
@@ -16,10 +15,7 @@ export function buildWizardCampaignPayload(state: WizardState): CreateWizardCamp
       destination_url: c.destinationUrl || undefined,
     })),
     location_city: audience.city || '',
-    // Vazio vira ausente (o back rejeita "")
-    location_city_key: audience.cityKey || undefined,
-    // Só envia geo com localização no modo ativo
-    ...(hasGeoLocations(audience.geo) ? { geo: audience.geo } : {}),
+    location_city_key: audience.cityKey,
     age_min: audience.ageMin || 18,
     age_max: audience.ageMax || 65,
     gender: audience.gender || 'all',
