@@ -2,12 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 
 export interface CampaignLead {
+  id?: string;
   name: string | null;
   email: string | null;
   phone: string | null;
   createdAt: string | null;
   campaignId?: string;
   campaignName?: string;
+  status?: string;
+  statusUpdatedAt?: string | null;
 }
 
 interface CampaignLeadsResponse {

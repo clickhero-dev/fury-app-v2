@@ -13,6 +13,7 @@ export function createV2Router(controller: MetaSyncV2Controller): Router {
   router.get('/campaigns/:id', controller.getCampaignDetail);
   router.get('/leads', controller.getAllLeads);
   router.get('/lead-campaigns', controller.getLeadCampaigns);
+  router.patch('/leads/:id/status', controller.updateLeadStatus);
   router.get('/metrics/summary', controller.getMetricsSummary);
   router.get('/metrics/daily', controller.getMetricsDaily);
   router.get('/metrics/goals-progress', controller.getGoalsProgress);
