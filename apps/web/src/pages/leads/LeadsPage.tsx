@@ -26,6 +26,24 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
   'não comprou': 'bg-error/10 text-error border-error/30',
 };
 
+function StatusSelect({ status, name, onSelect }: { status: string; name?: string | null; onSelect: (s: string) => void }) {
+  const classes = STATUS_BADGE_CLASSES[status] ?? STATUS_BADGE_CLASSES.novo;
+  return (
+    <select
+      aria-label={`Alterar status de ${name ?? 'cliente'}`}
+      value={status}
+      onChange={(e) => onSelect(e.target.value)}
+      className={`w-full cursor-pointer appearance-none rounded-full border px-2.5 py-1.5 text-xs font-semibold outline-none transition-colors hover:opacity-90 focus-visible:ring-2 focus-visible:ring-brand/40 ${classes}`}
+    >
+      {LEAD_STATUS_OPTIONS.map((s) => (
+        <option key={s} value={s} className="bg-surface text-text-primary">
+          {s}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const classes = STATUS_BADGE_CLASSES[status] ?? STATUS_BADGE_CLASSES.novo;
   return (
@@ -38,6 +56,7 @@ function StatusBadge({ status }: { status: string }) {
 type LeadColumn = {
   key: keyof CampaignLead;
   label: string;
+  thClass?: string;
   render: (value: unknown, row?: CampaignLead) => React.ReactNode;
 };
 
@@ -66,70 +85,72 @@ export function LeadsPage() {
     {
       key: 'name' as const,
       label: 'Nome',
+      thClass: 'w-[12%]',
       render: (value: unknown) => (
-        <span className="text-text-primary font-medium">{String(value ?? '—')}</span>
+        <span className="block truncate text-text-primary font-medium">{String(value ?? '—')}</span>
       ),
     },
     {
       key: 'email' as const,
       label: 'E-mail',
-      render: (value: unknown) => (
-        <span className="text-text-primary break-all">{String(value ?? '—')}</span>
-      ),
+      thClass: 'w-[16%]',
+      render: (value: unknown) => {
+        const email = String(value ?? '—');
+        return (
+          <span className="block truncate text-text-primary" title={email}>
+            {email}
+          </span>
+        );
+      },
     },
     {
       key: 'phone' as const,
       label: 'Telefone',
+      thClass: 'w-[11%]',
       render: (value: unknown) => (
-        <span className="text-text-primary whitespace-nowrap">{String(value ?? '—')}</span>
+        <span className="block truncate text-text-primary whitespace-nowrap">{String(value ?? '—')}</span>
       ),
     },
     ...(showCampaignColumn
       ? [{
           key: 'campaignName' as keyof CampaignLead,
           label: 'Campanha',
+          thClass: 'w-[12%]',
           render: (value: unknown) => (
-            <span className="text-text-secondary">{String(value ?? '—')}</span>
+            <span className="block truncate text-text-secondary">{String(value ?? '—')}</span>
           ),
         }]
       : []),
     {
       key: 'createdAt' as const,
       label: 'Data',
+      thClass: 'w-[12%]',
       render: (value: unknown) => (
-        <span className="text-text-secondary whitespace-nowrap">{formatDate(value as string | null)}</span>
+        <span className="block truncate text-text-secondary whitespace-nowrap">{formatDate(value as string | null)}</span>
       ),
     },
     {
       key: 'status' as const,
       label: 'Status',
+      thClass: 'w-[16%]',
       render: (value: unknown, row?: CampaignLead) => {
         const status = (value as string | undefined) ?? 'novo';
         if (!row?.id) {
           return <StatusBadge status={status} />;
         }
         return (
-          <div className="flex items-center gap-2">
-            <StatusBadge status={status} />
-            <select
-              aria-label={`Alterar status de ${row.name ?? 'cliente'}`}
-              value={status}
-              onChange={(e) => onLeadStatusChange(row.id!, e.target.value)}
-              className="rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-text-primary outline-none cursor-pointer hover:border-text-tertiary/50 focus:border-brand transition-colors"
-            >
-              {LEAD_STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s} className="bg-surface text-text-primary">
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
+          <StatusSelect
+            status={status}
+            name={row.name}
+            onSelect={(s) => onLeadStatusChange(row.id!, s)}
+          />
         );
       },
     },
     {
       key: 'phone' as const,
       label: 'Ação',
+      thClass: 'w-[22%]',
       render: (value: unknown, row: CampaignLead) => {
         const phone = row.phone;
         if (!phone) {
@@ -142,9 +163,9 @@ export function LeadsPage() {
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Conversar no WhatsApp com ${row.name ?? 'o cliente'}`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-3.5 py-1.5 text-xs font-semibold text-success hover:bg-success/20 transition-colors"
+            className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-success/30 bg-success/10 px-2.5 py-1.5 text-xs font-semibold text-success hover:bg-success/20 transition-colors"
           >
-            <MessageCircle className="w-3.5 h-3.5" />
+            <MessageCircle className="w-3.5 h-3.5 shrink-0" />
             WhatsApp
           </a>
         );
@@ -238,11 +259,11 @@ export function LeadsPage() {
             description="Quando alguém preencher o formulário dos seus anúncios, os contatos aparecerão aqui."
           />
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full table-fixed text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-secondary/40">
                 {columns.map((col) => (
-                  <th key={`${col.key}-${col.label}`} className="text-left uppercase text-[11px] text-text-tertiary tracking-wider font-semibold py-4 px-4">
+                  <th key={`${col.key}-${col.label}`} className={`text-left uppercase text-[11px] text-text-tertiary tracking-wider font-semibold py-4 px-4 ${col.thClass ?? ''}`}>
                     {col.label}
                   </th>
                 ))}
