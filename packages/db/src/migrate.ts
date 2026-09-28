@@ -152,6 +152,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0043_meta_sync_tables' },
   { tag: '0044_meta_lead_form_unknown' },
   { tag: '0045_meta_campaign_daily_insights' },
+  { tag: '0046_lead_status' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */

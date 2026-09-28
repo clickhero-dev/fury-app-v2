@@ -75,6 +75,14 @@ export const googleSyncOperationEnum = pgEnum('google_sync_operation', [
 ]);
 
 export const googleSyncLogStatusEnum = pgEnum('google_sync_log_status', ['pending', 'in_progress', 'success', 'failed']);
+export const leadStatusEnum = pgEnum('lead_status', [
+  'novo',
+  'não contatado',
+  'tentativa de contato',
+  'negociando',
+  'comprou',
+  'não comprou',
+]);
 
 // Tenants table
 export const tenants = pgTable(
@@ -717,11 +725,15 @@ export const metaLeads = pgTable(
     phone: text('phone'),
     createdTime: timestamp('created_time', { withTimezone: true }),
     fetchedAt: timestamp('fetched_at', { withTimezone: true }).defaultNow().notNull(),
+    status: leadStatusEnum('status').notNull().default('novo'),
+    statusUpdatedAt: timestamp('status_updated_at', { withTimezone: true }),
   },
   (table) => ({
     tenantIdIdx: index('meta_leads_tenant_id_idx').on(table.tenantId),
     snapshotIdIdx: index('meta_leads_snapshot_id_idx').on(table.snapshotId),
     tenantLeadUnique: unique('meta_leads_tenant_lead_unique').on(table.tenantId, table.metaLeadId),
+    statusIdx: index('meta_leads_status_idx').on(table.status),
+    statusCreatedIdx: index('meta_leads_status_created_idx').on(table.status, table.createdTime),
   })
 );
 
