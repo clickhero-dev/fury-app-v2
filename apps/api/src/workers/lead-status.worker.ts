@@ -39,6 +39,7 @@ export async function processLeadStatusRun(cutoff?: Date): Promise<void> {
 }
 
 let leadStatusWorkerInstance: Worker | null = null;
+let leadStatusQueueInstance: Queue | null = null;
 
 export async function startLeadStatusWorker(): Promise<Worker> {
   const worker = new Worker(
@@ -77,6 +78,7 @@ export async function startLeadStatusManager(): Promise<void> {
   const connection = await getRedisConnection();
   await startLeadStatusWorker();
   const queue = new Queue(LEAD_STATUS_QUEUE_NAME, { connection });
+  leadStatusQueueInstance = queue;
 
   await queue.add(
     'lead-status:cron',
@@ -90,4 +92,13 @@ export async function startLeadStatusManager(): Promise<void> {
   );
 
   console.log('✅ Lead-status scheduler started (daily 03:00)');
+}
+
+/** Encerra consumidor e produtor antes do Redis no shutdown da API. */
+export async function stopLeadStatusManager(): Promise<void> {
+  await stopLeadStatusWorker();
+  if (leadStatusQueueInstance) {
+    await leadStatusQueueInstance.close();
+    leadStatusQueueInstance = null;
+  }
 }

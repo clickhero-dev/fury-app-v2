@@ -29,7 +29,7 @@ import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers
 import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
 import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
 import { startMetaSyncManager, stopMetaSyncManager } from './lib/meta-sync-manager.js';
-import { startLeadStatusManager, stopLeadStatusWorker } from './workers/lead-status.worker.js';
+import { startLeadStatusManager, stopLeadStatusManager } from './workers/lead-status.worker.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
 import { slugify } from './lib/slug.js';
@@ -324,6 +324,7 @@ app.use((req, res) => {
         await stopPublishDueManager();
         await stopGoogleSyncManager();
         await stopMetaSyncManager();
+        await stopLeadStatusManager();
         await flushRequestLogs();
         await stopSyncJobsWorker();
         await stopRuleEngine();

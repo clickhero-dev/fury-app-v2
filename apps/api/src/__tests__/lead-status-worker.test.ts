@@ -33,6 +33,11 @@ Funcionalidade: Regra automática de status de clientes (1º dia novo, 2º dia n
     Dado worker iniciado
     Quando stopLeadStatusWorker
     Então o worker é fechado
+
+  Cenário: manager encerra worker e queue antes do Redis
+    Dado manager iniciado
+    Quando stopLeadStatusManager
+    Então o worker e a queue do lead-status são fechados
 */
 // =============================================================================
 
@@ -41,6 +46,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const {
   dbMock,
   workerInstances,
+  queueInstances,
   queueAddSpy,
   mockRepoUpdate,
   mockCaptureEvent,
@@ -49,22 +55,29 @@ const {
     select: vi.fn(() => ({ from: vi.fn() })) as any,
     query: {},
   } as any;
-  const workerInstances: Array<{ name: string; processor: (job: any) => Promise<any> }> = [];
+  const workerInstances: Array<{
+    name: string;
+    processor: (job: any) => Promise<any>;
+    close: ReturnType<typeof vi.fn>;
+  }> = [];
+  const queueInstances: Array<{ name: string; close: ReturnType<typeof vi.fn> }> = [];
   const queueAddSpy = vi.fn();
   const mockRepoUpdate = vi.fn();
   const mockCaptureEvent = vi.fn();
-  return { dbMock, workerInstances, queueAddSpy, mockRepoUpdate, mockCaptureEvent };
+  return { dbMock, workerInstances, queueInstances, queueAddSpy, mockRepoUpdate, mockCaptureEvent };
 });
 
 vi.mock('bullmq', () => {
   class QueueMock {
     name: string;
     add: typeof queueAddSpy;
+    close: ReturnType<typeof vi.fn>;
     constructor(name: string) {
       this.name = name;
       this.add = queueAddSpy;
+      this.close = vi.fn(async () => {});
+      queueInstances.push({ name, close: this.close });
     }
-    async close() {}
   }
   class WorkerMock {
     name: string;
@@ -74,9 +87,9 @@ vi.mock('bullmq', () => {
     constructor(name: string, processor: (job: any) => Promise<any>) {
       this.name = name;
       this.processor = processor;
-      workerInstances.push({ name, processor });
       this.on = vi.fn();
       this.close = vi.fn(async () => {});
+      workerInstances.push({ name, processor, close: this.close });
     }
   }
   return { Queue: QueueMock, Worker: WorkerMock };
@@ -109,11 +122,14 @@ import {
   processLeadStatusRun,
   startLeadStatusWorker,
   stopLeadStatusWorker,
+  stopLeadStatusManager,
   startLeadStatusManager,
 } from '../workers/lead-status.worker.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  workerInstances.length = 0;
+  queueInstances.length = 0;
 });
 
 describe('BDD: LeadStatusWorker', () => {
@@ -192,5 +208,16 @@ describe('BDD: LeadStatusWorker', () => {
     }));
     const ids = await getTenantIdsWithLeads();
     expect(ids).toEqual(['t1', 't2']);
+  });
+
+  it('Cenário: manager encerra worker e queue antes do Redis', async () => {
+    await startLeadStatusManager();
+    const worker = workerInstances.find((w) => w.name === 'lead-status');
+    const queue = queueInstances.find((q) => q.name === 'lead-status');
+
+    await stopLeadStatusManager();
+
+    expect(worker?.close).toHaveBeenCalledTimes(1);
+    expect(queue?.close).toHaveBeenCalledTimes(1);
   });
 });
