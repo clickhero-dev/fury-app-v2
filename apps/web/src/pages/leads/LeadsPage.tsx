@@ -9,16 +9,16 @@ import { MetaSyncNotice } from '../../components/MetaSyncNotice';
 import { getLatestSync } from '../../lib/format-last-sync';
 
 // A página também exporta estas constantes para que o teste valide a mesma classe usada no layout.
-// eslint-disable-next-line react-refresh/only-export-components
-export const LEADS_TABLE_MIN_WIDTH_CLASS = 'min-w-[1240px]';
+export const LEADS_TABLE_MIN_WIDTH_CLASS = 'min-w-[1320px]';
+export const LEADS_TABLE_NO_CAMPAIGN_MIN_WIDTH_CLASS = 'min-w-[1110px]';
 // eslint-disable-next-line react-refresh/only-export-components
 export const LEADS_TABLE_COLUMN_WIDTH_CLASSES = {
-  name: 'w-[170px]',
-  email: 'w-[240px]',
+  name: 'w-[190px]',
+  email: 'w-[270px]',
   phone: 'w-[150px]',
-  campaign: 'w-[200px]',
-  date: 'w-[190px]',
-  status: 'w-[150px]',
+  campaign: 'w-[210px]',
+  date: 'w-[200px]',
+  status: 'w-[160px]',
   action: 'w-[140px]',
 } as const;
 
@@ -108,6 +108,9 @@ export function LeadsPage() {
   };
 
   const showCampaignColumn = campaignId === '';
+  const tableMinWidthClass = showCampaignColumn
+    ? LEADS_TABLE_MIN_WIDTH_CLASS
+    : LEADS_TABLE_NO_CAMPAIGN_MIN_WIDTH_CLASS;
 
   const columns: LeadColumn[] = [
     {
@@ -253,12 +256,12 @@ export function LeadsPage() {
               role="status"
               aria-label="Carregando clientes..."
               aria-busy="true"
-              className={`p-4 space-y-2.5 ${LEADS_TABLE_MIN_WIDTH_CLASS}`}
+              className={`p-4 space-y-2.5 ${tableMinWidthClass}`}
             >
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="grid grid-cols-7 gap-4 rounded-xl bg-surface-secondary/40 p-3 animate-pulse">
-                  {Object.values(LEADS_TABLE_COLUMN_WIDTH_CLASSES).map((widthClass, index) => (
-                    <div key={index} className={`h-3 rounded bg-surface-secondary/80 ${widthClass}`} />
+                <div key={i} className={`grid ${showCampaignColumn ? 'grid-cols-7' : 'grid-cols-6'} gap-4 rounded-xl bg-surface-secondary/40 p-3 animate-pulse`}>
+                  {columns.map((column, index) => (
+                    <div key={index} className={`h-3 rounded bg-surface-secondary/80 ${column.thClass ?? ''}`} />
                   ))}
                 </div>
               ))}
@@ -283,7 +286,7 @@ export function LeadsPage() {
           />
         ) : (
           <div data-testid="leads-table-scroll" className="overflow-x-auto">
-            <table className={`w-full table-fixed text-sm ${LEADS_TABLE_MIN_WIDTH_CLASS}`}>
+            <table className={`w-full table-fixed text-sm ${tableMinWidthClass}`}>
             <thead>
               <tr className="border-b border-border bg-surface-secondary/40">
                 {columns.map((col) => (

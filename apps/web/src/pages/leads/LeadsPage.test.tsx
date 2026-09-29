@@ -18,7 +18,11 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { LeadsPage, LEADS_TABLE_MIN_WIDTH_CLASS } from './LeadsPage';
+import {
+  LeadsPage,
+  LEADS_TABLE_MIN_WIDTH_CLASS,
+  LEADS_TABLE_NO_CAMPAIGN_MIN_WIDTH_CLASS,
+} from './LeadsPage';
 
 const mockApiGet = vi.hoisted(() => vi.fn());
 
@@ -148,6 +152,7 @@ describe('LeadsPage', () => {
     expect(consoleError.mock.calls.some((call) => call.some((arg) => String(arg).includes('same key')))).toBe(false);
     // Coluna Campanha some quando há campanha específica selecionada
     expect(screen.queryByText('Campanha')).not.toBeInTheDocument();
+    expect(screen.getByRole('table')).toHaveClass(LEADS_TABLE_NO_CAMPAIGN_MIN_WIDTH_CLASS);
   });
 
   it('exibe estado vazio quando nenhuma campanha de Formulário existe', async () => {
