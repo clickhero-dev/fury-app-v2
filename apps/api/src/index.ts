@@ -283,12 +283,13 @@ app.use((req, res) => {
       void startStudioGenerationWorker().catch((error) => {
         console.error('Failed to start Studio generation worker:', error);
       });
-      void startComplianceCheckWorker().catch((error) => {
-        console.error('Failed to start Compliance check worker:', error);
-      });
+      // Compliance de imagem desativado (worker + sweeper)
+      // void startComplianceCheckWorker().catch((error) => {
+      //   console.error('Failed to start Compliance check worker:', error);
+      // });
       // Rede de segurança: varre a cada 5min por análises de compliance órfãs
       // (assets pendentes há >10min sem job em fila) e re-enfileira.
-      startComplianceSweeper();
+      // startComplianceSweeper();
       startSubscriptionRenewalManager();
       void startBudgetOptimizerWorker().catch((error) => {
         console.error('Failed to start Budget optimizer worker:', error);

@@ -213,19 +213,20 @@ export function GeradorImagem() {
     },
   });
 
-  const { data: compliance } = useQuery<StudioComplianceStatusResponse>({
-    queryKey: ['studio-asset', creativeAssetId],
-    queryFn: async () => {
-      const res = await api.get<StudioComplianceStatusResponse>(`/studio/assets/${creativeAssetId}`);
-      return res.data;
-    },
-    enabled: !!creativeAssetId && step === 'compliance',
-    refetchInterval: (query) => {
-      const d = query.state.data;
-      if (!d) return 2000;
-      return d.complianceStatus === 'pending_compliance' ? 2000 : false;
-    },
-  });
+  // Consulta de compliance desativada
+  // const { data: compliance } = useQuery<StudioComplianceStatusResponse>({
+  //   queryKey: ['studio-asset', creativeAssetId],
+  //   queryFn: async () => {
+  //     const res = await api.get<StudioComplianceStatusResponse>(`/studio/assets/${creativeAssetId}`);
+  //     return res.data;
+  //   },
+  //   enabled: !!creativeAssetId && step === 'compliance',
+  //   refetchInterval: (query) => {
+  //     const d = query.state.data;
+  //     if (!d) return 2000;
+  //     return d.complianceStatus === 'pending_compliance' ? 2000 : false;
+  //   },
+  // });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
@@ -267,8 +268,10 @@ export function GeradorImagem() {
     publishMutation.reset();
   }
 
-  const complianceStatus = compliance?.complianceStatus ?? (creativeAssetId ? 'pending_compliance' : null);
-  const isApproved = compliance?.approved === true || complianceStatus === 'approved';
+  // Compliance desativado: sempre liberado para salvar
+  // const complianceStatus = compliance?.complianceStatus ?? (creativeAssetId ? 'pending_compliance' : null);
+  // const isApproved = compliance?.approved === true || complianceStatus === 'approved';
+  const isApproved = true;
 
   return (
     <AppLayout
@@ -488,9 +491,10 @@ export function GeradorImagem() {
               <div className="p-6 space-y-4">
                 <div>
                   <p className="text-sm font-semibold text-text-primary mb-1">Preview do seu anúncio</p>
+                  {/* Aviso de compliance desativado
                   <p className="text-xs text-text-secondary">
                     Antes de salvar, verificamos o compliance com as políticas do Meta.
-                  </p>
+                  </p> */}
                 </div>
                 <div className="flex gap-3">
                   <Button
@@ -522,6 +526,7 @@ export function GeradorImagem() {
                 </div>
               )}
               <div className="p-6 space-y-4">
+                {/* Selo e motivos de compliance desativados
                 {complianceStatus && (
                   <ComplianceBadge status={complianceStatus} approved={compliance?.approved ?? null} />
                 )}
@@ -533,6 +538,7 @@ export function GeradorImagem() {
                     ))}
                   </ul>
                 )}
+                */}
 
                 {publishedUrl ? (
                   <div className="space-y-4">
