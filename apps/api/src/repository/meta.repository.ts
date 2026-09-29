@@ -3,7 +3,7 @@ import {
   type Database,
   metaConnections,
 } from '@fury/db';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq, ne } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type MetaConnection = typeof metaConnections.$inferSelect;
@@ -30,6 +30,30 @@ export class MetaRepository extends TenantScopedRepository {
   async findMetaConnectionByMetaUserId(metaUserId: string) {
     return this.db.query.metaConnections.findFirst({
       where: and(eq(metaConnections.tenantId, this.tenantId), eq(metaConnections.metaUserId, metaUserId)),
+    });
+  }
+
+  /**
+   * Conta conexões de outros tenants que já usam uma ad account.
+   * Exceção intencional ao escopo tenant-bound: a regra de exclusividade cruza
+   * tenants, mas permanece encapsulada no repository (ADR-0001).
+   */
+  async countOtherTenantsUsingSelectedAdAccount(adAccountId: string, excludeTenantId: string): Promise<number> {
+    const connections = await this.db.query.metaConnections.findMany({
+      where: and(
+        eq(metaConnections.selectedAdAccountId, adAccountId),
+        ne(metaConnections.tenantId, excludeTenantId),
+      ),
+    });
+    return connections.length;
+  }
+
+  /** Leitura global do worker/service para fan-out de uma conta compartilhada (ADR-0001). */
+  async findMetaConnectionsBySelectedAdAccount(adAccountId: string): Promise<MetaConnection[]> {
+    return this.db.query.metaConnections.findMany({
+      where: eq(metaConnections.selectedAdAccountId, adAccountId),
+      // Ordem determinística: o contexto canônico (1a conexão) não pode variar entre runs.
+      orderBy: asc(metaConnections.id),
     });
   }
 
