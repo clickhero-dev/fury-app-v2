@@ -869,7 +869,7 @@ export function TenantDetailPage() {
               Benchmarks de Performance
             </h3>
             <p className="text-xs text-admin-text-faint mb-4">
-              Defina as metas que o FURY usa para calcular o score de cada
+              Defina as metas que o ady usa para calcular o score de cada
               campanha.
             </p>
           </div>
@@ -1037,7 +1037,7 @@ export function TenantDetailPage() {
               <textarea
                 value={businessContext}
                 onChange={(e) => setBusinessContext(e.target.value)}
-                placeholder="Descreva o nicho, os clientes e o contexto do negócio. Esse texto é usado pela IA do FURY ao gerar criativos."
+                placeholder="Descreva o nicho, os clientes e o contexto do negócio. Esse texto é usado pela IA do ady ao gerar criativos."
                 rows={4}
                 className={`${inputCls} resize-y min-h-[100px]`}
               />

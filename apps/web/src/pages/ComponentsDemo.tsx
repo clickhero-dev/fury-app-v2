@@ -136,7 +136,7 @@ export function ComponentsDemo() {
     <AppLayout
       header={
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-[#1C1C1E]">FURY</h2>
+          <h2 className="text-lg font-bold text-[#1C1C1E]">ady</h2>
           <Button variant="primary" size="sm">
             Documentação
           </Button>
@@ -146,7 +146,7 @@ export function ComponentsDemo() {
       <div className="space-y-8">
         <PageHeader
           title="Demonstração de Componentes"
-          description="Explore todos os componentes disponíveis e sua utilização na plataforma FURY"
+          description="Explore todos os componentes disponíveis e sua utilização na plataforma ady"
         />
 
         {/* Metrics Section */}

@@ -298,7 +298,7 @@ export class MetaService {
       throw new AppError(
         409,
         'AD_ACCOUNT_IN_USE',
-        'Essa conta de anúncios já está vinculada a outra conta do Fury. Escolha outra conta ou conecte com o login Meta da própria empresa.',
+        'Essa conta de anúncios já está vinculada a outra conta do ady. Escolha outra conta ou conecte com o login Meta da própria empresa.',
       );
     }
   }

@@ -1190,7 +1190,7 @@ export async function metaApiCall<T>(
           data: [
             {
               id: 'mock_page_id',
-              name: 'Página Demo FURY',
+              name: 'Página Demo Ady',
               instagram_business_account: { id: 'mock_ig_user_id' },
               whatsapp_business_account: { id: 'mock_waba_id' },
             },
@@ -1203,7 +1203,7 @@ export async function metaApiCall<T>(
             {
               id: 'mock_phone_number_id',
               display_phone_number: '+55 11 99999-0000',
-              verified_name: 'FURY Demo',
+              verified_name: 'Ady Demo',
             },
           ],
         } as T;
@@ -1607,7 +1607,7 @@ export async function createAdCreativeFromCopy(params: {
   const callToActionType = mapCtaToMetaType(params.cta);
 
   const body: Record<string, unknown> = {
-    name: `FURY Copy Creative ${new Date().toISOString()}`,
+    name: `Ady Copy Creative ${new Date().toISOString()}`,
     object_story_spec: {
       page_id: params.pageId,
       link_data: {

@@ -540,7 +540,7 @@ export function Configuracoes() {
                 <div className="text-center py-8 space-y-4">
                   <p className="text-base font-semibold text-text-primary">Nenhuma assinatura ativa</p>
                   <p className="text-xs text-text-tertiary">
-                    Assine um plano para acessar todos os recursos da FURY.
+                    Assine um plano para acessar todos os recursos do ady.
                   </p>
                   <button
                     type="button"

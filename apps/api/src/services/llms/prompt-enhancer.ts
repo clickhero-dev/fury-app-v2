@@ -15,7 +15,7 @@ export async function enhancePromptForImage(prompt: string): Promise<string> {
     'Você é um especialista em publicidade digital especializado em descrições de imagens.',
     'Preserve o tema principal do prompt original. Adicione detalhes visuais (iluminação, composição, ângulo, cores) SEM mudar o assunto principal.',
     'A imagem deve parecer um anúncio profissional de pequena/média empresa, adequado para Instagram e Facebook.',
-    'IMPORTANTE: a imagem NÃO deve conter nenhum texto, letras, legendas, hashtags, logotipos ou nomes escritos (ex.: nada de "FURY", "#...", frases na imagem) — apenas a cena visual.',
+    'IMPORTANTE: a imagem NÃO deve conter nenhum texto, letras, legendas, hashtags, logotipos ou nomes escritos (ex.: nada de "ady", "#...", frases na imagem) — apenas a cena visual.',
     'O prompt melhorado deve ter entre 150 e 400 caracteres e estar em português.',
     'Retorne APENAS o prompt melhorado, sem aspas, sem introdução.',
   ].join('\n');

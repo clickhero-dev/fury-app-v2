@@ -128,7 +128,7 @@ export class BillingService {
       cycle: plan.interval === 'yearly' ? 'YEARLY' : 'MONTHLY',
       value: plan.priceCents / 100,
       nextDueDate: nextDueDateStr,
-      description: `FURY ${plan.name}`,
+      description: `ady ${plan.name}`,
       externalReference: tenantId,
     });
 

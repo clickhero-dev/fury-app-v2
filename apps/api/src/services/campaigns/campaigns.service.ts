@@ -1125,7 +1125,7 @@ export class CampaignsService {
       }
 
       const adSetBody: Record<string, unknown> = {
-        name: `AdSet — ${args.locationCity} — FURY`, campaign_id: metaCampaignId,
+        name: `AdSet — ${args.locationCity} — ady`, campaign_id: metaCampaignId,
         daily_budget: Math.round(args.dailyBudgetBrl * 100),
         billing_event: 'IMPRESSIONS', optimization_goal: objectiveConfig.optimizationGoal,
         bid_strategy: 'LOWEST_COST_WITHOUT_CAP', targeting, status: 'ACTIVE',
@@ -1184,7 +1184,7 @@ export class CampaignsService {
 
         const creativeBody: Record<string, unknown> = isInstagramCreative
           ? { object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: c.creativeInstagramMediaId, call_to_action: JSON.stringify({ type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: c.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
-          : { name: `Creative — FURY #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads'
+          : { name: `Creative — ady #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads'
             // Doc Lead Ads: o campo link no link_data é OBRIGATÓRIO mesmo para
             // formulários instantâneos, e o valor deve ser https://fb.me/ (o
             // clique real abre o form via call_to_action.lead_gen_form_id). Sem
@@ -1197,7 +1197,7 @@ export class CampaignsService {
         createdAdCreativeIds.push(adCreativeResponse.id);
 
         const adResponse = await this.meta.createAd(adAccountId, accessToken, {
-          name: `Ad — FURY — ${dataLabel} #${i + 1}`,
+          name: `Ad — ady — ${dataLabel} #${i + 1}`,
           adset_id: adSetId,
           creative: { creative_id: adCreativeResponse.id },
           status: 'ACTIVE',
