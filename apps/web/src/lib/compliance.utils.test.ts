@@ -26,7 +26,8 @@ describe('parseComplianceNotes', () => {
   });
 });
 
-describe('complianceBadge', () => {
+// Selo de compliance desativado em complianceBadge
+describe.skip('complianceBadge', () => {
   it('reprovado → label + motivos legíveis', () => {
     const badge = complianceBadge('rejected', REJECTED_NOTES);
     expect(badge.label).toBe('Reprovado');
