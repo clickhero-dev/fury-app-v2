@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
-export const MAX_GEO_REGIONS = 4;
-export const MAX_GEO_POINTS = 4;
 export const DEFAULT_POINT_RADIUS_KM = 10;
+// Teto do schema (superadmin); o limite de 4 do cliente fica na tela
+export const MAX_GEO_ITEMS = 50;
 
 // Formato salvo em audienceDefaults.geo (nomes nossos, não os da Meta)
 export const audienceGeoSchema = z.object({
@@ -13,7 +13,7 @@ export const audienceGeoSchema = z.object({
     name: z.string().min(1).max(200),
     region: z.string().max(200).optional(),
     countryCode: z.string().regex(/^[A-Z]{2}$/).optional(),
-  })).max(MAX_GEO_REGIONS).default([]),
+  })).max(MAX_GEO_ITEMS).default([]),
   base: z.object({
     label: z.string().max(200),
     lat: z.number().min(-90).max(90),
@@ -22,17 +22,16 @@ export const audienceGeoSchema = z.object({
   points: z.array(z.object({
     lat: z.number().min(-90).max(90),
     lng: z.number().min(-180).max(180),
-    radiusKm: z.number().positive().max(80),
-  })).max(MAX_GEO_POINTS).default([]),
+    radiusKm: z.number().min(1).max(80),
+  })).max(MAX_GEO_ITEMS).default([]),
 }).superRefine((geo, ctx) => {
   if (geo.regions.length === 0) return;
   if (!geo.regionType) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['regionType'], message: 'Tipo de localização obrigatório' });
     return;
   }
-  // País: 1 só, com código
+  // País: com código
   if (geo.regionType === 'country') {
-    if (geo.regions.length > 1) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['regions'], message: 'Selecione só 1 país' });
     if (geo.regions.some((r) => !r.countryCode)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['regions'], message: 'País sem código' });
     return;
   }

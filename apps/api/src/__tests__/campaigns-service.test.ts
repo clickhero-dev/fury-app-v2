@@ -1615,14 +1615,21 @@ describe('CampaignsService.createCampaignFromWizard — localização (geo)', ()
     expect(() => mapWizardMetaError(metaErr, 'campaign')).toThrowError(/^Inválido$/);
   });
 
-  it('regras do formato: 1 país, chave numérica em estado/cidade, máx. 4', () => {
+  it('regras do formato: teto de 50 (superadmin), chave numérica, raio 1–80 km', () => {
     const ok = (g: object) => audienceGeoSchema.safeParse(g).success;
-    expect(ok({ mode: 'regions', regionType: 'country', regions: [{ key: 'BR', name: 'Brasil', countryCode: 'BR' }] })).toBe(true);
-    expect(ok({ mode: 'regions', regionType: 'country', regions: [{ key: 'BR', name: 'Brasil', countryCode: 'BR' }, { key: 'AR', name: 'Argentina', countryCode: 'AR' }] })).toBe(false);
+    const countries = [{ key: 'BR', name: 'Brasil', countryCode: 'BR' }, { key: 'AR', name: 'Argentina', countryCode: 'AR' }];
+    expect(ok({ mode: 'regions', regionType: 'country', regions: countries })).toBe(true);
+    expect(ok({ mode: 'regions', regionType: 'country', regions: [{ key: 'BR', name: 'Brasil' }] })).toBe(false);
     expect(ok({ mode: 'regions', regionType: 'city', regions: [{ key: 'abc', name: 'X' }] })).toBe(false);
     expect(ok({ mode: 'regions', regions: [{ key: '1', name: 'X' }] })).toBe(false);
-    const five = Array.from({ length: 5 }, (_, i) => ({ key: String(i + 1), name: `C${i}` }));
-    expect(ok({ mode: 'regions', regionType: 'city', regions: five })).toBe(false);
+    const cities = (n: number) => Array.from({ length: n }, (_, i) => ({ key: String(i + 1), name: `C${i}` }));
+    expect(ok({ mode: 'regions', regionType: 'city', regions: cities(50) })).toBe(true);
+    expect(ok({ mode: 'regions', regionType: 'city', regions: cities(51) })).toBe(false);
+    const point = (radiusKm: number) => ({ mode: 'points', points: [{ lat: -23.4, lng: -51.9, radiusKm }] });
+    expect(ok(point(1))).toBe(true);
+    expect(ok(point(80))).toBe(true);
+    expect(ok(point(0.5))).toBe(false);
+    expect(ok(point(80.5))).toBe(false);
   });
 });
 

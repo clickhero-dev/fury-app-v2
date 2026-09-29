@@ -9,6 +9,11 @@ export const MAX_CREATIVES = 4;
 export const MAX_GEO_REGIONS = 4;
 export const MAX_GEO_POINTS = 4;
 export const DEFAULT_POINT_RADIUS_KM = 10;
+// Superadmin (igual ao teto do back): até 50 itens, raio 1–80 km em passos de 0,5
+export const ADMIN_MAX_GEO_ITEMS = 50;
+export const MIN_POINT_RADIUS_KM = 1;
+export const MAX_POINT_RADIUS_KM = 80;
+export const POINT_RADIUS_STEP_KM = 0.5;
 
 export type GeoRegionType = 'country' | 'region' | 'city';
 
@@ -19,6 +24,22 @@ export interface AudienceGeo {
   regions: { key: string; name: string; region?: string; countryCode?: string }[];
   base?: { label: string; lat: number; lng: number };
   points: { lat: number; lng: number; radiusKm: number }[];
+}
+
+export const EMPTY_GEO: AudienceGeo = { mode: 'regions', regions: [], points: [] };
+
+// Rótulo do item: cidade com estado; estado/país só o nome
+export const regionLabel = (r: AudienceGeo['regions'][number], type?: GeoRegionType) =>
+  (type === 'city' && r.region ? `${r.name}, ${r.region}` : r.name);
+
+// Campos antigos (city/cityKey) derivados do geo; wizard, revisão e planner leem city
+export function legacyFromGeo(geo: AudienceGeo): { city: string; cityKey: string } {
+  if (geo.mode === 'points' && geo.points.length) return { city: geo.base?.label || 'Pontos personalizados', cityKey: '' };
+  if (geo.regions.length) {
+    const type = geo.regionType;
+    return { city: regionLabel(geo.regions[0], type), cityKey: type === 'city' ? geo.regions[0].key : '' };
+  }
+  return { city: '', cityKey: '' };
 }
 
 // Tolera geo antigo/inválido salvo no banco (vira "sem geo")
