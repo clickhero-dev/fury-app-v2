@@ -19,6 +19,7 @@ import { MockMetaCampaignProvider } from '../lib/providers/mock-campaign.provide
 import { MockCampaignRepository } from '../lib/providers/mock-campaign.repository.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { audienceGeoSchema } from '../lib/audience-geo.js';
+import { rankGeoResults, cityNameFromMeta } from '../lib/meta-api.js';
 
 // ponytail: mock mínimo para o dynamic import de @fury/db no slug da LP
 vi.mock('@fury/db', () => ({
@@ -1622,5 +1623,27 @@ describe('CampaignsService.createCampaignFromWizard — localização (geo)', ()
     expect(ok({ mode: 'regions', regions: [{ key: '1', name: 'X' }] })).toBe(false);
     const five = Array.from({ length: 5 }, (_, i) => ({ key: String(i + 1), name: `C${i}` }));
     expect(ok({ mode: 'regions', regionType: 'city', regions: five })).toBe(false);
+  });
+});
+
+describe('busca de localização: ordem e nome da cidade', () => {
+  it('exato primeiro, depois "começa com"; empate: país, estado, cidade', () => {
+    const items = [
+      { key: '1', name: 'Brasilândia', type: 'city' },
+      { key: '2', name: 'Brasília', type: 'city' },
+      { key: 'BR', name: 'Brasil', type: 'country' },
+    ];
+    expect(rankGeoResults('brasil', items).map((i) => i.key)).toEqual(['BR', '1', '2']);
+    const parana = [
+      { key: '10', name: 'Paranaguá', type: 'city' },
+      { key: '460', name: 'Paraná', type: 'region' },
+      { key: '11', name: 'Paraná', type: 'city' },
+    ];
+    expect(rankGeoResults('Parana', parana).map((i) => i.key)).toEqual(['460', '11', '10']);
+  });
+
+  it('nome da cidade sem o bairro', () => {
+    expect(cityNameFromMeta('Zona 21, Maringá')).toBe('Maringá');
+    expect(cityNameFromMeta('Maringá')).toBe('Maringá');
   });
 });

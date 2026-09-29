@@ -55,7 +55,7 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
     },
   });
 
-  const publishError = (mutation.error as { response?: { data?: { error?: { code?: string; message?: string; details?: Record<string, unknown> } } } })
+  const publishError = (mutation.error as { response?: { data?: { error?: { code?: string; message?: string } } } })
     ?.response?.data?.error;
   // Erros de reconexão: token expirado ou falta de permissão no escopo — refazer o
   // OAuth concede os scopes atuais. Erros de Página (META_PAGE_NOT_MANAGED /
@@ -288,12 +288,6 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
       {mutation.isError && (
         <div className="rounded-lg bg-error/10 border border-error/20 p-3 text-sm text-error space-y-3">
           <span className="whitespace-pre-line">{publishError?.message || 'Erro ao publicar no Meta. Tente novamente.'}</span>
-          {publishError?.details && (
-            <details className="text-xs">
-              <summary className="cursor-pointer">Detalhes técnicos</summary>
-              <pre className="mt-2 whitespace-pre-wrap break-all">{JSON.stringify({ code: publishError.code, ...publishError.details }, null, 2)}</pre>
-            </details>
-          )}
           {isReconnectError && (
             <Button
               variant="primary"

@@ -439,7 +439,8 @@ export function PublicoContent() {
                     </ul>
                   )}
                 </div>
-              )}            </div>
+              )}
+            </div>
 
             {/* Faixa etária */}
 <div>

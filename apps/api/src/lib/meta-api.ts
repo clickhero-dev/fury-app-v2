@@ -1679,9 +1679,26 @@ export type MetaGeoSearchType = 'country' | 'region' | 'city';
 export async function searchMetaGeoLocations(query: string, accessToken: string, types: MetaGeoSearchType[]): Promise<MetaLocationResult[]> {
   const path = `/search?type=adgeolocation&location_types=${encodeURIComponent(JSON.stringify(types))}&q=${encodeURIComponent(query)}`;
   const response = await metaApiCall<MetaLocationSearchResponse>(path, accessToken);
-  return (response.data || [])
+  const items = (response.data || [])
     .filter((item) => types.includes(item.type as MetaGeoSearchType) && item.country_code === 'BR')
     .map((item) => ({ ...item, region: cleanRegionLabel(item.region) }));
+  return rankGeoResults(query, items);
+}
+
+const normalizeGeoText = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const GEO_TYPE_ORDER: Record<string, number> = { country: 0, region: 1, city: 2 };
+
+/** Exato primeiro, depois "começa com", depois o resto; empate: país, estado, cidade. */
+export function rankGeoResults(query: string, items: MetaLocationResult[]): MetaLocationResult[] {
+  const q = normalizeGeoText(query);
+  const score = (name: string) => {
+    const n = normalizeGeoText(name);
+    return n === q ? 0 : n.startsWith(q) ? 1 : 2;
+  };
+  return items
+    .map((item, i) => ({ item, i, s: score(item.name), t: GEO_TYPE_ORDER[item.type ?? ''] ?? 3 }))
+    .sort((a, b) => a.s - b.s || a.t - b.t || a.i - b.i)
+    .map(({ item }) => item);
 }
 
 /** Cidade da Meta a partir de coordenadas: adradiussuggestion → city_id → adgeolocationmeta. */
@@ -1702,13 +1719,25 @@ export async function findMetaCityByCoords(lat: number, lng: number, accessToken
   const cities = meta?.data?.cities ?? meta?.cities ?? (Array.isArray(meta?.data) ? meta.data[0]?.cities : undefined);
   const city = cities?.[cityId];
   if (!city?.name) return null;
+
+  // O nome pode vir com bairro ("Zona 21, Maringá"): pega o nome oficial da mesma chave
+  const cityName = cityNameFromMeta(city.name);
+  const found = await searchMetaCityLocations(cityName, accessToken)
+    .then((list) => list.find((c) => String(c.key) === cityId))
+    .catch(() => undefined);
   return {
     key: cityId,
-    name: city.name,
-    region: cleanRegionLabel(city.region),
-    country_code: city.country_code,
+    name: found?.name ?? cityName,
+    region: found?.region ?? cleanRegionLabel(city.region),
+    country_code: found?.country_code ?? city.country_code,
     type: 'city',
   };
+}
+
+/** Último trecho do nome ("Zona 21, Maringá" → "Maringá"). */
+export function cityNameFromMeta(name: string): string {
+  const parts = name.split(',').map((p) => p.trim()).filter(Boolean);
+  return parts[parts.length - 1] || name;
 }
 
 export async function uploadAdImage(params: {
