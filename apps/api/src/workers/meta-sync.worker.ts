@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { getMetaSyncQueue } from '../lib/queue.js';
 import { metaSyncService, type MetaSyncRunResult } from '../services/meta/meta-sync.service.js';
 import { notifyMetaSyncFailure } from '../lib/meta-sync-alerts.js';
-import { captureServerException } from '../lib/analytics.js';
+import { captureServerException, captureServerEvent } from '../lib/analytics.js';
 
 export const META_SYNC_QUEUE_NAME = 'meta-sync';
 
@@ -111,7 +111,26 @@ export async function startMetaSyncWorker(): Promise<Worker> {
       if (job.name === 'meta-sync:run') {
         const { tenantId, adAccountId, reason } = job.data;
         if (adAccountId) {
-          await metaSyncService.syncAdAccount({ adAccountId, reason: reason ?? 'scheduled' });
+          const results = await metaSyncService.syncAdAccount({ adAccountId, reason: reason ?? 'scheduled' });
+          // Falhas esperadas retornam status 'failed' (não lançam): alerta + telemetria,
+          // preservando o comportamento do caminho legado por tenant.
+          const failed = results.filter((result) => result.status === 'failed' && result.tenantId);
+          if (failed.length > 0) {
+            for (const result of failed) {
+              await notifyMetaSyncFailure({
+                tenantId: result.tenantId,
+                errorCode: result.errorCode ?? 'META_SYNC_FAILED',
+                message: result.errorMessage ?? 'Falha na sincronização da conta.',
+              });
+            }
+            captureServerEvent('meta_sync_run_failed', {
+              adAccountId,
+              failed: failed.map((result) => ({
+                tenantId: result.tenantId,
+                errorCode: result.errorCode ?? 'META_SYNC_FAILED',
+              })),
+            });
+          }
         } else if (tenantId) {
           // Jobs legados em voo continuam compatíveis durante o deploy.
           await processMetaSyncRun(tenantId, reason ?? 'scheduled');

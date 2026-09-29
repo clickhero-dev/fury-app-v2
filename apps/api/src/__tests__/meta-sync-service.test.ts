@@ -157,6 +157,28 @@ describe('BDD: MetaSyncService.syncTenant', () => {
     expect(deps.invalidateCampaignsCache).toHaveBeenCalledWith('t2');
   });
 
+  it('Cenário: promessa rejeitada no cache não contamina os demais tenants (evict on reject)', async () => {
+    const { repo, metaApi, deps } = makeFakes();
+    const secondRepo = { ...repo, recordSyncRun: vi.fn(async () => ({ id: 'run-2' })) };
+    deps.repoFactory = vi.fn((id: string) => (id === 't2' ? secondRepo : repo)) as any;
+    (deps as any).getMetaContextsByAdAccount = vi.fn(async () => [
+      { tenantId, context: { accessToken: TOKEN, adAccountId: AD_ACCOUNT, instagramUserId: null } },
+      { tenantId: 't2', context: { accessToken: 'different-token', adAccountId: AD_ACCOUNT, instagramUserId: null } },
+    ]);
+    metaApi.listAccountCampaigns
+      .mockRejectedValueOnce(new Error('rate limit transitório'))
+      .mockResolvedValueOnce([]);
+
+    const results = await new MetaSyncService(deps as any).syncAdAccount({ adAccountId: AD_ACCOUNT, reason: 'scheduled' });
+
+    // 1ª chamada falha (t1) e é removida do cache → t2 re-executa e obtém sucesso.
+    expect(metaApi.listAccountCampaigns).toHaveBeenCalledTimes(2);
+    expect(results[0].tenantId).toBe(tenantId);
+    expect(results[0].status).toBe('failed');
+    expect(results[1].tenantId).toBe('t2');
+    expect(results[1].status).toBe('success');
+  });
+
   it('Cenário: sincronização completa (happy path)', async () => {
     const { repo, metaApi, deps } = makeFakes({
       existingSnapshots: [{ metaCampaignId: 'm1', hasLeadForm: true }],

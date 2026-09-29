@@ -3,7 +3,7 @@ import {
   type Database,
   metaConnections,
 } from '@fury/db';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, asc, eq, ne } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type MetaConnection = typeof metaConnections.$inferSelect;
@@ -52,6 +52,8 @@ export class MetaRepository extends TenantScopedRepository {
   async findMetaConnectionsBySelectedAdAccount(adAccountId: string): Promise<MetaConnection[]> {
     return this.db.query.metaConnections.findMany({
       where: eq(metaConnections.selectedAdAccountId, adAccountId),
+      // Ordem determinística: o contexto canônico (1a conexão) não pode variar entre runs.
+      orderBy: asc(metaConnections.id),
     });
   }
 

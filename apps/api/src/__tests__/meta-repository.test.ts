@@ -50,6 +50,29 @@ describe('MetaRepository', () => {
     expect(db.query.metaConnections.findFirst).toHaveBeenCalledTimes(1);
   });
 
+  it('Cenário: conexões por ad account são lidas sem filtro de tenant e com ordem determinística', async () => {
+    const { db } = makeDb();
+    db.query.metaConnections.findMany.mockResolvedValueOnce([
+      { tenantId: 't2', selectedAdAccountId: 'act_1' },
+      { tenantId: 't1', selectedAdAccountId: 'act_1' },
+    ] as any);
+    const repo = new MetaRepository(tenantId, db);
+
+    const result = await repo.findMetaConnectionsBySelectedAdAccount('act_1');
+
+    const [args] = db.query.metaConnections.findMany.mock.calls[0];
+    expect(result).toHaveLength(2);
+    // Exceção intencional ao tenant-bound (ADR-0001): fan-out cruza tenants.
+    const whereJson = JSON.stringify(args.where ?? {}, (_key, value) =>
+      typeof value === 'object' && value !== null && value.constructor?.name.startsWith('Pg')
+        ? `[${value.constructor.name}]`
+        : value
+    );
+    expect(whereJson).not.toContain(tenantId);
+    expect(whereJson).toContain('act_1');
+    expect(args.orderBy).toBeDefined();
+  });
+
   it('createMetaConnection insere e retorna a conexão criada', async () => {
     const { db, insert } = makeDb();
     const repo = new MetaRepository(tenantId, db);

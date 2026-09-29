@@ -142,6 +142,31 @@ describe('MetaController', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it('authCallback redireciona com o código do erro quando o service lança AppError', async () => {
+    const state = signedState({ tenantId: 't-1', context: 'settings' });
+    metaService.handleMetaOAuthCallback = vi.fn(async () => {
+      const err = new Error('Conta de anúncios já em uso por outro tenant.') as any;
+      err.code = 'AD_ACCOUNT_IN_USE';
+      throw err;
+    });
+    const localController = new MetaController(metaService);
+    const req = { query: { code: 'code123', state } } as any;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const res = mockRes();
+    const next = vi.fn();
+
+    await localController.authCallback(req, res, next);
+
+    expect(res.redirect).toHaveBeenCalledWith(
+      expect.stringContaining('/configuracoes/integracoes?error=ad_account_in_use')
+    );
+    expect(res.redirect).not.toHaveBeenCalledWith(
+      expect.stringContaining('error=oauth_cancelled')
+    );
+    expect(next).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
   it('authCallback cai no FRONTEND_URL quando o state não carrega frontendUrl (fallback)', async () => {
     const state = signedState({ tenantId: 't-1', context: 'settings' });
     metaService.handleMetaOAuthCallback = vi.fn(async () => ({

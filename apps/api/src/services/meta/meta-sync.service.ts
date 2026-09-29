@@ -217,7 +217,7 @@ export class MetaSyncService {
    * tenant vinculado. O primeiro contexto é canônico; o cache por operação
    * impede chamadas externas repetidas, mas cada tenant preserva seus runs e caches.
    */
-  async syncAdAccount(args: { adAccountId: string; reason: string }): Promise<MetaSyncRunResult> {
+  async syncAdAccount(args: { adAccountId: string; reason: string }): Promise<Array<{ tenantId: string } & MetaSyncRunResult>> {
     const contexts = await (this.deps.getMetaContextsByAdAccount ?? getMetaSyncContextsByAdAccount)(args.adAccountId);
     if (contexts.length === 0) {
       throw new AppError(404, 'AD_ACCOUNT_NOT_FOUND', 'Conta de anúncios não encontrada para sincronizar.');
@@ -230,8 +230,12 @@ export class MetaSyncService {
         const key = `${name}:${JSON.stringify(params)}`;
         let result = cache.get(key);
         if (!result) {
-          result = Promise.resolve((fn as (...args: unknown[]) => unknown)(...params));
+          result = Promise.resolve().then(() => (fn as (...args: unknown[]) => unknown)(...params));
           cache.set(key, result);
+          // Evict on reject: falha transitória não contamina os demais tenants.
+          void result.catch(() => {
+            if (cache.get(key) === result) cache.delete(key);
+          });
         }
         return result;
       }]),
@@ -242,11 +246,11 @@ export class MetaSyncService {
       getMetaContext: async () => canonicalContext,
     });
 
-    const results: MetaSyncRunResult[] = [];
+    const results: Array<{ tenantId: string } & MetaSyncRunResult> = [];
     for (const { tenantId } of contexts) {
-      results.push(await runner.syncTenantPipeline({ tenantId, reason: args.reason }));
+      results.push({ ...(await runner.syncTenantPipeline({ tenantId, reason: args.reason })), tenantId });
     }
-    return results[0];
+    return results;
   }
 
   /** Compatibilidade para callers por tenant: no singleton delega ao sync por conta. */
@@ -254,7 +258,8 @@ export class MetaSyncService {
     if (this.deps.getMetaContextsByAdAccount) {
       try {
         const context = await this.deps.getMetaContext(args.tenantId);
-        return this.syncAdAccount({ adAccountId: context.adAccountId, reason: args.reason });
+        const results = await this.syncAdAccount({ adAccountId: context.adAccountId, reason: args.reason });
+        return results[0] ?? (await this.syncTenantPipeline(args));
       } catch {
         // Preserva o registro client-safe de falha por tenant do pipeline legado.
         return this.syncTenantPipeline(args);

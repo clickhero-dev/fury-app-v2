@@ -84,7 +84,10 @@ export class MetaController {
         stack: err?.stack?.split('\n').slice(0, 3).join(' | '),
         metaError: err?.metaError ? JSON.stringify(err.metaError).slice(0, 300) : undefined,
       });
-      res.redirect(`${frontendUrl}/configuracoes/integracoes?error=oauth_cancelled`);
+      // Erros de AppError preservam o código (ex.: AD_ACCOUNT_IN_USE) para o frontend;
+      // demais falhas de OAuth continuam como oauth_cancelled.
+      const errorCode = typeof err?.code === 'string' && err.code ? err.code.toLowerCase() : 'oauth_cancelled';
+      res.redirect(`${frontendUrl}/configuracoes/integracoes?error=${errorCode}`);
     }
   };
 
