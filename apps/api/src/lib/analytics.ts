@@ -9,8 +9,19 @@ const client = analyticsEnabled
   : null;
 
 /**
+ * Redige segredos comuns de textos de erro antes da telemetria:
+ * `access_token=` em URLs e tokens de acesso Meta/Instagram (EAA…/IGAA…).
+ */
+export function redactSensitiveText(input: string): string {
+  return input
+    .replace(/(access_token=)[^&\s"'`]+/gi, '$1[REDACTED]')
+    .replace(/(?:EAA|IGAA)[A-Za-z0-9_-]{20,}/g, '[REDACTED]');
+}
+
+/**
  * Captura uma exceção no PostHog (error tracking server-side).
- * Não envia campos sensíveis (tokens, secrets, bodies).
+ * Não envia campos sensíveis (tokens, secrets, bodies) — mensagem e stack
+ * passam por redactSensitiveText.
  */
 export function captureServerException(
   err: unknown,
@@ -24,11 +35,11 @@ export function captureServerException(
 ) {
   if (!client) return;
 
-  const message = err instanceof Error ? err.message : String(err);
-  const stack = err instanceof Error ? err.stack : undefined;
+  const message = redactSensitiveText(err instanceof Error ? err.message : String(err));
+  const stack = err instanceof Error ? redactSensitiveText(err.stack ?? '') : undefined;
 
   client.captureException(
-    err instanceof Error ? err : new Error(message),
+    new Error(message),
     context.tenantId ?? 'server',
     {
       source: 'server',

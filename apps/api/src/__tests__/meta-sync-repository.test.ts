@@ -128,6 +128,7 @@ function makeDb() {
   const db: any = {
     query,
     select: vi.fn(() => ({ from: () => ({ where: async () => [{ count: 2 }] }) })),
+    $count: vi.fn(async () => 1),
     insert: vi.fn((...args: any[]) => {
       calls.push({ method: 'insert', args });
       return makeChain('values');
@@ -309,5 +310,42 @@ describe('BDD: MetaSyncRepository', () => {
     expect(values.tenantId).toBe(tenantId);
     expect(values.status).toBe('success');
     expect(values.campaignsCount).toBe(2);
+  });
+
+  it('Cenário: updateLeadStatus grava status + status_updated_at escopado por tenant e lead e confirma a alteração', async () => {
+    const { db, calls } = makeDb();
+    const repo = new MetaSyncRepository(tenantId, db);
+    const changed = await repo.updateLeadStatus('lead-1', 'negociando');
+
+    expect(changed).toBe(true);
+
+    const updateCall = calls.find((c) => c.method === 'update');
+    expect(updateCall).toBeTruthy();
+    const setCall = calls.find((c) => c.method === 'set');
+    expect(setCall?.args[0]).toMatchObject({ status: 'negociando', statusUpdatedAt: expect.any(Date) });
+    const whereCall = calls.find((c) => c.method === 'where');
+    const where = whereText(whereCall?.args[0]);
+    expect(where).toContain(tenantId);
+    expect(where).toContain('lead-1');
+  });
+
+  it('Cenário: markStaleNewLeadsAsNotContacted atualiza só leads novos vencidos do tenant e retorna a contagem', async () => {
+    const { db, calls } = makeDb();
+    const repo = new MetaSyncRepository(tenantId, db);
+    const cutoff = new Date('2026-09-26T00:00:00Z');
+    const changed = await repo.markStaleNewLeadsAsNotContacted(cutoff);
+
+    expect(changed).toBe(1);
+    expect(db.$count).toHaveBeenCalledTimes(1);
+    const updateCall = calls.find((c) => c.method === 'update');
+    expect(updateCall).toBeTruthy();
+    const setCall = calls.find((c) => c.method === 'set');
+    expect(setCall?.args[0]).toMatchObject({ status: 'não contatado', statusUpdatedAt: expect.any(Date) });
+    const whereCall = calls.find((c) => c.method === 'where');
+    const where = whereText(whereCall?.args[0]);
+    expect(where).toContain(tenantId);
+    expect(where).toContain('novo');
+    expect(where).toContain('created_time');
+    expect(where).toContain('<='); // cutoff aplicado como filtro
   });
 });

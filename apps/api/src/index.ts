@@ -29,6 +29,7 @@ import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers
 import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
 import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
 import { startMetaSyncManager, stopMetaSyncManager } from './lib/meta-sync-manager.js';
+import { startLeadStatusManager, stopLeadStatusManager } from './workers/lead-status.worker.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
 import { slugify } from './lib/slug.js';
@@ -304,6 +305,9 @@ app.use((req, res) => {
       void startMetaSyncManager().catch((error) => {
         console.error('Failed to start meta-sync manager:', error);
       });
+      void startLeadStatusManager().catch((error) => {
+        console.error('Failed to start lead-status manager:', error);
+      });
       void startPlannerWorker().then(() => {
         return recoverInterruptedPlannerWorkflows().then((count) => {
           if (count > 0) console.log(`♻️  Recuperados ${count} workflows interrompidos`);
@@ -320,6 +324,7 @@ app.use((req, res) => {
         await stopPublishDueManager();
         await stopGoogleSyncManager();
         await stopMetaSyncManager();
+        await stopLeadStatusManager();
         await flushRequestLogs();
         await stopSyncJobsWorker();
         await stopRuleEngine();

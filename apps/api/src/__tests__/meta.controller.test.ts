@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import jwt from 'jsonwebtoken';
 import { MetaController } from '../controllers/meta.controller.js';
+import { AppError } from '../middleware/errorHandler.js';
 
 vi.mock('../services/email/notify.js', () => ({
   sendToTenant: vi.fn(async () => undefined),
@@ -140,6 +141,50 @@ describe('MetaController', () => {
       'https://app.useady.com.br/configuracoes/integracoes?connected=true'
     );
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it('authCallback redireciona com o código do erro quando o service lança AppError', async () => {
+    const state = signedState({ tenantId: 't-1', context: 'settings' });
+    metaService.handleMetaOAuthCallback = vi.fn(async () => {
+      throw new AppError(409, 'AD_ACCOUNT_IN_USE', 'Conta de anúncios já em uso por outro tenant.');
+    });
+    const localController = new MetaController(metaService);
+    const req = { query: { code: 'code123', state } } as any;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const res = mockRes();
+    const next = vi.fn();
+
+    await localController.authCallback(req, res, next);
+
+    expect(res.redirect).toHaveBeenCalledWith(
+      expect.stringContaining('/configuracoes/integracoes?error=ad_account_in_use')
+    );
+    expect(res.redirect).not.toHaveBeenCalledWith(
+      expect.stringContaining('error=oauth_cancelled')
+    );
+    expect(next).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it('authCallback não expõe código de erro não-AppError no redirect (fallback oauth_cancelled)', async () => {
+    const state = signedState({ tenantId: 't-1', context: 'settings' });
+    metaService.handleMetaOAuthCallback = vi.fn(async () => {
+      const err = new Error('conexão caiu') as any;
+      err.code = 'ECONNRESET';
+      throw err;
+    });
+    const localController = new MetaController(metaService);
+    const req = { query: { code: 'code123', state } } as any;
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const res = mockRes();
+    const next = vi.fn();
+
+    await localController.authCallback(req, res, next);
+
+    expect(res.redirect).toHaveBeenCalledWith(
+      expect.stringContaining('/configuracoes/integracoes?error=oauth_cancelled')
+    );
+    consoleError.mockRestore();
   });
 
   it('authCallback cai no FRONTEND_URL quando o state não carrega frontendUrl (fallback)', async () => {

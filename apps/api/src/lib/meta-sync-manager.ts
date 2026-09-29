@@ -14,11 +14,17 @@ export async function startMetaSyncManager(): Promise<void> {
 
   const queue = new Queue('meta-sync', { connection });
 
-  // Cron de reconciliação a cada 15 minutos; o aviso visível só aparece após 3h stale.
-  await queue.add(
-    'meta-sync:tick',
-    { timestamp: new Date().toISOString() },
-    { repeat: { pattern: '*/15 * * * *' }, jobId: 'meta-sync-tick' }
+  // Remove o repeatable legado antes de registrar o Job Scheduler v5. Os dois
+  // mecanismos usam metadados distintos no Redis; o upsert não substitui o
+  // repeatable criado pela API antiga, o que causaria ticks duplicados.
+  await queue.removeRepeatable('meta-sync:tick', { pattern: '*/15 * * * *' }, 'meta-sync-tick');
+
+  // Cron de reconciliação a cada 15 minutos. O Job Scheduler mantém o próximo
+  // tick de forma atômica no Redis e o id estável torna startups repetidos idempotentes.
+  await queue.upsertJobScheduler(
+    'meta-sync-tick',
+    { pattern: '*/15 * * * *' },
+    { name: 'meta-sync:tick', data: {} },
   );
 
   // Bootstrap: roda imediatamente no startup (todos os tenants conectados).

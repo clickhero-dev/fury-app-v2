@@ -133,4 +133,21 @@ describe('PainelCampanhas — Total Clientes = soma das linhas de campanha', () 
     expect(screen.queryByText('Nenhum dado disponível')).not.toBeInTheDocument();
     expect(screen.queryByText('Nenhuma campanha por aqui ainda')).not.toBeInTheDocument();
   });
+
+  it('informa discretamente a última atualização enquanto consulta novos dados da Meta', async () => {
+    mockApiGet.mockResolvedValue({
+      data: {
+        success: true,
+        data: [{ id: 'a', name: 'Camp Ativa', status: 'ACTIVE', conversions: 80, spend: 100 }],
+        degraded: true,
+        syncedAt: '2026-09-28T17:30:00.000Z',
+      },
+    });
+
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText('Camp Ativa')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Estamos consultando seus dados na Meta');
+    expect(screen.getByRole('status')).toHaveTextContent('Última atualização: 28/09 às 14:30');
+  });
 });

@@ -2,12 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 
 export interface CampaignLead {
+  id?: string;
   name: string | null;
   email: string | null;
   phone: string | null;
   createdAt: string | null;
   campaignId?: string;
   campaignName?: string;
+  status?: string;
+  statusUpdatedAt?: string | null;
 }
 
 interface CampaignLeadsResponse {
@@ -16,6 +19,7 @@ interface CampaignLeadsResponse {
   degraded?: boolean;
   firstSyncPending?: boolean;
   staleForMs?: number | null;
+  syncedAt?: string | null;
 }
 
 /**
@@ -42,6 +46,7 @@ export function useCampaignLeads(campaignId: string | null, enabled: boolean, al
     degraded: data?.degraded ?? false,
     firstSyncPending: data?.firstSyncPending ?? false,
     staleForMs: data?.staleForMs ?? null,
+    syncedAt: data?.syncedAt ?? null,
     isLoading: enabled && isLoading,
     isError,
     errorMessage:

@@ -32,6 +32,8 @@ import api from '@/lib/api';
 import { useGoalsProgress, translateObjective } from '@/hooks/useGoalsProgress';
 import { type Period, getPeriodDates, formatPeriodLabel } from '@/lib/period-utils';
 import { PeriodSelector } from '@/components/PeriodSelector';
+import { MetaSyncNotice } from '../../components/MetaSyncNotice';
+import { getLatestSync } from '../../lib/format-last-sync';
 
 // ─── Design tokens (ady) ──────────────────────────────────────────────────────
 
@@ -730,11 +732,11 @@ export function Dashboard() {
     queryKey: ['metrics-summary', startDate, endDate],
     queryFn: async () => {
       try {
-        const res = await api.get<{ success: boolean; data: { summary: MetricsSummary }; degraded?: boolean; firstSyncPending?: boolean }>(
+        const res = await api.get<{ success: boolean; data: { summary: MetricsSummary }; degraded?: boolean; firstSyncPending?: boolean; syncedAt?: string | null }>(
           '/v2/metrics/summary',
           { params: { startDate, endDate } }
         );
-        return res.data.data.summary ? { ...res.data.data.summary, degraded: res.data.degraded ?? false, firstSyncPending: res.data.firstSyncPending ?? false } : null;
+        return res.data.data.summary ? { ...res.data.data.summary, degraded: res.data.degraded ?? false, firstSyncPending: res.data.firstSyncPending ?? false, syncedAt: res.data.syncedAt ?? null } : null;
       } catch {
         return null;
       }
@@ -756,6 +758,7 @@ export function Dashboard() {
           partial_failures?: Array<{ item_id?: string; provider: string; code?: string; reason: string }>;
           degraded?: boolean;
           firstSyncPending?: boolean;
+          syncedAt?: string | null;
         }>('/v2/campaigns', {
           params: { status: 'ACTIVE', startDate, endDate, limit: 10 },
         });
@@ -769,13 +772,14 @@ export function Dashboard() {
           partialFailures: Array.isArray(res.data.partial_failures) ? res.data.partial_failures : [],
           degraded: res.data.degraded ?? false,
           firstSyncPending: res.data.firstSyncPending ?? false,
+          syncedAt: res.data.syncedAt ?? null,
         };
       } catch {
-        return { campaigns: [], partialFailures: [], degraded: false, firstSyncPending: false };
+        return { campaigns: [], partialFailures: [], degraded: false, firstSyncPending: false, syncedAt: null };
       }
     },
     staleTime: 5 * 60 * 1000,
-    placeholderData: { campaigns: [], partialFailures: [], degraded: false, firstSyncPending: false },
+    placeholderData: { campaigns: [], partialFailures: [], degraded: false, firstSyncPending: false, syncedAt: null },
     refetchInterval: (query) => query.state.data?.degraded ? 30_000 : false,
   });
   const activeCampaigns = activeCampaignsResult?.campaigns ?? [];
@@ -802,6 +806,7 @@ export function Dashboard() {
     (fetchingActiveCampaigns && !activeCampaignsResult) || (fetchingDaily && !dailyData);
   const isDataDegraded = Boolean(goalsData?.degraded || activeCampaignsResult?.degraded || summaryRaw?.degraded);
   const firstSyncPending = Boolean(goalsData?.firstSyncPending || activeCampaignsResult?.firstSyncPending || summaryRaw?.firstSyncPending);
+  const latestSyncedAt = getLatestSync(goalsData?.syncedAt, activeCampaignsResult?.syncedAt, summaryRaw?.syncedAt);
 
   const g = goalsData;
   const primaryGoal = g?.primary_goal ?? g?.goals?.[0];
@@ -874,12 +879,7 @@ export function Dashboard() {
 
         {!isMetaConnected && <MetaBanner />}
 
-        {isDataDegraded && (
-          <div role="status" className="rounded-2xl border border-[#CF6F03]/30 bg-[#CF6F03]/10 px-4 py-3 text-sm text-[#9A4F02] dark:text-[#E08A2E]">
-            <p className="font-semibold">{firstSyncPending ? 'Preparando seus dados' : 'Dados desatualizados'}</p>
-            <p className="mt-1 text-xs opacity-90">{firstSyncPending ? 'A primeira sincronização está em andamento. O painel será atualizado automaticamente.' : 'Mostramos o último snapshot salvo enquanto atualizamos a Meta em segundo plano.'}</p>
-          </div>
-        )}
+        {isDataDegraded && <MetaSyncNotice firstSyncPending={firstSyncPending} syncedAt={latestSyncedAt} />}
 
         {isPeriodDataLoading ? (
           <div role="status" aria-label="Carregando dados do dashboard" aria-busy="true" className="space-y-6">

@@ -1,5 +1,38 @@
+// BDD — guarda de conta de anúncios entre tenants.
+/*
+Funcionalidade: Exclusividade de conta de anúncios Meta
+
+  Cenário: tenant não seleciona conta já vinculada a outro tenant
+    Dado uma conta de anúncios selecionada em outro tenant
+    Quando o tenant atual tenta selecioná-la
+    Então recebe AD_ACCOUNT_IN_USE com mensagem segura
+
+  Cenário: tenant mantém sua própria conta de anúncios
+    Dado a conta já vinculada ao próprio tenant
+    Quando a seleciona novamente
+    Então a seleção é persistida
+
+  Cenário: OAuth não vincula automaticamente conta usada por outro tenant
+    Dado o callback Meta encontra uma conta já vinculada
+    Quando conclui a conexão
+    Então recebe AD_ACCOUNT_IN_USE
+*/
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import jwt from 'jsonwebtoken';
+
+vi.mock('@fury/db', () => {
+  const table = new Proxy({}, { get: () => ({}) });
+  return {
+    db: {},
+    brandKits: table,
+    clientGoals: table,
+    metaConnections: table,
+    tenants: table,
+    users: table,
+    businessProfileSettings: table,
+  };
+});
+
 import { MetaService } from '../services/meta/meta.service.js';
 
 const connection = {
@@ -24,11 +57,12 @@ function makeRepo(override: Record<string, any> = {}) {
     createMetaConnection: vi.fn(async () => connection),
     patchMetaConnection: vi.fn(async () => undefined),
     deleteMetaConnection: vi.fn(async () => undefined),
+    countOtherTenantsUsingSelectedAdAccount: vi.fn(async () => 0),
     ...override,
   } as any;
 }
 
-function makeSvc(repo: any) {
+function makeSvc(repo: any, metaApiOverrides: Record<string, any> = {}) {
   return new MetaService(
     () => repo,
     {
@@ -44,6 +78,7 @@ function makeSvc(repo: any) {
         getUserBusinesses: vi.fn(async () => []),
         getUserFacebookPages: vi.fn(async () => []),
         getUserPermissions: vi.fn(async () => []),
+        ...metaApiOverrides,
       },
       addSyncJob: vi.fn(async () => undefined),
     } as any,
@@ -149,6 +184,47 @@ describe('MetaService (deep DI)', () => {
     const repo = makeRepo({ findMetaConnectionById: vi.fn(async () => connection) });
     await expect(makeSvc(repo).selectAdAccount('t1', 'm1', 'act_999')).rejects.toMatchObject({
       code: 'AD_ACCOUNT_NOT_FOUND',
+    });
+  });
+
+  it('Cenário: selectAdAccount rejeita conta já selecionada por outro tenant', async () => {
+    const repo = makeRepo({
+      findMetaConnectionById: vi.fn(async () => connection),
+      countOtherTenantsUsingSelectedAdAccount: vi.fn(async () => 1),
+    });
+
+    await expect(makeSvc(repo).selectAdAccount('t1', 'm1', 'act_1')).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'AD_ACCOUNT_IN_USE',
+      message: 'Essa conta de anúncios já está vinculada a outra conta do Fury. Escolha outra conta ou conecte com o login Meta da própria empresa.',
+    });
+    expect(repo.patchMetaConnection).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: selectAdAccount permite a conta do próprio tenant', async () => {
+    const repo = makeRepo({ findMetaConnectionById: vi.fn(async () => connection) });
+
+    await expect(makeSvc(repo).selectAdAccount('t1', 'm1', 'act_1')).resolves.toBe('act_1');
+    expect(repo.countOtherTenantsUsingSelectedAdAccount).toHaveBeenCalledWith('act_1', 't1');
+    expect(repo.patchMetaConnection).toHaveBeenCalledWith('m1', { selectedAdAccountId: 'act_1' });
+  });
+
+  it('Cenário: callback OAuth rejeita conta automática já usada por outro tenant', async () => {
+    const repo = makeRepo({
+      findLatestMetaConnection: vi.fn(async () => connection),
+      countOtherTenantsUsingSelectedAdAccount: vi.fn(async () => 1),
+    });
+    const svc = makeSvc(repo, {
+      getUserAdAccounts: vi.fn(async () => ({
+        accounts: [{ id: 'act_1', name: 'Conta 1', account_status: 1 }],
+        ignoredBusinessIds: [],
+      })),
+    });
+    const state = new URL(svc.generateMetaAuthUrl('t1', 'settings')).searchParams.get('state')!;
+
+    await expect(svc.handleMetaOAuthCallback('oauth-code', state)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'AD_ACCOUNT_IN_USE',
     });
   });
 });
