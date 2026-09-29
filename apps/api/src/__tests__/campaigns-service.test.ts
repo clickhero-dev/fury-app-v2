@@ -18,6 +18,8 @@ import { CampaignsService, normalizeCampaignPanelMetrics, formatCampaignListItem
 import { MockMetaCampaignProvider } from '../lib/providers/mock-campaign.provider.js';
 import { MockCampaignRepository } from '../lib/providers/mock-campaign.repository.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { audienceGeoSchema } from '../lib/audience-geo.js';
+import { rankGeoResults, cityNameFromMeta } from '../lib/meta-api.js';
 
 // ponytail: mock mínimo para o dynamic import de @fury/db no slug da LP
 vi.mock('@fury/db', () => ({
@@ -1533,5 +1535,122 @@ describe('CampaignsService.getAllCampaignLeads', () => {
 
     await expect(service.getAllCampaignLeads({ tenantId: TENANT_ID }))
       .rejects.toMatchObject({ code: 'META_TOKEN_EXPIRED', statusCode: 401 });
+  });
+});
+
+describe('CampaignsService.createCampaignFromWizard — localização (geo)', () => {
+  function setup() {
+    const ctx = makeService();
+    ctx.repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+      createdAt: new Date(),
+    } as any);
+    ctx.meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+    ctx.meta.uploadAdImageResult = 'img_hash';
+    return ctx;
+  }
+  const baseArgs = {
+    tenantId: TENANT_ID, objective: 'visits' as const,
+    headline: 'Oferta', primaryText: 'Imperdivel',
+    locationCity: 'Maringá, Paraná', locationRadiusKm: 30,
+    ageMin: 18, ageMax: 65, gender: 'all' as const, dailyBudgetBrl: 7,
+    destinationUrl: 'https://example.com',
+    creativeUploadUrl: 'https://example.com/img.jpg',
+  };
+  async function sentGeo(geo?: any) {
+    const { service, meta } = setup();
+    meta.locationsResult = [{ key: '2788395' }];
+    await service.createCampaignFromWizard({ ...baseArgs, geo });
+    return meta.createdAdSets[0].targeting.geo_locations;
+  }
+
+  it('sem geo: envio igual ao de hoje (cidade + 30 km)', async () => {
+    expect(await sentGeo()).toEqual({ cities: [{ key: 2788395, radius: 30, distance_unit: 'kilometer' }] });
+  });
+
+  it('cidades: cidade inteira, sem raio', async () => {
+    const geo = { mode: 'regions', regionType: 'city', regions: [{ key: '2788395', name: 'Maringá' }, { key: '2789999', name: 'Sarandi' }], points: [] };
+    expect(await sentGeo(geo)).toEqual({ cities: [{ key: 2788395 }, { key: 2789999 }] });
+  });
+
+  it('estados: estado inteiro', async () => {
+    const geo = { mode: 'regions', regionType: 'region', regions: [{ key: '460', name: 'Paraná' }], points: [] };
+    expect(await sentGeo(geo)).toEqual({ regions: [{ key: 460 }] });
+  });
+
+  it('país: país inteiro pelo código', async () => {
+    const geo = { mode: 'regions', regionType: 'country', regions: [{ key: 'BR', name: 'Brasil', countryCode: 'BR' }], points: [] };
+    expect(await sentGeo(geo)).toEqual({ countries: ['BR'] });
+  });
+
+  it('pontos: custom_locations com o raio gravado (10 km)', async () => {
+    const geo = { mode: 'points', regions: [], points: [{ lat: -23.4207481, lng: -51.9331, radiusKm: 10 }] };
+    expect(await sentGeo(geo)).toEqual({
+      custom_locations: [{ latitude: -23.420748, longitude: -51.9331, radius: 10, distance_unit: 'kilometer' }],
+    });
+  });
+
+  it('modo ativo vazio: cai no envio de hoje', async () => {
+    const geo = { mode: 'points', regionType: 'city', regions: [{ key: '1', name: 'X' }], points: [] };
+    expect(await sentGeo(geo)).toEqual({ cities: [{ key: 2788395, radius: 30, distance_unit: 'kilometer' }] });
+  });
+
+  it('erro 1815946 no ad set: mensagem própria, código no texto e o que foi enviado', async () => {
+    const { service, meta } = setup();
+    meta.createAdSet = async () => {
+      throw Object.assign(new Error('[Meta API] 100'), { metaCode: 100, metaSubcode: 1815946, metaUserMsg: 'Raio não permitido' });
+    };
+    const geo = { mode: 'points' as const, regions: [], points: [{ lat: -23.42, lng: -51.93, radiusKm: 10 }, { lat: -23.5, lng: -51.8, radiusKm: 10 }] };
+    const err = await service.createCampaignFromWizard({ ...baseArgs, geo }).catch((e) => e);
+    expect(err.code).toBe('META_LOCATION_MULTI_RADIUS');
+    expect(err.message).toContain('(erro 100/1815946)');
+    expect(err.details.geo_locations.custom_locations).toHaveLength(2);
+    expect(meta.deletedCampaigns).toEqual(['meta_campaign_1']);
+  });
+
+  it('código no texto só na etapa adset', () => {
+    const metaErr = { metaCode: 100, metaSubcode: 33, metaUserMsg: 'Inválido' };
+    expect(() => mapWizardMetaError(metaErr, 'adset', { geo_locations: {} })).toThrowError('Inválido (erro 100/33)');
+    expect(() => mapWizardMetaError(metaErr, 'campaign')).toThrowError(/^Inválido$/);
+  });
+
+  it('regras do formato: teto de 50 (superadmin), chave numérica, raio 1–80 km', () => {
+    const ok = (g: object) => audienceGeoSchema.safeParse(g).success;
+    const countries = [{ key: 'BR', name: 'Brasil', countryCode: 'BR' }, { key: 'AR', name: 'Argentina', countryCode: 'AR' }];
+    expect(ok({ mode: 'regions', regionType: 'country', regions: countries })).toBe(true);
+    expect(ok({ mode: 'regions', regionType: 'country', regions: [{ key: 'BR', name: 'Brasil' }] })).toBe(false);
+    expect(ok({ mode: 'regions', regionType: 'city', regions: [{ key: 'abc', name: 'X' }] })).toBe(false);
+    expect(ok({ mode: 'regions', regions: [{ key: '1', name: 'X' }] })).toBe(false);
+    const cities = (n: number) => Array.from({ length: n }, (_, i) => ({ key: String(i + 1), name: `C${i}` }));
+    expect(ok({ mode: 'regions', regionType: 'city', regions: cities(50) })).toBe(true);
+    expect(ok({ mode: 'regions', regionType: 'city', regions: cities(51) })).toBe(false);
+    const point = (radiusKm: number) => ({ mode: 'points', points: [{ lat: -23.4, lng: -51.9, radiusKm }] });
+    expect(ok(point(1))).toBe(true);
+    expect(ok(point(80))).toBe(true);
+    expect(ok(point(0.5))).toBe(false);
+    expect(ok(point(80.5))).toBe(false);
+  });
+});
+
+describe('busca de localização: ordem e nome da cidade', () => {
+  it('exato primeiro, depois "começa com"; empate: país, estado, cidade', () => {
+    const items = [
+      { key: '1', name: 'Brasilândia', type: 'city' },
+      { key: '2', name: 'Brasília', type: 'city' },
+      { key: 'BR', name: 'Brasil', type: 'country' },
+    ];
+    expect(rankGeoResults('brasil', items).map((i) => i.key)).toEqual(['BR', '1', '2']);
+    const parana = [
+      { key: '10', name: 'Paranaguá', type: 'city' },
+      { key: '460', name: 'Paraná', type: 'region' },
+      { key: '11', name: 'Paraná', type: 'city' },
+    ];
+    expect(rankGeoResults('Parana', parana).map((i) => i.key)).toEqual(['460', '11', '10']);
+  });
+
+  it('nome da cidade sem o bairro', () => {
+    expect(cityNameFromMeta('Zona 21, Maringá')).toBe('Maringá');
+    expect(cityNameFromMeta('Maringá')).toBe('Maringá');
   });
 });
