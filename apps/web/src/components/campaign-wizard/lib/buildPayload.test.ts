@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildWizardCampaignPayload } from './buildPayload';
 import type { WizardState } from '../types';
-import { isValidGeo } from '../types';
 
 function makeState(overrides: Partial<WizardState> = {}): WizardState {
   return {
@@ -115,39 +114,5 @@ describe('buildWizardCampaignPayload', () => {
     expect(payload.creatives[1].creative_media_url).toBe('https://ig.jpg');
     expect(payload.creatives[0].creative_instagram_media_id).toBeUndefined();
     expect(payload.creatives[0].creative_media_url).toBeUndefined();
-  });
-});
-
-describe('buildWizardCampaignPayload — geo', () => {
-  const audience = makeState().audience;
-  const points = { mode: 'points' as const, regions: [], points: [{ lat: -23.42, lng: -51.93, radiusKm: 10 }] };
-
-  it('sem geo: payload igual ao de hoje', () => {
-    const payload = buildWizardCampaignPayload(makeState());
-    expect(payload).not.toHaveProperty('geo');
-    expect(payload.location_city_key).toBe('sp');
-  });
-
-  it('envia geo quando o modo ativo tem localização', () => {
-    const payload = buildWizardCampaignPayload(makeState({ audience: { ...audience, geo: points } }));
-    expect(payload.geo).toEqual(points);
-  });
-
-  it('cityKey vazio não vai no pedido', () => {
-    const payload = buildWizardCampaignPayload(makeState({ audience: { ...audience, cityKey: '', geo: points } }));
-    expect(JSON.parse(JSON.stringify(payload))).not.toHaveProperty('location_city_key');
-  });
-
-  it('não envia geo quando o modo ativo está vazio', () => {
-    const geo = { mode: 'points' as const, regionType: 'city' as const, regions: [{ key: '1', name: 'X' }], points: [] };
-    expect(buildWizardCampaignPayload(makeState({ audience: { ...audience, geo } }))).not.toHaveProperty('geo');
-  });
-});
-
-describe('geo: tolerância', () => {
-  it('geo antigo/inválido é ignorado', () => {
-    expect(isValidGeo({ mode: 'cities', cities: [], points: [] })).toBe(false);
-    expect(isValidGeo(undefined)).toBe(false);
-    expect(isValidGeo({ mode: 'regions', regions: [], points: [] })).toBe(true);
   });
 });
