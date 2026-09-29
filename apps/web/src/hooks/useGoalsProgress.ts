@@ -53,6 +53,7 @@ export interface GoalsProgressData {
   alerts: FuryAlert[];
   degraded?: boolean;
   firstSyncPending?: boolean;
+  syncedAt?: string | null;
 }
 
 /** Mapa de chaves de objetivo para labels legíveis em português. */
@@ -101,8 +102,8 @@ export function useGoalsProgress(startDate?: string, endDate?: string) {
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
 
-      const res = await api.get<{ data: GoalsProgressData; degraded?: boolean; firstSyncPending?: boolean }>('/v2/metrics/goals-progress', { params });
-      return res.data.data ? { ...res.data.data, degraded: res.data.degraded, firstSyncPending: res.data.firstSyncPending } : null;
+      const res = await api.get<{ data: GoalsProgressData; degraded?: boolean; firstSyncPending?: boolean; syncedAt?: string | null }>('/v2/metrics/goals-progress', { params });
+      return res.data.data ? { ...res.data.data, degraded: res.data.degraded, firstSyncPending: res.data.firstSyncPending, syncedAt: res.data.syncedAt ?? null } : null;
     },
     refetchInterval: (query) => query.state.data?.degraded ? 30_000 : 5 * 60 * 1000,
     placeholderData: (previousData) => previousData, // Mantém dados anteriores durante refetch

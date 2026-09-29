@@ -21,6 +21,7 @@ import {
   formatInvestidoBRL,
 } from '@/lib/format-campaign-metrics';
 import { type Period, getPeriodDates, formatPeriodLabel } from '@/lib/period-utils';
+import { MetaSyncNotice } from '../../components/MetaSyncNotice';
 
 type FilterType = 'todos' | 'ativo' | 'pausado' | 'finalizado';
 
@@ -295,15 +296,7 @@ export function PainelCampanhas() {
         </div>
       )}
 
-      {result.degraded && (
-        <div role="status" className="flex items-start gap-3 bg-warning-light border border-warning/20 rounded-2xl px-4 py-3.5 text-sm text-warning">
-          <span className="shrink-0 mt-0.5">⚠️</span>
-          <div>
-            <p className="font-semibold">{result.firstSyncPending ? 'Preparando seus dados' : 'Dados desatualizados'}</p>
-            <p className="text-xs mt-1 opacity-80">{result.firstSyncPending ? 'A primeira sincronização está em andamento. A lista será atualizada automaticamente.' : 'Mostramos o último snapshot salvo enquanto atualizamos os dados em segundo plano.'}</p>
-          </div>
-        </div>
-      )}
+      {result.degraded && <MetaSyncNotice firstSyncPending={result.firstSyncPending} syncedAt={result.syncedAt} />}
 
       {isError && (
         <div role="alert" className="flex items-start gap-3 bg-warning-light border border-warning/20 rounded-2xl px-4 py-3.5 text-sm text-warning">

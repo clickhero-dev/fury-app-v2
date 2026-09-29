@@ -24,6 +24,19 @@ const dateRangeSchema = z.object({
   endDate: dateOnlySchema.optional(),
 });
 
+export const LEAD_STATUSES = [
+  'novo',
+  'não contatado',
+  'tentativa de contato',
+  'negociando',
+  'comprou',
+  'não comprou',
+] as const;
+
+const updateLeadStatusSchema = z.object({
+  status: z.enum(LEAD_STATUSES),
+});
+
 interface FreshContext {
   syncedAt: Date | null;
   staleForMs: number | null;
@@ -102,16 +115,22 @@ function toSnapshotView(s: {
 }
 
 function toLeadView(l: {
+  id?: string;
   name: string | null;
   email: string | null;
   phone: string | null;
   createdTime: Date | null;
+  status?: string | null;
+  statusUpdatedAt?: Date | null;
 }) {
   return {
+    id: l.id,
     name: l.name,
     email: l.email,
     phone: l.phone,
     createdAt: l.createdTime ? l.createdTime.toISOString() : null,
+    status: l.status ?? 'novo',
+    statusUpdatedAt: l.statusUpdatedAt ? l.statusUpdatedAt.toISOString() : null,
   };
 }
 
@@ -317,6 +336,29 @@ export class MetaSyncV2Controller {
         success: true,
         data: rows.map((r) => ({ id: r.metaCampaignId, name: r.name, objective: r.objective })),
         ...freshnessFields(fresh),
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /** PATCH /leads/:id/status — alteração manual de status (transições livres). */
+  updateLeadStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tenantId = this.tenantOf(req);
+      const { id } = req.params;
+      if (!id) throw new AppError(400, 'MISSING_LEAD_ID', 'Lead ID is required');
+
+      const { status } = updateLeadStatusSchema.parse(req.body);
+
+      const repo = this.repoFactory(tenantId);
+      const changed = await repo.updateLeadStatus(id, status);
+      if (!changed) throw new AppError(404, 'LEAD_NOT_FOUND', 'Lead não encontrado.');
+
+      res.json({
+        success: true,
+        data: { id, status },
         timestamp: new Date().toISOString(),
       });
     } catch (err) {

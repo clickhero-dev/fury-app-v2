@@ -198,8 +198,43 @@ export class MetaSyncRepository extends TenantScopedRepository {
       .values(values.map((v) => ({ ...v, tenantId: this.tenantId })) as any)
       .onConflictDoUpdate({
         target: [metaLeads.tenantId, metaLeads.metaLeadId],
+        // FEAT status de clientes: NUNCA incluir `status`/`statusUpdatedAt` aqui —
+        // o sync não pode sobrescrever a alteração manual de status do usuário.
         set: excludedSetFor(keys) as any,
       });
+  }
+
+  /** Alteração manual de status de um lead (transições livres), tenant-bound. */
+  async updateLeadStatus(leadId: string, status: string): Promise<boolean> {
+    const rows = await this.db
+      .update(metaLeads)
+      .set({ status: status as any, statusUpdatedAt: new Date() })
+      .where(
+        and(eq(metaLeads.tenantId, this.tenantId), eq(metaLeads.id, leadId))
+      )
+      .returning({ id: metaLeads.id });
+    return rows.length > 0;
+  }
+
+  /**
+   * Regra automática do FEAT status de clientes: leads com status `novo` e
+   * criados antes do cutoff (2º dia sem alteração) viram `não contatado`.
+   * Tenant-bound; retorna quantos leads foram atualizados.
+   */
+  async markStaleNewLeadsAsNotContacted(cutoff: Date): Promise<number> {
+    const filters = and(
+      eq(metaLeads.tenantId, this.tenantId),
+      eq(metaLeads.status, 'novo'),
+      lte(metaLeads.createdTime, cutoff)
+    );
+    const changed = await this.db.$count(metaLeads, filters);
+    if (changed === 0) return 0;
+
+    await this.db
+      .update(metaLeads)
+      .set({ status: 'não contatado' as any, statusUpdatedAt: new Date() })
+      .where(filters);
+    return changed;
   }
 
   /** Upsert em lote de mídia Instagram (ON CONFLICT tenant+media). */
