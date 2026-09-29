@@ -292,6 +292,17 @@ export class MetaService {
     return decryptToken(connection.accessToken);
   }
 
+  private async ensureAdAccountIsAvailable(repo: MetaRepository, tenantId: string, adAccountId: string): Promise<void> {
+    const usedByOtherTenant = await repo.countOtherTenantsUsingSelectedAdAccount(adAccountId, tenantId);
+    if (usedByOtherTenant > 0) {
+      throw new AppError(
+        409,
+        'AD_ACCOUNT_IN_USE',
+        'Essa conta de anúncios já está vinculada a outra conta do Fury. Escolha outra conta ou conecte com o login Meta da própria empresa.',
+      );
+    }
+  }
+
   generateMetaAuthUrl(
     tenantId: string,
     context: OAuthContext = 'onboarding',
@@ -435,10 +446,12 @@ export class MetaService {
             ? oldSelectedAdAccountId
             : adAccounts[0].id;
 
+        await this.ensureAdAccountIsAvailable(repo, tenantId, selectedAdAccountId);
         await repo.patchMetaConnection(connectionId, { adAccounts, selectedAdAccountId, updatedAt: new Date() });
         await this.deps.addSyncJob({ tenantId, metaUserId, adAccounts });
       }
     } catch (error) {
+      if (error instanceof AppError && error.code === 'AD_ACCOUNT_IN_USE') throw error;
       console.error('[OAuth] busca de ativos falhou completamente:', error);
     }
 
@@ -505,6 +518,10 @@ export class MetaService {
       connection.selectedAdAccountId && selection.adAccountIds.includes(connection.selectedAdAccountId)
         ? connection.selectedAdAccountId
         : selection.adAccountIds[0] ?? connection.selectedAdAccountId;
+
+    if (selectedAdAccountId) {
+      await this.ensureAdAccountIsAvailable(repo, tenantId, selectedAdAccountId);
+    }
 
     await repo.patchMetaConnection(connection.id, {
         selectedBusinessIds: selection.businessIds,
@@ -785,6 +802,8 @@ export class MetaService {
     if (!exists) {
       throw new AppError(400, 'AD_ACCOUNT_NOT_FOUND', 'Conta de anuncios nao pertence a esta conexao.');
     }
+
+    await this.ensureAdAccountIsAvailable(repo, tenantId, adAccountId);
 
     await repo.patchMetaConnection(connectionId, { selectedAdAccountId: adAccountId });
 
