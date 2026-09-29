@@ -549,7 +549,7 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     })).rejects.toThrow(AppError);
   });
 
-  it('cria whatsapp_conv com link da LP em app.useAdy.com.br/l/<slug> e OUTCOME_TRAFFIC', async () => {
+  it('cria whatsapp_conv com link da LP em app.useady.com.br/l/<slug> e OUTCOME_TRAFFIC', async () => {
     const { service, repo, meta } = makeService();
     repo.metaConnections.push({
       tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
@@ -572,7 +572,7 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     expect(meta.createdCampaigns[0].objective).toBe('OUTCOME_TRAFFIC');
     expect(meta.createdAdSets[0].optimization_goal).toBe('LINK_CLICKS');
     const link = meta.createdAdCreatives[0].object_story_spec.link_data.link;
-    expect(link).toBe(`https://app.useAdy.com.br/l/${TENANT_ID}`);
+    expect(link).toBe(`https://app.useady.com.br/l/${TENANT_ID}`);
     expect(link).not.toContain('/api/lp/');
     expect(meta.createdAdCreatives[0].object_story_spec.link_data.call_to_action.type).toBe('LEARN_MORE');
     expect(repo.campaigns).toHaveLength(1);
@@ -601,7 +601,7 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     });
 
     const link = meta.createdAdCreatives[0].object_story_spec.link_data.link;
-    expect(link).toBe('https://app.useAdy.com.br/l/meu-negocio-test');
+    expect(link).toBe('https://app.useady.com.br/l/meu-negocio-test');
     expect(link).not.toContain('slug-antigo');
     expect(link).not.toContain(TENANT_ID);
     expect(result.success).toBe(true);
@@ -630,7 +630,7 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     });
 
     const link = meta.createdAdCreatives[0].object_story_spec.link_data.link;
-    expect(link).toBe('https://app.useAdy.com.br/l/meu-negocio-test');
+    expect(link).toBe('https://app.useady.com.br/l/meu-negocio-test');
     expect(link).not.toContain(TENANT_ID);
     expect(result.success).toBe(true);
   });
@@ -668,8 +668,8 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     expect(meta.createdAdSets).toHaveLength(1);
     // N adcreatives + N ads com nomes distintos
     expect(meta.createdAdCreatives).toHaveLength(2);
-    expect(meta.createdAdCreatives[0].name).toBe('Creative — Ady #1');
-    expect(meta.createdAdCreatives[1].name).toBe('Creative — Ady #2');
+    expect(meta.createdAdCreatives[0].name).toBe('Creative — ady #1');
+    expect(meta.createdAdCreatives[1].name).toBe('Creative — ady #2');
     expect(meta.createdAds).toHaveLength(2);
     expect(meta.createdAds[0].name).toContain(' #1');
     expect(meta.createdAds[1].name).toContain(' #2');
@@ -993,7 +993,7 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
     const privacy = meta.createdLeadForms[0].body.privacy_policy;
     expect(privacy).toBeDefined();
     // Slug derivado do NOME da organização (não do tenants.slug desatualizado)
-    expect(privacy.url).toBe('https://app.useAdy.com.br/privacidade/meu-negocio-test');
+    expect(privacy.url).toBe('https://app.useady.com.br/privacidade/meu-negocio-test');
     expect(privacy.link_text).toBe('Política de Privacidade');
     (mockDb.db.query.tenants.findFirst as any).mockReset();
   });
@@ -1005,7 +1005,7 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
     await service.createCampaignFromWizard(leadsArgs as any);
 
     const privacy = meta.createdLeadForms[0].body.privacy_policy;
-    expect(privacy.url).toBe(`https://app.useAdy.com.br/privacidade/${TENANT_ID}`);
+    expect(privacy.url).toBe(`https://app.useady.com.br/privacidade/${TENANT_ID}`);
   });
 
   it('arquiva o formulário no rollback quando a criação do adset falha', async () => {
