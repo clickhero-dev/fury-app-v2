@@ -1,8 +1,10 @@
 import { Worker } from 'bullmq';
 import { db, metaConnections } from '../lib/db.js';
+import { eq } from 'drizzle-orm';
 import { getMetaSyncQueue } from '../lib/queue.js';
 import { metaSyncService, type MetaSyncRunResult } from '../services/meta/meta-sync.service.js';
 import { notifyMetaSyncFailure } from '../lib/meta-sync-alerts.js';
+import { captureServerException } from '../lib/analytics.js';
 
 export const META_SYNC_QUEUE_NAME = 'meta-sync';
 
@@ -20,16 +22,39 @@ export async function getMetaSyncTenantIds(): Promise<string[]> {
 }
 
 /**
- * Enfileira um job `meta-sync:run` por tenant com jobId determinístico
- * (tenant + ciclo de 15min) — dedupe multi-pod via BullMQ.
+ * Contas Meta únicas que exigem sync. Worker pode ler a conexão via db direto
+ * (exceção documentada ADR-0001); toda escrita segue via MetaSyncRepository.
+ */
+export async function getMetaSyncAdAccountIds(): Promise<string[]> {
+  const rows = await db
+    .select({ adAccountId: metaConnections.selectedAdAccountId })
+    .from(metaConnections);
+  return [...new Set(rows.map((row) => row.adAccountId).filter((id): id is string => Boolean(id)))];
+}
+
+async function getMetaSyncAdAccountIdForTenant(tenantId: string): Promise<string | null> {
+  const connection = await db.query.metaConnections.findFirst({
+    where: eq(metaConnections.tenantId, tenantId),
+  });
+  return connection?.selectedAdAccountId ?? null;
+}
+
+/**
+ * Enfileira um job `meta-sync:run` por conta de anúncios com jobId determinístico
+ * (conta + ciclo de 15min) — dedupe multi-pod via BullMQ.
  */
 export async function enqueueMetaSyncRuns(
   timestamp: string,
   queue: { add: (...args: any[]) => Promise<unknown> }
 ): Promise<void> {
-  const tenantIds = await getMetaSyncTenantIds();
-  for (const tenantId of tenantIds) {
-    await enqueueMetaSyncTenantRun({ tenantId, reason: 'scheduled', timestamp, queue });
+  const adAccountIds = await getMetaSyncAdAccountIds();
+  const windowKey = windowKeyFor(timestamp).replace(/:/g, '-');
+  for (const adAccountId of adAccountIds) {
+    await queue.add(
+      'meta-sync:run',
+      { adAccountId, reason: 'scheduled' },
+      { jobId: `meta-sync-acc-${adAccountId}-${windowKey}` },
+    );
   }
 }
 
@@ -41,11 +66,13 @@ export async function enqueueMetaSyncTenantRun(args: {
   queue?: { add: (...args: any[]) => Promise<unknown> };
 }): Promise<void> {
   const queue = args.queue ?? await getMetaSyncQueue();
+  const adAccountId = await getMetaSyncAdAccountIdForTenant(args.tenantId);
+  if (!adAccountId) return;
   const windowKey = windowKeyFor(args.timestamp ?? new Date().toISOString()).replace(/:/g, '-');
   const staleRefresh = args.reason === 'stale-fallback';
   await queue.add(
     'meta-sync:run',
-    { tenantId: args.tenantId, reason: args.reason },
+    { tenantId: args.tenantId, adAccountId, reason: args.reason },
     staleRefresh
       ? { jobId: `meta-sync-stale-${args.tenantId}`, removeOnComplete: { age: 300 } }
       : { jobId: `meta-sync-${args.tenantId}-${windowKey}` }
@@ -74,15 +101,21 @@ export async function processMetaSyncRun(tenantId: string, reason: string): Prom
   }
 }
 
-let metaSyncWorkerInstance: Worker<{ tenantId: string; reason?: string; timestamp?: string }> | null = null;
+type MetaSyncJobData = { tenantId?: string; adAccountId?: string; reason?: string; timestamp?: string };
+let metaSyncWorkerInstance: Worker<MetaSyncJobData> | null = null;
 
 export async function startMetaSyncWorker(): Promise<Worker> {
-  const worker = new Worker<{ tenantId: string; reason?: string; timestamp?: string }>(
+  const worker = new Worker<MetaSyncJobData>(
     META_SYNC_QUEUE_NAME,
     async (job) => {
       if (job.name === 'meta-sync:run') {
-        const { tenantId, reason } = job.data;
-        await processMetaSyncRun(tenantId, reason ?? 'scheduled');
+        const { tenantId, adAccountId, reason } = job.data;
+        if (adAccountId) {
+          await metaSyncService.syncAdAccount({ adAccountId, reason: reason ?? 'scheduled' });
+        } else if (tenantId) {
+          // Jobs legados em voo continuam compatíveis durante o deploy.
+          await processMetaSyncRun(tenantId, reason ?? 'scheduled');
+        }
       } else {
         // 'meta-sync:tick' / 'meta-sync:bootstrap' → enfileira runs por tenant.
         const ts = job.data.timestamp ?? new Date().toISOString();
@@ -98,6 +131,17 @@ export async function startMetaSyncWorker(): Promise<Worker> {
 
   worker.on('error', (err) => {
     console.error('[meta-sync] Worker error:', err.message);
+    captureServerException(err, { path: 'meta-sync:worker' });
+  });
+
+  worker.on('failed', (job, err) => {
+    // Somente identificadores operacionais entram na telemetria; nunca token ou payload completo.
+    const data = job?.data;
+    captureServerException(err, {
+      path: 'meta-sync:worker',
+      ...(data?.tenantId ? { tenantId: data.tenantId } : {}),
+      ...(data?.adAccountId ? { adAccountId: data.adAccountId } : {}),
+    });
   });
 
   metaSyncWorkerInstance = worker;

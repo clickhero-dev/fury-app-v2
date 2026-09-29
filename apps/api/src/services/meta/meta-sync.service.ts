@@ -64,6 +64,7 @@ export interface MetaSyncApi {
 export interface MetaSyncServiceDeps {
   repoFactory: (tenantId: string) => MetaSyncRepository;
   getMetaContext: (tenantId: string) => Promise<MetaSyncContext>;
+  getMetaContextsByAdAccount?: (adAccountId: string) => Promise<Array<{ tenantId: string; context: MetaSyncContext }>>;
   metaApi: MetaSyncApi;
   invalidateCampaignsCache: (tenantId: string) => Promise<void>;
   invalidateHttpCache: (tenantId: string, pathPrefixes: string[]) => Promise<void>;
@@ -149,6 +150,20 @@ export async function getMetaSyncContext(tenantId: string): Promise<MetaSyncCont
   };
 }
 
+/** Resolve todos os tenants ativos de uma conta para o fan-out sem escrita fora do repository. */
+export async function getMetaSyncContextsByAdAccount(adAccountId: string): Promise<Array<{ tenantId: string; context: MetaSyncContext }>> {
+  const connections = await new MetaRepository('__meta-sync-global__').findMetaConnectionsBySelectedAdAccount(adAccountId);
+  return connections.map((connection) => ({
+    tenantId: connection.tenantId,
+    context: {
+      accessToken: decryptMetaToken(connection.accessToken),
+      adAccountId,
+      // Best-effort: tenants que compartilham conta usam o IG da primeira conexão.
+      instagramUserId: connection.selectedInstagramUserId ?? null,
+    },
+  }));
+}
+
 /** Normaliza os insights de uma campanha para o formato das métricas do painel. */
 export function insightToMetrics(
   insight: MetaInsightsData,
@@ -197,7 +212,59 @@ const INSIGHTS_REFRESH_MS = 24 * 60 * 60 * 1000;
 export class MetaSyncService {
   constructor(private deps: MetaSyncServiceDeps) {}
 
+  /**
+   * Sincroniza a fonte Meta uma vez e replica o pipeline de escrita para cada
+   * tenant vinculado. O primeiro contexto é canônico; o cache por operação
+   * impede chamadas externas repetidas, mas cada tenant preserva seus runs e caches.
+   */
+  async syncAdAccount(args: { adAccountId: string; reason: string }): Promise<MetaSyncRunResult> {
+    const contexts = await (this.deps.getMetaContextsByAdAccount ?? getMetaSyncContextsByAdAccount)(args.adAccountId);
+    if (contexts.length === 0) {
+      throw new AppError(404, 'AD_ACCOUNT_NOT_FOUND', 'Conta de anúncios não encontrada para sincronizar.');
+    }
+
+    const canonicalContext = contexts[0].context;
+    const cache = new Map<string, Promise<unknown>>();
+    const metaApi = Object.fromEntries(
+      Object.entries(this.deps.metaApi).map(([name, fn]) => [name, (...params: unknown[]) => {
+        const key = `${name}:${JSON.stringify(params)}`;
+        let result = cache.get(key);
+        if (!result) {
+          result = Promise.resolve((fn as (...args: unknown[]) => unknown)(...params));
+          cache.set(key, result);
+        }
+        return result;
+      }]),
+    ) as unknown as MetaSyncApi;
+    const runner = new MetaSyncService({
+      ...this.deps,
+      metaApi,
+      getMetaContext: async () => canonicalContext,
+    });
+
+    const results: MetaSyncRunResult[] = [];
+    for (const { tenantId } of contexts) {
+      results.push(await runner.syncTenantPipeline({ tenantId, reason: args.reason }));
+    }
+    return results[0];
+  }
+
+  /** Compatibilidade para callers por tenant: no singleton delega ao sync por conta. */
   async syncTenant(args: { tenantId: string; reason: string }): Promise<MetaSyncRunResult> {
+    if (this.deps.getMetaContextsByAdAccount) {
+      try {
+        const context = await this.deps.getMetaContext(args.tenantId);
+        return this.syncAdAccount({ adAccountId: context.adAccountId, reason: args.reason });
+      } catch {
+        // Preserva o registro client-safe de falha por tenant do pipeline legado.
+        return this.syncTenantPipeline(args);
+      }
+    }
+    return this.syncTenantPipeline(args);
+  }
+
+  /** Pipeline interno: chamadas Meta já podem estar compartilhadas pelo syncAdAccount. */
+  private async syncTenantPipeline(args: { tenantId: string; reason: string }): Promise<MetaSyncRunResult> {
     const repo = this.deps.repoFactory(args.tenantId);
     const startedAt = new Date();
     const partialFailures: PartialFailure[] = [];
@@ -478,6 +545,7 @@ export class MetaSyncService {
 export const metaSyncService = new MetaSyncService({
   repoFactory: (tenantId: string) => new MetaSyncRepository(tenantId),
   getMetaContext: getMetaSyncContext,
+  getMetaContextsByAdAccount: getMetaSyncContextsByAdAccount,
   metaApi: {
     listAccountCampaigns,
     campaignHasLeadForm,

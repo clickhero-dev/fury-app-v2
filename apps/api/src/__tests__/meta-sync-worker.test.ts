@@ -12,6 +12,12 @@ Funcionalidade: Agendamento e processamento do sync assíncrono Meta
     Então o padrão é 'a cada 15 minutos' (cron *&#47;15 * * * *)
     E enfileira um job 'meta-sync:bootstrap' no startup
 
+  Cenário: manager registra um Job Scheduler estável sem duplicar em novo startup
+    Dado dois startups do manager
+    Quando o scheduler é registrado
+    Então usa upsertJobScheduler com id 'meta-sync-tick'
+    E o bootstrap mantém jobId fixo
+
   Cenário: job de tick processa um run por tenant
     Dado job 'meta-sync:tick'
     Quando o worker processa
@@ -21,6 +27,11 @@ Funcionalidade: Agendamento e processamento do sync assíncrono Meta
     Dado dois pods processando o mesmo tick no mesmo ciclo
     Quando cada um enfileira o run do tenant T
     Então ambos usam o MESMO jobId (BullMQ deduplica)
+
+  Cenário: tick deduplica tenants que compartilham a mesma conta de anúncios
+    Dado duas conexões com a mesma ad account
+    Quando o tick enfileira runs
+    Então existe um único job por ad account e ciclo
 
   Cenário: run de sucesso não dispara email
     Dado syncTenant retorna status 'success'
@@ -36,6 +47,11 @@ Funcionalidade: Agendamento e processamento do sync assíncrono Meta
     Dado worker iniciado
     Quando stopMetaSyncWorker
     Então o worker é fechado
+
+  Cenário: worker reporta erro e falha de job sem expor payload
+    Dado um erro emitido pelo worker e um job que falhou
+    Quando os eventos são processados
+    Então captureServerException recebe somente tenantId e adAccountId do job
 */
 // =============================================================================
 
@@ -45,23 +61,27 @@ const {
   dbMock,
   workerInstances,
   queueAddSpy,
+  queueUpsertJobSchedulerSpy,
   mockSyncTenant,
   mockNotifyFailure,
+  mockCaptureServerException,
 } = vi.hoisted(() => {
   const dbMock = {
     select: vi.fn(() => ({
       from: vi.fn(async () => [
-        { tenantId: 't1' },
-        { tenantId: 't2' },
+        { tenantId: 't1', adAccountId: 'act_1' },
+        { tenantId: 't2', adAccountId: 'act_2' },
       ]),
     })),
-    query: {},
+    query: { metaConnections: { findFirst: vi.fn(async () => ({ selectedAdAccountId: 'act_1' })) } },
   } as any;
-  const workerInstances: Array<{ name: string; processor: (job: any) => Promise<any> }> = [];
+  const workerInstances: Array<{ name: string; processor: (job: any) => Promise<any>; emit: (event: string, ...args: any[]) => void }> = [];
   const queueAddSpy = vi.fn();
+  const queueUpsertJobSchedulerSpy = vi.fn();
   const mockSyncTenant = vi.fn();
   const mockNotifyFailure = vi.fn();
-  return { dbMock, workerInstances, queueAddSpy, mockSyncTenant, mockNotifyFailure };
+  const mockCaptureServerException = vi.fn();
+  return { dbMock, workerInstances, queueAddSpy, queueUpsertJobSchedulerSpy, mockSyncTenant, mockNotifyFailure, mockCaptureServerException };
 });
 
 vi.mock('bullmq', () => {
@@ -69,13 +89,18 @@ vi.mock('bullmq', () => {
     name: string;
     processor: (job: any) => Promise<any>;
     closed = false;
+    private listeners = new Map<string, (...args: any[]) => void>();
     constructor(name: string, processor: (job: any) => Promise<any>) {
       this.name = name;
       this.processor = processor;
       workerInstances.push(this);
     }
-    on() {
+    on(event: string, listener: (...args: any[]) => void) {
+      this.listeners.set(event, listener);
       return this;
+    }
+    emit(event: string, ...args: any[]) {
+      this.listeners.get(event)?.(...args);
     }
     async close() {
       this.closed = true;
@@ -89,6 +114,13 @@ vi.mock('bullmq', () => {
     async add(...args: unknown[]) {
       queueAddSpy(...args);
       return { id: 'mock-job' };
+    }
+    async upsertJobScheduler(...args: unknown[]) {
+      queueUpsertJobSchedulerSpy(...args);
+      return { id: 'mock-scheduler' };
+    }
+    async removeRepeatable() {
+      return true;
     }
     async close() {
       return undefined;
@@ -115,6 +147,10 @@ vi.mock('../lib/meta-sync-alerts.js', () => ({
   notifyMetaSyncFailure: mockNotifyFailure,
 }));
 
+vi.mock('../lib/analytics.js', () => ({
+  captureServerException: mockCaptureServerException,
+}));
+
 import {
   startMetaSyncManager,
   stopMetaSyncManager,
@@ -126,6 +162,7 @@ import {
   enqueueMetaSyncTenantRun,
   processMetaSyncRun,
   getMetaSyncTenantIds,
+  getMetaSyncAdAccountIds,
   windowKeyFor,
   META_SYNC_QUEUE_NAME,
 } from '../workers/meta-sync.worker.js';
@@ -136,20 +173,29 @@ describe('BDD: MetaSyncManager (agendamento)', () => {
     workerInstances.length = 0;
   });
 
-  it('Cenário: agenda cron */15 * * * * + bootstrap no startup', async () => {
+  it('Cenário: agenda Job Scheduler */15 * * * * + bootstrap no startup', async () => {
     await startMetaSyncManager();
 
-    const repeatCall = queueAddSpy.mock.calls.find(
-      (args) => args[2]?.repeat && args[2]?.repeat?.pattern
+    expect(queueUpsertJobSchedulerSpy).toHaveBeenCalledWith(
+      'meta-sync-tick',
+      { pattern: '*/15 * * * *' },
+      { name: 'meta-sync:tick', data: {} },
     );
-    expect(repeatCall).toBeTruthy();
-    expect(repeatCall![2].repeat.pattern).toBe('*/15 * * * *');
-    expect(repeatCall![0]).toBe('meta-sync:tick');
-    expect(repeatCall![2].jobId).not.toContain(':');
 
     const bootstrapCall = queueAddSpy.mock.calls.find((args) => args[0] === 'meta-sync:bootstrap');
     expect(bootstrapCall).toBeTruthy();
-    expect(bootstrapCall![2].jobId).not.toContain(':');
+    expect(bootstrapCall![2].jobId).toBe('meta-sync-bootstrap');
+
+    await stopMetaSyncManager();
+  });
+
+  it('Cenário: segundo startup reaproveita o scheduler estável sem criar tick repetível', async () => {
+    await startMetaSyncManager();
+    await startMetaSyncManager();
+
+    expect(queueUpsertJobSchedulerSpy).toHaveBeenCalledTimes(2);
+    expect(queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:tick')).toHaveLength(0);
+    expect(queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:bootstrap')).toHaveLength(2);
 
     await stopMetaSyncManager();
   });
@@ -166,15 +212,45 @@ describe('BDD: MetaSyncWorker', () => {
     expect(ids).toEqual(['t1', 't2']);
   });
 
-  it('Cenário: enqueueMetaSyncRuns enfileira um run por tenant com jobId determinístico', async () => {
+  it('Cenário: enqueueMetaSyncRuns enfileira um run por conta com jobId determinístico', async () => {
     const ts = '2026-09-25T21:30:00.000Z';
     await enqueueMetaSyncRuns(ts, { add: queueAddSpy });
 
     const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:run');
     expect(runCalls.length).toBe(2);
-    expect(runCalls[0][1].tenantId).toBe('t1');
-    expect(runCalls[0][2].jobId).toBe('meta-sync-t1-' + windowKeyFor(ts).replace(/[:.]/g, '-'));
+    expect(runCalls[0][1].adAccountId).toBe('act_1');
+    expect(runCalls[0][2].jobId).toBe('meta-sync-acc-act_1-' + windowKeyFor(ts).replace(/[:.]/g, '-'));
     expect(runCalls[0][2].jobId).not.toContain(':');
+  });
+
+  it('Cenário: enqueueMetaSyncRuns deduplica por ad account', async () => {
+    dbMock.select.mockReturnValueOnce({
+      from: vi.fn(async () => [
+        { adAccountId: 'act_1' },
+        { adAccountId: 'act_1' },
+        { adAccountId: 'act_2' },
+      ]),
+    });
+    const ts = '2026-09-25T21:30:00.000Z';
+
+    await enqueueMetaSyncRuns(ts, { add: queueAddSpy });
+
+    const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:run');
+    expect(runCalls).toHaveLength(2);
+    expect(runCalls.map((args) => args[1])).toEqual([
+      { adAccountId: 'act_1', reason: 'scheduled' },
+      { adAccountId: 'act_2', reason: 'scheduled' },
+    ]);
+    expect(runCalls[0][2].jobId).toBe(`meta-sync-acc-act_1-${windowKeyFor(ts).replace(/:/g, '-')}`);
+  });
+
+  it('Cenário: getMetaSyncAdAccountIds retorna somente contas distintas', async () => {
+    dbMock.select.mockReturnValueOnce({
+      from: vi.fn(async () => [
+        { adAccountId: 'act_1' }, { adAccountId: 'act_1' }, { adAccountId: 'act_2' },
+      ]),
+    });
+    await expect(getMetaSyncAdAccountIds()).resolves.toEqual(['act_1', 'act_2']);
   });
 
   it('Cenário: jobId é determinístico no mesmo ciclo (dedupe multi-pod)', async () => {
@@ -183,8 +259,8 @@ describe('BDD: MetaSyncWorker', () => {
     await enqueueMetaSyncRuns('2026-09-25T21:35:00.000Z', { add: queueAddSpy });
 
     const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:run');
-    const t1Jobs = runCalls.filter((args) => args[1].tenantId === 't1');
-    expect(new Set(t1Jobs.map((args) => args[2].jobId)).size).toBe(1);
+    const accountJobs = runCalls.filter((args) => args[1].adAccountId === 'act_1');
+    expect(new Set(accountJobs.map((args) => args[2].jobId)).size).toBe(1);
   });
 
   it('Cenário: refresh stale usa uma chave por tenant para evitar jobs por request', async () => {
@@ -240,6 +316,23 @@ describe('BDD: MetaSyncWorker', () => {
     expect(workerInstances.length).toBe(1);
     await stopMetaSyncWorker();
     expect(workerInstances[0].closed).toBe(true);
+  });
+
+  it('Cenário: worker captura error e failed com contexto seguro', async () => {
+    const worker = await startMetaSyncWorker() as any;
+    const error = new Error('falha interna');
+
+    worker.emit('error', error);
+    worker.emit('failed', {
+      data: { tenantId: 't1', adAccountId: 'act_1', accessToken: 'não-pode-vazar' },
+    }, error);
+
+    expect(mockCaptureServerException).toHaveBeenCalledWith(error, { path: 'meta-sync:worker' });
+    expect(mockCaptureServerException).toHaveBeenCalledWith(error, {
+      path: 'meta-sync:worker', tenantId: 't1', adAccountId: 'act_1',
+    });
+    expect(mockCaptureServerException.mock.calls[1][1]).not.toHaveProperty('accessToken');
+    await stopMetaSyncWorker();
   });
 
   it('Cenário: worker processa job de run e job de tick', async () => {

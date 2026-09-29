@@ -49,10 +49,21 @@ Funcionalidade: Sincronização assíncrona Meta por tenant (pipeline)
     Dado getMetaContext lança META_CONNECTION_NOT_FOUND
     Quando syncTenant
     Então meta_sync_runs status 'failed' com errorCode META_CONNECTION_NOT_FOUND
+
+  Cenário: uma conta compartilhada sincroniza a Meta uma vez e replica por tenant
+    Dado dois tenants vinculados à mesma ad account
+    Quando syncAdAccount roda
+    Então a API Meta é chamada uma vez e ambos os repositories registram o run
 */
 // =============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('@fury/db', () => {
+  const table = new Proxy({}, { get: () => ({}) });
+  return { db: {}, brandKits: table, clientGoals: table, metaConnections: table, tenants: table, users: table, businessProfileSettings: table };
+});
+
 import { AppError } from '../middleware/errorHandler.js';
 import { MetaSyncService, type MetaSyncContext } from '../services/meta/meta-sync.service.js';
 
@@ -126,6 +137,24 @@ function makeFakes(overrides: {
 describe('BDD: MetaSyncService.syncTenant', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('Cenário: syncAdAccount compartilha chamadas Meta e grava para todos os tenants', async () => {
+    const { repo, metaApi, deps } = makeFakes();
+    const secondRepo = { ...repo, recordSyncRun: vi.fn(async () => ({ id: 'run-2' })) };
+    deps.repoFactory = vi.fn((id: string) => id === 't2' ? secondRepo : repo) as any;
+    (deps as any).getMetaContextsByAdAccount = vi.fn(async () => [
+      { tenantId, context: { accessToken: TOKEN, adAccountId: AD_ACCOUNT, instagramUserId: null } },
+      { tenantId: 't2', context: { accessToken: 'different-token', adAccountId: AD_ACCOUNT, instagramUserId: null } },
+    ]);
+
+    await new MetaSyncService(deps as any).syncAdAccount({ adAccountId: AD_ACCOUNT, reason: 'scheduled' });
+
+    expect(metaApi.listAccountCampaigns).toHaveBeenCalledTimes(1);
+    expect(repo.recordSyncRun).toHaveBeenCalledTimes(1);
+    expect(secondRepo.recordSyncRun).toHaveBeenCalledTimes(1);
+    expect(deps.invalidateCampaignsCache).toHaveBeenCalledWith(tenantId);
+    expect(deps.invalidateCampaignsCache).toHaveBeenCalledWith('t2');
   });
 
   it('Cenário: sincronização completa (happy path)', async () => {
