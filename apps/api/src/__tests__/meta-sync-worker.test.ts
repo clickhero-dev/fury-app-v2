@@ -63,7 +63,13 @@ Funcionalidade: Agendamento e processamento do sync assíncrono Meta
     Dado syncAdAccount retorna runs com status 'failed' e 'success' para tenants distintos
     Quando o worker processa
     Então notifyMetaSyncFailure é chamado só para o tenant com status 'failed'
-    E captureServerEvent registra meta_sync_run_failed sem accessToken
+    E captureServerEvent registra meta_sync_run_failed sem dados sensíveis
+
+  Cenário: exceção no sync por conta alerta e propaga
+    Dado syncAdAccount lança erro inesperado
+    Quando o worker processa
+    Então notifyMetaSyncFailure é chamado com META_SYNC_UNEXPECTED_ERROR
+    E o erro propaga para o evento 'failed' do worker
 */
 // =============================================================================
 
@@ -373,7 +379,23 @@ describe('BDD: MetaSyncWorker', () => {
     await stopMetaSyncWorker();
   });
 
-  it('Cenário: run failed no sync por conta dispara email de alerta e telemetria sem payload', async () => {
+  it('Cenário: exceção no sync por conta alerta META_SYNC_UNEXPECTED_ERROR e propaga para o worker', async () => {
+    const worker = await startMetaSyncWorker() as any;
+    mockSyncAdAccount.mockRejectedValue(new Error('token expirado'));
+
+    await expect(
+      worker.processor({ name: 'meta-sync:run', data: { tenantId: 't1', adAccountId: 'act_1', reason: 'tick' } })
+    ).rejects.toThrow('token expirado');
+
+    expect(mockNotifyFailure).toHaveBeenCalledWith({
+      tenantId: 't1',
+      errorCode: 'META_SYNC_UNEXPECTED_ERROR',
+      message: 'Falha inesperada na sincronização Meta.',
+    });
+    await stopMetaSyncWorker();
+  });
+
+  it('Cenário: run failed no sync por conta dispara email de alerta e telemetria sem dados sensíveis', async () => {
     const worker = await startMetaSyncWorker() as any;
     mockSyncAdAccount.mockResolvedValue([
       { tenantId: 't1', status: 'failed', errorCode: 'META_RATE_LIMIT', errorMessage: 'limite excedido', partialFailures: [] },

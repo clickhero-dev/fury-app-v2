@@ -111,7 +111,18 @@ export async function startMetaSyncWorker(): Promise<Worker> {
       if (job.name === 'meta-sync:run') {
         const { tenantId, adAccountId, reason } = job.data;
         if (adAccountId) {
-          const results = await metaSyncService.syncAdAccount({ adAccountId, reason: reason ?? 'scheduled' });
+          let results: Array<{ tenantId: string } & MetaSyncRunResult>;
+          try {
+            results = await metaSyncService.syncAdAccount({ adAccountId, reason: reason ?? 'scheduled' });
+          } catch (err) {
+            // Paridade com o caminho legado: exceção inesperada também alerta.
+            await notifyMetaSyncFailure({
+              tenantId: tenantId ?? 'unknown',
+              errorCode: 'META_SYNC_UNEXPECTED_ERROR',
+              message: 'Falha inesperada na sincronização Meta.',
+            });
+            throw err;
+          }
           // Falhas esperadas retornam status 'failed' (não lançam): alerta + telemetria,
           // preservando o comportamento do caminho legado por tenant.
           const failed = results.filter((result) => result.status === 'failed' && result.tenantId);
