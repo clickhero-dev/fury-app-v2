@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
 import { MetaSyncService, type PartialFailure } from '../services/meta/meta-sync.service.js';
 import { MetaSyncRepository } from '../repository/meta-sync.repository.js';
+import { isLeadObjective } from '../utils/meta-conversion-events.js';
 
 const STALE_MS = 3 * 60 * 60 * 1000;
 
@@ -114,6 +115,31 @@ function toSnapshotView(s: {
   };
 }
 
+/**
+ * Campanha de captação (formulário/mensagem): o número exibido como "clientes"
+ * E o envio de formulário. Fonte única = `meta_leads` (mesma origem da página
+ * Clientes e do card "Pessoas" do detalhe). Insights/`conversions` do cache
+ * Meta NÃO entram — o fallback antigo contava clique como cliente.
+ */
+function isLeadCampaign(view: Pick<SnapshotView, 'objective' | 'hasLeadForm'>): boolean {
+  return isLeadObjective(view.objective) || view.hasLeadForm === true;
+}
+
+function withLeadCounts(views: SnapshotView[], leadCounts: Map<string, number>): SnapshotView[] {
+  return views.map((view) => {
+    if (!isLeadCampaign(view)) return view;
+    const conversions = leadCounts.get(view.id) ?? 0;
+    const spend = view.spend;
+    const metrics = { ...view.metrics, conversions };
+    return {
+      ...view,
+      conversions,
+      metrics,
+      cpa: conversions > 0 ? spend / conversions : null,
+    };
+  });
+}
+
 function toLeadView(l: {
   id?: string;
   name: string | null;
@@ -208,7 +234,7 @@ export class MetaSyncV2Controller {
         limit: query.limit,
         offset: query.offset,
       });
-      let views = items.map(toSnapshotView);
+      let views = withLeadCounts(items.map(toSnapshotView), await repo.countLeadsByCampaign());
       if (query.startDate && query.endDate) {
         const rows = await repo.findCampaignDailyInsights({ startDate: query.startDate, endDate: query.endDate });
         const grouped = new Map<string, Record<string, number>>();
@@ -242,6 +268,10 @@ export class MetaSyncV2Controller {
           };
           return { ...view, ...metrics, metrics };
         });
+        // Campanha de captação: o período ajusta investimento/cliques, mas o
+        // número de clientes continua sendo os envios de formulário (cumulativo),
+        // igual à página Clientes e ao card "Pessoas" do detalhe.
+        views = withLeadCounts(views, await repo.countLeadsByCampaign());
       }
 
       res.json({

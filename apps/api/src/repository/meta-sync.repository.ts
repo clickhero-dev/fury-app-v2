@@ -334,6 +334,28 @@ export class MetaSyncRepository extends TenantScopedRepository {
     return { items, total: countRow?.count ?? 0 };
   }
 
+  /**
+   * Contagem de envios de formulário por campanha (fonte do número "Clientes").
+   * Contrato COMPLETO: campanhas sem lead aparecem com 0 — o caller não deve
+   * tratar ausência como "sem dado" nem cair em outro fallback.
+   */
+  async countLeadsByCampaign(): Promise<Map<string, number>> {
+    const rows = await this.db
+      .select({
+        metaCampaignId: metaLeads.metaCampaignId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(metaLeads)
+      .where(eq(metaLeads.tenantId, this.tenantId))
+      .groupBy(metaLeads.metaCampaignId);
+
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      if (row.metaCampaignId) counts.set(row.metaCampaignId, Number(row.count) || 0);
+    }
+    return counts;
+  }
+
   /** Campanhas de formulário (OUTCOME_LEADS com form) — filtro da página de Leads. */
   async findLeadCampaigns(): Promise<Array<{
     metaCampaignId: string;

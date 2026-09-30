@@ -78,6 +78,13 @@ export interface ICampaignRepository {
 
   findCreativeAsset(id: string, tenantId: string): Promise<CreativeAssetRecord | null>;
 
+  /**
+   * Envios de formulário persistidos para uma campanha (fonte do número
+   * "Clientes"/"Pessoas" em campanha de captação). Mesma origem da página
+   * Clientes — garante que lista e detalhe mostrem o MESMO número.
+   */
+  countLeadFormSubmissions(tenantId: string, metaCampaignId: string): Promise<number>;
+
   findRecentTakedowns(tenantId: string, campaignId: string, limit?: number): Promise<FuryInsightRecord[]>;
 
   findActiveAutomationRules(tenantId: string): Promise<AutomationRuleRecord[]>;

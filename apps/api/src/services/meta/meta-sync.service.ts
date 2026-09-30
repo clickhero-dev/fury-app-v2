@@ -27,6 +27,7 @@ import {
   getInstagramMedia,
   getInstagramMediaInsights,
   getLeadFormQuestions,
+  getLeadFormData,
 } from '../../lib/meta-api.js';
 import { invalidateCampaignsCache } from '../../lib/campaigns-cache.js';
 import { invalidateHttpCache } from '../../lib/http-cache.js';
@@ -53,6 +54,8 @@ export interface MetaSyncApi {
   listCampaignAds(campaignId: string, accessToken: string): Promise<Array<{ id: string; name?: string }>>;
   listAdLeads(adId: string, accessToken: string): Promise<Array<Record<string, unknown>>>;
   getLeadFormQuestions(formId: string, accessToken: string): Promise<MetaLeadFormQuestion[]>;
+  /** Envios de formulário direto no form (mesma fonte usada pela tela de detalhe). */
+  getLeadFormData(formId: string, accessToken: string): Promise<{ data: Array<Record<string, unknown>> }>;
   getInstagramMedia(igUserId: string, accessToken: string): Promise<InstagramMediaItem[]>;
   getInstagramMediaInsights(
     mediaId: string,
@@ -201,6 +204,81 @@ export function normalizeLead(
 
 const DAYS_30_MS = 30 * 24 * 60 * 60 * 1000;
 const INSIGHTS_REFRESH_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Coleta os envios de formulário de uma campanha direto na Meta.
+ *
+ * Ordem (fonte única da verdade p/ a tela de Campanhas e o detalhe):
+ * 1. **Formulário** (`/{form_id}` — `budget.lead_form_id`): é o caminho que o
+ *    detalhe da campanha usa e o que retorna os envios do form. Sem ele, a
+ *    campanha aparece com clientes na tela de detalhe e vazio na lista.
+ * 2. **Ads** (`/{ad_id}/leads`): fallback para campanha criada fora do Fury ou
+ *    sem form gravado — o lead pertence ao ad.
+ *
+ * Dedup por id do lead (form compartilhado entre criativos não conta 2x).
+ */
+export async function collectCampaignLeads(
+  api: Pick<MetaSyncApi, 'getLeadFormData' | 'getLeadFormQuestions' | 'listCampaignAds' | 'listAdLeads'>,
+  args: { campaignId: string; leadFormId?: string | null; accessToken: string },
+): Promise<MetaLeadUpsert[]> {
+  const { campaignId, leadFormId, accessToken } = args;
+  const seen = new Set<string>();
+
+  const pushLead = (
+    leads: MetaLeadUpsert[],
+    lead: Record<string, unknown>,
+    questions: MetaLeadFormQuestion[],
+  ) => {
+    const leadId = typeof lead.id === 'string' && lead.id ? lead.id : null;
+    if (leadId) {
+      if (seen.has(leadId)) return;
+      seen.add(leadId);
+    }
+    const normalized = normalizeLead(lead, questions);
+    leads.push({
+      metaLeadId: leadId ?? `lead_${Date.now()}_${leads.length}`,
+      metaCampaignId: campaignId,
+      name: normalized.name,
+      email: normalized.email,
+      phone: normalized.phone,
+      createdTime: normalized.createdTime,
+    });
+  };
+
+  const questionsFor = async (formId: string): Promise<MetaLeadFormQuestion[]> => {
+    try {
+      return await api.getLeadFormQuestions(formId, accessToken);
+    } catch (err) {
+      console.warn(`[MetaSync] falha ao buscar perguntas do formulário ${formId}:`, (err as Error).message);
+      return [];
+    }
+  };
+
+  // 1) Caminho do formulário (mesma fonte do detalhe da campanha).
+  if (leadFormId) {
+    const [response, questions] = await Promise.all([
+      api.getLeadFormData(leadFormId, accessToken),
+      questionsFor(leadFormId),
+    ]);
+    const leads: MetaLeadUpsert[] = [];
+    for (const lead of response.data || []) pushLead(leads, lead, questions);
+    if (leads.length > 0) return leads;
+  }
+
+  // 2) Fallback: leads por ad.
+  const leads: MetaLeadUpsert[] = [];
+  const ads = await api.listCampaignAds(campaignId, accessToken);
+  const questionsByForm = new Map<string, MetaLeadFormQuestion[]>();
+  for (const ad of ads) {
+    const adLeads = await api.listAdLeads(ad.id, accessToken);
+    for (const lead of adLeads) {
+      const formId = typeof lead.form_id === 'string' && lead.form_id ? lead.form_id : null;
+      if (formId && !questionsByForm.has(formId)) questionsByForm.set(formId, await questionsFor(formId));
+      pushLead(leads, lead, formId ? (questionsByForm.get(formId) ?? []) : []);
+    }
+  }
+  return leads;
+}
 
 /**
  * MetaSyncService — pipeline assíncrono de sincronização Meta (fluxo de dados v2).
@@ -416,7 +494,13 @@ export class MetaSyncService {
         }
         if (!hasForm) continue;
 
-        const leads = await this.collectLeads(repo, campaign.id, ctx.accessToken);
+        // Fonte: formulário (`budget.lead_form_id` — mesmo caminho do detalhe da
+        // campanha) com fallback por ad. `localFormId` já foi lido do banco acima.
+        const leads = await collectCampaignLeads(this.deps.metaApi, {
+          campaignId: campaign.id,
+          leadFormId: localFormMap.get(campaign.id) ?? null,
+          accessToken: ctx.accessToken,
+        });
         if (leads.length > 0) {
           await repo.upsertLeads(leads);
           counts.leadsCount += leads.length;
@@ -505,45 +589,6 @@ export class MetaSyncService {
     };
   }
 
-  private async collectLeads(
-    repo: MetaSyncRepository,
-    campaignId: string,
-    accessToken: string
-  ): Promise<MetaLeadUpsert[]> {
-    const ads = await this.deps.metaApi.listCampaignAds(campaignId, accessToken);
-    const seen = new Set<string>();
-    const questionsByForm = new Map<string, MetaLeadFormQuestion[]>();
-    const leads: MetaLeadUpsert[] = [];
-    for (const ad of ads) {
-      const adLeads = await this.deps.metaApi.listAdLeads(ad.id, accessToken);
-      for (const lead of adLeads) {
-        const leadId = typeof lead.id === 'string' && lead.id ? lead.id : null;
-        if (leadId) {
-          if (seen.has(leadId)) continue;
-          seen.add(leadId);
-        }
-        const formId = typeof lead.form_id === 'string' && lead.form_id ? lead.form_id : null;
-        if (formId && !questionsByForm.has(formId)) {
-          try {
-            questionsByForm.set(formId, await this.deps.metaApi.getLeadFormQuestions(formId, accessToken));
-          } catch (err) {
-            console.warn(`[MetaSync] falha ao buscar perguntas do formulário ${formId}:`, (err as Error).message);
-            questionsByForm.set(formId, []);
-          }
-        }
-        const normalized = normalizeLead(lead, formId ? questionsByForm.get(formId) : undefined);
-        leads.push({
-          metaLeadId: leadId ?? `lead_${Date.now()}_${leads.length}`,
-          metaCampaignId: campaignId,
-          name: normalized.name,
-          email: normalized.email,
-          phone: normalized.phone,
-          createdTime: normalized.createdTime,
-        });
-      }
-    }
-    return leads;
-  }
 }
 
 /** Singleton usado por worker/manager e pelo fallback stale dos endpoints v2 (DI). */
@@ -558,6 +603,7 @@ export const metaSyncService = new MetaSyncService({
     listCampaignAds,
     listAdLeads,
     getLeadFormQuestions,
+    getLeadFormData,
     getInstagramMedia,
     getInstagramMediaInsights,
   },

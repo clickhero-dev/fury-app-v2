@@ -164,6 +164,8 @@ function makeFakes(overrides: Record<string, unknown> = {}) {
       { metaCampaignId: 'm1', name: 'Camp 1', objective: 'OUTCOME_LEADS', hasLeadForm: true },
     ]),
     updateLeadStatus: vi.fn(async () => true),
+    /** Envios de formulário por campanha (fonte do número "Clientes"). */
+    countLeadsByCampaign: vi.fn(async () => new Map<string, number>([])),
     findInstagramInsights: vi.fn(async () => [
       { id: 'ig1', mediaId: 'media-1', commentsCount: 4, insights: { saved: 3, reach: 100 } },
     ]),
@@ -434,6 +436,60 @@ describe('BDD: Endpoints v2', () => {
       .set('Authorization', `Bearer ${authToken(TENANT)}`);
     expect(repo.findCampaignDailyInsights).toHaveBeenCalledWith({ startDate: '2026-09-25', endDate: '2026-09-26' });
     expect(res.body.data.summary).toMatchObject({ spend: 20, conversions: 3, clicks: 8, impressions: 180 });
+  });
+
+  it('Cenário: campanha de formulário sem leads → 0 clientes, mesmo com insights em cache contando cliques', async () => {
+    const { controller, repo } = makeFakes({
+      repo: {
+        findCampaignSnapshots: vi.fn(async () => ({
+          items: [
+            {
+              id: 's-lead', tenantId: TENANT, metaCampaignId: 'lead-camp', name: 'Inglês/Espanhol R$140!',
+              status: 'ACTIVE', objective: 'OUTCOME_LEADS', budget: {}, hasLeadForm: true, lastInsightsAt: new Date(),
+              metrics: { spend: 6.73, impressions: 122, clicks: 3, conversions: 3 },
+            },
+          ],
+          total: 1,
+        })),
+        findCampaignDailyInsights: vi.fn(async () => [
+          { metaCampaignId: 'lead-camp', date: '2026-09-29', metrics: { spend: 6.73, conversions: 3, clicks: 3, impressions: 122 } },
+        ]),
+        countLeadsByCampaign: vi.fn(async () => new Map<string, number>()),
+      },
+    });
+    const app = buildApp(controller);
+
+    const res = await request(app)
+      .get('/api/v2/campaigns?startDate=2026-09-01&endDate=2026-09-29')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data[0].conversions).toBe(0);
+    expect(repo.countLeadsByCampaign).toHaveBeenCalled();
+  });
+
+  it('Cenário: campanha de formulário com 3 envios → Clientes 3 (mesmo número do detalhe)', async () => {
+    const { controller } = makeFakes({
+      repo: {
+        findCampaignSnapshots: vi.fn(async () => ({
+          items: [
+            {
+              id: 's-lead', tenantId: TENANT, metaCampaignId: 'lead-camp', name: 'Campanha Formulário',
+              status: 'ACTIVE', objective: 'OUTCOME_LEADS', budget: {}, hasLeadForm: true, lastInsightsAt: new Date(),
+              metrics: { spend: 6.73, impressions: 122, clicks: 3, conversions: 3 },
+            },
+          ],
+          total: 1,
+        })),
+        countLeadsByCampaign: vi.fn(async () => new Map([['lead-camp', 3]])),
+      },
+    });
+    const app = buildApp(controller);
+
+    const res = await request(app).get('/api/v2/campaigns').set('Authorization', `Bearer ${authToken(TENANT)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data[0].conversions).toBe(3);
   });
 
   it('Cenário: alterar status de um lead → 200 + update no repo', async () => {
