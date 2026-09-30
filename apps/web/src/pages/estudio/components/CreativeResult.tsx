@@ -210,6 +210,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
 
   return (
     <div className="space-y-6">
+      {/* Selo de compliance desativado
       {(() => {
         // ponytail: o selo segue a versão selecionada no carrossel
         // (displayComplianceStatus); os "motivos" detalhados (complianceNotes)
@@ -258,6 +259,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
           </TooltipProvider>
         );
       })()}
+      */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
         {/* Preview area — video or image */}
         <div className="overflow-hidden rounded-2xl border border-[#E6E8EC]">

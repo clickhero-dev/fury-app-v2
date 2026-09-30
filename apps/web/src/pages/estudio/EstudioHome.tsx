@@ -423,6 +423,7 @@ export function EstudioHome() {
                   </div>
                 </div>
 
+                {/* Filtro de status de compliance desativado
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-text-tertiary">Status:</span>
                   <div className="flex items-center gap-1.5">
@@ -446,6 +447,7 @@ export function EstudioHome() {
                 })}
                   </div>
                 </div>
+                */}
 
                 <button
                   type="button"

@@ -65,24 +65,26 @@ export function complianceBadge(
   complianceStatus: string | null | undefined,
   notes?: string | null
 ): ComplianceBadgeInfo {
-  const parsed = parseComplianceNotes(notes);
-
-  if (complianceStatus === 'approved' || parsed.approved === true) {
-    return { label: 'Aprovado', tone: 'approved', reasons: [], hint: COMPLIANCE_APPROVED_HINT };
-  }
-
-  if (complianceStatus === 'rejected' || parsed.approved === false) {
-    return {
-      label: 'Reprovado',
-      tone: 'rejected',
-      reasons: parsed.issues,
-      hint: COMPLIANCE_REJECTED_HINT,
-    };
-  }
-
-  if (complianceStatus === 'pending_compliance' || complianceStatus === 'pending') {
-    return { label: 'Analisando...', tone: 'pending', reasons: [], hint: COMPLIANCE_PENDING_HINT };
-  }
+  // Compliance desativado: sem selo e sem bloqueio em nenhuma tela
+  void complianceStatus; void notes;
+  // const parsed = parseComplianceNotes(notes);
+  //
+  // if (complianceStatus === 'approved' || parsed.approved === true) {
+  //   return { label: 'Aprovado', tone: 'approved', reasons: [], hint: COMPLIANCE_APPROVED_HINT };
+  // }
+  //
+  // if (complianceStatus === 'rejected' || parsed.approved === false) {
+  //   return {
+  //     label: 'Reprovado',
+  //     tone: 'rejected',
+  //     reasons: parsed.issues,
+  //     hint: COMPLIANCE_REJECTED_HINT,
+  //   };
+  // }
+  //
+  // if (complianceStatus === 'pending_compliance' || complianceStatus === 'pending') {
+  //   return { label: 'Analisando...', tone: 'pending', reasons: [], hint: COMPLIANCE_PENDING_HINT };
+  // }
 
   return { label: 'Sem análise', tone: 'unknown', reasons: [], hint: COMPLIANCE_UNKNOWN_HINT };
 }
