@@ -6,6 +6,7 @@ import {
   parseRoasFromPurchaseRoas,
   parseCpaFromCostPerAction,
 } from '../../utils/meta-insights-parser.js';
+import { isLeadObjective } from '../../utils/meta-conversion-events.js';
 import { roundToDecimals } from '../../utils/metrics-formatter.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { CampaignRepository } from '../../repository/campaign.repository.js';
@@ -836,18 +837,16 @@ export class CampaignsService {
       // Pessoas ("PESSOAS") — fonte da verdade: nº de pessoas que preencheram o
       // formulário. Insights contam `lead` por atribuição/evento e a soma diária
       // de únicos diverge do total de preenchimentos distintos (ex.: 6 ≠ 4).
-      // Campanha Formulário (OUTCOME_LEADS) → conta os fills do form; demais
-      // objetivos mantêm a soma das conversões dos insights.
+      // Campanha Formulário (OUTCOME_LEADS) → conta os envios PERSISTIDOS
+      // (`meta_leads`, mesma origem da lista de Campanhas e da página Clientes),
+      // para as duas telas mostrarem o MESMO número; demais objetivos mantêm a
+      // soma das conversões dos insights.
       let conversions: number = timeseries.reduce((s, d) => s + d.conversions, 0);
-      if (campaignObjective === 'OUTCOME_LEADS') {
+      if (isLeadObjective(campaignObjective)) {
         try {
-          const { leads } = await this.getCampaignLeads({
-            tenantId: args.tenantId,
-            campaignId: args.campaignId,
-          });
-          conversions = leads.length;
+          conversions = await this.repo.countLeadFormSubmissions(args.tenantId, args.campaignId);
         } catch (err) {
-          console.warn('[getCampaignInsights] falha ao contar fills do form:', (err as Error).message);
+          console.warn('[getCampaignInsights] falha ao contar envios de formulário:', (err as Error).message);
         }
       }
 

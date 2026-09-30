@@ -90,5 +90,48 @@ describe('meta-conversion-events', () => {
       ];
       expect(getConversionsFromActions(actions, 'UNKNOWN')).toBe(0);
     });
+
+    // Regressão do caso Elaine (30/09): campanha de FORMULÁRIO sem nenhum envio
+    // exibia "3 clientes" porque o fallback genérico somava `link_click`.
+    it('não conta clique/engajamento como cliente em campanha de formulário (OUTCOME_LEADS)', () => {
+      const actions = [
+        { action_type: 'link_click', value: '3' },
+        { action_type: 'post_engagement', value: '3' },
+        { action_type: 'page_engagement', value: '3' },
+      ];
+      const uniqueActions = [{ action_type: 'link_click', value: '2' }];
+      expect(getConversionsFromActions(actions, 'OUTCOME_LEADS', uniqueActions)).toBe(0);
+    });
+
+    it('não conta clique como cliente em objetivo de mensagem', () => {
+      const actions = [{ action_type: 'link_click', value: '7' }];
+      expect(getConversionsFromActions(actions, 'OUTCOME_ENGAGEMENT')).toBe(0);
+    });
+
+    // Fluxos ISOLADOS: a regra de MENSAGEM (conversas iniciadas) e a de
+    // FORMULÁRIO (envios) são independentes — mexer numa não pode alterar a outra.
+    it('campanha de MENSAGEM conta conversas iniciadas e ignora tipo de lead', () => {
+      const actions = [
+        { action_type: 'onsite_conversion.messaging_conversation_started_7d', value: '5' },
+        { action_type: 'onsite_conversion.messaging_first_reply', value: '3' },
+        { action_type: 'link_click', value: '40' },
+      ];
+      expect(getConversionsFromActions(actions, 'OUTCOME_ENGAGEMENT')).toBe(5);
+      // 'lead' não é métrica de mensagem
+      expect(getConversionsFromActions([{ action_type: 'lead', value: '9' }], 'OUTCOME_ENGAGEMENT')).toBe(0);
+    });
+
+    it('campanha de FORMULÁRIO conta envios e ignora conversa iniciada', () => {
+      expect(getConversionsFromActions([{ action_type: 'lead', value: '4' }], 'OUTCOME_LEADS')).toBe(4);
+      // conversa iniciada não é envio de formulário
+      const conversation = [{ action_type: 'onsite_conversion.messaging_conversation_started_7d', value: '7' }];
+      expect(getConversionsFromActions(conversation, 'OUTCOME_LEADS')).toBe(0);
+    });
+
+    it('conta envios de formulário reais (lead / lead_grouped)', () => {
+      const actions = [{ action_type: 'onsite_conversion.lead_grouped', value: '4' }];
+      expect(getConversionsFromActions(actions, 'OUTCOME_LEADS')).toBe(4);
+      expect(getConversionsFromActions([{ action_type: 'lead', value: '4' }], 'OUTCOME_LEADS')).toBe(4);
+    });
   });
 });

@@ -37,6 +37,24 @@ const leadInsight = {
   action_values: [],
 };
 
+/** Campanha de formulário SEM evento de lead — só cliques (caso Elaine/30-09). */
+const leadInsightWithoutLeadEvent = {
+  campaign_id: '120000000000000001',
+  campaign_name: 'Inglês/Espanhol R$140!',
+  spend: '673',
+  impressions: '122',
+  clicks: '3',
+  actions: [
+    { action_type: 'link_click', value: '3' },
+    { action_type: 'post_engagement', value: '3' },
+    { action_type: 'page_engagement', value: '3' },
+  ],
+  unique_actions: [{ action_type: 'link_click', value: '3' }],
+  purchase_roas: [],
+  cost_per_action_type: [],
+  action_values: [],
+};
+
 function mockMetaConnection(adAccountId = 'act_1') {
   vi.spyOn(MetaRepository.prototype, 'findLatestMetaConnection').mockResolvedValue({
     accessToken: 'enc-token',
@@ -46,8 +64,69 @@ function mockMetaConnection(adAccountId = 'act_1') {
   vi.spyOn(cryptoUtils, 'decryptMetaToken').mockReturnValue('decrypted-token');
 }
 
-describe('DatabaseMetricsProvider.getCampaigns — conversões objective-aware', () => {
+describe('DatabaseMetricsProvider — agregações do dashboard usam a regra do objetivo', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Regressão do caso Elaine: o card "Clientes alcançados" (/metrics/summary) e as
+  // séries diárias (/metrics/daily) chamavam o parser SEM objective → fallback
+  // genérico somava `link_click`, exibindo cliques como clientes.
+  it('/metrics/daily não conta clique como cliente em campanha de formulário', async () => {
+    mockMetaConnection();
+
+    vi.spyOn(metaApi, 'metaApiCall').mockResolvedValue({
+      data: [
+        { id: '120000000000000001', name: 'Inglês/Espanhol R$140!', status: 'PAUSED', objective: 'OUTCOME_LEADS' },
+      ],
+    } as never);
+
+    vi.spyOn(metaApi, 'getMetaInsights').mockResolvedValue({
+      data: [
+        {
+          campaign_id: '120000000000000001',
+          date_start: '2026-09-29',
+          date_stop: '2026-09-29',
+          spend: '673',
+          impressions: '122',
+          clicks: '3',
+          actions: [{ action_type: 'link_click', value: '3' }],
+          unique_actions: [{ action_type: 'link_click', value: '3' }],
+          purchase_roas: [],
+          action_values: [],
+        },
+      ],
+    } as never);
+
+    const provider = new DatabaseMetricsProvider();
+    const daily = await provider.getDailyMetrics('t1', '2026-09-29', '2026-09-29');
+
+    expect(daily).toHaveLength(1);
+    expect(daily[0].conversions).toBe(0); // nunca 3 (cliques)
+  });
+
+  it('/metrics/summary não conta clique como cliente em campanha de formulário', async () => {
+    mockMetaConnection();
+
+    vi.spyOn(metaApi, 'metaApiCall').mockResolvedValue({
+      data: [
+        { id: '120000000000000001', name: 'Inglês/Espanhol R$140!', status: 'ACTIVE', objective: 'OUTCOME_LEADS' },
+      ],
+    } as never);
+
+    vi.spyOn(metaApi, 'getMetaInsights').mockResolvedValue({
+      data: [leadInsightWithoutLeadEvent],
+    } as never);
+
+    const provider = new DatabaseMetricsProvider();
+    const summary = await provider.getSummary('t1', '2026-09-01', '2026-09-25');
+
+    expect(summary).not.toBeNull();
+    expect(summary!.conversions).toBe(0);
+  });
+});
+
+describe('DatabaseMetricsProvider.getCampaigns — conversões objective-aware', () => {  beforeEach(() => {
     vi.restoreAllMocks();
   });
 

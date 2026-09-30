@@ -2008,6 +2008,21 @@ export interface MetaLeadFormQuestion {
 }
 
 /**
+ * Envios de um leadgen form (leads de formulário instantâneo).
+ * GET /{form_id}/leads — MESMA fonte que o detalhe da campanha usa para
+ * contar "Pessoas"; o worker/lista precisam ler daqui para não divergirem.
+ */
+export async function getLeadFormData(
+  formId: string,
+  accessToken: string,
+): Promise<{ data: Array<Record<string, unknown>> }> {
+  return metaApiCall<{ data: Array<Record<string, unknown>> }>(
+    `/${encodeURIComponent(formId)}/leads?fields=id,field_data,created_time,form_id`,
+    accessToken,
+  );
+}
+
+/**
  * Perguntas de um leadgen form: mapeia o `key` tokenizado para o `type`.
  * GET /{form_id}?fields=questions — usado para traduzir field_data com keys
  * customizados (ex.: question1/2/3 criados pelo wizard) em nome/email/telefone.

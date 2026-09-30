@@ -72,6 +72,8 @@ export class MockMetaCampaignProvider implements IMetaCampaignProvider {
   archivedLeadFormsWithToken: Array<{ formId: string; accessToken: string }> = [];
   leadFormResult: { id: string } = { id: 'meta_form_1' };
   leadsResult: { data: Array<Record<string, unknown>> } = { data: [] };
+  /** Chamadas a getLeadFormData (o detalhe NÃO deve usar a Meta p/ contar clientes). */
+  leadFormDataRequests: Array<{ formId: string; accessToken: string }> = [];
 
   async createLeadForm(pageId: string, accessToken: string, body: any) {
     if (this.failCreateStep === 'lead_form') throw new Error('LeadForm fail');
@@ -85,6 +87,7 @@ export class MockMetaCampaignProvider implements IMetaCampaignProvider {
   }
 
   async getLeadFormData(formId: string, accessToken: string) {
+    this.leadFormDataRequests.push({ formId, accessToken });
     return this.leadsResult;
   }
 

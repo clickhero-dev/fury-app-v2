@@ -17,7 +17,6 @@ import {
   parseCpaFromCostPerAction,
   parseRoasFromPurchaseRoas,
 } from '../../utils/meta-insights-parser.js';
-import { getConversionsFromActions } from '../../utils/meta-conversion-events.js';
 import type {
   MetricsSummaryResponse,
   CampaignResponse,
@@ -93,6 +92,28 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     }
 
     return { accessToken, adAccountId };
+  }
+
+  /**
+   * Mapa campanha → objetivo (Meta), restrito a campanhas ATIVAS/PAUSADAS.
+   * Necessário para aplicar a regra de contagem correta por objetivo em
+   * qualquer agregação de insights (resumo, séries diárias).
+   */
+  private async fetchCampaignObjectives(tenantId: string): Promise<Map<string, string | null>> {
+    const { accessToken, adAccountId } = await this.getConnectionAndAccount(tenantId);
+
+    type MetaCampaignRow = { id: string; status?: string; objective?: string };
+    const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
+      `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,status,objective')}`,
+      accessToken
+    );
+
+    const includedStatuses = new Set(['ACTIVE', 'PAUSED']);
+    return new Map<string, string | null>(
+      (campaignsResp.data || [])
+        .filter((c) => includedStatuses.has((c.status || '').toUpperCase()))
+        .map((c) => [c.id, c.objective ?? null])
+    );
   }
 
   private normalizeInsights(
@@ -189,24 +210,8 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     try {
       const { accessToken, adAccountId } = await this.getConnectionAndAccount(tenantId);
 
-      type MetaCampaignRow = { id: string; status?: string; objective?: string };
-      const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
-        `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,status,objective')}`,
-        accessToken
-      );
-
-      const includedStatuses = new Set(['ACTIVE', 'PAUSED']);
-      const includedCampaignIds = new Set(
-        (campaignsResp.data || [])
-          .filter((c) => includedStatuses.has((c.status || '').toUpperCase()))
-          .map((c) => c.id)
-      );
-
-      // Mapa campanha → objective, para o resumo contar LEADS (quem preencheu)
-      // em campanhas de Formulário e não cliques (fallback genérico de tráfego).
-      const campaignObjective = new Map<string, string | null>(
-        (campaignsResp.data || []).map((c) => [c.id, c.objective ?? null])
-      );
+      const campaignObjective = await this.fetchCampaignObjectives(tenantId);
+      const includedCampaignIds = new Set(campaignObjective.keys());
 
       const response = await getMetaInsights({
         accessToken,
@@ -605,6 +610,11 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         timeIncrement: 1,
       });
 
+      // Mapa campanha → objetivo: cada objetivo tem SUA regra de contagem
+      // (formulário = envios, mensagem = conversas, etc.). Sem isso o fallback
+      // genérico contaria clique como "cliente" nas séries diárias do dashboard.
+      const campaignObjective = await this.fetchCampaignObjectives(tenantId);
+
       return insights
         .filter((item) => item.date_start && item.date_stop)
         .map((item) => {
@@ -612,7 +622,8 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
           const impressions = parseInt(item.impressions || '0', 10);
           const clicks = parseInt(item.clicks || '0', 10);
 
-          const conversions = getConversionsFromActions(item.actions) ?? 0;
+          const obj = item.campaign_id ? campaignObjective.get(item.campaign_id) ?? null : null;
+          const conversions = parseConversionsFromActions(item.actions, obj, item.unique_actions) ?? 0;
 
           const revenue = (item.action_values || [])
             .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
