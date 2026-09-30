@@ -196,7 +196,7 @@ describe('MetaService (deep DI)', () => {
     await expect(makeSvc(repo).selectAdAccount('t1', 'm1', 'act_1')).rejects.toMatchObject({
       statusCode: 409,
       code: 'AD_ACCOUNT_IN_USE',
-      message: 'Essa conta de anúncios já está vinculada a outra conta do Fury. Escolha outra conta ou conecte com o login Meta da própria empresa.',
+      message: 'Essa conta de anúncios já está vinculada a outra conta do ady. Escolha outra conta ou conecte com o login Meta da própria empresa.',
     });
     expect(repo.patchMetaConnection).not.toHaveBeenCalled();
   });

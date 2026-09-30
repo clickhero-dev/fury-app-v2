@@ -668,8 +668,8 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     expect(meta.createdAdSets).toHaveLength(1);
     // N adcreatives + N ads com nomes distintos
     expect(meta.createdAdCreatives).toHaveLength(2);
-    expect(meta.createdAdCreatives[0].name).toBe('Creative — FURY #1');
-    expect(meta.createdAdCreatives[1].name).toBe('Creative — FURY #2');
+    expect(meta.createdAdCreatives[0].name).toBe('Creative — ady #1');
+    expect(meta.createdAdCreatives[1].name).toBe('Creative — ady #2');
     expect(meta.createdAds).toHaveLength(2);
     expect(meta.createdAds[0].name).toContain(' #1');
     expect(meta.createdAds[1].name).toContain(' #2');

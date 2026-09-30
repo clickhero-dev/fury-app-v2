@@ -582,7 +582,7 @@ export function SelecionarAtivosPage() {
                   Confira sua seleção
                 </h1>
                 <p className="text-admin-text-muted text-lg leading-relaxed">
-                  A partir de agora, apenas estes ativos aparecerão no FURY.
+                  A partir de agora, apenas estes ativos aparecerão no ady.
                 </p>
               </div>
 

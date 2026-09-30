@@ -120,7 +120,7 @@ export function FuryConfig() {
           <div>
             <h3 className="text-lg font-bold text-text-primary mb-1">Metas de Performance</h3>
             <p className="text-sm text-text-secondary">
-              Defina as metas que o FURY usa para calcular a nota (0–100) de cada campanha.
+              Defina as metas que o ady usa para calcular a nota (0–100) de cada campanha.
             </p>
           </div>
 

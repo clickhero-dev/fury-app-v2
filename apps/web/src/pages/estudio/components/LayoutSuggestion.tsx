@@ -15,7 +15,7 @@ export function LayoutSuggestion({ suggestion, onAccept, onChooseManually }: Pro
       <div className="text-center">
         <div className="inline-flex items-center gap-2 rounded-full bg-[#FFF4ED] px-3 py-1 text-xs font-semibold text-[#B54708]">
           <Sparkles className="h-3.5 w-3.5" />
-          Sugestão do FURY
+          Sugestão do ady
         </div>
         <h2 className="mt-3 text-xl font-bold text-[#101828]">O melhor formato para o seu anúncio</h2>
       </div>
