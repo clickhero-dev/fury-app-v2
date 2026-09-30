@@ -7,13 +7,22 @@ Funcionalidade: informar discretamente quando os dados da Meta estão sendo atua
     Dado que há dados salvos e a atualização da Meta está em andamento
     Quando a página de Leads é exibida
     Então o cliente vê uma faixa informativa azul com a data e hora da última atualização
+
+  Cenário: permitir rolagem horizontal para não cortar os dados do lead
+    Dado que existem leads com nome, e-mail, telefone e campanha longos
+    Quando a página de Clientes é exibida com "Todas as campanhas"
+    Então o contêiner da tabela permite rolagem horizontal, a tabela tem largura mínima maior que a área visível e os dados completos estão no documento
 */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { LeadsPage } from './LeadsPage';
+import {
+  LeadsPage,
+  LEADS_TABLE_MIN_WIDTH_CLASS,
+  LEADS_TABLE_NO_CAMPAIGN_MIN_WIDTH_CLASS,
+} from './LeadsPage';
 
 const mockApiGet = vi.hoisted(() => vi.fn());
 
@@ -78,6 +87,27 @@ describe('LeadsPage', () => {
     await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/v2/leads'));
   });
 
+  it('permite rolagem horizontal para não cortar os dados do lead', async () => {
+    const lead = {
+      name: 'DJ Felipe Honorio',
+      email: 'felipinhomiranda@gmail.com',
+      phone: '+5545999999999',
+      createdAt: '2026-09-21T12:00:00Z',
+      campaignId: 'form_1',
+      campaignName: 'Vagas Exclusivas - Setembro',
+    };
+    mockApi([lead]);
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText(lead.name, { exact: true })).toBeInTheDocument();
+    expect(screen.getByText(lead.email, { exact: true })).toBeInTheDocument();
+    expect(screen.getByText(lead.phone, { exact: true })).toBeInTheDocument();
+    expect(screen.getByText(lead.campaignName, { exact: true })).toBeInTheDocument();
+    expect(screen.getByTestId('leads-table-scroll')).toHaveClass('overflow-x-auto');
+    expect(screen.getByRole('table')).toHaveClass(LEADS_TABLE_MIN_WIDTH_CLASS);
+  });
+
   it('filtro usa a fonte Meta (/v2/lead-campaigns) e lista as campanhas retornadas', async () => {
     mockApi([]);
 
@@ -122,6 +152,7 @@ describe('LeadsPage', () => {
     expect(consoleError.mock.calls.some((call) => call.some((arg) => String(arg).includes('same key')))).toBe(false);
     // Coluna Campanha some quando há campanha específica selecionada
     expect(screen.queryByText('Campanha')).not.toBeInTheDocument();
+    expect(screen.getByRole('table')).toHaveClass(LEADS_TABLE_NO_CAMPAIGN_MIN_WIDTH_CLASS);
   });
 
   it('exibe estado vazio quando nenhuma campanha de Formulário existe', async () => {

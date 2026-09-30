@@ -8,6 +8,20 @@ import { normalizePhoneToMeta } from '@/components/campaign-wizard/lib/phone-for
 import { MetaSyncNotice } from '../../components/MetaSyncNotice';
 import { getLatestSync } from '../../lib/format-last-sync';
 
+// A página também exporta estas constantes para que o teste valide a mesma classe usada no layout.
+export const LEADS_TABLE_MIN_WIDTH_CLASS = 'min-w-[1320px]';
+export const LEADS_TABLE_NO_CAMPAIGN_MIN_WIDTH_CLASS = 'min-w-[1110px]';
+// eslint-disable-next-line react-refresh/only-export-components
+export const LEADS_TABLE_COLUMN_WIDTH_CLASSES = {
+  name: 'w-[190px]',
+  email: 'w-[270px]',
+  phone: 'w-[150px]',
+  campaign: 'w-[210px]',
+  date: 'w-[200px]',
+  status: 'w-[160px]',
+  action: 'w-[140px]',
+} as const;
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
   return new Date(dateStr).toLocaleDateString('pt-BR', {
@@ -94,20 +108,24 @@ export function LeadsPage() {
   };
 
   const showCampaignColumn = campaignId === '';
+  const tableMinWidthClass = showCampaignColumn
+    ? LEADS_TABLE_MIN_WIDTH_CLASS
+    : LEADS_TABLE_NO_CAMPAIGN_MIN_WIDTH_CLASS;
 
   const columns: LeadColumn[] = [
     {
       key: 'name' as const,
       label: 'Nome',
-      thClass: 'w-[12%]',
-      render: (value: unknown) => (
-        <span className="block truncate text-text-primary font-medium">{String(value ?? '—')}</span>
-      ),
+      thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.name,
+      render: (value: unknown) => {
+        const name = String(value ?? '—');
+        return <span className="block truncate text-text-primary font-medium" title={name}>{name}</span>;
+      },
     },
     {
       key: 'email' as const,
       label: 'E-mail',
-      thClass: 'w-[16%]',
+      thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.email,
       render: (value: unknown) => {
         const email = String(value ?? '—');
         return (
@@ -120,25 +138,27 @@ export function LeadsPage() {
     {
       key: 'phone' as const,
       label: 'Telefone',
-      thClass: 'w-[11%]',
-      render: (value: unknown) => (
-        <span className="block truncate text-text-primary whitespace-nowrap">{String(value ?? '—')}</span>
-      ),
+      thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.phone,
+      render: (value: unknown) => {
+        const phone = String(value ?? '—');
+        return <span className="block truncate text-text-primary whitespace-nowrap" title={phone}>{phone}</span>;
+      },
     },
     ...(showCampaignColumn
       ? [{
           key: 'campaignName' as keyof CampaignLead,
           label: 'Campanha',
-          thClass: 'w-[12%]',
-          render: (value: unknown) => (
-            <span className="block truncate text-text-secondary">{String(value ?? '—')}</span>
-          ),
+          thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.campaign,
+          render: (value: unknown) => {
+            const campaignName = String(value ?? '—');
+            return <span className="block truncate text-text-secondary" title={campaignName}>{campaignName}</span>;
+          },
         }]
       : []),
     {
       key: 'createdAt' as const,
       label: 'Data',
-      thClass: 'w-[12%]',
+      thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.date,
       render: (value: unknown) => (
         <span className="block truncate text-text-secondary whitespace-nowrap">{formatDate(value as string | null)}</span>
       ),
@@ -146,7 +166,7 @@ export function LeadsPage() {
     {
       key: 'status' as const,
       label: 'Status',
-      thClass: 'w-[16%]',
+      thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.status,
       render: (value: unknown, row?: CampaignLead) => {
         const status = (value as string | undefined) ?? 'novo';
         if (!row?.id) {
@@ -164,7 +184,7 @@ export function LeadsPage() {
     {
       key: 'phone' as const,
       label: 'Ação',
-      thClass: 'w-[22%]',
+      thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.action,
       render: (value: unknown, row: CampaignLead) => {
         const phone = row.phone;
         if (!phone) {
@@ -231,20 +251,22 @@ export function LeadsPage() {
       {/* Lista de leads */}
       <div className="rounded-2xl border border-border bg-surface transition-all duration-300 hover:border-border-light overflow-x-auto">
         {isLoading ? (
-          <div
-            role="status"
-            aria-label="Carregando clientes..."
-            aria-busy="true"
-            className="p-4 space-y-2.5"
-          >
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="grid grid-cols-7 gap-4 rounded-xl bg-surface-secondary/40 p-3 animate-pulse">
-                {[0, 1, 2, 3, 4, 5, 6].map((j) => (
-                  <div key={j} className="h-3 rounded bg-surface-secondary/80" />
-                ))}
-              </div>
-            ))}
-            <span className="sr-only">Carregando clientes...</span>
+          <div data-testid="leads-table-scroll" className="overflow-x-auto">
+            <div
+              role="status"
+              aria-label="Carregando clientes..."
+              aria-busy="true"
+              className={`p-4 space-y-2.5 ${tableMinWidthClass}`}
+            >
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className={`grid ${showCampaignColumn ? 'grid-cols-7' : 'grid-cols-6'} gap-4 rounded-xl bg-surface-secondary/40 p-3 animate-pulse`}>
+                  {columns.map((column, index) => (
+                    <div key={index} className={`h-3 rounded bg-surface-secondary/80 ${column.thClass ?? ''}`} />
+                  ))}
+                </div>
+              ))}
+              <span className="sr-only">Carregando clientes...</span>
+            </div>
           </div>
         ) : isError ? (
           <div className="py-16 px-6 text-sm text-error text-center">
@@ -263,7 +285,8 @@ export function LeadsPage() {
             description="Quando alguém preencher o formulário dos seus anúncios, os contatos aparecerão aqui."
           />
         ) : (
-          <table className="w-full table-fixed text-sm">
+          <div data-testid="leads-table-scroll" className="overflow-x-auto">
+            <table className={`w-full table-fixed text-sm ${tableMinWidthClass}`}>
             <thead>
               <tr className="border-b border-border bg-surface-secondary/40">
                 {columns.map((col) => (
@@ -277,14 +300,15 @@ export function LeadsPage() {
               {leads.map((lead, i) => (
                 <tr key={`${lead.email ?? 'lead'}-${i}`} className="hover:bg-surface-secondary/30 transition-colors">
                   {columns.map((col) => (
-                    <td key={`${col.key}-${col.label}`} className="py-3 px-4">
+                    <td key={`${col.key}-${col.label}`} className={`py-3 px-4 ${col.thClass ?? ''}`}>
                       {col.render(lead[col.key], lead)}
                     </td>
                   ))}
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         )}
       </div>
     </div>
