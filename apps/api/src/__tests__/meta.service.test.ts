@@ -28,7 +28,7 @@ function makeRepo(override: Record<string, any> = {}) {
   } as any;
 }
 
-function makeSvc(repo: any) {
+function makeSvc(repo: any, metaSyncRepo: any = { deleteAllMetaSyncedData: vi.fn(async () => undefined) }) {
   return new MetaService(
     () => repo,
     {
@@ -47,6 +47,7 @@ function makeSvc(repo: any) {
       },
       addSyncJob: vi.fn(async () => undefined),
     } as any,
+    () => metaSyncRepo,
   );
 }
 
@@ -150,5 +151,29 @@ describe('MetaService (deep DI)', () => {
     await expect(makeSvc(repo).selectAdAccount('t1', 'm1', 'act_999')).rejects.toMatchObject({
       code: 'AD_ACCOUNT_NOT_FOUND',
     });
+  });
+
+  it('deleteTenantMetaConnection limpa os dados sincronizados antes de apagar a conexão', async () => {
+    const repo = makeRepo({ findMetaConnectionById: vi.fn(async () => connection) });
+    const metaSyncRepo = { deleteAllMetaSyncedData: vi.fn(async () => undefined) };
+    const service = makeSvc(repo, metaSyncRepo);
+
+    await service.deleteTenantMetaConnection('t1', 'm1');
+
+    expect(metaSyncRepo.deleteAllMetaSyncedData).toHaveBeenCalledOnce();
+    expect(repo.deleteMetaConnection).toHaveBeenCalledWith('m1');
+    expect(metaSyncRepo.deleteAllMetaSyncedData.mock.invocationCallOrder[0])
+      .toBeLessThan(repo.deleteMetaConnection.mock.invocationCallOrder[0]);
+  });
+
+  it('deleteTenantMetaConnection não limpa dados quando a conexão não existe', async () => {
+    const repo = makeRepo({ findMetaConnectionById: vi.fn(async () => null) });
+    const metaSyncRepo = { deleteAllMetaSyncedData: vi.fn(async () => undefined) };
+
+    await expect(makeSvc(repo, metaSyncRepo).deleteTenantMetaConnection('t1', 'missing'))
+      .rejects.toMatchObject({ code: 'META_CONNECTION_NOT_FOUND', statusCode: 404 });
+
+    expect(metaSyncRepo.deleteAllMetaSyncedData).not.toHaveBeenCalled();
+    expect(repo.deleteMetaConnection).not.toHaveBeenCalled();
   });
 });

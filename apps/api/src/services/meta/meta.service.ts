@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { MetaRepository } from '../../repository/meta.repository.js';
+import { MetaSyncRepository } from '../../repository/meta-sync.repository.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import {
   exchangeCodeForToken,
@@ -269,6 +270,7 @@ export class MetaService {
       },
       addSyncJob,
     },
+    private readonly metaSyncRepoFactory: (tenantId: string) => MetaSyncRepository = (t) => new MetaSyncRepository(t),
   ) {}
 
   private repo(t: string): MetaRepository {
@@ -765,6 +767,7 @@ export class MetaService {
       throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Conexao Meta nao encontrada para este tenant.');
     }
 
+    await this.metaSyncRepoFactory(tenantId).deleteAllMetaSyncedData();
     await repo.deleteMetaConnection(connectionId);
   }
 
