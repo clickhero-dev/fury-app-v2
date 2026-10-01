@@ -1027,6 +1027,84 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
     expect(repo.campaigns[0].budget.lead_page_id).toBe('page_1');
   });
 
+  it('mantém o nome original e faz uma única chamada ao Meta quando não há colisão', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+
+    await service.createCampaignFromWizard(leadsArgs as any);
+
+    expect(meta.createdLeadForms).toHaveLength(1);
+    expect(meta.createdLeadForms[0].body.name).toBe('Formulário — Promoção');
+  });
+
+  it.each([
+    'O nome do formulário já existe. Insira um novo nome.',
+    'The form name already exists. Please enter a new name.',
+  ])('recupera uma colisão de nome do formulário (%s) com uma única nova tentativa', async (metaUserMsg) => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    const originalCreateLeadForm = meta.createLeadForm.bind(meta);
+    let attempts = 0;
+    meta.createLeadForm = async (...params: [string, string, any]) => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw metaError(100, metaUserMsg, { metaUserMsg, metaUserTitle: 'Nome do formulário inválido' });
+      }
+      return originalCreateLeadForm(...params);
+    };
+
+    const result = await service.createCampaignFromWizard(leadsArgs as any);
+
+    expect(result.success).toBe(true);
+    expect(attempts).toBe(2);
+    expect(meta.createdLeadForms).toHaveLength(1);
+    expect(meta.createdLeadForms[0].body.name).toMatch(/^Formulário — Promoção — \d{8}-\d{6}-[A-F0-9]{4}$/);
+    expect(repo.campaigns[0].budget.lead_form_id).toBe('form_1');
+  });
+
+  it('não repete a criação para um erro de formulário que não é colisão de nome', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    let attempts = 0;
+    meta.createLeadForm = async () => {
+      attempts += 1;
+      throw metaError(100, 'Invalid privacy policy URL', { metaUserMsg: 'Invalid privacy policy URL' });
+    };
+
+    await expect(service.createCampaignFromWizard(leadsArgs as any)).rejects.toMatchObject({
+      code: 'META_API_ERROR',
+    });
+
+    expect(attempts).toBe(1);
+    expect(meta.createdCampaigns).toHaveLength(0);
+    expect(meta.createdAdSets).toHaveLength(0);
+    expect(meta.createdAds).toHaveLength(0);
+  });
+
+  it('mapeia a segunda falha após retry e não cria objetos posteriores', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    let attempts = 0;
+    meta.createLeadForm = async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw metaError(100, 'The form name already exists.', { metaUserMsg: 'The form name already exists.' });
+      }
+      throw metaError(100, 'Invalid privacy policy URL', { metaUserMsg: 'Invalid privacy policy URL' });
+    };
+
+    await expect(service.createCampaignFromWizard(leadsArgs as any)).rejects.toMatchObject({
+      code: 'META_API_ERROR',
+    });
+
+    expect(attempts).toBe(2);
+    expect(meta.createdCampaigns).toHaveLength(0);
+    expect(meta.createdAdSets).toHaveLength(0);
+    expect(meta.createdAdCreatives).toHaveLength(0);
+    expect(meta.createdAds).toHaveLength(0);
+    expect(repo.campaigns).toHaveLength(0);
+  });
+
   it('envia privacy_policy com URL pública da política de privacidade (nome slugificado)', async () => {
     const mockDb = await import('@fury/db');
     (mockDb.db.query.tenants.findFirst as any).mockResolvedValue({ name: 'Meu Negócio Test', slug: 'slug-antigo' });
