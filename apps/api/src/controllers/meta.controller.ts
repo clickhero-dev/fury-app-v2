@@ -219,11 +219,11 @@ export class MetaController {
         throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
       }
       const selection = saveSelectionBodySchema.parse(req.body);
-      await this.metaService.saveTenantAssetSelection(req.tenant.tenantId, selection);
+      const savedSelection = await this.metaService.saveTenantAssetSelection(req.tenant.tenantId, selection);
       await invalidateHttpCache(req.tenant.tenantId, ['/api/meta']);
       res.status(200).json({
         success: true,
-        data: selection,
+        data: savedSelection,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
@@ -326,8 +326,9 @@ const whatsappByAssetsBodySchema = z.object({
 });
 
 const saveSelectionBodySchema = z.object({
-  businessIds: z.array(z.string().min(1)).default([]),
-  pageIds: z.array(z.string().min(1)).default([]),
-  adAccountIds: z.array(z.string().min(1)).default([]),
+  businessIds: z.array(z.string().min(1)).min(1, 'Informe uma Business Manager'),
+  pageIds: z.array(z.string().min(1)).min(1, 'Informe uma Página'),
+  adAccountIds: z.array(z.string().min(1)).min(1, 'Informe uma conta de anúncio'),
+  instagramUserId: z.string().min(1, 'Informe um Instagram Business'),
   whatsappNumberIds: z.array(z.string().min(1)).default([]),
 });

@@ -146,7 +146,7 @@ export async function exchangeCodeForToken(params: {
   url.searchParams.set('redirect_uri', params.redirectUri);
   url.searchParams.set('code', params.code);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   return parseMetaResponse<MetaTokenResponse>(response, 'Falha ao trocar o code por access token no Meta.');
 }
 
@@ -161,7 +161,7 @@ export async function exchangeForLongLivedToken(params: {
   url.searchParams.set('client_secret', params.clientSecret);
   url.searchParams.set('fb_exchange_token', params.shortLivedToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   return parseMetaResponse<MetaTokenResponse>(
     response,
     'Falha ao obter token de longa duracao (60 dias) no Meta.'
@@ -197,7 +197,7 @@ export async function getBusinessAdAccounts(businessId: string, accessToken: str
   url.searchParams.set('fields', 'id,name,account_status,currency,timezone_name');
   url.searchParams.set('access_token', accessToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   const payload = await parseMetaResponse<MetaAdAccountsResponse>(
     response,
     'Falha ao buscar contas de anuncios da Business Manager no Meta.'
@@ -227,7 +227,7 @@ export async function getBusinessOwnedPages(businessId: string, accessToken: str
   url.searchParams.set('fields', 'id,name,instagram_business_account{id,username}');
   url.searchParams.set('access_token', accessToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   const payload = await parseMetaResponse<MetaOwnedPagesResponse>(
     response,
     'Falha ao buscar Paginas da Business Manager no Meta.'
