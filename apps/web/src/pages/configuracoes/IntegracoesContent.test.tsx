@@ -1,3 +1,13 @@
+/*
+# Language: pt-BR
+
+Funcionalidade: Confirmação de desconexão Meta
+
+  Cenário: informar os dados apagados e confirmar a desconexão
+    Dado uma conta Meta conectada
+    Quando a pessoa abre o diálogo e confirma Desconectar
+    Então visualiza o aviso de exclusão e o frontend envia DELETE para a conexão
+*/
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -6,7 +16,7 @@ import type { ReactNode } from 'react';
 import { IntegracoesContent } from './IntegracoesContent';
 import type { MetaConnection } from '@/types/meta';
 
-const mockApiGet = vi.hoisted(() => vi.fn());
+const { mockApiGet, mockApiDelete } = vi.hoisted(() => ({ mockApiGet: vi.fn(), mockApiDelete: vi.fn() }));
 
 vi.mock('@/lib/api', () => ({
   default: {
@@ -14,7 +24,7 @@ vi.mock('@/lib/api', () => ({
     post: vi.fn(),
     put: vi.fn(),
     patch: vi.fn(),
-    delete: vi.fn(),
+    delete: mockApiDelete,
   },
 }));
 
@@ -47,6 +57,8 @@ function makeWrapper() {
 describe('IntegracoesContent — status de conexão da conta Meta', () => {
   beforeEach(() => {
     mockApiGet.mockReset();
+    mockApiDelete.mockReset();
+    mockApiDelete.mockResolvedValue({ data: { success: true, data: null } });
   });
 
   function mockApi(connections: MetaConnection[]) {
@@ -200,6 +212,24 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
       expect(mockApiGet).toHaveBeenCalledWith('/meta/auth/url', {
         params: { context: 'settings', frontendUrl: window.location.origin, rerequest: 'true' },
       });
+    });
+  });
+
+  it('confirma que a desconexão apaga os dados Meta e só então chama DELETE', async () => {
+    mockApi([connection({})]);
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<IntegracoesContent />, { wrapper: makeWrapper() });
+
+    await user.click(await screen.findByRole('button', { name: /^Desconectar$/i }));
+
+    expect(await screen.findByText(/campanhas, métricas, leads e dados do Instagram/i)).toBeInTheDocument();
+    expect(mockApiDelete).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /^Desconectar$/i }));
+
+    await waitFor(() => {
+      expect(mockApiDelete).toHaveBeenCalledWith('/meta/connections/conn-1');
     });
   });
 });

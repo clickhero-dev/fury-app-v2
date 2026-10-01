@@ -5,6 +5,7 @@ import type { MetaService } from '../services/meta/meta.service.js';
 import { emailService } from '../services/email/email.service.js';
 import { sendToTenant } from '../services/email/notify.js';
 import { invalidateHttpCache } from '../lib/http-cache.js';
+import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
 
 const callbackQuerySchema = z.object({
   code: z.string().min(1, 'Code OAuth ausente'),
@@ -292,7 +293,8 @@ export class MetaController {
       }
       const params = connectionIdSchema.parse(req.params);
       await this.metaService.deleteTenantMetaConnection(req.tenant.tenantId, params.id);
-      await invalidateHttpCache(req.tenant.tenantId, ['/api/meta']);
+      await invalidateCampaignsCache(req.tenant.tenantId);
+      await invalidateHttpCache(req.tenant.tenantId, ['/api/meta', '/api/metrics', '/api/goals']);
 
       // Email transacional: conta Meta desconectada (fire-and-forget)
       await sendToTenant(req.tenant.tenantId, req.user?.email, (to) =>

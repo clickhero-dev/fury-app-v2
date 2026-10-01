@@ -51,6 +51,12 @@ Funcionalidade: Repositório de sincronização Meta (snapshots, leads, IG, runs
     Dado repositório tenant-bound
     Quando recordSyncRun({ status, counts })
     Então insere com tenant_id do repositório e retorna o run
+
+  Cenário: desconexão remove todos os dados Meta do tenant em transação
+    Dado um tenant com campanhas e dados sincronizados
+    Quando deleteAllMetaSyncedData é chamado
+    Então remove campanhas, snapshots, insights, leads, mídia e runs apenas desse tenant
+    E executa as exclusões dentro de uma transação
 */
 // =============================================================================
 
@@ -137,7 +143,12 @@ function makeDb() {
       calls.push({ method: 'update', args });
       return makeChain('set');
     }),
+    delete: vi.fn((...args: any[]) => {
+      calls.push({ method: 'delete', args });
+      return makeChain('where');
+    }),
   };
+  db.transaction = vi.fn(async (callback: (tx: any) => Promise<unknown>) => callback(db));
   return { db, calls, query };
 }
 
@@ -347,5 +358,20 @@ describe('BDD: MetaSyncRepository', () => {
     expect(where).toContain('novo');
     expect(where).toContain('created_time');
     expect(where).toContain('<='); // cutoff aplicado como filtro
+  });
+
+  it('Cenário: deleteAllMetaSyncedData remove todos os dados Meta do tenant em transação', async () => {
+    const { db, calls } = makeDb();
+    const repo = new MetaSyncRepository(tenantId, db);
+
+    await repo.deleteAllMetaSyncedData();
+
+    expect(db.transaction).toHaveBeenCalledOnce();
+    expect(calls.filter((call) => call.method === 'delete')).toHaveLength(6);
+    const whereCalls = calls.filter((call) => call.method === 'where');
+    expect(whereCalls).toHaveLength(6);
+    for (const call of whereCalls) {
+      expect(whereText(call.args[0])).toContain(tenantId);
+    }
   });
 });
