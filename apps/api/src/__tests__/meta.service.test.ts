@@ -219,29 +219,25 @@ describe('MetaService (deep DI)', () => {
     });
   });
 
-  it('Cenário: selectAdAccount rejeita conta já selecionada por outro tenant', async () => {
+  it('Cenário: selectAdAccount permite temporariamente conta já selecionada por outro tenant', async () => {
     const repo = makeRepo({
       findMetaConnectionById: vi.fn(async () => connection),
       countOtherTenantsUsingSelectedAdAccount: vi.fn(async () => 1),
     });
 
-    await expect(makeSvc(repo).selectAdAccount('t1', 'm1', 'act_1')).rejects.toMatchObject({
-      statusCode: 409,
-      code: 'AD_ACCOUNT_IN_USE',
-      message: 'Essa conta de anúncios já está vinculada a outra conta do ady. Escolha outra conta ou conecte com o login Meta da própria empresa.',
-    });
-    expect(repo.patchMetaConnection).not.toHaveBeenCalled();
+    await expect(makeSvc(repo).selectAdAccount('t1', 'm1', 'act_1')).resolves.toBe('act_1');
+    expect(repo.patchMetaConnection).toHaveBeenCalledWith('m1', { selectedAdAccountId: 'act_1' });
   });
 
   it('Cenário: selectAdAccount permite a conta do próprio tenant', async () => {
     const repo = makeRepo({ findMetaConnectionById: vi.fn(async () => connection) });
 
     await expect(makeSvc(repo).selectAdAccount('t1', 'm1', 'act_1')).resolves.toBe('act_1');
-    expect(repo.countOtherTenantsUsingSelectedAdAccount).toHaveBeenCalledWith('act_1', 't1');
+    expect(repo.countOtherTenantsUsingSelectedAdAccount).not.toHaveBeenCalled();
     expect(repo.patchMetaConnection).toHaveBeenCalledWith('m1', { selectedAdAccountId: 'act_1' });
   });
 
-  it('Cenário: callback OAuth rejeita conta automática já usada por outro tenant', async () => {
+  it('Cenário: callback OAuth permite temporariamente conta automática já usada por outro tenant', async () => {
     const repo = makeRepo({
       findLatestMetaConnection: vi.fn(async () => connection),
       countOtherTenantsUsingSelectedAdAccount: vi.fn(async () => 1),
@@ -254,10 +250,7 @@ describe('MetaService (deep DI)', () => {
     });
     const state = new URL(svc.generateMetaAuthUrl('t1', 'settings')).searchParams.get('state')!;
 
-    await expect(svc.handleMetaOAuthCallback('oauth-code', state)).rejects.toMatchObject({
-      statusCode: 409,
-      code: 'AD_ACCOUNT_IN_USE',
-    });
+    await expect(svc.handleMetaOAuthCallback('oauth-code', state)).resolves.toMatchObject({ tenantId: 't1' });
   });
 
   it('deleteTenantMetaConnection limpa os dados sincronizados antes de apagar a conexão', async () => {

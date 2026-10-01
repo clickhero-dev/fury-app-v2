@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
-import type { MetaService } from '../services/meta/meta.service.js';
+import { verifyOAuthState, type MetaService } from '../services/meta/meta.service.js';
 import { emailService } from '../services/email/email.service.js';
 import { sendToTenant } from '../services/email/notify.js';
 import { invalidateHttpCache } from '../lib/http-cache.js';
@@ -90,7 +90,18 @@ export class MetaController {
       // o fallback legado oauth_cancelled.
       const errorCode =
         error instanceof AppError ? encodeURIComponent(error.code.toLowerCase()) : 'oauth_cancelled';
-      res.redirect(`${frontendUrl}/configuracoes/integracoes?error=${errorCode}`);
+      let target = frontendUrl;
+      let path = '/configuracoes/integracoes';
+      if (typeof req.query.state === 'string') {
+        try {
+          const state = verifyOAuthState(req.query.state);
+          target = state.frontendUrl ?? frontendUrl;
+          if (state.context === 'onboarding') path = '/onboarding/conectar-meta';
+        } catch {
+          // State inválido mantém o fallback seguro para Integrações.
+        }
+      }
+      res.redirect(`${target}${path}?error=${errorCode}`);
     }
   };
 

@@ -60,7 +60,7 @@ const META_SCOPES = [
 
 export type OAuthContext = 'onboarding' | 'settings';
 
-interface OAuthStatePayload {
+export interface OAuthStatePayload {
   tenantId: string;
   context: OAuthContext;
   returnUrl?: string;
@@ -136,7 +136,7 @@ function signOAuthState(payload: OAuthStatePayload): string {
   return jwt.sign(payload, secret, { expiresIn: '10m' });
 }
 
-function verifyOAuthState(state: string): OAuthStatePayload {
+export function verifyOAuthState(state: string): OAuthStatePayload {
   try {
     const secret = getRequiredEnv('JWT_SECRET');
     return jwt.verify(state, secret) as OAuthStatePayload;
@@ -455,7 +455,8 @@ export class MetaService {
             ? oldSelectedAdAccountId
             : adAccounts[0].id;
 
-        await this.ensureAdAccountIsAvailable(repo, tenantId, selectedAdAccountId);
+        // Temporariamente desativado para permitir ad accounts compartilhadas entre tenants.
+        // await this.ensureAdAccountIsAvailable(repo, tenantId, selectedAdAccountId);
         await repo.patchMetaConnection(connectionId, { adAccounts, selectedAdAccountId, updatedAt: new Date() });
         await this.deps.addSyncJob({ tenantId, metaUserId, adAccounts });
       }
@@ -538,7 +539,8 @@ export class MetaService {
         : selection.adAccountIds[0] ?? connection.selectedAdAccountId;
 
     if (selectedAdAccountId) {
-      await this.ensureAdAccountIsAvailable(repo, tenantId, selectedAdAccountId);
+      // Temporariamente desativado para permitir ad accounts compartilhadas entre tenants.
+      // await this.ensureAdAccountIsAvailable(repo, tenantId, selectedAdAccountId);
     }
 
     const updated = await repo.patchMetaConnection(connection.id, {
@@ -832,7 +834,8 @@ export class MetaService {
       throw new AppError(400, 'AD_ACCOUNT_NOT_FOUND', 'Conta de anuncios nao pertence a esta conexao.');
     }
 
-    await this.ensureAdAccountIsAvailable(repo, tenantId, adAccountId);
+    // Temporariamente desativado para permitir ad accounts compartilhadas entre tenants.
+    // await this.ensureAdAccountIsAvailable(repo, tenantId, adAccountId);
 
     await repo.patchMetaConnection(connectionId, { selectedAdAccountId: adAccountId });
 

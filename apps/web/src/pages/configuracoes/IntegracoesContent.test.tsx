@@ -16,7 +16,9 @@ import type { ReactNode } from 'react';
 import { IntegracoesContent } from './IntegracoesContent';
 import type { MetaConnection } from '@/types/meta';
 
-const { mockApiGet, mockApiDelete } = vi.hoisted(() => ({ mockApiGet: vi.fn(), mockApiDelete: vi.fn() }));
+const { mockApiGet, mockApiDelete, mockLogout } = vi.hoisted(() => ({ mockApiGet: vi.fn(), mockApiDelete: vi.fn(), mockLogout: vi.fn() }));
+
+vi.mock('@/hooks/useLogout', () => ({ useLogout: () => mockLogout }));
 
 vi.mock('@/lib/api', () => ({
   default: {
@@ -58,6 +60,7 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
   beforeEach(() => {
     mockApiGet.mockReset();
     mockApiDelete.mockReset();
+    mockLogout.mockReset();
     mockApiDelete.mockResolvedValue({ data: { success: true, data: null } });
   });
 
@@ -255,5 +258,6 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
     await waitFor(() => {
       expect(mockApiDelete).toHaveBeenCalledWith('/meta/connections/conn-1');
     });
+    expect(mockLogout).toHaveBeenCalledOnce();
   });
 });

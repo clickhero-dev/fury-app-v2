@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
+import { useLogout } from '@/hooks/useLogout';
 import type { MetaConnection } from '@/types/meta';
 // Google Meu Negócio oculto (feature incompleta) — 2026-09
 // import { GoogleIntegrationCard } from './GoogleIntegrationCard';
@@ -243,6 +244,7 @@ function DisconnectDialog({
 
 export function IntegracoesContent() {
   const queryClient = useQueryClient();
+  const logout = useLogout();
   const [searchParams, setSearchParams] = useSearchParams();
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error'; canRetryMeta?: boolean } | null>(null);
   const [pendingDisconnect, setPendingDisconnect] = useState<{ id: string; accountId: string } | null>(null);
@@ -323,8 +325,8 @@ export function IntegracoesContent() {
       await api.delete(`/meta/connections/${connectionId}`);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
       setPendingDisconnect(null);
+      logout();
     },
     onError: () => {
       setPendingDisconnect(null);
