@@ -90,6 +90,25 @@ export class MetaSyncRepository extends TenantScopedRepository {
     super(tenantId, db);
   }
 
+  /**
+   * Remove o estado inteiro sincronizado da Meta para o tenant.
+   *
+   * A conexão Meta é única por tenant e as tabelas sincronizadas não guardam
+   * connectionId. Por isso a limpeza é tenant-wide. A exclusão de campaigns
+   * também remove, via ON DELETE CASCADE, insights e resultados de automação
+   * ligados às campanhas.
+   */
+  async deleteAllMetaSyncedData(): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(metaLeads).where(eq(metaLeads.tenantId, this.tenantId));
+      await tx.delete(metaCampaignDailyInsights).where(eq(metaCampaignDailyInsights.tenantId, this.tenantId));
+      await tx.delete(metaInstagramMedia).where(eq(metaInstagramMedia.tenantId, this.tenantId));
+      await tx.delete(metaSyncRuns).where(eq(metaSyncRuns.tenantId, this.tenantId));
+      await tx.delete(campaigns).where(eq(campaigns.tenantId, this.tenantId));
+      await tx.delete(metaCampaignSnapshots).where(eq(metaCampaignSnapshots.tenantId, this.tenantId));
+    });
+  }
+
   /** Upsert idempotente de um snapshot de campanha (ON CONFLICT tenant+campaign). */
   async upsertCampaignSnapshot(values: CampaignSnapshotUpsert): Promise<CampaignSnapshot> {
     const keys = Object.keys(values);

@@ -212,8 +212,9 @@ function DisconnectDialog({
           <DialogTitle className="text-base font-semibold text-text-primary">Desconectar conta Meta</DialogTitle>
           <DialogDescription className="text-xs text-text-tertiary">
             Tem certeza que deseja desconectar a conta Meta{' '}
-            <span className="font-semibold text-text-primary">{accountId}</span>? Esta ação não
-            pode ser desfeita.
+            <span className="font-semibold text-text-primary">{accountId}</span>? Esta ação apaga
+            permanentemente campanhas, métricas, leads e dados do Instagram sincronizados. Não pode
+            ser desfeita.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="mt-4 gap-2">
