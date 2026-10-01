@@ -7,13 +7,22 @@ Funcionalidade: informar discretamente quando os dados da Meta estão sendo atua
     Dado que há dados salvos e a atualização da Meta está em andamento
     Quando a página de Leads é exibida
     Então o cliente vê uma faixa informativa azul com a data e hora da última atualização
+
+  Cenário: permitir rolagem horizontal para não cortar os dados do lead
+    Dado que existem leads com nome, e-mail, telefone e campanha longos
+    Quando a página de Clientes é exibida com "Todas as campanhas"
+    Então o contêiner da tabela permite rolagem horizontal, a tabela tem largura mínima maior que a área visível e os dados completos estão no documento
 */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { LeadsPage } from './LeadsPage';
+import {
+  LeadsPage,
+  LEADS_TABLE_MIN_WIDTH_CLASS,
+  LEADS_TABLE_NO_CAMPAIGN_MIN_WIDTH_CLASS,
+} from './LeadsPage';
 
 const mockApiGet = vi.hoisted(() => vi.fn());
 
@@ -48,6 +57,15 @@ function mockApi(leads: unknown[] = [], campaigns: unknown[] = [FORM_CAMPAIGN, T
   });
 }
 
+function setScrollableDimensions(element: HTMLElement, clientWidth: number, scrollWidth: number) {
+  Object.defineProperties(element, {
+    clientWidth: { configurable: true, value: clientWidth },
+    scrollWidth: { configurable: true, value: scrollWidth },
+    scrollLeft: { configurable: true, writable: true, value: 0 },
+  });
+  fireEvent(window, new Event('resize'));
+}
+
 describe('LeadsPage', () => {
   beforeEach(() => {
     mockApiGet.mockReset();
@@ -76,6 +94,84 @@ describe('LeadsPage', () => {
     expect(screen.getAllByText('Camp Formulário').length).toBeGreaterThanOrEqual(2);
     // Chamou o agregado /v2/leads
     await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/v2/leads'));
+  });
+
+  it('permite rolagem horizontal para não cortar os dados do lead', async () => {
+    const lead = {
+      name: 'DJ Felipe Honorio',
+      email: 'felipinhomiranda@gmail.com',
+      phone: '+5545999999999',
+      createdAt: '2026-09-21T12:00:00Z',
+      campaignId: 'form_1',
+      campaignName: 'Vagas Exclusivas - Setembro',
+    };
+    mockApi([lead]);
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText(lead.name, { exact: true })).toBeInTheDocument();
+    expect(screen.getByText(lead.email, { exact: true })).toBeInTheDocument();
+    expect(screen.getByText(lead.phone, { exact: true })).toBeInTheDocument();
+    expect(screen.getByText(lead.campaignName, { exact: true })).toBeInTheDocument();
+    expect(screen.getByTestId('leads-table-scroll')).toHaveClass('overflow-x-auto');
+    expect(screen.getByRole('table')).toHaveClass(LEADS_TABLE_MIN_WIDTH_CLASS);
+    expect(screen.getByText(lead.name, { exact: true })).not.toHaveClass('truncate');
+    expect(screen.getByText(lead.email, { exact: true })).not.toHaveClass('truncate');
+    expect(screen.getByText(lead.phone, { exact: true })).not.toHaveClass('truncate');
+    expect(screen.getByText(lead.campaignName, { exact: true })).not.toHaveClass('truncate');
+  });
+
+  it('exibe uma barra persistente com dica quando há mais colunas para rolar', async () => {
+    mockApi([{ name: 'Maria Souza', email: 'maria@exemplo.com', campaignName: 'Camp Formulário' }]);
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    await screen.findByText('Maria Souza');
+    setScrollableDimensions(screen.getByTestId('leads-table-scroll'), 600, 1320);
+
+    const scrollbar = await screen.findByRole('scrollbar', { name: /rolagem horizontal da tabela de clientes/i });
+    expect(screen.getByText('Role para ver todos os dados')).toBeInTheDocument();
+    expect(scrollbar).toHaveAttribute('aria-valuemin', '0');
+    expect(scrollbar).toHaveAttribute('aria-valuemax', '720');
+
+    const scrollContainer = screen.getByTestId('leads-table-scroll');
+    scrollContainer.scrollLeft = 360;
+    fireEvent.scroll(scrollContainer);
+    expect(scrollbar).toHaveAttribute('aria-valuenow', '360');
+  });
+
+  it('não exibe a barra própria quando a tabela cabe integralmente no cartão', async () => {
+    mockApi([{ name: 'Maria Souza', email: 'maria@exemplo.com', campaignName: 'Camp Formulário' }]);
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    await screen.findByText('Maria Souza');
+    setScrollableDimensions(screen.getByTestId('leads-table-scroll'), 1320, 1320);
+
+    await waitFor(() => expect(screen.queryByRole('scrollbar')).not.toBeInTheDocument());
+    expect(screen.queryByText('Role para ver todos os dados')).not.toBeInTheDocument();
+  });
+
+  it('move a tabela pelo teclado e pelo indicador arrastável', async () => {
+    mockApi([{ name: 'Maria Souza', email: 'maria@exemplo.com', campaignName: 'Camp Formulário' }]);
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    await screen.findByText('Maria Souza');
+    const scrollContainer = screen.getByTestId('leads-table-scroll');
+    setScrollableDimensions(scrollContainer, 600, 1320);
+    const scrollbar = await screen.findByRole('scrollbar', { name: /rolagem horizontal da tabela de clientes/i });
+
+    fireEvent.keyDown(scrollbar, { key: 'ArrowRight' });
+    expect(scrollContainer.scrollLeft).toBeGreaterThan(0);
+    expect(scrollbar).toHaveAttribute('aria-valuenow', String(scrollContainer.scrollLeft));
+
+    const track = screen.getByTestId('leads-table-scroll-track');
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
+      bottom: 12, height: 12, left: 0, right: 100, top: 0, width: 100, x: 0, y: 0, toJSON: () => ({}),
+    });
+    const thumb = screen.getByTestId('leads-table-scroll-thumb');
+    fireEvent.pointerDown(thumb, { pointerId: 1, clientX: 10 });
+    fireEvent.pointerMove(thumb, { pointerId: 1, clientX: 50 });
+
+    expect(scrollContainer.scrollLeft).toBeGreaterThan(300);
   });
 
   it('filtro usa a fonte Meta (/v2/lead-campaigns) e lista as campanhas retornadas', async () => {
@@ -122,6 +218,7 @@ describe('LeadsPage', () => {
     expect(consoleError.mock.calls.some((call) => call.some((arg) => String(arg).includes('same key')))).toBe(false);
     // Coluna Campanha some quando há campanha específica selecionada
     expect(screen.queryByText('Campanha')).not.toBeInTheDocument();
+    expect(screen.getByRole('table')).toHaveClass(LEADS_TABLE_NO_CAMPAIGN_MIN_WIDTH_CLASS);
   });
 
   it('exibe estado vazio quando nenhuma campanha de Formulário existe', async () => {
