@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { normalizePhoneToMetaE164 } from '../../utils/phone-normalize.js';
 import { normalizeMetaLeadFields } from '../../utils/meta-lead-normalizer.js';
@@ -26,6 +27,7 @@ import type {
 } from '../../lib/providers/campaign.repository.js';
 import { DefaultMetaCampaignProvider } from '../../lib/providers/default-meta-campaign.provider.js';
 import { DefaultCampaignRepository } from '../../lib/providers/default-campaign.repository.js';
+import { captureServerEvent } from '../../lib/analytics.js';
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
@@ -120,6 +122,30 @@ export function normalizeWizardCreatives(args: {
     primaryText: args.primaryText ?? '',
     destinationUrl: args.destinationUrl,
   }];
+}
+
+/** A Meta varia o texto da colisão entre idiomas e versões da Graph API. */
+function isLeadFormNameConflict(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const metaError = err as { metaCode?: unknown; metaUserMsg?: unknown; metaUserTitle?: unknown; message?: unknown };
+  // Só recuperamos respostas estruturadas da Meta; erros internos nunca devem ser repetidos.
+  if (metaError.metaCode === undefined && !metaError.metaUserMsg && !metaError.metaUserTitle) return false;
+
+  const normalized = [metaError.metaUserTitle, metaError.metaUserMsg, metaError.message]
+    .filter((part): part is string => typeof part === 'string')
+    .join(' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  return /nome (?:do |de )?formulario ja existe|form name already exists|lead form name already exists/.test(normalized);
+}
+
+function uniqueLeadFormName(baseName: string): string {
+  const isoNow = new Date().toISOString();
+  const timestamp = `${isoNow.slice(0, 10).replace(/-/g, '')}-${isoNow.slice(11, 19).replace(/:/g, '')}`;
+  const shortId = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase();
+  return `${baseName} — ${timestamp}-${shortId}`;
 }
 
 // ── Wizard constants ────────────────────────────────────────────────────────
@@ -1090,7 +1116,30 @@ export class CampaignsService {
             business_phone_number: normalizePhoneToMetaE164(args.whatsappPhoneNumber!),
           },
         };
-        const leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, leadFormBody);
+        let leadFormResponse: { id: string };
+        try {
+          leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, leadFormBody);
+        } catch (err) {
+          if (!isLeadFormNameConflict(err)) throw err;
+
+          // Não reutilizamos o formulário existente: cada campanha precisa manter
+          // as próprias perguntas, política e destino. A segunda chamada é o único
+          // retry e usa um nome único, legível e gerado no servidor.
+          captureServerEvent('meta_lead_form_name_collision', {
+            tenantId: args.tenantId,
+            step: 'lead_form',
+            recovery: 'retry_once',
+          });
+          console.warn('[CampaignWizard] colisão de nome do formulário; repetindo uma única vez.', {
+            tenantId: args.tenantId,
+            step: 'lead_form',
+            recovery: 'retry_once',
+          });
+          leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, {
+            ...leadFormBody,
+            name: uniqueLeadFormName(leadFormBody.name),
+          });
+        }
         leadFormId = leadFormResponse.id;
       }
     } catch (err) {
