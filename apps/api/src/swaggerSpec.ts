@@ -465,10 +465,13 @@ export const swaggerSpec = {
       // ── Meta ──────────────────────────────────
       SaveSelectionRequest: {
         type: 'object',
+        required: ['businessIds', 'pageIds', 'adAccountIds', 'instagramUserId'],
         properties: {
-          pageId: { type: 'string' },
-          adAccountId: { type: 'string' },
-          whatsappNumberId: { type: 'string' },
+          businessIds: { type: 'array', items: { type: 'string' }, minItems: 1 },
+          pageIds: { type: 'array', items: { type: 'string' }, minItems: 1 },
+          adAccountIds: { type: 'array', items: { type: 'string' }, minItems: 1 },
+          instagramUserId: { type: 'string' },
+          whatsappNumberIds: { type: 'array', items: { type: 'string' } },
         },
       },
       SelectAdAccountRequest: {

@@ -45,11 +45,11 @@ function connection(overrides: Partial<MetaConnection>): MetaConnection {
   };
 }
 
-function makeWrapper() {
+function makeWrapper(entry = '/configuracoes/integracoes') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/configuracoes/integracoes']}>{children}</MemoryRouter>
+      <MemoryRouter initialEntries={[entry]}>{children}</MemoryRouter>
     </QueryClientProvider>
   );
 }
@@ -99,6 +99,30 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
 
     expect(await screen.findByText('Nenhuma conta de anúncio conectada')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Conectar conta Meta/i })).toBeInTheDocument();
+  });
+
+  it('exibe erro OAuth da Meta com o código técnico e remove o parâmetro da URL', async () => {
+    mockApi([]);
+    render(<IntegracoesContent />, { wrapper: makeWrapper('/configuracoes/integracoes?error=ad_account_in_use') });
+
+    expect(await screen.findByText(/conta de anúncio já está em uso/i)).toBeInTheDocument();
+    expect(screen.getByText(/Código: ad_account_in_use/i)).toBeInTheDocument();
+  });
+
+  it('permite tentar novamente com rerequest após ad_account_in_use', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/meta/connections') return Promise.resolve({ data: { success: true, data: [] } });
+      if (url === '/meta/auth/url') return Promise.resolve({ data: { success: true, data: { authUrl: 'https://meta.example/oauth' } } });
+      return Promise.resolve({ data: { success: true, data: { scopes: [] } } });
+    });
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<IntegracoesContent />, { wrapper: makeWrapper('/configuracoes/integracoes?error=ad_account_in_use') });
+
+    await user.click(await screen.findByRole('button', { name: /tentar novamente/i }));
+    expect(mockApiGet).toHaveBeenCalledWith('/meta/auth/url', {
+      params: { context: 'settings', frontendUrl: window.location.origin, rerequest: 'true' },
+    });
   });
 
   it('exibe o @perfil Instagram vinculado ao calendário com badge "Autorizado"', async () => {

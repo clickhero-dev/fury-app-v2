@@ -1,21 +1,17 @@
-// BDD — guarda de conta de anúncios entre tenants.
 /*
-Funcionalidade: Exclusividade de conta de anúncios Meta
-
+Funcionalidade: exclusividade e confirmação segura dos ativos Meta
   Cenário: tenant não seleciona conta já vinculada a outro tenant
     Dado uma conta de anúncios selecionada em outro tenant
     Quando o tenant atual tenta selecioná-la
     Então recebe AD_ACCOUNT_IN_USE com mensagem segura
-
-  Cenário: tenant mantém sua própria conta de anúncios
-    Dado a conta já vinculada ao próprio tenant
-    Quando a seleciona novamente
-    Então a seleção é persistida
-
-  Cenário: OAuth não vincula automaticamente conta usada por outro tenant
-    Dado o callback Meta encontra uma conta já vinculada
-    Quando conclui a conexão
-    Então recebe AD_ACCOUNT_IN_USE
+  Cenário: salvar uma BM, página/Instagram e conta de anúncio válidos
+    Dado que os ativos pertencem à Business Manager selecionada
+    Quando o onboarding salva a seleção
+    Então a API persiste e confirma os mesmos ativos
+  Cenário: recusar conta de anúncio fora da BM
+    Dado uma conta de anúncio que não pertence à Business Manager
+    Quando o onboarding salva a seleção
+    Então a API falha sem persistir
 */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import jwt from 'jsonwebtoken';
@@ -47,6 +43,7 @@ const connection = {
   selectedBusinessIds: ['b1'],
   selectedPageIds: ['p1'],
   selectedAdAccountIds: ['act_1'],
+  selectedInstagramUserId: 'ig1',
   selectedWhatsappNumberIds: ['wa1'],
 };
 
@@ -168,6 +165,7 @@ describe('MetaService (deep DI)', () => {
       businessIds: ['b1'],
       pageIds: ['p1'],
       adAccountIds: ['act_1'],
+      instagramUserId: 'ig1',
       whatsappNumberIds: ['wa1'],
     });
   });
@@ -179,9 +177,38 @@ describe('MetaService (deep DI)', () => {
         businessIds: [],
         pageIds: [],
         adAccountIds: [],
+        instagramUserId: 'ig_1',
         whatsappNumberIds: [],
       })
     ).rejects.toMatchObject({ code: 'META_CONNECTION_NOT_FOUND' });
+    expect(repo.patchMetaConnection).not.toHaveBeenCalled();
+  });
+
+  it('confirma a seleção persistida quando BM, página/Instagram e conta pertencem ao tenant', async () => {
+    const repo = makeRepo({ findLatestMetaConnection: vi.fn(async () => connection), patchMetaConnection: vi.fn(async () => connection) });
+    const service = makeSvc(repo) as any;
+    vi.spyOn(service, 'getTenantAccessToken').mockResolvedValue('token');
+    service.deps.metaApi.getUserBusinesses.mockResolvedValue([{ id: 'b1', name: 'BM' }]);
+    service.deps.metaApi.getBusinessOwnedPages.mockResolvedValue([{ pageId: 'p1', name: 'Página', instagramUserId: 'ig1', instagramUsername: 'perfil' }]);
+    service.deps.metaApi.getBusinessAdAccounts.mockResolvedValue([{ id: 'act_1', name: 'Conta', account_status: 1 }]);
+
+    await expect(service.saveTenantAssetSelection('t1', {
+      businessIds: ['b1'], pageIds: ['p1'], adAccountIds: ['act_1'], instagramUserId: 'ig1', whatsappNumberIds: [],
+    })).resolves.toMatchObject({ instagramUserId: 'ig1', selectedAdAccountId: 'act_1' });
+    expect(repo.patchMetaConnection).toHaveBeenCalledOnce();
+  });
+
+  it('rejeita conta de anúncio fora da BM sem persistir', async () => {
+    const repo = makeRepo({ findLatestMetaConnection: vi.fn(async () => connection) });
+    const service = makeSvc(repo) as any;
+    vi.spyOn(service, 'getTenantAccessToken').mockResolvedValue('token');
+    service.deps.metaApi.getUserBusinesses.mockResolvedValue([{ id: 'b1', name: 'BM' }]);
+    service.deps.metaApi.getBusinessOwnedPages.mockResolvedValue([{ pageId: 'p1', name: 'Página', instagramUserId: 'ig1', instagramUsername: 'perfil' }]);
+    service.deps.metaApi.getBusinessAdAccounts.mockResolvedValue([]);
+
+    await expect(service.saveTenantAssetSelection('t1', {
+      businessIds: ['b1'], pageIds: ['p1'], adAccountIds: ['act_999'], instagramUserId: 'ig1', whatsappNumberIds: [],
+    })).rejects.toMatchObject({ code: 'INVALID_META_AD_ACCOUNT' });
     expect(repo.patchMetaConnection).not.toHaveBeenCalled();
   });
 

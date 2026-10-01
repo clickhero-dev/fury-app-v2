@@ -244,18 +244,23 @@ function DisconnectDialog({
 export function IntegracoesContent() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error'; canRetryMeta?: boolean } | null>(null);
   const [pendingDisconnect, setPendingDisconnect] = useState<{ id: string; accountId: string } | null>(null);
 
-  function showToast(message: string, variant: 'success' | 'error' = 'success') {
-    setToast({ message, variant });
-    setTimeout(() => setToast(null), 3000);
+  function showToast(message: string, variant: 'success' | 'error' = 'success', canRetryMeta = false) {
+    setToast({ message, variant, canRetryMeta });
+    setTimeout(() => setToast(null), 10_000);
   }
 
   useEffect(() => {
     const error = searchParams.get('error');
-    if (error === 'oauth_cancelled') {
-      showToast('Conexão com o Meta cancelada ou expirada. Tente novamente.', 'error');
+    if (error) {
+      const message = error === 'ad_account_in_use'
+        ? 'Esta conta de anúncio já está em uso na Meta. Revise a vinculação e tente novamente.'
+        : error === 'oauth_cancelled'
+          ? 'Conexão com o Meta cancelada ou expirada. Tente novamente.'
+          : 'Não foi possível concluir a conexão com a Meta. Tente novamente.';
+      showToast(`${message} Código: ${error}`, 'error', error === 'ad_account_in_use');
       const next = new URLSearchParams(searchParams);
       next.delete('error');
       setSearchParams(next, { replace: true });
@@ -344,12 +349,23 @@ export function IntegracoesContent() {
       {/* Notification Toast */}
       {toast && (
         <div
+          role="alert"
           className={cn(
             'fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-lg text-xs font-semibold text-white',
             toast.variant === 'error' ? 'bg-error' : 'bg-brand'
           )}
         >
-          {toast.variant === 'error' ? '⚠️' : '✅'} {toast.message}
+          <span>{toast.variant === 'error' ? '⚠️' : '✅'} {toast.message}</span>
+          {toast.canRetryMeta && (
+            <button
+              type="button"
+              onClick={() => connectMutation.mutate()}
+              disabled={connectMutation.isPending}
+              className="ml-3 rounded-full border border-white/70 px-3 py-1 text-xs font-bold hover:bg-white/15 disabled:opacity-50"
+            >
+              {connectMutation.isPending ? 'Abrindo Meta...' : 'Tentar novamente'}
+            </button>
+          )}
         </div>
       )}
 

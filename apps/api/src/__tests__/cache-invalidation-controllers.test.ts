@@ -177,7 +177,7 @@ describe('invalidação de cache http nos writes', () => {
 
     it('saveSelection invalida /api/meta', async () => {
       const ctrl = makeController({ saveTenantAssetSelection: vi.fn().mockResolvedValue(undefined) });
-      const req = makeReq({ body: { adAccountId: 'act_1' } });
+      const req = makeReq({ body: { businessIds: ['bm_1'], pageIds: ['page_1'], adAccountIds: ['act_1'], instagramUserId: 'ig_1' } });
       const res = makeRes();
 
       await ctrl.saveSelection(req, res, next);
