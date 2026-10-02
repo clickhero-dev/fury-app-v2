@@ -214,6 +214,24 @@ export const creativeAssets = pgTable(
   })
 );
 
+// Músicas de fundo enviadas pelo tenant (vídeo via MoneyPrinterTurbo)
+export const studioMusicTracks = pgTable(
+  'studio_music_tracks',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    mptFile: varchar('mpt_file', { length: 255 }).notNull(),
+    previewUrl: text('preview_url').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('studio_music_tracks_tenant_id_idx').on(table.tenantId),
+  })
+);
+
 // Client goals table
 export const clientGoals = pgTable(
   'client_goals',

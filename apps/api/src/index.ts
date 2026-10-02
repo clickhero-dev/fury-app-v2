@@ -32,6 +32,8 @@ import { startMetaSyncManager, stopMetaSyncManager } from './lib/meta-sync-manag
 import { startLeadStatusManager, stopLeadStatusManager } from './workers/lead-status.worker.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
+import { startStudioVideoWorker, stopStudioVideoWorker } from './workers/studio-video.worker.js';
+import { studioVideoService } from './di.js';
 import { slugify } from './lib/slug.js';
 import { recoverInterruptedPlannerWorkflows } from './planner-workflow-runner.js';
 import { runApiStartupWorkflow } from './workflows/api-startup-runner.js';
@@ -283,6 +285,9 @@ app.use((req, res) => {
       void startStudioGenerationWorker().catch((error) => {
         console.error('Failed to start Studio generation worker:', error);
       });
+      void startStudioVideoWorker(studioVideoService).catch((error) => {
+        console.error('Failed to start Studio video worker:', error);
+      });
       // Compliance de imagem desativado (worker + sweeper)
       // void startComplianceCheckWorker().catch((error) => {
       //   console.error('Failed to start Compliance check worker:', error);
@@ -336,6 +341,7 @@ app.use((req, res) => {
         await stopBudgetOptimizerWorker();
         await stopFuryEngine();
         await stopPlannerWorker();
+        await stopStudioVideoWorker();
         await closeStudioQueue();
         await closeComplianceQueue();
         await closeFuryEngineQueue();

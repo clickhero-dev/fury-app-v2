@@ -276,4 +276,47 @@ export interface GenerateCreativeResponse {
   modificationsRemaining?: number | null;
   complianceStatus?: 'pending' | 'pending_compliance' | 'approved' | 'rejected';
   complianceNotes?: string | null;
+  /** Metadados de vídeo gerado pelo MoneyPrinterTurbo. */
+  videoMeta?: StudioVideoMeta | null;
+}
+
+/** Metadados salvos no complianceNotes de um vídeo (source = moneyprinterturbo). */
+export interface StudioVideoMeta {
+  prompt?: string;
+  script?: string | null;
+  durationSeconds?: number | null;
+  voice?: string | null;
+  music?: string | null;
+}
+
+export interface StudioVideoOptions {
+  voices: Array<{ id: string; key: string; name: string; gender: string }>;
+  transitions: Array<{ id: string; label: string }>;
+  builtinSongs: Array<{ file: string; label: string; previewPath: string }>;
+  userTracks: Array<{ id: string; name: string; previewUrl: string }>;
+}
+
+export type StudioVideoMusicMode = 'none' | 'random' | 'preset' | 'custom';
+
+export interface CreateStudioVideoPayload {
+  prompt: string;
+  voice: string;
+  voiceRate: number;
+  music: { mode: StudioVideoMusicMode; file?: string; trackId?: string; volume: number };
+  subtitles: { enabled: boolean; position: 'top' | 'center' | 'bottom' };
+  transition: string;
+}
+
+export type StudioVideoStage = 'queued' | 'script' | 'voice' | 'scenes' | 'render' | 'saving' | 'done';
+
+export interface StudioVideoJob {
+  jobId: string;
+  status: 'pending' | 'running' | 'done' | 'error';
+  stage: StudioVideoStage;
+  progress: number;
+  prompt: string;
+  error: string | null;
+  assetId: string | null;
+  videoUrl: string | null;
+  createdAt: string;
 }

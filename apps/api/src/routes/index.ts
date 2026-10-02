@@ -12,6 +12,7 @@ import instagramRoutes from "./instagram.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
 import formsRoutes from "./forms.routes.js";
 import studioAiRoutes from "./studio-ai.routes.js";
+import studioVideoRoutes from "./studio-video.routes.js";
 import observabilityRoutes from "./observability.routes.js";
 import bullBoardRoutes from "./bull-board.routes.js";
 
@@ -43,6 +44,7 @@ router.use("/google", googleRoutes);
 
 router.use("/metrics", ...AUTH_TENANT_SUB, metricsRoutes);
 router.use("/automation", automationRoutes);
+router.use("/studio/video", studioVideoRoutes);
 router.use("/studio", studioRoutes);
 
 // Allow superadmin to access meta-locations with explicit tenantId (query param or header)

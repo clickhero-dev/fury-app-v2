@@ -3,7 +3,7 @@ import {
   type Database,
   workflowJobs,
 } from '@fury/db';
-import { and, desc, eq, lt, or } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, lt, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type WorkflowJob = typeof workflowJobs.$inferSelect;
@@ -67,5 +67,48 @@ export class WorkflowJobRepository extends TenantScopedRepository {
 
   async renewWorkflowJobLock(id: string): Promise<void> {
     await this.db.update(workflowJobs).set({ updatedAt: new Date() }).where(eq(workflowJobs.id, id));
+  }
+
+  async listTenantWorkflowJobs(
+    tenantId: string,
+    workflow: string,
+    statuses: Array<WorkflowJob['status']>,
+  ) {
+    return this.db.query.workflowJobs.findMany({
+      where: and(
+        eq(workflowJobs.tenantId, tenantId),
+        eq(workflowJobs.workflow, workflow),
+        inArray(workflowJobs.status, statuses),
+      ),
+      orderBy: [desc(workflowJobs.createdAt)],
+    });
+  }
+
+  /**
+   * Cria o job só se o tenant tiver menos de `limit` jobs ativos (ignora os sem
+   * heartbeat desde `staleBefore`). Lock por tenant+workflow evita corrida.
+   */
+  async createTenantJobIfUnderLimit(
+    data: Partial<WorkflowJob> & { tenantId: string; workflow: string },
+    limit: number,
+    staleBefore: Date,
+  ): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${data.tenantId}:${data.workflow}`}))`);
+      const [row] = await tx
+        .select({ n: count() })
+        .from(workflowJobs)
+        .where(
+          and(
+            eq(workflowJobs.tenantId, data.tenantId),
+            eq(workflowJobs.workflow, data.workflow),
+            inArray(workflowJobs.status, ['pending', 'running']),
+            gt(workflowJobs.updatedAt, staleBefore),
+          ),
+        );
+      if (Number(row?.n ?? 0) >= limit) return false;
+      await tx.insert(workflowJobs).values(data as any);
+      return true;
+    });
   }
 }

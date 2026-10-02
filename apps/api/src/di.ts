@@ -13,6 +13,9 @@ import { StudioService } from './services/studio/creative-studio.service.js';
 import { StudioPublishingService } from './services/studio/studio-publishing.service.js';
 import { CreativeStudioController } from './controllers/creative-studio.controller.js';
 import { StudioPublishingController } from './controllers/studio-publishing.controller.js';
+import { StudioVideoService } from './services/studio/studio-video.service.js';
+import { StudioVideoController } from './controllers/studio-video.controller.js';
+import { enqueueStudioVideo } from './workers/studio-video.worker.js';
 import { BillingService } from './services/billing/billing.service.js';
 import { BillingController } from './controllers/billing.controller.js';
 import { PolicyService } from './services/policy/policy.service.js';
@@ -75,6 +78,7 @@ export const furyEngineService = new FuryEngineService();
 export const studioAiService = new StudioAiService();
 export const studioService = new StudioService();
 export const studioPublishingService = new StudioPublishingService();
+export const studioVideoService = new StudioVideoService({ enqueue: enqueueStudioVideo });
 export const billingService = new BillingService();
 export const policyService = new PolicyService();
 export const observabilityService = new ObservabilityService();
@@ -109,6 +113,7 @@ export const controllers = {
   studioAi: new StudioAiController(studioAiService),
   studio: new CreativeStudioController(studioService),
   studioPublishing: new StudioPublishingController(studioPublishingService),
+  studioVideo: new StudioVideoController(studioVideoService),
   billing: new BillingController(billingService),
   policy: new PolicyController(policyService),
   observability: new ObservabilityController(observabilityService),

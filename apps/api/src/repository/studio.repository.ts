@@ -2,12 +2,14 @@ import {
   db as defaultDb,
   type Database,
   creativeAssets,
+  studioMusicTracks,
 } from '@fury/db';
 import { alias } from 'drizzle-orm/pg-core';
 import { and, asc, count, desc, eq, isNull, isNotNull, or, sql, type SQL } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type CreativeAsset = typeof creativeAssets.$inferSelect;
+type StudioMusicTrack = typeof studioMusicTracks.$inferSelect;
 
 export interface ListAssetsFilter {
   type?: 'image' | 'video' | 'copy';
@@ -188,5 +190,27 @@ export class StudioRepository extends TenantScopedRepository {
       rows,
       total: Number((countRow as any)?.total ?? 0),
     };
+  }
+
+  /** Músicas de fundo enviadas pelo tenant (vídeo). */
+  async listMusicTracks(): Promise<StudioMusicTrack[]> {
+    return this.db.query.studioMusicTracks.findMany({
+      where: eq(studioMusicTracks.tenantId, this.tenantId),
+      orderBy: [desc(studioMusicTracks.createdAt)],
+    });
+  }
+
+  async findMusicTrack(id: string): Promise<StudioMusicTrack | undefined> {
+    return this.db.query.studioMusicTracks.findFirst({
+      where: and(eq(studioMusicTracks.id, id), eq(studioMusicTracks.tenantId, this.tenantId)),
+    });
+  }
+
+  async createMusicTrack(data: { name: string; mptFile: string; previewUrl: string }): Promise<StudioMusicTrack> {
+    const [row] = await this.db
+      .insert(studioMusicTracks)
+      .values({ ...data, tenantId: this.tenantId })
+      .returning();
+    return row;
   }
 }
