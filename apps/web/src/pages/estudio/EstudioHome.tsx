@@ -31,7 +31,7 @@ const SURFACE = 'rounded-2xl border border-border bg-surface shadow-sm';
 const CARD_HOVER = 'transition-all duration-300 ease-in-out hover:border-brand/50 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5';
 const BUTTON_HOVER = 'transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]';
 
-const CHIP_ON = 'bg-brand text-brand-foreground font-semibold shadow-sm';
+const CHIP_ON = 'bg-brand text-white font-semibold shadow-sm';
 const CHIP_OFF = 'text-text-tertiary hover:text-text-primary hover:bg-surface-hover font-medium';
 
 interface StudioAssetResponse {
@@ -377,7 +377,7 @@ export function EstudioHome() {
                     type="button"
                     onClick={handleStartQuickCreate}
                     disabled={quotaReached}
-                    className={`quick-create-btn inline-flex items-center justify-center gap-2 rounded-full bg-brand-hover px-6 py-2.5 text-sm font-semibold text-white shadow-md ${BUTTON_HOVER} hover:bg-brand-hover/90 disabled:opacity-50`}
+                    className={`ady-btn quick-create-btn inline-flex items-center justify-center gap-2 rounded-full bg-brand-hover px-6 py-2.5 text-sm font-semibold text-white shadow-md ${BUTTON_HOVER} hover:bg-brand-hover/90 disabled:opacity-50`}
                   >
                     <Sparkles className="h-4 w-4 shrink-0" />
                     Criação rápida
@@ -528,7 +528,7 @@ export function EstudioHome() {
                   <span>Imagem • explicação detalhada = melhor resultado</span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                <div className="ady-decor flex flex-wrap items-center gap-2.5 pt-1">
                   <ModelSelect
                     models={imageModels}
                     selectedModel={selectedImageModel}
@@ -542,7 +542,7 @@ export function EstudioHome() {
                       type="button"
                       onClick={() => setOrAspectRatio('1:1')}
                       aria-pressed={orAspectRatio === '1:1'}
-                      className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition ${orAspectRatio === '1:1' ? CHIP_ON : CHIP_OFF}`}
+                      className={`ady-btn flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition ${orAspectRatio === '1:1' ? CHIP_ON : CHIP_OFF}`}
                     >
                       <Square className="h-3.5 w-3.5" />
                       Quadrado
@@ -551,7 +551,7 @@ export function EstudioHome() {
                       type="button"
                       onClick={() => setOrAspectRatio('9:16')}
                       aria-pressed={orAspectRatio === '9:16'}
-                      className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition ${orAspectRatio === '9:16' ? CHIP_ON : CHIP_OFF}`}
+                      className={`ady-btn flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition ${orAspectRatio === '9:16' ? CHIP_ON : CHIP_OFF}`}
                     >
                       <RectangleVertical className="h-3.5 w-3.5" />
                       Vertical
@@ -589,7 +589,7 @@ export function EstudioHome() {
                     type="button"
                     onClick={handleQuickCreate}
                     disabled={orPrompt.trim().length < 10 || orImageMutation.isPending || quotaReached}
-                    className={`ml-auto inline-flex items-center justify-center gap-2 rounded-full bg-brand-hover px-5 py-2.5 text-sm font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50`}
+                    className={`ady-btn ml-auto inline-flex items-center justify-center gap-2 rounded-full bg-brand-hover px-5 py-2.5 text-sm font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50`}
                   >
                     {orImageMutation.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -691,7 +691,7 @@ export function EstudioHome() {
               <button
                 type="button"
                 onClick={handleStartQuickCreate}
-                className={`rounded-full bg-brand-hover px-5 py-2 text-sm font-semibold text-white ${BUTTON_HOVER}`}
+                className={`ady-btn rounded-full bg-brand-hover px-5 py-2 text-sm font-semibold text-white ${BUTTON_HOVER}`}
               >
                 Tentar novamente
               </button>
@@ -873,7 +873,7 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
               type="button"
               onClick={onRestore}
               disabled={restorePending}
-              className="flex-1 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand transition-all duration-200 hover:bg-brand hover:text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+              className="ady-btn flex-1 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand transition-all duration-200 hover:bg-brand hover:text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
             >
               {restorePending ? 'Restaurando...' : 'Restaurar anúncio'}
             </button>
@@ -881,7 +881,7 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
             <button
               type="button"
               onClick={onUseInCampaign}
-              className="flex-1 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand transition-all duration-200 hover:bg-brand hover:text-white hover:scale-[1.02] active:scale-[0.98]"
+              className="ady-btn flex-1 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand transition-all duration-200 hover:bg-brand hover:text-white hover:scale-[1.02] active:scale-[0.98]"
             >
               Usar em campanha
             </button>
@@ -889,7 +889,7 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
           <button
             type="button"
             onClick={onViewDetails}
-            className="flex-1 rounded-full bg-brand-hover px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-brand-hover/90 hover:scale-[1.02] active:scale-[0.98]"
+            className="ady-btn flex-1 rounded-full bg-brand-hover px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-brand-hover/90 hover:scale-[1.02] active:scale-[0.98]"
           >
             Ver detalhes
           </button>

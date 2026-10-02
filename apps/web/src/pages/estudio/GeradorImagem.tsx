@@ -80,7 +80,7 @@ function StepIndicator({ step }: { step: WizardStep }) {
   const idx = steps.findIndex((s) => s.key === step);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="ady-decor flex items-center gap-2">
       {steps.map((s, i) => (
         <div key={s.key} className="flex items-center gap-2">
           <div
@@ -98,7 +98,7 @@ function StepIndicator({ step }: { step: WizardStep }) {
             {s.label}
           </span>
           {i < steps.length - 1 && (
-            <div className={`w-8 h-px ${i < idx ? 'bg-[#E8631A]' : 'bg-gray-200'}`} />
+            <div className={`w-8 h-px ${i < idx ? 'bg-[#E8631A]' : 'bg-slate-300 dark:bg-gray-200'}`} />
           )}
         </div>
       ))}
@@ -303,7 +303,7 @@ export function GeradorImagem() {
             <div className="lg:col-span-1 space-y-4">
               <Card>
                 <div className="p-6 space-y-5">
-                  <p className="text-sm font-semibold text-text-primary">
+                  <p className="ady-decor text-sm font-semibold text-text-primary">
                     Foto do Produto <span className="text-red-500">*</span>
                   </p>
 
@@ -361,7 +361,7 @@ export function GeradorImagem() {
               <Card>
                 <div className="p-6 space-y-5">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="ady-decor text-sm font-medium text-text-primary">
                       Headline <span className="text-red-500">*</span>
                     </label>
                     <textarea
@@ -389,7 +389,7 @@ export function GeradorImagem() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="ady-decor text-sm font-medium text-text-primary">
                       CTA (botão de chamada) <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -452,7 +452,7 @@ export function GeradorImagem() {
                       type="button"
                       onClick={handleGenerate}
                       disabled={renderMutation.isPending}
-                      className="w-full bg-[#E8631A] hover:bg-[#D45714] disabled:opacity-50"
+                      className="ady-decor w-full bg-[#E8631A] text-white hover:bg-[#D45714] disabled:opacity-50"
                     >
                       {renderMutation.isPending ? (
                         <span className="inline-flex items-center gap-2">

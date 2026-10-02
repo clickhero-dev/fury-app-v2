@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppLayout, PageHeader, ErrorBoundary, Button, Card, CardContent, CardHeader, CardTitle } from '@/components';
-import { Select } from '@/components/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useBrandKit, useSaveBrandKit, useUploadLogo, useUploadPhotos, useDeletePhoto } from '@/hooks/useBrandKit';
 // OCULTO (feature em teste) — volta no unhide
 // import { WhatsappVerificationCard } from './WhatsappVerificationCard';
 import type { VoiceTone } from '@/types/brandKit';
 import { FURY_COLORS } from '@/lib/constants';
-import { Upload, X, Trash2, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Trash2, Image as ImageIcon, ChevronDown, Check } from 'lucide-react';
 import { ConfiguracoesTabsNav } from './ConfiguracoesTabsNav';
 
 const VOICE_TONE_OPTIONS: { value: VoiceTone; label: string; description: string }[] = [
@@ -299,14 +299,35 @@ export function BrandKitContent() {
               <p className="text-sm text-text-secondary mb-4">
                 Escolha o tom de voz que será usado na escrita dos criativos.
               </p>
-              <Select value={voiceTone} onChange={(e) => setVoiceTone(e.target.value as VoiceTone | '')}>
-                <option value="">Selecione um tom de voz</option>
-                {VOICE_TONE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label} — {opt.description}
-                  </option>
-                ))}
-              </Select>
+              {/* Lista estilizada (o <select> nativo usa a lista do sistema) */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Tom de voz"
+                    className="ady-btn ady-decor flex w-full items-center justify-between gap-2 px-4 py-3 border border-border rounded-lg bg-surface text-left text-base font-medium text-text-primary transition-all duration-200 hover:border-brand/40 focus:outline-none focus:border-brand"
+                  >
+                    <span className="truncate">
+                      {(() => {
+                        const opt = VOICE_TONE_OPTIONS.find((o) => o.value === voiceTone);
+                        return opt ? `${opt.label} — ${opt.description}` : 'Selecione um tom de voz';
+                      })()}
+                    </span>
+                    <ChevronDown className="h-4 w-4 shrink-0 text-text-tertiary" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="ady-decor w-[var(--radix-dropdown-menu-trigger-width)]">
+                  {VOICE_TONE_OPTIONS.map((opt) => (
+                    <DropdownMenuItem key={opt.value} onSelect={() => setVoiceTone(opt.value)} className="justify-between gap-3">
+                      <span className="flex flex-col">
+                        <span className="font-semibold text-text-primary">{opt.label}</span>
+                        <span className="text-xs text-text-tertiary">{opt.description}</span>
+                      </span>
+                      {opt.value === voiceTone && <Check className="h-3.5 w-3.5 shrink-0 text-brand" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </CardContent>
           </Card>
 

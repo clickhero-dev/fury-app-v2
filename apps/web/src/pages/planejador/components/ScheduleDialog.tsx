@@ -13,7 +13,7 @@ export function ScheduleDialog({ count, onConfirm, onClose }: Props) {
   const dateTime = date && time ? new Date(`${date}T${time}`).toISOString() : '';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="ady-decor fixed inset-0 z-50 flex items-center justify-center bg-[#000000]/50" onClick={onClose}>
       <div className="bg-surface border border-border rounded-2xl p-6 w-full max-w-sm shadow-lg" onClick={e => e.stopPropagation()}>
         <h3 className="text-lg font-bold text-text-primary mb-4">
           Agendar {count} post{count > 1 ? 's' : ''}
