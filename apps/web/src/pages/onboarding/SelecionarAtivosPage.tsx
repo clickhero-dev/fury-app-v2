@@ -1,4 +1,5 @@
 import { useState, useTransition, useId } from "react";
+import axios from 'axios';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { AdySymbol } from "@/components/AdySymbol";
@@ -33,6 +34,16 @@ interface MetaAdAccountOption {
 
 interface ApiListResponse<T> {
   data: T[];
+}
+
+export function isConfirmedMetaSelection(
+  saved: any,
+  expected: { businessIds: string[]; pageIds: string[]; adAccountIds: string[]; instagramUserId: string },
+) {
+  return Boolean(saved) && saved.instagramUserId === expected.instagramUserId &&
+    expected.businessIds.every((id) => saved.businessIds?.includes(id)) &&
+    expected.pageIds.every((id) => saved.pageIds?.includes(id)) &&
+    expected.adAccountIds.every((id) => saved.adAccountIds?.includes(id));
 }
 
 // ─── Constantes de Configuração ─────────────────────────────────────────────────
@@ -232,6 +243,12 @@ export function SelecionarAtivosPage() {
   const [pageIds, setPageIds] = useState<string[]>([]);
   const [adAccountIds, setAdAccountIds] = useState<string[]>([]);
   const [businessPage, setBusinessPage] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showError(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 10_000);
+  }
 
   // ── Queries ──────────────────────────────────────────────────────────────────
   const businessesQuery = useQuery({
@@ -275,11 +292,20 @@ export function SelecionarAtivosPage() {
   // ── Mutations ────────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: async () => {
-      await api.post("/meta/save-selection", {
+      const selectedPage = pages.find((page) => pageIds.includes(page.pageId));
+      if (!selectedPage?.instagramUserId || businessIds.length === 0 || adAccountIds.length === 0) {
+        throw new Error('Selecione uma Business Manager, conta de anúncio e Página com Instagram Business.');
+      }
+      const response = await api.post("/meta/save-selection", {
         businessIds,
         pageIds,
         adAccountIds,
+        instagramUserId: selectedPage.instagramUserId,
       });
+      const saved = response.data.data;
+      if (!isConfirmedMetaSelection(saved, { businessIds, pageIds, adAccountIds, instagramUserId: selectedPage.instagramUserId })) {
+        throw new Error('A Meta não confirmou todos os ativos selecionados. Revise e tente novamente.');
+      }
     },
     onSuccess: async () => {
       await queryClient.refetchQueries({
@@ -291,12 +317,18 @@ export function SelecionarAtivosPage() {
         window.location.assign("/dashboard");
       });
     },
+    onError: (error: unknown) => {
+      const apiMessage = axios.isAxiosError(error) ? error.response?.data?.error?.message : undefined;
+      showError(apiMessage ?? (error instanceof Error ? error.message : 'Erro ao salvar a seleção. Tente novamente.'));
+    },
   });
 
   // ── Mapeamento dos Itens Selecionados ─────────────────────────────────────────
   const businesses = businessesQuery.data ?? [];
   const adAccounts = adAccountsQuery.data ?? [];
   const pages = pagesQuery.data ?? [];
+  const selectedPage = pages.find((page) => pageIds.includes(page.pageId));
+  const hasSelectedInstagram = Boolean(selectedPage?.instagramUserId);
 
   const selectedBusinessNames = businesses
     .filter((b) => businessIds.includes(b.id))
@@ -330,6 +362,11 @@ export function SelecionarAtivosPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-admin-bg text-admin-text">
+      {toast && (
+        <div role="alert" className="fixed top-6 left-1/2 z-50 -translate-x-1/2 rounded-2xl bg-red-500 px-5 py-3 text-sm font-semibold text-white shadow-lg">
+          {toast}
+        </div>
+      )}
       {/* Fundo Iluminado — bem mais discreto no claro */}
       <div
         aria-hidden
@@ -582,7 +619,7 @@ export function SelecionarAtivosPage() {
                   Confira sua seleção
                 </h1>
                 <p className="text-admin-text-muted text-lg leading-relaxed">
-                  A partir de agora, apenas estes ativos aparecerão no FURY.
+                  A partir de agora, apenas estes ativos aparecerão no ady.
                 </p>
               </div>
 
@@ -618,7 +655,7 @@ export function SelecionarAtivosPage() {
 
                 <div className="p-4">
                   <div className="text-xs font-bold text-admin-text-faint uppercase tracking-wide mb-1">
-                    Instagram do calendário
+                    Página do instagram
                   </div>
                   <div className="text-sm font-medium text-admin-text">
                     {(() => {
@@ -644,7 +681,7 @@ export function SelecionarAtivosPage() {
                   variant="outline"
                   size="md"
                   className="flex-1"
-                  disabled={saveMutation.isPending}
+                  disabled={saveMutation.isPending || businessIds.length === 0 || adAccountIds.length === 0 || !hasSelectedInstagram}
                 >
                   Voltar
                 </Button>

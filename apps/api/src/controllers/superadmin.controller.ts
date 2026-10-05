@@ -4,6 +4,7 @@ import bcrypt from "bcrypt";
 import { db, tenants, users, clientGoals } from "@fury/db";
 import { AppError } from "../middleware/errorHandler.js";
 import { SuperAdminRepository } from "../repository/superadmin.repository.js";
+import { audienceGeoSchema } from "../lib/audience-geo.js";
 
 const createUserSchema = z.object({
   tenantId: z.string().uuid(),
@@ -37,6 +38,7 @@ const updateUserSchema = z.object({
         id: z.string(),
         name: z.string(),
       })).optional(),
+      geo: audienceGeoSchema.optional(),
     })
     .optional(),
 });

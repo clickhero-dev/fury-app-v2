@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { normalizePhoneToMetaE164 } from '../../utils/phone-normalize.js';
 import { normalizeMetaLeadFields } from '../../utils/meta-lead-normalizer.js';
@@ -6,6 +7,7 @@ import {
   parseRoasFromPurchaseRoas,
   parseCpaFromCostPerAction,
 } from '../../utils/meta-insights-parser.js';
+import { isLeadObjective } from '../../utils/meta-conversion-events.js';
 import { roundToDecimals } from '../../utils/metrics-formatter.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { CampaignRepository } from '../../repository/campaign.repository.js';
@@ -16,7 +18,8 @@ import { getResolvedTenantAssetSelection } from '../meta/meta.service.js';
 import { slugify } from '../../lib/slug.js';
 import { privacyPolicyUrl } from '../../lib/privacy-policy.js';
 import { isMetaPermissionDenied, sanitizeMetaReason } from '../../lib/meta-error.js';
-import { getCampaignAds, getCampaignAdCreatives, getVideoSourceUrl, searchMetaInterests as searchMetaInterestsLib } from '../../lib/meta-api.js';
+import { getCampaignAds, getCampaignAdCreatives, getVideoSourceUrl, searchMetaInterests as searchMetaInterestsLib, searchMetaGeoLocations, findMetaCityByCoords, type MetaGeoSearchType } from '../../lib/meta-api.js';
+import { type AudienceGeo, hasGeoLocations, buildGeoLocations } from '../../lib/audience-geo.js';
 import type { IMetaCampaignProvider } from '../../lib/providers/meta-campaign.provider.js';
 import type {
   ICampaignRepository,
@@ -24,6 +27,7 @@ import type {
 } from '../../lib/providers/campaign.repository.js';
 import { DefaultMetaCampaignProvider } from '../../lib/providers/default-meta-campaign.provider.js';
 import { DefaultCampaignRepository } from '../../lib/providers/default-campaign.repository.js';
+import { captureServerEvent } from '../../lib/analytics.js';
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
@@ -78,6 +82,7 @@ export interface CreateWizardCampaignArgs {
   destinations?: WizardMessagingDestination[]; instagramUserId?: string;
   instagramUsername?: string;
   audienceInterests?: { id: string; name: string }[];
+  geo?: AudienceGeo;
 }
 
 export interface CreateWizardCampaignResult {
@@ -117,6 +122,30 @@ export function normalizeWizardCreatives(args: {
     primaryText: args.primaryText ?? '',
     destinationUrl: args.destinationUrl,
   }];
+}
+
+/** A Meta varia o texto da colisão entre idiomas e versões da Graph API. */
+function isLeadFormNameConflict(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const metaError = err as { metaCode?: unknown; metaUserMsg?: unknown; metaUserTitle?: unknown; message?: unknown };
+  // Só recuperamos respostas estruturadas da Meta; erros internos nunca devem ser repetidos.
+  if (metaError.metaCode === undefined && !metaError.metaUserMsg && !metaError.metaUserTitle) return false;
+
+  const normalized = [metaError.metaUserTitle, metaError.metaUserMsg, metaError.message]
+    .filter((part): part is string => typeof part === 'string')
+    .join(' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  return /nome (?:do |de )?formulario ja existe|form name already exists|lead form name already exists/.test(normalized);
+}
+
+function uniqueLeadFormName(baseName: string): string {
+  const isoNow = new Date().toISOString();
+  const timestamp = `${isoNow.slice(0, 10).replace(/-/g, '')}-${isoNow.slice(11, 19).replace(/:/g, '')}`;
+  const shortId = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase();
+  return `${baseName} — ${timestamp}-${shortId}`;
 }
 
 // ── Wizard constants ────────────────────────────────────────────────────────
@@ -182,7 +211,7 @@ export function calculateDateRange(
   };
 }
 
-export function mapWizardMetaError(err: unknown, step: string): never {
+export function mapWizardMetaError(err: unknown, step: string, context?: Record<string, unknown>): never {
   if (err instanceof AppError) throw err;
   const metaCode = (err as any).metaCode;
   const metaSubcode = (err as any).metaSubcode;
@@ -243,8 +272,14 @@ export function mapWizardMetaError(err: unknown, step: string): never {
   if (metaSubcode === 1892075) {
     throw new AppError(400, 'META_LEGAL_CONTENT_REQUIRED', 'O Meta exigiu uma política de privacidade na criação do Formulário. Não foi possível validar a URL da política. Tente novamente em instantes.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
   }
+  // Código no texto só no ad set (onde vai a localização)
+  const codeSuffix = step === 'adset' && metaCode ? ` (erro ${metaCode}${metaSubcode ? `/${metaSubcode}` : ''})` : '';
+  if (metaSubcode === 1815946) {
+    const metaOriginal = `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || message}`;
+    throw new AppError(400, 'META_LOCATION_MULTI_RADIUS', `A Meta recusou usar raio com várias localizações${codeSuffix}.\nMensagem da Meta: ${metaOriginal}`, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...context });
+  }
   if (metaSubcode === 1487110) {
-    throw new AppError(400, 'META_LOCATION_RADIUS', metaUserMsg || 'O raio geografico selecionado nao esta dentro dos limites. Aumente o raio (ex: Sao Paulo precisa de 15km ou mais).', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+    throw new AppError(400, 'META_LOCATION_RADIUS', (metaUserMsg || 'O raio geografico selecionado nao esta dentro dos limites. Aumente o raio (ex: Sao Paulo precisa de 15km ou mais).') + codeSuffix, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...context });
   }
   // "Required field is missing: the link field is required" — criativo de leads
   // sem o campo `link` no link_data. O wizard envia https://fb.me/ (doc Lead Ads);
@@ -258,7 +293,7 @@ export function mapWizardMetaError(err: unknown, step: string): never {
     throw new AppError(400, 'META_INVALID_PHONE_NUMBER', 'O Meta rejeitou o número de WhatsApp informado. Verifique se o número está correto (com DDI e DDD) e se possui WhatsApp ativo, e tente novamente.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
   }
   const userMessage = metaUserMsg || metaUserTitle ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}` : (message || 'Erro ao publicar no Meta. Tente novamente.');
-  throw new AppError(400, 'META_API_ERROR', userMessage, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...(metaBlameField ? { blame_field: metaBlameField } : {}) });
+  throw new AppError(400, 'META_API_ERROR', userMessage + codeSuffix, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...(metaBlameField ? { blame_field: metaBlameField } : {}), ...context });
 }
 
 // ── Service class ────────────────────────────────────────────────────────────
@@ -828,18 +863,16 @@ export class CampaignsService {
       // Pessoas ("PESSOAS") — fonte da verdade: nº de pessoas que preencheram o
       // formulário. Insights contam `lead` por atribuição/evento e a soma diária
       // de únicos diverge do total de preenchimentos distintos (ex.: 6 ≠ 4).
-      // Campanha Formulário (OUTCOME_LEADS) → conta os fills do form; demais
-      // objetivos mantêm a soma das conversões dos insights.
+      // Campanha Formulário (OUTCOME_LEADS) → conta os envios PERSISTIDOS
+      // (`meta_leads`, mesma origem da lista de Campanhas e da página Clientes),
+      // para as duas telas mostrarem o MESMO número; demais objetivos mantêm a
+      // soma das conversões dos insights.
       let conversions: number = timeseries.reduce((s, d) => s + d.conversions, 0);
-      if (campaignObjective === 'OUTCOME_LEADS') {
+      if (isLeadObjective(campaignObjective)) {
         try {
-          const { leads } = await this.getCampaignLeads({
-            tenantId: args.tenantId,
-            campaignId: args.campaignId,
-          });
-          conversions = leads.length;
+          conversions = await this.repo.countLeadFormSubmissions(args.tenantId, args.campaignId);
         } catch (err) {
-          console.warn('[getCampaignInsights] falha ao contar fills do form:', (err as Error).message);
+          console.warn('[getCampaignInsights] falha ao contar envios de formulário:', (err as Error).message);
         }
       }
 
@@ -939,8 +972,10 @@ export class CampaignsService {
       instagramCreativePageId = igPage.pageId;
     }
 
+    const useGeo = hasGeoLocations(args.geo);
     let cityKey = args.locationCityKey;
-    if (!cityKey) {
+    // Com geo não precisa buscar a cidade
+    if (!cityKey && !useGeo) {
       let locations: any[];
       try { locations = await this.meta.searchLocations(args.locationCity, accessToken); }
       catch (err) { mapWizardMetaError(err, 'location_search'); }
@@ -1081,7 +1116,30 @@ export class CampaignsService {
             business_phone_number: normalizePhoneToMetaE164(args.whatsappPhoneNumber!),
           },
         };
-        const leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, leadFormBody);
+        let leadFormResponse: { id: string };
+        try {
+          leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, leadFormBody);
+        } catch (err) {
+          if (!isLeadFormNameConflict(err)) throw err;
+
+          // Não reutilizamos o formulário existente: cada campanha precisa manter
+          // as próprias perguntas, política e destino. A segunda chamada é o único
+          // retry e usa um nome único, legível e gerado no servidor.
+          captureServerEvent('meta_lead_form_name_collision', {
+            tenantId: args.tenantId,
+            step: 'lead_form',
+            recovery: 'retry_once',
+          });
+          console.warn('[CampaignWizard] colisão de nome do formulário; repetindo uma única vez.', {
+            tenantId: args.tenantId,
+            step: 'lead_form',
+            recovery: 'retry_once',
+          });
+          leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, {
+            ...leadFormBody,
+            name: uniqueLeadFormName(leadFormBody.name),
+          });
+        }
         leadFormId = leadFormResponse.id;
       }
     } catch (err) {
@@ -1089,6 +1147,7 @@ export class CampaignsService {
       mapWizardMetaError(err, 'lead_form');
     }
 
+    let sentGeoLocations: Record<string, unknown> | undefined;
     try {
       const campaignBody = {
         name: campaignName, objective: objectiveConfig.metaObjective, status: 'ACTIVE',
@@ -1098,8 +1157,12 @@ export class CampaignsService {
       const campaignResponse = await this.meta.createCampaign(adAccountId, accessToken, campaignBody);
       metaCampaignId = campaignResponse.id;
 
+      sentGeoLocations = useGeo
+        ? buildGeoLocations(args.geo!)
+        : { cities: [{ key: parseInt(cityKey!, 10), radius: args.locationRadiusKm || 30, distance_unit: 'kilometer' }] };
+
       const targeting: Record<string, unknown> = {
-        geo_locations: { cities: [{ key: parseInt(cityKey!, 10), radius: args.locationRadiusKm || 30, distance_unit: 'kilometer' }] },
+        geo_locations: sentGeoLocations,
         age_min: args.ageMin, age_max: args.ageMax,
         genders: args.gender === 'all' ? [1, 2] : args.gender === 'male' ? [1] : [2],
         targeting_automation: { advantage_audience: 0 },
@@ -1110,7 +1173,7 @@ export class CampaignsService {
       }
 
       const adSetBody: Record<string, unknown> = {
-        name: `AdSet — ${args.locationCity} — FURY`, campaign_id: metaCampaignId,
+        name: `AdSet — ${args.locationCity} — ady`, campaign_id: metaCampaignId,
         daily_budget: Math.round(args.dailyBudgetBrl * 100),
         billing_event: 'IMPRESSIONS', optimization_goal: objectiveConfig.optimizationGoal,
         bid_strategy: 'LOWEST_COST_WITHOUT_CAP', targeting, status: 'ACTIVE',
@@ -1169,7 +1232,7 @@ export class CampaignsService {
 
         const creativeBody: Record<string, unknown> = isInstagramCreative
           ? { object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: c.creativeInstagramMediaId, call_to_action: JSON.stringify({ type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: c.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
-          : { name: `Creative — FURY #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads'
+          : { name: `Creative — ady #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads'
             // Doc Lead Ads: o campo link no link_data é OBRIGATÓRIO mesmo para
             // formulários instantâneos, e o valor deve ser https://fb.me/ (o
             // clique real abre o form via call_to_action.lead_gen_form_id). Sem
@@ -1182,7 +1245,7 @@ export class CampaignsService {
         createdAdCreativeIds.push(adCreativeResponse.id);
 
         const adResponse = await this.meta.createAd(adAccountId, accessToken, {
-          name: `Ad — FURY — ${dataLabel} #${i + 1}`,
+          name: `Ad — ady — ${dataLabel} #${i + 1}`,
           adset_id: adSetId,
           creative: { creative_id: adCreativeResponse.id },
           status: 'ACTIVE',
@@ -1192,7 +1255,7 @@ export class CampaignsService {
     } catch (err) {
       const step = !metaCampaignId ? 'campaign' : !adSetId ? 'adset' : 'creative';
       await rollback(step);
-      mapWizardMetaError(err, step);
+      mapWizardMetaError(err, step, step === 'adset' ? { geo_locations: sentGeoLocations } : undefined);
     }
 
     let campaign: { id: string };
@@ -1440,16 +1503,21 @@ export class CampaignsService {
     return { leads };
   }
 
-  async searchMetaLocations(args: { tenantId: string; query: string }): Promise<any[]> {
-    const cached = await this.deps.getMetaLocationsCache(args.query);
+  async searchMetaLocations(args: { tenantId: string; query: string; types?: MetaGeoSearchType[] }): Promise<any[]> {
+    // Sem types: busca de cidades de sempre (mesma chave de cache)
+    const withTypes = Boolean(args.types?.length);
+    const cacheKey = withTypes ? `${args.types!.join(',')}|${args.query}` : args.query;
+    const cached = await this.deps.getMetaLocationsCache(cacheKey);
     if (cached) return cached;
-  
+
     let results: any[];
-  
+
     try {
       // 1. A busca de token AGORA fica dentro do try
       const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
-      results = await this.meta.searchLocations(args.query, accessToken);
+      results = withTypes
+        ? await searchMetaGeoLocations(args.query, accessToken, args.types!)
+        : await this.meta.searchLocations(args.query, accessToken);
     } catch (err) {
       // 2. Se falhar na busca de token OU no envio pra Meta (401, 403 ou qualquer erro em dev)
       console.warn(`[searchMetaLocations] Falha na Meta ou Token ausente/expirado localmente. Retornando mock data para query: "${args.query}"`);
@@ -1465,8 +1533,21 @@ export class CampaignsService {
       }
     }
   
-    await this.deps.setMetaLocationsCache(args.query, results);
+    await this.deps.setMetaLocationsCache(cacheKey, results);
     return results;
+  }
+
+  // "Usar minha localização": coordenadas → cidade da Meta
+  async findMetaCityByCoords(args: { tenantId: string; lat: number; lng: number }): Promise<any> {
+    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+    let city;
+    try { city = await findMetaCityByCoords(args.lat, args.lng, accessToken); }
+    catch (err) {
+      const e = err as { metaCode?: number; metaSubcode?: number; message?: string };
+      throw new AppError(502, 'META_CITY_LOOKUP_FAILED', 'Não foi possível descobrir a cidade pela Meta.', { meta_code: e.metaCode, meta_subcode: e.metaSubcode, meta_message: e.message });
+    }
+    if (!city) throw new AppError(404, 'CITY_NOT_FOUND', 'A Meta não encontrou uma cidade para a sua localização. Digite o nome da cidade.');
+    return city;
   }
 
   async searchMetaInterests(args: { tenantId: string; query: string }): Promise<any[]> {

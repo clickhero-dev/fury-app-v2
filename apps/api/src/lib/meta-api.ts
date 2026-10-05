@@ -146,7 +146,7 @@ export async function exchangeCodeForToken(params: {
   url.searchParams.set('redirect_uri', params.redirectUri);
   url.searchParams.set('code', params.code);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   return parseMetaResponse<MetaTokenResponse>(response, 'Falha ao trocar o code por access token no Meta.');
 }
 
@@ -161,7 +161,7 @@ export async function exchangeForLongLivedToken(params: {
   url.searchParams.set('client_secret', params.clientSecret);
   url.searchParams.set('fb_exchange_token', params.shortLivedToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   return parseMetaResponse<MetaTokenResponse>(
     response,
     'Falha ao obter token de longa duracao (60 dias) no Meta.'
@@ -197,7 +197,7 @@ export async function getBusinessAdAccounts(businessId: string, accessToken: str
   url.searchParams.set('fields', 'id,name,account_status,currency,timezone_name');
   url.searchParams.set('access_token', accessToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   const payload = await parseMetaResponse<MetaAdAccountsResponse>(
     response,
     'Falha ao buscar contas de anuncios da Business Manager no Meta.'
@@ -227,7 +227,7 @@ export async function getBusinessOwnedPages(businessId: string, accessToken: str
   url.searchParams.set('fields', 'id,name,instagram_business_account{id,username}');
   url.searchParams.set('access_token', accessToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   const payload = await parseMetaResponse<MetaOwnedPagesResponse>(
     response,
     'Falha ao buscar Paginas da Business Manager no Meta.'
@@ -1190,7 +1190,7 @@ export async function metaApiCall<T>(
           data: [
             {
               id: 'mock_page_id',
-              name: 'Página Demo FURY',
+              name: 'Página Demo Ady',
               instagram_business_account: { id: 'mock_ig_user_id' },
               whatsapp_business_account: { id: 'mock_waba_id' },
             },
@@ -1203,7 +1203,7 @@ export async function metaApiCall<T>(
             {
               id: 'mock_phone_number_id',
               display_phone_number: '+55 11 99999-0000',
-              verified_name: 'FURY Demo',
+              verified_name: 'Ady Demo',
             },
           ],
         } as T;
@@ -1607,7 +1607,7 @@ export async function createAdCreativeFromCopy(params: {
   const callToActionType = mapCtaToMetaType(params.cta);
 
   const body: Record<string, unknown> = {
-    name: `FURY Copy Creative ${new Date().toISOString()}`,
+    name: `Ady Copy Creative ${new Date().toISOString()}`,
     object_story_spec: {
       page_id: params.pageId,
       link_data: {
@@ -1671,6 +1671,73 @@ export async function searchMetaCityLocations(query: string, accessToken: string
   return (response.data || [])
     .filter((item) => item.type === 'city' && item.country_code === 'BR')
     .map((item) => ({ ...item, region: cleanRegionLabel(item.region) }));
+}
+
+export type MetaGeoSearchType = 'country' | 'region' | 'city';
+
+/** Busca país, estado e/ou cidade do Brasil (mesmo filtro client-side da busca de cidades). */
+export async function searchMetaGeoLocations(query: string, accessToken: string, types: MetaGeoSearchType[]): Promise<MetaLocationResult[]> {
+  const path = `/search?type=adgeolocation&location_types=${encodeURIComponent(JSON.stringify(types))}&q=${encodeURIComponent(query)}`;
+  const response = await metaApiCall<MetaLocationSearchResponse>(path, accessToken);
+  const items = (response.data || [])
+    .filter((item) => types.includes(item.type as MetaGeoSearchType) && item.country_code === 'BR')
+    .map((item) => ({ ...item, region: cleanRegionLabel(item.region) }));
+  return rankGeoResults(query, items);
+}
+
+const normalizeGeoText = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const GEO_TYPE_ORDER: Record<string, number> = { country: 0, region: 1, city: 2 };
+
+/** Exato primeiro, depois "começa com", depois o resto; empate: país, estado, cidade. */
+export function rankGeoResults(query: string, items: MetaLocationResult[]): MetaLocationResult[] {
+  const q = normalizeGeoText(query);
+  const score = (name: string) => {
+    const n = normalizeGeoText(name);
+    return n === q ? 0 : n.startsWith(q) ? 1 : 2;
+  };
+  return items
+    .map((item, i) => ({ item, i, s: score(item.name), t: GEO_TYPE_ORDER[item.type ?? ''] ?? 3 }))
+    .sort((a, b) => a.s - b.s || a.t - b.t || a.i - b.i)
+    .map(({ item }) => item);
+}
+
+/** Cidade da Meta a partir de coordenadas: adradiussuggestion → city_id → adgeolocationmeta. */
+export async function findMetaCityByCoords(lat: number, lng: number, accessToken: string): Promise<MetaLocationResult | null> {
+  // Formato não documentado: aceita objeto solto ou dentro de data
+  const suggestion = await metaApiCall<Record<string, any>>(
+    `/search?type=adradiussuggestion&latitude=${lat}&longitude=${lng}`,
+    accessToken
+  );
+  const s = Array.isArray(suggestion?.data) ? suggestion.data[0] : (suggestion?.data ?? suggestion);
+  const cityId = s?.city_id ? String(s.city_id) : '';
+  if (!/^\d+$/.test(cityId)) return null;
+
+  const meta = await metaApiCall<Record<string, any>>(
+    `/search?type=adgeolocationmeta&cities=${encodeURIComponent(JSON.stringify([cityId]))}`,
+    accessToken
+  );
+  const cities = meta?.data?.cities ?? meta?.cities ?? (Array.isArray(meta?.data) ? meta.data[0]?.cities : undefined);
+  const city = cities?.[cityId];
+  if (!city?.name) return null;
+
+  // O nome pode vir com bairro ("Zona 21, Maringá"): pega o nome oficial da mesma chave
+  const cityName = cityNameFromMeta(city.name);
+  const found = await searchMetaCityLocations(cityName, accessToken)
+    .then((list) => list.find((c) => String(c.key) === cityId))
+    .catch(() => undefined);
+  return {
+    key: cityId,
+    name: found?.name ?? cityName,
+    region: found?.region ?? cleanRegionLabel(city.region),
+    country_code: found?.country_code ?? city.country_code,
+    type: 'city',
+  };
+}
+
+/** Último trecho do nome ("Zona 21, Maringá" → "Maringá"). */
+export function cityNameFromMeta(name: string): string {
+  const parts = name.split(',').map((p) => p.trim()).filter(Boolean);
+  return parts[parts.length - 1] || name;
 }
 
 export async function uploadAdImage(params: {
@@ -1938,6 +2005,21 @@ export interface MetaLeadFormQuestion {
   key: string;
   type: string;
   label?: string;
+}
+
+/**
+ * Envios de um leadgen form (leads de formulário instantâneo).
+ * GET /{form_id}/leads — MESMA fonte que o detalhe da campanha usa para
+ * contar "Pessoas"; o worker/lista precisam ler daqui para não divergirem.
+ */
+export async function getLeadFormData(
+  formId: string,
+  accessToken: string,
+): Promise<{ data: Array<Record<string, unknown>> }> {
+  return metaApiCall<{ data: Array<Record<string, unknown>> }>(
+    `/${encodeURIComponent(formId)}/leads?fields=id,field_data,created_time,form_id`,
+    accessToken,
+  );
 }
 
 /**

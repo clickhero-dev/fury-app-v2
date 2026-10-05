@@ -170,15 +170,16 @@ async function persistGeneratedImage(params: {
     complianceNotes: JSON.stringify({ prompt: params.prompt, generatedAt }),
   });
 
-  const complianceQueue = await getComplianceQueue();
-  await complianceQueue.add(
-    'studio:compliance-check',
-    { creativeAssetId: asset.id, tenantId: params.tenantId },
-    {
-      removeOnComplete: 1000,
-      removeOnFail: 5000,
-    }
-  );
+  // Compliance de imagem desativado
+  // const complianceQueue = await getComplianceQueue();
+  // await complianceQueue.add(
+  //   'studio:compliance-check',
+  //   { creativeAssetId: asset.id, tenantId: params.tenantId },
+  //   {
+  //     removeOnComplete: 1000,
+  //     removeOnFail: 5000,
+  //   }
+  // );
 
   return {
     creativeAssetId: asset.id,
@@ -297,9 +298,10 @@ export async function publishStudioAssetToMeta(params: {
     throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
   }
 
-  if (asset.complianceStatus !== 'approved') {
-    throw new AppError(409, 'ASSET_NOT_APPROVED', 'O asset precisa estar aprovado no compliance antes da publicacao.');
-  }
+  // Trava de aprovação desativada
+  // if (asset.complianceStatus !== 'approved') {
+  //   throw new AppError(409, 'ASSET_NOT_APPROVED', 'O asset precisa estar aprovado no compliance antes da publicacao.');
+  // }
 
   const connection = await repo.findLatestMetaConnection();
 

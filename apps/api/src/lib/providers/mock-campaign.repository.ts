@@ -7,6 +7,8 @@ export class MockCampaignRepository implements ICampaignRepository {
   furyInsights: FuryInsightRecord[] = [];
   automationRules: AutomationRuleRecord[] = [];
   failCreateCampaign = false;
+  /** Envios de formulário persistidos por form (fonte do número "Clientes"). */
+  leadFormSubmissionsByForm: Map<string, Array<{ id: string; name?: string | null; email?: string | null; phone?: string | null; createdTime?: Date | null }>> = new Map();
 
   async findMetaConnection(tenantId: string): Promise<MetaConnectionRecord | null> {
     return this.metaConnections.find((c) => c.tenantId === tenantId) ?? null;
@@ -51,6 +53,13 @@ export class MockCampaignRepository implements ICampaignRepository {
 
   async findCreativeAsset(id: string, tenantId: string): Promise<CreativeAssetRecord | null> {
     return this.creativeAssets.find((a) => a.id === id && a.tenantId === tenantId) ?? null;
+  }
+
+  async countLeadFormSubmissions(tenantId: string, metaCampaignId: string): Promise<number> {
+    const campaign = this.campaigns.find((c) => c.tenantId === tenantId && c.metaCampaignId === metaCampaignId);
+    const formId = (campaign?.budget as Record<string, unknown> | null)?.lead_form_id;
+    if (typeof formId !== 'string') return 0;
+    return this.leadFormSubmissionsByForm.get(formId)?.length ?? 0;
   }
 
   async findRecentTakedowns(tenantId: string, campaignId: string, limit = 5): Promise<FuryInsightRecord[]> {

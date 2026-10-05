@@ -58,29 +58,30 @@ async function persistStudioImage(input: StudioGenerationJobData): Promise<Gener
     complianceStatus: 'pending_compliance',
   });
 
-  // Enfileira compliance check com retry
-  const complianceQueue = await getComplianceQueue();
-  let complianceEnqueued = false;
-  let retries = 3;
-  while (!complianceEnqueued && retries > 0) {
-    try {
-      await complianceQueue.add('compliance-check', { creativeAssetId: asset.id, tenantId: input.tenantId }, {
-        removeOnComplete: 1000,
-        removeOnFail: 5000,
-        attempts: 4,
-        backoff: { type: 'exponential', delay: 10_000 },
-      });
-      complianceEnqueued = true;
-    } catch (err) {
-      retries--;
-      if (retries === 0) {
-        // Rollback: deletar creativeAsset criado se compliance queue falhar definitivamente
-        await repo.deleteAsset(asset.id);
-        throw err;
-      }
-      await new Promise(r => setTimeout(r, 1000 * (4 - retries))); // backoff: 1s, 2s, 3s
-    }
-  }
+  // Compliance de imagem desativado
+  // // Enfileira compliance check com retry
+  // const complianceQueue = await getComplianceQueue();
+  // let complianceEnqueued = false;
+  // let retries = 3;
+  // while (!complianceEnqueued && retries > 0) {
+  //   try {
+  //     await complianceQueue.add('compliance-check', { creativeAssetId: asset.id, tenantId: input.tenantId }, {
+  //       removeOnComplete: 1000,
+  //       removeOnFail: 5000,
+  //       attempts: 4,
+  //       backoff: { type: 'exponential', delay: 10_000 },
+  //     });
+  //     complianceEnqueued = true;
+  //   } catch (err) {
+  //     retries--;
+  //     if (retries === 0) {
+  //       // Rollback: deletar creativeAsset criado se compliance queue falhar definitivamente
+  //       await repo.deleteAsset(asset.id);
+  //       throw err;
+  //     }
+  //     await new Promise(r => setTimeout(r, 1000 * (4 - retries))); // backoff: 1s, 2s, 3s
+  //   }
+  // }
 
   return {
     creativeAssetId: asset.id,
@@ -239,29 +240,30 @@ export async function processPlannerImageJob(input: StudioGenerationJobData): Pr
     });
     creativeAssetId = String(creativeAsset.id);
 
-    // Enfileira compliance check com retry
-    const complianceQueue = await getComplianceQueue();
-    let complianceEnqueued = false;
-    let retries = 3;
-    while (!complianceEnqueued && retries > 0) {
-      try {
-        await complianceQueue.add('compliance-check', { creativeAssetId: creativeAsset.id, tenantId: input.tenantId }, {
-          removeOnComplete: 1000,
-          removeOnFail: 5000,
-          attempts: 4,
-          backoff: { type: 'exponential', delay: 10_000 },
-        });
-        complianceEnqueued = true;
-      } catch (err) {
-        retries--;
-        if (retries === 0) {
-          // Rollback: deletar creativeAsset criado se compliance queue falhar definitivamente
-          await repo.deleteAsset(creativeAsset.id);
-          throw err;
-        }
-        await new Promise(r => setTimeout(r, 1000 * (4 - retries))); // backoff: 1s, 2s, 3s
-      }
-    }
+    // Compliance de imagem desativado
+    // // Enfileira compliance check com retry
+    // const complianceQueue = await getComplianceQueue();
+    // let complianceEnqueued = false;
+    // let retries = 3;
+    // while (!complianceEnqueued && retries > 0) {
+    //   try {
+    //     await complianceQueue.add('compliance-check', { creativeAssetId: creativeAsset.id, tenantId: input.tenantId }, {
+    //       removeOnComplete: 1000,
+    //       removeOnFail: 5000,
+    //       attempts: 4,
+    //       backoff: { type: 'exponential', delay: 10_000 },
+    //     });
+    //     complianceEnqueued = true;
+    //   } catch (err) {
+    //     retries--;
+    //     if (retries === 0) {
+    //       // Rollback: deletar creativeAsset criado se compliance queue falhar definitivamente
+    //       await repo.deleteAsset(creativeAsset.id);
+    //       throw err;
+    //     }
+    //     await new Promise(r => setTimeout(r, 1000 * (4 - retries))); // backoff: 1s, 2s, 3s
+    //   }
+    // }
   } catch (err) {
     // Não propaga: o post (rascunho, sem imagem) será criado logo abaixo.
     console.warn(

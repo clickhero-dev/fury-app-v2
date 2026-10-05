@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Loader2, MapPin, X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { Select } from '@/components/ui/select';
-import { useMetaLocations } from '@/components/campaign-wizard/hooks/useMetaLocations';
 import { useMetaInterests } from '@/components/campaign-wizard/hooks/useMetaInterests';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components';
-import type { WizardGender } from '@/components/campaign-wizard/types';
-import { AGE_OPTIONS } from '@/components/campaign-wizard/types';
+import type { AudienceGeo, WizardGender } from '@/components/campaign-wizard/types';
+import { AGE_OPTIONS, isValidGeo, legacyFromGeo, EMPTY_GEO } from '@/components/campaign-wizard/types';
+import { LocationEditor } from './LocationEditor';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 
@@ -17,7 +17,11 @@ interface AudienceDefaults {
   ageMax?: number;
   gender?: WizardGender;
   audienceInterests?: { id: string; name: string }[];
+  geo?: unknown;
 }
+
+const apiErrorMessage = (err: unknown, fallback: string) =>
+  (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message || fallback;
 
 interface MeResponse {
   audienceDefaults?: AudienceDefaults;
@@ -31,20 +35,24 @@ const GENDER_OPTIONS: { value: WizardGender; label: string }[] = [
 ];
 
 export function PublicoContent() {
-  const [cityQuery, setCityQuery] = useState('');
   const [city, setCity] = useState('');
   const [cityKey, setCityKey] = useState('');
+  const [geo, setGeo] = useState<AudienceGeo>(EMPTY_GEO);
+  // Remonta o editor quando o salvo termina de carregar
+  const [geoLoadKey, setGeoLoadKey] = useState(0);
+  // Padrão antigo (só city/cityKey) só vira geo quando o usuário mexe
+  const [geoTouched, setGeoTouched] = useState(false);
+  const [hasSavedGeo, setHasSavedGeo] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [ageMin, setAgeMin] = useState(18);
   const [ageMax, setAgeMax] = useState(65);
   const [gender, setGender] = useState<WizardGender>('all');
-  const [showDropdown, setShowDropdown] = useState(false);
   const [businessContext, setBusinessContext] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [audienceInterests, setAudienceInterests] = useState<{ id: string; name: string }[]>([]);
   const [interestQuery, setInterestQuery] = useState('');
   const [showInterestDropdown, setShowInterestDropdown] = useState(false);
-  const { locations, isLoading: loadingLocations } = useMetaLocations(cityQuery);
   const { interests, isLoading: loadingInterests } = useMetaInterests(interestQuery);
 
   // Load saved defaults
@@ -53,11 +61,17 @@ export function PublicoContent() {
       const data = res.data.data;
       const defaults = data.audienceDefaults;
       if (defaults) {
-        if (defaults.city) {
-          setCity(defaults.city);
-          setCityQuery(defaults.city);
-        }
+        if (defaults.city) setCity(defaults.city);
         if (defaults.cityKey) setCityKey(defaults.cityKey);
+        // geo antigo/inválido é ignorado (usa o padrão normal)
+        if (isValidGeo(defaults.geo)) {
+          const g = defaults.geo;
+          setHasSavedGeo(true);
+          setGeo({ ...g, regionType: g.regions.length ? g.regionType : undefined });
+        } else if (defaults.city && defaults.cityKey) {
+          setGeo({ ...EMPTY_GEO, regionType: 'city', regions: [{ key: defaults.cityKey, name: defaults.city }] });
+        }
+        setGeoLoadKey((k) => k + 1);
         if (defaults.ageMin) setAgeMin(defaults.ageMin);
         if (defaults.ageMax) setAgeMax(defaults.ageMax);
         if (defaults.gender) setGender(defaults.gender);
@@ -69,26 +83,36 @@ export function PublicoContent() {
     });
   }, []);
 
-  function handleSelectLocation(location: { key: string; name: string; region?: string }) {
-    const label = location.region ? `${location.name}, ${location.region}` : location.name;
-    setCityQuery(label);
-    setCity(label);
-    setCityKey(location.key);
-    setShowDropdown(false);
+  const saveGeo = hasSavedGeo || geoTouched;
+
+  function handleGeoChange(update: (prev: AudienceGeo) => AudienceGeo) {
+    setGeo(update);
+    setGeoTouched(true);
   }
 
   async function handleSave() {
     setSaving(true);
     setSaved(false);
+    setSaveError('');
+    // Campos antigos seguem preenchidos (wizard, revisão e planner leem city)
+    const legacy = saveGeo ? legacyFromGeo(geo) : { city, cityKey };
+    const legacyCity = legacy.city;
+    const legacyKey = legacy.cityKey;
     try {
       await api.patch('/auth/me', {
-        audienceDefaults: { city, cityKey, ageMin, ageMax, gender, audienceInterests },
+        audienceDefaults: {
+          city: legacyCity, cityKey: legacyKey, ageMin, ageMax, gender, audienceInterests,
+          ...(saveGeo ? { geo } : {}),
+        },
         businessContext: businessContext || undefined,
       });
+      setCity(legacyCity);
+      setCityKey(legacyKey);
+      if (saveGeo) setHasSavedGeo(true);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch {
-      // save failed silently
+    } catch (err) {
+      setSaveError(apiErrorMessage(err, 'Não foi possível salvar.'));
     } finally {
       setSaving(false);
     }
@@ -136,42 +160,13 @@ export function PublicoContent() {
           </div>
 
           <div className="space-y-5">
-            {/* Cidade */}
-            <div className="relative">
-              <label className="text-sm font-bold text-gray-900 mb-1 block">Cidade</label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={cityQuery}
-                  onChange={(e) => {
-                    setCityQuery(e.target.value);
-                    setCity(e.target.value);
-                    setCityKey('');
-                    setShowDropdown(true);
-                  }}
-                  onFocus={() => setShowDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-                  placeholder="Digite o nome da cidade"
-                  className="w-full pl-10 pr-4 py-3 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/20"                />
-                {loadingLocations && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
-              </div>
-
-              {showDropdown && locations.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
-                  {locations.map((location) => (
-                    <button
-                      key={location.key}
-                      type="button"
-                      onMouseDown={() => handleSelectLocation(location)}
-                      className="w-full text-left px-4 py-2 hover:bg-orange-50 text-sm text-gray-900"
-                    >
-                      {location.region ? `${location.name}, ${location.region}` : location.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Localização */}
+            <LocationEditor
+              key={geoLoadKey}
+              value={geo}
+              onChange={handleGeoChange}
+              legacyCity={!saveGeo && cityKey ? city : undefined}
+            />
 
             {/* Faixa etária */}
 <div>
@@ -311,6 +306,7 @@ export function PublicoContent() {
           {saving ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar'}
         </Button>
         {saved && <span className="text-sm text-green-600">Configurações salvas.</span>}
+        {saveError && <span className="text-sm text-red-600">{saveError}</span>}
       </div>
     </div>
   );

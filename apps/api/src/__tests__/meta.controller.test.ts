@@ -166,6 +166,20 @@ describe('MetaController', () => {
     consoleError.mockRestore();
   });
 
+  it('authCallback de onboarding retorna ao onboarding com o código do erro', async () => {
+    const state = signedState({ tenantId: 't-1', context: 'onboarding', frontendUrl: 'https://hmg.example' });
+    metaService.handleMetaOAuthCallback = vi.fn(async () => {
+      throw new AppError(400, 'OAUTH_PERMISSION_DENIED', 'Permissão recusada.');
+    });
+    const res = mockRes();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await new MetaController(metaService).authCallback({ query: { code: 'code123', state } } as any, res, vi.fn());
+
+    expect(res.redirect).toHaveBeenCalledWith('https://hmg.example/onboarding/conectar-meta?error=oauth_permission_denied');
+    consoleError.mockRestore();
+  });
+
   it('authCallback não expõe código de erro não-AppError no redirect (fallback oauth_cancelled)', async () => {
     const state = signedState({ tenantId: 't-1', context: 'settings' });
     metaService.handleMetaOAuthCallback = vi.fn(async () => {

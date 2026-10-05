@@ -6,13 +6,13 @@ import {
   Upload,
   X,
   Image as ImageIcon,
-  MapPin,
-  Loader2,
   Pencil,
   Trash2,
 } from "lucide-react";
 import api from "@/lib/api";
-import { useMetaLocations } from "@/components/campaign-wizard/hooks/useMetaLocations";
+import type { AudienceGeo } from "@/components/campaign-wizard/types";
+import { isValidGeo, legacyFromGeo, EMPTY_GEO } from "@/components/campaign-wizard/types";
+import { LocationEditor } from "@/pages/configuracoes/LocationEditor";
 import { FURY_COLORS } from "@/lib/constants";
 
 type Tab =
@@ -74,6 +74,8 @@ interface TenantData {
     ageMin?: number;
     ageMax?: number;
     gender?: string;
+    audienceInterests?: { id: string; name: string }[];
+    geo?: unknown;
   } | null;
   ownerUserId: string | null;
   businessContext: string | null;
@@ -183,11 +185,14 @@ export function TenantDetailPage() {
     ageMin: 18,
     ageMax: 65,
     gender: "all",
+    // Mantidos ao salvar (o PATCH substitui a audiência inteira)
+    audienceInterests: [] as { id: string; name: string }[],
   });
-  const [cityQuery, setCityQuery] = useState("");
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
-  const { locations, isLoading: loadingLocations } =
-    useMetaLocations(cityQuery);
+  const [geo, setGeo] = useState<AudienceGeo>(EMPTY_GEO);
+  const [geoTouched, setGeoTouched] = useState(false);
+  const [hasSavedGeo, setHasSavedGeo] = useState(false);
+  // Remonta o editor quando o salvo termina de carregar
+  const [geoLoadKey, setGeoLoadKey] = useState(0);
   const [businessContext, setBusinessContext] = useState("");
 
   // Brand Kit
@@ -243,7 +248,16 @@ export function TenantDetailPage() {
           ageMin: t.audienceDefaults?.ageMin ?? 18,
           ageMax: t.audienceDefaults?.ageMax ?? 65,
           gender: t.audienceDefaults?.gender ?? "all",
+          audienceInterests: t.audienceDefaults?.audienceInterests ?? [],
         });
+        const savedGeo = t.audienceDefaults?.geo;
+        if (isValidGeo(savedGeo)) {
+          setHasSavedGeo(true);
+          setGeo({ ...savedGeo, regionType: savedGeo.regions.length ? savedGeo.regionType : undefined });
+        } else if (t.audienceDefaults?.city && t.audienceDefaults?.cityKey) {
+          setGeo({ ...EMPTY_GEO, regionType: "city", regions: [{ key: t.audienceDefaults.cityKey, name: t.audienceDefaults.city }] });
+        }
+        setGeoLoadKey((k) => k + 1);
         setBrandForm({
           logoUrl: t.brandKit?.logoUrl ?? "",
           primaryColor: t.brandKit?.primaryColor ?? FURY_COLORS.primary,
@@ -304,11 +318,18 @@ export function TenantDetailPage() {
     });
   }, "Metas atualizadas");
 
+  const saveGeo = hasSavedGeo || geoTouched;
   const saveAudience = save(async () => {
+    // Campos antigos seguem preenchidos (wizard, revisão e planner leem city)
+    const legacy = saveGeo ? legacyFromGeo(geo) : { city: audienceForm.city, cityKey: audienceForm.cityKey };
     await api.patch(`/admin/tenants/${id}/audience`, {
       ...audienceForm,
+      ...legacy,
+      ...(saveGeo ? { geo } : {}),
       businessContext,
     });
+    setAudienceForm((prev) => ({ ...prev, ...legacy }));
+    if (saveGeo) setHasSavedGeo(true);
   }, "Público atualizado");
 
   const saveBrandKit = save(async () => {
@@ -848,7 +869,7 @@ export function TenantDetailPage() {
               Benchmarks de Performance
             </h3>
             <p className="text-xs text-admin-text-faint mb-4">
-              Defina as metas que o FURY usa para calcular o score de cada
+              Defina as metas que o ady usa para calcular o score de cada
               campanha.
             </p>
           </div>
@@ -1016,7 +1037,7 @@ export function TenantDetailPage() {
               <textarea
                 value={businessContext}
                 onChange={(e) => setBusinessContext(e.target.value)}
-                placeholder="Descreva o nicho, os clientes e o contexto do negócio. Esse texto é usado pela IA do FURY ao gerar criativos."
+                placeholder="Descreva o nicho, os clientes e o contexto do negócio. Esse texto é usado pela IA do ady ao gerar criativos."
                 rows={4}
                 className={`${inputCls} resize-y min-h-[100px]`}
               />
@@ -1025,61 +1046,14 @@ export function TenantDetailPage() {
                 público-alvo.
               </p>
             </div>
-            <div className="relative">
-              <label className={labelCls}>Cidade</label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-text-faint" />
-                <input
-                  type="text"
-                  value={cityQuery}
-                  onChange={(e) => {
-                    setCityQuery(e.target.value);
-                    setAudienceForm({
-                      ...audienceForm,
-                      city: e.target.value,
-                      cityKey: "",
-                    });
-                    setShowCityDropdown(true);
-                  }}
-                  onFocus={() => setShowCityDropdown(true)}
-                  onBlur={() =>
-                    setTimeout(() => setShowCityDropdown(false), 150)
-                  }
-                  placeholder="Digite o nome da cidade"
-                  className="w-full pl-10 pr-4 py-2.5 bg-admin-bg border border-admin-border rounded-xl text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol"
-                />
-                {loadingLocations && (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-text-muted animate-spin" />
-                )}
-              </div>
-              {showCityDropdown && locations.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-admin-surface-2 border border-admin-border rounded-xl shadow-lg max-h-56 overflow-y-auto">
-                  {locations.map((location) => (
-                    <button
-                      key={location.key}
-                      type="button"
-                      onMouseDown={() => {
-                        const label = location.region
-                          ? `${location.name}, ${location.region}`
-                          : location.name;
-                        setCityQuery(label);
-                        setAudienceForm({
-                          ...audienceForm,
-                          city: label,
-                          cityKey: location.key,
-                        });
-                        setShowCityDropdown(false);
-                      }}
-                      className="w-full text-left px-4 py-2 hover:bg-admin-border text-sm text-admin-text"
-                    >
-                      {location.region
-                        ? `${location.name}, ${location.region}`
-                        : location.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <LocationEditor
+              key={geoLoadKey}
+              value={geo}
+              onChange={(update) => { setGeo(update); setGeoTouched(true); }}
+              legacyCity={!saveGeo && audienceForm.cityKey ? audienceForm.city : undefined}
+              admin
+              tenantId={id}
+            />
             <div>
               <label className={labelCls}>Faixa etária</label>
               <div className="flex items-center gap-3">

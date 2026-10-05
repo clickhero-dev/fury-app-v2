@@ -22,6 +22,40 @@ export function isConversionEvent(actionType: string): boolean {
   return CONVERSION_SET.has(actionType);
 }
 
+/**
+ * Objetivos de captacao de contato (formulario instantaneo / mensageria).
+ * Neles o numero exibido como "clientes" E o envio de formulario — nunca um
+ * clique ou engajamento (somar clique como cliente ilude o cliente final).
+ */
+/** Objetivo Meta de mensageria (campanha de conversas no WhatsApp/Messenger/IG Direct). */
+const MESSAGE_OBJECTIVE_RE = /MESSAG|CONVERSATION|ENGAGEMENT|WHATSAPP|MESSENGER|INSTAGRAM_DIRECT|DIRECT/;
+
+/**
+ * Classifica o objetivo da campanha no fluxo de contagem correspondente.
+ * Cada fluxo tem regra PRÓPRIA — nunca reaproveitada de outro (evita que
+ * mexer em leads altere mensagens, ou vice-versa).
+ */
+export type ConversionObjectiveFamily = 'LEADS' | 'MESSAGING' | 'SALES' | 'TRAFFIC' | 'OTHER';
+
+export function getConversionObjectiveFamily(objective?: string | null): ConversionObjectiveFamily {
+  const obj = (objective || '').toUpperCase();
+  if (obj.includes('LEAD')) return 'LEADS';
+  if (MESSAGE_OBJECTIVE_RE.test(obj)) return 'MESSAGING';
+  if (obj.includes('SALES')) return 'SALES';
+  if (obj.includes('TRAFFIC')) return 'TRAFFIC';
+  return 'OTHER';
+}
+
+/** Campanha de geração de cadastros (formulário instantâneo, lead no site). */
+export function isLeadObjective(objective?: string | null): boolean {
+  return getConversionObjectiveFamily(objective) === 'LEADS';
+}
+
+/** Campanha de conversas (WhatsApp / Messenger / Instagram Direct). */
+export function isMessagingObjective(objective?: string | null): boolean {
+  return getConversionObjectiveFamily(objective) === 'MESSAGING';
+}
+
 // Acoes "de vaidade": medem engajamento, nao conversao real, e nunca devem
 // entrar no fallback generico de conversoes.
 const VANITY_ACTION_TYPES = new Set([
@@ -76,6 +110,15 @@ export const TRAFFIC_CONVERSION_ACTION_TYPES: readonly string[] = [
 ] as const;
 
 /**
+ * Acoes que representam um envio de formulario / lead real (ordem de
+ * prioridade). Em campanha de captacao so ESTES tipos contam como cliente.
+ */
+export const ALL_LEAD_AND_MESSAGE_ACTION_TYPES: readonly string[] = [
+  ...LEAD_CONVERSION_ACTION_TYPES,
+  ...MESSAGING_CONVERSION_ACTION_TYPES,
+];
+
+/**
  * Retorna, em ordem de prioridade, os action_types que representam a
  * "conversao" principal para o objetivo da campanha. Apenas o PRIMEIRO
  * tipo encontrado nas actions e usado — somar varios tipos da mesma
@@ -117,6 +160,28 @@ export function getConversionActionTypesForObjective(objective?: string | null):
 }
 
 /**
+ * Retorna o valor da PRIMEIRA ação encontrada entre `types` (ordem de
+ * prioridade) ou 0 quando nenhuma existe — compartilhado pelos fluxos que
+ * têm contagem própria, sem cair no fallback genérico.
+ */
+function pickFirstActionValue(
+  actions: MetaInsightsAction[],
+  types: readonly string[],
+  uniqueActions?: MetaInsightsAction[]
+): number {
+  for (const type of types) {
+    const entry = actions.find((a) => a.action_type === type);
+    if (!entry) continue;
+    // O Meta Ads Manager exibe "Resultados" com base em pessoas únicas
+    // (unique_actions) — a mesma pessoa pode gerar vários eventos no período.
+    const uniqueEntry = uniqueActions?.find((a) => a.action_type === type);
+    const value = parseInt(String((uniqueEntry ?? entry).value), 10);
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
+/**
  * Calcula o numero de conversoes a partir das `actions` retornadas pela
  * Meta Insights API, escolhendo o(s) action_type(s) corretos conforme o
  * objetivo da campanha (ver `getConversionActionTypesForObjective`).
@@ -129,6 +194,22 @@ export function getConversionsFromActions(
   uniqueActions?: MetaInsightsAction[] | undefined
 ): number | null {
   if (!actions || actions.length === 0) return null;
+
+  // Fluxos ISOLADOS: cada objetivo tem a SUA regra de contagem, sem
+  // reaproveitamento — "cliente" em captação nunca é clique/engajamento
+  // (exibir clique como cliente ilude o cliente final). Zero é a resposta
+  // correta quando a Meta não reporta o evento do fluxo.
+  const family = getConversionObjectiveFamily(objective);
+
+  if (family === 'LEADS') {
+    // Formulário/cadastro → envios de formulário. Conversa iniciada NÃO conta.
+    return pickFirstActionValue(actions, LEAD_CONVERSION_ACTION_TYPES, uniqueActions);
+  }
+
+  if (family === 'MESSAGING') {
+    // Conversas (WhatsApp/Messenger/IG Direct) → conversas iniciadas. Lead NÃO conta.
+    return pickFirstActionValue(actions, MESSAGING_CONVERSION_ACTION_TYPES, uniqueActions);
+  }
 
   const candidateTypes = getConversionActionTypesForObjective(objective);
 
@@ -146,7 +227,7 @@ export function getConversionsFromActions(
   }
 
   // Nenhum action_type conhecido encontrado: soma tudo que nao seja
-  // engajamento de vaidade, como ultimo recurso.
+  // engajamento de vaidade, como ultimo recurso (demais objetivos).
   const fallbackSum = actions
     .filter((a) => !VANITY_ACTION_TYPES.has(a.action_type))
     .reduce((sum, a) => sum + (parseInt(String(a.value), 10) || 0), 0);

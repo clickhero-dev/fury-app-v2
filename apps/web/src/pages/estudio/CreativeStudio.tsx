@@ -210,7 +210,7 @@ export function CreativeStudio() {
       <div className="space-y-8 bg-[radial-gradient(circle_at_top_right,_rgba(232,99,26,0.08),_transparent_30%),radial-gradient(circle_at_bottom_left,_rgba(0,0,0,0.04),_transparent_25%)]">
         <PageHeader
           title="Creative Studio"
-          description="FURY gera anúncios com IA via OpenRouter"
+          description="O ady gera anúncios com IA via OpenRouter"
           actions={<StatusBadge status={complianceStatus} />}
         />
 
@@ -323,7 +323,7 @@ export function CreativeStudio() {
                   <div className="flex items-center gap-3">
                     <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
                     <span>
-                      FURY está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...
+                      O ady está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...
                       {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
                     </span>
                   </div>
@@ -379,7 +379,7 @@ export function CreativeStudio() {
                   <div className="space-y-4 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
                     <p className="text-base font-semibold text-[#101828]">
-                      FURY está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...
+                      O ady está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...
                       {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
                     </p>
                     <p className="text-sm text-[#667085]">A geração via OpenRouter e a checagem de compliance são processadas em sequência.</p>
@@ -391,7 +391,7 @@ export function CreativeStudio() {
                 <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[#E6E8EC] bg-gradient-to-br from-[#FFF7F2] to-white">
                   <div className="space-y-4 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
-                    <p className="text-base font-semibold text-[#101828]">FURY está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...</p>
+                    <p className="text-base font-semibold text-[#101828]">O ady está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...</p>
                     <p className="text-sm text-[#667085]">
                       {isWithinPollingWindow ? 'Análise de compliance em andamento.' : 'A janela de polling terminou. Atualize ou gere novamente.'}
                     </p>

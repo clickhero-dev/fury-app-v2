@@ -149,7 +149,8 @@ describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
     expect(image.src).toBe('https://example.com/v2.png');
   });
 
-  it('o selo de compliance troca junto com a versão selecionada', async () => {
+  // Selo de compliance desativado no CreativeResult
+  it.skip('o selo de compliance troca junto com a versão selecionada', async () => {
     mockApiPost.mockImplementation((url: string) => {
       if (url === '/studio/assets/v1/set-active') return Promise.resolve({ data: GROUP_3_VERSIONS });
       if (url === '/studio/assets/v2/set-active') return Promise.resolve({ data: { ...GROUP_3_VERSIONS, activeVersionId: 'v2' } });

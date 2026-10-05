@@ -18,6 +18,8 @@ import { CampaignsService, normalizeCampaignPanelMetrics, formatCampaignListItem
 import { MockMetaCampaignProvider } from '../lib/providers/mock-campaign.provider.js';
 import { MockCampaignRepository } from '../lib/providers/mock-campaign.repository.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { audienceGeoSchema } from '../lib/audience-geo.js';
+import { rankGeoResults, cityNameFromMeta } from '../lib/meta-api.js';
 
 // ponytail: mock mínimo para o dynamic import de @fury/db no slug da LP
 vi.mock('@fury/db', () => ({
@@ -666,8 +668,8 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     expect(meta.createdAdSets).toHaveLength(1);
     // N adcreatives + N ads com nomes distintos
     expect(meta.createdAdCreatives).toHaveLength(2);
-    expect(meta.createdAdCreatives[0].name).toBe('Creative — FURY #1');
-    expect(meta.createdAdCreatives[1].name).toBe('Creative — FURY #2');
+    expect(meta.createdAdCreatives[0].name).toBe('Creative — ady #1');
+    expect(meta.createdAdCreatives[1].name).toBe('Creative — ady #2');
     expect(meta.createdAds).toHaveLength(2);
     expect(meta.createdAds[0].name).toContain(' #1');
     expect(meta.createdAds[1].name).toContain(' #2');
@@ -827,26 +829,25 @@ describe('CampaignsService.getCampaignInsights', () => {
     expect(result.timeseries[0].spend).toBe(100);
   });
 
-  it('PESSOAS de campanha Formulário = nº de pessoas que preencheram o form (fonte da verdade), não a soma dos insights', async () => {
+  it('PESSOAS de campanha Formulário = nº de envios PERSISTIDOS (fonte da verdade), não a soma dos insights', async () => {
     const { service, repo, meta } = makeService();
     repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
     await repo.createCampaign({
       tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Vagas Executivo',
-      status: 'pausado', budget: { objective: 'leads' }, // wizard → OUTCOME_LEADS
+      status: 'pausado', budget: { objective: 'leads', lead_form_id: 'form-1' }, // wizard → OUTCOME_LEADS
     } as any);
 
-    // insights dizem 6 unique lead, mas o form tem 4 preenchimentos distintos
+    // insights dizem 6 unique lead, mas o form tem 4 preenchimentos persistidos
     meta.insightsResult = {
       data: [
         { date_start: '2026-09-23', spend: '8.66', impressions: '1200', clicks: '25', ctr: '2.08', cpc: '0.35', cpm: '7.2', actions: [{ action_type: 'lead', value: '6' }], unique_actions: [{ action_type: 'lead', value: '6' }], purchase_roas: [] },
       ],
     };
-    meta.campaignAdsByCampaign.set('mc1', ['ad_1']);
-    meta.adLeadsByAd.set('ad_1', [
-      { field_data: [{ name: 'full_name', values: ['P1'] }, { name: 'email', values: ['p1@x.com'] }] },
-      { field_data: [{ name: 'full_name', values: ['P2'] }, { name: 'email', values: ['p2@x.com'] }] },
-      { field_data: [{ name: 'full_name', values: ['P3'] }, { name: 'email', values: ['p3@x.com'] }] },
-      { field_data: [{ name: 'full_name', values: ['P4'] }, { name: 'email', values: ['p4@x.com'] }] },
+    repo.leadFormSubmissionsByForm.set('form-1', [
+      { id: 'L1', name: 'P1', email: 'p1@x.com' },
+      { id: 'L2', name: 'P2', email: 'p2@x.com' },
+      { id: 'L3', name: 'P3', email: 'p3@x.com' },
+      { id: 'L4', name: 'P4', email: 'p4@x.com' },
     ]);
 
     const result = await service.getCampaignInsights({
@@ -861,7 +862,7 @@ describe('CampaignsService.getCampaignInsights', () => {
     repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
     await repo.createCampaign({
       tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Vagas Executivo',
-      status: 'pausado', budget: { objective: 'leads' },
+      status: 'pausado', budget: { objective: 'leads', lead_form_id: 'form-1' },
     } as any);
 
     // insights dizem 6 unique lead, mas 2 são a MESMA submissão sob 2 ads
@@ -870,16 +871,12 @@ describe('CampaignsService.getCampaignInsights', () => {
         { date_start: '2026-09-23', spend: '8.66', impressions: '1200', clicks: '25', ctr: '2.08', cpc: '0.35', cpm: '7.2', actions: [{ action_type: 'lead', value: '6' }], unique_actions: [{ action_type: 'lead', value: '6' }], purchase_roas: [] },
       ],
     };
-    meta.campaignAdsByCampaign.set('mc1', ['ad_1', 'ad_2']);
-    meta.adLeadsByAd.set('ad_1', [
-      { id: 'L1', field_data: [{ name: 'email', values: ['p1@x.com'] }] },
-      { id: 'L2', field_data: [{ name: 'email', values: ['p2@x.com'] }] },
-      { id: 'L3', field_data: [{ name: 'email', values: ['p3@x.com'] }] },
-    ]);
-    // L1 (mesma pessoa) repete sob ad_2 → não pode contar 2x
-    meta.adLeadsByAd.set('ad_2', [
-      { id: 'L1', field_data: [{ name: 'email', values: ['p1@x.com'] }] },
-      { id: 'L4', field_data: [{ name: 'email', values: ['p4@x.com'] }] },
+    // persistência deduplica por meta_lead_id: L1 sob 2 ads = 1 linha
+    repo.leadFormSubmissionsByForm.set('form-1', [
+      { id: 'L1', name: 'P1', email: 'p1@x.com' },
+      { id: 'L2', name: 'P2', email: 'p2@x.com' },
+      { id: 'L3', name: 'P3', email: 'p3@x.com' },
+      { id: 'L4', name: 'P4', email: 'p4@x.com' },
     ]);
 
     const result = await service.getCampaignInsights({
@@ -890,8 +887,58 @@ describe('CampaignsService.getCampaignInsights', () => {
     expect(result.totals.conversions).toBe(4);
   });
 
-  it('campanha não-form mantém conversões dos insights (sem chamada de leads)', async () => {
+  it('campanha de formulário conta os envios PERSISTIDOS (mesma fonte da lista de Campanhas) — sem chamar a Meta', async () => {
     const { service, repo, meta } = makeService();
+    repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
+    await repo.createCampaign({
+      tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Inglês/Espanhol R$140!',
+      status: 'pausado', budget: { objective: 'leads', lead_form_id: 'form-1' },
+    } as any);
+
+    // Insights contam 3 cliques (sem lead) — o número de clientes NÃO pode vir daí.
+    meta.insightsResult = {
+      data: [
+        { date_start: '2026-09-29', spend: '6.73', impressions: '122', clicks: '3', ctr: '2.4', cpc: '2.24', cpm: '55', actions: [{ action_type: 'link_click', value: '3' }], unique_actions: [{ action_type: 'link_click', value: '2' }], purchase_roas: [] },
+      ],
+    };
+    repo.leadFormSubmissionsByForm.set('form-1', [
+      { id: 'L1', name: 'P1', email: 'p1@x.com', phone: '1199', createdTime: new Date() },
+      { id: 'L2', name: 'P2', email: 'p2@x.com', phone: '1198', createdTime: new Date() },
+      { id: 'L3', name: 'P3', email: 'p3@x.com', phone: '1197', createdTime: new Date() },
+    ]);
+
+    const result = await service.getCampaignInsights({
+      tenantId: TENANT_ID, campaignId: 'mc1', dateRange: 'last_7d',
+    });
+
+    expect(result.totals.conversions).toBe(3);
+    // fonte única: não consulta leads por ad/na Meta para montar o número
+    expect(meta.campaignAdsByCampaign.size).toBe(0);
+    expect(meta.leadFormDataRequests).toHaveLength(0);
+  });
+
+  it('campanha de formulário sem envios gravados → 0 (nunca cliques como clientes)', async () => {
+    const { service, repo, meta } = makeService();
+    repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
+    await repo.createCampaign({
+      tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Inglês/Espanhol R$140!',
+      status: 'ativo', budget: { objective: 'leads', lead_form_id: 'form-1' },
+    } as any);
+
+    meta.insightsResult = {
+      data: [
+        { date_start: '2026-09-29', spend: '6.73', impressions: '122', clicks: '3', ctr: '2.4', cpc: '2.24', cpm: '55', actions: [{ action_type: 'link_click', value: '3' }], unique_actions: [], purchase_roas: [] },
+      ],
+    };
+
+    const result = await service.getCampaignInsights({
+      tenantId: TENANT_ID, campaignId: 'mc1', dateRange: 'last_7d',
+    });
+
+    expect(result.totals.conversions).toBe(0);
+  });
+
+  it('campanha não-form mantém conversões dos insights (sem chamada de leads)', async () => {    const { service, repo, meta } = makeService();
     repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
     await repo.createCampaign({
       tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Tráfego',
@@ -978,6 +1025,84 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
     // persistência local guarda o id do form
     expect(repo.campaigns[0].budget.lead_form_id).toBe('form_1');
     expect(repo.campaigns[0].budget.lead_page_id).toBe('page_1');
+  });
+
+  it('mantém o nome original e faz uma única chamada ao Meta quando não há colisão', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+
+    await service.createCampaignFromWizard(leadsArgs as any);
+
+    expect(meta.createdLeadForms).toHaveLength(1);
+    expect(meta.createdLeadForms[0].body.name).toBe('Formulário — Promoção');
+  });
+
+  it.each([
+    'O nome do formulário já existe. Insira um novo nome.',
+    'The form name already exists. Please enter a new name.',
+  ])('recupera uma colisão de nome do formulário (%s) com uma única nova tentativa', async (metaUserMsg) => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    const originalCreateLeadForm = meta.createLeadForm.bind(meta);
+    let attempts = 0;
+    meta.createLeadForm = async (...params: [string, string, any]) => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw metaError(100, metaUserMsg, { metaUserMsg, metaUserTitle: 'Nome do formulário inválido' });
+      }
+      return originalCreateLeadForm(...params);
+    };
+
+    const result = await service.createCampaignFromWizard(leadsArgs as any);
+
+    expect(result.success).toBe(true);
+    expect(attempts).toBe(2);
+    expect(meta.createdLeadForms).toHaveLength(1);
+    expect(meta.createdLeadForms[0].body.name).toMatch(/^Formulário — Promoção — \d{8}-\d{6}-[A-F0-9]{4}$/);
+    expect(repo.campaigns[0].budget.lead_form_id).toBe('form_1');
+  });
+
+  it('não repete a criação para um erro de formulário que não é colisão de nome', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    let attempts = 0;
+    meta.createLeadForm = async () => {
+      attempts += 1;
+      throw metaError(100, 'Invalid privacy policy URL', { metaUserMsg: 'Invalid privacy policy URL' });
+    };
+
+    await expect(service.createCampaignFromWizard(leadsArgs as any)).rejects.toMatchObject({
+      code: 'META_API_ERROR',
+    });
+
+    expect(attempts).toBe(1);
+    expect(meta.createdCampaigns).toHaveLength(0);
+    expect(meta.createdAdSets).toHaveLength(0);
+    expect(meta.createdAds).toHaveLength(0);
+  });
+
+  it('mapeia a segunda falha após retry e não cria objetos posteriores', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    let attempts = 0;
+    meta.createLeadForm = async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw metaError(100, 'The form name already exists.', { metaUserMsg: 'The form name already exists.' });
+      }
+      throw metaError(100, 'Invalid privacy policy URL', { metaUserMsg: 'Invalid privacy policy URL' });
+    };
+
+    await expect(service.createCampaignFromWizard(leadsArgs as any)).rejects.toMatchObject({
+      code: 'META_API_ERROR',
+    });
+
+    expect(attempts).toBe(2);
+    expect(meta.createdCampaigns).toHaveLength(0);
+    expect(meta.createdAdSets).toHaveLength(0);
+    expect(meta.createdAdCreatives).toHaveLength(0);
+    expect(meta.createdAds).toHaveLength(0);
+    expect(repo.campaigns).toHaveLength(0);
   });
 
   it('envia privacy_policy com URL pública da política de privacidade (nome slugificado)', async () => {
@@ -1533,5 +1658,122 @@ describe('CampaignsService.getAllCampaignLeads', () => {
 
     await expect(service.getAllCampaignLeads({ tenantId: TENANT_ID }))
       .rejects.toMatchObject({ code: 'META_TOKEN_EXPIRED', statusCode: 401 });
+  });
+});
+
+describe('CampaignsService.createCampaignFromWizard — localização (geo)', () => {
+  function setup() {
+    const ctx = makeService();
+    ctx.repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+      createdAt: new Date(),
+    } as any);
+    ctx.meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+    ctx.meta.uploadAdImageResult = 'img_hash';
+    return ctx;
+  }
+  const baseArgs = {
+    tenantId: TENANT_ID, objective: 'visits' as const,
+    headline: 'Oferta', primaryText: 'Imperdivel',
+    locationCity: 'Maringá, Paraná', locationRadiusKm: 30,
+    ageMin: 18, ageMax: 65, gender: 'all' as const, dailyBudgetBrl: 7,
+    destinationUrl: 'https://example.com',
+    creativeUploadUrl: 'https://example.com/img.jpg',
+  };
+  async function sentGeo(geo?: any) {
+    const { service, meta } = setup();
+    meta.locationsResult = [{ key: '2788395' }];
+    await service.createCampaignFromWizard({ ...baseArgs, geo });
+    return meta.createdAdSets[0].targeting.geo_locations;
+  }
+
+  it('sem geo: envio igual ao de hoje (cidade + 30 km)', async () => {
+    expect(await sentGeo()).toEqual({ cities: [{ key: 2788395, radius: 30, distance_unit: 'kilometer' }] });
+  });
+
+  it('cidades: cidade inteira, sem raio', async () => {
+    const geo = { mode: 'regions', regionType: 'city', regions: [{ key: '2788395', name: 'Maringá' }, { key: '2789999', name: 'Sarandi' }], points: [] };
+    expect(await sentGeo(geo)).toEqual({ cities: [{ key: 2788395 }, { key: 2789999 }] });
+  });
+
+  it('estados: estado inteiro', async () => {
+    const geo = { mode: 'regions', regionType: 'region', regions: [{ key: '460', name: 'Paraná' }], points: [] };
+    expect(await sentGeo(geo)).toEqual({ regions: [{ key: 460 }] });
+  });
+
+  it('país: país inteiro pelo código', async () => {
+    const geo = { mode: 'regions', regionType: 'country', regions: [{ key: 'BR', name: 'Brasil', countryCode: 'BR' }], points: [] };
+    expect(await sentGeo(geo)).toEqual({ countries: ['BR'] });
+  });
+
+  it('pontos: custom_locations com o raio gravado (10 km)', async () => {
+    const geo = { mode: 'points', regions: [], points: [{ lat: -23.4207481, lng: -51.9331, radiusKm: 10 }] };
+    expect(await sentGeo(geo)).toEqual({
+      custom_locations: [{ latitude: -23.420748, longitude: -51.9331, radius: 10, distance_unit: 'kilometer' }],
+    });
+  });
+
+  it('modo ativo vazio: cai no envio de hoje', async () => {
+    const geo = { mode: 'points', regionType: 'city', regions: [{ key: '1', name: 'X' }], points: [] };
+    expect(await sentGeo(geo)).toEqual({ cities: [{ key: 2788395, radius: 30, distance_unit: 'kilometer' }] });
+  });
+
+  it('erro 1815946 no ad set: mensagem própria, código no texto e o que foi enviado', async () => {
+    const { service, meta } = setup();
+    meta.createAdSet = async () => {
+      throw Object.assign(new Error('[Meta API] 100'), { metaCode: 100, metaSubcode: 1815946, metaUserMsg: 'Raio não permitido' });
+    };
+    const geo = { mode: 'points' as const, regions: [], points: [{ lat: -23.42, lng: -51.93, radiusKm: 10 }, { lat: -23.5, lng: -51.8, radiusKm: 10 }] };
+    const err = await service.createCampaignFromWizard({ ...baseArgs, geo }).catch((e) => e);
+    expect(err.code).toBe('META_LOCATION_MULTI_RADIUS');
+    expect(err.message).toContain('(erro 100/1815946)');
+    expect(err.details.geo_locations.custom_locations).toHaveLength(2);
+    expect(meta.deletedCampaigns).toEqual(['meta_campaign_1']);
+  });
+
+  it('código no texto só na etapa adset', () => {
+    const metaErr = { metaCode: 100, metaSubcode: 33, metaUserMsg: 'Inválido' };
+    expect(() => mapWizardMetaError(metaErr, 'adset', { geo_locations: {} })).toThrowError('Inválido (erro 100/33)');
+    expect(() => mapWizardMetaError(metaErr, 'campaign')).toThrowError(/^Inválido$/);
+  });
+
+  it('regras do formato: teto de 50 (superadmin), chave numérica, raio 1–80 km', () => {
+    const ok = (g: object) => audienceGeoSchema.safeParse(g).success;
+    const countries = [{ key: 'BR', name: 'Brasil', countryCode: 'BR' }, { key: 'AR', name: 'Argentina', countryCode: 'AR' }];
+    expect(ok({ mode: 'regions', regionType: 'country', regions: countries })).toBe(true);
+    expect(ok({ mode: 'regions', regionType: 'country', regions: [{ key: 'BR', name: 'Brasil' }] })).toBe(false);
+    expect(ok({ mode: 'regions', regionType: 'city', regions: [{ key: 'abc', name: 'X' }] })).toBe(false);
+    expect(ok({ mode: 'regions', regions: [{ key: '1', name: 'X' }] })).toBe(false);
+    const cities = (n: number) => Array.from({ length: n }, (_, i) => ({ key: String(i + 1), name: `C${i}` }));
+    expect(ok({ mode: 'regions', regionType: 'city', regions: cities(50) })).toBe(true);
+    expect(ok({ mode: 'regions', regionType: 'city', regions: cities(51) })).toBe(false);
+    const point = (radiusKm: number) => ({ mode: 'points', points: [{ lat: -23.4, lng: -51.9, radiusKm }] });
+    expect(ok(point(1))).toBe(true);
+    expect(ok(point(80))).toBe(true);
+    expect(ok(point(0.5))).toBe(false);
+    expect(ok(point(80.5))).toBe(false);
+  });
+});
+
+describe('busca de localização: ordem e nome da cidade', () => {
+  it('exato primeiro, depois "começa com"; empate: país, estado, cidade', () => {
+    const items = [
+      { key: '1', name: 'Brasilândia', type: 'city' },
+      { key: '2', name: 'Brasília', type: 'city' },
+      { key: 'BR', name: 'Brasil', type: 'country' },
+    ];
+    expect(rankGeoResults('brasil', items).map((i) => i.key)).toEqual(['BR', '1', '2']);
+    const parana = [
+      { key: '10', name: 'Paranaguá', type: 'city' },
+      { key: '460', name: 'Paraná', type: 'region' },
+      { key: '11', name: 'Paraná', type: 'city' },
+    ];
+    expect(rankGeoResults('Parana', parana).map((i) => i.key)).toEqual(['460', '11', '10']);
+  });
+
+  it('nome da cidade sem o bairro', () => {
+    expect(cityNameFromMeta('Zona 21, Maringá')).toBe('Maringá');
+    expect(cityNameFromMeta('Maringá')).toBe('Maringá');
   });
 });
