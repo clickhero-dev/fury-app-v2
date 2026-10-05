@@ -77,6 +77,7 @@ export function ConectarMetaPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isConnected = searchParams.get('connected') === 'true';
+  const oauthError = searchParams.get('error');
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -111,6 +112,20 @@ export function ConectarMetaPage() {
       {/* Content */}
       <main className="ady-decor relative z-10 flex-1 flex flex-col items-center justify-start px-5 pt-4 pb-16">
         <div className="relative w-full max-w-[480px]">
+          {oauthError && (
+            <div role="alert" className="mb-5 rounded-2xl border border-red-400/30 bg-red-500/15 p-5 text-center shadow-lg">
+              <p className="text-sm font-semibold text-red-300">
+                Não foi possível concluir a conexão com a Meta. Revise as permissões e tente novamente.
+              </p>
+              <p className="mt-1 text-xs text-red-200">Código: {oauthError}</p>
+              <Button
+                onClick={() => navigate('/onboarding/meta-authorize?rerequest=true', { replace: true })}
+                className="mt-4 w-full bg-admin-petrol text-admin-bg font-semibold py-3 h-auto rounded-lg hover:opacity-90"
+              >
+                Tentar novamente
+              </Button>
+            </div>
+          )}
           {isConnected ? (
             /* ── Passo 2: conta conectada ── */
             <div className="flex flex-col items-center text-center gap-6 rounded-2xl border border-white/10 bg-admin-surface p-8 shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)]">

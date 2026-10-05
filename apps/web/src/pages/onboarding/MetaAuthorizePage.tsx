@@ -1,18 +1,23 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '@/lib/api';
 import { AdySymbol } from '@/components/AdySymbol';
 import { Loader2 } from 'lucide-react';
 
 export function MetaAuthorizePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<'subscription_expired' | 'trial_expired' | 'server_error' | 'other' | null>(null);
 
   useEffect(() => {
     api
       .get<{ success: boolean; data: { authUrl: string } }>('/meta/auth/url', {
-        params: { context: 'onboarding', frontendUrl: window.location.origin },
+        params: {
+          context: 'onboarding',
+          frontendUrl: window.location.origin,
+          ...(searchParams.get('rerequest') === 'true' ? { rerequest: 'true' } : {}),
+        },
       })
       .then((res) => {
         const authUrl = res.data.data.authUrl;
@@ -39,7 +44,7 @@ export function MetaAuthorizePage() {
           setErrorType('other');
         }
       });
-  }, []);
+  }, [searchParams]);
 
   if (error) {
     return (

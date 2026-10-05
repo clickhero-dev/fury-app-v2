@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { MetaRepository } from '../../repository/meta.repository.js';
+import { MetaSyncRepository } from '../../repository/meta-sync.repository.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import {
   exchangeCodeForToken,
@@ -21,6 +22,7 @@ import {
   type MetaWhatsappNumber,
 } from '../../lib/meta-api.js';
 import { addSyncJob } from '../../lib/sync-jobs.js';
+import { captureServerEvent } from '../../lib/analytics.js';
 
 const META_OAUTH_URL = 'https://www.facebook.com/v20.0/dialog/oauth';
 
@@ -58,7 +60,7 @@ const META_SCOPES = [
 
 export type OAuthContext = 'onboarding' | 'settings';
 
-interface OAuthStatePayload {
+export interface OAuthStatePayload {
   tenantId: string;
   context: OAuthContext;
   returnUrl?: string;
@@ -134,7 +136,7 @@ function signOAuthState(payload: OAuthStatePayload): string {
   return jwt.sign(payload, secret, { expiresIn: '10m' });
 }
 
-function verifyOAuthState(state: string): OAuthStatePayload {
+export function verifyOAuthState(state: string): OAuthStatePayload {
   try {
     const secret = getRequiredEnv('JWT_SECRET');
     return jwt.verify(state, secret) as OAuthStatePayload;
@@ -181,7 +183,13 @@ export interface TenantAssetSelection {
   businessIds: string[];
   pageIds: string[];
   adAccountIds: string[];
+  instagramUserId: string;
   whatsappNumberIds: string[];
+}
+
+export interface ConfirmedTenantAssetSelection extends TenantAssetSelection {
+  selectedAdAccountId: string;
+  instagramUsername: string | null;
 }
 
 export interface TenantBusinessAdAccount {
@@ -269,6 +277,7 @@ export class MetaService {
       },
       addSyncJob,
     },
+    private readonly metaSyncRepoFactory: (tenantId: string) => MetaSyncRepository = (t) => new MetaSyncRepository(t),
   ) {}
 
   private repo(t: string): MetaRepository {
@@ -298,7 +307,7 @@ export class MetaService {
       throw new AppError(
         409,
         'AD_ACCOUNT_IN_USE',
-        'Essa conta de anúncios já está vinculada a outra conta do Fury. Escolha outra conta ou conecte com o login Meta da própria empresa.',
+        'Essa conta de anúncios já está vinculada a outra conta do ady. Escolha outra conta ou conecte com o login Meta da própria empresa.',
       );
     }
   }
@@ -446,7 +455,8 @@ export class MetaService {
             ? oldSelectedAdAccountId
             : adAccounts[0].id;
 
-        await this.ensureAdAccountIsAvailable(repo, tenantId, selectedAdAccountId);
+        // Temporariamente desativado para permitir ad accounts compartilhadas entre tenants.
+        // await this.ensureAdAccountIsAvailable(repo, tenantId, selectedAdAccountId);
         await repo.patchMetaConnection(connectionId, { adAccounts, selectedAdAccountId, updatedAt: new Date() });
         await this.deps.addSyncJob({ tenantId, metaUserId, adAccounts });
       }
@@ -471,6 +481,7 @@ export class MetaService {
       businessIds: (connection.selectedBusinessIds as string[] | null) ?? [],
       pageIds: (connection.selectedPageIds as string[] | null) ?? [],
       adAccountIds: (connection.selectedAdAccountIds as string[] | null) ?? [],
+      instagramUserId: connection.selectedInstagramUserId ?? '',
       whatsappNumberIds: (connection.selectedWhatsappNumberIds as string[] | null) ?? [],
     };
   }
@@ -478,7 +489,7 @@ export class MetaService {
   async saveTenantAssetSelection(
     tenantId: string,
     selection: TenantAssetSelection,
-  ): Promise<void> {
+  ): Promise<ConfirmedTenantAssetSelection> {
     const repo = this.repo(tenantId);
     const connection = await repo.findLatestMetaConnection();
 
@@ -486,28 +497,36 @@ export class MetaService {
       throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
     }
 
-    // Vinculação do Instagram do calendário resolvida SERVER-SIDE: o id do
-    // Instagram Business vem do owned_pages das businesses selecionadas — o
-    // front NÃO manda o id (sem chance de id trocado/inventado). O publish-due
-    // só publica neste perfil (resolveInstagramAccount). Página sem IG ou fora
-    // das businesses ⇒ null (falha segura: sem vinculação, não publica).
-    let selectedInstagramUserId: string | null = null;
-    let selectedInstagramUsername: string | null = null;
-    if (selection.pageIds.length > 0 && selection.businessIds.length > 0) {
-      try {
-        const ownedPages = await this.resolvePagesByBusiness(tenantId, selection.businessIds);
-        const selected = ownedPages.find((p) => selection.pageIds.includes(p.pageId));
-        selectedInstagramUserId = selected?.instagramUserId ?? null;
-        selectedInstagramUsername = selected?.instagramUsername ?? null;
-      } catch (err) {
-        // Falha na consulta Meta não pode bloquear o save da seleção — mas
-        // deixa a vinculação null (publish-due não publica até re-vincular).
-        console.error('[meta] save-selection: falha ao resolver Instagram da página selecionada:', err);
-        selectedInstagramUserId = null;
-        selectedInstagramUsername = null;
-      }
+    const accessToken = await this.getTenantAccessToken(tenantId);
+    let businesses: MetaBusiness[];
+    let ownedPages: MetaOwnedPage[];
+    let adAccounts: TenantBusinessAdAccount[];
+    try {
+      [businesses, ownedPages, adAccounts] = await Promise.all([
+        this.deps.metaApi.getUserBusinesses(accessToken),
+        this.resolvePagesByBusiness(tenantId, selection.businessIds),
+        this.resolveAdAccountsByBusiness(tenantId, selection.businessIds),
+      ]);
+    } catch (error) {
+      captureServerEvent('meta_selection_validation_failed', { tenantId, reason: 'provider_unavailable' });
+      console.error('[meta] save-selection: validação de ativos indisponível', error instanceof Error ? error.name : 'unknown');
+      throw new AppError(502, 'META_VALIDATION_UNAVAILABLE', 'Não foi possível validar os ativos na Meta. Tente novamente.');
     }
-    console.log(`[meta] save-selection: tenant=${tenantId} pages=${JSON.stringify(selection.pageIds)} instagramVinculado=${selectedInstagramUserId ? `@${selectedInstagramUsername ?? selectedInstagramUserId}` : 'nenhum'}`);
+    if (!selection.businessIds.every((id) => businesses.some((business) => business.id === id))) {
+      throw new AppError(400, 'INVALID_META_BUSINESS', 'Business Manager inválida para esta conexão Meta.');
+    }
+    if (!selection.pageIds.every((id) => ownedPages.some((page) => page.pageId === id))) {
+      throw new AppError(400, 'INVALID_META_PAGE', 'A Página não pertence à Business Manager escolhida.');
+    }
+    const selectedPage = ownedPages.find((page) => page.instagramUserId === selection.instagramUserId && selection.pageIds.includes(page.pageId));
+    if (!selectedPage || selectedPage.instagramUserId !== selection.instagramUserId) {
+      throw new AppError(400, 'INVALID_META_INSTAGRAM', 'O Instagram selecionado não pertence à Página ou Business Manager escolhida.');
+    }
+    if (!selection.adAccountIds.every((id) => adAccounts.some((account) => account.adAccountId === id))) {
+      throw new AppError(400, 'INVALID_META_AD_ACCOUNT', 'A conta de anúncio não pertence à Business Manager escolhida.');
+    }
+    const selectedInstagramUserId = selectedPage.instagramUserId;
+    const selectedInstagramUsername = selectedPage.instagramUsername;
 
     // Preserva a conta de anuncios ja escolhida pelo usuario (via "Conta ativa
     // para metricas" em Configuracoes > Integracoes) se ela ainda estiver entre
@@ -520,10 +539,11 @@ export class MetaService {
         : selection.adAccountIds[0] ?? connection.selectedAdAccountId;
 
     if (selectedAdAccountId) {
-      await this.ensureAdAccountIsAvailable(repo, tenantId, selectedAdAccountId);
+      // Temporariamente desativado para permitir ad accounts compartilhadas entre tenants.
+      // await this.ensureAdAccountIsAvailable(repo, tenantId, selectedAdAccountId);
     }
 
-    await repo.patchMetaConnection(connection.id, {
+    const updated = await repo.patchMetaConnection(connection.id, {
         selectedBusinessIds: selection.businessIds,
         selectedPageIds: selection.pageIds,
         selectedAdAccountIds: selection.adAccountIds,
@@ -533,6 +553,16 @@ export class MetaService {
         selectedInstagramUsername,
         updatedAt: new Date(),
       });
+    if (!updated) throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Conexão Meta não encontrada para este tenant.');
+    return {
+      businessIds: selection.businessIds,
+      pageIds: selection.pageIds,
+      adAccountIds: selection.adAccountIds,
+      instagramUserId: selectedInstagramUserId,
+      instagramUsername: selectedInstagramUsername,
+      whatsappNumberIds: selection.whatsappNumberIds,
+      selectedAdAccountId: selectedAdAccountId!,
+    };
   }
 
   async getTenantBusinesses(tenantId: string): Promise<MetaBusiness[]> {
@@ -782,6 +812,7 @@ export class MetaService {
       throw new AppError(404, 'META_CONNECTION_NOT_FOUND', 'Conexao Meta nao encontrada para este tenant.');
     }
 
+    await this.metaSyncRepoFactory(tenantId).deleteAllMetaSyncedData();
     await repo.deleteMetaConnection(connectionId);
   }
 
@@ -803,7 +834,8 @@ export class MetaService {
       throw new AppError(400, 'AD_ACCOUNT_NOT_FOUND', 'Conta de anuncios nao pertence a esta conexao.');
     }
 
-    await this.ensureAdAccountIsAvailable(repo, tenantId, adAccountId);
+    // Temporariamente desativado para permitir ad accounts compartilhadas entre tenants.
+    // await this.ensureAdAccountIsAvailable(repo, tenantId, adAccountId);
 
     await repo.patchMetaConnection(connectionId, { selectedAdAccountId: adAccountId });
 

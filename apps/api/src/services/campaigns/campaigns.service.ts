@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { decryptMetaToken } from '../../utils/crypto.js';
 import { normalizePhoneToMetaE164 } from '../../utils/phone-normalize.js';
 import { normalizeMetaLeadFields } from '../../utils/meta-lead-normalizer.js';
@@ -6,6 +7,7 @@ import {
   parseRoasFromPurchaseRoas,
   parseCpaFromCostPerAction,
 } from '../../utils/meta-insights-parser.js';
+import { isLeadObjective } from '../../utils/meta-conversion-events.js';
 import { roundToDecimals } from '../../utils/metrics-formatter.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { CampaignRepository } from '../../repository/campaign.repository.js';
@@ -25,6 +27,7 @@ import type {
 } from '../../lib/providers/campaign.repository.js';
 import { DefaultMetaCampaignProvider } from '../../lib/providers/default-meta-campaign.provider.js';
 import { DefaultCampaignRepository } from '../../lib/providers/default-campaign.repository.js';
+import { captureServerEvent } from '../../lib/analytics.js';
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
@@ -119,6 +122,30 @@ export function normalizeWizardCreatives(args: {
     primaryText: args.primaryText ?? '',
     destinationUrl: args.destinationUrl,
   }];
+}
+
+/** A Meta varia o texto da colisão entre idiomas e versões da Graph API. */
+function isLeadFormNameConflict(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const metaError = err as { metaCode?: unknown; metaUserMsg?: unknown; metaUserTitle?: unknown; message?: unknown };
+  // Só recuperamos respostas estruturadas da Meta; erros internos nunca devem ser repetidos.
+  if (metaError.metaCode === undefined && !metaError.metaUserMsg && !metaError.metaUserTitle) return false;
+
+  const normalized = [metaError.metaUserTitle, metaError.metaUserMsg, metaError.message]
+    .filter((part): part is string => typeof part === 'string')
+    .join(' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  return /nome (?:do |de )?formulario ja existe|form name already exists|lead form name already exists/.test(normalized);
+}
+
+function uniqueLeadFormName(baseName: string): string {
+  const isoNow = new Date().toISOString();
+  const timestamp = `${isoNow.slice(0, 10).replace(/-/g, '')}-${isoNow.slice(11, 19).replace(/:/g, '')}`;
+  const shortId = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase();
+  return `${baseName} — ${timestamp}-${shortId}`;
 }
 
 // ── Wizard constants ────────────────────────────────────────────────────────
@@ -836,18 +863,16 @@ export class CampaignsService {
       // Pessoas ("PESSOAS") — fonte da verdade: nº de pessoas que preencheram o
       // formulário. Insights contam `lead` por atribuição/evento e a soma diária
       // de únicos diverge do total de preenchimentos distintos (ex.: 6 ≠ 4).
-      // Campanha Formulário (OUTCOME_LEADS) → conta os fills do form; demais
-      // objetivos mantêm a soma das conversões dos insights.
+      // Campanha Formulário (OUTCOME_LEADS) → conta os envios PERSISTIDOS
+      // (`meta_leads`, mesma origem da lista de Campanhas e da página Clientes),
+      // para as duas telas mostrarem o MESMO número; demais objetivos mantêm a
+      // soma das conversões dos insights.
       let conversions: number = timeseries.reduce((s, d) => s + d.conversions, 0);
-      if (campaignObjective === 'OUTCOME_LEADS') {
+      if (isLeadObjective(campaignObjective)) {
         try {
-          const { leads } = await this.getCampaignLeads({
-            tenantId: args.tenantId,
-            campaignId: args.campaignId,
-          });
-          conversions = leads.length;
+          conversions = await this.repo.countLeadFormSubmissions(args.tenantId, args.campaignId);
         } catch (err) {
-          console.warn('[getCampaignInsights] falha ao contar fills do form:', (err as Error).message);
+          console.warn('[getCampaignInsights] falha ao contar envios de formulário:', (err as Error).message);
         }
       }
 
@@ -1091,7 +1116,30 @@ export class CampaignsService {
             business_phone_number: normalizePhoneToMetaE164(args.whatsappPhoneNumber!),
           },
         };
-        const leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, leadFormBody);
+        let leadFormResponse: { id: string };
+        try {
+          leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, leadFormBody);
+        } catch (err) {
+          if (!isLeadFormNameConflict(err)) throw err;
+
+          // Não reutilizamos o formulário existente: cada campanha precisa manter
+          // as próprias perguntas, política e destino. A segunda chamada é o único
+          // retry e usa um nome único, legível e gerado no servidor.
+          captureServerEvent('meta_lead_form_name_collision', {
+            tenantId: args.tenantId,
+            step: 'lead_form',
+            recovery: 'retry_once',
+          });
+          console.warn('[CampaignWizard] colisão de nome do formulário; repetindo uma única vez.', {
+            tenantId: args.tenantId,
+            step: 'lead_form',
+            recovery: 'retry_once',
+          });
+          leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, {
+            ...leadFormBody,
+            name: uniqueLeadFormName(leadFormBody.name),
+          });
+        }
         leadFormId = leadFormResponse.id;
       }
     } catch (err) {
@@ -1125,7 +1173,7 @@ export class CampaignsService {
       }
 
       const adSetBody: Record<string, unknown> = {
-        name: `AdSet — ${args.locationCity} — FURY`, campaign_id: metaCampaignId,
+        name: `AdSet — ${args.locationCity} — ady`, campaign_id: metaCampaignId,
         daily_budget: Math.round(args.dailyBudgetBrl * 100),
         billing_event: 'IMPRESSIONS', optimization_goal: objectiveConfig.optimizationGoal,
         bid_strategy: 'LOWEST_COST_WITHOUT_CAP', targeting, status: 'ACTIVE',
@@ -1184,7 +1232,7 @@ export class CampaignsService {
 
         const creativeBody: Record<string, unknown> = isInstagramCreative
           ? { object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: c.creativeInstagramMediaId, call_to_action: JSON.stringify({ type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: c.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
-          : { name: `Creative — FURY #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads'
+          : { name: `Creative — ady #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads'
             // Doc Lead Ads: o campo link no link_data é OBRIGATÓRIO mesmo para
             // formulários instantâneos, e o valor deve ser https://fb.me/ (o
             // clique real abre o form via call_to_action.lead_gen_form_id). Sem
@@ -1197,7 +1245,7 @@ export class CampaignsService {
         createdAdCreativeIds.push(adCreativeResponse.id);
 
         const adResponse = await this.meta.createAd(adAccountId, accessToken, {
-          name: `Ad — FURY — ${dataLabel} #${i + 1}`,
+          name: `Ad — ady — ${dataLabel} #${i + 1}`,
           adset_id: adSetId,
           creative: { creative_id: adCreativeResponse.id },
           status: 'ACTIVE',

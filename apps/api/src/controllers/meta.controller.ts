@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
-import type { MetaService } from '../services/meta/meta.service.js';
+import { verifyOAuthState, type MetaService } from '../services/meta/meta.service.js';
 import { emailService } from '../services/email/email.service.js';
 import { sendToTenant } from '../services/email/notify.js';
 import { invalidateHttpCache } from '../lib/http-cache.js';
+import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
 
 const callbackQuerySchema = z.object({
   code: z.string().min(1, 'Code OAuth ausente'),
@@ -89,7 +90,18 @@ export class MetaController {
       // o fallback legado oauth_cancelled.
       const errorCode =
         error instanceof AppError ? encodeURIComponent(error.code.toLowerCase()) : 'oauth_cancelled';
-      res.redirect(`${frontendUrl}/configuracoes/integracoes?error=${errorCode}`);
+      let target = frontendUrl;
+      let path = '/configuracoes/integracoes';
+      if (typeof req.query.state === 'string') {
+        try {
+          const state = verifyOAuthState(req.query.state);
+          target = state.frontendUrl ?? frontendUrl;
+          if (state.context === 'onboarding') path = '/onboarding/conectar-meta';
+        } catch {
+          // State inválido mantém o fallback seguro para Integrações.
+        }
+      }
+      res.redirect(`${target}${path}?error=${errorCode}`);
     }
   };
 
@@ -218,11 +230,11 @@ export class MetaController {
         throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
       }
       const selection = saveSelectionBodySchema.parse(req.body);
-      await this.metaService.saveTenantAssetSelection(req.tenant.tenantId, selection);
+      const savedSelection = await this.metaService.saveTenantAssetSelection(req.tenant.tenantId, selection);
       await invalidateHttpCache(req.tenant.tenantId, ['/api/meta']);
       res.status(200).json({
         success: true,
-        data: selection,
+        data: savedSelection,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
@@ -292,7 +304,8 @@ export class MetaController {
       }
       const params = connectionIdSchema.parse(req.params);
       await this.metaService.deleteTenantMetaConnection(req.tenant.tenantId, params.id);
-      await invalidateHttpCache(req.tenant.tenantId, ['/api/meta']);
+      await invalidateCampaignsCache(req.tenant.tenantId);
+      await invalidateHttpCache(req.tenant.tenantId, ['/api/meta', '/api/metrics', '/api/goals']);
 
       // Email transacional: conta Meta desconectada (fire-and-forget)
       await sendToTenant(req.tenant.tenantId, req.user?.email, (to) =>
@@ -324,8 +337,9 @@ const whatsappByAssetsBodySchema = z.object({
 });
 
 const saveSelectionBodySchema = z.object({
-  businessIds: z.array(z.string().min(1)).default([]),
-  pageIds: z.array(z.string().min(1)).default([]),
-  adAccountIds: z.array(z.string().min(1)).default([]),
+  businessIds: z.array(z.string().min(1)).min(1, 'Informe uma Business Manager'),
+  pageIds: z.array(z.string().min(1)).min(1, 'Informe uma Página'),
+  adAccountIds: z.array(z.string().min(1)).min(1, 'Informe uma conta de anúncio'),
+  instagramUserId: z.string().min(1, 'Informe um Instagram Business'),
   whatsappNumberIds: z.array(z.string().min(1)).default([]),
 });

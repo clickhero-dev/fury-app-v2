@@ -1,3 +1,13 @@
+/*
+# Language: pt-BR
+
+Funcionalidade: Confirmação de desconexão Meta
+
+  Cenário: informar os dados apagados e confirmar a desconexão
+    Dado uma conta Meta conectada
+    Quando a pessoa abre o diálogo e confirma Desconectar
+    Então visualiza o aviso de exclusão e o frontend envia DELETE para a conexão
+*/
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -6,7 +16,9 @@ import type { ReactNode } from 'react';
 import { IntegracoesContent } from './IntegracoesContent';
 import type { MetaConnection } from '@/types/meta';
 
-const mockApiGet = vi.hoisted(() => vi.fn());
+const { mockApiGet, mockApiDelete, mockLogout } = vi.hoisted(() => ({ mockApiGet: vi.fn(), mockApiDelete: vi.fn(), mockLogout: vi.fn() }));
+
+vi.mock('@/hooks/useLogout', () => ({ useLogout: () => mockLogout }));
 
 vi.mock('@/lib/api', () => ({
   default: {
@@ -14,7 +26,7 @@ vi.mock('@/lib/api', () => ({
     post: vi.fn(),
     put: vi.fn(),
     patch: vi.fn(),
-    delete: vi.fn(),
+    delete: mockApiDelete,
   },
 }));
 
@@ -35,11 +47,11 @@ function connection(overrides: Partial<MetaConnection>): MetaConnection {
   };
 }
 
-function makeWrapper() {
+function makeWrapper(entry = '/configuracoes/integracoes') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/configuracoes/integracoes']}>{children}</MemoryRouter>
+      <MemoryRouter initialEntries={[entry]}>{children}</MemoryRouter>
     </QueryClientProvider>
   );
 }
@@ -47,6 +59,9 @@ function makeWrapper() {
 describe('IntegracoesContent — status de conexão da conta Meta', () => {
   beforeEach(() => {
     mockApiGet.mockReset();
+    mockApiDelete.mockReset();
+    mockLogout.mockReset();
+    mockApiDelete.mockResolvedValue({ data: { success: true, data: null } });
   });
 
   function mockApi(connections: MetaConnection[]) {
@@ -87,6 +102,30 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
 
     expect(await screen.findByText('Nenhuma conta de anúncio conectada')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Conectar conta Meta/i })).toBeInTheDocument();
+  });
+
+  it('exibe erro OAuth da Meta com o código técnico e remove o parâmetro da URL', async () => {
+    mockApi([]);
+    render(<IntegracoesContent />, { wrapper: makeWrapper('/configuracoes/integracoes?error=ad_account_in_use') });
+
+    expect(await screen.findByText(/conta de anúncio já está em uso/i)).toBeInTheDocument();
+    expect(screen.getByText(/Código: ad_account_in_use/i)).toBeInTheDocument();
+  });
+
+  it('permite tentar novamente com rerequest após ad_account_in_use', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/meta/connections') return Promise.resolve({ data: { success: true, data: [] } });
+      if (url === '/meta/auth/url') return Promise.resolve({ data: { success: true, data: { authUrl: 'https://meta.example/oauth' } } });
+      return Promise.resolve({ data: { success: true, data: { scopes: [] } } });
+    });
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<IntegracoesContent />, { wrapper: makeWrapper('/configuracoes/integracoes?error=ad_account_in_use') });
+
+    await user.click(await screen.findByRole('button', { name: /tentar novamente/i }));
+    expect(mockApiGet).toHaveBeenCalledWith('/meta/auth/url', {
+      params: { context: 'settings', frontendUrl: window.location.origin, rerequest: 'true' },
+    });
   });
 
   it('exibe o @perfil Instagram vinculado ao calendário com badge "Autorizado"', async () => {
@@ -201,5 +240,24 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
         params: { context: 'settings', frontendUrl: window.location.origin, rerequest: 'true' },
       });
     });
+  });
+
+  it('confirma que a desconexão apaga os dados Meta e só então chama DELETE', async () => {
+    mockApi([connection({})]);
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<IntegracoesContent />, { wrapper: makeWrapper() });
+
+    await user.click(await screen.findByRole('button', { name: /^Desconectar$/i }));
+
+    expect(await screen.findByText(/campanhas, métricas, leads e dados do Instagram/i)).toBeInTheDocument();
+    expect(mockApiDelete).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /^Desconectar$/i }));
+
+    await waitFor(() => {
+      expect(mockApiDelete).toHaveBeenCalledWith('/meta/connections/conn-1');
+    });
+    expect(mockLogout).toHaveBeenCalledOnce();
   });
 });

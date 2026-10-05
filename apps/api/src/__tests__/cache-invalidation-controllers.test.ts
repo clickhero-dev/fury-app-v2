@@ -177,7 +177,7 @@ describe('invalidação de cache http nos writes', () => {
 
     it('saveSelection invalida /api/meta', async () => {
       const ctrl = makeController({ saveTenantAssetSelection: vi.fn().mockResolvedValue(undefined) });
-      const req = makeReq({ body: { adAccountId: 'act_1' } });
+      const req = makeReq({ body: { businessIds: ['bm_1'], pageIds: ['page_1'], adAccountIds: ['act_1'], instagramUserId: 'ig_1' } });
       const res = makeRes();
 
       await ctrl.saveSelection(req, res, next);
@@ -195,14 +195,15 @@ describe('invalidação de cache http nos writes', () => {
       expect(mockInvalidateHttpCache).toHaveBeenCalledWith('tenant-foo', ['/api/meta']);
     });
 
-    it('deleteConnection invalida /api/meta', async () => {
+    it('deleteConnection invalida campanhas, Meta, métricas e goals', async () => {
       const ctrl = makeController({ deleteTenantMetaConnection: vi.fn().mockResolvedValue(undefined) });
       const req = makeReq({ params: { id: '5ca0c5cb-609b-4215-a884-1a7edae648ee' } });
       const res = makeRes();
 
       await ctrl.deleteConnection(req, res, next);
 
-      expect(mockInvalidateHttpCache).toHaveBeenCalledWith('tenant-foo', ['/api/meta']);
+      expect(mockInvalidateCampaignsCache).toHaveBeenCalledWith('tenant-foo');
+      expect(mockInvalidateHttpCache).toHaveBeenCalledWith('tenant-foo', ['/api/meta', '/api/metrics', '/api/goals']);
     });
 
     it('authCallback invalida /api/meta (nova conexão muda asset-selection/connections)', async () => {

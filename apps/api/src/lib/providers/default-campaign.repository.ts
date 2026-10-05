@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import {
   automationRules,
   campaigns,
@@ -6,6 +6,7 @@ import {
   db,
   furyInsights,
   metaConnections,
+  metaLeads,
 } from '../../lib/db.js';
 import type {
   ICampaignRepository,
@@ -93,6 +94,19 @@ export class DefaultCampaignRepository implements ICampaignRepository {
       where: and(eq(creativeAssets.id, id), eq(creativeAssets.tenantId, tenantId)),
     });
     return row as CreativeAssetRecord | null;
+  }
+
+  /**
+   * Envios de formulário persistidos para a campanha (`meta_leads`) — mesma
+   * origem da página Clientes. A campanha é resolvida pelo meta id (local ou
+   * externa) e o form vem de `budget.lead_form_id` quando existir.
+   */
+  async countLeadFormSubmissions(tenantId: string, metaCampaignId: string): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(metaLeads)
+      .where(and(eq(metaLeads.tenantId, tenantId), eq(metaLeads.metaCampaignId, metaCampaignId)));
+    return Number(row?.count) || 0;
   }
 
   async findRecentTakedowns(

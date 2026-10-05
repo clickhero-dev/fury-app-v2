@@ -146,7 +146,7 @@ export async function exchangeCodeForToken(params: {
   url.searchParams.set('redirect_uri', params.redirectUri);
   url.searchParams.set('code', params.code);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   return parseMetaResponse<MetaTokenResponse>(response, 'Falha ao trocar o code por access token no Meta.');
 }
 
@@ -161,7 +161,7 @@ export async function exchangeForLongLivedToken(params: {
   url.searchParams.set('client_secret', params.clientSecret);
   url.searchParams.set('fb_exchange_token', params.shortLivedToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   return parseMetaResponse<MetaTokenResponse>(
     response,
     'Falha ao obter token de longa duracao (60 dias) no Meta.'
@@ -197,7 +197,7 @@ export async function getBusinessAdAccounts(businessId: string, accessToken: str
   url.searchParams.set('fields', 'id,name,account_status,currency,timezone_name');
   url.searchParams.set('access_token', accessToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   const payload = await parseMetaResponse<MetaAdAccountsResponse>(
     response,
     'Falha ao buscar contas de anuncios da Business Manager no Meta.'
@@ -227,7 +227,7 @@ export async function getBusinessOwnedPages(businessId: string, accessToken: str
   url.searchParams.set('fields', 'id,name,instagram_business_account{id,username}');
   url.searchParams.set('access_token', accessToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   const payload = await parseMetaResponse<MetaOwnedPagesResponse>(
     response,
     'Falha ao buscar Paginas da Business Manager no Meta.'
@@ -1190,7 +1190,7 @@ export async function metaApiCall<T>(
           data: [
             {
               id: 'mock_page_id',
-              name: 'Página Demo FURY',
+              name: 'Página Demo Ady',
               instagram_business_account: { id: 'mock_ig_user_id' },
               whatsapp_business_account: { id: 'mock_waba_id' },
             },
@@ -1203,7 +1203,7 @@ export async function metaApiCall<T>(
             {
               id: 'mock_phone_number_id',
               display_phone_number: '+55 11 99999-0000',
-              verified_name: 'FURY Demo',
+              verified_name: 'Ady Demo',
             },
           ],
         } as T;
@@ -1607,7 +1607,7 @@ export async function createAdCreativeFromCopy(params: {
   const callToActionType = mapCtaToMetaType(params.cta);
 
   const body: Record<string, unknown> = {
-    name: `FURY Copy Creative ${new Date().toISOString()}`,
+    name: `Ady Copy Creative ${new Date().toISOString()}`,
     object_story_spec: {
       page_id: params.pageId,
       link_data: {
@@ -2005,6 +2005,21 @@ export interface MetaLeadFormQuestion {
   key: string;
   type: string;
   label?: string;
+}
+
+/**
+ * Envios de um leadgen form (leads de formulário instantâneo).
+ * GET /{form_id}/leads — MESMA fonte que o detalhe da campanha usa para
+ * contar "Pessoas"; o worker/lista precisam ler daqui para não divergirem.
+ */
+export async function getLeadFormData(
+  formId: string,
+  accessToken: string,
+): Promise<{ data: Array<Record<string, unknown>> }> {
+  return metaApiCall<{ data: Array<Record<string, unknown>> }>(
+    `/${encodeURIComponent(formId)}/leads?fields=id,field_data,created_time,form_id`,
+    accessToken,
+  );
 }
 
 /**

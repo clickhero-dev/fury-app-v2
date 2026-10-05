@@ -69,7 +69,9 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
 
   // Mesma chave ['studio/assets'] do EstudioHome → cache compartilhado traz o
   // CORPO COMPLETO (não o array). Lê `assets` para não quebrar com `.filter`.
-  const libraryImages = studioAssetsData?.assets?.filter(a => a.type === 'image' && a.url && a.complianceStatus === 'approved') ?? [];
+  // Filtro de aprovadas desativado (compliance desligado)
+  // const libraryImages = studioAssetsData?.assets?.filter(a => a.type === 'image' && a.url && a.complianceStatus === 'approved') ?? [];
+  const libraryImages = studioAssetsData?.assets?.filter(a => a.type === 'image' && a.url) ?? [];
 
   // Fase 8: Prioriza preselectedDate (novo) sobre preselectedDay (legado)
   const getEffectiveDate = (): string => {

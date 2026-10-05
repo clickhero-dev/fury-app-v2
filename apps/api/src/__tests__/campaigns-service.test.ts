@@ -668,8 +668,8 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     expect(meta.createdAdSets).toHaveLength(1);
     // N adcreatives + N ads com nomes distintos
     expect(meta.createdAdCreatives).toHaveLength(2);
-    expect(meta.createdAdCreatives[0].name).toBe('Creative — FURY #1');
-    expect(meta.createdAdCreatives[1].name).toBe('Creative — FURY #2');
+    expect(meta.createdAdCreatives[0].name).toBe('Creative — ady #1');
+    expect(meta.createdAdCreatives[1].name).toBe('Creative — ady #2');
     expect(meta.createdAds).toHaveLength(2);
     expect(meta.createdAds[0].name).toContain(' #1');
     expect(meta.createdAds[1].name).toContain(' #2');
@@ -829,26 +829,25 @@ describe('CampaignsService.getCampaignInsights', () => {
     expect(result.timeseries[0].spend).toBe(100);
   });
 
-  it('PESSOAS de campanha Formulário = nº de pessoas que preencheram o form (fonte da verdade), não a soma dos insights', async () => {
+  it('PESSOAS de campanha Formulário = nº de envios PERSISTIDOS (fonte da verdade), não a soma dos insights', async () => {
     const { service, repo, meta } = makeService();
     repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
     await repo.createCampaign({
       tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Vagas Executivo',
-      status: 'pausado', budget: { objective: 'leads' }, // wizard → OUTCOME_LEADS
+      status: 'pausado', budget: { objective: 'leads', lead_form_id: 'form-1' }, // wizard → OUTCOME_LEADS
     } as any);
 
-    // insights dizem 6 unique lead, mas o form tem 4 preenchimentos distintos
+    // insights dizem 6 unique lead, mas o form tem 4 preenchimentos persistidos
     meta.insightsResult = {
       data: [
         { date_start: '2026-09-23', spend: '8.66', impressions: '1200', clicks: '25', ctr: '2.08', cpc: '0.35', cpm: '7.2', actions: [{ action_type: 'lead', value: '6' }], unique_actions: [{ action_type: 'lead', value: '6' }], purchase_roas: [] },
       ],
     };
-    meta.campaignAdsByCampaign.set('mc1', ['ad_1']);
-    meta.adLeadsByAd.set('ad_1', [
-      { field_data: [{ name: 'full_name', values: ['P1'] }, { name: 'email', values: ['p1@x.com'] }] },
-      { field_data: [{ name: 'full_name', values: ['P2'] }, { name: 'email', values: ['p2@x.com'] }] },
-      { field_data: [{ name: 'full_name', values: ['P3'] }, { name: 'email', values: ['p3@x.com'] }] },
-      { field_data: [{ name: 'full_name', values: ['P4'] }, { name: 'email', values: ['p4@x.com'] }] },
+    repo.leadFormSubmissionsByForm.set('form-1', [
+      { id: 'L1', name: 'P1', email: 'p1@x.com' },
+      { id: 'L2', name: 'P2', email: 'p2@x.com' },
+      { id: 'L3', name: 'P3', email: 'p3@x.com' },
+      { id: 'L4', name: 'P4', email: 'p4@x.com' },
     ]);
 
     const result = await service.getCampaignInsights({
@@ -863,7 +862,7 @@ describe('CampaignsService.getCampaignInsights', () => {
     repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
     await repo.createCampaign({
       tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Vagas Executivo',
-      status: 'pausado', budget: { objective: 'leads' },
+      status: 'pausado', budget: { objective: 'leads', lead_form_id: 'form-1' },
     } as any);
 
     // insights dizem 6 unique lead, mas 2 são a MESMA submissão sob 2 ads
@@ -872,16 +871,12 @@ describe('CampaignsService.getCampaignInsights', () => {
         { date_start: '2026-09-23', spend: '8.66', impressions: '1200', clicks: '25', ctr: '2.08', cpc: '0.35', cpm: '7.2', actions: [{ action_type: 'lead', value: '6' }], unique_actions: [{ action_type: 'lead', value: '6' }], purchase_roas: [] },
       ],
     };
-    meta.campaignAdsByCampaign.set('mc1', ['ad_1', 'ad_2']);
-    meta.adLeadsByAd.set('ad_1', [
-      { id: 'L1', field_data: [{ name: 'email', values: ['p1@x.com'] }] },
-      { id: 'L2', field_data: [{ name: 'email', values: ['p2@x.com'] }] },
-      { id: 'L3', field_data: [{ name: 'email', values: ['p3@x.com'] }] },
-    ]);
-    // L1 (mesma pessoa) repete sob ad_2 → não pode contar 2x
-    meta.adLeadsByAd.set('ad_2', [
-      { id: 'L1', field_data: [{ name: 'email', values: ['p1@x.com'] }] },
-      { id: 'L4', field_data: [{ name: 'email', values: ['p4@x.com'] }] },
+    // persistência deduplica por meta_lead_id: L1 sob 2 ads = 1 linha
+    repo.leadFormSubmissionsByForm.set('form-1', [
+      { id: 'L1', name: 'P1', email: 'p1@x.com' },
+      { id: 'L2', name: 'P2', email: 'p2@x.com' },
+      { id: 'L3', name: 'P3', email: 'p3@x.com' },
+      { id: 'L4', name: 'P4', email: 'p4@x.com' },
     ]);
 
     const result = await service.getCampaignInsights({
@@ -892,8 +887,58 @@ describe('CampaignsService.getCampaignInsights', () => {
     expect(result.totals.conversions).toBe(4);
   });
 
-  it('campanha não-form mantém conversões dos insights (sem chamada de leads)', async () => {
+  it('campanha de formulário conta os envios PERSISTIDOS (mesma fonte da lista de Campanhas) — sem chamar a Meta', async () => {
     const { service, repo, meta } = makeService();
+    repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
+    await repo.createCampaign({
+      tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Inglês/Espanhol R$140!',
+      status: 'pausado', budget: { objective: 'leads', lead_form_id: 'form-1' },
+    } as any);
+
+    // Insights contam 3 cliques (sem lead) — o número de clientes NÃO pode vir daí.
+    meta.insightsResult = {
+      data: [
+        { date_start: '2026-09-29', spend: '6.73', impressions: '122', clicks: '3', ctr: '2.4', cpc: '2.24', cpm: '55', actions: [{ action_type: 'link_click', value: '3' }], unique_actions: [{ action_type: 'link_click', value: '2' }], purchase_roas: [] },
+      ],
+    };
+    repo.leadFormSubmissionsByForm.set('form-1', [
+      { id: 'L1', name: 'P1', email: 'p1@x.com', phone: '1199', createdTime: new Date() },
+      { id: 'L2', name: 'P2', email: 'p2@x.com', phone: '1198', createdTime: new Date() },
+      { id: 'L3', name: 'P3', email: 'p3@x.com', phone: '1197', createdTime: new Date() },
+    ]);
+
+    const result = await service.getCampaignInsights({
+      tenantId: TENANT_ID, campaignId: 'mc1', dateRange: 'last_7d',
+    });
+
+    expect(result.totals.conversions).toBe(3);
+    // fonte única: não consulta leads por ad/na Meta para montar o número
+    expect(meta.campaignAdsByCampaign.size).toBe(0);
+    expect(meta.leadFormDataRequests).toHaveLength(0);
+  });
+
+  it('campanha de formulário sem envios gravados → 0 (nunca cliques como clientes)', async () => {
+    const { service, repo, meta } = makeService();
+    repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
+    await repo.createCampaign({
+      tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Inglês/Espanhol R$140!',
+      status: 'ativo', budget: { objective: 'leads', lead_form_id: 'form-1' },
+    } as any);
+
+    meta.insightsResult = {
+      data: [
+        { date_start: '2026-09-29', spend: '6.73', impressions: '122', clicks: '3', ctr: '2.4', cpc: '2.24', cpm: '55', actions: [{ action_type: 'link_click', value: '3' }], unique_actions: [], purchase_roas: [] },
+      ],
+    };
+
+    const result = await service.getCampaignInsights({
+      tenantId: TENANT_ID, campaignId: 'mc1', dateRange: 'last_7d',
+    });
+
+    expect(result.totals.conversions).toBe(0);
+  });
+
+  it('campanha não-form mantém conversões dos insights (sem chamada de leads)', async () => {    const { service, repo, meta } = makeService();
     repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
     await repo.createCampaign({
       tenantId: TENANT_ID, metaCampaignId: 'mc1', name: 'Tráfego',
@@ -980,6 +1025,84 @@ describe('CampaignsService.createCampaignFromWizard — objetivo leads', () => {
     // persistência local guarda o id do form
     expect(repo.campaigns[0].budget.lead_form_id).toBe('form_1');
     expect(repo.campaigns[0].budget.lead_page_id).toBe('page_1');
+  });
+
+  it('mantém o nome original e faz uma única chamada ao Meta quando não há colisão', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+
+    await service.createCampaignFromWizard(leadsArgs as any);
+
+    expect(meta.createdLeadForms).toHaveLength(1);
+    expect(meta.createdLeadForms[0].body.name).toBe('Formulário — Promoção');
+  });
+
+  it.each([
+    'O nome do formulário já existe. Insira um novo nome.',
+    'The form name already exists. Please enter a new name.',
+  ])('recupera uma colisão de nome do formulário (%s) com uma única nova tentativa', async (metaUserMsg) => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    const originalCreateLeadForm = meta.createLeadForm.bind(meta);
+    let attempts = 0;
+    meta.createLeadForm = async (...params: [string, string, any]) => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw metaError(100, metaUserMsg, { metaUserMsg, metaUserTitle: 'Nome do formulário inválido' });
+      }
+      return originalCreateLeadForm(...params);
+    };
+
+    const result = await service.createCampaignFromWizard(leadsArgs as any);
+
+    expect(result.success).toBe(true);
+    expect(attempts).toBe(2);
+    expect(meta.createdLeadForms).toHaveLength(1);
+    expect(meta.createdLeadForms[0].body.name).toMatch(/^Formulário — Promoção — \d{8}-\d{6}-[A-F0-9]{4}$/);
+    expect(repo.campaigns[0].budget.lead_form_id).toBe('form_1');
+  });
+
+  it('não repete a criação para um erro de formulário que não é colisão de nome', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    let attempts = 0;
+    meta.createLeadForm = async () => {
+      attempts += 1;
+      throw metaError(100, 'Invalid privacy policy URL', { metaUserMsg: 'Invalid privacy policy URL' });
+    };
+
+    await expect(service.createCampaignFromWizard(leadsArgs as any)).rejects.toMatchObject({
+      code: 'META_API_ERROR',
+    });
+
+    expect(attempts).toBe(1);
+    expect(meta.createdCampaigns).toHaveLength(0);
+    expect(meta.createdAdSets).toHaveLength(0);
+    expect(meta.createdAds).toHaveLength(0);
+  });
+
+  it('mapeia a segunda falha após retry e não cria objetos posteriores', async () => {
+    const { service, meta, repo } = makeService();
+    makeLeadsEnv(meta, repo);
+    let attempts = 0;
+    meta.createLeadForm = async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw metaError(100, 'The form name already exists.', { metaUserMsg: 'The form name already exists.' });
+      }
+      throw metaError(100, 'Invalid privacy policy URL', { metaUserMsg: 'Invalid privacy policy URL' });
+    };
+
+    await expect(service.createCampaignFromWizard(leadsArgs as any)).rejects.toMatchObject({
+      code: 'META_API_ERROR',
+    });
+
+    expect(attempts).toBe(2);
+    expect(meta.createdCampaigns).toHaveLength(0);
+    expect(meta.createdAdSets).toHaveLength(0);
+    expect(meta.createdAdCreatives).toHaveLength(0);
+    expect(meta.createdAds).toHaveLength(0);
+    expect(repo.campaigns).toHaveLength(0);
   });
 
   it('envia privacy_policy com URL pública da política de privacidade (nome slugificado)', async () => {

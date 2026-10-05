@@ -524,7 +524,8 @@ describe('Compliance Check Worker', () => {
     );
   });
 
-  it('inicializa junto com o servidor em modo production', async () => {
+  // Worker desativado no index.ts (compliance de imagem desligado)
+  it.skip('inicializa junto com o servidor em modo production', async () => {
     const startComplianceCheckWorkerMock = vi.fn().mockResolvedValue(undefined);
     const stopComplianceCheckWorkerMock = vi.fn().mockResolvedValue(undefined);
 

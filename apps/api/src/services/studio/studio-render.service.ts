@@ -123,12 +123,13 @@ export async function renderCreative(input: RenderCreativeInput): Promise<Render
     }),
   });
 
-  const complianceQueue = await getComplianceQueue();
-  await complianceQueue.add(
-    'studio:compliance-check',
-    { creativeAssetId: asset.id, tenantId },
-    { removeOnComplete: 1000, removeOnFail: 5000, attempts: 4, backoff: { type: 'exponential', delay: 10_000 } }
-  );
+  // Compliance de imagem desativado
+  // const complianceQueue = await getComplianceQueue();
+  // await complianceQueue.add(
+  //   'studio:compliance-check',
+  //   { creativeAssetId: asset.id, tenantId },
+  //   { removeOnComplete: 1000, removeOnFail: 5000, attempts: 4, backoff: { type: 'exponential', delay: 10_000 } }
+  // );
 
   return { creativeAssetId: asset.id, imageUrl: dataUrl, headline, cta, brandColor: color };
 }
