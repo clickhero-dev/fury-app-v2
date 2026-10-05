@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Users, MessageCircle } from 'lucide-react';
+import { Users, MessageCircle, ChevronDown, Check } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useCampaignLeads, type CampaignLead } from '@/hooks/useCampaignLeads';
 import { useLeadCampaigns } from '@/hooks/useLeadCampaigns';
 import { useLeadStatus, LEAD_STATUS_OPTIONS } from '@/hooks/useLeadStatus';
@@ -196,27 +197,33 @@ export function LeadsPage() {
 
       {/* Filtro por campanha de Formulário */}
       <div className="flex items-center gap-2.5">
-        <label htmlFor="leads-campaign-filter" className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
+        <span id="leads-campaign-filter-label" className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
           Filtrar por campanha
-        </label>
+        </span>
         <div className="relative max-w-sm w-full">
-          <select
-            id="leads-campaign-filter"
-            value={campaignId}
-            onChange={(e) => setCampaignId(e.target.value)}
-            disabled={loadingCampaigns}
-            className="w-full appearance-none rounded-full border border-border bg-surface px-4 py-3 pr-9 text-xs sm:text-sm text-text-primary outline-none cursor-pointer hover:border-text-tertiary/50 focus:border-brand transition-all duration-200 disabled:opacity-50"
-          >
-            <option value="">Todas as campanhas</option>
-            {campaigns.map((c) => (
-              <option key={c.id} value={c.id} className="bg-surface text-text-primary">
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <svg className="absolute right-3.5 top-1/2 -translate-y-1/2 size-4 text-text-tertiary pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" />
-          </svg>
+          {/* Lista estilizada (o <select> nativo usa a lista do sistema) */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild disabled={loadingCampaigns}>
+              <button
+                type="button"
+                aria-labelledby="leads-campaign-filter-label"
+                className="flex w-full items-center justify-between gap-2 rounded-full border border-border bg-surface px-4 py-3 text-left text-xs sm:text-sm text-text-primary outline-none cursor-pointer hover:border-text-tertiary/50 focus:border-brand transition-all duration-200 disabled:opacity-50"
+              >
+                <span className="truncate">
+                  {campaigns.find((c) => c.id === campaignId)?.name ?? 'Todas as campanhas'}
+                </span>
+                <ChevronDown className="size-4 shrink-0 text-text-tertiary" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="max-h-80 w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto">
+              {[{ id: '', name: 'Todas as campanhas' }, ...campaigns].map((c) => (
+                <DropdownMenuItem key={c.id || 'all'} onSelect={() => setCampaignId(c.id)} className="justify-between gap-3">
+                  <span className="truncate">{c.name}</span>
+                  {c.id === campaignId && <Check className="size-3.5 shrink-0 text-brand" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

@@ -194,7 +194,7 @@ export function CampaignWizard({
                   <div
                     className={cn(
                       'h-0.5 flex-1 mx-1 transition-colors',
-                      isVisited ? 'bg-brand' : 'bg-surface-secondary'
+                      isVisited ? 'bg-brand' : 'bg-slate-300 dark:bg-surface-secondary'
                     )}
                   />
                 )}

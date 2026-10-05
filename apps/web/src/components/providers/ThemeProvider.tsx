@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { selectTheme } from '@/store/slices/authSlice';
 
@@ -14,7 +14,8 @@ import { selectTheme } from '@/store/slices/authSlice';
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useAppSelector(selectTheme);
 
-  useEffect(() => {
+  // Layout effect: roda antes dos useEffect (ex.: ForceDarkMode vence no admin)
+  useLayoutEffect(() => {
     const html = document.documentElement;
 
     if (theme === 'dark') {
