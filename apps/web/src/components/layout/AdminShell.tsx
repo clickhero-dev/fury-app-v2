@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Clock, Zap, LogOut, LayoutGrid, ArrowLeft } from 'lucide-react';
+import { Users, Clock, Zap, LogOut, LayoutGrid, ArrowLeft, Ticket } from 'lucide-react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useFavicon } from '@/hooks/useFavicon';
 
@@ -14,6 +14,7 @@ const navItems: NavItem[] = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { path: '/admin/users', label: 'Usuários', icon: Users },
   { path: '/admin/planos', label: 'Planos', icon: Clock },
+  { path: '/admin/tickets', label: 'Tickets', icon: Ticket },
   { path: '/admin/tenants', label: 'Campanhas', icon: Zap },
 ];
 

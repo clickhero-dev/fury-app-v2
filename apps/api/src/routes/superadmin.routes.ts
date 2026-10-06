@@ -8,6 +8,10 @@ const router = Router();
 // All routes require auth + superadmin role
 router.use(authMiddleware, superadminMiddleware);
 
+router.post('/tickets', controllers.tickets.create);
+router.get('/tickets', controllers.tickets.list);
+router.get('/tickets/assignees', controllers.tickets.listAssignees);
+
 // Dashboard (stats globais)
 router.get("/dashboard", controllers.superadmin.getDashboard);
 
