@@ -660,6 +660,20 @@ export const workflowJobsRelations = relations(workflowJobs, ({ one }) => ({
 
 export const metaSyncRunStatusEnum = pgEnum('meta_sync_run_status', ['running', 'success', 'partial', 'failed']);
 
+/** Último healthcheck da integração Meta por tenant (sem histórico de execuções). */
+export const metaHealthchecks = pgTable(
+  'meta_healthchecks',
+  {
+    tenantId: uuid('tenant_id').primaryKey().references(() => tenants.id, { onDelete: 'cascade' }),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).notNull(),
+    status: varchar('status', { length: 16 }).notNull(),
+    checks: jsonb('checks').notNull().default(sql`'{}'::jsonb`),
+    lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+    lastSyncStatus: varchar('last_sync_status', { length: 16 }),
+  },
+  (table) => ({ checkedAtIdx: index('meta_healthchecks_checked_at_idx').on(table.checkedAt) })
+);
+
 export const metaSyncScopes = pgTable(
   'meta_sync_scopes',
   {

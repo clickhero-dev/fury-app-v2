@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
 import { AppError } from '../middleware/errorHandler.js';
 import { isMetaPermissionDenied, sanitizeMetaReason } from './meta-error.js';
+import { externalFetch } from './http-client.js';
 
 const META_API_VERSION = 'v25.0';
 const META_GRAPH_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -179,7 +180,7 @@ export async function getUserBusinesses(accessToken: string): Promise<MetaBusine
     url.searchParams.set('access_token', accessToken);
     if (after) url.searchParams.set('after', after);
 
-    const response = await fetch(url, { method: 'GET' });
+    const response = await externalFetch(url.toString(), { method: 'GET' });
     const payload = await parseMetaResponse<MetaBusinessesResponse>(
       response,
       'Falha ao buscar Business Managers no Meta.'
@@ -563,7 +564,7 @@ export async function getPageAccessToken(
     url.searchParams.set('access_token', accessToken);
     if (after) url.searchParams.set('after', after);
 
-    const response = await fetch(url, { method: 'GET' });
+    const response = await externalFetch(url.toString(), { method: 'GET' });
     const payload = await parseMetaResponse<MetaPagesAccessResponse>(
       response,
       'Falha ao buscar as Paginas do usuario no Meta.'
@@ -1017,7 +1018,7 @@ export async function getMetaUserId(accessToken: string): Promise<string> {
   url.searchParams.set('fields', 'id');
   url.searchParams.set('access_token', accessToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await externalFetch(url.toString(), { method: 'GET' });
   const payload = await parseMetaResponse<MetaUserProfileResponse>(
     response,
     'Falha ao buscar o id do usuario Meta.'
@@ -1353,10 +1354,10 @@ export async function metaApiCall<T>(
   let res: Response;
   let json: unknown;
   try {
-    res = await fetch(url.toString(), fetchOptions);
+    res = await externalFetch(url.toString(), fetchOptions);
     json = (await res.json()) as unknown;
   } catch (fetchErr: any) {
-    if (fetchErr.name === 'TimeoutError' || fetchErr.name === 'AbortError') {
+    if (fetchErr.code === 'TIMEOUT' || fetchErr.name === 'TimeoutError' || fetchErr.name === 'AbortError') {
       console.error(`[Meta API] Timeout (90s) ao chamar: ${path}`);
       const err = new Error(`[Meta API] Timeout ao chamar ${path} (>90s)`);
       (err as MetaApiError).httpStatus = 504;
@@ -1375,20 +1376,14 @@ export async function metaApiCall<T>(
     const code = maybeErr?.error?.code;
     const subcode = maybeErr?.error?.error_subcode;
     const type = maybeErr?.error?.type;
-    const message = maybeErr?.error?.message || (typeof json === 'object' ? JSON.stringify(json) : String(json));
+    const message = maybeErr?.error?.message || 'Falha na chamada à API da Meta.';
     console.error('[Meta API] Error response:', {
       path,
       status: res.status,
       code,
       subcode,
       type,
-      message,
     });
-    // Loga o body COMPLETO da resposta para diagnóstico de blame_field_specs etc
-    console.error('[Meta API] Full error body:', JSON.stringify(json, null, 2));
-    if (options?.body) {
-      console.error('[Meta API] Request body:', JSON.stringify(options.body, null, 2));
-    }
     const err = new Error(`[Meta API] ${code ?? res.status}: ${message}`);
     (err as MetaApiError).metaCode = code;
     (err as MetaApiError).metaSubcode = subcode;

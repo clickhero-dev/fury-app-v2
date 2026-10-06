@@ -26,6 +26,11 @@ router.post('/faqs/images', faqImageUpload.single('file'), controllers.faq.uploa
 // Dashboard (stats globais)
 router.get("/dashboard", controllers.superadmin.getDashboard);
 
+// Healthcheck Meta (global superadmin view)
+router.get('/healthchecks/users', controllers.metaHealthchecks.listUsers);
+router.get('/healthchecks', controllers.metaHealthchecks.getLatest);
+router.post('/healthchecks/run', controllers.metaHealthchecks.run);
+
 // Tenants
 router.get("/tenants", controllers.superadmin.listTenants);
 router.get("/tenants/:id", controllers.superadmin.getTenant);
