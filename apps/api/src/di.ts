@@ -56,6 +56,9 @@ import { MetaSyncRepository } from './repository/meta-sync.repository.js';
 import { enqueueMetaSyncTenantRun } from './workers/meta-sync.worker.js';
 import { SuperAdminRepository } from './repository/superadmin.repository.js';
 import { SuperAdminController } from './controllers/superadmin.controller.js';
+import { ClickUpTicketsClient } from './lib/clickup-tickets.client.js';
+import { TicketService } from './services/tickets/ticket.service.js';
+import { TicketsController } from './controllers/tickets.controller.js';
 import { FaqRepository } from './repository/faq.repository.js';
 import { FaqController } from './controllers/faq.controller.js';
 
@@ -90,6 +93,8 @@ export { metaSyncService };
 
 // SuperAdmin (GLOBAL) — único repositório/controller não escopado por tenant.
 export const superAdminRepository = new SuperAdminRepository("");
+export const clickUpTicketsClient = new ClickUpTicketsClient();
+export const ticketService = new TicketService(clickUpTicketsClient);
 export const faqRepository = new FaqRepository();
 
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
@@ -106,6 +111,7 @@ export const wppVerificationService = new WppVerificationService(
 );
 
 export const controllers = {
+  tickets: new TicketsController(ticketService),
   faq: new FaqController(faqRepository),
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),

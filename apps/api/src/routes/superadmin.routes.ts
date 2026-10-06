@@ -9,6 +9,9 @@ const router = Router();
 // All routes require auth + superadmin role
 router.use(authMiddleware, superadminMiddleware);
 
+router.post('/tickets', controllers.tickets.create);
+router.get('/tickets', controllers.tickets.list);
+router.get('/tickets/assignees', controllers.tickets.listAssignees);
 const faqImageUpload = multer({
   storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => cb(null, ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.mimetype)),
