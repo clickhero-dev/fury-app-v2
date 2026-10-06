@@ -659,6 +659,23 @@ export const workflowJobsRelations = relations(workflowJobs, ({ one }) => ({
 
 export const metaSyncRunStatusEnum = pgEnum('meta_sync_run_status', ['running', 'success', 'partial', 'failed']);
 
+export const metaSyncScopes = pgTable(
+  'meta_sync_scopes',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id').notNull().references(() => metaConnections.id, { onDelete: 'cascade' }),
+    metaUserId: varchar('meta_user_id', { length: 255 }).notNull(),
+    adAccountId: varchar('ad_account_id', { length: 255 }).notNull(),
+    instagramUserId: varchar('instagram_user_id', { length: 255 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantUnique: unique('meta_sync_scopes_tenant_unique').on(table.tenantId),
+    connectionIdIdx: index('meta_sync_scopes_connection_id_idx').on(table.connectionId),
+  })
+);
+
 /** Snapshot das campanhas da conta Meta (todas, inclusive criadas fora do Fury). */
 export const metaCampaignSnapshots = pgTable(
   'meta_campaign_snapshots',
@@ -673,6 +690,7 @@ export const metaCampaignSnapshots = pgTable(
     objective: varchar('objective', { length: 50 }),
     budget: jsonb('budget').default(sql`'{}'::jsonb`),
     metrics: jsonb('metrics').default(sql`'{}'::jsonb`),
+    scopeId: uuid('scope_id').notNull().references(() => metaSyncScopes.id, { onDelete: 'cascade' }),
     hasLeadForm: boolean('has_lead_form'),
     lastInsightsAt: timestamp('last_insights_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -697,6 +715,7 @@ export const metaCampaignDailyInsights = pgTable(
     metaCampaignId: varchar('meta_campaign_id', { length: 255 }).notNull(),
     date: date('date').notNull(),
     metrics: jsonb('metrics').default(sql`'{}'::jsonb`).notNull(),
+    scopeId: uuid('scope_id').notNull().references(() => metaSyncScopes.id, { onDelete: 'cascade' }),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
@@ -727,6 +746,7 @@ export const metaLeads = pgTable(
     fetchedAt: timestamp('fetched_at', { withTimezone: true }).defaultNow().notNull(),
     status: leadStatusEnum('status').notNull().default('novo'),
     statusUpdatedAt: timestamp('status_updated_at', { withTimezone: true }),
+    scopeId: uuid('scope_id').notNull().references(() => metaSyncScopes.id, { onDelete: 'cascade' }),
   },
   (table) => ({
     tenantIdIdx: index('meta_leads_tenant_id_idx').on(table.tenantId),
@@ -755,6 +775,7 @@ export const metaInstagramMedia = pgTable(
     likeCount: integer('like_count'),
     commentsCount: integer('comments_count'),
     insights: jsonb('insights').default(sql`'{}'::jsonb`),
+    scopeId: uuid('scope_id').notNull().references(() => metaSyncScopes.id, { onDelete: 'cascade' }),
     fetchedAt: timestamp('fetched_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
@@ -783,6 +804,7 @@ export const metaSyncRuns = pgTable(
     campaignsCount: integer('campaigns_count').notNull().default(0),
     leadsCount: integer('leads_count').notNull().default(0),
     insightsCount: integer('insights_count').notNull().default(0),
+    scopeId: uuid('scope_id'),
   },
   (table) => ({
     tenantIdIdx: index('meta_sync_runs_tenant_id_idx').on(table.tenantId),
