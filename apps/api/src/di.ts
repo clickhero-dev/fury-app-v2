@@ -59,6 +59,8 @@ import { SuperAdminController } from './controllers/superadmin.controller.js';
 import { ClickUpTicketsClient } from './lib/clickup-tickets.client.js';
 import { TicketService } from './services/tickets/ticket.service.js';
 import { TicketsController } from './controllers/tickets.controller.js';
+import { FaqRepository } from './repository/faq.repository.js';
+import { FaqController } from './controllers/faq.controller.js';
 
 /**
  * Composition root (DI) da API.
@@ -93,6 +95,7 @@ export { metaSyncService };
 export const superAdminRepository = new SuperAdminRepository("");
 export const clickUpTicketsClient = new ClickUpTicketsClient();
 export const ticketService = new TicketService(clickUpTicketsClient);
+export const faqRepository = new FaqRepository();
 
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
@@ -109,6 +112,7 @@ export const wppVerificationService = new WppVerificationService(
 
 export const controllers = {
   tickets: new TicketsController(ticketService),
+  faq: new FaqController(faqRepository),
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),
   fury: new FuryController(furyEngineService),

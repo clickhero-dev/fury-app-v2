@@ -250,7 +250,7 @@ export function MinhasRegrasContent() {
             title="Minhas Regras"
             description="Crie e gerencie regras automáticas para otimizar suas campanhas"
           />
-          <Button variant="primary" size="md" onClick={() => handleOpenDialog()}>
+          <Button variant="primary" size="md" className="ady-decor" onClick={() => handleOpenDialog()}>
             +<span className="hidden sm:inline"> Nova Regra</span>
           </Button>
         </div>

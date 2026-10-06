@@ -33,6 +33,8 @@ import { invalidateCampaignsCache } from '../../lib/campaigns-cache.js';
 import { invalidateHttpCache } from '../../lib/http-cache.js';
 
 export interface MetaSyncContext {
+  connectionId: string;
+  metaUserId: string;
   accessToken: string;
   adAccountId: string;
   instagramUserId: string | null;
@@ -125,13 +127,6 @@ export async function getMetaSyncContext(tenantId: string): Promise<MetaSyncCont
   const connection = await repo.findLatestMetaConnection();
 
   if (!connection) {
-    // Fallback para token de sistema (padrão campaigns.service.ts). Exige também
-    // a ad account configurada via env — sem ela não há como listar campanhas.
-    const systemToken = process.env.META_SYSTEM_ACCESS_TOKEN;
-    const systemAdAccount = process.env.META_SYSTEM_AD_ACCOUNT_ID;
-    if (systemToken && systemAdAccount) {
-      return { accessToken: systemToken, adAccountId: systemAdAccount, instagramUserId: null };
-    }
     throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexão Meta para sincronizar.');
   }
 
@@ -147,6 +142,8 @@ export async function getMetaSyncContext(tenantId: string): Promise<MetaSyncCont
   }
 
   return {
+    connectionId: connection.id,
+    metaUserId: connection.metaUserId,
     accessToken,
     adAccountId,
     instagramUserId: connection.selectedInstagramUserId ?? null,
@@ -159,6 +156,8 @@ export async function getMetaSyncContextsByAdAccount(adAccountId: string): Promi
   return connections.map((connection) => ({
     tenantId: connection.tenantId,
     context: {
+      connectionId: connection.id,
+      metaUserId: connection.metaUserId,
       accessToken: decryptMetaToken(connection.accessToken),
       adAccountId,
       // Best-effort: tenants que compartilham conta usam o IG da primeira conexão.
@@ -382,6 +381,14 @@ export class MetaSyncService {
       ctx = await this.deps.getMetaContext(args.tenantId);
     } catch (err) {
       return recordFailed(err);
+    }
+
+    if (typeof (repo as any).ensureScope === 'function') {
+      try {
+        await (repo as MetaSyncRepository).ensureScope({ connectionId: ctx.connectionId, metaUserId: ctx.metaUserId, adAccountId: ctx.adAccountId, instagramUserId: ctx.instagramUserId });
+      } catch (err) {
+        return recordFailed(err);
+      }
     }
 
     // 1) Lista TODAS as campanhas da conta (inclui criadas fora do Fury).

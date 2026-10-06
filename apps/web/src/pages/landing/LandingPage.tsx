@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { FURY_COLORS } from '@/lib/constants';
 
-const API_BASE = import.meta.env.VITE_API_URL;
+const API_BASE = (import.meta.env.VITE_API_URL ?? '/api').replace(/\/+$/, '');
 
 interface PublicBrandKitData {
   tenantName: string;
@@ -30,28 +30,28 @@ export function LandingPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-        <div className="w-8 h-8 border-[3px] border-gray-200 border-t-[#E8631A] rounded-full animate-spin" />
+      <div className="ady-decor min-h-screen flex items-center justify-center bg-[#FFFFFF]">
+        <div className="w-8 h-8 border-[3px] border-slate-200 border-t-[#17708A] rounded-full animate-spin" />
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="ady-decor min-h-screen flex items-center justify-center bg-[#FFFFFF] p-6">
         <div className="text-center max-w-sm">
-          <div className="w-16 h-16 mx-auto mb-5 rounded-full bg-gray-100 flex items-center justify-center">
-            <svg className="w-7 h-7 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-16 h-16 mx-auto mb-5 rounded-full bg-[#17708A]/10 flex items-center justify-center">
+            <svg className="w-7 h-7 text-[#17708A]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-gray-800 mb-2">Página não encontrada</h1>
-          <p className="text-sm text-gray-500 mb-6">
+          <h1 className="text-xl font-bold text-slate-900 mb-2">Página não encontrada</h1>
+          <p className="text-sm text-slate-500 mb-6">
             O link que você acessou não existe ou foi desativado.
           </p>
           <button
             onClick={() => navigate('/')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#E8631A] text-white rounded-full text-sm font-semibold hover:opacity-90 transition-opacity"
+            className="ady-btn inline-flex items-center gap-2 px-5 py-2.5 bg-[#17708A] text-white rounded-full text-sm font-semibold hover:bg-[#145E74] transition-colors"
           >
             Ir para o início
           </button>
@@ -73,7 +73,7 @@ export function LandingPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
+      className="ady-decor min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
       style={{ backgroundColor: bgColor }}
     >
       {/* subtle decorative blob */}
@@ -114,7 +114,7 @@ export function LandingPage() {
           <h1 className="text-xl font-bold mb-2" style={{ color: accentColor }}>
             {tenantName}
           </h1>
-          <p className="text-xs text-gray-400 mb-6">
+          <p className="text-xs text-slate-400 mb-6">
             Fale conosco pelo WhatsApp
           </p>
 
@@ -122,7 +122,7 @@ export function LandingPage() {
           {whatsapp_number ? (
             <button
               onClick={handleWhatsAppClick}
-              className="inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl text-sm font-semibold text-white shadow-lg shadow-[#25D366]/25 hover:shadow-xl hover:shadow-[#25D366]/30 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all duration-200 cursor-pointer w-full"
+              className="ady-btn inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl text-sm font-semibold text-white shadow-lg shadow-[#25D366]/25 hover:shadow-xl hover:shadow-[#25D366]/30 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all duration-200 cursor-pointer w-full"
               style={{ backgroundColor: '#25D366' }}
             >
               <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current flex-shrink-0">
@@ -131,7 +131,7 @@ export function LandingPage() {
               Falar no WhatsApp
             </button>
           ) : (
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-slate-400">
               WhatsApp não configurado
             </p>
           )}

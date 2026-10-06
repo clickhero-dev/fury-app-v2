@@ -276,7 +276,7 @@ export function Configuracoes() {
                         'flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-medium transition-all duration-200 cursor-pointer',
                         !isDark
                           ? 'border-brand bg-brand/10 text-brand'
-                          : 'border-border bg-surface-secondary text-text-tertiary hover:text-text-primary'
+                          : 'border-[#4A4E47] bg-[#3A3D37] text-[#E0E3DC] hover:text-text-primary'
                       )}
                     >
                       <Sun size={16} />
@@ -287,10 +287,10 @@ export function Configuracoes() {
                       type="button"
                       onClick={() => setDark(true)}
                       className={cn(
-                        'flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-medium transition-all duration-200 cursor-pointer',
+                        'ady-btn flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-medium transition-all duration-200 cursor-pointer',
                         isDark
                           ? 'border-brand bg-brand/10 text-brand'
-                          : 'border-border bg-surface-secondary text-text-tertiary hover:text-text-primary'
+                          : 'border-[#94A3B8] bg-[#CBD5E1] text-[#1E293B] hover:text-[#0F172A]'
                       )}
                     >
                       <Moon size={16} />
@@ -600,7 +600,7 @@ export function Configuracoes() {
                     <button
                       type="button"
                       onClick={() => setCancelOpen(true)}
-                      className="rounded-full border border-error/40 px-4 py-2 text-xs font-semibold text-error hover:bg-error/10 hover:border-error cursor-pointer"
+                      className="ady-btn rounded-full border border-error/40 px-4 py-2 text-xs font-semibold text-error hover:bg-error/10 hover:border-error cursor-pointer"
                     >
                       Cancelar Plano
                     </button>

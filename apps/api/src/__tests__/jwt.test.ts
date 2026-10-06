@@ -1,3 +1,13 @@
+/*
+# Language: pt-BR
+
+Funcionalidade: validade dos tokens JWT
+
+  Cenário: access token usa trinta dias como validade padrão
+    Dado que JWT_EXPIRES_IN não foi configurada
+    Quando o servidor emite um access token
+    Então seu exp fica aproximadamente trinta dias à frente
+*/
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import jwt from 'jsonwebtoken';
 
@@ -22,6 +32,19 @@ describe('jwt', () => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET) as any;
     expect(decoded.userId).toBe('u1');
     expect(decoded.tenantId).toBe('t1');
+  });
+
+  it('Cenário: access token usa trinta dias como validade padrão', () => {
+    const previous = process.env.JWT_EXPIRES_IN;
+    delete process.env.JWT_EXPIRES_IN;
+    const now = Math.floor(Date.now() / 1000);
+    const token = generateAccessToken({ userId: 'u1', tenantId: 't1', email: 'a@b.com', role: 'admin' });
+    const decoded = jwt.decode(token) as { exp: number };
+    if (previous === undefined) delete process.env.JWT_EXPIRES_IN;
+    else process.env.JWT_EXPIRES_IN = previous;
+
+    expect(decoded.exp - now).toBeGreaterThanOrEqual(30 * 24 * 60 * 60 - 1);
+    expect(decoded.exp - now).toBeLessThanOrEqual(30 * 24 * 60 * 60 + 1);
   });
 
   it('generateRefreshToken creates a valid token', () => {

@@ -8,6 +8,7 @@ import { store } from './store';
 import { identifyUser, resetUser, startReplay, stopReplay } from './lib/posthog';
 import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { startSessionRefresh } from './lib/session-refresh';
 import './App.css';
 
 function bindPostHogIdentity() {
@@ -27,6 +28,7 @@ function bindPostHogIdentity() {
 }
 
 bindPostHogIdentity();
+startSessionRefresh();
 
 function App() {
   return (
