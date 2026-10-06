@@ -60,6 +60,18 @@ function makeDeps(overrides: Record<string, any> = {}) {
 }
 
 describe('publishDuePosts — claim atômico por post', () => {
+  it('não resolve a conta Meta quando não há posts vencidos', async () => {
+    const repo = makeRepoFake([]);
+    const deps = makeDeps();
+    const svc = new PlannerService(() => repo as never, deps as never);
+
+    const result = await svc.publishDuePosts('t1');
+
+    expect(repo.listDuePosts).toHaveBeenCalledTimes(1);
+    expect(deps.getUserFacebookPages).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ published: 0, posts: [], reason: 'no_due_posts' });
+  });
+
   it('Cenário: ganha o claim → publica e marca published', async () => {
     const repo = makeRepoFake();
     const deps = makeDeps();

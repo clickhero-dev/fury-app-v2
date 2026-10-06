@@ -48,6 +48,11 @@ import { PlansPage } from './pages/superadmin/PlansPage';
 import { UsersPage } from './pages/superadmin/UsersPage';
 import { TenantCampaignsPage } from './pages/superadmin/TenantCampaignsPage';
 import { DashboardAdminPage } from './pages/superadmin/AdminDashboard';
+import { TicketsPage } from './pages/superadmin/TicketsPage';
+import { HealthchecksPage } from './pages/superadmin/HealthchecksPage';
+import { FaqsPage } from './pages/superadmin/FaqsPage';
+import { HelpCenterPage } from './pages/help/HelpCenterPage';
+import { FaqPublicPage } from './pages/help/FaqPublicPage';
 
 // 1. IMPORTAR O FORCE DARK MODE QUE VOCÊ CRIOU
 import { ForceDarkMode } from './pages/superadmin/ForceDarkMode';
@@ -105,6 +110,8 @@ export const router = createBrowserRouter([
     path: '/roadmap',
     element: <RoadmapPage />,
   },
+  { path: '/ajuda', element: <HelpCenterPage /> },
+  { path: '/ajuda/:slug', element: <FaqPublicPage /> },
   {
     element: (
       <CampaignWizardProvider>
@@ -215,6 +222,9 @@ export const router = createBrowserRouter([
       { path: 'tenants/:id/campaigns', element: <TenantCampaignsPage /> },
       { path: 'planos', element: <PlansPage /> },
       { path: 'tenants', element: <TenantsPage /> },
+      { path: 'tickets', element: <TicketsPage /> },
+      { path: 'healthchecks', element: <HealthchecksPage /> },
+      { path: 'faqs', element: <FaqsPage /> },
     ],
   },
   {

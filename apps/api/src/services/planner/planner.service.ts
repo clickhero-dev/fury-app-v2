@@ -713,6 +713,16 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
   }
 
   async publishDuePosts(tenantId: string) {
+    const now = new Date();
+    const repo = this.repo(tenantId);
+    console.log(`[publishDuePosts] tenant ${tenantId}: verificando se há posts agendados...`);
+    const due = await repo.listDuePosts(now);
+
+    if (due.length === 0) {
+      console.log(`[publishDuePosts] tenant ${tenantId}: nenhum post agendado para publicar`);
+      return { published: 0, posts: [], reason: 'no_due_posts' as const };
+    }
+
     const account = await this.resolveInstagramAccount(tenantId);
 
     // Tenant sem Instagram: sai silenciosamente
@@ -721,16 +731,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
       return { published: 0, posts: [], reason: 'no_instagram_account' as const };
     }
 
-    const now = new Date();
-    const repo = this.repo(tenantId);
-    const due = await repo.listDuePosts(now);
-
-    if (due.length === 0) {
-      console.log(`[publishDuePosts] tenant ${tenantId}: 0 posts elegíveis encontrados`);
-      return { published: 0, posts: [], reason: 'no_due_posts' as const, pageName: account.pageName, instagramUsername: account.instagramUsername };
-    }
-
-    console.log(`[publishDuePosts] tenant ${tenantId}: ${due.length} posts elegíveis, iniciando publicação...`);
+    console.log(`[publishDuePosts] tenant ${tenantId}: ${due.length} posts agendados, iniciando publicação...`);
     let published = 0;
 
     for (const post of due) {

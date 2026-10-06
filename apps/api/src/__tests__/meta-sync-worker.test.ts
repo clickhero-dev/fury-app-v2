@@ -82,6 +82,7 @@ const {
   queueUpsertJobSchedulerSpy,
   mockSyncTenant,
   mockSyncAdAccount,
+  mockRunHealthcheck,
   mockNotifyFailure,
   mockCaptureServerException,
   mockCaptureServerEvent,
@@ -100,10 +101,11 @@ const {
   const queueUpsertJobSchedulerSpy = vi.fn();
   const mockSyncTenant = vi.fn();
   const mockSyncAdAccount = vi.fn();
+  const mockRunHealthcheck = vi.fn();
   const mockNotifyFailure = vi.fn();
   const mockCaptureServerException = vi.fn();
   const mockCaptureServerEvent = vi.fn();
-  return { dbMock, workerInstances, queueAddSpy, queueUpsertJobSchedulerSpy, mockSyncTenant, mockSyncAdAccount, mockNotifyFailure, mockCaptureServerException, mockCaptureServerEvent };
+  return { dbMock, workerInstances, queueAddSpy, queueUpsertJobSchedulerSpy, mockSyncTenant, mockSyncAdAccount, mockRunHealthcheck, mockNotifyFailure, mockCaptureServerException, mockCaptureServerEvent };
 });
 
 vi.mock('bullmq', () => {
@@ -165,6 +167,10 @@ vi.mock('../services/meta/meta-sync.service.js', () => ({
   metaSyncService: { syncTenant: mockSyncTenant, syncAdAccount: mockSyncAdAccount },
 }));
 
+vi.mock('../services/meta/meta-healthcheck.service.js', () => ({
+  metaHealthcheckService: { runForTenant: mockRunHealthcheck },
+}));
+
 vi.mock('../lib/meta-sync-alerts.js', () => ({
   notifyMetaSyncFailure: mockNotifyFailure,
 }));
@@ -216,11 +222,52 @@ describe('BDD: MetaSyncManager (agendamento)', () => {
     await startMetaSyncManager();
     await startMetaSyncManager();
 
-    expect(queueUpsertJobSchedulerSpy).toHaveBeenCalledTimes(2);
+    expect(queueUpsertJobSchedulerSpy).toHaveBeenCalledTimes(4);
+    expect(queueUpsertJobSchedulerSpy).toHaveBeenCalledWith(
+      'meta-healthcheck-every-12h',
+      { pattern: '0 */12 * * *' },
+      { name: 'meta-healthcheck:run-all', data: {} },
+    );
     expect(queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:tick')).toHaveLength(0);
     expect(queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:bootstrap')).toHaveLength(2);
 
     await stopMetaSyncManager();
+  });
+});
+
+describe('BDD: MetaHealthcheck worker', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    workerInstances.length = 0;
+    mockRunHealthcheck.mockResolvedValue({ status: 'success' });
+  });
+
+  it('Cenário: job valida todas as conexões Meta', async () => {
+    await startMetaSyncWorker();
+    const worker = workerInstances.at(-1)!;
+
+    await worker.processor({ name: 'meta-healthcheck:run-all', data: {} });
+
+    expect(mockRunHealthcheck).toHaveBeenCalledWith('t1');
+    expect(mockRunHealthcheck).toHaveBeenCalledWith('t2');
+    expect(mockRunHealthcheck).toHaveBeenCalledTimes(2);
+    await stopMetaSyncWorker();
+  });
+
+  it('Cenário: falha em um tenant não interrompe os demais', async () => {
+    mockRunHealthcheck.mockRejectedValueOnce(new Error('provider secret must not be logged'));
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await startMetaSyncWorker();
+    const worker = workerInstances.at(-1)!;
+
+    await worker.processor({ name: 'meta-healthcheck:run-all', data: {} });
+
+    expect(mockRunHealthcheck).toHaveBeenCalledTimes(2);
+    expect(mockCaptureServerException).toHaveBeenCalledWith(expect.any(Error), { path: 'meta-healthcheck:worker', tenantId: 't1' });
+    expect(mockRunHealthcheck).toHaveBeenLastCalledWith('t2');
+    expect(errorLog).toHaveBeenCalledWith('[meta-healthcheck] erro ao validar tenant', { tenantId: 't1', code: 'META_HEALTHCHECK_UNEXPECTED_ERROR' });
+    errorLog.mockRestore();
+    await stopMetaSyncWorker();
   });
 });
 
