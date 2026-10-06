@@ -8,7 +8,7 @@ export class ExternalHttpError extends Error {
   }
 }
 
-export async function externalFetch(input: string, init: RequestInit = {}): Promise<Response> {
+export async function externalFetch(input: string | URL, init: RequestInit = {}): Promise<Response> {
   try {
     return await fetch(input, {
       ...init,

@@ -180,7 +180,7 @@ export async function getUserBusinesses(accessToken: string): Promise<MetaBusine
     url.searchParams.set('access_token', accessToken);
     if (after) url.searchParams.set('after', after);
 
-    const response = await externalFetch(url.toString(), { method: 'GET' });
+    const response = await externalFetch(url, { method: 'GET' });
     const payload = await parseMetaResponse<MetaBusinessesResponse>(
       response,
       'Falha ao buscar Business Managers no Meta.'
@@ -564,7 +564,7 @@ export async function getPageAccessToken(
     url.searchParams.set('access_token', accessToken);
     if (after) url.searchParams.set('after', after);
 
-    const response = await externalFetch(url.toString(), { method: 'GET' });
+    const response = await externalFetch(url, { method: 'GET' });
     const payload = await parseMetaResponse<MetaPagesAccessResponse>(
       response,
       'Falha ao buscar as Paginas do usuario no Meta.'
@@ -1018,7 +1018,7 @@ export async function getMetaUserId(accessToken: string): Promise<string> {
   url.searchParams.set('fields', 'id');
   url.searchParams.set('access_token', accessToken);
 
-  const response = await externalFetch(url.toString(), { method: 'GET' });
+  const response = await externalFetch(url, { method: 'GET' });
   const payload = await parseMetaResponse<MetaUserProfileResponse>(
     response,
     'Falha ao buscar o id do usuario Meta.'
