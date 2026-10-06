@@ -81,8 +81,8 @@ describe('LeadsPage', () => {
     expect(screen.getByText('11999999999')).toBeInTheDocument();
     // Coluna Campanha visível na visão "todas"
     expect(screen.getByText('Campanha')).toBeInTheDocument();
-    // "Camp Formulário" aparece na coluna da tabela (e no option do filtro)
-    expect(screen.getAllByText('Camp Formulário').length).toBeGreaterThanOrEqual(2);
+    // "Camp Formulário" aparece na coluna da tabela
+    expect(screen.getAllByText('Camp Formulário').length).toBeGreaterThanOrEqual(1);
     // Chamou o agregado /v2/leads
     await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/v2/leads'));
   });
@@ -110,12 +110,15 @@ describe('LeadsPage', () => {
 
   it('filtro usa a fonte Meta (/v2/lead-campaigns) e lista as campanhas retornadas', async () => {
     mockApi([]);
+    const user = userEvent.setup();
 
     render(<LeadsPage />, { wrapper: makeWrapper() });
 
     await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/v2/lead-campaigns'));
-    const select = await screen.findByRole('combobox', { name: /Filtrar por campanha/i });
-    const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
+    const trigger = await screen.findByRole('button', { name: /Filtrar por campanha/i });
+    await waitFor(() => expect(trigger).toBeEnabled());
+    await user.click(trigger);
+    const options = (await screen.findAllByRole('menuitem')).map((o) => o.textContent);
     expect(options).toContain('Todas as campanhas');
     expect(options).toContain('Camp Formulário');
     // O filtro de Formulário é server-side: o backend já retorna só OUTCOME_LEADS.
@@ -136,12 +139,10 @@ describe('LeadsPage', () => {
 
     render(<LeadsPage />, { wrapper: makeWrapper() });
 
-    const select = await screen.findByRole('combobox', { name: /Filtrar por campanha/i });
-    // Aguarda as opções carregarem antes de selecionar
-    await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Camp Formulário' })).toBeInTheDocument();
-    });
-    await user.selectOptions(select, 'form_1');
+    const trigger = await screen.findByRole('button', { name: /Filtrar por campanha/i });
+    await waitFor(() => expect(trigger).toBeEnabled());
+    await user.click(trigger);
+    await user.click(await screen.findByRole('menuitem', { name: 'Camp Formulário' }));
 
     await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/v2/campaigns/form_1/leads'));
     expect(await screen.findByText('João Silva')).toBeInTheDocument();

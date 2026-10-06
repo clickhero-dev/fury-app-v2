@@ -39,7 +39,7 @@ export function IdleStatus({ onGenerate, isLoading, checks, creativesRemaining, 
     <div className="mx-auto w-full max-w-5xl px-6 py-10 lg:px-10 lg:py-14">
       {/* Badges do Topo */}
       <header className="flex flex-wrap items-center gap-3">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-semibold tracking-wide text-accent-foreground uppercase">
+        <span className="ady-decor cta-label inline-flex items-center gap-1.5 rounded-full bg-[#CF6F03] px-3 py-1 text-xs font-semibold tracking-wide text-white uppercase">
           <Sparkles className="size-3.5" />
           PLANEJADOR IA
         </span>

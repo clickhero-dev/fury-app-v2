@@ -38,7 +38,7 @@ export function ReferenceImagePanel({ contextUrls, onAdd, onRemove }: Props) {
   };
 
   return (
-    <aside className="sticky top-6 flex max-h-[calc(100vh-11rem)] flex-col rounded-2xl border border-border bg-surface p-4 shadow-sm">
+    <aside className="ady-decor sticky top-6 flex max-h-[calc(100vh-11rem)] flex-col rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="shrink-0">
         <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">
           Imagens de referência
@@ -93,7 +93,7 @@ export function ReferenceImagePanel({ contextUrls, onAdd, onRemove }: Props) {
                 >
                   <img src={url} alt="" className="block h-auto w-full" />
                   {isSelected && (
-                    <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-brand-foreground">
+                    <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-white">
                       <Check className="h-3 w-3" />
                     </span>
                   )}

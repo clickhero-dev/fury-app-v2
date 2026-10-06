@@ -226,6 +226,9 @@ export function LoginPage() {
               Criar conta gratuita
             </Link>
           </p>
+          <p className="text-center text-xs text-slate-500 dark:text-zinc-500">
+            Precisa de ajuda? <Link to="/ajuda" className="underline hover:text-[#17708A]">Acesse a Central de ajuda</Link>
+          </p>
         </form>
       </div>
     </div>

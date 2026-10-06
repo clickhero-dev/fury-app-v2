@@ -121,7 +121,7 @@ export function RegisterPage() {
           <button
             type="button"
             onClick={() => navigate('/cadastro/formulario')}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#17708A] py-3 text-sm font-semibold text-white shadow-md shadow-[#17708A]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#145E74] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99]"
+            className="ady-btn flex w-full items-center justify-center gap-2 rounded-xl bg-[#17708A] py-3 text-sm font-semibold text-white shadow-md shadow-[#17708A]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#145E74] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99]"
           >
             <Loader2 className="size-4 hidden" />
             Cadastrar
