@@ -56,6 +56,8 @@ import { MetaSyncRepository } from './repository/meta-sync.repository.js';
 import { enqueueMetaSyncTenantRun } from './workers/meta-sync.worker.js';
 import { SuperAdminRepository } from './repository/superadmin.repository.js';
 import { SuperAdminController } from './controllers/superadmin.controller.js';
+import { FaqRepository } from './repository/faq.repository.js';
+import { FaqController } from './controllers/faq.controller.js';
 
 /**
  * Composition root (DI) da API.
@@ -88,6 +90,7 @@ export { metaSyncService };
 
 // SuperAdmin (GLOBAL) — único repositório/controller não escopado por tenant.
 export const superAdminRepository = new SuperAdminRepository("");
+export const faqRepository = new FaqRepository();
 
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
@@ -103,6 +106,7 @@ export const wppVerificationService = new WppVerificationService(
 );
 
 export const controllers = {
+  faq: new FaqController(faqRepository),
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),
   fury: new FuryController(furyEngineService),

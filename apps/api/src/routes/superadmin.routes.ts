@@ -2,11 +2,23 @@ import { Router } from "express";
 import { controllers } from "../di.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { superadminMiddleware } from "../middleware/superadmin.middleware.js";
+import multer from 'multer';
 
 const router = Router();
 
 // All routes require auth + superadmin role
 router.use(authMiddleware, superadminMiddleware);
+
+const faqImageUpload = multer({
+  storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.mimetype)),
+});
+
+router.get('/faqs', controllers.faq.listAdmin);
+router.post('/faqs', controllers.faq.create);
+router.patch('/faqs/:id', controllers.faq.update);
+router.delete('/faqs/:id', controllers.faq.delete);
+router.post('/faqs/images', faqImageUpload.single('file'), controllers.faq.uploadImage);
 
 // Dashboard (stats globais)
 router.get("/dashboard", controllers.superadmin.getDashboard);
