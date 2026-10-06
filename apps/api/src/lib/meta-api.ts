@@ -1802,7 +1802,14 @@ interface InstagramPublishResponse {
 export async function createInstagramMedia(
   igUserId: string,
   accessToken: string,
-  params: { imageUrl?: string; videoUrl?: string; caption?: string; mediaType?: 'REELS' },
+  params: {
+    imageUrl?: string;
+    videoUrl?: string;
+    caption?: string;
+    mediaType?: 'REELS' | 'STORIES' | 'CAROUSEL';
+    isCarouselItem?: boolean;
+    children?: string[];
+  },
 ): Promise<string> {
   const body: Record<string, unknown> = {};
 
@@ -1810,7 +1817,21 @@ export async function createInstagramMedia(
     body.image_url = params.imageUrl;
   } else if (params.videoUrl) {
     body.video_url = params.videoUrl;
-    body.media_type = params.mediaType || 'REELS';
+  }
+
+  // Stories (imagem ou vídeo) exige media_type=STORIES; vídeo sem tipo vira REELS
+  if (params.mediaType) {
+    body.media_type = params.mediaType;
+  } else if (params.videoUrl) {
+    // item de carrossel em vídeo usa VIDEO
+    body.media_type = params.isCarouselItem ? 'VIDEO' : 'REELS';
+  }
+
+  if (params.isCarouselItem) {
+    body.is_carousel_item = true;
+  }
+  if (params.children?.length) {
+    body.children = params.children;
   }
 
   if (params.caption) {

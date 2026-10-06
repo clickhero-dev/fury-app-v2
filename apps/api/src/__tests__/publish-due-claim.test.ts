@@ -90,9 +90,62 @@ describe('publishDuePosts — claim atômico por post', () => {
     expect(result.published).toBe(0);
   });
 
-  it('Cenário: post de tipo não suportado (carousel) → nem tenta o claim', async () => {
+  it('Cenário: stories agendado → publica com media_type STORIES', async () => {
     const repo = makeRepoFake([
-      { ...DUE_POST, id: 'post-carousel', postType: 'carousel' },
+      { ...DUE_POST, id: 'post-story', postType: 'stories' },
+    ]);
+    const deps = makeDeps({ fitImageToStory: vi.fn(async () => 'https://cdn.x/story-9x16.jpg') });
+    const svc = new PlannerService(() => repo as never, deps as never);
+
+    const result = await svc.publishDuePosts('t1');
+
+    expect(repo.claimPostForPublish).toHaveBeenCalledWith('post-story');
+    expect(deps.fitImageToStory).toHaveBeenCalledWith('https://cdn.x/img.png');
+    expect(deps.createInstagramMedia).toHaveBeenCalledWith('ig-1', expect.any(String), expect.objectContaining({
+      imageUrl: 'https://cdn.x/story-9x16.jpg',
+      mediaType: 'STORIES',
+    }));
+    expect(result.published).toBe(1);
+  });
+
+  it('Cenário: carrossel agendado → itens + container CAROUSEL + publish', async () => {
+    const repo = makeRepoFake([
+      { ...DUE_POST, id: 'post-carousel', postType: 'carousel', imageUrls: ['https://cdn.x/a.png', 'https://cdn.x/b.png'] },
+    ]);
+    const createInstagramMedia = vi.fn()
+      .mockResolvedValueOnce('item-1')
+      .mockResolvedValueOnce('item-2')
+      .mockResolvedValueOnce('carousel-1');
+    const deps = makeDeps({ createInstagramMedia });
+    const svc = new PlannerService(() => repo as never, deps as never);
+
+    const result = await svc.publishDuePosts('t1');
+
+    expect(createInstagramMedia).toHaveBeenNthCalledWith(1, 'ig-1', expect.any(String), { imageUrl: 'https://cdn.x/a.png', isCarouselItem: true });
+    expect(createInstagramMedia).toHaveBeenNthCalledWith(2, 'ig-1', expect.any(String), { imageUrl: 'https://cdn.x/b.png', isCarouselItem: true });
+    expect(createInstagramMedia).toHaveBeenNthCalledWith(3, 'ig-1', expect.any(String), {
+      mediaType: 'CAROUSEL', children: ['item-1', 'item-2'], caption: 'post vencido',
+    });
+    expect(deps.publishInstagramMedia).toHaveBeenCalledWith('ig-1', expect.any(String), 'carousel-1');
+    expect(result.published).toBe(1);
+  });
+
+  it('Cenário: carrossel com 1 imagem → falha sem chamar a Meta', async () => {
+    const repo = makeRepoFake([
+      { ...DUE_POST, id: 'post-carousel-1', postType: 'carousel', imageUrls: ['https://cdn.x/a.png'] },
+    ]);
+    const deps = makeDeps();
+    const svc = new PlannerService(() => repo as never, deps as never);
+
+    await svc.publishDuePosts('t1');
+
+    expect(deps.createInstagramMedia).not.toHaveBeenCalled();
+    expect(repo.setPostRetry).toHaveBeenCalled();
+  });
+
+  it('Cenário: post de tipo não suportado → nem tenta o claim', async () => {
+    const repo = makeRepoFake([
+      { ...DUE_POST, id: 'post-x', postType: 'text' },
     ]);
     const deps = makeDeps();
     const svc = new PlannerService(() => repo as never, deps as never);

@@ -5,11 +5,12 @@ import { parseAgentJSON } from '../../agents/utils.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { createInstagramMedia, getMediaContainerStatus, publishInstagramMedia, getUserFacebookPages } from '../../lib/meta-api.js';
 import { decryptMetaToken } from '../../utils/crypto.js';
-import { todaySaoPauloYMD } from '../../utils/date-sao-paulo.js';
+import { saoPauloYMD, todaySaoPauloYMD } from '../../utils/date-sao-paulo.js';
 import { plannerStore } from '../../planner-store.js';
 import { enqueuePlanGeneration } from '../../workers/planner.worker.js';
 import { snapshotToJobStatus } from '../../agents/job-status-adapter.js';
 import { PlannerRepository } from '../../repository/planner.repository.js';
+import { fitImageToStory } from './story-image.js';
 
 // Job de planejamento em andamento com mais de 15min é considerado "stale":
 // o fluxo limpa os dados do banco e permite gerar novamente.
@@ -57,6 +58,17 @@ function formatWaitSeconds(seconds: number): string {
 
 const RETRY_BACKOFF_MINUTES = [1, 5, 15];
 
+/** Post publicado (ou publicando) não muda de dia. */
+function assertMovable(status: string | null | undefined): void {
+  if (status === 'published' || status === 'publishing') {
+    throw new AppError(409, 'POST_LOCKED', 'Post já publicado não pode mudar de dia.');
+  }
+}
+
+const isVideoUrl = (url: string) => /\.(mp4|mov)(\?|$)/i.test(url);
+/** Carrossel não mistura imagem e vídeo (regra do produto). */
+const isMixedMedia = (urls: string[]) => new Set(urls.map(isVideoUrl)).size > 1;
+
 /** Lease do claim de publicação (publish-now) — espelha PUBLISH_LEASE_MINUTES do repository. */
 const PUBLISH_LEASE_MINUTES = 5;
 
@@ -98,12 +110,14 @@ export class PlannerService {
       getMediaContainerStatus: typeof getMediaContainerStatus;
       publishInstagramMedia: typeof publishInstagramMedia;
       getUserFacebookPages: typeof getUserFacebookPages;
+      fitImageToStory?: typeof fitImageToStory;
     } = {
       openrouter: openrouterService,
       createInstagramMedia,
       getMediaContainerStatus,
       publishInstagramMedia,
       getUserFacebookPages,
+      fitImageToStory,
     },
   ) {}
 
@@ -278,18 +292,76 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
   async updatePostFields(
     postId: string,
     tenantId: string,
-    fields: { caption?: string; cta?: string; hashtags?: string[]; imageUrl?: string; imageUrls?: string[]; scheduledAt?: string | null },
+    fields: {
+      caption?: string;
+      cta?: string;
+      hashtags?: string[];
+      postType?: 'image' | 'carousel' | 'reel' | 'stories';
+      imageUrl?: string | null;
+      imageUrls?: string[];
+      scheduledAt?: string | null;
+    },
   ) {
+    const repo = this.repo(tenantId);
+    const current = await repo.findPostById(postId);
+    // rejected = excluído (delete lógico)
+    if (!current || current.status === 'rejected') throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    if (current.status === 'published' || current.status === 'publishing') {
+      throw new AppError(409, 'POST_LOCKED', 'Post já publicado ou em publicação não pode ser editado.');
+    }
+
     const setData: Record<string, any> = { updatedAt: new Date() };
     if (fields.caption !== undefined) setData.caption = fields.caption;
     if (fields.cta !== undefined) setData.cta = fields.cta;
     if (fields.hashtags !== undefined) setData.hashtags = fields.hashtags;
+    if (fields.postType !== undefined) setData.postType = fields.postType;
     if (fields.imageUrl !== undefined) setData.imageUrl = fields.imageUrl;
     if (fields.imageUrls !== undefined) setData.imageUrls = fields.imageUrls;
-    if (fields.scheduledAt !== undefined) setData.scheduledAt = fields.scheduledAt ? new Date(fields.scheduledAt) : null;
 
-    const updated = await this.repo(tenantId).patchPost(postId, setData);
-    if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado ao atualizar');
+    // Mídia final precisa casar com o tipo final
+    const postType = fields.postType ?? current.postType;
+    const imageUrl = fields.imageUrl !== undefined ? fields.imageUrl : current.imageUrl;
+    const imageUrls = (fields.imageUrls ?? (Array.isArray(current.imageUrls) ? current.imageUrls : [])) as string[];
+    const touchesMedia = fields.postType !== undefined || fields.imageUrl !== undefined || fields.imageUrls !== undefined;
+    if (touchesMedia || fields.scheduledAt) {
+      if (postType !== 'carousel' && !imageUrl) {
+        throw new AppError(400, 'MEDIA_REQUIRED', 'Post precisa de mídia para ser agendado.');
+      }
+      if (postType === 'carousel' && (imageUrls.length < 2 || imageUrls.length > 10)) {
+        throw new AppError(400, 'CAROUSEL_TOO_FEW_ITEMS', 'Carrossel precisa de 2 a 10 mídias.');
+      }
+      if (postType === 'carousel' && isMixedMedia(imageUrls)) {
+        throw new AppError(400, 'CAROUSEL_MIXED_MEDIA', 'Carrossel aceita só imagens ou só vídeos, sem misturar.');
+      }
+      if (postType === 'reel' && !isVideoUrl(imageUrl ?? '')) {
+        throw new AppError(400, 'REEL_REQUIRES_VIDEO', 'Reels precisa de um vídeo (MP4 ou MOV).');
+      }
+    }
+
+    if (fields.scheduledAt !== undefined) {
+      if (fields.scheduledAt) {
+        // Agendar: dia do calendário segue o horário (Brasília) e libera para o job
+        const at = new Date(fields.scheduledAt);
+        const calendarDate = saoPauloYMD(at);
+        Object.assign(setData, {
+          scheduledAt: at,
+          calendarDate,
+          dayIndex: Number(calendarDate.slice(8, 10)),
+          status: 'approved',
+          publishAttempts: 0,
+          nextRetryAt: null,
+          lastPublishError: null,
+        });
+      } else {
+        Object.assign(setData, { scheduledAt: null, status: 'draft' });
+      }
+    }
+
+    // Condição de status no próprio UPDATE: se o job pegou o post no meio, não sobrescreve
+    const updated = await repo.patchPostIfEditable(postId, setData);
+    if (!updated) {
+      throw new AppError(409, 'POST_LOCKED', 'Post entrou em publicação ou foi alterado. Atualize e tente de novo.');
+    }
     return updated;
   }
 
@@ -332,6 +404,15 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
     const endDateStr = endDate.toISOString().split('T')[0];
 
     return this.getCalendarPostsByDateRange(tenantId, startDateStr, endDateStr);
+  }
+
+  /** Upload do post também vai para a biblioteca; falha aqui não bloqueia o upload. */
+  async saveUploadToLibrary(tenantId: string, url: string, mimeType: string): Promise<void> {
+    try {
+      await this.repo(tenantId).createLibraryAsset(mimeType.startsWith('video/') ? 'video' : 'image', url);
+    } catch (err) {
+      console.error(`[saveUploadToLibrary] tenant ${tenantId}:`, err instanceof Error ? err.message : err);
+    }
   }
 
   async bulkSchedulePosts(tenantId: string, postIds: string[], scheduledAt: string | null) {
@@ -415,6 +496,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
     const repo = this.repo(tenantId);
     const post = await repo.findPostById(postId);
     if (!post) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    assertMovable(post.status);
 
     // Se o post tem calendar_date, extrai mês/ano e aplica novo dayIndex
     let newCalendarDate: string | null;
@@ -437,8 +519,8 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
       newCalendarDate = newDate.toISOString().split('T')[0];
     }
 
-    const updated = await repo.patchPost(postId, { dayIndex, calendarDate: newCalendarDate, updatedAt: new Date() });
-    if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    const updated = await repo.patchPostIfEditable(postId, { dayIndex, calendarDate: newCalendarDate, updatedAt: new Date() });
+    if (!updated) throw new AppError(409, 'POST_LOCKED', 'Post já publicado não pode mudar de dia.');
     return updated;
   }
 
@@ -465,8 +547,13 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
       updateData.scheduledAt = new Date(scheduledAt);
     }
 
-    const updated = await this.repo(tenantId).patchPost(postId, updateData);
-    if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    const repo = this.repo(tenantId);
+    const current = await repo.findPostById(postId);
+    if (!current) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    assertMovable(current.status);
+    // condição de status no UPDATE (corrida com a publicação)
+    const updated = await repo.patchPostIfEditable(postId, updateData);
+    if (!updated) throw new AppError(409, 'POST_LOCKED', 'Post já publicado não pode mudar de dia.');
     return updated;
   }
 
@@ -531,38 +618,98 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
    * Testável isoladamente com mock de metaApiCall.
    */
   async publishSinglePost(
-    post: { id: string; postType: string; caption?: string | null; imageUrl?: string | null },
+    post: { id: string; postType: string; caption?: string | null; imageUrl?: string | null; imageUrls?: unknown },
     igUserId: string,
     accessToken: string,
   ): Promise<{ mediaId: string }> {
+    if (post.postType === 'carousel') {
+      return this.publishCarousel(post, igUserId, accessToken);
+    }
     const isReel = post.postType === 'reel';
+    const isStory = post.postType === 'stories';
     const mediaUrl = post.imageUrl;
     if (!mediaUrl) {
       throw new Error(`Post ${post.id} não tem imageUrl para publicar`);
     }
+    // Story aceita imagem ou vídeo (mp4/mov)
+    if (isReel && !isVideoUrl(mediaUrl)) {
+      throw new Error(`Reels ${post.id} precisa de vídeo (MP4 ou MOV)`);
+    }
+    const isVideo = isReel || (isStory && isVideoUrl(mediaUrl));
+    // Imagem de story ajustada para 9:16 sem corte
+    const publishUrl = isStory && !isVideo && this.deps.fitImageToStory
+      ? await this.deps.fitImageToStory(mediaUrl)
+      : mediaUrl;
 
     // 1. Criar media container
     const containerId = await this.deps.createInstagramMedia(igUserId, accessToken, {
-      [isReel ? 'videoUrl' : 'imageUrl']: mediaUrl,
-      caption: post.caption || undefined,
-      mediaType: isReel ? 'REELS' : undefined,
+      [isVideo ? 'videoUrl' : 'imageUrl']: publishUrl,
+      // Story não tem legenda na API
+      caption: isStory ? undefined : post.caption || undefined,
+      mediaType: isReel ? 'REELS' : isStory ? 'STORIES' : undefined,
     });
 
-    // 2. Polling até FINISHED (3 tentativas) — a Meta responde 9007 se
-    // media_publish for chamado antes do container terminar o processamento.
-    const pollDelays = [3_000, 3_000, 12_000];
-    for (let i = 0; i < pollDelays.length; i++) {
-      await new Promise((r) => setTimeout(r, pollDelays[i]));
-      const status = await this.deps.getMediaContainerStatus(containerId, accessToken);
-      if (status === 'FINISHED') break;
-      if (i === pollDelays.length - 1) {
-        throw new Error(`Media container ${containerId} still IN_PROGRESS after ${pollDelays.length} polls`);
-      }
-    }
+    // 2. Espera FINISHED (evita 9007)
+    await this.waitForContainer(containerId, accessToken, isVideo);
 
     // 3. Publicar
     const mediaId = await this.deps.publishInstagramMedia(igUserId, accessToken, containerId);
     return { mediaId };
+  }
+
+  /** Carrossel: containers dos itens → container CAROUSEL → publish. */
+  private async publishCarousel(
+    post: { id: string; caption?: string | null; imageUrl?: string | null; imageUrls?: unknown },
+    igUserId: string,
+    accessToken: string,
+  ): Promise<{ mediaId: string }> {
+    const urls = (Array.isArray(post.imageUrls) ? post.imageUrls : [])
+      .filter((u): u is string => typeof u === 'string' && !!u);
+    if (urls.length < 2 || urls.length > 10) {
+      throw new Error(`Carrossel precisa de 2 a 10 mídias (post ${post.id} tem ${urls.length})`);
+    }
+    if (isMixedMedia(urls)) {
+      throw new Error(`Carrossel ${post.id} mistura imagem e vídeo`);
+    }
+
+    // 1. Containers dos itens (sem legenda)
+    const children: string[] = [];
+    for (const url of urls) {
+      const isVideo = isVideoUrl(url);
+      children.push(await this.deps.createInstagramMedia(igUserId, accessToken, {
+        [isVideo ? 'videoUrl' : 'imageUrl']: url,
+        isCarouselItem: true,
+      }));
+    }
+    const videoItems = isVideoUrl(urls[0]);
+    for (const childId of children) {
+      await this.waitForContainer(childId, accessToken, videoItems);
+    }
+
+    // 2. Container do carrossel (legenda aqui)
+    const carouselId = await this.deps.createInstagramMedia(igUserId, accessToken, {
+      mediaType: 'CAROUSEL',
+      children,
+      caption: post.caption || undefined,
+    });
+    await this.waitForContainer(carouselId, accessToken);
+
+    // 3. Publicar
+    const mediaId = await this.deps.publishInstagramMedia(igUserId, accessToken, carouselId);
+    return { mediaId };
+  }
+
+  /** Polling até FINISHED — a Meta responde 9007 se publicar antes. Vídeo: ~85s (cabe no timeout HTTP de 120s). */
+  private async waitForContainer(containerId: string, accessToken: string, isVideo = false): Promise<void> {
+    const pollDelays = isVideo
+      ? [5_000, 5_000, 10_000, 10_000, 15_000, 20_000, 20_000]
+      : [3_000, 3_000, 12_000];
+    for (let i = 0; i < pollDelays.length; i++) {
+      await new Promise((r) => setTimeout(r, pollDelays[i]));
+      const status = await this.deps.getMediaContainerStatus(containerId, accessToken);
+      if (status === 'FINISHED') return;
+    }
+    throw new Error(`Media container ${containerId} still IN_PROGRESS after ${pollDelays.length} polls`);
   }
 
   async publishDuePosts(tenantId: string) {
@@ -587,8 +734,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
     let published = 0;
 
     for (const post of due) {
-      // ponytail: só image e reel são suportados no Instagram v1
-      if (post.postType !== 'image' && post.postType !== 'reel') continue;
+      if (!['image', 'reel', 'stories', 'carousel'].includes(post.postType)) continue;
 
       // Claim atômico ANTES de publicar: disputa com o trigger manual
       // (publish-now). Quem perde pula o post sem marcar nada — o dono
@@ -600,7 +746,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
 
       try {
         const { mediaId } = await this.publishSinglePost(
-          { id: post.id, postType: post.postType, caption: post.caption, imageUrl: post.imageUrl },
+          { id: post.id, postType: post.postType, caption: post.caption, imageUrl: post.imageUrl, imageUrls: post.imageUrls },
           account.igUserId,
           account.accessToken,
         );
@@ -635,8 +781,14 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
     tenantId: string,
     payload: { postType: string; caption?: string; imageUrl?: string; imageUrls?: string[] | null; title?: string; platform?: string },
   ) {
-    if (payload.postType === 'carousel') {
-      throw new AppError(400, 'CAROUSEL_NOT_SUPPORTED', 'Carrossel ainda não é suportado no "Postar agora". Crie um post único ou agende.');
+    if (payload.postType === 'carousel' && (payload.imageUrls?.length ?? 0) < 2) {
+      throw new AppError(400, 'CAROUSEL_TOO_FEW_ITEMS', 'Carrossel precisa de pelo menos 2 imagens.');
+    }
+    if (payload.postType === 'reel' && !isVideoUrl(payload.imageUrl ?? '')) {
+      throw new AppError(400, 'REEL_REQUIRES_VIDEO', 'Reels precisa de um vídeo (MP4 ou MOV).');
+    }
+    if (payload.postType === 'carousel' && isMixedMedia(payload.imageUrls ?? [])) {
+      throw new AppError(400, 'CAROUSEL_MIXED_MEDIA', 'Carrossel aceita só imagens ou só vídeos, sem misturar.');
     }
     const repo = this.repo(tenantId);
     const now = new Date();
@@ -684,7 +836,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
   /** Resolve conta, publica, marca resultado e devolve o estado final do post. */
   private async attemptPublish(
     repo: PlannerRepository,
-    post: { id: string; postType: string; caption?: string | null; imageUrl?: string | null; publishAttempts?: number | null },
+    post: { id: string; postType: string; caption?: string | null; imageUrl?: string | null; imageUrls?: unknown; publishAttempts?: number | null },
     tenantId: string,
   ) {
     const account = await this.resolveInstagramAccount(tenantId);
@@ -698,7 +850,7 @@ Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
 
     try {
       const { mediaId } = await this.publishSinglePost(
-        { id: post.id, postType: post.postType, caption: post.caption, imageUrl: post.imageUrl },
+        { id: post.id, postType: post.postType, caption: post.caption, imageUrl: post.imageUrl, imageUrls: post.imageUrls },
         account.igUserId,
         account.accessToken,
       );

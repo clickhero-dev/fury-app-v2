@@ -119,7 +119,21 @@ export class PlannerRepository extends TenantScopedRepository {
   }
 
   /** Atualiza campos arbitrários de um post por id (já escopado por tenant). */
-  async patchPost(postId: string, setData: Record<string, any>) {
+  /** Patch atômico só se o post ainda for editável (evita corrida com o claim de publicação). */
+  async patchPostIfEditable(postId: string, setData: Record<string, any>) {
+    const [updated] = await this.db
+      .update(socialPosts)
+      .set(setData)
+      .where(and(
+        eq(socialPosts.id, postId),
+        eq(socialPosts.tenantId, this.tenantId),
+        not(inArray(socialPosts.status, ['published', 'publishing', 'rejected'])),
+      ))
+      .returning();
+    return updated ?? null;
+  }
+
+    async patchPost(postId: string, setData: Record<string, any>) {
     const [updated] = await this.db
       .update(socialPosts)
       .set(setData)
@@ -192,6 +206,15 @@ export class PlannerRepository extends TenantScopedRepository {
       .update(socialPosts)
       .set({ imageUrl, imageUrls: [imageUrl] })
       .where(eq(socialPosts.id, postId));
+  }
+
+  /** Registra mídia enviada no post na biblioteca do Estúdio. */
+  async createLibraryAsset(type: 'image' | 'video', url: string) {
+    const [row] = await this.db
+      .insert(creativeAssets)
+      .values({ tenantId: this.tenantId, type, url })
+      .returning({ id: creativeAssets.id });
+    return row;
   }
 
   /** Assets cuja URL casa com as URLs informadas (enriquecimento de compliance por post). */
