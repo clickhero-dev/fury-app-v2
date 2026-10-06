@@ -38,3 +38,8 @@ export function daysAgoSaoPauloYMD(daysAgo: number): string {
   date.setUTCDate(date.getUTCDate() - daysAgo);
   return formatYMD({ year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() });
 }
+
+/** Data (YYYY-MM-DD) de um instante no horario de Brasilia. */
+export function saoPauloYMD(date: Date): string {
+  return formatYMD(getSaoPauloYMD(date));
+}

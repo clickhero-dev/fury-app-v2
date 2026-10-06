@@ -14,6 +14,8 @@ interface PostSidePanelProps {
   onUpdate: (post: Post) => void;
   onDuplicate?: (post: Post) => void;
   onRequestDelete?: (post: Post) => void;
+  /** Edição completa (tipo, mídia, agendamento) no diálogo de criação */
+  onEdit?: (post: Post) => void;
 }
 
 const postIcons: Record<string, typeof LayoutGrid> = {
@@ -89,7 +91,7 @@ function DiffField({ label, before, after }: { label: string; before?: string; a
   );
 }
 
-export function PostSidePanel({ post, onClose, onUpdate, onDuplicate, onRequestDelete }: PostSidePanelProps) {
+export function PostSidePanel({ post, onClose, onUpdate, onDuplicate, onRequestDelete, onEdit }: PostSidePanelProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiEditor, setShowAiEditor] = useState(false);
@@ -227,7 +229,9 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate, onRequestD
           <div className="grid grid-cols-2 gap-2">
             {getPostImages(post).map((url, idx) => (
               <div key={idx} className="relative rounded-xl overflow-hidden border border-border bg-surface-secondary aspect-square">
-                <img src={url} alt={`Carousel ${idx + 1}`} className="w-full h-full object-cover" />
+                {/\.(mp4|mov)(\?|$)/i.test(url)
+                  ? <video src={url} muted className="w-full h-full object-cover" />
+                  : <img src={url} alt={`Carousel ${idx + 1}`} className="w-full h-full object-cover" />}
               </div>
             ))}
           </div>
@@ -236,7 +240,7 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate, onRequestD
       return (
         post.imageUrl && (
           <div className="rounded-xl overflow-hidden border border-border bg-surface-secondary">
-            {post.postType === 'reel' ? (
+            {/\.(mp4|mov)(\?|$)/i.test(post.imageUrl) ? (
               <video src={post.imageUrl} controls className="w-full max-h-48 object-cover" />
             ) : (
               <img src={post.imageUrl} alt="Preview" className="w-full max-h-48 object-cover" />
@@ -329,9 +333,7 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate, onRequestD
     );
   }
 
-  // Refactor em andamento: mediaContent será ligado ao JSX quando o bloco
-  // inline antigo for substituído — por ora fica computado (build/lint ok).
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // Visualização (carrossel em grade, vídeo/imagem únicos)
   const mediaContent = renderMediaContent();
 
   return (
@@ -511,15 +513,7 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate, onRequestD
                 </div>
               )
             ) : (
-              post.imageUrl && (
-                <div className="rounded-xl overflow-hidden border border-border bg-surface-secondary">
-                  {post.postType === 'reel' ? (
-                    <video src={post.imageUrl} controls className="w-full max-h-48 object-cover" />
-                  ) : (
-                    <img src={post.imageUrl} alt="Preview" className="w-full max-h-48 object-cover" />
-                  )}
-                </div>
-              )
+              mediaContent
             )}
             <input
               ref={editFileRef}
@@ -638,7 +632,7 @@ export function PostSidePanel({ post, onClose, onUpdate, onDuplicate, onRequestD
                 /* AÇÕES NORMAIS PARA POSTS FUTUROS */
                 <>
                   <button
-                    onClick={() => setEditMode(true)}
+                    onClick={() => (onEdit ? onEdit(post) : setEditMode(true))}
                     className="flex-1 px-4 py-2.5 bg-surface-secondary hover:bg-border text-text-primary font-medium rounded-xl text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                   >
                     Editar

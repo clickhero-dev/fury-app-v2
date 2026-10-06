@@ -11,10 +11,10 @@ Funcionalidade: Postar agora (publicação imediata idempotente)
     Quando POST /planner/posts/publish-now com payload válido e Idempotency-Key
     Então a resposta é 201 com data.status 'published' e platformPostId
 
-  Cenário: carrossel não suportado
+  Cenário: carrossel com menos de 2 imagens
     Dado usuário autenticado
-    Quando o payload é postType 'carousel'
-    Então a resposta é 400 com código CAROUSEL_NOT_SUPPORTED
+    Quando o payload é postType 'carousel' com 1 imagem
+    Então a resposta é 400 com código CAROUSEL_TOO_FEW_ITEMS
 
   Cenário: sem Idempotency-Key
     Dado usuário autenticado
@@ -147,19 +147,19 @@ describe('BDD: Postar agora — POST /api/planner/posts/publish-now', () => {
     expect(mockPlannerService.publishNow).toHaveBeenCalledWith('t1', expect.objectContaining({ postType: 'image' }));
   });
 
-  it('Cenário: carrossel não suportado → 400 CAROUSEL_NOT_SUPPORTED', async () => {
+  it('Cenário: carrossel com 1 imagem → 400 CAROUSEL_TOO_FEW_ITEMS', async () => {
     // (service mockado: o AppError 400 é exatamente o que o service real lança
     // — coberto no unit planner-publish-now.test.ts cenário carousel)
-    mockPlannerService.publishNow.mockRejectedValue(new AppError(400, 'CAROUSEL_NOT_SUPPORTED', 'Carrossel ainda não é suportado no "Postar agora". Crie um post único ou agende.'));
+    mockPlannerService.publishNow.mockRejectedValue(new AppError(400, 'CAROUSEL_TOO_FEW_ITEMS', 'Carrossel precisa de pelo menos 2 imagens.'));
 
     const res = await request(app)
       .post(url)
       .set('Authorization', `Bearer ${authToken()}`)
       .set('Idempotency-Key', 'key-carousel')
-      .send({ postType: 'carousel', imageUrls: ['https://cdn.x/a.png', 'https://cdn.x/b.png'] });
+      .send({ postType: 'carousel', imageUrls: ['https://cdn.x/a.png'] });
 
     expect(res.status).toBe(400);
-    expect(res.body.error?.code).toBe('CAROUSEL_NOT_SUPPORTED');
+    expect(res.body.error?.code).toBe('CAROUSEL_TOO_FEW_ITEMS');
   });
 
   it('Cenário: sem Idempotency-Key → 400 IDEMPOTENCY_KEY_REQUIRED (handler nunca roda)', async () => {

@@ -175,7 +175,7 @@ export class PlannerController {
         scheduledAt: z.string().datetime().optional(),
         title: z.string().max(255).optional(),
         imageUrl: z.string().url().optional(),
-        imageUrls: z.array(z.string().url()).max(5).optional(),
+        imageUrls: z.array(z.string().url()).max(10).optional(),
       }).and(
         z.union([
           z.object({ date: z.string().date() }), // Novo: ISO date "2026-08-19"
@@ -260,7 +260,7 @@ export class PlannerController {
         platform: z.string().max(50).optional(),
         title: z.string().max(255).optional(),
         imageUrl: z.string().url().optional(),
-        imageUrls: z.array(z.string().url()).max(5).optional(),
+        imageUrls: z.array(z.string().url()).max(10).optional(),
       });
       const payload = bodySchema.parse(req.body);
       const result = await this.plannerService.publishNow(tenantId, payload);
@@ -276,11 +276,14 @@ export class PlannerController {
       }
       const ext = req.file.mimetype === 'image/png' ? 'png'
         : req.file.mimetype === 'image/jpeg' ? 'jpg'
+        : req.file.mimetype === 'image/webp' ? 'webp'
         : req.file.mimetype === 'video/mp4' ? 'mp4'
         : req.file.mimetype === 'video/quicktime' ? 'mov'
         : 'png';
       const fileName = `posts/${tenantId}/${randomUUID()}.${ext}`;
       const url = await uploadAsset(req.file.buffer, fileName, req.file.mimetype);
+      // Disponível depois na Biblioteca do Estúdio
+      await this.plannerService.saveUploadToLibrary(tenantId, url, req.file.mimetype);
       res.json({ success: true, data: { url } });
     } catch (err) { next(err); }
   };
@@ -307,8 +310,9 @@ const editPostSchema = z.union([
     caption: z.string().optional(),
     cta: z.string().optional(),
     hashtags: z.array(z.string()).optional(),
-    imageUrl: z.string().url().optional(),
-    imageUrls: z.array(z.string().url()).max(5).optional(),
+    postType: z.enum(['image', 'carousel', 'reel', 'stories']).optional(),
+    imageUrl: z.string().url().startsWith('https://').nullable().optional(),
+    imageUrls: z.array(z.string().url().startsWith('https://')).max(10).optional(),
     scheduledAt: z.string().datetime().nullable().optional(),
   }),
 ]);
