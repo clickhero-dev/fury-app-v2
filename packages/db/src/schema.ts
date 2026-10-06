@@ -83,6 +83,7 @@ export const leadStatusEnum = pgEnum('lead_status', [
   'comprou',
   'não comprou',
 ]);
+export const faqStatusEnum = pgEnum('faq_status', ['draft', 'published']);
 
 // Tenants table
 export const tenants = pgTable(
@@ -1076,6 +1077,35 @@ export const wppWebhookEvents = pgTable(
   })
 );
 
+// Public help-center content. It is global to the product, never tenant-scoped.
+export const faqs = pgTable(
+  'faqs',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    title: varchar('title', { length: 255 }).notNull(),
+    slug: varchar('slug', { length: 255 }).notNull().unique(),
+    markdown: text('markdown').notNull(),
+    status: faqStatusEnum('status').notNull().default('draft'),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({ slugIdx: index('faqs_slug_idx').on(table.slug), statusIdx: index('faqs_status_idx').on(table.status) }),
+);
+
+export const faqSlugRedirects = pgTable(
+  'faq_slug_redirects',
+  {
+    slug: varchar('slug', { length: 255 }).primaryKey(),
+    faqId: uuid('faq_id').notNull().references(() => faqs.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({ faqIdIdx: index('faq_slug_redirects_faq_id_idx').on(table.faqId) }),
+);
+
+export const faqsRelations = relations(faqs, ({ many }) => ({ slugRedirects: many(faqSlugRedirects) }));
+export const faqSlugRedirectsRelations = relations(faqSlugRedirects, ({ one }) => ({ faq: one(faqs, { fields: [faqSlugRedirects.faqId], references: [faqs.id] }) }));
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -1113,4 +1143,6 @@ export const allTables = {
   metaLeads,
   metaInstagramMedia,
   metaSyncRuns,
+  faqs,
+  faqSlugRedirects,
 };

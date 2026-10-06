@@ -153,6 +153,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0044_meta_lead_form_unknown' },
   { tag: '0045_meta_campaign_daily_insights' },
   { tag: '0046_lead_status' },
+  { tag: '0047_faqs' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
@@ -192,6 +193,8 @@ export const REQUIRED_TABLES = [
   'meta_leads',
   'meta_instagram_media',
   'meta_sync_runs',
+  'faqs',
+  'faq_slug_redirects',
 ];
 
 /**
