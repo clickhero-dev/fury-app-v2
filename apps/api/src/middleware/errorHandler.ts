@@ -63,14 +63,18 @@ export function errorHandler(
     };
   }
 
-  // Error tracking server-side (apenas erros de servidor e AppError, sem campos sensíveis)
-  captureServerException(err, {
-    tenantId,
-    method: req.method,
-    path: req.originalUrl,
-    statusCode,
-    code,
-  });
+  // Erros 4xx são rejeições esperadas de entrada/autorização; registrá-los como
+  // exception cria falsos incidentes no PostHog. Apenas falhas do servidor são
+  // enviadas ao Error Tracking.
+  if (statusCode >= 500) {
+    captureServerException(err, {
+      tenantId,
+      method: req.method,
+      path: req.originalUrl,
+      statusCode,
+      code,
+    });
+  }
 
   res.status(statusCode).json(response);
 }
