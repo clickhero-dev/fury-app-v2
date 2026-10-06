@@ -155,6 +155,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0046_meta_sync_scopes' },
   { tag: '0046_lead_status' },
   { tag: '0047_faqs' },
+  { tag: '0048_meta_healthchecks' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
@@ -194,6 +195,7 @@ export const REQUIRED_TABLES = [
   'meta_leads',
   'meta_instagram_media',
   'meta_sync_runs',
+  'meta_healthchecks',
   'faqs',
   'faq_slug_redirects',
 ];
