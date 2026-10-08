@@ -4,7 +4,7 @@
 Funcionalidade: jornada real do cliente (QA com dados reais, sem mocks)
 
   Cenário: login, criar campanha, pausar campanha e gerar imagem
-    Dado a conta de teste com Meta conectado
+    Dado a conta de teste (QA_EMAIL/QA_PASSWORD) com Meta conectado
     Quando o fluxo é feito pela interface, esperando a resposta real de cada etapa
     Então cada etapa só passa após o retorno da API e a conferência na listagem
     E ao final (sucesso ou falha) a campanha é pausada e arquivada e a imagem arquivada
@@ -12,8 +12,9 @@ Funcionalidade: jornada real do cliente (QA com dados reais, sem mocks)
 import { expect, test, type Page, type Response } from '@playwright/test';
 
 const apiURL = process.env.QA_API_URL ?? 'http://localhost:3000/api';
-const email = process.env.QA_EMAIL ?? 'diogommtdes@gmail.com';
-const password = process.env.QA_PASSWORD ?? 'teste@2025';
+// credenciais via GitHub Secrets no CI, variáveis de ambiente local
+const email = process.env.QA_EMAIL ?? '';
+const password = process.env.QA_PASSWORD ?? '';
 const whatsapp = '55981286344';
 
 const stamp = new Intl.DateTimeFormat('pt-BR', {
@@ -98,6 +99,9 @@ function apiClient(page: Page, getToken: () => string) {
 }
 
 test('jornada real: login, criar campanha, pausar campanha e gerar imagem', async ({ page }) => {
+  if (!email || !password) {
+    throw new Error('Defina QA_EMAIL e QA_PASSWORD (GitHub Secrets no CI, variáveis de ambiente local).');
+  }
   let token = '';
   let campaignId: string | undefined;
   let assetId: string | undefined;

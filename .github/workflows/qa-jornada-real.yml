@@ -38,6 +38,8 @@ jobs:
         env:
           QA_BASE_URL: http://127.0.0.1:5173
           QA_API_URL: https://clickhero-hmg-fury-api.u7pe19.easypanel.host/api
+          QA_EMAIL: ${{ secrets.QA_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
         run: pnpm test:qa
 
       - name: Upload report
