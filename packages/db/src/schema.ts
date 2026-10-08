@@ -505,6 +505,40 @@ export const brandKits = pgTable(
   })
 );
 
+// Biblioteca de imagens do Estúdio, cada uma com tipo
+export const brandKitPhotoKindEnum = pgEnum('brand_kit_photo_kind', ['modelo', 'produto', 'equipe']);
+
+export const brandKitPhotos = pgTable(
+  'brand_kit_photos',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    brandKitId: uuid('brand_kit_id')
+      .notNull()
+      .references(() => brandKits.id, { onDelete: 'cascade' }),
+    kind: brandKitPhotoKindEnum('kind').notNull(),
+    url: text('url').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    /** Soft delete: preenchido = removida (some da biblioteca e da geração). */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => ({
+    tenantKindIdx: index('brand_kit_photos_tenant_kind_idx').on(table.tenantId, table.kind),
+    brandKitIdIdx: index('brand_kit_photos_brand_kit_id_idx').on(table.brandKitId),
+  })
+);
+
+export const brandKitsRelations = relations(brandKits, ({ many }) => ({
+  photos: many(brandKitPhotos),
+}));
+
+export const brandKitPhotosRelations = relations(brandKitPhotos, ({ one }) => ({
+  tenant: one(tenants, { fields: [brandKitPhotos.tenantId], references: [tenants.id] }),
+  brandKit: one(brandKits, { fields: [brandKitPhotos.brandKitId], references: [brandKits.id] }),
+}));
+
 // Request logs table (audit / debug)
 // Partitioned by RANGE (created_at) — PK is (id, created_at) at DB level.
 // Drizzle schema mirrors the production columns for type-safe queries.
@@ -1162,6 +1196,7 @@ export const allTables = {
   subscriptions,
   invoices,
   brandKits,
+  brandKitPhotos,
   requestLogs,
   campaignPlans,
   socialPosts,

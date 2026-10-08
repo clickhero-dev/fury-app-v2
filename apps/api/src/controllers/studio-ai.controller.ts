@@ -18,6 +18,12 @@ const generateImageSchema = z.object({
   aspect_ratio: z.enum(['1:1', '16:9', '9:16']).optional().default('1:1'),
   resolution: z.enum(['1K', '2K', '4K']).optional().default('2K'),
   reference_image_urls: z.array(z.string().url()).max(2).optional(),
+  // biblioteca nova: ids resolvidos no servidor, filtrando pelo tenant
+  template_photo_id: z.string().uuid().optional(),
+  photo_ids: z.array(z.string().uuid()).max(2).optional(),
+}).refine((b) => !(b.reference_image_urls?.length && b.photo_ids?.length), {
+  message: 'Use reference_image_urls ou photo_ids, não os dois.',
+  path: ['photo_ids'],
 });
 
 const generateVideoSchema = z.object({
@@ -29,7 +35,11 @@ const generateVideoSchema = z.object({
   generate_audio: z.boolean().optional().default(true),
 });
 
-const enhancePromptSchema = z.object({ prompt: z.string().min(3).max(1000), type: z.enum(['image', 'video']) });
+const enhancePromptSchema = z.object({
+  prompt: z.string().min(3).max(1000),
+  type: z.enum(['image', 'video']),
+  photo_kinds: z.array(z.enum(['produto', 'equipe'])).max(2).optional(),
+});
 const regenerateQuickSchema = z.object({ assetId: z.string().uuid(), feedback: z.string().min(3) });
 
 export class StudioAiController {

@@ -459,4 +459,110 @@ export const openrouterService = {
       throw new AppError(502, 'IMAGE_EDIT_EMPTY', (err as Error).message || 'Modelo não retornou imagem editada.');
     }
   },
+
+  /** Chat com imagens anexadas (modelo de visão); devolve texto + custo real. */
+  async chatWithImages(options: {
+    model: string;
+    text: string;
+    imageUrls: string[];
+    temperature?: number;
+    jsonMode?: boolean;
+  }): Promise<{ content: string; costUsd: number | null }> {
+    const apiKey = getClient();
+    const response = await fetchWithTimeout(`${OPENROUTER_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: options.model,
+        temperature: options.temperature ?? 0.1,
+        ...(options.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: options.text },
+            ...options.imageUrls.map((url) => ({ type: 'image_url', image_url: { url } })),
+          ],
+        }],
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      if (isInsufficientCreditsError(err)) {
+        throw new AppError(402, 'OPENROUTER_INSUFFICIENT_CREDITS', INSUFFICIENT_CREDITS_MESSAGE);
+      }
+      console.error('[openrouter] chatWithImages error:', err.slice(0, 2000));
+      throw new AppError(502, 'OPENROUTER_CHAT_ERROR', 'Falha ao analisar a imagem. Tente novamente.');
+    }
+    const data = (await response.json()) as any;
+    return {
+      content: data.choices?.[0]?.message?.content ?? '',
+      costUsd: typeof data.usage?.cost === 'number' ? data.usage.cost : null,
+    };
+  },
+
+  /**
+   * Gera imagem a partir de imagens de entrada (ex.: modelo de anúncio) via chat
+   * com saída de imagem. Normaliza pro pixel exato do formato pedido.
+   */
+  async generateImageFromImages(options: {
+    model: string;
+    prompt: string;
+    imageUrls: string[];
+    aspect_ratio: string;
+  }): Promise<{ dataUrl: string; costUsd: number | null }> {
+    const apiKey = getClient();
+    const response = await fetchWithTimeout(`${OPENROUTER_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: options.model,
+        modalities: ['image', 'text'],
+        image_config: { aspect_ratio: options.aspect_ratio },
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: options.prompt },
+            ...options.imageUrls.map((url) => ({ type: 'image_url', image_url: { url } })),
+          ],
+        }],
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      if (isInsufficientCreditsError(err)) {
+        throw new AppError(402, 'OPENROUTER_INSUFFICIENT_CREDITS', INSUFFICIENT_CREDITS_MESSAGE);
+      }
+      console.error('[openrouter] generateImageFromImages error:', err.slice(0, 2000));
+      throw new AppError(502, 'OPENROUTER_IMAGE_ERROR', 'Falha ao gerar a imagem. Tente novamente.');
+    }
+    const data = (await response.json()) as any;
+    const costUsd = typeof data.usage?.cost === 'number' ? data.usage.cost : null;
+    const imageUrl: string | undefined = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!imageUrl) throw new AppError(502, 'OPENROUTER_IMAGE_EMPTY', 'OpenRouter não retornou imagem.');
+
+    let buffer: Buffer;
+    if (imageUrl.startsWith('data:')) {
+      buffer = Buffer.from(imageUrl.slice(imageUrl.indexOf(',') + 1), 'base64');
+    } else {
+      // URL vem do provedor: só https, status ok e teto de 15MB
+      const MAX_BYTES = 15 * 1024 * 1024;
+      if (!imageUrl.startsWith('https://')) throw new AppError(502, 'OPENROUTER_IMAGE_EMPTY', 'OpenRouter não retornou imagem.');
+      const imgResponse = await fetchWithTimeout(imageUrl, { redirect: 'error' }, 60_000);
+      const declared = Number(imgResponse.headers.get('content-length') ?? 0);
+      if (!imgResponse.ok || declared > MAX_BYTES) throw new AppError(502, 'OPENROUTER_IMAGE_EMPTY', 'OpenRouter não retornou imagem.');
+      buffer = Buffer.from(await imgResponse.arrayBuffer());
+      if (buffer.length > MAX_BYTES) throw new AppError(502, 'OPENROUTER_IMAGE_EMPTY', 'OpenRouter não retornou imagem.');
+    }
+
+    const target = ASPECT_RATIO_TARGET_PX[options.aspect_ratio];
+    if (target) {
+      try {
+        const { default: sharp } = await import('sharp');
+        buffer = await sharp(buffer).resize(target.width, target.height, { fit: 'cover', position: 'centre' }).png().toBuffer();
+      } catch (err) {
+        console.warn('[openrouter] Pixel normalization failed:', (err as Error).message);
+      }
+    }
+    return { dataUrl: `data:image/png;base64,${buffer.toString('base64')}`, costUsd };
+  },
 };

@@ -156,6 +156,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0046_lead_status' },
   { tag: '0047_faqs' },
   { tag: '0048_meta_healthchecks' },
+  { tag: '0049_brand_kit_photos' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
@@ -178,6 +179,7 @@ export const REQUIRED_TABLES = [
   'subscriptions',
   'invoices',
   'brand_kits',
+  'brand_kit_photos',
   'request_logs',
   'campaign_plans',
   'social_posts',
