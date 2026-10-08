@@ -1,104 +1,90 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { ReferenceImagePanel } from './ReferenceImagePanel';
 
 const mockApiGet = vi.hoisted(() => vi.fn());
-const mockApiPost = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api', () => ({
-  default: {
-    get: mockApiGet,
-    post: mockApiPost,
-    put: vi.fn(),
-    patch: vi.fn(),
-    delete: vi.fn(),
-  },
+  default: { get: mockApiGet, post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
-const PHOTO_URLS = ['https://cdn/produto.png', 'https://cdn/pessoa.png', 'https://cdn/bolsa.png'];
+const LIB = [
+  { id: 'm1', kind: 'modelo', url: 'https://cdn/m1.png', created_at: '2026-10-07' },
+  { id: 'p1', kind: 'produto', url: 'https://cdn/p1.png', created_at: '2026-10-07' },
+  { id: 'p2', kind: 'produto', url: 'https://cdn/p2.png', created_at: '2026-10-07' },
+  { id: 'e1', kind: 'equipe', url: 'https://cdn/e1.png', created_at: '2026-10-07' },
+];
 
-function renderPanel(contextUrls: string[] = [], onAdd = vi.fn(), onRemove = vi.fn()) {
+function renderPanel(props: Partial<React.ComponentProps<typeof ReferenceImagePanel>> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-  const utils = render(
-    <ReferenceImagePanel contextUrls={contextUrls} onAdd={onAdd} onRemove={onRemove} />,
-    { wrapper },
-  );
-  return { ...utils, onAdd, onRemove };
+  const handlers = {
+    onPickTemplate: vi.fn(),
+    onToggleArtPhoto: vi.fn(),
+    onUploadClick: vi.fn(),
+  };
+  render(<ReferenceImagePanel templateId={null} artPhotoIds={[]} {...handlers} {...props} />, { wrapper });
+  return handlers;
 }
 
 describe('ReferenceImagePanel', () => {
   beforeEach(() => {
     mockApiGet.mockReset();
-    mockApiPost.mockReset();
     mockApiGet.mockImplementation((url: string) => {
-      if (url === '/brand-kit') {
-        return Promise.resolve({ data: { data: { photo_urls: PHOTO_URLS } } });
-      }
+      if (url === '/brand-kit/library') return Promise.resolve({ data: { success: true, data: LIB } });
       return Promise.reject(new Error(`unexpected GET ${url}`));
     });
-    mockApiPost.mockResolvedValue({ data: { data: { urls: ['https://cdn/nova.png'] } } });
   });
 
-  it('renderiza a galeria com as fotos já salvas na biblioteca, sem nome/legenda', async () => {
+  it('mostra a biblioteca com etiqueta do tipo e filtros com contagem', async () => {
     renderPanel();
-    const thumbs = await screen.findAllByRole('button', { name: /selecionar imagem de referência/i });
-    expect(thumbs).toHaveLength(3);
-    // Só imagem — nenhum texto de nome de arquivo visível nas miniaturas
-    thumbs.forEach((btn) => expect(btn).not.toHaveTextContent(/\w/));
+    const tiles = await screen.findAllByRole('button', { name: /usar imagem/i });
+    expect(tiles).toHaveLength(4);
+    expect(within(tiles[0]).getByText('Modelo')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /todas 4/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /produtos 2/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /equipe 1/i })).toBeInTheDocument();
   });
 
-  it('upload chama POST /brand-kit/photos com os arquivos e não afeta o contexto (Upload A)', async () => {
-    const { onAdd } = renderPanel();
-    const user = userEvent.setup();
-    await screen.findAllByRole('button', { name: /selecionar imagem de referência/i });
-
-    const file = new File(['conteudo'], 'produto-novo.png', { type: 'image/png' });
-    const input = screen.getByLabelText(/enviar fotos/i);
-    await user.upload(input, file);
-
-    await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledWith('/brand-kit/photos', expect.any(FormData), expect.anything());
-    });
-    expect(onAdd).not.toHaveBeenCalled();
-  });
-
-  it('clicar numa miniatura já chama onAdd na hora, sem passo de confirmação', async () => {
-    const { onAdd } = renderPanel();
-    const user = userEvent.setup();
-    const thumbs = await screen.findAllByRole('button', { name: /selecionar imagem de referência/i });
-
-    await user.click(thumbs[0]);
-
-    expect(onAdd).toHaveBeenCalledWith([PHOTO_URLS[0]]);
-    // Não existe mais botão de confirmação
-    expect(screen.queryByRole('button', { name: /adicionar à criação/i })).not.toBeInTheDocument();
-  });
-
-  it('miniatura já presente no contexto aparece selecionada, e clicar nela chama onRemove', async () => {
-    const { onRemove } = renderPanel([PHOTO_URLS[1]]);
-    const user = userEvent.setup();
-    const thumbs = await screen.findAllByRole('button', { name: /selecionar imagem de referência/i });
-
-    expect(thumbs[1]).toHaveAttribute('aria-pressed', 'true');
-    expect(thumbs[0]).toHaveAttribute('aria-pressed', 'false');
-
-    await user.click(thumbs[1]);
-    expect(onRemove).toHaveBeenCalledWith(PHOTO_URLS[1]);
-  });
-
-  it('sem fotos na biblioteca, não mostra grade nenhuma', async () => {
-    mockApiGet.mockImplementation((url: string) => {
-      if (url === '/brand-kit') return Promise.resolve({ data: { data: { photo_urls: [] } } });
-      return Promise.reject(new Error('unexpected'));
-    });
+  it('filtrar mostra só o tipo escolhido e "Limpar filtro" volta para todas', async () => {
     renderPanel();
-    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/brand-kit'));
-    expect(screen.queryByRole('button', { name: /selecionar imagem de referência/i })).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await screen.findAllByRole('button', { name: /usar imagem/i });
+    expect(screen.queryByRole('button', { name: /limpar filtro/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /produtos 2/i }));
+    expect(screen.getAllByRole('button', { name: /usar imagem: produto/i })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: /usar imagem: modelo/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /limpar filtro/i }));
+    expect(screen.getAllByRole('button', { name: /usar imagem/i })).toHaveLength(4);
+  });
+
+  it('clicar num modelo escolhe o modelo; num produto/equipe coloca na arte', async () => {
+    const h = renderPanel();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /usar imagem: modelo/i }));
+    expect(h.onPickTemplate).toHaveBeenCalledWith(expect.objectContaining({ id: 'm1' }));
+    await user.click(screen.getByRole('button', { name: /usar imagem: equipe/i }));
+    expect(h.onToggleArtPhoto).toHaveBeenCalledWith(expect.objectContaining({ id: 'e1' }));
+  });
+
+  it('marca como selecionados o modelo e as fotos da criação', async () => {
+    renderPanel({ templateId: 'm1', artPhotoIds: ['p2'] });
+    expect(await screen.findByRole('button', { name: /remover imagem: modelo/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /remover imagem: produto/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByRole('button', { name: /usar imagem/i })).toHaveLength(2);
+  });
+
+  it('"Enviar imagens" pede o envio geral', async () => {
+    const h = renderPanel();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /enviar imagens/i }));
+    expect(h.onUploadClick).toHaveBeenCalled();
   });
 });

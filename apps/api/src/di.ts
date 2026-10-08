@@ -5,6 +5,8 @@ import { GoalService } from './services/goals/goal.service.js';
 import { GoalController } from './controllers/goal.controller.js';
 import { BrandKitService } from './services/brand-kit/brand-kit.service.js';
 import { BrandKitController } from './controllers/brand-kit.controller.js';
+import { BrandKitPhotoService } from './services/brand-kit/brand-kit-photo.service.js';
+import { BrandKitPhotoController } from './controllers/brand-kit-photo.controller.js';
 import { FuryEngineService } from './services/fury/fury-engine.service.js';
 import { FuryController } from './controllers/fury.controller.js';
 import { StudioAiService } from './services/studio/studio-ai.service.js';
@@ -79,6 +81,7 @@ const metricsProvider: IMetricsProvider =
 
 export const goalService = new GoalService(metricsProvider);
 export const brandKitService = new BrandKitService();
+export const brandKitPhotoService = new BrandKitPhotoService();
 export const furyEngineService = new FuryEngineService();
 export const studioAiService = new StudioAiService();
 export const studioService = new StudioService();
@@ -120,6 +123,7 @@ export const controllers = {
   metaHealthchecks: new MetaHealthcheckController(metaHealthcheckRepository, metaHealthcheckService),
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),
+  brandKitPhotos: new BrandKitPhotoController(brandKitPhotoService),
   fury: new FuryController(furyEngineService),
   studioAi: new StudioAiController(studioAiService),
   studio: new CreativeStudioController(studioService),

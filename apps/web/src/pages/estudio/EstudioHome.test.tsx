@@ -57,6 +57,13 @@ const MOCK_MODELS = {
   video: [],
 };
 
+const MOCK_LIBRARY = [
+  { id: 'm1', kind: 'modelo', url: 'https://cdn/m1.png', created_at: '2026-10-07' },
+  { id: 'p1', kind: 'produto', url: 'https://cdn/p1.png', created_at: '2026-10-07' },
+  { id: 'p2', kind: 'produto', url: 'https://cdn/p2.png', created_at: '2026-10-07' },
+  { id: 'e1', kind: 'equipe', url: 'https://cdn/e1.png', created_at: '2026-10-07' },
+];
+
 function renderWithProviders(entry = '/estudio') {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -146,14 +153,20 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
       if (url.includes('/studio/ai/models')) {
         return Promise.resolve({ data: MOCK_MODELS });
       }
+      if (url.includes('/brand-kit/library')) {
+        return Promise.resolve({ data: { success: true, data: MOCK_LIBRARY } });
+      }
       return Promise.resolve({ data: MOCK_ASSETS });
     });
-    mockApiPost.mockImplementation((url: string) => {
+    mockApiPost.mockImplementation((url: string, body?: unknown) => {
       if (url.includes('/enhance-prompt')) {
         return Promise.resolve({ data: { enhancedPrompt: 'prompt melhorado', brand: {} } });
       }
-      if (url.includes('/brand-kit/photos')) {
-        return Promise.resolve({ data: { data: { urls: ['https://cdn/upload-b.png'] } } });
+      if (url.includes('/brand-kit/library')) {
+        const fd = body as FormData;
+        const kind = fd.get('kind') as string;
+        const created = fd.getAll('files[]').map((_, i) => ({ id: `novo-${kind}-${i}`, kind, url: `https://cdn/novo-${i}.png`, created_at: '' }));
+        return Promise.resolve({ data: { success: true, data: created } });
       }
       return Promise.resolve({ data: { type: 'image', creativeAssetId: 'asset-new', imageUrl: 'https://cdn/n.png', costUsd: 0.04, processingTimeMs: 3200 } });
     });
@@ -232,7 +245,7 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     });
   });
 
-  it('sem imagem de referência, gera sem reference_image_urls (comportamento preservado)', async () => {
+  it('sem imagens, gera sem modelo nem fotos e passa pelo aprimoramento (comportamento preservado)', async () => {
     renderWithProviders();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
@@ -240,96 +253,158 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
 
     await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledWith(
-        '/studio/ai/generate-image',
-        expect.objectContaining({ reference_image_urls: undefined }),
-      );
+      expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/generate-image', expect.objectContaining({ prompt: 'prompt melhorado' }));
     });
+    const body = (mockApiPost as any).mock.calls.find((c: any[]) => c[0] === '/studio/ai/generate-image')[1];
+    expect(body.template_photo_id).toBeUndefined();
+    expect(body.photo_ids).toBeUndefined();
+    expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/enhance-prompt', expect.anything());
   });
 
-  it('Upload B envia a foto, mostra miniatura removível e inclui reference_image_urls na geração', async () => {
-    const { container } = renderWithProviders();
+  it('com modelo escolhido na lateral: muda o texto da caixa, esconde o seletor de IA e gera sem aprimorar', async () => {
+    renderWithProviders();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.click(await screen.findByRole('button', { name: /usar imagem: modelo/i }));
 
-    // Upload B fica no formulário principal — vem antes do painel lateral no DOM
-    const fileInputs = container.querySelectorAll('input[type="file"]');
-    const uploadBInput = fileInputs[0] as HTMLInputElement;
-    const file = new File(['conteudo'], 'produto.png', { type: 'image/png' });
-    await user.upload(uploadBInput, file);
+    expect(screen.getByText('O que muda no modelo?')).toBeInTheDocument();
+    expect(screen.getByText('Modelo escolhido')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /modelo de imagem/i })).not.toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledWith('/brand-kit/photos', expect.any(FormData), expect.anything());
-    });
-    const removeBtn = await screen.findByRole('button', { name: /remover imagem de referência/i });
-    expect(removeBtn).toBeInTheDocument();
-
-    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio fashion minimalista com luz natural');
+    await user.type(screen.getByLabelText(/o que muda no modelo/i), 'Empresa DUO Oral Care em Joinville-SC');
     await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
 
     await waitFor(() => {
       expect(mockApiPost).toHaveBeenCalledWith(
         '/studio/ai/generate-image',
-        expect.objectContaining({ reference_image_urls: ['https://cdn/upload-b.png'] }),
+        expect.objectContaining({ template_photo_id: 'm1', prompt: 'Empresa DUO Oral Care em Joinville-SC' }),
       );
     });
-
-    // remover a miniatura tira ela do contexto
-    await user.click(removeBtn);
-    expect(screen.queryByRole('button', { name: /remover imagem de referência/i })).not.toBeInTheDocument();
+    expect(mockApiPost).not.toHaveBeenCalledWith('/studio/ai/enhance-prompt', expect.anything());
   });
 
-  it('Upload B com mais de 2 arquivos: mostra modal de limite, não envia nada', async () => {
-    const { container } = renderWithProviders();
+  it('"Enviar modelo" abre a pasta direto, mostra a miniatura para conferir e envia como Modelo', async () => {
+    renderWithProviders();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
 
-    const fileInputs = container.querySelectorAll('input[type="file"]');
-    const uploadBInput = fileInputs[0] as HTMLInputElement;
-    const files = [
+    await user.upload(screen.getByLabelText('Enviar modelo'), new File(['x'], 'vaga-toledo.jpg', { type: 'image/jpeg' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Conferir antes de enviar')).toBeInTheDocument();
+    expect(within(dialog).getByText(/esta imagem será salva como modelo/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('vaga-toledo.jpg')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: /enviar 1 modelo/i }));
+    await waitFor(() => expect(screen.getByText('Modelo escolhido')).toBeInTheDocument());
+    const call = (mockApiPost as any).mock.calls.find((c: any[]) => c[0] === '/brand-kit/library');
+    expect((call[1] as FormData).get('kind')).toBe('modelo');
+  });
+
+  it('"Enviar foto" só oferece Produto ou Equipe e aceita no máximo 2 fotos', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.click(screen.getByRole('button', { name: /^enviar foto$/i }));
+
+    const chooser = await screen.findByRole('dialog');
+    expect(within(chooser).getByLabelText('Enviar como Produto')).toBeInTheDocument();
+    expect(within(chooser).getByLabelText('Enviar como Equipe')).toBeInTheDocument();
+    expect(within(chooser).queryByLabelText('Enviar como Modelo')).not.toBeInTheDocument();
+    expect(within(chooser).getByText(/no máximo 2 fotos/i)).toBeInTheDocument();
+
+    await user.upload(within(chooser).getByLabelText('Enviar como Produto'), [
       new File(['a'], 'a.png', { type: 'image/png' }),
       new File(['b'], 'b.png', { type: 'image/png' }),
       new File(['c'], 'c.png', { type: 'image/png' }),
-    ];
-    await user.upload(uploadBInput, files);
+    ]);
+    const confirm = await screen.findByText('Conferir antes de enviar');
+    const dialog = confirm.closest('[role="dialog"]') as HTMLElement;
+    expect(within(dialog).getByText(/todas as imagens abaixo serão salvas como produto/i)).toBeInTheDocument();
+    expect(within(dialog).getAllByRole('button', { name: /tirar esta imagem/i })).toHaveLength(2);
+    expect(within(dialog).getByText(/ficaram só as primeiras 2/i)).toBeInTheDocument();
 
-    expect(await screen.findByText(/máximo de 2 fotos por vez/i)).toBeInTheDocument();
-    expect(mockApiPost).not.toHaveBeenCalledWith('/brand-kit/photos', expect.anything(), expect.anything());
+    await user.click(within(dialog).getByRole('button', { name: /enviar 2 produtos/i }));
+    await waitFor(() => expect(screen.getByText('Fotos na arte')).toBeInTheDocument());
 
-    await user.click(screen.getByRole('button', { name: /entendi/i }));
-    expect(screen.queryByText(/máximo de 2 fotos por vez/i)).not.toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText(/Ex: Anúncio fashion/i), 'Anúncio do meu produto com luz natural');
+    await user.click(screen.getByRole('button', { name: /gerar imagem/i }));
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith(
+        '/studio/ai/generate-image',
+        expect.objectContaining({ photo_ids: ['novo-produto-0', 'novo-produto-1'] }),
+      );
+    });
+    // o aprimoramento sabe que há fotos e de que tipo
+    expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/enhance-prompt', expect.objectContaining({ photo_kinds: ['produto', 'produto'] }));
   });
 
-  it('regra de substituição: já com 2 no contexto, novo upload B substitui a mais antiga (com aviso)', async () => {
-    const { container } = renderWithProviders();
+  it('"Enviar imagens" da lateral oferece os 3 tipos, sem limite', async () => {
+    renderWithProviders();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.click(await screen.findByRole('button', { name: /enviar imagens/i }));
 
-    const fileInputs = container.querySelectorAll('input[type="file"]');
-    const uploadBInput = fileInputs[0] as HTMLInputElement;
+    const chooser = await screen.findByRole('dialog');
+    expect(within(chooser).getByLabelText('Enviar como Modelo')).toBeInTheDocument();
+    expect(within(chooser).getByLabelText('Enviar como Produto')).toBeInTheDocument();
+    expect(within(chooser).getByLabelText('Enviar como Equipe')).toBeInTheDocument();
+    expect(within(chooser).getByText(/pode enviar quantas quiser/i)).toBeInTheDocument();
+  });
 
-    let callCount = 0;
-    (mockApiPost as any).mockImplementation((url: string) => {
-      if (url.includes('/brand-kit/photos')) {
-        callCount += 1;
-        return Promise.resolve({ data: { data: { urls: [`https://cdn/foto-${callCount}.png`] } } });
+  it('envio geral com 22 imagens vai em lotes de 10 (10 + 10 + 2), todas como o tipo escolhido', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.click(await screen.findByRole('button', { name: /enviar imagens/i }));
+
+    const chooser = await screen.findByRole('dialog');
+    const files = Array.from({ length: 22 }, (_, i) => new File(['x'], `f${i}.png`, { type: 'image/png' }));
+    await user.upload(within(chooser).getByLabelText('Enviar como Produto'), files);
+    const dialog = (await screen.findByText('Conferir antes de enviar')).closest('[role="dialog"]') as HTMLElement;
+    await user.click(within(dialog).getByRole('button', { name: /enviar 22 produtos/i }));
+
+    await waitFor(() => expect(screen.queryByText('Conferir antes de enviar')).not.toBeInTheDocument());
+    const calls = (mockApiPost as any).mock.calls.filter((c: any[]) => c[0] === '/brand-kit/library');
+    expect(calls.map((c: any[]) => (c[1] as FormData).getAll('files[]').length)).toEqual([10, 10, 2]);
+    expect(calls.every((c: any[]) => (c[1] as FormData).get('kind') === 'produto')).toBe(true);
+  });
+
+  it('envio geral que falha no meio avisa quantas foram salvas e mantém só as que faltam', async () => {
+    let n = 0;
+    const basePost = mockApiPost.getMockImplementation();
+    (mockApiPost as any).mockImplementation((url: string, body?: unknown) => {
+      if (url === '/brand-kit/library' && ++n === 2) {
+        return Promise.reject({ response: { data: { error: { message: 'Cada imagem pode ter no máximo 5MB.' } } } });
       }
-      if (url.includes('/enhance-prompt')) return Promise.resolve({ data: { enhancedPrompt: 'x', brand: {} } });
-      return Promise.resolve({ data: { type: 'image', creativeAssetId: 'a', imageUrl: 'https://cdn/n.png' } });
+      return basePost(url, body);
     });
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    await user.click(await screen.findByRole('button', { name: /enviar imagens/i }));
 
-    await user.upload(uploadBInput, new File(['a'], 'a.png', { type: 'image/png' }));
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /remover imagem de referência/i })).toHaveLength(1));
+    const chooser = await screen.findByRole('dialog');
+    const files = Array.from({ length: 15 }, (_, i) => new File(['x'], `f${i}.png`, { type: 'image/png' }));
+    await user.upload(within(chooser).getByLabelText('Enviar como Equipe'), files);
+    const dialog = (await screen.findByText('Conferir antes de enviar')).closest('[role="dialog"]') as HTMLElement;
+    await user.click(within(dialog).getByRole('button', { name: /enviar 15 fotos/i }));
 
-    await user.upload(uploadBInput, new File(['b'], 'b.png', { type: 'image/png' }));
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /remover imagem de referência/i })).toHaveLength(2));
+    expect(await within(dialog).findByText(/10 de 15 imagens foram salvas/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/no máximo 5MB/i)).toBeInTheDocument();
+    expect(within(dialog).getAllByRole('button', { name: /tirar esta imagem/i })).toHaveLength(5);
+  });
 
-    await user.upload(uploadBInput, new File(['c'], 'c.png', { type: 'image/png' }));
-    await waitFor(() => {
-      // ainda só 2 miniaturas — a mais antiga foi substituída, não acumulou 3
-      expect(screen.getAllByRole('button', { name: /remover imagem de referência/i })).toHaveLength(2);
-    });
-    expect(screen.getByText(/limite de 2 imagens de referência/i)).toBeInTheDocument();
+  it('fotos na arte pela lateral: a 3ª substitui a mais antiga (com aviso)', async () => {
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /criação rápida/i }));
+    const tiles = await screen.findAllByRole('button', { name: /usar imagem: (produto|equipe)/i });
+    await user.click(tiles[0]);
+    await user.click(tiles[1]);
+    await user.click(tiles[2]);
+
+    expect(screen.getAllByRole('button', { name: /remover foto da arte/i })).toHaveLength(2);
+    expect(screen.getByText(/limite de 2 fotos na arte/i)).toBeInTheDocument();
   });
 
   it('mostra cronômetro (Xs) desde o clique, mesmo durante o enhance-prompt', async () => {
