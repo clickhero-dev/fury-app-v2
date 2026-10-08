@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:qa": "playwright test -c playwright.qa.config.ts",
     "preview": "vite preview",
     "start": "vite preview --host 0.0.0.0 --port 80 --strictPort"
   },
