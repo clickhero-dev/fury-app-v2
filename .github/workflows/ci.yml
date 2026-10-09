@@ -3,8 +3,8 @@ name: CI - Fury monorepo
 on:
   push:
     branches: [dev, main, hmg]
+  # Também cobre PRs empilhadas, cuja base ainda é uma branch de feature.
   pull_request:
-    branches: [dev, main, hmg]
 
 jobs:
   # ─────────────────────────────────────────────────────────────

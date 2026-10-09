@@ -21,10 +21,15 @@
  * Quando o superadmin abre o chamado
  * Então a API preserva a classificação para a integração
  *
- * Cenário: rejeitar uma área isolada
+ * Cenário: aceitar uma área secundária isolada
  * Dado que há somente uma etiqueta de área
  * Quando a API recebe o chamado
- * Então responde 400 sem chamar a integração
+ * Então preserva a classificação para a integração
+ *
+ * Cenário: solicitar nova funcionalidade
+ * Dado que o ticket tem nível N5
+ * Quando o superadmin abre o chamado
+ * Então a API aceita a solicitação
  *
  * Cenário: acompanhar tickets
  * Dado que há chamados pendentes, em progresso e concluídos
@@ -75,13 +80,20 @@ describe('TicketsController', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
   });
 
-  it('rejeita uma única etiqueta de área sem chamar o serviço', async () => {
-    const service = { createTicket: vi.fn() };
+  it('aceita uma única etiqueta de área', async () => {
+    const service = { createTicket: vi.fn().mockResolvedValue({ clickupTaskId: 'task-124', clickupTaskUrl: 'https://app.clickup.com/t/task-124' }) };
     const next = vi.fn();
     await new TicketsController(service as any).create({ body: { ...validInput, labels: ['app', 'meta'] } } as any, mockRes(), next);
 
-    expect(service.createTicket).not.toHaveBeenCalled();
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+    expect(service.createTicket).toHaveBeenCalledWith(expect.objectContaining({ labels: ['app', 'meta'] }));
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('aceita N5 para solicitação de nova funcionalidade', async () => {
+    const service = { createTicket: vi.fn().mockResolvedValue({ clickupTaskId: 'task-125', clickupTaskUrl: 'https://app.clickup.com/t/task-125' }) };
+    await new TicketsController(service as any).create({ body: { ...validInput, level: 'N5' } } as any, mockRes(), vi.fn());
+
+    expect(service.createTicket).toHaveBeenCalledWith(expect.objectContaining({ level: 'N5' }));
   });
 
   it('propaga somente erro seguro quando o ClickUp está indisponível', async () => {

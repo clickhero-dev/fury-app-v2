@@ -21,10 +21,15 @@ Funcionalidade: tela de chamados do painel administrativo
     Quando envia o chamado
     Então a API recebe a classificação
 
-  Cenário: impedir uma área isolada
+  Cenário: permitir uma área secundária isolada
     Dado que o superadmin escolhe só uma área
     Quando tenta abrir o chamado
-    Então a API não é chamada e a regra fica visível
+    Então o envio fica habilitado
+
+  Cenário: solicitar uma nova funcionalidade
+    Dado que o superadmin seleciona o nível N5
+    Quando envia o chamado
+    Então a API recebe N5
 
   Cenário: manter o preenchimento após erro do serviço
     Dado que o ClickUp está indisponível
@@ -156,14 +161,25 @@ describe('TicketsPage', () => {
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets', expect.objectContaining({ labels: ['app', 'meta', 'sincronizacao-dados'] })));
   });
 
-  it('impede o envio com uma única etiqueta de área', async () => {
+  it('permite o envio com uma única etiqueta de área', async () => {
     render(<TicketsPage />);
     const user = setupUser();
     const dialog = await openModalAndFill(user);
     await user.click(within(dialog).getByLabelText('Meta'));
 
-    expect(within(dialog).getByText(/selecione zero ou duas etiquetas de área/i)).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: 'Abrir ticket' })).toBeDisabled();
+    expect(within(dialog).queryByText(/selecione zero ou duas etiquetas de área/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Abrir ticket' })).toBeEnabled();
+  });
+
+  it('envia N5 para solicitação de nova funcionalidade', async () => {
+    mockPost.mockResolvedValue({ data: { data: { clickupTaskId: 'task-n5', clickupTaskUrl: 'https://app.clickup.com/t/task-n5' } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    const dialog = await openModalAndFill(user);
+    await user.selectOptions(within(dialog).getByLabelText('Nível'), 'N5');
+    await user.click(within(dialog).getByRole('button', { name: 'Abrir ticket' }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets', expect.objectContaining({ level: 'N5' })));
   });
 
   it('fecha o modal de novo chamado com Esc', async () => {

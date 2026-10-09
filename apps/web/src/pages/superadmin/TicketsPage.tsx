@@ -21,14 +21,14 @@ const ticketSchema = z.object({
   subject: z.string().trim().min(3, 'Informe um assunto com pelo menos 3 caracteres.').max(160),
   description: z.string().trim().min(10, 'Descreva o chamado com pelo menos 10 caracteres.').max(5_000),
   priority: z.enum(['low', 'normal', 'high', 'urgent']),
-  level: z.enum(['N1', 'N2', 'N3', 'N4']),
+  level: z.enum(['N1', 'N2', 'N3', 'N4', 'N5']),
   assigneeId: z.preprocess((value) => value === '' ? undefined : Number(value), z.number().int().positive().optional()),
   labels: z.array(z.enum(allLabels.map(([value]) => value) as [TicketLabel, ...TicketLabel[]])).min(1, 'Selecione ao menos uma etiqueta.').max(4),
 }).superRefine(({ labels }, context) => {
   const scopes = labels.filter((label) => scopeLabels.some(([value]) => value === label)).length;
   const areas = labels.filter((label) => areaLabels.some(([value]) => value === label)).length;
   if (scopes < 1 || scopes > 2) context.addIssue({ code: z.ZodIssueCode.custom, path: ['labels'], message: 'Selecione uma ou duas etiquetas de escopo.' });
-  if (areas !== 0 && areas !== 2) context.addIssue({ code: z.ZodIssueCode.custom, path: ['labels'], message: 'Selecione zero ou duas etiquetas de área.' });
+  if (areas > 2) context.addIssue({ code: z.ZodIssueCode.custom, path: ['labels'], message: 'Selecione no máximo duas etiquetas de área.' });
 });
 
 type TicketForm = z.infer<typeof ticketSchema>;
@@ -44,6 +44,7 @@ const levelHelp = [
   ['N2 — Problema pontual', 'Algo não funciona para um usuário, mas existe alternativa.'],
   ['N3 — Bloqueio importante', 'Uma função essencial está indisponível ou vários usuários foram afetados.'],
   ['N4 — Crítico', 'A plataforma está indisponível ou há risco de dados e segurança.'],
+  ['N5 — Nova funcionalidade', 'Solicitação de uma nova funcionalidade ou melhoria relevante no produto.'],
 ] as const;
 
 const fieldErrors: Record<keyof TicketForm, { link: string; field: string }> = {
@@ -187,7 +188,7 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
   const selectedLabels = watch('labels') ?? [];
   const selectedScopes = selectedLabels.filter((label) => scopeLabels.some(([value]) => value === label));
   const selectedAreas = selectedLabels.filter((label) => areaLabels.some(([value]) => value === label));
-  const canSubmit = selectedScopes.length >= 1 && selectedScopes.length <= 2 && (selectedAreas.length === 0 || selectedAreas.length === 2);
+  const canSubmit = selectedScopes.length >= 1 && selectedScopes.length <= 2 && selectedAreas.length <= 2;
 
   const handleOpenChange = (next: boolean) => {
     if (next) { setCreatedTicket(null); setSubmitError(null); reset(); }
@@ -267,7 +268,7 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
               <div>
                 <label className="text-sm font-medium" htmlFor="ticket-level">Nível</label>
                 <select id="ticket-level" className={fieldClass} {...register('level')}>
-                  <option value="N1">N1</option><option value="N2">N2</option><option value="N3">N3</option><option value="N4">N4</option>
+                  <option value="N1">N1</option><option value="N2">N2</option><option value="N3">N3</option><option value="N4">N4</option><option value="N5">N5 — Nova funcionalidade</option>
                 </select>
               </div>
               <div>
@@ -280,12 +281,12 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
             </div>
             <fieldset id="ticket-labels">
               <legend className="text-sm font-medium">Etiquetas</legend>
-              <p className="mt-0.5 text-xs text-[#8A8F8B]">Escolha 1–2 de escopo e zero ou duas áreas (máximo 4).</p>
+              <p className="mt-0.5 text-xs text-[#8A8F8B]">Escolha 1–2 de escopo e até duas áreas (máximo 4).</p>
               <div className="mt-3 space-y-3">
                 <LabelGroup title="Escopo" labels={scopeLabels} selected={selectedLabels} register={register} />
                 <LabelGroup title="Área do playbook" labels={areaLabels} selected={selectedLabels} register={register} />
               </div>
-              {selectedAreas.length === 1 && <p className="mt-2 text-xs text-red-300">Selecione zero ou duas etiquetas de área.</p>}
+              {selectedAreas.length > 2 && <p className="mt-2 text-xs text-red-300">Selecione no máximo duas etiquetas de área.</p>}
               {(selectedScopes.length === 0 || selectedScopes.length > 2) && <p className="mt-2 text-xs text-red-300">Selecione uma ou duas etiquetas de escopo.</p>}
               {errors.labels && <p className="mt-2 text-xs text-red-300">{errors.labels.message}</p>}
             </fieldset>

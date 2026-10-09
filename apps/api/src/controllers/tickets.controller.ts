@@ -8,14 +8,14 @@ const createTicketSchema = z.object({
   subject: z.string().trim().min(3).max(160),
   description: z.string().trim().min(10).max(5_000),
   priority: z.enum(['low', 'normal', 'high', 'urgent']),
-  level: z.enum(['N1', 'N2', 'N3', 'N4']),
+  level: z.enum(['N1', 'N2', 'N3', 'N4', 'N5']),
   assigneeId: z.number().int().positive().optional(),
   labels: z.array(z.enum(TICKET_LABELS)).min(1).max(4).refine((labels) => new Set(labels).size === labels.length, 'As etiquetas não podem se repetir'),
 }).superRefine(({ labels }, context) => {
   const scopeCount = labels.filter((label) => (TICKET_SCOPE_LABELS as readonly string[]).includes(label)).length;
   const areaCount = labels.filter((label) => (TICKET_AREA_LABELS as readonly string[]).includes(label)).length;
   if (scopeCount < 1 || scopeCount > 2) context.addIssue({ code: z.ZodIssueCode.custom, path: ['labels'], message: 'Selecione uma ou duas etiquetas de escopo.' });
-  if (areaCount !== 0 && areaCount !== 2) context.addIssue({ code: z.ZodIssueCode.custom, path: ['labels'], message: 'Selecione zero ou duas etiquetas de área.' });
+  if (areaCount > 2) context.addIssue({ code: z.ZodIssueCode.custom, path: ['labels'], message: 'Selecione no máximo duas etiquetas de área.' });
 });
 
 /** Controller fino; valida o input e delega a abertura ao serviço. */
