@@ -15,6 +15,11 @@
  * Dado que o chamado possui escopo e áreas operacionais
  * Quando a tarefa é criada
  * Então as tags nativas recebem a classificação
+ *
+ * Cenário: criar solicitação de nova funcionalidade
+ * Dado que o ticket tem nível N5
+ * Quando a tarefa é criada
+ * Então o título preserva o nível N5
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClickUpTicketsClient, ClickUpTicketsError } from '../lib/clickup-tickets.client.js';
@@ -86,6 +91,16 @@ describe('ClickUpTicketsClient', () => {
     expect(error).toBeInstanceOf(ClickUpTicketsError);
     expect(error).toMatchObject({ status: 502, code: 'CLICKUP_UNAVAILABLE' });
     expect(error.message).not.toContain('clickup-secret-token');
+  });
+
+  it('cria solicitação de nova funcionalidade como N5', async () => {
+    const fetchMock = mockFetchOnce(200, { id: 'task-n5', url: 'https://app.clickup.com/t/task-n5' });
+    await new ClickUpTicketsClient().createTicket({
+      email: 'cliente@empresa.com', subject: 'Novo painel de relatórios',
+      description: 'Solicitação detalhada de uma nova funcionalidade.', priority: 'normal', level: 'N5', labels: ['app'],
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual(expect.objectContaining({ name: '[N5] Novo painel de relatórios' }));
   });
 
   it('rejeita resposta de sucesso sem id ou URL da tarefa', async () => {
