@@ -7,6 +7,14 @@ import { z } from 'zod';
 import api from '@/lib/api';
 
 const PAGE_SIZE = 10;
+const scopeLabels = [
+  ['app', 'App'], ['ux', 'UX'], ['infra', 'Infra'], ['api', 'API'], ['dados', 'Dados'], ['integracoes', 'Integrações'], ['seguranca', 'Segurança'],
+] as const;
+const areaLabels = [
+  ['meta', 'Meta'], ['sincronizacao-dados', 'Sincronização de dados'], ['dados-usuario', 'Dados do usuário'], ['google', 'Google'],
+] as const;
+const allLabels = [...scopeLabels, ...areaLabels];
+type TicketLabel = (typeof allLabels)[number][0];
 
 const ticketSchema = z.object({
   email: z.string().trim().email('Informe um e-mail válido.'),
@@ -15,12 +23,18 @@ const ticketSchema = z.object({
   priority: z.enum(['low', 'normal', 'high', 'urgent']),
   level: z.enum(['N1', 'N2', 'N3', 'N4']),
   assigneeId: z.preprocess((value) => value === '' ? undefined : Number(value), z.number().int().positive().optional()),
+  labels: z.array(z.enum(allLabels.map(([value]) => value) as [TicketLabel, ...TicketLabel[]])).min(1, 'Selecione ao menos uma etiqueta.').max(4),
+}).superRefine(({ labels }, context) => {
+  const scopes = labels.filter((label) => scopeLabels.some(([value]) => value === label)).length;
+  const areas = labels.filter((label) => areaLabels.some(([value]) => value === label)).length;
+  if (scopes < 1 || scopes > 2) context.addIssue({ code: z.ZodIssueCode.custom, path: ['labels'], message: 'Selecione uma ou duas etiquetas de escopo.' });
+  if (areas !== 0 && areas !== 2) context.addIssue({ code: z.ZodIssueCode.custom, path: ['labels'], message: 'Selecione zero ou duas etiquetas de área.' });
 });
 
 type TicketForm = z.infer<typeof ticketSchema>;
 type CreatedTicket = { clickupTaskId: string; clickupTaskUrl: string };
 type TicketApiResponse = { data?: CreatedTicket; error?: { message?: string } };
-type Ticket = { id: string; name: string; status: string; priority: string | null; url: string; createdAt: string };
+type Ticket = { id: string; name: string; status: string; priority: string | null; url: string; createdAt: string; labels?: TicketLabel[] };
 type TicketLists = { open: Ticket[]; resolved: Ticket[] };
 type Assignee = { id: number; name: string; email: string | null };
 type Queue = 'open' | 'resolved';
@@ -39,6 +53,7 @@ const fieldErrors: Record<keyof TicketForm, { link: string; field: string }> = {
   priority: { link: 'Prioridade', field: 'ticket-priority' },
   level: { link: 'Nível', field: 'ticket-level' },
   assigneeId: { link: 'Responsável', field: 'ticket-assignee' },
+  labels: { link: 'Etiquetas', field: 'ticket-labels' },
 };
 
 const statusLabels: Record<string, string> = {
@@ -86,6 +101,7 @@ function TicketRow({ ticket }: { ticket: Ticket }) {
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-[#8A8F8B]">
       <Chip>{statusLabel(ticket.status)}</Chip>
       {priority && <Chip className={priority.chip}>{priority.label}</Chip>}
+      {ticket.labels?.map((label) => <Chip key={label}>{allLabels.find(([value]) => value === label)?.[1] ?? label}</Chip>)}
       {age && <span>{age}</span>}
     </div>
   </li>;
@@ -165,9 +181,13 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
   const [createdTicket, setCreatedTicket] = useState<CreatedTicket | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset, watch } = useForm<TicketForm>({
-    resolver: zodResolver(ticketSchema), defaultValues: { priority: 'normal', level: 'N1', email: '', subject: '', description: '', assigneeId: undefined },
+    resolver: zodResolver(ticketSchema), defaultValues: { priority: 'normal', level: 'N1', email: '', subject: '', description: '', assigneeId: undefined, labels: [] },
   });
   const descriptionValue = watch('description') ?? '';
+  const selectedLabels = watch('labels') ?? [];
+  const selectedScopes = selectedLabels.filter((label) => scopeLabels.some(([value]) => value === label));
+  const selectedAreas = selectedLabels.filter((label) => areaLabels.some(([value]) => value === label));
+  const canSubmit = selectedScopes.length >= 1 && selectedScopes.length <= 2 && (selectedAreas.length === 0 || selectedAreas.length === 2);
 
   const handleOpenChange = (next: boolean) => {
     if (next) { setCreatedTicket(null); setSubmitError(null); reset(); }
@@ -258,7 +278,18 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
                 </select>
               </div>
             </div>
-            <button type="submit" disabled={isSubmitting} className="inline-flex items-center gap-2 rounded-lg bg-[#17708A] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1E88A8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#161714] disabled:cursor-not-allowed disabled:opacity-60">
+            <fieldset id="ticket-labels">
+              <legend className="text-sm font-medium">Etiquetas</legend>
+              <p className="mt-0.5 text-xs text-[#8A8F8B]">Escolha 1–2 de escopo e zero ou duas áreas (máximo 4).</p>
+              <div className="mt-3 space-y-3">
+                <LabelGroup title="Escopo" labels={scopeLabels} selected={selectedLabels} register={register} />
+                <LabelGroup title="Área do playbook" labels={areaLabels} selected={selectedLabels} register={register} />
+              </div>
+              {selectedAreas.length === 1 && <p className="mt-2 text-xs text-red-300">Selecione zero ou duas etiquetas de área.</p>}
+              {(selectedScopes.length === 0 || selectedScopes.length > 2) && <p className="mt-2 text-xs text-red-300">Selecione uma ou duas etiquetas de escopo.</p>}
+              {errors.labels && <p className="mt-2 text-xs text-red-300">{errors.labels.message}</p>}
+            </fieldset>
+            <button type="submit" disabled={isSubmitting || !canSubmit} className="inline-flex items-center gap-2 rounded-lg bg-[#17708A] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1E88A8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#161714] disabled:cursor-not-allowed disabled:opacity-60">
               <Send className="h-4 w-4" aria-hidden="true" />
               {isSubmitting ? 'Abrindo ticket…' : 'Abrir ticket'}
             </button>
@@ -267,6 +298,14 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
   );
+}
+
+function LabelGroup({ title, labels, selected, register }: { title: string; labels: readonly (readonly [TicketLabel, string])[]; selected: TicketLabel[]; register: ReturnType<typeof useForm<TicketForm>>['register'] }) {
+  return <div><p className="text-xs font-medium text-[#8A8F8B]">{title}</p><div className="mt-1.5 flex flex-wrap gap-2">
+    {labels.map(([value, label]) => <label key={value} className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs ${selected.includes(value) ? 'border-[#1E88A8] bg-[#1E88A8]/15 text-[#5cc5e4]' : 'border-[#2A2D27] text-[#ECEDEF]'}`}>
+      <input className="sr-only" type="checkbox" value={value} {...register('labels')} />{label}
+    </label>)}
+  </div></div>;
 }
 
 export function TicketsPage() {
