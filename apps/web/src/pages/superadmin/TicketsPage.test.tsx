@@ -16,6 +16,16 @@ Funcionalidade: tela de chamados do painel administrativo
     Quando tenta enviar o formulário
     Então a API não é chamada e o resumo de erros aparece no modal
 
+  Cenário: classificar com etiquetas válidas
+    Dado que o superadmin escolhe escopo e duas áreas
+    Quando envia o chamado
+    Então a API recebe a classificação
+
+  Cenário: impedir uma área isolada
+    Dado que o superadmin escolhe só uma área
+    Quando tenta abrir o chamado
+    Então a API não é chamada e a regra fica visível
+
   Cenário: manter o preenchimento após erro do serviço
     Dado que o ClickUp está indisponível
     Quando o superadmin envia o ticket
@@ -77,7 +87,7 @@ vi.mock('@/lib/api', () => ({ default: { post: mockPost, get: mockGet } }));
 
 const NOW = new Date('2026-10-06T12:00:00-03:00');
 
-type MockTicket = { id: string; name: string; status: string; priority: string; url: string; createdAt: string };
+type MockTicket = { id: string; name: string; status: string; priority: string; url: string; createdAt: string; labels?: Array<'app' | 'ux' | 'infra' | 'api' | 'dados' | 'integracoes' | 'seguranca' | 'meta' | 'sincronizacao-dados' | 'dados-usuario' | 'google'> };
 
 function ticket(id: string, name: string, over: Partial<MockTicket> = {}): MockTicket {
   return { id, name, status: 'em progresso', priority: 'normal', url: `https://app.clickup.com/t/${id}`, createdAt: '2026-10-03T12:00:00.000Z', ...over };
@@ -108,6 +118,7 @@ async function openModalAndFill(user = setupUser()) {
   await user.selectOptions(within(dialog).getByLabelText('Nível'), 'N2');
   await within(dialog).findByRole('option', { name: 'Kaio Araújo' });
   await user.selectOptions(within(dialog).getByLabelText('Responsável'), '101281834');
+  await user.click(within(dialog).getByLabelText('App'));
   return dialog;
 }
 
@@ -128,9 +139,31 @@ describe('TicketsPage', () => {
 
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets', {
       email: 'cliente@empresa.com', subject: 'Erro ao publicar campanha',
-      description: 'A publicação falha depois de confirmar os dados.', priority: 'high', level: 'N2', assigneeId: 101281834,
+      description: 'A publicação falha depois de confirmar os dados.', priority: 'high', level: 'N2', assigneeId: 101281834, labels: ['app'],
     }));
     expect(await within(dialog).findByRole('link', { name: 'Abrir ticket no ClickUp' })).toHaveAttribute('href', 'https://app.clickup.com/t/task-123');
+  });
+
+  it('envia duas etiquetas de área junto do escopo', async () => {
+    mockPost.mockResolvedValue({ data: { data: { clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    const dialog = await openModalAndFill(user);
+    await user.click(within(dialog).getByLabelText('Meta'));
+    await user.click(within(dialog).getByLabelText('Sincronização de dados'));
+    await user.click(within(dialog).getByRole('button', { name: 'Abrir ticket' }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets', expect.objectContaining({ labels: ['app', 'meta', 'sincronizacao-dados'] })));
+  });
+
+  it('impede o envio com uma única etiqueta de área', async () => {
+    render(<TicketsPage />);
+    const user = setupUser();
+    const dialog = await openModalAndFill(user);
+    await user.click(within(dialog).getByLabelText('Meta'));
+
+    expect(within(dialog).getByText(/selecione zero ou duas etiquetas de área/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Abrir ticket' })).toBeDisabled();
   });
 
   it('fecha o modal de novo chamado com Esc', async () => {

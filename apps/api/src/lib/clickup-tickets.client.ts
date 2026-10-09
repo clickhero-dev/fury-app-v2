@@ -4,6 +4,10 @@ const CLICKUP_API_URL = 'https://api.clickup.com/api/v2';
 
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type TicketLevel = 'N1' | 'N2' | 'N3' | 'N4';
+export const TICKET_SCOPE_LABELS = ['app', 'ux', 'infra', 'api', 'dados', 'integracoes', 'seguranca'] as const;
+export const TICKET_AREA_LABELS = ['meta', 'sincronizacao-dados', 'dados-usuario', 'google'] as const;
+export const TICKET_LABELS = [...TICKET_SCOPE_LABELS, ...TICKET_AREA_LABELS] as const;
+export type TicketLabel = (typeof TICKET_LABELS)[number];
 
 export interface CreateClickUpTicketInput {
   email: string;
@@ -11,6 +15,7 @@ export interface CreateClickUpTicketInput {
   description: string;
   priority: TicketPriority;
   level: TicketLevel;
+  labels: TicketLabel[];
   assigneeId?: number;
 }
 
@@ -27,6 +32,7 @@ export interface ClickUpTicketSummary {
   priority: TicketPriority | null;
   url: string;
   createdAt: string;
+  labels: TicketLabel[];
 }
 
 export interface ClickUpMember {
@@ -127,6 +133,7 @@ export class ClickUpTicketsClient {
           description: toClickUpDescription(input),
           priority: clickUpPriority[input.priority],
           status: 'pendente',
+          tags: input.labels,
           ...(input.assigneeId ? { assignees: [input.assigneeId] } : {}),
         }),
       });
@@ -163,6 +170,7 @@ export class ClickUpTicketsClient {
       const item = task as {
         id?: unknown; name?: unknown; url?: unknown; date_created?: unknown;
         status?: { status?: unknown; type?: unknown }; priority?: { priority?: unknown } | null;
+        tags?: Array<{ name?: unknown }>;
       };
       if (
         typeof item.id !== 'string' || typeof item.name !== 'string' || typeof item.url !== 'string' ||
@@ -173,10 +181,14 @@ export class ClickUpTicketsClient {
       const rawPriority = item.priority?.priority;
       const priority = rawPriority === 'low' || rawPriority === 'normal' || rawPriority === 'high' || rawPriority === 'urgent'
         ? rawPriority : null;
+      const labels = Array.isArray(item.tags)
+        ? item.tags.map((tag) => tag.name).filter((name): name is TicketLabel => typeof name === 'string' && (TICKET_LABELS as readonly string[]).includes(name))
+        : [];
       return {
         id: item.id, name: item.name, url: item.url, status: item.status.status,
         statusType: item.status.type, priority,
         createdAt: new Date(Number(item.date_created)).toISOString(),
+        labels,
       };
     });
   }

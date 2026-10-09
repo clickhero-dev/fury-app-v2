@@ -10,6 +10,11 @@
  * Dado que a chamada ao ClickUp falha ou retorna conteúdo inválido
  * Quando o sistema tenta criar um chamado
  * Então recebe um erro normalizado e seguro
+ *
+ * Cenário: registrar etiquetas no ClickUp
+ * Dado que o chamado possui escopo e áreas operacionais
+ * Quando a tarefa é criada
+ * Então as tags nativas recebem a classificação
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClickUpTicketsClient, ClickUpTicketsError } from '../lib/clickup-tickets.client.js';
@@ -51,6 +56,7 @@ describe('ClickUpTicketsClient', () => {
       priority: 'high',
       level: 'N1',
       assigneeId: 101281834,
+      labels: ['app', 'meta', 'sincronizacao-dados'],
     })).resolves.toEqual({
       clickupTaskId: 'task-123',
       clickupTaskUrl: 'https://app.clickup.com/t/task-123',
@@ -66,6 +72,7 @@ describe('ClickUpTicketsClient', () => {
       priority: 2,
       status: 'pendente',
       assignees: [101281834],
+      tags: ['app', 'meta', 'sincronizacao-dados'],
     });
   });
 
@@ -97,6 +104,7 @@ describe('ClickUpTicketsClient', () => {
         id: 'task-1', name: '[N1] Publicação falhou',
         status: { status: 'pendente', type: 'open' },
         priority: { priority: 'high' },
+        tags: [{ name: 'app' }, { name: 'meta' }, { name: 'tag-externa' }],
         url: 'https://app.clickup.com/t/task-1', date_created: '1791246447809',
       }],
     });
@@ -105,6 +113,7 @@ describe('ClickUpTicketsClient', () => {
       id: 'task-1', name: '[N1] Publicação falhou', status: 'pendente',
       statusType: 'open', priority: 'high', url: 'https://app.clickup.com/t/task-1',
       createdAt: '2026-10-06T00:27:27.809Z',
+      labels: ['app', 'meta'],
     }]);
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/list/901717485435/task?include_closed=true');
   });

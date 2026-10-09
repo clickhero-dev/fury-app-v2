@@ -16,6 +16,16 @@
  * Quando o ticket é aberto
  * Então a API devolve um erro seguro, sem segredo ou payload do provedor
  *
+ * Cenário: classificar um ticket
+ * Dado que há uma etiqueta de escopo e duas etiquetas de área
+ * Quando o superadmin abre o chamado
+ * Então a API preserva a classificação para a integração
+ *
+ * Cenário: rejeitar uma área isolada
+ * Dado que há somente uma etiqueta de área
+ * Quando a API recebe o chamado
+ * Então responde 400 sem chamar a integração
+ *
  * Cenário: acompanhar tickets
  * Dado que há chamados pendentes, em progresso e concluídos
  * Quando o superadmin abre a tela
@@ -40,6 +50,7 @@ const validInput = {
   priority: 'high',
   level: 'N1',
   assigneeId: 101281834,
+  labels: ['app', 'meta', 'sincronizacao-dados'],
 };
 
 describe('TicketsController', () => {
@@ -59,6 +70,15 @@ describe('TicketsController', () => {
     const service = { createTicket: vi.fn() };
     const next = vi.fn();
     await new TicketsController(service as any).create({ body: { ...validInput, email: 'inválido', level: 'N9' } } as any, mockRes(), next);
+
+    expect(service.createTicket).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+  });
+
+  it('rejeita uma única etiqueta de área sem chamar o serviço', async () => {
+    const service = { createTicket: vi.fn() };
+    const next = vi.fn();
+    await new TicketsController(service as any).create({ body: { ...validInput, labels: ['app', 'meta'] } } as any, mockRes(), next);
 
     expect(service.createTicket).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
