@@ -24,6 +24,7 @@ import policyRoutes from "./policy.routes.js";
 import plannerRoutes from "./planner.routes.js"; // NOVO
 import wppRoutes from "./wpp.routes.js";
 import faqRoutes from './faq.routes.js';
+import announcementRoutes from './announcement.routes.js';
 
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { tenantMiddleware } from "../middleware/tenant.middleware.js";
@@ -40,6 +41,7 @@ const router = Router();
 router.use("/health", healthRoutes);
 router.use("/auth", authRoutes);
 router.use('/faqs', faqRoutes);
+router.use('/announcements', announcementRoutes);
 router.use("/meta", metaRoutes);
 router.use("/google", googleRoutes);
 

@@ -63,6 +63,8 @@ import { TicketService } from './services/tickets/ticket.service.js';
 import { TicketsController } from './controllers/tickets.controller.js';
 import { FaqRepository } from './repository/faq.repository.js';
 import { FaqController } from './controllers/faq.controller.js';
+import { AnnouncementRepository } from './repository/announcement.repository.js';
+import { AnnouncementController } from './controllers/announcement.controller.js';
 import { MetaHealthcheckRepository } from './repository/meta-healthcheck.repository.js';
 import { metaHealthcheckService } from './services/meta/meta-healthcheck.service.js';
 import { MetaHealthcheckController } from './controllers/meta-healthcheck.controller.js';
@@ -102,6 +104,7 @@ export const superAdminRepository = new SuperAdminRepository("");
 export const clickUpTicketsClient = new ClickUpTicketsClient();
 export const ticketService = new TicketService(clickUpTicketsClient);
 export const faqRepository = new FaqRepository();
+export const announcementRepository = new AnnouncementRepository();
 export const metaHealthcheckRepository = new MetaHealthcheckRepository();
 
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
@@ -120,6 +123,7 @@ export const wppVerificationService = new WppVerificationService(
 export const controllers = {
   tickets: new TicketsController(ticketService),
   faq: new FaqController(faqRepository),
+  announcement: new AnnouncementController(announcementRepository),
   metaHealthchecks: new MetaHealthcheckController(metaHealthcheckRepository, metaHealthcheckService),
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),

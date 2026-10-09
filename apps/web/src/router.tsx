@@ -51,6 +51,7 @@ import { DashboardAdminPage } from './pages/superadmin/AdminDashboard';
 import { TicketsPage } from './pages/superadmin/TicketsPage';
 import { HealthchecksPage } from './pages/superadmin/HealthchecksPage';
 import { FaqsPage } from './pages/superadmin/FaqsPage';
+import { AnnouncementsPage } from './pages/superadmin/AnnouncementsPage';
 import { HelpCenterPage } from './pages/help/HelpCenterPage';
 import { FaqPublicPage } from './pages/help/FaqPublicPage';
 
@@ -225,6 +226,7 @@ export const router = createBrowserRouter([
       { path: 'tickets', element: <TicketsPage /> },
       { path: 'healthchecks', element: <HealthchecksPage /> },
       { path: 'faqs', element: <FaqsPage /> },
+      { path: 'avisos', element: <AnnouncementsPage /> },
     ],
   },
   {
