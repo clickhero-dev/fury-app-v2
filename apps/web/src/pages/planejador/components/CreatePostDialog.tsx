@@ -1,10 +1,11 @@
 import { useState, useRef, type DragEvent } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import { LayoutGrid, Image, Sparkles, Film, Upload, Trash2, X, Plus, FolderOpen, Image as ImageIcon, Loader2, Check } from 'lucide-react';
 import api from '@/lib/api';
 import type { StudioAsset } from '@/types/studio';
 import { publishNowToast } from '../plannerPage.utils';
+import type { Post } from '../types';
 
 interface Props {
   mode: 'schedule' | 'now';
@@ -12,19 +13,31 @@ interface Props {
   preselectedDay?: number | null;
   /** Fase 8: Novo — ISO date string (ex: "2026-08-19") */
   preselectedDate?: string | null;
+  /** Hora "HH:mm" do slot clicado (visão semana) */
+  preselectedTime?: string;
+  /** Edição: abre preenchido e salva via PATCH */
+  editPost?: Post | null;
   onClose: () => void;
   onCreated: (message: string) => void;
   onError?: (msg: string) => void;
 }
 
+/** Hoje no fuso local (toISOString usaria UTC: após 21h viraria amanhã). */
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 const TYPE_OPTIONS = [
   { value: 'image', label: 'Post', icon: Image, desc: 'Imagem única' },
-  { value: 'carousel', label: 'Carrossel', icon: LayoutGrid, desc: 'Múltiplas imagens (máx. 5)' },
+  { value: 'carousel', label: 'Carrossel', icon: LayoutGrid, desc: 'De 2 a 10 mídias' },
   { value: 'reel', label: 'Reels', icon: Film, desc: 'Vídeo curto' },
   { value: 'stories', label: 'Stories', icon: Sparkles, desc: 'Efêmero 24h' },
 ] as const;
 
-const MAX_CAROUSEL_IMAGES = 5;
+const MAX_CAROUSEL_IMAGES = 10;
+// Meta exige no mínimo 2 itens
+const MIN_CAROUSEL_IMAGES = 2;
 
 /** Resposta completa de GET /studio/assets (mesmo shape cacheado pelo EstudioHome). */
 interface StudioAssetsResponse {
@@ -36,16 +49,74 @@ interface StudioAssetsResponse {
   creativesLimit?: number | null;
 }
 
+type MediaKind = 'image' | 'video';
+/** Mídias aceitas por tipo de post. */
+const allowedKinds = (postType: string): MediaKind[] =>
+  postType === 'image' ? ['image'] : postType === 'reel' ? ['video'] : ['image', 'video'];
+const fileKind = (f: File) => f.type.split('/')[0] as MediaKind;
+const urlKind = (url: string): MediaKind => (/\.(mp4|mov)(\?|$)/i.test(url) ? 'video' : 'image');
+
+/** Mídia atual do post ainda serve para o tipo? */
+const existingFits = (urls: string[], postType: string) =>
+  urls.every(u => allowedKinds(postType).includes(urlKind(u))) &&
+  (postType === 'carousel' ? urls.length >= 2 : urls.length === 1);
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** URL absoluta do asset do Estúdio (alguns vêm relativos à API). */
+const assetSrc = (url: string) =>
+  url.startsWith('http') ? url : `${api.defaults.baseURL?.replace(/\/api$/, '')}${url}`;
+
+/** Moldura da prévia no formato real: feed 1:1, reels/stories 9:16. */
+const frameClass = (postType: string) =>
+  postType === 'reel' || postType === 'stories'
+    ? 'mx-auto h-[min(55vh,480px)] aspect-[9/16]'
+    : 'w-full aspect-square';
+
+function MediaPreview({ src, isVideo, postType, children }: { src: string; isVideo: boolean; postType: string; children?: React.ReactNode }) {
+  return (
+    <div className={clsx('relative group rounded-xl overflow-hidden border border-border bg-black', frameClass(postType))}>
+      {isVideo ? (
+        <video src={src} controls className="w-full h-full object-cover" />
+      ) : postType === 'stories' ? (
+        // mesmo ajuste do backend: imagem inteira sobre fundo desfocado
+        <>
+          <img src={src} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 brightness-75" />
+          <img src={src} alt="Preview" className="relative w-full h-full object-contain" />
+        </>
+      ) : (
+        <img src={src} alt="Preview" className="w-full h-full object-cover" />
+      )}
+      {children}
+    </div>
+  );
+}
+
 const MEDIA_SOURCE_OPTIONS = [
   { value: 'upload', label: 'Enviar mídia', icon: Upload, desc: 'Carregar do seu dispositivo' },
   { value: 'library', label: 'Biblioteca do Estúdio', icon: FolderOpen, desc: 'Usar imagem já gerada' },
 ] as const;
 
-export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, preselectedDate, onError }: Props) {
-  const [caption, setCaption] = useState('');
-  const [postType, setPostType] = useState('image');
-  const [scheduledDate, setScheduledDate] = useState(preselectedDate || '');
-  const [scheduledTime, setScheduledTime] = useState('');
+export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, preselectedDate, preselectedTime, editPost, onError }: Props) {
+  const isEdit = !!editPost;
+  // Horário do post em edição no fuso local
+  const editAt = editPost?.scheduledAt ? new Date(editPost.scheduledAt) : null;
+  const [caption, setCaption] = useState(editPost?.caption ?? '');
+  const [postType, setPostType] = useState(editPost?.postType ?? 'image');
+  const [scheduledDate, setScheduledDate] = useState(
+    editAt
+      ? `${editAt.getFullYear()}-${pad2(editAt.getMonth() + 1)}-${pad2(editAt.getDate())}`
+      : isEdit ? '' : preselectedDate || (mode === 'schedule' ? todayLocal() : ''),
+  );
+  const [scheduledTime, setScheduledTime] = useState(
+    editAt ? `${pad2(editAt.getHours())}:${pad2(editAt.getMinutes())}` : preselectedTime || '',
+  );
+  // Mídia já salva no post (edição) até o usuário trocar
+  const [existingUrls, setExistingUrls] = useState<string[]>(() => {
+    if (!editPost) return [];
+    if (editPost.postType === 'carousel') return editPost.imageUrls ?? [];
+    return editPost.imageUrl ? [editPost.imageUrl] : [];
+  });
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [carouselFiles, setCarouselFiles] = useState<File[]>([]);
@@ -53,9 +124,10 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   const [dragOver, setDragOver] = useState(false);
   const [showSchedule, setShowSchedule] = useState(mode === 'schedule' || !!preselectedDate);
   const [mediaSource, setMediaSource] = useState<'upload' | 'library'>('upload');
-  const [selectedLibraryAsset, setSelectedLibraryAsset] = useState<StudioAsset | null>(null);
+  const [selectedLibraryAssets, setSelectedLibraryAssets] = useState<StudioAsset[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const carouselInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
   // Fetch studio assets for library picker
   const { data: studioAssetsData, isLoading: assetsLoading } = useQuery({
@@ -73,6 +145,24 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   // const libraryImages = studioAssetsData?.assets?.filter(a => a.type === 'image' && a.url && a.complianceStatus === 'approved') ?? [];
   const libraryImages = studioAssetsData?.assets?.filter(a => a.type === 'image' && a.url) ?? [];
 
+  // Vídeos em query própria (a lista padrão mistura tipos e pagina em 20)
+  const kinds = allowedKinds(postType);
+  const { data: studioVideosData, isLoading: videosLoading } = useQuery({
+    queryKey: ['studio/assets', 'video'],
+    queryFn: async () => {
+      const response = await api.get<StudioAssetsResponse>('/studio/assets', { params: { type: 'video', limit: 50 } });
+      return response.data;
+    },
+    enabled: mediaSource === 'library' && kinds.includes('video'),
+    retry: 1,
+  });
+  const libraryVideos = studioVideosData?.assets?.filter(a => a.type === 'video' && a.url) ?? [];
+  const libraryItems = [
+    ...(kinds.includes('video') ? libraryVideos : []),
+    ...(kinds.includes('image') ? libraryImages : []),
+  ];
+  const libraryLoading = assetsLoading || (kinds.includes('video') && videosLoading);
+
   // Fase 8: Prioriza preselectedDate (novo) sobre preselectedDay (legado)
   const getEffectiveDate = (): string => {
     if (preselectedDate) return preselectedDate; // ISO string: "2026-08-19"
@@ -83,7 +173,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
       return dateObj.toISOString().split('T')[0];
     }
     // Default: hoje
-    return new Date().toISOString().split('T')[0];
+    return todayLocal();
   };
 
   const effectiveDate = getEffectiveDate();
@@ -93,17 +183,29 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   const scheduledAt = scheduledDate && scheduledTime
     ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
     : '';
+  // Agendar exige data + hora no futuro (sem hora o job nunca publica)
+  const scheduleInPast = !!scheduledAt && new Date(scheduledAt) <= new Date();
+  const scheduleValid = !!scheduledAt && !scheduleInPast;
 
   const handleFile = (file: File) => {
-    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
+    if (!allowedKinds(postType).includes(fileKind(file))) {
+      onError?.(postType === 'reel' ? 'Reels aceita só vídeo (MP4 ou MOV).' : 'Post aceita só imagem.');
+      return;
+    }
     setMediaFile(file);
     setMediaPreview(URL.createObjectURL(file));
   };
 
   const handleCarouselFiles = (files: File[]) => {
-    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    // Carrossel: só imagens ou só vídeos (o 1º arquivo define)
+    const media = files.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
+    const kind = (carouselFiles[0] ?? media[0])?.type.split('/')[0];
+    const sameKind = media.filter(f => f.type.startsWith(`${kind}/`));
+    if (sameKind.length < media.length) {
+      onError?.('Carrossel aceita só imagens ou só vídeos, sem misturar.');
+    }
     const remainingSlots = MAX_CAROUSEL_IMAGES - carouselFiles.length;
-    const toAdd = imageFiles.slice(0, remainingSlots);
+    const toAdd = sameKind.slice(0, remainingSlots);
     const newFiles = [...carouselFiles, ...toAdd];
     const newPreviews = toAdd.map(f => URL.createObjectURL(f));
     setCarouselFiles(newFiles);
@@ -125,8 +227,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   const handleCarouselDrop = (e: DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-    handleCarouselFiles(files);
+    handleCarouselFiles(Array.from(e.dataTransfer.files));
   };
 
   const isNow = mode === 'now';
@@ -142,13 +243,17 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   // Post failed aguardando decisão do usuário (retry no próprio dialog).
   const [failedPostId, setFailedPostId] = useState<string | null>(null);
 
-  const submitLabel = isNow ? (failedPostId ? 'Tentar novamente' : 'Postar agora') : 'Criar post';
-  const loadingLabel = isNow ? 'Publicando...' : 'Criando...';
+  const submitLabel = isEdit ? 'Salvar' : isNow ? (failedPostId ? 'Tentar novamente' : 'Postar agora') : 'Criar post';
+  const loadingLabel = isEdit ? 'Salvando...' : isNow ? 'Publicando...' : 'Criando...';
 
   const uploadMedia = async (): Promise<{ imageUrl?: string; imageUrls?: string[] }> => {
+    if (existingUrls.length > 0) {
+      return postType === 'carousel' ? { imageUrls: existingUrls } : { imageUrl: existingUrls[0] };
+    }
     // Handle library selection
-    if (mediaSource === 'library' && selectedLibraryAsset?.url) {
-      return { imageUrl: selectedLibraryAsset.url };
+    if (mediaSource === 'library' && selectedLibraryAssets.length > 0) {
+      const urls = selectedLibraryAssets.map(a => a.url).filter((u): u is string => !!u);
+      return postType === 'carousel' ? { imageUrls: urls } : { imageUrl: urls[0] };
     }
     let imageUrl: string | undefined;
     let imageUrls: string[] | undefined;
@@ -193,6 +298,20 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
       }
 
       const media = await uploadMedia();
+      // uploads entram na biblioteca do Estúdio
+      if (mediaSource === 'upload') queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+
+      if (isEdit) {
+        // Sem data e hora: volta a rascunho
+        const { data } = await api.patch(`/planner/posts/${editPost!.id}`, {
+          caption,
+          postType,
+          imageUrl: postType === 'carousel' ? null : media.imageUrl,
+          imageUrls: postType === 'carousel' ? media.imageUrls : [],
+          scheduledAt: scheduledAt || null,
+        });
+        return data;
+      }
 
       if (isNow) {
         // Postar agora: cria + publica num request (endpoint idempotente)
@@ -215,6 +334,10 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
       return null;
     },
     onSuccess: (pubRes) => {
+      if (isEdit) {
+        onCreated('Post atualizado!');
+        return;
+      }
       if (isNow) {
         if (pubRes?.data?.status === 'failed') {
           // Post existe como failed: dialog PERMANECE aberto com botão
@@ -234,10 +357,28 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
     },
   });
 
-  const canCreate = caption.trim() && !mutation.isPending && (
-    (postType === 'carousel' && carouselFiles.length > 0) ||
-    (postType !== 'carousel' && (mediaFile || (mediaSource === 'library' && selectedLibraryAsset)))
-  );
+  const carouselCount = mediaSource === 'library' ? selectedLibraryAssets.length : carouselFiles.length;
+  // Edição pode ficar sem agendamento (rascunho); criação agendada exige data + hora
+  const scheduleOk = mode === 'now' || scheduleValid || (isEdit && !scheduledDate && !scheduledTime);
+  const mediaOk = existingUrls.length > 0
+    ? existingFits(existingUrls, postType)
+    : (postType === 'carousel' && carouselCount >= MIN_CAROUSEL_IMAGES) ||
+      (postType !== 'carousel' && (mediaSource === 'library' ? selectedLibraryAssets.length === 1 : !!mediaFile));
+  const canCreate = caption.trim() && !mutation.isPending && scheduleOk && mediaOk;
+
+  // Seleção múltipla na biblioteca só no carrossel
+  const toggleLibraryAsset = (asset: StudioAsset) => {
+    clearRetryState();
+    setSelectedLibraryAssets(prev => {
+      if (prev.some(a => a.id === asset.id)) return prev.filter(a => a.id !== asset.id);
+      if (postType !== 'carousel') return [asset];
+      if (prev[0] && prev[0].type !== asset.type) {
+        onError?.('Carrossel aceita só imagens ou só vídeos, sem misturar.');
+        return prev;
+      }
+      return prev.length < MAX_CAROUSEL_IMAGES ? [...prev, asset] : prev;
+    });
+  };
 
   return (
     <div className="ady-decor fixed inset-0 z-50 flex items-center justify-center bg-[#000000]/50" onClick={onClose}>
@@ -246,7 +387,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 pt-6 pb-0">
-          <h3 className="text-lg font-bold text-text-primary">{isNow ? 'Postar agora' : 'Novo post'}</h3>
+          <h3 className="text-lg font-bold text-text-primary">{isEdit ? 'Editar post' : isNow ? 'Postar agora' : 'Novo post'}</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary hover:text-text-primary transition-colors">
             <X className="h-5 w-5" />
           </button>
@@ -259,6 +400,32 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
               Mídia <span className="text-error">*</span>
             </label>
 
+            {existingUrls.length > 0 ? (
+              // Mídia atual do post (edição)
+              <div>
+                {postType === 'carousel' ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {existingUrls.map((url, idx) => (
+                      <div key={idx} className="relative rounded-xl overflow-hidden border border-border bg-black aspect-square">
+                        {urlKind(url) === 'video'
+                          ? <video src={url} muted className="w-full h-full object-cover" />
+                          : <img src={url} alt={`Mídia ${idx + 1}`} className="w-full h-full object-cover" />}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <MediaPreview src={existingUrls[0]} isVideo={urlKind(existingUrls[0]) === 'video'} postType={postType} />
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setExistingUrls([]); clearRetryState(); }}
+                  className="mt-2 w-full px-3 py-2 rounded-xl border border-border text-sm font-medium text-text-secondary hover:text-text-primary hover:border-text-tertiary transition-colors"
+                >
+                  Trocar mídia
+                </button>
+              </div>
+            ) : (
+            <>
             {/* Media source selector: Upload vs Library */}
             <div className="flex gap-2 mb-3">
               {MEDIA_SOURCE_OPTIONS.map(opt => {
@@ -270,7 +437,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                     onClick={() => {
                       setMediaSource(opt.value);
                       if (opt.value === 'upload') {
-                        setSelectedLibraryAsset(null);
+                        setSelectedLibraryAssets([]);
                       }
                       clearRetryState();
                     }}
@@ -299,7 +466,11 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                         {carouselPreviews.map((preview, idx) => {
                           return (
                             <div key={idx} className="relative group rounded-xl overflow-hidden border border-border bg-surface-secondary aspect-square">
-                              <img src={preview} alt={`Carousel ${idx + 1}`} className="w-full h-full object-cover" />
+                              {carouselFiles[idx]?.type.startsWith('video/') ? (
+                                <video src={preview} muted className="w-full h-full object-cover" />
+                              ) : (
+                                <img src={preview} alt={`Carousel ${idx + 1}`} className="w-full h-full object-cover" />
+                              )}
                               <button
                                 onClick={() => removeCarouselFile(idx)}
                                 className="absolute top-1 right-1 p-1 rounded bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
@@ -325,14 +496,14 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                         )}
                       >
                         <Plus className="h-8 w-8 text-text-tertiary mb-2" />
-                        <p className="text-sm text-text-secondary font-medium">Adicionar imagem ({carouselFiles.length}/{MAX_CAROUSEL_IMAGES})</p>
-                        <p className="text-xs text-text-tertiary mt-1">PNG, JPG, WebP</p>
+                        <p className="text-sm text-text-secondary font-medium">Adicionar mídia ({carouselFiles.length}/{MAX_CAROUSEL_IMAGES})</p>
+                        <p className="text-xs text-text-tertiary mt-1">Mínimo {MIN_CAROUSEL_IMAGES} · só imagens ou só vídeos</p>
                       </div>
                     )}
                     <input
                       ref={carouselInputRef}
                       type="file"
-                      accept="image/png,image/jpeg,image/webp"
+                      accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
                       multiple
                       onChange={e => e.target.files && handleCarouselFiles(Array.from(e.target.files))}
                       className="hidden"
@@ -342,12 +513,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                   // Single image/video
                   <div>
                     {mediaPreview ? (
-                      <div className="relative group rounded-xl overflow-hidden border border-border bg-surface-secondary">
-                        {mediaFile?.type.startsWith('video/') ? (
-                          <video src={mediaPreview} controls className="w-full aspect-square object-cover" />
-                        ) : (
-                          <img src={mediaPreview} alt="Preview" className="w-full aspect-square object-cover" />
-                        )}
+                      <MediaPreview src={mediaPreview} isVideo={!!mediaFile?.type.startsWith('video/')} postType={postType}>
                         <button
                           onClick={() => { setMediaFile(null); setMediaPreview(null); }}
                           className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
@@ -358,7 +524,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                           <p className="text-xs text-white font-medium truncate">{mediaFile?.name}</p>
                           <p className="text-[10px] text-white/70">{(mediaFile!.size / 1024 / 1024).toFixed(1)} MB</p>
                         </div>
-                      </div>
+                      </MediaPreview>
                     ) : (
                       <div
                         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -366,7 +532,8 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                         onDrop={handleDrop}
                         onClick={() => fileInputRef.current?.click()}
                         className={clsx(
-                          'flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed cursor-pointer transition-all',
+                          'flex flex-col items-center justify-center rounded-xl border-2 border-dashed cursor-pointer transition-all',
+                          frameClass(postType),
                           dragOver
                             ? 'border-accent bg-accent/10 scale-[1.02]'
                             : 'border-border hover:border-text-tertiary bg-surface-secondary',
@@ -374,13 +541,18 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                       >
                         <Upload className="h-8 w-8 text-text-tertiary mb-2" />
                         <p className="text-sm text-text-secondary font-medium">Arraste ou clique</p>
-                        <p className="text-xs text-text-tertiary mt-1">PNG, JPG, WebP, MP4</p>
+                        <p className="text-xs text-text-tertiary mt-1">
+                          {postType === 'reel' ? 'MP4 ou MOV' : postType === 'image' ? 'PNG, JPG, WebP' : 'PNG, JPG, WebP, MP4'}
+                        </p>
                       </div>
                     )}
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
+                      accept={[
+                        kinds.includes('image') && 'image/png,image/jpeg,image/webp',
+                        kinds.includes('video') && 'video/mp4,video/quicktime',
+                      ].filter(Boolean).join(',')}
                       onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
                       className="hidden"
                     />
@@ -390,39 +562,58 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
             ) : (
               // Library mode
               <div>
-                {assetsLoading ? (
+                {libraryLoading ? (
                   <div className="flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed bg-surface-secondary">
                     <Loader2 className="h-8 w-8 animate-spin text-brand mb-2" />
                     <p className="text-sm text-text-secondary font-medium">Carregando biblioteca...</p>
                   </div>
-                ) : libraryImages.length === 0 ? (
+                ) : libraryItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center aspect-square rounded-xl border-2 border-dashed bg-surface-secondary text-center px-4">
                     <ImageIcon className="h-10 w-10 text-text-tertiary mb-2" />
-                    <p className="text-sm text-text-secondary font-medium">Nenhuma imagem na biblioteca</p>
-                    <p className="text-xs text-text-tertiary mt-1">Crie imagens no Estúdio ou mude para "Enviar mídia"</p>
+                    <p className="text-sm text-text-secondary font-medium">
+                      {postType === 'reel' ? 'Nenhum vídeo na biblioteca' : 'Nenhuma imagem na biblioteca'}
+                    </p>
+                    <p className="text-xs text-text-tertiary mt-1">Crie no Estúdio ou mude para "Enviar mídia"</p>
                   </div>
                 ) : (
+                  <>
+                  {postType !== 'carousel' && selectedLibraryAssets[0]?.url && (
+                    <div className="mb-3">
+                      <MediaPreview
+                        src={assetSrc(selectedLibraryAssets[0].url)}
+                        isVideo={selectedLibraryAssets[0].type === 'video'}
+                        postType={postType}
+                      />
+                    </div>
+                  )}
                   <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto">
-                    {libraryImages.map((asset) => {
-                      const imageUrl = asset.url?.startsWith('http') ? asset.url : `${api.defaults.baseURL?.replace(/\/api$/, '')}${asset.url}`;
+                    {libraryItems.map((asset) => {
+                      const imageUrl = assetSrc(asset.url ?? '');
                       return (
                         <button
                           key={asset.id}
                           type="button"
-                          onClick={() => setSelectedLibraryAsset(selectedLibraryAsset?.id === asset.id ? null : asset)}
+                          onClick={() => toggleLibraryAsset(asset)}
                           className={clsx(
                             'relative aspect-square rounded-xl overflow-hidden border-2 transition-all',
-                            selectedLibraryAsset?.id === asset.id
+                            selectedLibraryAssets.some(a => a.id === asset.id)
                               ? 'border-accent ring-2 ring-accent/30'
                               : 'border-transparent hover:border-brand/50',
                           )}
                         >
-                          <img
-                            src={imageUrl}
-                            alt={asset.name || 'Asset do Estúdio'}
-                            className="w-full h-full object-cover"
-                          />
-                          {selectedLibraryAsset?.id === asset.id && (
+                          {asset.type === 'video' ? (
+                            <>
+                              <video src={`${imageUrl}#t=0.5`} muted preload="metadata" aria-label={asset.name || 'Vídeo do Estúdio'} className="w-full h-full object-cover" />
+                              <Film className="absolute bottom-1 left-1 h-4 w-4 text-white drop-shadow" />
+                            </>
+                          ) : (
+                            <img
+                              src={imageUrl}
+                              alt={asset.name || 'Asset do Estúdio'}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
+                          {selectedLibraryAssets.some(a => a.id === asset.id) && (
                             <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
                               <div className="bg-accent rounded-full p-1.5">
                                 <Check className="h-5 w-5 text-white" />
@@ -433,13 +624,20 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                       );
                     })}
                   </div>
+                  </>
                 )}
-                {selectedLibraryAsset && (
+                {postType === 'carousel' ? (
                   <p className="mt-2 text-xs text-text-tertiary text-center">
-                    Selecionado: {selectedLibraryAsset.name || 'Imagem do Estúdio'}
+                    {selectedLibraryAssets.length}/{MAX_CAROUSEL_IMAGES} selecionadas · mínimo {MIN_CAROUSEL_IMAGES}
+                  </p>
+                ) : selectedLibraryAssets[0] && (
+                  <p className="mt-2 text-xs text-text-tertiary text-center">
+                    Selecionado: {selectedLibraryAssets[0].name || 'Mídia do Estúdio'}
                   </p>
                 )}
               </div>
+            )}
+            </>
             )}
           </div>
 
@@ -454,7 +652,20 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                   return (
                     <button
                       key={opt.value}
-                      onClick={() => setPostType(opt.value)}
+                      onClick={() => {
+                        setPostType(opt.value);
+                        // descarta mídia incompatível com o novo tipo
+                        const next = allowedKinds(opt.value);
+                        setSelectedLibraryAssets(prev => {
+                          const ok = prev.filter(a => next.includes(a.type as MediaKind));
+                          return opt.value === 'carousel' ? ok : ok.slice(0, 1);
+                        });
+                        if (existingUrls.length > 0 && !existingFits(existingUrls, opt.value)) setExistingUrls([]);
+                        if (mediaFile && !next.includes(fileKind(mediaFile))) {
+                          setMediaFile(null);
+                          setMediaPreview(null);
+                        }
+                      }}
                       className={clsx(
                         'flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all text-left',
                         postType === opt.value
@@ -493,6 +704,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                     <label className="block text-[10px] font-medium text-text-tertiary mb-1">Data</label>
                     <input
                       type="date"
+                      min={todayLocal()}
                       value={scheduledDate}
                       onChange={e => setScheduledDate(e.target.value)}
                       className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2.5 text-text-primary text-sm focus:border-accent focus:outline-none transition-colors"
@@ -512,7 +724,13 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                   <p className="text-[10px] text-text-tertiary mt-1">O post será agendado em vez de publicado agora</p>
                 )}
                 {!isNow && (
-                  <p className="text-[10px] text-text-tertiary mt-1">Deixe em branco para publicar manualmente</p>
+                  <p className={clsx('text-[10px] mt-1', scheduleInPast ? 'text-error' : 'text-text-tertiary')}>
+                    {scheduleInPast
+                      ? 'Escolha um horário no futuro'
+                      : isEdit && !scheduledDate && !scheduledTime
+                        ? 'Sem data e hora o post fica como rascunho'
+                        : 'Publicado automaticamente na data e hora escolhidas'}
+                  </p>
                 )}
               </div>
             )}

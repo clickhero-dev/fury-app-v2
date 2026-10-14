@@ -23,6 +23,12 @@ router.patch('/faqs/:id', controllers.faq.update);
 router.delete('/faqs/:id', controllers.faq.delete);
 router.post('/faqs/images', faqImageUpload.single('file'), controllers.faq.uploadImage);
 
+router.get('/announcements', controllers.announcement.listAdmin);
+router.post('/announcements', controllers.announcement.create);
+router.post('/announcements/format', controllers.announcement.formatText);
+router.patch('/announcements/:id', controllers.announcement.update);
+router.delete('/announcements/:id', controllers.announcement.delete);
+
 // Dashboard (stats globais)
 router.get("/dashboard", controllers.superadmin.getDashboard);
 

@@ -10,7 +10,7 @@ Funcionalidade: manter totais de Campanhas sincronizados com o período selecion
     E os totais do novo período aparecem quando a consulta termina
 */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -57,6 +57,15 @@ function mockCampaigns(rows: Record<string, unknown>[]) {
 }
 
 describe('PainelCampanhas — Total Clientes = soma das linhas de campanha', () => {
+  // data fixa: "Este mês" e "7 dias" coincidem no dia 8 e o teste perde o sentido
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-15T15:00:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     mockApiGet.mockReset();
   });

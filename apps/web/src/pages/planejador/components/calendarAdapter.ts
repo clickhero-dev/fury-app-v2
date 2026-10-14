@@ -30,29 +30,26 @@ export function postToEvent(post: Post & { calendarDate?: string }): EventInput 
 
   const normalizedStatus = statusMap[post.status?.toLowerCase() || ''] || 'draft';
 
-  // Obtém a data simples (YYYY-MM-DD)
-  const activeDate = (post.calendarDate || (post as any).date || post.scheduledAt || '').split('T')[0];
-
-  // Extrai a hora exatamente como gravada (HH:mm:ss) sem interpretar UTC
-  let timePart = (post as any).time || '00:00:00';
-  if (post.scheduledAt && post.scheduledAt.includes('T')) {
-    timePart = post.scheduledAt.split('T')[1].slice(0, 8);
-  }
-
-  // Cria a data local ISO para o FullCalendar
-  const startDate = activeDate ? `${activeDate}T${timePart}` : post.scheduledAt;
+  // scheduledAt é um instante UTC real (o job publica nele): o FullCalendar
+  // converte para o horário local. Sem horário, fica no dia do calendário.
+  const activeDate = (post.calendarDate || (post as any).date || '').split('T')[0];
+  const startDate = post.scheduledAt || (activeDate ? `${activeDate}T00:00:00` : undefined);
 
   return {
     id: post.id,
     title: post.title || post.caption?.slice(0, 40) || 'Sem título',
     start: startDate, 
     allDay: false,
+    // publicado/publicando não arrasta
+    startEditable: normalizedStatus !== 'published' && post.status !== 'publishing',
     extendedProps: {
       post,
       channel: normalizedChannel,
       status: normalizedStatus,
       scheduledAt: post.scheduledAt || null,
       postType: post.postType || null,
+      // ordenação do dia: não publicados primeiro (eventOrder)
+      publishedRank: normalizedStatus === 'published' ? 1 : 0,
     },
   };
 }
@@ -62,25 +59,20 @@ export function extractEventDropData(event: EventDropArg['event']): {
   newDate: string; 
   scheduledAt: string | null;
 } {
-  const dateOnly = event.startStr ? event.startStr.split('T')[0] : '';
-
-  let scheduledAt: string | null = null;
-
-  if (event.start) {
-    const hours = String(event.start.getHours()).padStart(2, '0');
-    const minutes = String(event.start.getMinutes()).padStart(2, '0');
-    const seconds = String(event.start.getSeconds()).padStart(2, '0');
-
-    // Monta a string no horário local exato da grade com final .000Z
-    // Isso passa pela validação do Zod sem disparar o cálculo de fuso -03:00
-    scheduledAt = `${dateOnly}T${hours}:${minutes}:${seconds}.000Z`;
-  }
+  // Dia local onde foi solto + instante UTC real (mesma hora exibida na grade)
+  const dateOnly = event.start ? localYMD(event.start) : '';
+  const scheduledAt = event.start ? event.start.toISOString() : null;
 
   return {
     postId: event.id,
     newDate: dateOnly,
     scheduledAt,
   };
+}
+
+/** YYYY-MM-DD no fuso local (toISOString usaria UTC). */
+export function localYMD(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function getPostFromEvent(event: EventApi): Post | undefined {

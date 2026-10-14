@@ -16,6 +16,7 @@ import {
   bigserial,
   smallint,
   date,
+  primaryKey,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -504,6 +505,40 @@ export const brandKits = pgTable(
     tenantIdIdx: index('brand_kits_tenant_id_idx').on(table.tenantId),
   })
 );
+
+// Biblioteca de imagens do Estúdio, cada uma com tipo
+export const brandKitPhotoKindEnum = pgEnum('brand_kit_photo_kind', ['modelo', 'produto', 'equipe']);
+
+export const brandKitPhotos = pgTable(
+  'brand_kit_photos',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    brandKitId: uuid('brand_kit_id')
+      .notNull()
+      .references(() => brandKits.id, { onDelete: 'cascade' }),
+    kind: brandKitPhotoKindEnum('kind').notNull(),
+    url: text('url').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    /** Soft delete: preenchido = removida (some da biblioteca e da geração). */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => ({
+    tenantKindIdx: index('brand_kit_photos_tenant_kind_idx').on(table.tenantId, table.kind),
+    brandKitIdIdx: index('brand_kit_photos_brand_kit_id_idx').on(table.brandKitId),
+  })
+);
+
+export const brandKitsRelations = relations(brandKits, ({ many }) => ({
+  photos: many(brandKitPhotos),
+}));
+
+export const brandKitPhotosRelations = relations(brandKitPhotos, ({ one }) => ({
+  tenant: one(tenants, { fields: [brandKitPhotos.tenantId], references: [tenants.id] }),
+  brandKit: one(brandKits, { fields: [brandKitPhotos.brandKitId], references: [brandKits.id] }),
+}));
 
 // Request logs table (audit / debug)
 // Partitioned by RANGE (created_at) — PK is (id, created_at) at DB level.
@@ -1142,6 +1177,38 @@ export const faqSlugRedirects = pgTable(
 export const faqsRelations = relations(faqs, ({ many }) => ({ slugRedirects: many(faqSlugRedirects) }));
 export const faqSlugRedirectsRelations = relations(faqSlugRedirects, ({ one }) => ({ faq: one(faqs, { fields: [faqSlugRedirects.faqId], references: [faqs.id] }) }));
 
+// Avisos globais do produto; cada usuário vê cada um uma única vez.
+export const announcements = pgTable(
+  'announcements',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    title: varchar('title', { length: 255 }).notNull(),
+    markdown: text('markdown').notNull(),
+    isActive: boolean('is_active').notNull().default(false),
+    // 'Manter ativo': todos os usuários, sem encerramento
+    showToNewUsers: boolean('show_to_new_users').notNull().default(false),
+    endsAt: timestamp('ends_at', { withTimezone: true }),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => ({ activeIdx: index('announcements_active_idx').on(table.isActive, table.publishedAt) }),
+);
+
+export const announcementViews = pgTable(
+  'announcement_views',
+  {
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    announcementId: uuid('announcement_id').notNull().references(() => announcements.id, { onDelete: 'cascade' }),
+    seenAt: timestamp('seen_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.announcementId] }),
+    announcementIdIdx: index('announcement_views_announcement_id_idx').on(table.announcementId),
+  }),
+);
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -1162,6 +1229,7 @@ export const allTables = {
   subscriptions,
   invoices,
   brandKits,
+  brandKitPhotos,
   requestLogs,
   campaignPlans,
   socialPosts,
@@ -1181,4 +1249,6 @@ export const allTables = {
   metaSyncRuns,
   faqs,
   faqSlugRedirects,
+  announcements,
+  announcementViews,
 };

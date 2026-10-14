@@ -17,3 +17,7 @@ assets
 *.njsproj
 *.sln
 *.sw?
+
+# QA jornada real (Playwright)
+test-results-qa
+playwright-report-qa

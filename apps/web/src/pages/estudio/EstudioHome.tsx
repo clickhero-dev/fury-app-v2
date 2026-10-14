@@ -1,21 +1,22 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Loader2, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Wand2, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Info, Loader2, Plus, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Wand2, X } from 'lucide-react';
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import { UsageBadge } from '@/components/UsageBadge';
-import { useUploadPhotos } from '@/hooks/useBrandKit';
+import type { LibraryPhoto } from '@/hooks/useStudioLibrary';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { StudioAsset, GenerateCreativeResponse } from '@/types/studio';
 import { CreativeResult } from './components/CreativeResult';
 import { ArchiveConfirmDialog } from './components/ArchiveConfirmDialog';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ArchivedAssetsModal } from './components/ArchivedAssetsModal';
 import { ReferenceImagePanel } from './components/ReferenceImagePanel';
+import { LibraryUploadFlow, type UploadRequest } from './components/LibraryUploadFlow';
+import { LibraryPickerDialog, type PickerMode } from './components/LibraryPickerDialog';
 
 type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create';
 
@@ -55,7 +56,10 @@ export function EstudioHome() {
   // ─── OpenRouter state ──────────────────────────────────────────────
   const [orPrompt, setOrPrompt] = useState('');
   const [orAspectRatio, setOrAspectRatio] = useState<'1:1' | '9:16'>('1:1');
-  const [referenceContextUrls, setReferenceContextUrls] = useState<string[]>([]);
+  const [templatePhoto, setTemplatePhoto] = useState<LibraryPhoto | null>(null);
+  const [artPhotos, setArtPhotos] = useState<LibraryPhoto[]>([]);
+  const [uploadRequest, setUploadRequest] = useState<UploadRequest | null>(null);
+  const [pickerMode, setPickerMode] = useState<PickerMode | null>(null);
   const [progressMessage, setProgressMessage] = useState('');
   const [quotaErrorMessage, setQuotaErrorMessage] = useState<string | null>(null);
   const [selectedImageModel, setSelectedImageModel] = useState(IMAGE_MODEL);
@@ -99,8 +103,14 @@ export function EstudioHome() {
   });
 
   const orImageMutation = useMutation({
-    mutationFn: async (payload: { model: string; prompt: string; aspect_ratio: '1:1' | '9:16'; reference_image_urls?: string[] }) => {
-      setProgressMessage('Gerando imagem...');
+    mutationFn: async (payload: {
+      model: string;
+      prompt: string;
+      aspect_ratio: '1:1' | '9:16';
+      template_photo_id?: string;
+      photo_ids?: string[];
+    }) => {
+      if (!payload.template_photo_id) setProgressMessage('Gerando imagem...');
       const res = await api.post('/studio/ai/generate-image', payload);
       return res.data;
     },
@@ -150,7 +160,8 @@ export function EstudioHome() {
   const handleStartQuickCreate = () => {
     setOrPrompt('');
     setQuotaErrorMessage(null);
-    setReferenceContextUrls([]);
+    setTemplatePhoto(null);
+    setArtPhotos([]);
     setView('quick-create');
   };
 
@@ -180,73 +191,72 @@ export function EstudioHome() {
     }
   }, [criarParam, searchParams, setSearchParams]);
 
-  // Regra de precedência (Decisão 6, plan.md): contexto atual = últimas até
-  // 2 imagens adicionadas, venham do painel lateral (RF-09) ou do Upload B
-  // (RF-10, Fase 5) — mesma função pras duas origens.
-  const MAX_REFERENCE_CONTEXT = 2;
-  const addToReferenceContext = (urls: string[]) => {
-    setReferenceContextUrls((prev) => {
-      const combined = [...prev, ...urls];
-      if (combined.length > MAX_REFERENCE_CONTEXT) {
-        setToast({ message: 'Limite de 2 imagens de referência — a mais antiga foi substituída.', type: 'success' });
+  // Fotos na arte: no máximo 2; nova escolha substitui a mais antiga
+  const MAX_ART_PHOTOS = 2;
+  const addArtPhotos = (photos: LibraryPhoto[]) => {
+    setArtPhotos((prev) => {
+      const combined = [...prev.filter((p) => !photos.some((n) => n.id === p.id)), ...photos];
+      if (combined.length > MAX_ART_PHOTOS) {
+        setToast({ message: 'Limite de 2 fotos na arte — a mais antiga foi substituída.', type: 'success' });
         setTimeout(() => setToast(null), 3000);
       }
-      return combined.slice(-MAX_REFERENCE_CONTEXT);
+      return combined.slice(-MAX_ART_PHOTOS);
     });
   };
 
-  const removeFromReferenceContext = (url: string) => {
-    setReferenceContextUrls((prev) => prev.filter((u) => u !== url));
-  };
-
-  // Upload B (RF-10) — separado do painel lateral: no máximo 2 arquivos por
-  // vez, salva na mesma biblioteca (Upload A/painel reflete junto) E já
-  // entra automaticamente no contexto da geração, sem passo de seleção.
-  const uploadReferenceB = useUploadPhotos();
-  const [showUploadBLimitAlert, setShowUploadBLimitAlert] = useState(false);
-  const handleUploadB = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
-    if (files.length > 2) {
-      setShowUploadBLimitAlert(true);
-      e.target.value = '';
-      return;
+  const toggleArtPhoto = (photo: LibraryPhoto) => {
+    if (artPhotos.some((p) => p.id === photo.id)) {
+      setArtPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+    } else {
+      addArtPhotos([photo]);
     }
-    uploadReferenceB.mutate(files, {
-      onSuccess: (data) => addToReferenceContext(data.urls),
-    });
-    e.target.value = '';
+  };
+
+  const toggleTemplate = (photo: LibraryPhoto) => {
+    setTemplatePhoto((prev) => (prev?.id === photo.id ? null : photo));
+  };
+
+  const requestTemplateUpload = (files: File[]) => {
+    setUploadRequest({ kinds: ['modelo'], max: 1, files, onDone: (photos) => setTemplatePhoto(photos[0] ?? null) });
+  };
+
+  const requestArtUpload = () => {
+    setUploadRequest({ kinds: ['produto', 'equipe'], max: MAX_ART_PHOTOS, onDone: addArtPhotos });
   };
 
   const handleQuickCreate = async () => {
     const finalPrompt = orPrompt.trim();
     if (finalPrompt.length < 10) return;
     setView('loading');
-    setProgressMessage('Aprimorando explicação detalhada...');
     // cronômetro começa no clique — cobre enhance-prompt + geração
     setGenerationStartedAt(Date.now());
+    const photo_ids = artPhotos.length ? artPhotos.map((p) => p.id) : undefined;
 
+    // com modelo: o texto é "o que muda" — vai direto, sem aprimorar
+    if (templatePhoto) {
+      setProgressMessage('Analisando o modelo e trocando os textos...');
+      orImageMutation.mutate({
+        model: selectedImageModel,
+        prompt: finalPrompt,
+        aspect_ratio: orAspectRatio,
+        template_photo_id: templatePhoto.id,
+        photo_ids,
+      });
+      return;
+    }
+
+    setProgressMessage('Aprimorando explicação detalhada...');
     try {
       const enhanceRes = await api.post('/studio/ai/enhance-prompt', {
         prompt: finalPrompt,
         type: CREATIVE_TYPE,
+        // com fotos, o aprimoramento monta a cena em volta delas
+        photo_kinds: artPhotos.length ? artPhotos.map((p) => p.kind) : undefined,
       });
       const { enhancedPrompt } = enhanceRes.data as { enhancedPrompt: string };
-      setProgressMessage('Gerando imagem...');
-      orImageMutation.mutate({
-        model: selectedImageModel,
-        prompt: enhancedPrompt,
-        aspect_ratio: orAspectRatio,
-        reference_image_urls: referenceContextUrls.length ? referenceContextUrls : undefined,
-      });
+      orImageMutation.mutate({ model: selectedImageModel, prompt: enhancedPrompt, aspect_ratio: orAspectRatio, photo_ids });
     } catch {
-      setProgressMessage('Gerando imagem...');
-      orImageMutation.mutate({
-        model: selectedImageModel,
-        prompt: finalPrompt,
-        aspect_ratio: orAspectRatio,
-        reference_image_urls: referenceContextUrls.length ? referenceContextUrls : undefined,
-      });
+      orImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt, aspect_ratio: orAspectRatio, photo_ids });
     }
   };
 
@@ -515,29 +525,192 @@ export function EstudioHome() {
             <div className="space-y-5">
             <Card className={`${SURFACE} border-0 bg-transparent p-0 shadow-none`}>
               <CardContent className={`${SURFACE} space-y-3 p-5`}>
-                <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">
-                  Descreva o anúncio
-                </label>
+                <div className="ady-decor flex flex-wrap items-center gap-2">
+                  <label htmlFor="quick-create-prompt" className="block text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">
+                    {templatePhoto ? 'O que muda no modelo?' : 'Descreva o anúncio'}
+                  </label>
+                  {templatePhoto && (
+                    <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">Modelo anexado</span>
+                  )}
+                </div>
                 <textarea
+                  id="quick-create-prompt"
                   value={orPrompt}
                   maxLength={1000}
                   onChange={(e) => setOrPrompt(e.target.value)}
-                  placeholder="Ex: Anúncio fashion minimalista com luz natural, modelo feminina, fundo branco, cores suaves..."
+                  placeholder={
+                    templatePhoto
+                      ? 'Diga o que trocar. Ex: Empresa DUO Oral Care, vaga de Consultor(a) em Joinville-SC, fixo de R$ 3.000 + comissões...'
+                      : 'Ex: Anúncio fashion minimalista com luz natural, modelo feminina, fundo branco, cores suaves...'
+                  }
                   className="min-h-36 w-full resize-none rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm text-text-primary placeholder:text-text-disabled outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                 />
-                <div className="flex items-center justify-between text-xs text-text-tertiary">
+                <div className="flex items-center justify-between gap-3 text-xs text-text-tertiary">
                   <span>{orPrompt.trim().length}/1000</span>
-                  <span>Imagem • explicação detalhada = melhor resultado</span>
+                  <span>
+                    {templatePhoto
+                      ? 'Com modelo, é só dizer o que trocar. O resto fica igual.'
+                      : 'Imagem • explicação detalhada = melhor resultado'}
+                  </span>
                 </div>
 
-                <div className="ady-decor flex flex-wrap items-center gap-2.5 pt-1">
-                  <ModelSelect
-                    models={imageModels}
-                    selectedModel={selectedImageModel}
-                    onSelect={setSelectedImageModel}
-                    id="quick-create-model-select"
-                    compact
-                  />
+                {/* Imagens: modelo (copia o estilo) e fotos na arte (aparecem no anúncio) */}
+                <div className="ady-decor space-y-2.5 border-t border-border pt-4">
+                  <div className="flex items-baseline gap-2">
+                    <h3 className="text-sm font-semibold text-text-primary">Quer usar imagens?</h3>
+                    <span className="text-xs text-text-tertiary">Opcional</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className={`rounded-xl border p-4 ${templatePhoto ? 'border-2 border-brand' : 'border-border'}`}>
+                      {templatePhoto ? (
+                        <div className="flex gap-3">
+                          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-border">
+                            <img src={templatePhoto.url} alt="" className="h-full w-full object-cover" />
+                            <span className="absolute bottom-1 left-1 rounded-full bg-brand-hover px-1.5 py-px text-[9px] font-bold text-white">Modelo</span>
+                          </div>
+                          <div className="min-w-0 space-y-1.5">
+                            <p className="text-sm font-semibold text-text-primary">Modelo escolhido</p>
+                            <p className="text-xs leading-relaxed text-text-secondary">
+                              Vamos seguir o layout, as cores e o estilo deste anúncio e trocar só os textos.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setPickerMode('modelo')}
+                                className="ady-btn rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-text-primary"
+                              >
+                                Trocar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTemplatePhoto(null)}
+                                className="ady-btn rounded-full px-2 py-1.5 text-xs font-semibold text-destructive"
+                              >
+                                Remover
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-text-primary">Usar um anúncio como modelo</p>
+                            <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">1 imagem</span>
+                          </div>
+                          <p className="text-xs leading-relaxed text-text-secondary">
+                            Gostou de um anúncio? A gente analisa e cria um parecido, com os seus textos.
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setPickerMode('modelo')}
+                              className="ady-btn rounded-full bg-brand-hover px-3.5 py-2 text-xs font-semibold text-white"
+                            >
+                              Meus modelos
+                            </button>
+                            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-brand/50 bg-brand/5 px-3.5 py-2 text-xs font-semibold text-brand hover:bg-brand/10">
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg"
+                                className="sr-only"
+                                aria-label="Enviar modelo"
+                                onChange={(e) => {
+                                  const files = Array.from(e.target.files ?? []);
+                                  e.target.value = '';
+                                  if (files.length) requestTemplateUpload(files);
+                                }}
+                              />
+                              <Upload className="h-3.5 w-3.5" />
+                              Enviar modelo
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={`rounded-xl border p-4 ${artPhotos.length ? 'border-2 border-amber-600' : 'border-border'}`}>
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-text-primary">
+                            {artPhotos.length ? 'Fotos na arte' : 'Colocar foto na arte'}
+                          </p>
+                          <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+                            {artPhotos.length ? `${artPhotos.length} de ${MAX_ART_PHOTOS}` : `até ${MAX_ART_PHOTOS} fotos`}
+                          </span>
+                        </div>
+                        {artPhotos.length ? (
+                          <div className="flex flex-wrap gap-2">
+                            {artPhotos.map((photo) => (
+                              <div key={photo.id} className="relative h-20 w-20 overflow-hidden rounded-lg border border-border">
+                                <img src={photo.url} alt="" className="h-full w-full object-cover" />
+                                <button
+                                  type="button"
+                                  onClick={() => toggleArtPhoto(photo)}
+                                  aria-label="Remover foto da arte"
+                                  className="ady-btn absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface text-text-tertiary hover:text-destructive"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                            {artPhotos.length < MAX_ART_PHOTOS && (
+                              <button
+                                type="button"
+                                onClick={() => setPickerMode('arte')}
+                                className="ady-btn flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-amber-600/60 text-xs font-semibold text-amber-700"
+                              >
+                                <Plus className="h-4 w-4" />
+                                Adicionar
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-xs leading-relaxed text-text-secondary">
+                              Seu produto, você ou sua equipe aparecendo dentro do anúncio.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setPickerMode('arte')}
+                                className="ady-btn rounded-full bg-amber-700 px-3.5 py-2 text-xs font-semibold text-white"
+                              >
+                                Minhas fotos
+                              </button>
+                              <button
+                                type="button"
+                                onClick={requestArtUpload}
+                                className="ady-btn inline-flex items-center gap-1.5 rounded-full border border-dashed border-amber-600/60 bg-amber-500/5 px-3.5 py-2 text-xs font-semibold text-amber-700"
+                              >
+                                <Upload className="h-3.5 w-3.5" />
+                                Enviar foto
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {templatePhoto && (
+                    <p className="text-xs text-text-tertiary">Use artes suas ou que você tenha direito de usar.</p>
+                  )}
+                </div>
+
+                <div className="ady-decor flex flex-wrap items-center gap-2.5 border-t border-border pt-4">
+                  {templatePhoto ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+                      <Info className="h-3.5 w-3.5" />
+                      IA escolhida automaticamente para seguir o modelo
+                    </span>
+                  ) : (
+                    <ModelSelect
+                      models={imageModels}
+                      selectedModel={selectedImageModel}
+                      onSelect={setSelectedImageModel}
+                      id="quick-create-model-select"
+                      compact
+                    />
+                  )}
 
                   <div className="flex items-center gap-1 rounded-full border border-border bg-surface-muted p-1">
                     <button
@@ -560,33 +733,6 @@ export function EstudioHome() {
                     </button>
                   </div>
 
-                  <label
-                    className={`flex items-center gap-1.5 rounded-full border border-brand/40 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand/20 ${
-                      uploadReferenceB.isPending ? 'cursor-wait opacity-60' : 'cursor-pointer'
-                    }`}
-                  >
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg"
-                      multiple
-                      className="hidden"
-                      onChange={handleUploadB}
-                      disabled={uploadReferenceB.isPending}
-                      aria-label="Enviar fotos"
-                    />
-                    {uploadReferenceB.isPending ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Enviando...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-3.5 w-3.5" />
-                        Enviar fotos
-                      </>
-                    )}
-                  </label>
-
                   <button
                     type="button"
                     onClick={handleQuickCreate}
@@ -601,34 +747,17 @@ export function EstudioHome() {
                     Gerar imagem
                   </button>
                 </div>
-
-                {referenceContextUrls.length > 0 && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <span className="text-xs text-text-tertiary">Referências nesta criação:</span>
-                    {referenceContextUrls.map((url) => (
-                      <div key={url} className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-brand">
-                        <img src={url} alt="" className="h-full w-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => removeFromReferenceContext(url)}
-                          aria-label="Remover imagem de referência"
-                          className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-border bg-surface text-text-tertiary hover:text-destructive"
-                        >
-                          <X className="h-2.5 w-2.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </CardContent>
             </Card>
             <UsageBadge remaining={creativesRemaining} limit={creativesLimit} className="mt-1 w-full max-w-none" />
             </div>
 
             <ReferenceImagePanel
-              contextUrls={referenceContextUrls}
-              onAdd={addToReferenceContext}
-              onRemove={removeFromReferenceContext}
+              templateId={templatePhoto?.id ?? null}
+              artPhotoIds={artPhotos.map((p) => p.id)}
+              onPickTemplate={toggleTemplate}
+              onToggleArtPhoto={toggleArtPhoto}
+              onUploadClick={() => setUploadRequest({ kinds: ['modelo', 'produto', 'equipe'], max: null })}
             />
             </div>
           </div>
@@ -650,8 +779,17 @@ export function EstudioHome() {
               </p>
             </div>
             <div className="flex flex-col gap-1.5 text-xs text-text-tertiary">
-              <span><span className="text-warning">✦</span> Aprimorando a explicação detalhada com o contexto da marca</span>
-              <span><span className="text-warning">✦</span> Gerando imagem com IA</span>
+              {templatePhoto ? (
+                <>
+                  <span><span className="text-warning">✦</span> Analisando o layout do modelo</span>
+                  <span><span className="text-warning">✦</span> Trocando os textos pelos seus</span>
+                </>
+              ) : (
+                <>
+                  <span><span className="text-warning">✦</span> Aprimorando a explicação detalhada com o contexto da marca</span>
+                  <span><span className="text-warning">✦</span> Gerando imagem com IA</span>
+                </>
+              )}
               <span><span className="text-warning">✦</span> Salvando na biblioteca</span>
             </div>
           </div>
@@ -727,26 +865,26 @@ export function EstudioHome() {
         />
       )}
 
-      <Dialog open={showUploadBLimitAlert} onOpenChange={setShowUploadBLimitAlert}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Máximo de 2 fotos por vez</DialogTitle>
-            <DialogDescription>
-              Esse botão aceita no máximo 2 fotos de cada vez. Selecione até 2 fotos e envie novamente ou use o
-              painel lateral, que aceita quantas fotos você quiser.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <button
-              type="button"
-              onClick={() => setShowUploadBLimitAlert(false)}
-              className="px-5 py-2.5 rounded-xl bg-brand-hover hover:opacity-90 text-white text-sm font-medium transition-colors"
-            >
-              Entendi
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <LibraryUploadFlow request={uploadRequest} onClose={() => setUploadRequest(null)} />
+      <LibraryPickerDialog
+        mode={pickerMode}
+        selectedIds={pickerMode === 'modelo' ? (templatePhoto ? [templatePhoto.id] : []) : artPhotos.map((p) => p.id)}
+        maxArt={MAX_ART_PHOTOS}
+        onClose={() => setPickerMode(null)}
+        onConfirm={(photos) => {
+          if (pickerMode === 'modelo') setTemplatePhoto(photos[0] ?? null);
+          else setArtPhotos(photos.slice(0, MAX_ART_PHOTOS));
+          setPickerMode(null);
+        }}
+        onUploadFiles={(files) => {
+          setPickerMode(null);
+          requestTemplateUpload(files);
+        }}
+        onUploadClick={() => {
+          setPickerMode(null);
+          requestArtUpload();
+        }}
+      />
     </AppLayout>
   );
 }
