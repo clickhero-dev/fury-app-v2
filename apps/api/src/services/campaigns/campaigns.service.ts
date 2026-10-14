@@ -1231,7 +1231,7 @@ export class CampaignsService {
         const adImageHash = !isInstagramCreative ? await getAdImageHash(imageUrl) : undefined;
 
         const creativeBody: Record<string, unknown> = isInstagramCreative
-          ? { object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: c.creativeInstagramMediaId, call_to_action: JSON.stringify({ type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: c.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
+          ? { object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: c.creativeInstagramMediaId, call_to_action: JSON.stringify(args.objective === 'leads' ? { ...leadsCtaFor(), value: { ...leadsCtaFor().value, link: 'https://fb.me/' } } : { type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: c.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
           : { name: `Creative — ady #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads'
             // Doc Lead Ads: o campo link no link_data é OBRIGATÓRIO mesmo para
             // formulários instantâneos, e o valor deve ser https://fb.me/ (o
