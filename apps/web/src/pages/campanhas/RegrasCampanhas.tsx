@@ -78,12 +78,12 @@ export function RegrasCampanhas() {
           <button
             type="button"
             onClick={() => handleToggle('pauseLowRoas')}
-            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
+            className={`ady-btn relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
               rules.pauseLowRoas ? 'bg-brand' : 'bg-surface-secondary'
             }`}
           >
             <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-text-primary transition-transform ${
+              className={`inline-block h-4 w-4 transform rounded-full bg-[#FFFFFF] dark:bg-text-primary transition-transform ${
                 rules.pauseLowRoas ? 'translate-x-6' : 'translate-x-1'
               }`}
             />
@@ -125,12 +125,12 @@ export function RegrasCampanhas() {
           <button
             type="button"
             onClick={() => handleToggle('pauseNoConversions')}
-            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
+            className={`ady-btn relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
               rules.pauseNoConversions ? 'bg-brand' : 'bg-surface-secondary'
             }`}
           >
             <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-text-primary transition-transform ${
+              className={`inline-block h-4 w-4 transform rounded-full bg-[#FFFFFF] dark:bg-text-primary transition-transform ${
                 rules.pauseNoConversions ? 'translate-x-6' : 'translate-x-1'
               }`}
             />
@@ -181,7 +181,7 @@ export function RegrasCampanhas() {
           type="button"
           onClick={handleSave}
           disabled={saveRulesMutation.isPending}
-          className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-text-primary bg-brand hover:bg-brand-hover rounded-full transition-all shadow-lg hover:shadow-brand/20 disabled:opacity-50 cursor-pointer"
+          className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white dark:text-text-primary bg-brand hover:bg-brand-hover rounded-full transition-all shadow-lg hover:shadow-brand/20 disabled:opacity-50 cursor-pointer"
         >
           {saveRulesMutation.isPending ? (
             <>

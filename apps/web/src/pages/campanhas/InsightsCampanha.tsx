@@ -270,16 +270,17 @@ export function InsightsCampanha() {
           <div className="rounded-2xl border border-border bg-surface p-6 space-y-6">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <h3 className="text-sm font-semibold text-text-primary">Desempenho ao longo do tempo</h3>
-              <div className="inline-flex rounded-full border border-border bg-surface-secondary p-1 gap-1">
+              <div className="flex items-center gap-2">
                 {DATE_RANGES.map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
                     onClick={() => setDateRange(opt.value)}
-                    className={`px-3 py-1 text-xs font-semibold rounded-full transition-all cursor-pointer ${
+                    // Mesmo padrão do PeriodSelector
+                    className={`filter-pill text-xs px-4 py-2 rounded-full font-medium transition-all duration-150 cursor-pointer border ${
                       dateRange === opt.value
-                        ? 'bg-brand text-text-primary shadow-sm'
-                        : 'text-text-tertiary hover:text-text-primary'
+                        ? 'filter-pill-active bg-brand text-white border-brand'
+                        : 'bg-[#1A1B18] text-slate-700 dark:text-[#A3A8B3] border-transparent hover:bg-[#242622] hover:text-white hover:border-[#3F423B]'
                     }`}
                   >
                     {opt.label}

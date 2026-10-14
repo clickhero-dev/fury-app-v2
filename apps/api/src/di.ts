@@ -5,6 +5,8 @@ import { GoalService } from './services/goals/goal.service.js';
 import { GoalController } from './controllers/goal.controller.js';
 import { BrandKitService } from './services/brand-kit/brand-kit.service.js';
 import { BrandKitController } from './controllers/brand-kit.controller.js';
+import { BrandKitPhotoService } from './services/brand-kit/brand-kit-photo.service.js';
+import { BrandKitPhotoController } from './controllers/brand-kit-photo.controller.js';
 import { FuryEngineService } from './services/fury/fury-engine.service.js';
 import { FuryController } from './controllers/fury.controller.js';
 import { StudioAiService } from './services/studio/studio-ai.service.js';
@@ -59,6 +61,16 @@ import { MetaSyncRepository } from './repository/meta-sync.repository.js';
 import { enqueueMetaSyncTenantRun } from './workers/meta-sync.worker.js';
 import { SuperAdminRepository } from './repository/superadmin.repository.js';
 import { SuperAdminController } from './controllers/superadmin.controller.js';
+import { ClickUpTicketsClient } from './lib/clickup-tickets.client.js';
+import { TicketService } from './services/tickets/ticket.service.js';
+import { TicketsController } from './controllers/tickets.controller.js';
+import { FaqRepository } from './repository/faq.repository.js';
+import { FaqController } from './controllers/faq.controller.js';
+import { AnnouncementRepository } from './repository/announcement.repository.js';
+import { AnnouncementController } from './controllers/announcement.controller.js';
+import { MetaHealthcheckRepository } from './repository/meta-healthcheck.repository.js';
+import { metaHealthcheckService } from './services/meta/meta-healthcheck.service.js';
+import { MetaHealthcheckController } from './controllers/meta-healthcheck.controller.js';
 
 /**
  * Composition root (DI) da API.
@@ -74,6 +86,7 @@ const metricsProvider: IMetricsProvider =
 
 export const goalService = new GoalService(metricsProvider);
 export const brandKitService = new BrandKitService();
+export const brandKitPhotoService = new BrandKitPhotoService();
 export const furyEngineService = new FuryEngineService();
 export const studioAiService = new StudioAiService();
 export const studioService = new StudioService();
@@ -92,6 +105,11 @@ export { metaSyncService };
 
 // SuperAdmin (GLOBAL) — único repositório/controller não escopado por tenant.
 export const superAdminRepository = new SuperAdminRepository("");
+export const clickUpTicketsClient = new ClickUpTicketsClient();
+export const ticketService = new TicketService(clickUpTicketsClient);
+export const faqRepository = new FaqRepository();
+export const announcementRepository = new AnnouncementRepository();
+export const metaHealthcheckRepository = new MetaHealthcheckRepository();
 
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
@@ -107,8 +125,13 @@ export const wppVerificationService = new WppVerificationService(
 );
 
 export const controllers = {
+  tickets: new TicketsController(ticketService),
+  faq: new FaqController(faqRepository),
+  announcement: new AnnouncementController(announcementRepository),
+  metaHealthchecks: new MetaHealthcheckController(metaHealthcheckRepository, metaHealthcheckService),
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),
+  brandKitPhotos: new BrandKitPhotoController(brandKitPhotoService),
   fury: new FuryController(furyEngineService),
   studioAi: new StudioAiController(studioAiService),
   studio: new CreativeStudioController(studioService),

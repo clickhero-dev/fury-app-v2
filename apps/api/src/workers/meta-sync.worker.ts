@@ -5,6 +5,7 @@ import { getMetaSyncQueue } from '../lib/queue.js';
 import { metaSyncService, type MetaSyncRunResult } from '../services/meta/meta-sync.service.js';
 import { notifyMetaSyncFailure } from '../lib/meta-sync-alerts.js';
 import { captureServerException, captureServerEvent } from '../lib/analytics.js';
+import { metaHealthcheckService } from '../services/meta/meta-healthcheck.service.js';
 
 export const META_SYNC_QUEUE_NAME = 'meta-sync';
 
@@ -101,6 +102,19 @@ export async function processMetaSyncRun(tenantId: string, reason: string): Prom
   }
 }
 
+/** Executa healthchecks isolados por tenant; uma falha não para as próximas conexões. */
+export async function processMetaHealthcheckRuns(): Promise<void> {
+  const tenantIds = await getMetaSyncTenantIds();
+  for (const tenantId of tenantIds) {
+    try {
+      await metaHealthcheckService.runForTenant(tenantId);
+    } catch (err) {
+      captureServerException(err, { path: 'meta-healthcheck:worker', tenantId });
+      console.error('[meta-healthcheck] erro ao validar tenant', { tenantId, code: 'META_HEALTHCHECK_UNEXPECTED_ERROR' });
+    }
+  }
+}
+
 type MetaSyncJobData = { tenantId?: string; adAccountId?: string; reason?: string; timestamp?: string };
 let metaSyncWorkerInstance: Worker<MetaSyncJobData> | null = null;
 
@@ -108,7 +122,9 @@ export async function startMetaSyncWorker(): Promise<Worker> {
   const worker = new Worker<MetaSyncJobData>(
     META_SYNC_QUEUE_NAME,
     async (job) => {
-      if (job.name === 'meta-sync:run') {
+      if (job.name === 'meta-healthcheck:run-all') {
+        await processMetaHealthcheckRuns();
+      } else if (job.name === 'meta-sync:run') {
         const { tenantId, adAccountId, reason } = job.data;
         if (adAccountId) {
           let results: Array<{ tenantId: string } & MetaSyncRunResult>;

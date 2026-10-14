@@ -6,6 +6,7 @@ import {
   metaLeads,
   metaInstagramMedia,
   metaSyncRuns,
+  metaSyncScopes,
   campaigns,
 } from '@fury/db';
 import { and, desc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-orm';
@@ -66,6 +67,7 @@ export interface RecordSyncRunInput {
   leadsCount?: number;
   insightsCount?: number;
 }
+export interface MetaSyncScopeInput { connectionId: string; metaUserId: string; adAccountId: string; instagramUserId?: string | null; }
 
 /** Construção do `set` de um ON CONFLICT a partir das chaves do primeiro registro. */
 function excludedSetFor(keys: string[]): Record<string, SQL> {
@@ -86,8 +88,28 @@ function excludedSetFor(keys: string[]): Record<string, SQL> {
  * habilitando re-runs e múltiplos pods sem duplicação.
  */
 export class MetaSyncRepository extends TenantScopedRepository {
-  constructor(tenantId: string, db: Database = defaultDb) {
+  constructor(tenantId: string, db: Database = defaultDb, private configuredScopeId?: string) {
     super(tenantId, db);
+  }
+
+  private async activeScopeId(): Promise<string> {
+    if (this.configuredScopeId) return this.configuredScopeId;
+    const scope = await this.db.query.metaSyncScopes.findFirst({ where: eq(metaSyncScopes.tenantId, this.tenantId) });
+    if (!scope) throw new Error(`META_SYNC_SCOPE_NOT_FOUND:${this.tenantId}`);
+    return scope.id;
+  }
+
+  async ensureScope(input: MetaSyncScopeInput): Promise<string> {
+    const current = await this.db.query.metaSyncScopes.findFirst({ where: eq(metaSyncScopes.tenantId, this.tenantId) });
+    const matches = current && current.connectionId === input.connectionId && current.metaUserId === input.metaUserId
+      && current.adAccountId === input.adAccountId && current.instagramUserId === (input.instagramUserId ?? null);
+    if (matches) { this.configuredScopeId = current.id; return current.id; }
+    const [scope] = await this.db.transaction(async (tx) => {
+      if (current) await tx.delete(metaSyncScopes).where(eq(metaSyncScopes.id, current.id));
+      return tx.insert(metaSyncScopes).values({ tenantId: this.tenantId, ...input } as any).returning();
+    });
+    this.configuredScopeId = scope.id;
+    return scope.id;
   }
 
   /**
@@ -111,13 +133,15 @@ export class MetaSyncRepository extends TenantScopedRepository {
 
   /** Upsert idempotente de um snapshot de campanha (ON CONFLICT tenant+campaign). */
   async upsertCampaignSnapshot(values: CampaignSnapshotUpsert): Promise<CampaignSnapshot> {
+    const scopeId = await this.activeScopeId();
     const keys = Object.keys(values);
     const [row] = await this.db
       .insert(metaCampaignSnapshots)
-      .values({ ...values, tenantId: this.tenantId } as any)
+      .values({ ...values, tenantId: this.tenantId, scopeId } as any)
       .onConflictDoUpdate({
         target: [metaCampaignSnapshots.tenantId, metaCampaignSnapshots.metaCampaignId],
         set: { ...excludedSetFor(keys), updatedAt: sql`now()` } as any,
+        where: eq(metaCampaignSnapshots.scopeId, scopeId),
       })
       .returning();
     return row as CampaignSnapshot;
@@ -126,13 +150,15 @@ export class MetaSyncRepository extends TenantScopedRepository {
   /** Upsert em lote de snapshots (idempotente). */
   async upsertCampaignSnapshots(values: CampaignSnapshotUpsert[]): Promise<void> {
     if (values.length === 0) return;
+    const scopeId = await this.activeScopeId();
     const keys = Object.keys(values[0]);
     await this.db
       .insert(metaCampaignSnapshots)
-      .values(values.map((v) => ({ ...v, tenantId: this.tenantId })) as any)
+      .values(values.map((v) => ({ ...v, tenantId: this.tenantId, scopeId })) as any)
       .onConflictDoUpdate({
         target: [metaCampaignSnapshots.tenantId, metaCampaignSnapshots.metaCampaignId],
         set: { ...excludedSetFor(keys), updatedAt: sql`now()` } as any,
+        where: eq(metaCampaignSnapshots.scopeId, scopeId),
       });
   }
 
@@ -142,58 +168,68 @@ export class MetaSyncRepository extends TenantScopedRepository {
     values: Partial<Omit<CampaignSnapshotUpsert, 'metaCampaignId'>>
   ): Promise<void> {
     if (Object.keys(values).length === 0) return;
+    const scopeId = await this.activeScopeId();
     await this.db
       .update(metaCampaignSnapshots)
       .set({ ...values, updatedAt: new Date() } as any)
       .where(and(
         eq(metaCampaignSnapshots.tenantId, this.tenantId),
-        eq(metaCampaignSnapshots.metaCampaignId, metaCampaignId)
+        eq(metaCampaignSnapshots.metaCampaignId, metaCampaignId),
+        eq(metaCampaignSnapshots.scopeId, scopeId)
       ));
   }
 
   /** Marca o resultado de `campaignHasLeadForm` no snapshot (evita N+1 nos ciclos seguintes). */
   async updateSnapshotHasLeadForm(metaCampaignId: string, hasLeadForm: boolean): Promise<void> {
+    const scopeId = await this.activeScopeId();
     await this.db
       .update(metaCampaignSnapshots)
       .set({ hasLeadForm, updatedAt: new Date() })
       .where(
         and(
           eq(metaCampaignSnapshots.tenantId, this.tenantId),
-          eq(metaCampaignSnapshots.metaCampaignId, metaCampaignId)
+          eq(metaCampaignSnapshots.metaCampaignId, metaCampaignId),
+          eq(metaCampaignSnapshots.scopeId, scopeId)
         )
       );
   }
 
   /** Atualiza metrics + lastInsightsAt de um snapshot (após insights account-level). */
   async updateSnapshotMetrics(metaCampaignId: string, metrics: unknown): Promise<void> {
+    const scopeId = await this.activeScopeId();
     await this.db
       .update(metaCampaignSnapshots)
       .set({ metrics: metrics as any, lastInsightsAt: new Date(), updatedAt: new Date() })
       .where(
         and(
           eq(metaCampaignSnapshots.tenantId, this.tenantId),
-          eq(metaCampaignSnapshots.metaCampaignId, metaCampaignId)
+          eq(metaCampaignSnapshots.metaCampaignId, metaCampaignId),
+          eq(metaCampaignSnapshots.scopeId, scopeId)
         )
       );
   }
 
   async markCampaignInsightsFetched(metaCampaignId: string): Promise<void> {
+    const scopeId = await this.activeScopeId();
     await this.db.update(metaCampaignSnapshots)
       .set({ lastInsightsAt: new Date(), updatedAt: new Date() })
       .where(and(
         eq(metaCampaignSnapshots.tenantId, this.tenantId),
         eq(metaCampaignSnapshots.metaCampaignId, metaCampaignId),
+        eq(metaCampaignSnapshots.scopeId, scopeId),
       ));
   }
 
   async upsertCampaignDailyInsights(values: CampaignDailyInsightUpsert[]): Promise<void> {
     if (values.length === 0) return;
+    const scopeId = await this.activeScopeId();
     const keys = Object.keys(values[0]);
     await this.db.insert(metaCampaignDailyInsights)
-      .values(values.map((value) => ({ ...value, tenantId: this.tenantId })) as any)
+      .values(values.map((value) => ({ ...value, tenantId: this.tenantId, scopeId })) as any)
       .onConflictDoUpdate({
         target: [metaCampaignDailyInsights.tenantId, metaCampaignDailyInsights.metaCampaignId, metaCampaignDailyInsights.date],
         set: { ...excludedSetFor(keys), updatedAt: sql`now()` } as any,
+        where: eq(metaCampaignDailyInsights.scopeId, scopeId),
       });
   }
 
@@ -211,15 +247,17 @@ export class MetaSyncRepository extends TenantScopedRepository {
   /** Upsert em lote de leads (ON CONFLICT tenant+lead — dedupe 6h/lead). */
   async upsertLeads(values: MetaLeadUpsert[]): Promise<void> {
     if (values.length === 0) return;
+    const scopeId = await this.activeScopeId();
     const keys = Object.keys(values[0]);
     await this.db
       .insert(metaLeads)
-      .values(values.map((v) => ({ ...v, tenantId: this.tenantId })) as any)
+      .values(values.map((v) => ({ ...v, tenantId: this.tenantId, scopeId })) as any)
       .onConflictDoUpdate({
         target: [metaLeads.tenantId, metaLeads.metaLeadId],
         // FEAT status de clientes: NUNCA incluir `status`/`statusUpdatedAt` aqui —
         // o sync não pode sobrescrever a alteração manual de status do usuário.
         set: excludedSetFor(keys) as any,
+        where: eq(metaLeads.scopeId, scopeId),
       });
   }
 
@@ -259,22 +297,26 @@ export class MetaSyncRepository extends TenantScopedRepository {
   /** Upsert em lote de mídia Instagram (ON CONFLICT tenant+media). */
   async upsertInstagramMedia(values: InstagramMediaUpsert[]): Promise<void> {
     if (values.length === 0) return;
+    const scopeId = await this.activeScopeId();
     const keys = Object.keys(values[0]);
     await this.db
       .insert(metaInstagramMedia)
-      .values(values.map((v) => ({ ...v, tenantId: this.tenantId })) as any)
+      .values(values.map((v) => ({ ...v, tenantId: this.tenantId, scopeId })) as any)
       .onConflictDoUpdate({
         target: [metaInstagramMedia.tenantId, metaInstagramMedia.mediaId],
         set: { ...excludedSetFor(keys), fetchedAt: sql`now()` } as any,
+        where: eq(metaInstagramMedia.scopeId, scopeId),
       });
   }
 
   /** Persiste o resultado de um run de sincronização. */
   async recordSyncRun(input: RecordSyncRunInput): Promise<SyncRun> {
+    const scope = await this.db.query.metaSyncScopes.findFirst({ where: eq(metaSyncScopes.tenantId, this.tenantId) });
     const [row] = await this.db
       .insert(metaSyncRuns)
       .values({
         tenantId: this.tenantId,
+        scopeId: this.configuredScopeId ?? scope?.id ?? null,
         status: input.status,
         errorCode: input.errorCode ?? null,
         errorMessage: input.errorMessage ?? null,

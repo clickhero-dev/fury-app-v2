@@ -27,7 +27,7 @@ function ProgressSteps({ current }: { current: number }) {
                     ? 'bg-admin-petrol border-admin-petrol text-admin-bg'
                     : active
                     ? 'bg-admin-surface border-admin-petrol text-admin-petrol font-bold'
-                    : 'bg-admin-surface border-white/10 text-admin-text-faint',
+                    : 'bg-admin-surface border-slate-300 dark:border-white/10 text-admin-text-faint',
                 ].join(' ')}
               >
                 {done ? (
@@ -49,7 +49,7 @@ function ProgressSteps({ current }: { current: number }) {
               <div
                 className={[
                   'w-16 h-px mb-6 mx-3 transition-colors',
-                  i < current ? 'bg-admin-petrol' : 'bg-white/10',
+                  i < current ? 'bg-admin-petrol' : 'bg-slate-400 dark:bg-white/10',
                 ].join(' ')}
               />
             )}
@@ -148,7 +148,7 @@ export function ConectarMetaPage() {
               <div className="w-full pt-2">
                 <Button
                   onClick={() => navigate('/onboarding/selecionar-conta')}
-                  className="w-full bg-admin-petrol text-admin-bg font-semibold py-3 h-auto rounded-lg hover:opacity-90 transition-opacity"
+                  className="w-full bg-admin-petrol text-admin-bg font-semibold py-4 text-sm h-auto rounded-lg hover:opacity-90 transition-opacity"
                 >
                   Selecionar conta de anúncios
                 </Button>
@@ -188,7 +188,7 @@ export function ConectarMetaPage() {
               <div className="w-full pt-2">
                 <Button
                   onClick={() => navigate('/onboarding/meta-authorize')}
-                  className="w-full bg-admin-petrol text-admin-bg font-semibold py-3 h-auto rounded-lg hover:opacity-90 transition-opacity"
+                  className="w-full bg-admin-petrol text-admin-bg font-semibold py-4 text-sm h-auto rounded-lg hover:opacity-90 transition-opacity"
                 >
                   Conectar com Meta
                 </Button>

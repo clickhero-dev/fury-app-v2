@@ -413,8 +413,8 @@ html:not(.dark) {
   }
 
   .gradient-teal h1,
-  .gradient-teal p,
-  .gradient-teal div {
+  .gradient-teal p:not(.ady-decor *),
+  .gradient-teal div:not(.ady-decor):not(.ady-decor *) {
     color: #ffffff !important;
   }
 
@@ -483,8 +483,8 @@ label:not(.ady-decor *),
 }
 
 /* Exceções explícitas para contextos especiais */
-.gradient-teal p,
-.gradient-teal span {
+.gradient-teal p:not(.ady-decor *),
+.gradient-teal span:not(.ady-decor *) {
   color: #ffffff !important;
 }
 

@@ -152,7 +152,12 @@ const STEPS: MigrationStep[] = [
   { tag: '0043_meta_sync_tables' },
   { tag: '0044_meta_lead_form_unknown' },
   { tag: '0045_meta_campaign_daily_insights' },
+  { tag: '0046_meta_sync_scopes' },
   { tag: '0046_lead_status' },
+  { tag: '0047_faqs' },
+  { tag: '0048_meta_healthchecks' },
+  { tag: '0049_brand_kit_photos' },
+  { tag: '0050_announcements' },
   { tag: '0047_studio_music_tracks' },
 ];
 
@@ -176,6 +181,7 @@ export const REQUIRED_TABLES = [
   'subscriptions',
   'invoices',
   'brand_kits',
+  'brand_kit_photos',
   'request_logs',
   'campaign_plans',
   'social_posts',
@@ -193,6 +199,11 @@ export const REQUIRED_TABLES = [
   'meta_leads',
   'meta_instagram_media',
   'meta_sync_runs',
+  'meta_healthchecks',
+  'faqs',
+  'faq_slug_redirects',
+  'announcements',
+  'announcement_views',
   'studio_music_tracks',
 ];
 

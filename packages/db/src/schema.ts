@@ -16,6 +16,7 @@ import {
   bigserial,
   smallint,
   date,
+  primaryKey,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -83,6 +84,7 @@ export const leadStatusEnum = pgEnum('lead_status', [
   'comprou',
   'não comprou',
 ]);
+export const faqStatusEnum = pgEnum('faq_status', ['draft', 'published']);
 
 // Tenants table
 export const tenants = pgTable(
@@ -522,6 +524,40 @@ export const brandKits = pgTable(
   })
 );
 
+// Biblioteca de imagens do Estúdio, cada uma com tipo
+export const brandKitPhotoKindEnum = pgEnum('brand_kit_photo_kind', ['modelo', 'produto', 'equipe']);
+
+export const brandKitPhotos = pgTable(
+  'brand_kit_photos',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    brandKitId: uuid('brand_kit_id')
+      .notNull()
+      .references(() => brandKits.id, { onDelete: 'cascade' }),
+    kind: brandKitPhotoKindEnum('kind').notNull(),
+    url: text('url').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    /** Soft delete: preenchido = removida (some da biblioteca e da geração). */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => ({
+    tenantKindIdx: index('brand_kit_photos_tenant_kind_idx').on(table.tenantId, table.kind),
+    brandKitIdIdx: index('brand_kit_photos_brand_kit_id_idx').on(table.brandKitId),
+  })
+);
+
+export const brandKitsRelations = relations(brandKits, ({ many }) => ({
+  photos: many(brandKitPhotos),
+}));
+
+export const brandKitPhotosRelations = relations(brandKitPhotos, ({ one }) => ({
+  tenant: one(tenants, { fields: [brandKitPhotos.tenantId], references: [tenants.id] }),
+  brandKit: one(brandKits, { fields: [brandKitPhotos.brandKitId], references: [brandKits.id] }),
+}));
+
 // Request logs table (audit / debug)
 // Partitioned by RANGE (created_at) — PK is (id, created_at) at DB level.
 // Drizzle schema mirrors the production columns for type-safe queries.
@@ -677,6 +713,37 @@ export const workflowJobsRelations = relations(workflowJobs, ({ one }) => ({
 
 export const metaSyncRunStatusEnum = pgEnum('meta_sync_run_status', ['running', 'success', 'partial', 'failed']);
 
+/** Último healthcheck da integração Meta por tenant (sem histórico de execuções). */
+export const metaHealthchecks = pgTable(
+  'meta_healthchecks',
+  {
+    tenantId: uuid('tenant_id').primaryKey().references(() => tenants.id, { onDelete: 'cascade' }),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).notNull(),
+    status: varchar('status', { length: 16 }).notNull(),
+    checks: jsonb('checks').notNull().default(sql`'{}'::jsonb`),
+    lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+    lastSyncStatus: varchar('last_sync_status', { length: 16 }),
+  },
+  (table) => ({ checkedAtIdx: index('meta_healthchecks_checked_at_idx').on(table.checkedAt) })
+);
+
+export const metaSyncScopes = pgTable(
+  'meta_sync_scopes',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id').notNull().references(() => metaConnections.id, { onDelete: 'cascade' }),
+    metaUserId: varchar('meta_user_id', { length: 255 }).notNull(),
+    adAccountId: varchar('ad_account_id', { length: 255 }).notNull(),
+    instagramUserId: varchar('instagram_user_id', { length: 255 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantUnique: unique('meta_sync_scopes_tenant_unique').on(table.tenantId),
+    connectionIdIdx: index('meta_sync_scopes_connection_id_idx').on(table.connectionId),
+  })
+);
+
 /** Snapshot das campanhas da conta Meta (todas, inclusive criadas fora do Fury). */
 export const metaCampaignSnapshots = pgTable(
   'meta_campaign_snapshots',
@@ -691,6 +758,7 @@ export const metaCampaignSnapshots = pgTable(
     objective: varchar('objective', { length: 50 }),
     budget: jsonb('budget').default(sql`'{}'::jsonb`),
     metrics: jsonb('metrics').default(sql`'{}'::jsonb`),
+    scopeId: uuid('scope_id').notNull().references(() => metaSyncScopes.id, { onDelete: 'cascade' }),
     hasLeadForm: boolean('has_lead_form'),
     lastInsightsAt: timestamp('last_insights_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -715,6 +783,7 @@ export const metaCampaignDailyInsights = pgTable(
     metaCampaignId: varchar('meta_campaign_id', { length: 255 }).notNull(),
     date: date('date').notNull(),
     metrics: jsonb('metrics').default(sql`'{}'::jsonb`).notNull(),
+    scopeId: uuid('scope_id').notNull().references(() => metaSyncScopes.id, { onDelete: 'cascade' }),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
@@ -745,6 +814,7 @@ export const metaLeads = pgTable(
     fetchedAt: timestamp('fetched_at', { withTimezone: true }).defaultNow().notNull(),
     status: leadStatusEnum('status').notNull().default('novo'),
     statusUpdatedAt: timestamp('status_updated_at', { withTimezone: true }),
+    scopeId: uuid('scope_id').notNull().references(() => metaSyncScopes.id, { onDelete: 'cascade' }),
   },
   (table) => ({
     tenantIdIdx: index('meta_leads_tenant_id_idx').on(table.tenantId),
@@ -773,6 +843,7 @@ export const metaInstagramMedia = pgTable(
     likeCount: integer('like_count'),
     commentsCount: integer('comments_count'),
     insights: jsonb('insights').default(sql`'{}'::jsonb`),
+    scopeId: uuid('scope_id').notNull().references(() => metaSyncScopes.id, { onDelete: 'cascade' }),
     fetchedAt: timestamp('fetched_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
@@ -801,6 +872,7 @@ export const metaSyncRuns = pgTable(
     campaignsCount: integer('campaigns_count').notNull().default(0),
     leadsCount: integer('leads_count').notNull().default(0),
     insightsCount: integer('insights_count').notNull().default(0),
+    scopeId: uuid('scope_id'),
   },
   (table) => ({
     tenantIdIdx: index('meta_sync_runs_tenant_id_idx').on(table.tenantId),
@@ -1094,6 +1166,67 @@ export const wppWebhookEvents = pgTable(
   })
 );
 
+// Public help-center content. It is global to the product, never tenant-scoped.
+export const faqs = pgTable(
+  'faqs',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    title: varchar('title', { length: 255 }).notNull(),
+    slug: varchar('slug', { length: 255 }).notNull().unique(),
+    markdown: text('markdown').notNull(),
+    status: faqStatusEnum('status').notNull().default('draft'),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({ slugIdx: index('faqs_slug_idx').on(table.slug), statusIdx: index('faqs_status_idx').on(table.status) }),
+);
+
+export const faqSlugRedirects = pgTable(
+  'faq_slug_redirects',
+  {
+    slug: varchar('slug', { length: 255 }).primaryKey(),
+    faqId: uuid('faq_id').notNull().references(() => faqs.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({ faqIdIdx: index('faq_slug_redirects_faq_id_idx').on(table.faqId) }),
+);
+
+export const faqsRelations = relations(faqs, ({ many }) => ({ slugRedirects: many(faqSlugRedirects) }));
+export const faqSlugRedirectsRelations = relations(faqSlugRedirects, ({ one }) => ({ faq: one(faqs, { fields: [faqSlugRedirects.faqId], references: [faqs.id] }) }));
+
+// Avisos globais do produto; cada usuário vê cada um uma única vez.
+export const announcements = pgTable(
+  'announcements',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    title: varchar('title', { length: 255 }).notNull(),
+    markdown: text('markdown').notNull(),
+    isActive: boolean('is_active').notNull().default(false),
+    // 'Manter ativo': todos os usuários, sem encerramento
+    showToNewUsers: boolean('show_to_new_users').notNull().default(false),
+    endsAt: timestamp('ends_at', { withTimezone: true }),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => ({ activeIdx: index('announcements_active_idx').on(table.isActive, table.publishedAt) }),
+);
+
+export const announcementViews = pgTable(
+  'announcement_views',
+  {
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    announcementId: uuid('announcement_id').notNull().references(() => announcements.id, { onDelete: 'cascade' }),
+    seenAt: timestamp('seen_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.announcementId] }),
+    announcementIdIdx: index('announcement_views_announcement_id_idx').on(table.announcementId),
+  }),
+);
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -1114,6 +1247,7 @@ export const allTables = {
   subscriptions,
   invoices,
   brandKits,
+  brandKitPhotos,
   requestLogs,
   campaignPlans,
   socialPosts,
@@ -1131,4 +1265,8 @@ export const allTables = {
   metaLeads,
   metaInstagramMedia,
   metaSyncRuns,
+  faqs,
+  faqSlugRedirects,
+  announcements,
+  announcementViews,
 };

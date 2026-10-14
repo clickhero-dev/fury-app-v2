@@ -7,7 +7,7 @@ interface Props {
 
 export function PostTypeDialog({ onSelect, onClose }: Props) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="ady-decor fixed inset-0 z-50 flex items-center justify-center bg-[#000000]/50" onClick={onClose}>
       <div className="bg-surface border border-border rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 pt-6 pb-2">
           <h3 className="text-lg font-bold text-text-primary">Novo post</h3>

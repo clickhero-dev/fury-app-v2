@@ -244,6 +244,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
                   <button
                     key={asset.id}
                     type="button"
+                    data-testid="wizard-gallery-asset"
                     onClick={() => handleToggleAsset(asset)}
                     disabled={isRejected || (!isSelected && !canAddMore)}
                     title={isRejected ? badge.reasons.join(' • ') : (asset.name ?? 'Criativo')}

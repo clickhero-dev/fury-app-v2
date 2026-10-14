@@ -11,6 +11,21 @@ Funcionalidade: Repositório de sincronização Meta (snapshots, leads, IG, runs
     Quando upsertCampaignSnapshot é chamado duas vezes com o mesmo meta_campaign_id
     Então usa ON CONFLICT (tenant_id, meta_campaign_id) DO UPDATE (não duplica)
 
+  Cenário: upsert de snapshot inclui o scope Meta ativo
+    Dado um scope Meta ativo para o tenant
+    Quando persisto uma projeção de campanha
+    Então o insert contém scope_id
+
+  Cenário: não grava projeção sem scope Meta ativo
+    Dado um tenant sem scope atual
+    Quando tento upsertar um snapshot
+    Então a escrita falha antes de enviar uma projeção sem scope_id
+
+  Cenário: job de scope antigo não atualiza projeção do scope novo
+    Dado um upsert com chave já existente em outro scope
+    Quando ocorre ON CONFLICT
+    Então o DO UPDATE exige o mesmo scope_id capturado pelo job
+
   Cenário: atualização pontual do snapshot preserva métricas
     Dado snapshot de campanha com métricas já persistidas
     Quando atualizo apenas o status da campanha
@@ -104,12 +119,13 @@ function makeDb() {
   const calls: { method: string; args: any[] }[] = [];
 
   const query: any = {};
-  for (const table of ['metaCampaignSnapshots', 'metaCampaignDailyInsights', 'metaLeads', 'metaInstagramMedia', 'metaSyncRuns']) {
+  for (const table of ['metaCampaignSnapshots', 'metaCampaignDailyInsights', 'metaLeads', 'metaInstagramMedia', 'metaSyncRuns', 'metaSyncScopes']) {
     query[table] = {
       findFirst: vi.fn(async () => null),
       findMany: vi.fn(async () => []),
     };
   }
+  query.metaSyncScopes.findFirst.mockResolvedValue({ id: 'scope-ativo' });
 
   const makeChain = (name: string): any => {
     const proxy = new Proxy(
@@ -191,6 +207,29 @@ describe('BDD: MetaSyncRepository', () => {
       .join(',');
     expect(targetNames).toContain('meta_campaign_id');
     expect(targetNames).toContain('tenant_id');
+  });
+
+  it('Cenário: upsert de snapshot inclui o scope Meta ativo', async () => {
+    const { db, calls } = makeDb();
+    const repo = new MetaSyncRepository(tenantId, db, 'scope-ativo');
+    await repo.upsertCampaignSnapshot({ metaCampaignId: 'meta-1', name: 'Camp' });
+    const valuesCall = calls.find((c) => c.method === 'values');
+    expect(valuesCall?.args[0]).toMatchObject({ tenantId, metaCampaignId: 'meta-1', scopeId: 'scope-ativo' });
+  });
+
+  it('Cenário: não grava projeção sem scope Meta ativo', async () => {
+    const { db, query } = makeDb();
+    query.metaSyncScopes.findFirst.mockResolvedValue(null);
+    await expect(new MetaSyncRepository(tenantId, db).upsertCampaignSnapshot({ metaCampaignId: 'meta-1', name: 'Camp' }))
+      .rejects.toThrow(`META_SYNC_SCOPE_NOT_FOUND:${tenantId}`);
+  });
+
+  it('Cenário: job de scope antigo não atualiza projeção do scope novo', async () => {
+    const { db, calls } = makeDb();
+    await new MetaSyncRepository(tenantId, db, 'scope-antigo').upsertCampaignSnapshot({ metaCampaignId: 'meta-1', name: 'Camp' });
+    const conflict = calls.find((c) => c.method === 'onConflictDoUpdate');
+    expect(whereText(conflict?.args[0].where)).toContain('scope_id');
+    expect(whereText(conflict?.args[0].where)).toContain('scope-antigo');
   });
 
   it('Cenário: updateCampaignSnapshot grava apenas campos enviados e escopa por tenant', async () => {

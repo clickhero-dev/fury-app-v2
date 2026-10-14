@@ -125,7 +125,7 @@ export function FuryRuleDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="ady-decor fixed inset-0 bg-[#000000]/50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-md">
         <div className="p-6">
           <h2 className="text-lg font-bold text-text-primary mb-6">
@@ -157,10 +157,10 @@ export function FuryRuleDialog({
                   onChange={(e) =>
                     setForm({ ...form, conditionField: e.target.value as CreateFuryRulePayload['conditionField'] })
                   }
-                  className="w-full px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
+                  className="w-full px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] dark:text-text-primary focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
                 >
                   {METRICS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
+                    <option key={m.value} value={m.value} className="dark:bg-surface dark:text-text-primary">{m.label}</option>
                   ))}
                 </select>
 
@@ -169,10 +169,10 @@ export function FuryRuleDialog({
                   onChange={(e) =>
                     setForm({ ...form, conditionOperator: e.target.value as CreateFuryRulePayload['conditionOperator'] })
                   }
-                  className="w-full px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
+                  className="w-full px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] dark:text-text-primary focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
                 >
                   {OPERATORS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                    <option key={o.value} value={o.value} className="dark:bg-surface dark:text-text-primary">{o.label}</option>
                   ))}
                 </select>
 
@@ -198,10 +198,10 @@ export function FuryRuleDialog({
                 onChange={(e) =>
                   setForm({ ...form, action: e.target.value as CreateFuryRulePayload['action'] })
                 }
-                className="w-full px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
+                className="w-full px-4 py-3.5 border border-[#E0E0E0] rounded-xl bg-white text-[#1C1C1E] dark:text-text-primary focus:outline-none focus:border-[#E8631A] focus:ring-1 focus:ring-[#E8631A]/20 text-sm"
               >
                 {ACTIONS.map((a) => (
-                  <option key={a.value} value={a.value}>{a.label}</option>
+                  <option key={a.value} value={a.value} className="dark:bg-surface dark:text-text-primary">{a.label}</option>
                 ))}
               </select>
             </div>

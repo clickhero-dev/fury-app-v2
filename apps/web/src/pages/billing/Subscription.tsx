@@ -184,7 +184,7 @@ export function Subscription() {
               <button
                 type="button"
                 onClick={() => setCancelDialogOpen(true)}
-                className="inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium border border-error/40 bg-transparent text-error hover:border-error hover:bg-error/10 transition-all duration-200 cursor-pointer"
+                className="ady-btn inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium border border-error/40 bg-transparent text-error hover:border-error hover:bg-error/10 transition-all duration-200 cursor-pointer"
               >
                 Cancelar assinatura
               </button>

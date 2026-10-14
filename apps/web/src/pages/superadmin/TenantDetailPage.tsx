@@ -38,11 +38,15 @@ interface TenantData {
     trialEndsAt: string;
     currentPeriodEnd: string;
     asaasSubscriptionId: string;
+    creativesRemaining: number | null;
     plan: {
       id: string;
       name: string;
       priceCents: number;
       interval: string;
+      limits?: {
+        creativesPerMonth?: number | null;
+      } | null;
     } | null;
   } | null;
   furyConfig: {
@@ -127,6 +131,7 @@ export function TenantDetailPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [renewingQuota, setRenewingQuota] = useState(false);
   const [msg, setMsg] = useState("");
 
   // Users
@@ -305,6 +310,20 @@ export function TenantDetailPage() {
       ).toISOString();
     await api.patch(`/admin/tenants/${id}/subscription`, payload);
   }, "Assinatura atualizada");
+
+  async function renewCreativeQuota() {
+    setRenewingQuota(true);
+    setMsg("");
+    try {
+      await api.post(`/admin/tenants/${id}/reset-quota`);
+      setMsg("Cota de créditos renovada");
+      await reload();
+    } catch {
+      setMsg("Não foi possível renovar a cota. Tente novamente.");
+    } finally {
+      setRenewingQuota(false);
+    }
+  }
 
   const saveConfig = save(async () => {
     await api.patch(`/admin/tenants/${id}/fury-config`, configForm);
@@ -768,6 +787,42 @@ export function TenantDetailPage() {
 
       {/* ── Subscription ────────────────────────────── */}
       {tab === "subscription" && (
+        <div className="space-y-4">
+          {(() => {
+            const subscription = data?.subscription;
+            const creativesLimit = subscription?.plan?.limits?.creativesPerMonth ?? null;
+            const hasLimitedQuota = subscription !== null && subscription !== undefined && creativesLimit !== null;
+
+            return (
+              <section className="bg-admin-surface border border-admin-border rounded-2xl p-5" aria-labelledby="image-credits-title">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 id="image-credits-title" className="text-sm font-semibold text-admin-text">Créditos de imagem</h3>
+                    {!subscription ? (
+                      <p className="mt-1 text-sm text-admin-text-faint">Configure uma assinatura para liberar créditos.</p>
+                    ) : hasLimitedQuota ? (
+                      <p className="mt-1 text-sm text-admin-text-muted">
+                        <span className="font-semibold text-admin-text">{subscription.creativesRemaining ?? 0} de {creativesLimit} disponíveis</span>
+                        <span className="block mt-0.5 text-xs text-admin-text-faint">A renovação restaura o saldo ao limite mensal do plano.</span>
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-sm font-semibold text-admin-text">Créditos ilimitados</p>
+                    )}
+                  </div>
+                  {hasLimitedQuota && (
+                    <button
+                      onClick={renewCreativeQuota}
+                      disabled={renewingQuota}
+                      className="shrink-0 bg-admin-petrol hover:bg-admin-petrol-hover disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                    >
+                      {renewingQuota ? "Renovando..." : "Renovar cota"}
+                    </button>
+                  )}
+                </div>
+              </section>
+            );
+          })()}
+
         <div className="bg-admin-surface border border-admin-border rounded-2xl p-5 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -858,6 +913,7 @@ export function TenantDetailPage() {
               Ativar (30 dias)
             </button>
           </div>
+        </div>
         </div>
       )}
 

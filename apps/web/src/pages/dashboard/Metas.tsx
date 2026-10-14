@@ -250,7 +250,7 @@ export function Metas() {
             </div>
 
             {/* Status Indicator */}
-            <div className={cn('mt-2 flex items-center gap-3 rounded-xl border px-4 py-3', statusClass)}>
+            <div className={cn('ady-decor mt-2 flex items-center gap-3 rounded-xl border px-4 py-3', statusClass)}>
               <span className="text-2xl">{statusEmoji}</span>
               <div>
                 <p className="flex items-center gap-1.5 text-sm font-bold">

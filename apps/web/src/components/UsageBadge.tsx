@@ -79,7 +79,7 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
       data-tone={tone}
       role="status"
       aria-atomic="true"
-      className={cn('group inline-flex w-full max-w-64 flex-col gap-2 rounded-xl border border-white/10 bg-[#161814] px-4 py-3', className)}
+      className={cn('ady-decor group inline-flex w-full max-w-64 flex-col gap-2 rounded-xl border border-slate-200 bg-[#FFFFFF] px-4 py-3 dark:border-white/10 dark:bg-[#161814]', className)}
     >
       <div className="flex items-center justify-between gap-3">
         <TooltipProvider delayDuration={200}>
@@ -88,7 +88,7 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
               <div
                 data-testid="usage-tooltip-trigger"
                 aria-label={tooltipText}
-                className="flex cursor-help items-center gap-2 text-sm font-semibold text-[#ECEDEF]"
+                className="flex cursor-help items-center gap-2 text-sm font-semibold text-[#0F172A] dark:text-[#ECEDEF]"
               >
                 <Icon
                   data-testid="usage-icon"
@@ -101,12 +101,12 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
                 </span>
               </div>
             </TooltipTrigger>
-            <TooltipContent className="max-w-64 bg-[#1A1B17] text-text-primary border-white/10">
+            <TooltipContent className="max-w-64 border-slate-200 bg-[#FFFFFF] text-[#0F172A] dark:border-white/10 dark:bg-[#1A1B17] dark:text-text-primary">
               {tooltipText}
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        <span data-testid="usage-pct" className="whitespace-nowrap text-xs text-[#9BA3AB]">
+        <span data-testid="usage-pct" className="whitespace-nowrap text-xs text-[#64748B] dark:text-[#9BA3AB]">
           {exhausted ? (
             '0 criativos'
           ) : used !== null ? (
@@ -127,7 +127,7 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
           aria-valuenow={pct}
           aria-valuemax={100}
           aria-label="Cota de criativos usada"
-          className="h-2 w-full overflow-hidden rounded-full bg-white/10"
+          className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-white/10"
         >
           <div
             data-testid="usage-bar"
@@ -140,7 +140,7 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
 
       <div
         data-testid="usage-renew"
-        className="max-h-0 overflow-hidden text-xs text-[#9BA3AB] opacity-0 transition-all duration-200 ease-out group-hover:max-h-8 group-hover:opacity-100"
+        className="max-h-0 overflow-hidden text-xs text-[#64748B] dark:text-[#9BA3AB] opacity-0 transition-all duration-200 ease-out group-hover:max-h-8 group-hover:opacity-100"
       >
         <div className="flex items-center justify-between gap-2">
           <span className="whitespace-nowrap">

@@ -31,6 +31,10 @@ import {
   ArrowUp,
   ArrowDown,
   MoreHorizontal,
+  LayoutGrid,
+  Film,
+  Sparkles,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { PostSidePanel } from './PostSidePanel';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
@@ -41,7 +45,7 @@ import { Button } from '@/components/ui/button';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import api from '@/lib/api';
 import type { Post } from '../types';
-import { postToEvent, extractEventDropData, getPostFromEvent, resolveEventClickAction } from './calendarAdapter';
+import { postToEvent, extractEventDropData, getPostFromEvent, resolveEventClickAction, localYMD } from './calendarAdapter';
 
 // ===== Types =====
 
@@ -83,6 +87,14 @@ const statusLabels: Record<Status, string> = {
   acao: 'Ação pendente',
 };
 
+// Tipo do post (mesmas cores do painel lateral)
+const postTypeMeta: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; className: string }> = {
+  image: { label: 'Post', icon: ImageIcon, className: 'bg-success/10 text-success' },
+  carousel: { label: 'Carrossel', icon: LayoutGrid, className: 'bg-blue-500/10 text-blue-500' },
+  reel: { label: 'Reels', icon: Film, className: 'bg-purple-500/10 text-purple-500' },
+  stories: { label: 'Stories', icon: Sparkles, className: 'bg-pink-500/10 text-pink-500' },
+};
+
 function resolveChannel(post: Record<string, unknown>): Channel {
   const raw = String(post.channel ?? post.platform ?? '').toLowerCase();
   if (raw.includes('google') || raw.includes('ads')) return 'google';
@@ -109,6 +121,8 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedPost, setSelectedPost] = useState<CalendarPost | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  // Post em edição (abre o diálogo de criação preenchido)
+  const [editingPost, setEditingPost] = useState<CalendarPost | null>(null);
   // Deep-link do FAB "Postar": ?criar=post abre o fluxo de postagem direto.
   // O estado inicializa da prop; o bloco abaixo reage à TRANSIÇÃO da prop
   // (null → 'new-post') quando o usuário já está em /calendario e o componente
@@ -119,7 +133,8 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string } | null>(null);
-  const [preselectedDay, setPreselectedDay] = useState<number | null>(null);
+  // Dia (e hora, na visão semana) clicado no calendário
+  const [preselected, setPreselected] = useState<{ date: string; time: string } | null>(null);
   const [title, setTitle] = useState('');
   const [currentView, setCurrentView] = useState<string>('dayGridMonth');
   const queryClient = useQueryClient();
@@ -134,7 +149,7 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
   if (initialAction !== prevInitialAction) {
     setPrevInitialAction(initialAction);
     if (initialAction === 'new-post') {
-      setPreselectedDay(null);
+      setPreselected(null);
       setCreateMode('schedule');
       setShowPostTypeDialog(true);
     }
@@ -254,16 +269,16 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
     [selectionMode],
   );
 
+  // Dia vazio: abre direto em "Agendar" com a data (e hora, na semana) preenchida
   const handleDateClick = useCallback((info: { dateStr: string }) => {
-    const clickedDate = new Date(info.dateStr);
+    const [date, timePart] = info.dateStr.split('T');
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    clickedDate.setHours(0, 0, 0, 0);
-    if (clickedDate < today) return;
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (date < todayStr) return;
 
-    setPreselectedDay(clickedDate.getDate());
+    setPreselected({ date, time: timePart ? timePart.slice(0, 5) : '' });
     setCreateMode('schedule');
-    setShowPostTypeDialog(true);
+    setShowCreateDialog(true);
   }, []);
 
   const handleEventDrop = useCallback(
@@ -275,23 +290,19 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
         return;
       }
 
-      const today = new Date().toISOString().split('T')[0];
-
-      if (newDate < today) {
+      // Só posts já agendados levam horário; sem horário, muda só o dia
+      const hadSchedule = !!getPostFromEvent(info.event)?.scheduledAt;
+      const pastInstant = hadSchedule && scheduledAt && new Date(scheduledAt) <= new Date();
+      if (newDate < localYMD(new Date()) || pastInstant) {
         showToast('Não é possível mover posts para datas passadas.', 'error');
         info.revert();
         return;
       }
 
-      const timePart = info.event.start
-        ? info.event.start.toTimeString().split(' ')[0]
-        : '00:00:00';
-
       try {
         await api.patch(`/planner/posts/${postId}/move`, {
           date: newDate,
-          time: timePart,
-          scheduledAt: scheduledAt,
+          ...(hadSchedule && scheduledAt ? { scheduledAt } : {}),
         });
 
         await queryClient.invalidateQueries({ queryKey: ['calendar'] });
@@ -481,7 +492,7 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
   size="sm"
   className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
   onClick={() => {
-    setPreselectedDay(null);
+    setPreselected(null);
     setCreateMode('schedule');
     setShowPostTypeDialog(true);
   }}
@@ -558,6 +569,8 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
             firstDay={0}
             headerToolbar={false}
             dayMaxEvents={3}
+            // Mês/Agenda: não publicados no topo do dia, depois por horário
+            eventOrder="publishedRank,start,title"
             editable
             droppable
             slotDuration="00:30:00"
@@ -602,6 +615,10 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
               showToast('Post atualizado!');
               queryClient.invalidateQueries({ queryKey: ['calendar'] });
             }}
+            onEdit={(post) => {
+              setSelectedPost(null);
+              setEditingPost(post as CalendarPost);
+            }}
             onRequestDelete={(post) => {
               // Exclui um post específico a partir do painel, reutilizando o
               // fluxo de confirmação + DELETE /planner/posts/bulk (já testado).
@@ -615,14 +632,28 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
         {showCreateDialog && (
           <CreatePostDialog
             mode={createMode}
-            preselectedDay={preselectedDay}
+            preselectedDate={preselected?.date ?? null}
+            preselectedTime={preselected?.time ?? ''}
             onClose={() => {
               setShowCreateDialog(false);
-              setPreselectedDay(null);
+              setPreselected(null);
             }}
             onCreated={(message) => {
               setShowCreateDialog(false);
-              setPreselectedDay(null);
+              setPreselected(null);
+              showToast(message);
+              queryClient.invalidateQueries({ queryKey: ['calendar'] });
+            }}
+            onError={(msg) => showToast(msg, 'error')}
+          />
+        )}
+        {editingPost && (
+          <CreatePostDialog
+            mode="schedule"
+            editPost={editingPost}
+            onClose={() => setEditingPost(null)}
+            onCreated={(message) => {
+              setEditingPost(null);
               showToast(message);
               queryClient.invalidateQueries({ queryKey: ['calendar'] });
             }}
@@ -638,7 +669,7 @@ export function CalendarView({ initialAction = null }: { initialAction?: 'new-po
             }}
             onClose={() => {
               setShowPostTypeDialog(false);
-              setPreselectedDay(null);
+              setPreselected(null);
             }}
           />
         )}
@@ -685,6 +716,8 @@ function EventCard({
   const isList = arg.view.type.startsWith('list');
   const isSelected = post ? selectedIds.has(post.id) : false;
   const ChannelIcon = channelIcons[channel];
+  const typeMeta = post?.postType ? postTypeMeta[post.postType] : undefined;
+  const TypeIcon = typeMeta?.icon;
 
   const eventDate = arg.event.start ? new Date(arg.event.start) : null;
   const isPast = eventDate ? eventDate < new Date() : false;
@@ -695,27 +728,26 @@ function EventCard({
   // Keyboard-accessible move actions
   const movePost = useCallback(async (direction: 'prev' | 'next') => {
     if (!post) return;
-    const currentDate = new Date(post.date);
-    const newDate = new Date(currentDate);
-    newDate.setDate(currentDate.getDate() + (direction === 'prev' ? -1 : 1));
-    
+    const delta = direction === 'prev' ? -1 : 1;
+    // Dia local do calendário (new Date('YYYY-MM-DD') seria UTC → dia anterior no Brasil)
+    const [y, m, d] = String((post as any).calendarDate ?? post.date).slice(0, 10).split('-').map(Number);
+    const newDate = new Date(y, m - 1, d + delta);
+    // Horário de publicação acompanha o dia
+    const newScheduledAt = post.scheduledAt
+      ? new Date(new Date(post.scheduledAt).getTime() + delta * 86_400_000)
+      : null;
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    if (newDate < today) {
+    if (newDate < today || (newScheduledAt && newScheduledAt <= new Date())) {
       showToast('Não é possível mover posts para datas passadas.', 'error');
       return;
     }
 
-    const newDateStr = newDate.toISOString().split('T')[0];
-    const timePart = post.scheduledAt 
-      ? new Date(post.scheduledAt).toTimeString().split(' ')[0]
-      : '00:00:00';
-
     try {
       await api.patch(`/planner/posts/${post.id}/move`, {
-        date: newDateStr,
-        time: timePart,
-        scheduledAt: post.scheduledAt,
+        date: localYMD(newDate),
+        ...(newScheduledAt ? { scheduledAt: newScheduledAt.toISOString() } : {}),
       });
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
       showToast(`Post movido para ${newDate.toLocaleDateString('pt-BR')}`);
@@ -747,6 +779,15 @@ function EventCard({
           <ChannelIcon className="size-3" />
           {channelLabels[channel]}
         </span>
+        {typeMeta && TypeIcon && (
+          <span
+            className={clsx('inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none', typeMeta.className)}
+            title={typeMeta.label}
+          >
+            <TypeIcon className="size-3" />
+            {typeMeta.label}
+          </span>
+        )}
         {badge?.tone === 'approved' && (
           <span
             className="inline-flex items-center gap-1 rounded bg-green-600/95 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
@@ -769,7 +810,7 @@ function EventCard({
           <span className="text-[10px] font-medium text-text-secondary">{arg.timeText}</span>
         ) : null}
         {/* Keyboard-accessible move menu */}
-        {!isPast && (
+        {!isPast && status !== 'publicado' && post?.status !== 'publishing' && (
           <div className="relative ml-auto">
             <button
               type="button"

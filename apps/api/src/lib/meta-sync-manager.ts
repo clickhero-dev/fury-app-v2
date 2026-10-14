@@ -27,6 +27,12 @@ export async function startMetaSyncManager(): Promise<void> {
     { name: 'meta-sync:tick', data: {} },
   );
 
+  await queue.upsertJobScheduler(
+    'meta-healthcheck-every-12h',
+    { pattern: '0 */12 * * *' },
+    { name: 'meta-healthcheck:run-all', data: {} },
+  );
+
   // Bootstrap: roda imediatamente no startup (todos os tenants conectados).
   await queue.add(
     'meta-sync:bootstrap',
@@ -34,7 +40,7 @@ export async function startMetaSyncManager(): Promise<void> {
     { jobId: 'meta-sync-bootstrap' }
   );
 
-  console.log('✅ Meta-sync scheduler started (every 15min + bootstrap)');
+  console.log('✅ Meta schedulers started (sync every 15min, healthcheck every 12h + bootstrap)');
 }
 
 export async function stopMetaSyncManager(): Promise<void> {

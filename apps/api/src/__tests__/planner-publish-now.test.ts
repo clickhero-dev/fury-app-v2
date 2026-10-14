@@ -2,7 +2,7 @@
 // Testes do publishNow/publishRetry (PlannerService) — endpoint publish-now.
 // BDD unit: cria com claim 'publishing' → publica → published; falha → failed
 // NA HORA (decisão: sem retry automático no postar agora — retry é clique);
-// carousel recusado 400; sem conta IG → failed com motivo; retry republica o
+// carousel com <2 imagens recusado 400; sem conta IG → failed com motivo; retry republica o
 // MESMO post via claim (approved/failed), published → 409.
 // Padrão: import direto do PlannerService + DI via construtor
 // (mesma receita do resolve-instagram.test.ts).
@@ -122,12 +122,30 @@ describe('PlannerService.publishNow', () => {
     expect(result.lastPublishError).toBe('Graph API: boom');
   });
 
-  it('Cenário: carousel → AppError 400 CAROUSEL_NOT_SUPPORTED, nada é criado', async () => {
+  it('Cenário: reel com imagem → 400 REEL_REQUIRES_VIDEO, nada é criado', async () => {
     const repo = makeRepoFake();
     const svc = new PlannerService(() => repo as never, makeDeps() as never);
 
-    await expect(svc.publishNow('t1', { postType: 'carousel', imageUrls: ['a', 'b'] }))
-      .rejects.toMatchObject({ statusCode: 400, code: 'CAROUSEL_NOT_SUPPORTED' });
+    await expect(svc.publishNow('t1', { postType: 'reel', imageUrl: 'https://cdn.x/img.png' }))
+      .rejects.toMatchObject({ statusCode: 400, code: 'REEL_REQUIRES_VIDEO' });
+    expect(repo.createPost).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: carousel misturando imagem e vídeo → 400 CAROUSEL_MIXED_MEDIA, nada é criado', async () => {
+    const repo = makeRepoFake();
+    const svc = new PlannerService(() => repo as never, makeDeps() as never);
+
+    await expect(svc.publishNow('t1', { postType: 'carousel', imageUrls: ['https://cdn.x/a.png', 'https://cdn.x/b.mp4'] }))
+      .rejects.toMatchObject({ statusCode: 400, code: 'CAROUSEL_MIXED_MEDIA' });
+    expect(repo.createPost).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: carousel com 1 imagem → AppError 400 CAROUSEL_TOO_FEW_ITEMS, nada é criado', async () => {
+    const repo = makeRepoFake();
+    const svc = new PlannerService(() => repo as never, makeDeps() as never);
+
+    await expect(svc.publishNow('t1', { postType: 'carousel', imageUrls: ['a'] }))
+      .rejects.toMatchObject({ statusCode: 400, code: 'CAROUSEL_TOO_FEW_ITEMS' });
     expect(repo.createPost).not.toHaveBeenCalled();
   });
 

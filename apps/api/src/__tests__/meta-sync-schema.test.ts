@@ -24,6 +24,11 @@ Funcionalidade: Tabelas de sincronização assíncrona Meta (snapshots, leads, I
     Então metaCampaignSnapshots tem coluna meta_campaign_id com unique tenant+campaign
     E metaSyncRuns tem status no enum running/success/partial/failed
     E metaLeads tem unique (tenant_id, meta_lead_id)
+
+  Cenário: migration de scopes cerca as projeções e preserva isolamento tenant
+    Dado o arquivo 0046_meta_sync_scopes.sql
+    Quando inspeciono a migration e o schema
+    Então as projeções têm scope_id e o scope é isolado por tenant
 */
 // =============================================================================
 
@@ -36,6 +41,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..');
 const MIGRATION_PATH = resolve(REPO_ROOT, 'packages/db/migrations/0043_meta_sync_tables.sql');
 const LEAD_FORM_MIGRATION_PATH = resolve(REPO_ROOT, 'packages/db/migrations/0044_meta_lead_form_unknown.sql');
+const SCOPES_MIGRATION_PATH = resolve(REPO_ROOT, 'packages/db/migrations/0046_meta_sync_scopes.sql');
 
 function readMigration(): string {
   return readFileSync(MIGRATION_PATH, 'utf8');
@@ -79,6 +85,16 @@ describe('BDD: Migration 0043 — meta_sync_tables', () => {
 });
 
 describe('BDD: schema drizzle expõe as tabelas de sync', () => {
+  it('Cenário: migration de scopes cerca as projeções e preserva isolamento tenant', async () => {
+    const migration = readFileSync(SCOPES_MIGRATION_PATH, 'utf8');
+    const { metaCampaignSnapshots, metaSyncScopes } = await import('@fury/db');
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS "meta_sync_scopes"');
+    expect(migration).toContain('ALTER COLUMN "scope_id" SET NOT NULL');
+    expect(migration).toContain('ON DELETE CASCADE');
+    expect(migration).toContain('meta_sync_scopes_tenant_isolation');
+    expect(metaSyncScopes.tenantId.name).toBe('tenant_id');
+    expect(metaCampaignSnapshots.scopeId.name).toBe('scope_id');
+  });
   it('Cenário: metaCampaignSnapshots expõe as colunas e unique', async () => {
     const { metaCampaignSnapshots, metaSyncRuns, metaLeads, metaInstagramMedia } =
       await import('@fury/db');
