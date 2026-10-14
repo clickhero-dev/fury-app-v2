@@ -8,7 +8,7 @@ const createTicketSchema = z.object({
   subject: z.string().trim().min(3).max(160),
   description: z.string().trim().min(10).max(5_000),
   priority: z.enum(['low', 'normal', 'high', 'urgent']),
-  level: z.enum(['N1', 'N2', 'N3', 'N4']),
+  level: z.enum(['N1', 'N2', 'N3', 'N4', 'N5']),
   assigneeId: z.number().int().positive().optional(),
   labels: z.array(z.enum(TICKET_LABELS)).min(1).max(4).refine((labels) => new Set(labels).size === labels.length, 'As etiquetas não podem se repetir'),
 }).superRefine(({ labels }, context) => {

@@ -21,7 +21,7 @@ const ticketSchema = z.object({
   subject: z.string().trim().min(3, 'Informe um assunto com pelo menos 3 caracteres.').max(160),
   description: z.string().trim().min(10, 'Descreva o chamado com pelo menos 10 caracteres.').max(5_000),
   priority: z.enum(['low', 'normal', 'high', 'urgent']),
-  level: z.enum(['N1', 'N2', 'N3', 'N4']),
+  level: z.enum(['N1', 'N2', 'N3', 'N4', 'N5']),
   assigneeId: z.preprocess((value) => value === '' ? undefined : Number(value), z.number().int().positive().optional()),
   labels: z.array(z.enum(allLabels.map(([value]) => value) as [TicketLabel, ...TicketLabel[]])).min(1, 'Selecione ao menos uma etiqueta.').max(4),
 }).superRefine(({ labels }, context) => {
@@ -44,6 +44,7 @@ const levelHelp = [
   ['N2 — Problema pontual', 'Algo não funciona para um usuário, mas existe alternativa.'],
   ['N3 — Bloqueio importante', 'Uma função essencial está indisponível ou vários usuários foram afetados.'],
   ['N4 — Crítico', 'A plataforma está indisponível ou há risco de dados e segurança.'],
+  ['N5 — Solicitação de feature', 'Pedido de criação ou evolução de funcionalidade para avaliação do produto.'],
 ] as const;
 
 const fieldErrors: Record<keyof TicketForm, { link: string; field: string }> = {
@@ -267,7 +268,7 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
               <div>
                 <label className="text-sm font-medium" htmlFor="ticket-level">Nível</label>
                 <select id="ticket-level" className={fieldClass} {...register('level')}>
-                  <option value="N1">N1</option><option value="N2">N2</option><option value="N3">N3</option><option value="N4">N4</option>
+                  <option value="N1">N1</option><option value="N2">N2</option><option value="N3">N3</option><option value="N4">N4</option><option value="N5">N5 — Solicitação de feature</option>
                 </select>
               </div>
               <div>

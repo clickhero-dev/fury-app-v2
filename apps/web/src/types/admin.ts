@@ -11,7 +11,7 @@ export interface AdminDashboardStats {
 }
 
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
-export type TicketLevel = 'N1' | 'N2' | 'N3' | 'N4';
+export type TicketLevel = 'N1' | 'N2' | 'N3' | 'N4' | 'N5';
 
 export interface CreateTicketRequest {
   email: string;
