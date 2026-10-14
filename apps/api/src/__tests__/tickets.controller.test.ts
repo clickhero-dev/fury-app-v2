@@ -75,6 +75,17 @@ describe('TicketsController', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
   });
 
+  it('aceita N5 para solicitações de feature', async () => {
+    const service = { createTicket: vi.fn().mockResolvedValue({ clickupTaskId: 'feature-123', clickupTaskUrl: 'https://app.clickup.com/t/feature-123' }) };
+    const response = mockRes();
+    const input = { ...validInput, level: 'N5', subject: 'Exportar relatórios em CSV' };
+
+    await new TicketsController(service as any).create({ body: input } as any, response, vi.fn());
+
+    expect(service.createTicket).toHaveBeenCalledWith(input);
+    expect(response.status).toHaveBeenCalledWith(201);
+  });
+
   it('rejeita uma única etiqueta de área sem chamar o serviço', async () => {
     const service = { createTicket: vi.fn() };
     const next = vi.fn();

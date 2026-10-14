@@ -3,7 +3,7 @@ import { externalFetch, ExternalHttpError } from './http-client.js';
 const CLICKUP_API_URL = 'https://api.clickup.com/api/v2';
 
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
-export type TicketLevel = 'N1' | 'N2' | 'N3' | 'N4';
+export type TicketLevel = 'N1' | 'N2' | 'N3' | 'N4' | 'N5';
 export const TICKET_SCOPE_LABELS = ['app', 'ux', 'infra', 'api', 'dados', 'integracoes', 'seguranca'] as const;
 export const TICKET_AREA_LABELS = ['meta', 'sincronizacao-dados', 'dados-usuario', 'google'] as const;
 export const TICKET_LABELS = [...TICKET_SCOPE_LABELS, ...TICKET_AREA_LABELS] as const;

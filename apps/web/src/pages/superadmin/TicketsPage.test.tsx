@@ -156,6 +156,22 @@ describe('TicketsPage', () => {
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets', expect.objectContaining({ labels: ['app', 'meta', 'sincronizacao-dados'] })));
   });
 
+  it('envia N5 como solicitação de feature e explica o nível na ajuda', async () => {
+    mockPost.mockResolvedValue({ data: { data: { clickupTaskId: 'feature-123', clickupTaskUrl: 'https://app.clickup.com/t/feature-123' } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    const dialog = await openModalAndFill(user);
+    await user.selectOptions(within(dialog).getByLabelText('Nível'), 'N5');
+    await user.click(within(dialog).getByRole('button', { name: 'Abrir ticket' }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets', expect.objectContaining({ level: 'N5' })));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const details = screen.getByText('Como escolher o nível').closest('details') as HTMLElement;
+    await user.click(within(details).getByText('Como escolher o nível'));
+    expect(screen.getByText('N5 — Solicitação de feature')).toBeVisible();
+  });
+
   it('impede o envio com uma única etiqueta de área', async () => {
     render(<TicketsPage />);
     const user = setupUser();

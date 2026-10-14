@@ -76,6 +76,29 @@ describe('ClickUpTicketsClient', () => {
     });
   });
 
+  it('cria solicitação de feature N5 na lista Chamados existente', async () => {
+    const fetchMock = mockFetchOnce(200, {
+      id: 'feature-123',
+      url: 'https://app.clickup.com/t/feature-123',
+    });
+
+    await new ClickUpTicketsClient().createTicket({
+      email: 'cliente@empresa.com',
+      subject: 'Exportar relatórios em CSV',
+      description: 'Permitir exportar os dados do painel em formato CSV.',
+      priority: 'normal',
+      level: 'N5',
+      labels: ['app'],
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe('https://api.clickup.com/api/v2/list/901717485435/task');
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual(expect.objectContaining({
+      name: '[N5] Exportar relatórios em CSV',
+      description: expect.stringContaining('**Nível:** N5'),
+    }));
+  });
+
   it('normaliza falha de rede sem expor detalhes do provedor', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('token=clickup-secret-token ECONNREFUSED')));
     const error = await new ClickUpTicketsClient().createTicket({
