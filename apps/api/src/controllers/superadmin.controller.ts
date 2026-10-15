@@ -82,6 +82,9 @@ const upsertGoalsSchema = z.object({
 const planLimitsSchema = z.object({
   creativesPerMonth: z.number().int().positive().nullable().optional(),
   modificationsPerCreative: z.number().int().positive().nullable().optional(),
+  // vídeo: 0 desliga a criação de vídeo no plano
+  videosPerMonth: z.number().int().min(0).nullable().optional(),
+  modificationsPerVideo: z.number().int().min(0).nullable().optional(),
 });
 
 const createPlanSchema = z.object({

@@ -11,6 +11,9 @@ import { FuryEngineService } from './services/fury/fury-engine.service.js';
 import { FuryController } from './controllers/fury.controller.js';
 import { StudioAiService } from './services/studio/studio-ai.service.js';
 import { StudioAiController } from './controllers/studio-ai.controller.js';
+import { StudioVideoService } from './services/studio/studio-video.service.js';
+import { StudioVideoController } from './controllers/studio-video.controller.js';
+import { enqueueStudioVideo } from './workers/studio-video.worker.js';
 import { StudioService } from './services/studio/creative-studio.service.js';
 import { StudioPublishingService } from './services/studio/studio-publishing.service.js';
 import { CreativeStudioController } from './controllers/creative-studio.controller.js';
@@ -86,6 +89,10 @@ export const brandKitService = new BrandKitService();
 export const brandKitPhotoService = new BrandKitPhotoService();
 export const furyEngineService = new FuryEngineService();
 export const studioAiService = new StudioAiService();
+export const studioVideoService = new StudioVideoService({
+  enqueue: enqueueStudioVideo,
+  brand: (tenantId) => studioAiService.getBrandContext(tenantId),
+});
 export const studioService = new StudioService();
 export const studioPublishingService = new StudioPublishingService();
 export const billingService = new BillingService();
@@ -130,6 +137,7 @@ export const controllers = {
   brandKitPhotos: new BrandKitPhotoController(brandKitPhotoService),
   fury: new FuryController(furyEngineService),
   studioAi: new StudioAiController(studioAiService),
+  studioVideo: new StudioVideoController(studioVideoService),
   studio: new CreativeStudioController(studioService),
   studioPublishing: new StudioPublishingController(studioPublishingService),
   billing: new BillingController(billingService),
