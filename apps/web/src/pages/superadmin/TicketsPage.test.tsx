@@ -16,8 +16,8 @@ Funcionalidade: tela de chamados do painel administrativo
     Quando tenta enviar o formulário
     Então a API não é chamada e o resumo de erros aparece no modal
 
-  Cenário: abrir chamado sem classificação manual
-    Dado que o formulário não exibe escopo nem área do playbook
+  Cenário: classificação opcional
+    Dado que o formulário exibe escopo e área do playbook
     Quando o superadmin envia o chamado
     Então a API recebe os demais campos sem etiquetas
 
@@ -145,7 +145,7 @@ describe('TicketsPage', () => {
 
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets', {
       email: 'cliente@empresa.com', subject: 'Erro ao publicar campanha',
-      description: 'A publicação falha depois de confirmar os dados.', priority: 'high', level: 'N2', assigneeId: 101281834,
+      description: 'A publicação falha depois de confirmar os dados.', priority: 'high', level: 'N2', assigneeId: 101281834, labels: [],
     }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(mockShowSnack).toHaveBeenCalledWith('Ticket aberto com sucesso.', 'success');
@@ -184,14 +184,30 @@ describe('TicketsPage', () => {
     expect(screen.getByText('N5 — Solicitação de feature')).toBeVisible();
   });
 
-  it('não exibe seleção de etiquetas de escopo ou área', async () => {
+  it('mantém escopo e área do playbook visíveis, mas permite enviar sem seleção', async () => {
     render(<TicketsPage />);
     const user = setupUser();
     const dialog = await openModalAndFill(user);
 
-    expect(within(dialog).queryByText('Etiquetas')).not.toBeInTheDocument();
-    expect(within(dialog).queryByText('Escopo')).not.toBeInTheDocument();
+    expect(within(dialog).getByText('Etiquetas')).toBeInTheDocument();
+    expect(within(dialog).getByText('Escopo')).toBeInTheDocument();
+    expect(within(dialog).getByText('Área do playbook')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Abrir ticket' })).toBeEnabled();
+  });
+
+  it('envia as etiquetas escolhidas, inclusive no multipart', async () => {
+    mockPost.mockResolvedValue({ data: { data: { clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    const dialog = await openModalAndFill(user);
+    await user.click(within(dialog).getByLabelText('App'));
+    await user.click(within(dialog).getByLabelText('Meta'));
+    const file = new File(['imagem'], 'erro.png', { type: 'image/png' });
+    await user.upload(within(dialog).getByLabelText('Anexos (imagens ou vídeos)'), file);
+    await user.click(within(dialog).getByRole('button', { name: 'Abrir ticket' }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets', expect.any(FormData)));
+    expect((mockPost.mock.calls[0][1] as FormData).get('labels')).toBe('["app","meta"]');
   });
 
   it('fecha o modal de novo chamado com Esc', async () => {
