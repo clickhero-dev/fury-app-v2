@@ -1,12 +1,16 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, ExternalLink, Plus, RefreshCw, Send, Users, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, ExternalLink, Paperclip, Plus, RefreshCw, Send, Trash2, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import api from '@/lib/api';
+import { showSnack } from '@/lib/snack';
 
 const PAGE_SIZE = 10;
+const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
+const acceptedAttachmentTypes = ['image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'video/quicktime'];
 const scopeLabels = [
   ['app', 'App'], ['ux', 'UX'], ['infra', 'Infra'], ['api', 'API'], ['dados', 'Dados'], ['integracoes', 'Integrações'], ['seguranca', 'Segurança'],
 ] as const;
@@ -33,7 +37,7 @@ const ticketSchema = z.object({
 
 type TicketForm = z.infer<typeof ticketSchema>;
 type CreatedTicket = { clickupTaskId: string; clickupTaskUrl: string };
-type TicketApiResponse = { data?: CreatedTicket; error?: { message?: string } };
+type TicketApiResponse = { data?: CreatedTicket; error?: { message?: string; details?: { clickupTaskUrl?: string } } };
 type Ticket = { id: string; name: string; status: string; priority: string | null; url: string; createdAt: string; labels?: TicketLabel[] };
 type TicketLists = { open: Ticket[]; resolved: Ticket[] };
 type Assignee = { id: number; name: string; email: string | null };
@@ -179,8 +183,8 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
   assignees: Assignee[];
   onCreated: () => void;
 }) {
-  const [createdTicket, setCreatedTicket] = useState<CreatedTicket | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset, watch } = useForm<TicketForm>({
     resolver: zodResolver(ticketSchema), defaultValues: { priority: 'normal', level: 'N1', email: '', subject: '', description: '', assigneeId: undefined, labels: [] },
   });
@@ -191,18 +195,67 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
   const canSubmit = selectedScopes.length >= 1 && selectedScopes.length <= 2 && (selectedAreas.length === 0 || selectedAreas.length === 2);
 
   const handleOpenChange = (next: boolean) => {
-    if (next) { setCreatedTicket(null); setSubmitError(null); reset(); }
+    if (next) { setAttachments([]); setAttachmentError(null); reset(); }
     onOpenChange(next);
   };
 
-  const onSubmit = (values: TicketForm) => {
-    setSubmitError(null); setCreatedTicket(null);
-    void api.post<TicketApiResponse>('/admin/tickets', values).then((response) => {
+  const closeAndReset = () => {
+    setAttachments([]);
+    setAttachmentError(null);
+    reset();
+    onOpenChange(false);
+  };
+
+  const onSubmit = async (values: TicketForm) => {
+    const payload = attachments.length === 0 ? values : (() => {
+      const formData = new FormData();
+      formData.append('email', values.email);
+      formData.append('subject', values.subject);
+      formData.append('description', values.description);
+      formData.append('priority', values.priority);
+      formData.append('level', values.level);
+      if (values.assigneeId) formData.append('assigneeId', String(values.assigneeId));
+      formData.append('labels', JSON.stringify(values.labels));
+      attachments.forEach((file) => formData.append('attachments', file));
+      return formData;
+    })();
+
+    try {
+      const response = await api.post<TicketApiResponse>('/admin/tickets', payload);
       const ticket = response.data?.data;
-      if (!ticket?.clickupTaskId || !ticket?.clickupTaskUrl) { setSubmitError(response.data?.error?.message ?? 'Não foi possível abrir o ticket agora. Tente novamente.'); return; }
-      setCreatedTicket(ticket);
+      if (!ticket?.clickupTaskId || !ticket?.clickupTaskUrl) throw new Error(response.data?.error?.message ?? 'Não foi possível abrir o ticket agora. Tente novamente.');
+      closeAndReset();
+      showSnack('Ticket aberto com sucesso.', 'success');
       onCreated();
-    }).catch((error: unknown) => setSubmitError((error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Não foi possível abrir o ticket agora. Tente novamente.'));
+    } catch (error) {
+      const responseError = (error as { response?: { data?: TicketApiResponse } })?.response?.data?.error;
+      const message = responseError?.message ?? (error instanceof Error ? error.message : 'Não foi possível abrir o ticket agora. Tente novamente.');
+      closeAndReset();
+      if (responseError?.details?.clickupTaskUrl) {
+        showSnack(message, 'error', { label: 'Abrir tarefa', href: responseError.details.clickupTaskUrl });
+      } else {
+        showSnack(message, 'error');
+      }
+    }
+  };
+
+  const addAttachments = (files: FileList | null) => {
+    const nextFiles = Array.from(files ?? []);
+    if (nextFiles.length === 0) return;
+    if (nextFiles.some((file) => !acceptedAttachmentTypes.includes(file.type))) {
+      setAttachmentError('Envie imagens PNG, JPG ou WebP, ou vídeos MP4 ou MOV.');
+      return;
+    }
+    if (nextFiles.some((file) => file.size > MAX_ATTACHMENT_SIZE)) {
+      setAttachmentError('Cada anexo pode ter no máximo 50 MB.');
+      return;
+    }
+    if (attachments.length + nextFiles.length > MAX_ATTACHMENTS) {
+      setAttachmentError('Envie no máximo cinco anexos por ticket.');
+      return;
+    }
+    setAttachmentError(null);
+    setAttachments((current) => [...current, ...nextFiles]);
   };
 
   const fieldClass = 'mt-1 w-full rounded-lg border border-[#2A2D27] bg-[#0C0D0A] px-3 py-2.5 text-sm text-[#ECEDEF] outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30';
@@ -225,11 +278,6 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
               <span className="sr-only">Fechar</span>
             </DialogPrimitive.Close>
           </div>
-          {createdTicket && <div className="mt-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-emerald-100">
-            <p className="font-medium">Ticket aberto com sucesso.</p>
-            <a className="mt-2 inline-flex items-center gap-1 text-[#5cc5e4] underline" href={createdTicket.clickupTaskUrl} target="_blank" rel="noreferrer">Abrir ticket no ClickUp <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></a>
-          </div>}
-          {submitError && <div role="alert" className="mt-4 rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-100">{submitError}</div>}
           <form className="mt-5 space-y-5" onSubmit={handleSubmit(onSubmit)} noValidate>
             {summaryEntries.length > 0 && (
               <div role="alert" tabIndex={-1} aria-labelledby="ticket-error-title" className="rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-100">
@@ -289,6 +337,26 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
               {selectedAreas.length === 1 && <p className="mt-2 text-xs text-red-300">Selecione zero ou duas etiquetas de área.</p>}
               {(selectedScopes.length === 0 || selectedScopes.length > 2) && <p className="mt-2 text-xs text-red-300">Selecione uma ou duas etiquetas de escopo.</p>}
               {errors.labels && <p className="mt-2 text-xs text-red-300">{errors.labels.message}</p>}
+            </fieldset>
+            <fieldset>
+              <legend className="text-sm font-medium">Anexos (imagens ou vídeos)</legend>
+              <p className="mt-0.5 text-xs text-[#8A8F8B]">Até 5 arquivos: PNG, JPG, WebP, MP4 ou MOV, com até 50 MB cada.</p>
+              <input
+                id="ticket-attachments"
+                aria-label="Anexos (imagens ou vídeos)"
+                type="file"
+                multiple
+                accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
+                className="mt-2 block w-full text-sm text-[#8A8F8B] file:mr-3 file:rounded-lg file:border-0 file:bg-[#1E88A8]/15 file:px-3 file:py-2 file:text-sm file:font-medium file:text-[#5cc5e4] hover:file:bg-[#1E88A8]/25"
+                onChange={(event) => { addAttachments(event.target.files); event.target.value = ''; }}
+              />
+              {attachmentError && <p role="alert" className="mt-2 text-xs text-red-300">{attachmentError}</p>}
+              {attachments.length > 0 && <ul className="mt-3 space-y-2" aria-label="Anexos selecionados">
+                {attachments.map((file, index) => <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 rounded-lg bg-[#0C0D0A] px-3 py-2 text-sm">
+                  <span className="flex min-w-0 items-center gap-2"><Paperclip className="h-4 w-4 shrink-0 text-[#5cc5e4]" aria-hidden="true" /><span className="truncate">{file.name}</span></span>
+                  <button type="button" onClick={() => setAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index))} aria-label={`Remover ${file.name}`} className="rounded p-1 text-[#8A8F8B] hover:bg-[#2A2D27] hover:text-[#ECEDEF]"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
+                </li>)}
+              </ul>}
             </fieldset>
             <button type="submit" disabled={isSubmitting || !canSubmit} className="inline-flex items-center gap-2 rounded-lg bg-[#17708A] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1E88A8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#161714] disabled:cursor-not-allowed disabled:opacity-60">
               <Send className="h-4 w-4" aria-hidden="true" />

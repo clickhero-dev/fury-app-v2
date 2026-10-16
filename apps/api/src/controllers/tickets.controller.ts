@@ -9,8 +9,11 @@ const createTicketSchema = z.object({
   description: z.string().trim().min(10).max(5_000),
   priority: z.enum(['low', 'normal', 'high', 'urgent']),
   level: z.enum(['N1', 'N2', 'N3', 'N4', 'N5']),
-  assigneeId: z.number().int().positive().optional(),
-  labels: z.array(z.enum(TICKET_LABELS)).min(1).max(4).refine((labels) => new Set(labels).size === labels.length, 'As etiquetas não podem se repetir'),
+  assigneeId: z.preprocess((value) => value === '' || value === undefined ? undefined : Number(value), z.number().int().positive().optional()),
+  labels: z.preprocess((value) => {
+    if (typeof value !== 'string') return value;
+    try { return JSON.parse(value); } catch { return value; }
+  }, z.array(z.enum(TICKET_LABELS)).min(1).max(4).refine((labels) => new Set(labels).size === labels.length, 'As etiquetas não podem se repetir')),
 }).superRefine(({ labels }, context) => {
   const scopeCount = labels.filter((label) => (TICKET_SCOPE_LABELS as readonly string[]).includes(label)).length;
   const areaCount = labels.filter((label) => (TICKET_AREA_LABELS as readonly string[]).includes(label)).length;
@@ -25,7 +28,9 @@ export class TicketsController {
   create = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = createTicketSchema.parse(req.body);
-      const ticket = await this.ticketService.createTicket(input);
+      const files = Array.isArray(req.files) ? req.files : [];
+      const attachments = files.map((file) => ({ buffer: file.buffer, filename: file.originalname, mimeType: file.mimetype }));
+      const ticket = await this.ticketService.createTicket({ ...input, ...(attachments.length > 0 ? { attachments } : {}) });
       res.status(201).json({ success: true, data: ticket, timestamp: new Date().toISOString() });
     } catch (error) {
       next(error);

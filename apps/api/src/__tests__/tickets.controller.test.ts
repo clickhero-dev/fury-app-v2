@@ -30,6 +30,16 @@
  * Dado que há chamados pendentes, em progresso e concluídos
  * Quando o superadmin abre a tela
  * Então recebe as listas Abertos e Resolvidos separadas
+ *
+ * Cenário: receber ticket multipart com anexos
+ * Dado que o formulário envia campos textuais como multipart
+ * Quando o superadmin abre o chamado com uma evidência
+ * Então a API converte os campos e encaminha o arquivo ao serviço
+ *
+ * Cenário: falha parcial de anexos
+ * Dado que o ClickUp criou a tarefa mas falhou ao anexar um arquivo
+ * Quando a API devolve o erro ao painel
+ * Então preserva apenas a URL segura da tarefa criada
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TicketsController } from '../controllers/tickets.controller.js';
@@ -84,6 +94,30 @@ describe('TicketsController', () => {
 
     expect(service.createTicket).toHaveBeenCalledWith(input);
     expect(response.status).toHaveBeenCalledWith(201);
+  });
+
+  it('normaliza campos multipart e encaminha os anexos', async () => {
+    const service = { createTicket: vi.fn().mockResolvedValue({ clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' }) };
+    const response = mockRes();
+    const file = { buffer: Buffer.from('imagem'), originalname: 'erro.png', mimetype: 'image/png' };
+    const multipartBody = { ...validInput, assigneeId: '101281834', labels: JSON.stringify(validInput.labels) };
+
+    await new TicketsController(service as any).create({ body: multipartBody, files: [file] } as any, response, vi.fn());
+
+    expect(service.createTicket).toHaveBeenCalledWith({ ...validInput, attachments: [{ buffer: file.buffer, filename: 'erro.png', mimeType: 'image/png' }] });
+  });
+
+  it('preserva o link seguro da tarefa em uma falha parcial de anexos', async () => {
+    const client = { createTicket: vi.fn().mockRejectedValue(new ClickUpTicketsError(502, 'CLICKUP_ATTACHMENT_FAILED', 'detalhe privado', 'https://app.clickup.com/t/task-123')) };
+    const next = vi.fn();
+
+    await new TicketsController(new TicketService(client as any)).create({ body: validInput } as any, mockRes(), next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 502,
+      code: 'TICKET_ATTACHMENTS_UNAVAILABLE',
+      details: { clickupTaskUrl: 'https://app.clickup.com/t/task-123' },
+    }));
   });
 
   it('rejeita uma única etiqueta de área sem chamar o serviço', async () => {

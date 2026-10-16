@@ -27,4 +27,14 @@ describe('SnackHost', () => {
 
     expect(screen.queryByText(/Campanha cancelada com sucesso/)).not.toBeInTheDocument();
   });
+
+  it('renderiza ação opcional de link no snack', () => {
+    render(<SnackHost />);
+
+    act(() => {
+      showSnack('Os anexos falharam', 'error', { label: 'Abrir tarefa', href: 'https://app.clickup.com/t/task-123' });
+    });
+
+    expect(screen.getByRole('link', { name: 'Abrir tarefa' })).toHaveAttribute('href', 'https://app.clickup.com/t/task-123');
+  });
 });
