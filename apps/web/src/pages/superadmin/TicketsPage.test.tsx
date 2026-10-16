@@ -4,7 +4,7 @@ Funcionalidade: tela de chamados do painel administrativo
   Cenário: abrir ticket com dados válidos
     Dado que o superadmin abre o modal e preenche o formulário
     Quando envia o ticket
-    Então vê a confirmação e o link da tarefa no ClickUp dentro do modal
+    Então o modal fecha e vê a confirmação em um snack global
 
   Cenário: fechar o modal de novo chamado
     Dado que o modal de novo chamado está aberto
@@ -16,20 +16,25 @@ Funcionalidade: tela de chamados do painel administrativo
     Quando tenta enviar o formulário
     Então a API não é chamada e o resumo de erros aparece no modal
 
-  Cenário: classificar com etiquetas válidas
-    Dado que o superadmin escolhe escopo e duas áreas
-    Quando envia o chamado
-    Então a API recebe a classificação
+  Cenário: abrir chamado sem classificação manual
+    Dado que o formulário não exibe escopo nem área do playbook
+    Quando o superadmin envia o chamado
+    Então a API recebe os demais campos sem etiquetas
 
-  Cenário: impedir uma área isolada
-    Dado que o superadmin escolhe só uma área
-    Quando tenta abrir o chamado
-    Então a API não é chamada e a regra fica visível
-
-  Cenário: manter o preenchimento após erro do serviço
+  Cenário: informar erro do serviço após fechar o modal
     Dado que o ClickUp está indisponível
     Quando o superadmin envia o ticket
-    Então vê uma mensagem segura e seus dados continuam no formulário
+    Então o modal fecha e vê uma mensagem segura no snack
+
+  Cenário: anexar evidências ao ticket
+    Dado que o superadmin seleciona uma imagem ou vídeo
+    Quando envia o chamado
+    Então a tela envia multipart com os anexos selecionados
+
+  Cenário: falhar ao anexar evidências após criar o ticket
+    Dado que o ClickUp criou a tarefa mas não aceitou todos os anexos
+    Quando a API retorna a URL segura da tarefa
+    Então o modal fecha e o snack oferece acesso à tarefa criada
 
   Cenário: lista única com abas Abertos e Resolvidos
     Dado que há chamados em ambas as filas
@@ -83,7 +88,9 @@ import { TicketsPage } from './TicketsPage';
 
 const mockPost = vi.hoisted(() => vi.fn());
 const mockGet = vi.hoisted(() => vi.fn());
+const mockShowSnack = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/api', () => ({ default: { post: mockPost, get: mockGet } }));
+vi.mock('@/lib/snack', () => ({ showSnack: mockShowSnack }));
 
 const NOW = new Date('2026-10-06T12:00:00-03:00');
 
@@ -118,17 +125,16 @@ async function openModalAndFill(user = setupUser()) {
   await user.selectOptions(within(dialog).getByLabelText('Nível'), 'N2');
   await within(dialog).findByRole('option', { name: 'Kaio Araújo' });
   await user.selectOptions(within(dialog).getByLabelText('Responsável'), '101281834');
-  await user.click(within(dialog).getByLabelText('App'));
   return dialog;
 }
 
 describe('TicketsPage', () => {
   beforeEach(() => {
-    mockPost.mockReset(); mockGet.mockReset(); mockTicketsData();
+    mockPost.mockReset(); mockGet.mockReset(); mockShowSnack.mockReset(); mockTicketsData();
     vi.useFakeTimers({ now: NOW, shouldAdvanceTime: true });
   });
 
-  it('abre o formulário em modal e envia ticket válido com link do ClickUp', async () => {
+  it('fecha o modal e mostra snack de sucesso ao enviar ticket válido', async () => {
     mockPost.mockResolvedValue({ data: { data: { clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' } } });
     render(<TicketsPage />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -139,21 +145,27 @@ describe('TicketsPage', () => {
 
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets', {
       email: 'cliente@empresa.com', subject: 'Erro ao publicar campanha',
-      description: 'A publicação falha depois de confirmar os dados.', priority: 'high', level: 'N2', assigneeId: 101281834, labels: ['app'],
+      description: 'A publicação falha depois de confirmar os dados.', priority: 'high', level: 'N2', assigneeId: 101281834,
     }));
-    expect(await within(dialog).findByRole('link', { name: 'Abrir ticket no ClickUp' })).toHaveAttribute('href', 'https://app.clickup.com/t/task-123');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(mockShowSnack).toHaveBeenCalledWith('Ticket aberto com sucesso.', 'success');
   });
 
-  it('envia duas etiquetas de área junto do escopo', async () => {
+  it('envia os anexos selecionados como multipart', async () => {
     mockPost.mockResolvedValue({ data: { data: { clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' } } });
     render(<TicketsPage />);
     const user = setupUser();
     const dialog = await openModalAndFill(user);
-    await user.click(within(dialog).getByLabelText('Meta'));
-    await user.click(within(dialog).getByLabelText('Sincronização de dados'));
+    const file = new File(['imagem'], 'erro.png', { type: 'image/png' });
+    await user.upload(within(dialog).getByLabelText('Anexos (imagens ou vídeos)'), file);
+
+    expect(within(dialog).getByText('erro.png')).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Abrir ticket' }));
 
-    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets', expect.objectContaining({ labels: ['app', 'meta', 'sincronizacao-dados'] })));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets', expect.any(FormData)));
+    const formData = mockPost.mock.calls[0][1] as FormData;
+    expect(formData.get('attachments')).toMatchObject({ name: 'erro.png', type: 'image/png' });
+    expect(formData.get('labels')).toBeNull();
   });
 
   it('envia N5 como solicitação de feature e explica o nível na ajuda', async () => {
@@ -172,14 +184,14 @@ describe('TicketsPage', () => {
     expect(screen.getByText('N5 — Solicitação de feature')).toBeVisible();
   });
 
-  it('impede o envio com uma única etiqueta de área', async () => {
+  it('não exibe seleção de etiquetas de escopo ou área', async () => {
     render(<TicketsPage />);
     const user = setupUser();
     const dialog = await openModalAndFill(user);
-    await user.click(within(dialog).getByLabelText('Meta'));
 
-    expect(within(dialog).getByText(/selecione zero ou duas etiquetas de área/i)).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: 'Abrir ticket' })).toBeDisabled();
+    expect(within(dialog).queryByText('Etiquetas')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('Escopo')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Abrir ticket' })).toBeEnabled();
   });
 
   it('fecha o modal de novo chamado com Esc', async () => {
@@ -203,16 +215,33 @@ describe('TicketsPage', () => {
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  it('mantém os campos e mostra mensagem segura quando a API falha', async () => {
-    mockPost.mockResolvedValue({ data: { error: { message: 'Não foi possível abrir o ticket agora. Tente novamente.' } } });
+  it('fecha o modal e mostra snack seguro quando a API falha', async () => {
+    mockPost.mockRejectedValue({ response: { data: { error: { message: 'Não foi possível abrir o ticket agora. Tente novamente.' } } } });
     render(<TicketsPage />);
     const user = setupUser();
     const dialog = await openModalAndFill(user);
     await user.click(within(dialog).getByRole('button', { name: 'Abrir ticket' }));
 
-    expect(await within(dialog).findByText('Não foi possível abrir o ticket agora. Tente novamente.')).toBeInTheDocument();
-    expect(within(dialog).getByLabelText('Assunto')).toHaveValue('Erro ao publicar campanha');
-    expect(within(dialog).getByLabelText('Nível')).toHaveValue('N2');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(mockShowSnack).toHaveBeenCalledWith('Não foi possível abrir o ticket agora. Tente novamente.', 'error');
+  });
+
+  it('oferece a tarefa criada no snack quando um anexo falha', async () => {
+    mockPost.mockRejectedValue({ response: { data: { error: {
+      message: 'O ticket foi aberto, mas não foi possível anexar todos os arquivos.',
+      details: { clickupTaskUrl: 'https://app.clickup.com/t/task-123' },
+    } } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    const dialog = await openModalAndFill(user);
+    await user.click(within(dialog).getByRole('button', { name: 'Abrir ticket' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(mockShowSnack).toHaveBeenCalledWith(
+      'O ticket foi aberto, mas não foi possível anexar todos os arquivos.',
+      'error',
+      { label: 'Abrir tarefa', href: 'https://app.clickup.com/t/task-123' },
+    );
   });
 
   it('mostra uma lista única com abas Abertos e Resolvidos e contagens', async () => {
