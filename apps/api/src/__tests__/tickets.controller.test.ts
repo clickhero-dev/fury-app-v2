@@ -96,6 +96,17 @@ describe('TicketsController', () => {
     expect(response.status).toHaveBeenCalledWith(201);
   });
 
+  it('aceita ticket sem etiquetas de escopo ou área', async () => {
+    const service = { createTicket: vi.fn().mockResolvedValue({ clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' }) };
+    const response = mockRes();
+    const { labels: _labels, ...input } = validInput;
+
+    await new TicketsController(service as any).create({ body: input } as any, response, vi.fn());
+
+    expect(service.createTicket).toHaveBeenCalledWith({ ...input, labels: [] });
+    expect(response.status).toHaveBeenCalledWith(201);
+  });
+
   it('normaliza campos multipart e encaminha os anexos', async () => {
     const service = { createTicket: vi.fn().mockResolvedValue({ clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' }) };
     const response = mockRes();
@@ -118,15 +129,6 @@ describe('TicketsController', () => {
       code: 'TICKET_ATTACHMENTS_UNAVAILABLE',
       details: { clickupTaskUrl: 'https://app.clickup.com/t/task-123' },
     }));
-  });
-
-  it('rejeita uma única etiqueta de área sem chamar o serviço', async () => {
-    const service = { createTicket: vi.fn() };
-    const next = vi.fn();
-    await new TicketsController(service as any).create({ body: { ...validInput, labels: ['app', 'meta'] } } as any, mockRes(), next);
-
-    expect(service.createTicket).not.toHaveBeenCalled();
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
   });
 
   it('propaga somente erro seguro quando o ClickUp está indisponível', async () => {

@@ -15,7 +15,7 @@ export interface CreateClickUpTicketInput {
   description: string;
   priority: TicketPriority;
   level: TicketLevel;
-  labels: TicketLabel[];
+  labels?: TicketLabel[];
   assigneeId?: number;
   attachments?: TicketAttachment[];
 }
@@ -167,7 +167,7 @@ export class ClickUpTicketsClient {
           description: toClickUpDescription(input),
           priority: clickUpPriority[input.priority],
           status: 'pendente',
-          tags: input.labels,
+          ...(input.labels?.length ? { tags: input.labels } : {}),
           ...(input.assigneeId ? { assignees: [input.assigneeId] } : {}),
         }),
       });

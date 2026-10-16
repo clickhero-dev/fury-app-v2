@@ -109,6 +109,21 @@ describe('ClickUpTicketsClient', () => {
     }));
   });
 
+  it('cria ticket sem enviar tags quando não há classificação', async () => {
+    const fetchMock = mockFetchOnce(200, {
+      id: 'task-sem-tags',
+      url: 'https://app.clickup.com/t/task-sem-tags',
+    });
+
+    await new ClickUpTicketsClient().createTicket({
+      email: 'cliente@empresa.com', subject: 'Chamado sem classificação',
+      description: 'Descrição detalhada sem necessidade de etiquetas.', priority: 'normal', level: 'N1', labels: [],
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string)).not.toHaveProperty('tags');
+  });
+
   it('anexa imagens e vídeos à tarefa criada', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'task-123', url: 'https://app.clickup.com/t/task-123' }) } as Response)
