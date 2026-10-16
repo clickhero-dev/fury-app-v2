@@ -27,6 +27,7 @@ const ticketSchema = z.object({
   priority: z.enum(['low', 'normal', 'high', 'urgent']),
   level: z.enum(['N1', 'N2', 'N3', 'N4', 'N5']),
   assigneeId: z.preprocess((value) => value === '' ? undefined : Number(value), z.number().int().positive().optional()),
+  labels: z.array(z.enum(allLabels.map(([value]) => value) as [TicketLabel, ...TicketLabel[]])).max(4, 'Selecione no máximo quatro etiquetas.').default([]),
 });
 
 type TicketForm = z.infer<typeof ticketSchema>;
@@ -52,6 +53,7 @@ const fieldErrors: Record<keyof TicketForm, { link: string; field: string }> = {
   priority: { link: 'Prioridade', field: 'ticket-priority' },
   level: { link: 'Nível', field: 'ticket-level' },
   assigneeId: { link: 'Responsável', field: 'ticket-assignee' },
+  labels: { link: 'Etiquetas', field: 'ticket-labels' },
 };
 
 const statusLabels: Record<string, string> = {
@@ -179,9 +181,10 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset, watch } = useForm<TicketForm>({
-    resolver: zodResolver(ticketSchema), defaultValues: { priority: 'normal', level: 'N1', email: '', subject: '', description: '', assigneeId: undefined },
+    resolver: zodResolver(ticketSchema), defaultValues: { priority: 'normal', level: 'N1', email: '', subject: '', description: '', assigneeId: undefined, labels: [] },
   });
   const descriptionValue = watch('description') ?? '';
+  const selectedLabels = watch('labels') ?? [];
 
   const handleOpenChange = (next: boolean) => {
     if (next) { setAttachments([]); setAttachmentError(null); reset(); }
@@ -204,6 +207,7 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
       formData.append('priority', values.priority);
       formData.append('level', values.level);
       if (values.assigneeId) formData.append('assigneeId', String(values.assigneeId));
+      if (values.labels.length > 0) formData.append('labels', JSON.stringify(values.labels));
       attachments.forEach((file) => formData.append('attachments', file));
       return formData;
     })();
@@ -315,6 +319,15 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
                 </select>
               </div>
             </div>
+            <fieldset id="ticket-labels">
+              <legend className="text-sm font-medium">Etiquetas <span className="text-xs font-normal text-[#8A8F8B]">(opcional)</span></legend>
+              <p className="mt-0.5 text-xs text-[#8A8F8B]">Classifique o chamado, se fizer sentido. Você pode deixar tudo sem seleção.</p>
+              <div className="mt-3 space-y-3">
+                <LabelGroup title="Escopo" labels={scopeLabels} selected={selectedLabels} register={register} />
+                <LabelGroup title="Área do playbook" labels={areaLabels} selected={selectedLabels} register={register} />
+              </div>
+              {errors.labels && <p className="mt-2 text-xs text-red-300">{errors.labels.message}</p>}
+            </fieldset>
             <fieldset>
               <legend className="text-sm font-medium">Anexos (imagens ou vídeos)</legend>
               <p className="mt-0.5 text-xs text-[#8A8F8B]">Até 5 arquivos: PNG, JPG, WebP, MP4 ou MOV, com até 50 MB cada.</p>
@@ -346,6 +359,13 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
   );
 }
 
+function LabelGroup({ title, labels, selected, register }: { title: string; labels: readonly (readonly [TicketLabel, string])[]; selected: TicketLabel[]; register: ReturnType<typeof useForm<TicketForm>>['register'] }) {
+  return <div><p className="text-xs font-medium text-[#8A8F8B]">{title}</p><div className="mt-1.5 flex flex-wrap gap-2">
+    {labels.map(([value, label]) => <label key={value} className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs ${selected.includes(value) ? 'border-[#1E88A8] bg-[#1E88A8]/15 text-[#5cc5e4]' : 'border-[#2A2D27] text-[#ECEDEF]'}`}>
+      <input className="sr-only" type="checkbox" value={value} {...register('labels')} />{label}
+    </label>)}
+  </div></div>;
+}
 
 export function TicketsPage() {
   const [lists, setLists] = useState<TicketLists>({ open: [], resolved: [] });
