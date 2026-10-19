@@ -9,7 +9,7 @@ Funcionalidade: informar discretamente quando os dados da Meta estão sendo atua
     Então o cliente vê uma faixa informativa azul com a data e hora da última atualização
 */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -70,10 +70,8 @@ describe('LeadsPage', () => {
     expect(await screen.findByText('Maria Souza')).toBeInTheDocument();
     expect(screen.getByText('maria@exemplo.com')).toBeInTheDocument();
     expect(screen.getByText('11999999999')).toBeInTheDocument();
-    // Coluna Campanha visível na visão "todas"
-    expect(screen.getByText('Campanha')).toBeInTheDocument();
-    // "Camp Formulário" aparece na coluna da tabela
-    expect(screen.getAllByText('Camp Formulário').length).toBeGreaterThanOrEqual(1);
+    // Campanha visível no card na visão "todas"
+    expect(within(screen.getByRole('list', { name: 'Clientes' })).getByText('Camp Formulário')).toBeInTheDocument();
     // Chamou o agregado /v2/leads
     await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/v2/leads'));
   });
@@ -102,7 +100,7 @@ describe('LeadsPage', () => {
     mockApi([
       {
         name: 'João Silva', email: 'joao@exemplo.com', phone: '21988887777',
-        createdAt: '2026-09-20T10:00:00Z',
+        createdAt: '2026-09-20T10:00:00Z', campaignName: 'Camp Formulário',
       },
     ]);
     const user = userEvent.setup();
@@ -121,8 +119,8 @@ describe('LeadsPage', () => {
     expect(screen.getByRole('link', { name: /whatsapp/i })).toHaveAttribute('href', 'https://wa.me/5521988887777');
     expect(screen.getByText(/20 de set\. de 2026/)).toBeInTheDocument();
     expect(consoleError.mock.calls.some((call) => call.some((arg) => String(arg).includes('same key')))).toBe(false);
-    // Coluna Campanha some quando há campanha específica selecionada
-    expect(screen.queryByText('Campanha')).not.toBeInTheDocument();
+    // Campanha some do card quando há campanha específica selecionada
+    expect(within(screen.getByRole('list', { name: 'Clientes' })).queryByText('Camp Formulário')).not.toBeInTheDocument();
   });
 
   it('exibe estado vazio quando nenhuma campanha de Formulário existe', async () => {
@@ -256,5 +254,75 @@ describe('LeadsPage', () => {
 
     expect(await screen.findByText('Sem Telefone')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /whatsapp/i })).toBeNull();
+  });
+
+  it('pagina 12 clientes por vez e volta à página 1 ao trocar o filtro', async () => {
+    mockApi(
+      Array.from({ length: 13 }, (_, i) => ({
+        id: `lead-${i + 1}`, name: `Cliente ${i + 1}`, email: `c${i + 1}@exemplo.com`, phone: null,
+        createdAt: '2026-09-21T09:00:00Z', campaignId: 'form_1', campaignName: 'Camp Formulário',
+      })),
+    );
+    const user = userEvent.setup();
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    const list = await screen.findByRole('list', { name: 'Clientes' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(12);
+    expect(screen.getByText('Mostrando 1–12 de 13 clientes')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Página anterior' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'Próxima página' }));
+    expect(screen.getByText('Página 2 de 2')).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Clientes' })).getAllByRole('listitem')).toHaveLength(1);
+    expect(screen.getByText('Cliente 13')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Próxima página' })).toBeDisabled();
+
+    const trigger = screen.getByRole('button', { name: /Filtrar por campanha/i });
+    await user.click(trigger);
+    await user.click(await screen.findByRole('menuitem', { name: 'Camp Formulário' }));
+    expect(await screen.findByText('Página 1 de 2')).toBeInTheDocument();
+  });
+
+  it('não mostra paginação com até 12 clientes', async () => {
+    mockApi([{ name: 'Único', email: 'u@exemplo.com', phone: null, createdAt: null }]);
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText('Único')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: /paginação/i })).toBeNull();
+  });
+
+  it('copia nome, e-mail e telefone individualmente', async () => {
+    mockApi([
+      {
+        id: 'lead-1', name: 'Ana Lima', email: 'ana@exemplo.com', phone: '11988887777',
+        createdAt: '2026-09-21T09:00:00Z', campaignId: 'form_1', campaignName: 'Camp Formulário',
+      },
+    ]);
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    await user.click(await screen.findByRole('button', { name: 'Copiar nome' }));
+    expect(writeText).toHaveBeenLastCalledWith('Ana Lima');
+    expect(await screen.findByRole('button', { name: 'nome copiado' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Copiar e-mail' }));
+    expect(writeText).toHaveBeenLastCalledWith('ana@exemplo.com');
+
+    await user.click(screen.getByRole('button', { name: 'Copiar telefone' }));
+    expect(writeText).toHaveBeenLastCalledWith('11988887777');
+  });
+
+  it('não mostra botão de copiar para campo vazio', async () => {
+    mockApi([{ name: 'Sem Telefone', email: 'sem@exemplo.com', phone: null, createdAt: null }]);
+
+    render(<LeadsPage />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText('Sem Telefone')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Copiar telefone' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Copiar e-mail' })).toBeInTheDocument();
   });
 });
