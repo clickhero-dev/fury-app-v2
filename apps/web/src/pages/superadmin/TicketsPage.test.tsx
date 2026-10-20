@@ -46,15 +46,20 @@ Funcionalidade: tela de chamados do painel administrativo
     Quando clica na aba Resolvidos
     Então o painel mostra os chamados resolvidos e não os abertos
 
-  Cenário: paginar a lista em páginas de 10
-    Dado que a fila ativa tem 12 chamados
+  Cenário: paginar a lista em páginas de 6
+    Dado que a fila ativa tem 7 chamados
     Quando a página é renderizada
-    Então só os 10 primeiros aparecem, com controle "Página 1 de 2"
+    Então só os 6 primeiros aparecem, com controle "Página 1 de 2"
 
   Cenário: navegar entre páginas da lista
     Dado que o superadmin está na página 1 de 2
     Quando avança de página
-    Então vê os 2 chamados restantes e a navegação anterior volta habilitada
+    Então vê o chamado restante e a navegação anterior volta habilitada
+
+  Cenário: exibir o rodapé em uma página única
+    Dado que a fila ativa tem até 6 chamados
+    Quando a página é renderizada
+    Então vê o controle "Página 1 de 1" com a navegação desabilitada
 
   Cenário: seção de níveis recolhível
     Dado que a ajuda de níveis ocupa espaço na página
@@ -288,13 +293,13 @@ describe('TicketsPage', () => {
     expect(within(panel).queryByText('[N2] Publicação falhou')).not.toBeInTheDocument();
   });
 
-  it('pagina a lista em páginas de 10 com controles e contador', async () => {
-    const many = Array.from({ length: 12 }, (_, i) => ticket(`open-${i + 1}`, `[N2] Chamado ${i + 1}`));
+  it('pagina a lista em páginas de 6 com controles e contador', async () => {
+    const many = Array.from({ length: 7 }, (_, i) => ticket(`open-${i + 1}`, `[N2] Chamado ${i + 1}`));
     mockTicketsData({ open: many, resolved: [] });
     render(<TicketsPage />);
 
     const panel = await screen.findByRole('tabpanel');
-    expect(within(panel).getAllByRole('listitem')).toHaveLength(10);
+    expect(within(panel).getAllByRole('listitem')).toHaveLength(6);
     expect(within(panel).getByText('Página 1 de 2')).toBeInTheDocument();
 
     const next = within(panel).getByRole('button', { name: /próxima página/i });
@@ -304,10 +309,24 @@ describe('TicketsPage', () => {
 
     const user = setupUser();
     await user.click(next);
-    expect(within(panel).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(panel).getAllByRole('listitem')).toHaveLength(1);
     expect(within(panel).getByText('Página 2 de 2')).toBeInTheDocument();
     expect(prev).toBeEnabled();
     expect(next).toBeDisabled();
+  });
+
+  it('exibe o rodapé com navegação desabilitada quando a fila cabe em uma página', async () => {
+    mockTicketsData({
+      open: Array.from({ length: 6 }, (_, i) => ticket(`open-${i + 1}`, `[N2] Chamado ${i + 1}`)),
+      resolved: [],
+    });
+    render(<TicketsPage />);
+
+    const panel = await screen.findByRole('tabpanel');
+    expect(within(panel).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(panel).getByText('Página 1 de 1')).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /página anterior/i })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: /próxima página/i })).toBeDisabled();
   });
 
   it('seção de níveis fica recolhida e expande ao clicar', async () => {

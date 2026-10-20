@@ -7,7 +7,7 @@ import { z } from 'zod';
 import api from '@/lib/api';
 import { showSnack } from '@/lib/snack';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 6;
 const MAX_ATTACHMENTS = 5;
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
 const acceptedAttachmentTypes = ['image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'video/quicktime'];
@@ -156,15 +156,13 @@ function TicketsTabs({ lists, loading }: { lists: TicketLists; loading: boolean 
           <ul className="max-h-[480px] space-y-2 overflow-y-auto pr-1">
             {visible.map((ticket) => <TicketRow key={ticket.id} ticket={ticket} />)}
           </ul>
-          {pageCount > 1 && (
-            <nav aria-label="Paginação de chamados" className="mt-4 flex items-center justify-between gap-2 text-sm text-[#8A8F8B]">
-              <span role="status">Página {safePage + 1} de {pageCount}</span>
-              <span className="flex gap-2">
-                <button type="button" aria-label="Página anterior" disabled={safePage === 0} onClick={() => setPage(safePage - 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#2A2D27] px-3 py-1.5 transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft className="h-4 w-4" aria-hidden="true" /> Anterior</button>
-                <button type="button" aria-label="Próxima página" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#2A2D27] px-3 py-1.5 transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Próxima <ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
-              </span>
-            </nav>
-          )}
+          <nav aria-label="Paginação de chamados" className="mt-4 flex items-center justify-between gap-2 text-sm text-[#8A8F8B]">
+            <span role="status">Página {safePage + 1} de {pageCount}</span>
+            <span className="flex gap-2">
+              <button type="button" aria-label="Página anterior" disabled={safePage === 0} onClick={() => setPage(safePage - 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#2A2D27] px-3 py-1.5 transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft className="h-4 w-4" aria-hidden="true" /> Anterior</button>
+              <button type="button" aria-label="Próxima página" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#2A2D27] px-3 py-1.5 transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Próxima <ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
+            </span>
+          </nav>
         </>
       )}
     </div>
