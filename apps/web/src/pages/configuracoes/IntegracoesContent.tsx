@@ -208,22 +208,25 @@ function DisconnectDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onCancel(); }}>
-      <DialogContent className="max-w-md border-border bg-surface text-text-primary">
-        <DialogHeader>
-          <DialogTitle className="text-base font-semibold text-text-primary">Desconectar conta Meta</DialogTitle>
-          <DialogDescription className="text-xs text-text-tertiary">
+      <DialogContent className="max-w-lg border-border bg-surface p-8 text-text-primary">
+        <DialogHeader className="gap-3">
+          <DialogTitle className="text-xl font-semibold text-text-primary">Desconectar conta Meta</DialogTitle>
+          <DialogDescription className="text-base leading-relaxed text-text-tertiary">
             Tem certeza que deseja desconectar a conta Meta{' '}
             <span className="font-semibold text-text-primary">{accountId}</span>? Esta ação apaga
             permanentemente campanhas, métricas, leads e dados do Instagram sincronizados. Não pode
             ser desfeita.
           </DialogDescription>
+          <p className="rounded-lg border border-border bg-border/40 px-4 py-3 text-base font-medium text-text-primary">
+            Ao confirmar, você será desconectado e precisará fazer login novamente.
+          </p>
         </DialogHeader>
-        <DialogFooter className="mt-4 gap-2">
+        <DialogFooter className="mt-6 gap-2">
           <DialogClose asChild>
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-full border border-border px-4 py-2 text-xs font-medium text-text-primary hover:bg-border cursor-pointer"
+              className="rounded-full border border-border px-6 py-3 text-base font-medium text-text-primary hover:bg-border cursor-pointer"
             >
               Cancelar
             </button>
@@ -232,7 +235,7 @@ function DisconnectDialog({
             type="button"
             onClick={onConfirm}
             disabled={isPending}
-            className="rounded-full bg-error px-4 py-2 text-xs font-semibold text-white hover:bg-error/90 disabled:opacity-50 cursor-pointer"
+            className="rounded-full bg-error px-6 py-3 text-base font-semibold text-white hover:bg-error/90 disabled:opacity-50 cursor-pointer"
           >
             {isPending ? 'Desconectando...' : 'Desconectar'}
           </button>

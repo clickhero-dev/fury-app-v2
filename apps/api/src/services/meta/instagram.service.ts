@@ -10,7 +10,7 @@ import { AppError } from '../../middleware/errorHandler.js';
 import { MetaRepository } from '../../repository/meta.repository.js';
 import { MetaService, metaService } from './meta.service.js';
 
-export type InstagramRankingObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';
+export type InstagramRankingObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp' | 'leads';
 
 export interface RankedInstagramPost {
   id: string;

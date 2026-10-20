@@ -144,9 +144,9 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       await expect(next).toBeEnabled({ timeout: 60_000 });
       await next.click();
 
-      // criativo: o mais antigo da galeria (último da grade)
-      await expect(page.getByRole('heading', { name: 'Qual imagem vai usar?' })).toBeVisible();
-      const gallery = page.locator('[data-testid="wizard-gallery-asset"]:not([disabled])');
+      // criativo: a imagem mais antiga da galeria (última da grade; ignora vídeos)
+      await expect(page.getByRole('heading', { name: 'Qual imagem ou vídeo vai usar?' })).toBeVisible();
+      const gallery = page.locator('[data-testid="wizard-gallery-asset"][data-asset-type="image"]:not([disabled])');
       await expect(gallery.first()).toBeVisible({ timeout: 60_000 });
       await gallery.last().click();
       await expect(page.getByText(/1\/\d+ selecionadas/).first()).toBeVisible();

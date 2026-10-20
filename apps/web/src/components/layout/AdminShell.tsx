@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Users, Clock, Zap, LogOut, LayoutGrid, ArrowLeft, Ticket, CircleHelp, Activity, Megaphone } from 'lucide-react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useFavicon } from '@/hooks/useFavicon';
+import { SnackHost } from './SnackHost';
 
 interface NavItem {
   path: string;
@@ -49,6 +50,7 @@ export function AdminShell() {
 
   return (
     <div className="min-h-screen bg-[#0C0D0A] text-[#ECEDEF] flex font-sans">
+      <SnackHost />
       {/* Toast */}
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 bg-[#1E88A8] text-white px-4 py-3 rounded-lg shadow-lg text-sm font-medium">

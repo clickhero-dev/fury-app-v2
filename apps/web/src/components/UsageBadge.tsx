@@ -12,6 +12,8 @@ interface UsageBadgeProps {
   limit: number | null;
   /** Classes extras para o container (layout do pai decide largura/alinhamento). */
   className?: string;
+  /** O que está sendo contado (plural). */
+  unit?: string;
 }
 
 type Tone = 'normal' | 'warning' | 'error';
@@ -43,7 +45,7 @@ function renewLabel(periodEnd: string | null | undefined): string | null {
  * Cor muda conforme o uso (Petróleo ≤50%, Faísca >50%, erro + CTA ao zerar).
  * Some quando o dado de quota é desconhecido (remaining === null).
  */
-export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps) {
+export function UsageBadge({ remaining, limit, className = '', unit = 'criativos' }: UsageBadgeProps) {
   const queryClient = useQueryClient();
   const { data: subscription } = useSubscription();
   const renew = renewLabel(subscription?.currentPeriodEnd);
@@ -67,11 +69,11 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
   const tooltipText =
     limit !== null
       ? exhausted
-        ? `Seu plano tem ${limit} criativos por mês e você já usou todos. Não é possível criar novos criativos este mês — faça upgrade do plano ou aguarde a renovação.`
-        : `Seu plano tem ${limit} criativos por mês. Você já usou ${used} e pode criar ainda ${remaining} criativos este mês.`
+        ? `Seu plano tem ${limit} ${unit} por mês e você já usou todos. Não é possível criar novos ${unit} este mês — faça upgrade do plano ou aguarde a renovação.`
+        : `Seu plano tem ${limit} ${unit} por mês. Você já usou ${used} e pode criar ainda ${remaining} ${unit} este mês.`
       : exhausted
-        ? 'Não é possível criar novos criativos este mês — faça upgrade do plano ou aguarde a renovação.'
-        : `Você pode criar ainda ${remaining} criativos este mês.`;
+        ? `Não é possível criar novos ${unit} este mês — faça upgrade do plano ou aguarde a renovação.`
+        : `Você pode criar ainda ${remaining} ${unit} este mês.`;
 
   return (
     <div
@@ -108,7 +110,7 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
         </TooltipProvider>
         <span data-testid="usage-pct" className="whitespace-nowrap text-xs text-[#64748B] dark:text-[#9BA3AB]">
           {exhausted ? (
-            '0 criativos'
+            `0 ${unit}`
           ) : used !== null ? (
             <>
               {remaining} de {limit}
@@ -126,7 +128,7 @@ export function UsageBadge({ remaining, limit, className = '' }: UsageBadgeProps
           aria-valuemin={0}
           aria-valuenow={pct}
           aria-valuemax={100}
-          aria-label="Cota de criativos usada"
+          aria-label={`Cota de ${unit} usada`}
           className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-white/10"
         >
           <div

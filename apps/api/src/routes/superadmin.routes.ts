@@ -1,15 +1,40 @@
 import { Router } from "express";
+import type { NextFunction, Request, Response } from 'express';
 import { controllers } from "../di.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { superadminMiddleware } from "../middleware/superadmin.middleware.js";
 import multer from 'multer';
+import { AppError } from '../middleware/errorHandler.js';
 
 const router = Router();
 
 // All routes require auth + superadmin role
 router.use(authMiddleware, superadminMiddleware);
 
-router.post('/tickets', controllers.tickets.create);
+const ticketAttachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024, files: 5 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'video/quicktime'];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new AppError(400, 'INVALID_TICKET_ATTACHMENT', 'Envie imagens PNG, JPG ou WebP, ou vídeos MP4 ou MOV.'));
+  },
+});
+
+const ticketAttachments = (req: Request, res: Response, next: NextFunction) => {
+  ticketAttachmentUpload.array('attachments', 5)(req, res, (error: unknown) => {
+    if (error instanceof multer.MulterError) {
+      const message = error.code === 'LIMIT_FILE_SIZE'
+        ? 'Cada anexo pode ter no máximo 50 MB.'
+        : 'Envie no máximo cinco anexos por ticket.';
+      next(new AppError(400, 'INVALID_TICKET_ATTACHMENT', message));
+      return;
+    }
+    next(error);
+  });
+};
+
+router.post('/tickets', ticketAttachments, controllers.tickets.create);
 router.get('/tickets', controllers.tickets.list);
 router.get('/tickets/assignees', controllers.tickets.listAssignees);
 const faqImageUpload = multer({

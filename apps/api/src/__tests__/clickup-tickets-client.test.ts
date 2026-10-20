@@ -15,6 +15,16 @@
  * Dado que o chamado possui escopo e áreas operacionais
  * Quando a tarefa é criada
  * Então as tags nativas recebem a classificação
+ *
+ * Cenário: anexar evidências ao ticket
+ * Dado que o chamado tem imagens ou vídeos
+ * Quando a tarefa é criada no ClickUp
+ * Então cada arquivo é enviado como anexo da tarefa
+ *
+ * Cenário: falhar ao anexar evidência
+ * Dado que a tarefa já foi criada e o ClickUp rejeita um anexo
+ * Quando o sistema conclui a abertura
+ * Então informa uma falha segura e preserva a URL da tarefa criada
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClickUpTicketsClient, ClickUpTicketsError } from '../lib/clickup-tickets.client.js';
@@ -97,6 +107,60 @@ describe('ClickUpTicketsClient', () => {
       name: '[N5] Exportar relatórios em CSV',
       description: expect.stringContaining('**Nível:** N5'),
     }));
+  });
+
+  it('cria ticket sem enviar tags quando não há classificação', async () => {
+    const fetchMock = mockFetchOnce(200, {
+      id: 'task-sem-tags',
+      url: 'https://app.clickup.com/t/task-sem-tags',
+    });
+
+    await new ClickUpTicketsClient().createTicket({
+      email: 'cliente@empresa.com', subject: 'Chamado sem classificação',
+      description: 'Descrição detalhada sem necessidade de etiquetas.', priority: 'normal', level: 'N1', labels: [],
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string)).not.toHaveProperty('tags');
+  });
+
+  it('anexa imagens e vídeos à tarefa criada', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'task-123', url: 'https://app.clickup.com/t/task-123' }) } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}) } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(new ClickUpTicketsClient().createTicket({
+      email: 'cliente@empresa.com', subject: 'Erro com evidências',
+      description: 'Descrição detalhada com evidências anexadas.', priority: 'high', level: 'N2', labels: ['app'],
+      attachments: [
+        { buffer: Buffer.from('imagem'), filename: 'erro.png', mimeType: 'image/png' },
+        { buffer: Buffer.from('video'), filename: 'erro.mp4', mimeType: 'video/mp4' },
+      ],
+    })).resolves.toEqual({ clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' });
+
+    expect(String(fetchMock.mock.calls[1][0])).toBe('https://api.clickup.com/api/v2/task/task-123/attachment');
+    expect(String(fetchMock.mock.calls[2][0])).toBe('https://api.clickup.com/api/v2/task/task-123/attachment');
+    const firstAttachment = (fetchMock.mock.calls[1][1] as RequestInit).body as FormData;
+    const secondAttachment = (fetchMock.mock.calls[2][1] as RequestInit).body as FormData;
+    expect(firstAttachment.get('attachment')).toMatchObject({ name: 'erro.png', type: 'image/png' });
+    expect(secondAttachment.get('attachment')).toMatchObject({ name: 'erro.mp4', type: 'video/mp4' });
+  });
+
+  it('preserva a URL da tarefa quando um anexo falha', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'task-123', url: 'https://app.clickup.com/t/task-123' }) } as Response)
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const error = await new ClickUpTicketsClient().createTicket({
+      email: 'cliente@empresa.com', subject: 'Erro com evidência',
+      description: 'Descrição detalhada com evidência anexa.', priority: 'high', level: 'N2', labels: ['app'],
+      attachments: [{ buffer: Buffer.from('imagem'), filename: 'erro.png', mimeType: 'image/png' }],
+    }).catch((reason) => reason);
+
+    expect(error).toMatchObject({ code: 'CLICKUP_ATTACHMENT_FAILED', clickupTaskUrl: 'https://app.clickup.com/t/task-123' });
   });
 
   it('normaliza falha de rede sem expor detalhes do provedor', async () => {

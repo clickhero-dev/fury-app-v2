@@ -86,18 +86,21 @@ export function LibraryTile({ photo, selected, order, onClick }: TileProps) {
 interface Props {
   templateId: string | null;
   artPhotoIds: string[];
-  onPickTemplate: (photo: LibraryPhoto) => void;
+  onPickTemplate?: (photo: LibraryPhoto) => void;
   onToggleArtPhoto: (photo: LibraryPhoto) => void;
   onUploadClick: () => void;
   uploading?: boolean;
+  /** Vídeo: só produtos/equipe, sem modelos. */
+  hideTemplates?: boolean;
 }
 
 /**
  * Painel lateral da Criação Rápida: biblioteca com filtro por tipo. Clicar num
  * modelo define o modelo da criação; num produto/equipe, coloca/tira da arte.
  */
-export function ReferenceImagePanel({ templateId, artPhotoIds, onPickTemplate, onToggleArtPhoto, onUploadClick, uploading }: Props) {
-  const { data: photos = [], isLoading } = useStudioLibrary();
+export function ReferenceImagePanel({ templateId, artPhotoIds, onPickTemplate, onToggleArtPhoto, onUploadClick, uploading, hideTemplates }: Props) {
+  const { data: library = [], isLoading } = useStudioLibrary();
+  const photos = hideTemplates ? library.filter((p) => p.kind !== 'modelo') : library;
   const [filter, setFilter] = useState<Filter>('todas');
   const visible = filter === 'todas' ? photos : photos.filter((p) => p.kind === filter);
 
@@ -119,7 +122,7 @@ export function ReferenceImagePanel({ templateId, artPhotoIds, onPickTemplate, o
       </button>
 
       <div className="shrink-0">
-        <FilterChips options={['todas', 'modelo', 'produto', 'equipe']} value={filter} counts={countByKind(photos)} onChange={setFilter} />
+        <FilterChips options={hideTemplates ? ['todas', 'produto', 'equipe'] : ['todas', 'modelo', 'produto', 'equipe']} value={filter} counts={countByKind(photos)} onChange={setFilter} />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -140,7 +143,7 @@ export function ReferenceImagePanel({ templateId, artPhotoIds, onPickTemplate, o
                   key={photo.id}
                   photo={photo}
                   selected={selected}
-                  onClick={() => (photo.kind === 'modelo' ? onPickTemplate(photo) : onToggleArtPhoto(photo))}
+                  onClick={() => (photo.kind === 'modelo' ? onPickTemplate?.(photo) : onToggleArtPhoto(photo))}
                 />
               );
             })}

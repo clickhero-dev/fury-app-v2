@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, BookmarkCheck, Loader2, RefreshCw, Upload, X } from 'lucide-react';
+import { AlertCircle, BookmarkCheck, Download, Loader2, RefreshCw, Upload, Video, X } from 'lucide-react';
 import { Button } from '@/components';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { layoutLabel, isKnownLayout } from '@/lib/layout-labels';
 import type { GenerateCreativeResponse, StudioPublishResponse, StudioAssetGroupDetail } from '@/types/studio';
 import { VersionCarousel } from './VersionCarousel';
+import { formatDuration, parseVideoMeta, useAdjustStudioVideo } from '@/hooks/useStudioVideo';
 
 interface Props {
   result: GenerateCreativeResponse;
@@ -17,6 +18,8 @@ interface Props {
   // ponytail: quando presente, "Publicar no Meta" abre o wizard (imagem presetada)
   // em vez de publicar direto — alinha com o botão "Usar em campanha".
   onPublish?: () => void;
+  /** Vídeo: ajuste gera um job novo; a tela de progresso acompanha. */
+  onTrackVideo?: (jobId: string) => void;
 }
 
 // ponytail: gera máscara de inpainting a partir do canvas de pintura
@@ -39,7 +42,7 @@ function generateMaskBlob(source: HTMLCanvasElement): Blob | null {
   return new Promise((resolve) => mask.toBlob((b) => resolve(b), 'image/png')) as unknown as Blob | null;
 }
 
-export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Props) {
+export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTrackVideo }: Props) {
   const queryClient = useQueryClient();
   const [currentResult, setCurrentResult] = useState(result);
   const [feedback, setFeedback] = useState('');
@@ -55,6 +58,8 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
 
   const isQuickCreate = !!currentResult.type;
   const isVideo = currentResult.type === 'video';
+  const [videoMeta, setVideoMeta] = useState(currentResult.videoMeta ?? null);
+  const adjustVideo = useAdjustStudioVideo();
 
   // Histórico do grupo (versões/evidência/arquivado) — carregado à parte do
   // resultado da criação/modificação em si, porque cada versão tem seu
@@ -81,6 +86,9 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
       if (data && Array.isArray(data.versions)) {
         setGroupDetail(data);
       }
+      // vídeo: roteiro/custos seguem a versão em evidência
+      const notes = (data as { complianceNotes?: string | null } | undefined)?.complianceNotes;
+      if (isVideo && notes) setVideoMeta(parseVideoMeta(notes));
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
   });
@@ -100,7 +108,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
   const isArchived = !!groupDetail?.archivedAt;
   const activeVersion = groupDetail?.versions.find((v) => v.id === selectedVersionId);
   const displayUrl = isVideo
-    ? (currentResult.videoUrl ?? currentResult.imageUrl)
+    ? (activeVersion?.url ?? currentResult.videoUrl ?? currentResult.imageUrl)
     : (activeVersion?.url ?? currentResult.imageUrl);
   const displayComplianceStatus = activeVersion?.complianceStatus ?? currentResult.complianceStatus;
 
@@ -266,11 +274,9 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
           <div className="relative w-full">
             {isVideo && displayUrl ? (
               <video
+                key={displayUrl}
                 src={displayUrl}
                 controls
-                autoPlay
-                loop
-                muted
                 playsInline
                 className="block w-full h-auto max-h-[80vh] rounded-lg"
                 style={{ opacity: regenerateMutation.isPending ? 0.5 : 1, transition: 'opacity 0.2s' }}
@@ -336,17 +342,81 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
                 )}
               </div>
             )}
+            {isVideo && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {[formatDuration(videoMeta?.durationSeconds), videoMeta?.aspectRatio === '16:9' ? 'Horizontal 16:9' : 'Vertical 9:16']
+                  .filter(Boolean)
+                  .map((chip) => (
+                    <span key={chip as string} className="rounded-full border border-border bg-surface-secondary px-2.5 py-1 text-xs text-text-secondary">
+                      {chip}
+                    </span>
+                  ))}
+              </div>
+            )}
             <p className="text-sm text-[#667085]">
-              {isLegacy ? 'Este modelo foi descontinuado. Crie um novo anúncio para usar os formatos atuais.' : isQuickCreate ? 'Criado via Criação Rápida. Regenere com ajustes ou salve na biblioteca.' : 'Pronto. Regenere com ajustes, salve ou publique no Meta.'}
+              {isVideo ? 'Assista, baixe ou peça um ajuste.' : isLegacy ? 'Este modelo foi descontinuado. Crie um novo anúncio para usar os formatos atuais.' : isQuickCreate ? 'Criado via Criação Rápida. Regenere com ajustes ou salve na biblioteca.' : 'Pronto. Regenere com ajustes, salve ou publique no Meta.'}
             </p>
             {modificationsRemaining !== null && (
               <p className={`text-xs font-semibold ${modificationsExhausted ? 'text-red-600' : 'text-[#98A2B3]'}`}>
                 {modificationsExhausted
-                  ? 'Limite de modificações deste criativo atingido'
-                  : `${modificationsRemaining} modificaç${modificationsRemaining !== 1 ? 'ões' : 'ão'} restante${modificationsRemaining !== 1 ? 's' : ''} neste criativo`}
+                  ? `Limite de modificações deste ${isVideo ? 'vídeo' : 'criativo'} atingido`
+                  : `${modificationsRemaining} modificaç${modificationsRemaining !== 1 ? 'ões' : 'ão'} restante${modificationsRemaining !== 1 ? 's' : ''} neste ${isVideo ? 'vídeo' : 'criativo'}`}
               </p>
             )}
           </div>
+
+          {isVideo && !!videoMeta?.scenes?.length && (
+            <div className="space-y-2 rounded-xl border border-border bg-surface p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">Roteiro</p>
+              <ol className="max-h-56 space-y-2 overflow-y-auto text-sm">
+                {videoMeta.scenes.map((scene, i) => (
+                  <li key={i} className="space-y-0.5">
+                    <p className="text-xs font-semibold text-text-primary">Cena {i + 1} · {scene.start}s–{scene.end}s</p>
+                    <p className="text-text-secondary">{scene.visual}</p>
+                    {scene.narration && <p className="italic text-text-secondary">“{scene.narration}”</p>}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {isVideo && showRegenerateForm && !isArchived && videoMeta && !modificationsExhausted && (
+            <div className="space-y-2 rounded-xl border border-border bg-surface-secondary p-4">
+              <p className="text-sm font-semibold text-text-primary">Quer ajustar o vídeo?</p>
+              <p className="text-xs text-[#98A2B3]">Descreva o que mudar. O ady ajusta o roteiro e gera uma nova versão com as mesmas fotos.</p>
+              <textarea
+                value={feedback}
+                maxLength={500}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="Ex: Deixar a narração mais animada, mostrar o produto mais de perto no final..."
+                rows={3}
+                className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none transition focus:border-[#E8631A] focus:ring-2 focus:ring-[#E8631A]/10 resize-none"
+              />
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => adjustVideo.mutate(
+                    { assetId: selectedVersionId, feedback: feedback.trim() },
+                    { onSuccess: (data) => onTrackVideo?.(data.jobId) },
+                  )}
+                  disabled={feedback.trim().length < 3 || adjustVideo.isPending || modificationsExhausted}
+                  className="flex-1 flex items-center justify-center gap-2 bg-[#E8631A] hover:bg-[#D45714] text-white text-sm"
+                >
+                  {adjustVideo.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Video className="h-3.5 w-3.5" />}
+                  Gerar nova versão
+                </Button>
+                <Button variant="outline" onClick={() => setShowRegenerateForm(false)} className="flex items-center justify-center gap-2 text-sm">
+                  Não, obrigado
+                </Button>
+              </div>
+              {adjustVideo.isError && (
+                <div className="flex items-center gap-2 text-xs text-red-600">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  {(adjustVideo.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
+                    ?? 'Erro ao ajustar o vídeo. Tente novamente.'}
+                </div>
+              )}
+            </div>
+          )}
 
           {(cd.headline || cd.offer_text || cd.qualifier) && (
             <div className="rounded-xl border border-[#E6E8EC] bg-[#FCFCFD] p-4 space-y-2">
@@ -361,7 +431,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
           )}
 
           {/* ponytail: pergunta pós-criação visível por padrão */}
-          {showRegenerateForm && isQuickCreate && !isArchived && (
+          {showRegenerateForm && isQuickCreate && !isArchived && !isVideo && (
             <div className="space-y-2 rounded-xl border border-border bg-surface-secondary p-4">
               <p className="text-sm font-semibold text-text-primary">Deseja incluir mais alguma coisa no anúncio?</p>
               <p className="text-xs text-[#98A2B3]">Segure e arraste sobre a imagem para marcar a área. Depois descreva o ajuste abaixo.</p>
@@ -411,16 +481,33 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
           )}
 
           <div className="flex flex-col gap-2 pt-1">
-            {!isLegacy && !showRegenerateForm && !isArchived && (
+            {!isLegacy && !showRegenerateForm && !isArchived && (!isVideo || videoMeta) && (
               <Button variant="outline" size="sm" onClick={() => setShowRegenerateForm(true)} disabled={regenerateMutation.isPending || modificationsExhausted} className="w-full flex items-center justify-center gap-2">
                 <RefreshCw className="h-4 w-4 shrink-0" />
-                Regenerar com ajuste
+                {isVideo ? 'Ajustar vídeo' : 'Regenerar com ajuste'}
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={handleSaveToLibrary} className="w-full flex items-center justify-center gap-2">
               <BookmarkCheck className="h-4 w-4 shrink-0" />
               Salvar na Biblioteca
             </Button>
+            {isVideo && displayUrl && (
+              <a
+                href={displayUrl}
+                download
+                target="_blank"
+                rel="noreferrer"
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-[#E8631A] px-3 py-2 text-sm font-medium text-white hover:bg-[#D45714]"
+              >
+                <Download className="h-4 w-4 shrink-0" />
+                Baixar vídeo
+              </a>
+            )}
+            {isVideo && !onPublish ? (
+              <Button size="sm" variant="outline" disabled className="w-full border-dashed">
+                Publicar no Meta · em breve
+              </Button>
+            ) : (
             <Button
               size="sm"
               onClick={() => (onPublish ? onPublish() : publishMutation.mutate(selectedVersionId))}
@@ -430,6 +517,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
               {publishMutation.isPending ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Upload className="h-4 w-4 shrink-0" />}
               Publicar no Meta
             </Button>
+            )}
             {publishMutation.isError && (
               <div className="flex items-center gap-2 text-xs text-red-600">
                 <AlertCircle className="h-3.5 w-3.5" />
@@ -437,7 +525,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish }: Pro
               </div>
             )}
             <button onClick={onNewCreative} className="text-center text-xs text-[#667085] hover:text-[#E8631A] transition-colors pt-1">
-              Criar outro anúncio →
+              {isVideo ? 'Criar outro vídeo →' : 'Criar outro anúncio →'}
             </button>
           </div>
         </div>
