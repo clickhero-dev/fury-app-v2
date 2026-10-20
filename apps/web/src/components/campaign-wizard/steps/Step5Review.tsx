@@ -65,6 +65,7 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
     publishError?.code === 'META_TOKEN_EXPIRED' || publishError?.code === 'META_PERMISSION_DENIED';
 
   const audience = state.audience;
+  const hasVideo = state.creatives.some((c) => c.isVideo);
 
   // Limpa o timer ao desmontar
   useEffect(() => {
@@ -188,11 +189,13 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
               const imageUrl = isInstagramCreative
                 ? creative.mediaUrl
                 : creative.uploadUrl || creative.assetUrl;
-              const creativeSourceLabel = isInstagramCreative ? 'Post do Instagram' : 'Galeria do Estúdio';
+              const creativeSourceLabel = isInstagramCreative ? 'Post do Instagram' : creative.isVideo ? 'Vídeo do Estúdio' : 'Galeria do Estúdio';
               return (
                 <div key={creative.id} className="flex gap-3">
                   <div className="w-16 h-16 rounded-lg bg-surface-secondary overflow-hidden flex-shrink-0 flex items-center justify-center">
-                    {imageUrl ? (
+                    {imageUrl && creative.isVideo ? (
+                      <video src={`${imageUrl}#t=0.1`} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                    ) : imageUrl ? (
                       <img src={imageUrl} alt={`Criativo ${index + 1}`} className="w-full h-full object-cover" />
                     ) : (
                       <ImagePlus className="w-6 h-6 text-text-tertiary" />
@@ -274,7 +277,15 @@ export function Step5Review({ state, onViewCampaigns, onCreateAnother, onBack, o
         </div>
       </div>
 
-      {showSlowWarning && (
+      {/* vídeo sempre demora: aviso neutro desde o início, não alerta */}
+      {hasVideo && mutation.isPending && (
+        <div role="status" className="rounded-lg bg-surface-secondary border border-border p-3 text-sm text-text-secondary flex items-start gap-2">
+          <Loader2 className="w-5 h-5 flex-shrink-0 mt-0.5 animate-spin" />
+          <span>A Meta está processando o vídeo. Isso pode levar até 2 minutos — não feche a página.</span>
+        </div>
+      )}
+
+      {showSlowWarning && !hasVideo && (
         <div className="rounded-lg bg-warning/10 border border-warning/25 p-3 text-sm text-warning flex items-start gap-2">
           <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
