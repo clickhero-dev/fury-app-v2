@@ -332,7 +332,7 @@ export function EstudioHome() {
   };
 
   const handleUseInCampaign = (asset: StudioAsset) => {
-    setPreSelectedAsset({ id: asset.id, url: asset.url ?? undefined });
+    setPreSelectedAsset({ id: asset.id, url: asset.url ?? undefined, isVideo: asset.type === 'video' });
     navigate('/criar-campanha');
   };
 
@@ -898,7 +898,12 @@ export function EstudioHome() {
               onNewCreative={handleStartQuickCreate}
               onTrackVideo={handleTrackVideo}
               onPublish={() => {
-                setPreSelectedAsset({ id: generationResult.assetId, url: generationResult.imageUrl });
+                const isVideo = generationResult.type === 'video';
+                setPreSelectedAsset({
+                  id: generationResult.assetId,
+                  url: isVideo ? generationResult.videoUrl : generationResult.imageUrl,
+                  isVideo,
+                });
                 navigate('/criar-campanha');
               }}
             />
@@ -1120,15 +1125,6 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
               className="ady-btn flex-1 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand transition-all duration-200 hover:bg-brand hover:text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
             >
               {restorePending ? 'Restaurando...' : 'Restaurar anúncio'}
-            </button>
-          ) : isVideo ? (
-            <button
-              type="button"
-              disabled
-              title="Publicar vídeo no Meta chega em breve"
-              className="flex-1 cursor-not-allowed rounded-full border border-dashed border-border px-3 py-1.5 text-xs font-semibold text-text-tertiary"
-            >
-              Usar em campanha · em breve
             </button>
           ) : (
             <button

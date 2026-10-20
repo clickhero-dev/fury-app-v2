@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, ImagePlus, Loader2, Sparkles, UploadCloud, X } from 'lucide-react';
+import { Check, ImagePlus, Loader2, Play, Sparkles, UploadCloud, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
@@ -51,8 +51,8 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
   const uploadMutation = useUploadCreative();
 
   const suggestMutation = useMutation({
-    mutationFn: async ({ imageUrl }: { imageUrl: string | null }) => {
-      const res = await api.post('/campaigns/suggest-text', { imageUrl });
+    mutationFn: async (body: { imageUrl: string } | { assetId: string }) => {
+      const res = await api.post('/campaigns/suggest-text', body);
       return res.data.data as SuggestResponse;
     },
     onSuccess: (data) => {
@@ -71,9 +71,17 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
   });
 
   // Assets reprovados continuam visíveis (com badge + motivo), mas não selecionáveis.
-  const galleryAssets = (data?.assets ?? []).filter((asset) => asset.type === 'image');
+  const galleryAssets = (data?.assets ?? []).filter((asset) => asset.type === 'image' || asset.type === 'video');
 
-  const selectedImageUrl = value[0]?.assetUrl || value[0]?.uploadUrl || value[0]?.mediaUrl || null;
+  // Sugestão IA: imagem pela foto; vídeo do Estúdio pelo roteiro
+  const firstImage = value.find((c) => !c.isVideo);
+  const selectedImageUrl = firstImage?.assetUrl || firstImage?.uploadUrl || firstImage?.mediaUrl || null;
+  const selectedVideoAssetId = value.find((c) => c.isVideo && c.assetId)?.assetId ?? null;
+  const suggestBody = selectedImageUrl
+    ? { imageUrl: selectedImageUrl }
+    : selectedVideoAssetId
+      ? { assetId: selectedVideoAssetId }
+      : null;
 
   const suggestErrorMessage =
     (suggestMutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error
@@ -112,6 +120,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
         id: crypto.randomUUID(),
         assetId: asset.id,
         assetUrl: asset.url ?? undefined,
+        isVideo: asset.type === 'video',
         headline,
         primaryText,
         destinationUrl: copy.destinationUrl,
@@ -201,7 +210,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
     <div className="space-y-5">
       <div>
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-lg font-bold text-text-primary">Qual imagem vai usar?</h3>
+          <h3 className="text-lg font-bold text-text-primary">Qual imagem ou vídeo vai usar?</h3>
           {value.length > 0 && (
             <span
               role="status"
@@ -256,7 +265,13 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
                         : ''
                     )}
                   >
-                    {asset.url ? (
+                    {asset.url && asset.type === 'video' ? (
+                      <>
+                        {/* #t=0.1 mostra o 1º quadro */}
+                        <video src={`${asset.url}#t=0.1`} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                        <Play className="absolute bottom-1.5 left-1.5 z-10 h-4 w-4 fill-white text-white drop-shadow" />
+                      </>
+                    ) : asset.url ? (
                       <img
                         src={asset.url}
                         alt={asset.name ?? 'Criativo'}
@@ -369,7 +384,9 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
                 <div key={c.id} className="relative w-11 h-11">
                   {/* thumb com overflow-hidden; o botão de remover fica FORA desse wrapper para não ser cortado */}
                   <div className="w-full h-full rounded-lg overflow-hidden border border-border bg-surface-secondary">
-                    {image ? (
+                    {image && c.isVideo ? (
+                      <video src={`${image}#t=0.1`} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                    ) : image ? (
                       <img src={image} alt="Criativo selecionado" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-text-tertiary">
@@ -401,10 +418,10 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => suggestMutation.mutate({ imageUrl: selectedImageUrl })}
-                disabled={suggestMutation.isPending || !selectedImageUrl}
+                onClick={() => suggestBody && suggestMutation.mutate(suggestBody)}
+                disabled={suggestMutation.isPending || !suggestBody}
                 className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:text-brand-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title={!selectedImageUrl ? 'Selecione uma imagem primeiro' : 'Sugerir com IA'}
+                title={!suggestBody ? 'Selecione uma imagem ou vídeo primeiro' : 'Sugerir com IA'}
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 {suggestMutation.isPending ? 'Gerando...' : 'Sugestão IA'}

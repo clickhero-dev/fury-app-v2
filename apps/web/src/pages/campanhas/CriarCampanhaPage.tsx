@@ -47,6 +47,7 @@ export function CriarCampanhaPage() {
           mode="page"
           preSelectedAssetId={preSelectedAsset?.id}
           preSelectedAssetUrl={preSelectedAsset?.url}
+          preSelectedAssetIsVideo={preSelectedAsset?.isVideo}
           onViewCampaigns={handleViewCampaigns}
           onCreateAnother={handleCreateAnother}
           onCancel={handleCancel}

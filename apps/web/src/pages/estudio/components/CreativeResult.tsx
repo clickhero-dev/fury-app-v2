@@ -503,7 +503,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
                 Baixar vídeo
               </a>
             )}
-            {isVideo ? (
+            {isVideo && !onPublish ? (
               <Button size="sm" variant="outline" disabled className="w-full border-dashed">
                 Publicar no Meta · em breve
               </Button>

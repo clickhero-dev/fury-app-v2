@@ -213,9 +213,27 @@ const cityByCoordsSchema = z.object({
   lng: z.coerce.number().min(-180).max(180),
 });
 
-const suggestTextSchema = z.object({
-  imageUrl: z.string().url(),
-});
+// imageUrl (imagem) OU assetId (vídeo do Estúdio: usa o roteiro)
+const suggestTextSchema = z
+  .object({
+    imageUrl: z.string().url().optional(),
+    assetId: z.string().uuid().optional(),
+  })
+  .refine((d) => Boolean(d.imageUrl || d.assetId), { message: 'Informe a imagem ou o vídeo.', path: ['imageUrl'] });
+
+// Roteiro do vídeo gerado no Estúdio (complianceNotes)
+function videoScriptFromNotes(notes: string | null | undefined): string | null {
+  try {
+    const meta = JSON.parse(notes ?? '');
+    const scenes = Array.isArray(meta?.scenes)
+      ? meta.scenes.map((s: { visual?: string; narration?: string }) => `- ${s.visual ?? ''} ${s.narration ? `(narração: ${s.narration})` : ''}`.trim())
+      : [];
+    const text = [meta?.prompt ? `Pedido: ${meta.prompt}` : '', ...scenes].filter(Boolean).join('\n');
+    return text || null;
+  } catch {
+    return null;
+  }
+}
 
 const HEADLINE_MAX_LENGTH = 40;
 const PRIMARY_TEXT_MAX_LENGTH = 125;
@@ -248,7 +266,7 @@ function parseAdCopy(raw: string): AdCopySuggestion | null {
 async function tryGenerateAdCopy(
   systemPrompt: string,
   promptText: string,
-  imageUrl: string,
+  imageUrl: string | undefined,
   model: string,
   maxAttempts: number,
 ): Promise<AdCopySuggestion | null> {
@@ -256,10 +274,13 @@ async function tryGenerateAdCopy(
     { role: 'system', content: systemPrompt },
     {
       role: 'user',
-      content: [
-        { type: 'text', text: promptText },
-        { type: 'image_url', image_url: { url: imageUrl } },
-      ],
+      // sem imagem (vídeo): só texto
+      content: imageUrl
+        ? [
+            { type: 'text', text: promptText },
+            { type: 'image_url', image_url: { url: imageUrl } },
+          ]
+        : promptText,
     },
   ];
 
@@ -309,7 +330,7 @@ async function tryGenerateAdCopy(
 async function generateAdCopyWithinLimits(
   systemPrompt: string,
   promptText: string,
-  imageUrl: string,
+  imageUrl: string | undefined,
 ): Promise<AdCopySuggestion | null> {
   for (const { id: model, maxAttempts } of SUGGESTION_MODELS) {
     const result = await tryGenerateAdCopy(systemPrompt, promptText, imageUrl, model, maxAttempts);
@@ -1055,20 +1076,31 @@ export class CampaignsController {
 
   suggestText = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { imageUrl } = suggestTextSchema.parse(req.body);
+      const { imageUrl, assetId } = suggestTextSchema.parse(req.body);
 
       const tenantId = req.tenant?.tenantId || '';
       if (!tenantId) throw new AppError(401, 'UNAUTHORIZED', 'Tenant ID required');
 
-      if (!isAllowedImageUrl(imageUrl)) {
+      const repo = this.repoFactory(tenantId);
+
+      let videoScript: string | null = null;
+      if (assetId) {
+        const asset = await repo.findCreativeAsset(assetId);
+        if (!asset || asset.type !== 'video') throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Vídeo não encontrado.');
+        videoScript = videoScriptFromNotes(asset.complianceNotes);
+        if (!videoScript) throw new AppError(422, 'VIDEO_SCRIPT_MISSING', 'Este vídeo não tem roteiro para gerar a sugestão.');
+      } else if (!isAllowedImageUrl(imageUrl!)) {
         throw new AppError(400, 'INVALID_IMAGE_URL', 'URL de imagem não permitida.');
       }
 
-      const repo = this.repoFactory(tenantId);
       const brandKit = await repo.findBrandKit();
       const tenant = await repo.findTenant();
 
-      const promptText = `Você é copywriter especialista em Meta Ads. Observe a imagem do anúncio anexada e, com base no que ela mostra (produto, oferta, estilo visual) e nos dados da marca abaixo, gere UM título (headline) e UM texto principal (primary_text) para um anúncio no Facebook/Instagram.
+      const mediaIntro = videoScript
+        ? `O anúncio é um VÍDEO. Roteiro do vídeo:\n${videoScript}\n\nCom base no roteiro e`
+        : 'Observe a imagem do anúncio anexada e, com base no que ela mostra (produto, oferta, estilo visual) e';
+
+      const promptText = `Você é copywriter especialista em Meta Ads. ${mediaIntro} nos dados da marca abaixo, gere UM título (headline) e UM texto principal (primary_text) para um anúncio no Facebook/Instagram.
 
 Dados da marca:
 - Tom de voz: ${brandKit?.voiceTone || 'não definido'}
@@ -1076,7 +1108,7 @@ Dados da marca:
 - Cores da marca: ${brandKit?.primaryColor || ''} ${brandKit?.secondaryColor || ''}
 
 Regras (OBRIGATÓRIO respeitar, a resposta será rejeitada se não respeitar):
-- headline: no MÁXIMO ${HEADLINE_MAX_LENGTH} caracteres (conte antes de responder), chamativa, ação, referenciando o que aparece na imagem quando fizer sentido
+- headline: no MÁXIMO ${HEADLINE_MAX_LENGTH} caracteres (conte antes de responder), chamativa, ação, referenciando o que aparece no anúncio quando fizer sentido
 - primary_text: no MÁXIMO ${PRIMARY_TEXT_MAX_LENGTH} caracteres (conte antes de responder), descritivo, com call to action, frase completa (não pode terminar cortada no meio)
 - Responda APENAS JSON: {"headline":"...","primaryText":"..."}
 - Português brasileiro, sem erros ortográficos`;
