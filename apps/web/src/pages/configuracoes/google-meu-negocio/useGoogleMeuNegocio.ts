@@ -15,6 +15,7 @@ import type {
   GoogleAdsCampaignInput,
   GoogleAdsCampaignResult,
   GoogleAdsCampaignStatus,
+  GoogleOwnerOverview,
 } from '@/types/google';
 
 export const googleConnectionKey = ['google-connection'] as const;
@@ -173,6 +174,26 @@ export function useGoogleProfile(profileId: string | null, enabled: boolean) {
       return response.data.data;
     },
     enabled: enabled && !!profileId,
+    retry: false,
+  });
+}
+
+// Sob a chave do perfil: invalidar o perfil também atualiza o painel
+export const googleOverviewKey = (profileId: string | null) =>
+  ['google-profile', profileId, 'overview'] as const;
+
+/** Painel do dono "Sua empresa no Google" (spec 015). */
+export function useGoogleOverview(profileId: string | null) {
+  return useQuery<GoogleOwnerOverview>({
+    queryKey: googleOverviewKey(profileId),
+    queryFn: async () => {
+      const response = await api.get<GoogleApiResponse<GoogleOwnerOverview>>(
+        `/google/profiles/${profileId}/overview`
+      );
+      return response.data.data;
+    },
+    enabled: !!profileId,
+    staleTime: 60_000,
     retry: false,
   });
 }

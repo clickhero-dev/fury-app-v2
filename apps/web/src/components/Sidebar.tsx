@@ -8,6 +8,7 @@ import {
   Palette,
   Plug,
   Settings,
+  Store,
   Users,
   ChevronLeft,
   ChevronDown,
@@ -43,6 +44,7 @@ const sections: { label: string; items: NavItem[] }[] = [
       { to: '/dashboard', label: 'Painel', icon: LayoutGrid },
       { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
       { to: '/leads', label: 'Clientes', icon: Users },
+      { to: '/google-meu-negocio', label: 'Google Meu Negócio', icon: Store },
     ],
   },
   {

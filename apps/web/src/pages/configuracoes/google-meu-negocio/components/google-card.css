@@ -1,0 +1,144 @@
+/* Painel "Sua empresa no Google" (spec 015); usar dentro de .ady-decor.gmb-scope */
+
+.gmb-scope {
+  --gmb-surface: #f0f4f9;
+  --gmb-card: #ffffff;
+  --gmb-text: #1f1f1f;
+  --gmb-text-2: #444746;
+  --gmb-blue: #0b57d0;
+  --gmb-link: #1a0dab;
+  --gmb-border: #dadce0;
+  --gmb-hover: rgba(11, 87, 208, 0.08);
+  --gmb-track: #e3e3e3;
+  --gmb-partial: #d93025;
+  --gmb-complete: #188038;
+  --gmb-badge-bg: #ffffff;
+  --gmb-muted-bg: #e9eef6;
+  color: var(--gmb-text);
+}
+
+/* Tema escuro: paleta do modo escuro do Google */
+.dark .gmb-scope,
+html[data-theme='escuro'] .gmb-scope {
+  --gmb-surface: #1e1f20;
+  --gmb-card: #282a2c;
+  --gmb-text: #e3e3e3;
+  --gmb-text-2: #c4c7c5;
+  --gmb-blue: #a8c7fa;
+  --gmb-link: #c58af9;
+  --gmb-border: #444746;
+  --gmb-hover: rgba(168, 199, 250, 0.12);
+  --gmb-track: #444746;
+  --gmb-partial: #f28b82;
+  --gmb-complete: #81c995;
+  --gmb-badge-bg: #1e1f20;
+  --gmb-muted-bg: #333537;
+}
+
+.gmb-panel {
+  background: var(--gmb-surface);
+  border-radius: 28px;
+  padding: 24px;
+}
+
+.gmb-title {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 400;
+  color: var(--gmb-text);
+}
+
+.gmb-text-2 {
+  color: var(--gmb-text-2);
+}
+
+.gmb-link {
+  color: var(--gmb-link);
+}
+
+.gmb-blue {
+  color: var(--gmb-blue);
+}
+
+.gmb-avatar {
+  background: var(--gmb-muted-bg);
+  border: 1px solid var(--gmb-border);
+  color: var(--gmb-text-2);
+}
+
+.gmb-badge {
+  background: var(--gmb-badge-bg);
+  color: var(--gmb-blue);
+}
+
+.gmb-action {
+  border-radius: 16px;
+  color: var(--gmb-text-2);
+  transition: background-color 0.15s;
+}
+
+.gmb-action:not(:disabled):hover,
+.gmb-action:focus-visible {
+  background: var(--gmb-hover);
+  outline: none;
+}
+
+.gmb-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.gmb-pill {
+  background: var(--gmb-muted-bg);
+  color: var(--gmb-text-2);
+  border-radius: 999px;
+}
+
+.gmb-card {
+  background: var(--gmb-card);
+  border-radius: 24px;
+}
+
+.gmb-icon-button {
+  border-radius: 999px;
+  color: var(--gmb-text-2);
+}
+
+.gmb-icon-button:hover,
+.gmb-icon-button:focus-visible {
+  background: var(--gmb-hover);
+  outline: none;
+}
+
+.gmb-scroll-button {
+  background: var(--gmb-card);
+  border: 1px solid var(--gmb-border);
+  color: var(--gmb-text-2);
+  border-radius: 999px;
+}
+
+.gmb-ring-track {
+  stroke: var(--gmb-track);
+}
+
+.gmb-ring-partial {
+  stroke: var(--gmb-partial);
+}
+
+.gmb-ring-complete {
+  stroke: var(--gmb-complete);
+}
+
+.gmb-strength-list {
+  background: var(--gmb-card);
+  border: 1px solid var(--gmb-border);
+  border-radius: 16px;
+}
+
+.gmb-carousel {
+  scrollbar-width: none;
+}
+
+.gmb-carousel::-webkit-scrollbar {
+  display: none;
+}

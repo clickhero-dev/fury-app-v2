@@ -212,3 +212,53 @@ export interface GoogleAdsCampaignStatus {
   dailyBudgetMicros: number | null;
   lastServedAt: string | null;
 }
+
+// ── Painel do dono / cartão público (spec 015) ───────────────────────────
+
+export type GoogleActionStatus = 'available' | 'coming_soon' | 'requires_verification' | 'external';
+
+export interface GoogleOwnerAction {
+  key: string;
+  label: string;
+  kind: 'core' | 'category';
+  status: GoogleActionStatus;
+  externalUrl?: string;
+}
+
+export interface GoogleStrengthItem {
+  key: string;
+  label: string;
+  done: boolean;
+  weight: number;
+}
+
+export interface GoogleStrengthReport {
+  percent: number;
+  complete: boolean;
+  missingCount: number;
+  items: GoogleStrengthItem[];
+}
+
+export interface GoogleSuggestion {
+  id: string;
+  title: string;
+  description: string;
+  cta: { label: string; action: string };
+}
+
+/** GET /profiles/:id/overview — "Sua empresa no Google". */
+export interface GoogleOwnerOverview {
+  profile: {
+    id: string;
+    name: string;
+    logoUrl: string | null;
+    verified: boolean;
+    categoryName: string | null;
+    syncStatus: string;
+  };
+  interactions: { total: number; periodDays: number } | null;
+  strength: GoogleStrengthReport;
+  actions: GoogleOwnerAction[];
+  suggestions: GoogleSuggestion[];
+  reviewLink: string | null;
+}
