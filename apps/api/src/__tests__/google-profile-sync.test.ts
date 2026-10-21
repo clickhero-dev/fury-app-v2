@@ -197,10 +197,15 @@ describe('updateProfile — PATCH com field mask (US3)', () => {
     });
 
     expect(mockPatchLocation).toHaveBeenCalledTimes(1);
-    const [locationName, updates] = mockPatchLocation.mock.calls[0] as [string, Record<string, unknown>];
+    const [locationName, updates, fieldMask] = mockPatchLocation.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+      string[],
+    ];
     expect(locationName).toBe('accounts/123456/locations/789');
     expect(updates.title).toBe('Padaria Estrela');
     expect(updates.phoneNumbers).toEqual({ primaryPhone: '+5511977777777' });
+    expect(fieldMask).toEqual(['title', 'phoneNumbers']);
 
     expect(result.syncStatus).toBe('synced');
     expect(result.name).toBe('Padaria Estrela');
@@ -229,9 +234,53 @@ describe('updateProfile — PATCH com field mask (US3)', () => {
       },
     });
 
-    const [locationName, updates] = mockPatchLocation.mock.calls[0] as [string, Record<string, unknown>];
+    const [, updates, fieldMask] = mockPatchLocation.mock.calls[0] as [string, Record<string, unknown>, string[]];
     expect(updates.openInfo).toBeDefined();
+    expect(fieldMask).toEqual(['openInfo']);
     expect(result.syncStatus).toBe('synced');
+  });
+
+  it('inclui site, e-mail e categoria no field mask', async () => {
+    mockGetLocation.mockResolvedValue({ name: 'locations/789', categories: [{ categoryId: 'gcid:bakery' }] });
+    mockPatchLocation.mockResolvedValue({ name: 'locations/789', title: 'Minha Empresa Ltda' });
+
+    await googleService.updateProfile('profile-1', 'tenant-A', {
+      website: 'https://nova.com.br',
+      email: 'novo@empresa.com.br',
+      categoryId: 'gcid:coffee_shop',
+    });
+
+    const [, , fieldMask] = mockPatchLocation.mock.calls[0] as [string, unknown, string[]];
+    expect(fieldMask).toEqual(['emailAddress', 'websiteUri', 'categories']);
+  });
+
+  it('troca a categoria principal preservando as adicionais do Google', async () => {
+    mockGetLocation.mockResolvedValue({
+      name: 'locations/789',
+      categories: [
+        { categoryId: 'gcid:bakery', displayName: 'Padaria' },
+        { categoryId: 'gcid:coffee_shop', displayName: 'Cafeteria' },
+        { categoryId: 'gcid:pastry_shop', displayName: 'Confeitaria' },
+      ],
+    });
+    mockPatchLocation.mockResolvedValue({ name: 'locations/789', title: 'Minha Empresa Ltda' });
+
+    await googleService.updateProfile('profile-1', 'tenant-A', { categoryId: 'gcid:coffee_shop' });
+
+    const [, updates] = mockPatchLocation.mock.calls[0] as [string, Record<string, unknown>];
+    // a nova principal sai da lista de adicionais para não duplicar
+    expect(updates.categories).toEqual([
+      { categoryId: 'gcid:coffee_shop' },
+      { categoryId: 'gcid:pastry_shop', displayName: 'Confeitaria' },
+    ]);
+  });
+
+  it('não lê o Google antes do PATCH quando a categoria não muda', async () => {
+    mockPatchLocation.mockResolvedValue({ name: 'locations/789', title: 'Padaria Estrela' });
+
+    await googleService.updateProfile('profile-1', 'tenant-A', { name: 'Padaria Estrela' });
+
+    expect(mockGetLocation).not.toHaveBeenCalled();
   });
 
   it('GBP_UPDATE_REJECTED (409) quando o Google recusa a atualização', async () => {

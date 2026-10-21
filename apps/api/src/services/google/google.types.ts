@@ -13,6 +13,61 @@ import type {
 import type { exchangeCodeForToken, getGoogleOAuthConfig, revokeGoogleToken } from '../../lib/google-oauth.js';
 import type { uploadAsset, deleteAsset } from '../storage/storage.service.js';
 import type { GoogleQualityReport } from './google.quality.js';
+import type {
+  CategoryAction,
+  OpenStatus,
+  StrengthReport,
+  Suggestion,
+  WeeklyHoursDay,
+} from './google.overview.js';
+
+/** Painel do dono "Sua empresa no Google" (spec 015). */
+export interface GoogleOwnerOverview {
+  profile: {
+    id: string;
+    name: string;
+    logoUrl: string | null;
+    verified: boolean;
+    categoryName: string | null;
+    syncStatus: GoogleProfileResult['syncStatus'];
+  };
+  interactions: { total: number; periodDays: number } | null;
+  strength: StrengthReport;
+  actions: CategoryAction[];
+  suggestions: Suggestion[];
+  reviewLink: string | null;
+}
+
+/** Prévia do cartão público; textos vêm crus do Google: renderizar como texto, nunca HTML. */
+export interface GooglePublicCard {
+  name: string;
+  categoryName: string | null;
+  additionalCategories: string[];
+  rating: { average: number; count: number } | null;
+  priceRange: string | null;
+  addressLine: string;
+  phone: string | null;
+  website: string | null;
+  description: string | null;
+  weeklyHours: WeeklyHoursDay[];
+  openStatus: OpenStatus;
+  photos: Array<{ url: string; source: 'ady_local' | 'google'; category: string | null }>;
+  photosNotice: 'ady_local' | null;
+  tabs: string[];
+  mapsUri: string | null;
+}
+
+export interface GoogleAccountLocationItem {
+  gbpLocationId: string;
+  name: string;
+  addressLine: string;
+  active: boolean;
+}
+
+export interface GoogleAccountLocationsResult {
+  accountName: string | null;
+  locations: GoogleAccountLocationItem[];
+}
 
 export type OAuthContext = 'onboarding' | 'settings' | 'ads';
 

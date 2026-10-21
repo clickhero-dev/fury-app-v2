@@ -61,7 +61,24 @@ import type {
   GooglePhotoUploadResult,
   GoogleServiceDeps,
   GoogleAdsCampaignResult,
+  GoogleOwnerOverview,
+  GooglePublicCard,
+  GoogleAccountLocationsResult,
 } from './google.types.js';
+import {
+  buildReviewLink,
+  buildSuggestions,
+  categoryTab,
+  computeOpenStatus,
+  computeProfileStrength,
+  formatAddress,
+  formatWeeklyHours,
+  resolveCategoryActions,
+  resolveTimeZone,
+  safeGoogleUrl,
+  safeHttpUrl,
+  safeHttpsUrl,
+} from './google.overview.js';
 import { GOOGLE_ADS_MIN_MONTHLY_BUDGET, GOOGLE_ADS_MAX_MONTHLY_BUDGET } from './google.types.js';
 import type { GoogleQualityReport } from './google.quality.js';
 
@@ -325,11 +342,24 @@ export class GoogleService {
       pageSize: 5,
     });
 
-    const normalized = matches.map((match) => ({
-      ...mapGbpMatch(match, searchTitle),
-      quality: match.location ? this.assessGoogleProfileQuality(match.location) : null,
-    }));
-    const found = normalized.some((match) => match.claimed && match.verificationState === 'VERIFIED');
+    // v1 não diz se o resultado é do usuário: cruza com as locations da conta pelo placeId
+    const ownedLocations = connection.accountId && matches.length > 0
+      ? await client.listLocations(connection.accountId)
+      : [];
+    const ownedByPlaceId = new Map(
+      ownedLocations
+        .filter((location) => location.metadata?.placeId)
+        .map((location) => [location.metadata!.placeId!, location]),
+    );
+
+    const normalized = matches.map((match) => {
+      const mapped = mapGbpMatch(match, searchTitle, match.placeId ? ownedByPlaceId.get(match.placeId) : undefined);
+      const quality = match.location
+        ? this.assessGoogleProfileQuality({ ...match.location, verification: { state: mapped.verificationState } })
+        : null;
+      return { ...mapped, quality };
+    });
+    const found = normalized.some((match) => match.claimed);
 
     return {
       found,
@@ -665,6 +695,107 @@ export class GoogleService {
     return this.assessGoogleProfileQuality(gbpLocation);
   }
 
+  /** Perfil do tenant + conexão + client (404 se algum faltar). */
+  private async loadProfileContext(profileId: string, tenantId: string) {
+    const profile = await this.getProfileConnection(profileId, tenantId);
+    const connection = await this.repo(tenantId).findGoogleConnectionByRawId(profile.connectionId);
+    if (!connection) {
+      throw new AppError(
+        404,
+        GOOGLE_ERROR_CODES.NOT_FOUND,
+        'Nenhuma conexão Google encontrada. Conecte sua conta Google para continuar.'
+      );
+    }
+    return { profile, connection, client: this.createClientForConnection(connection) };
+  }
+
+  /** Painel do dono "Sua empresa no Google" (spec 015). */
+  async getOwnerOverview(profileId: string, tenantId: string): Promise<GoogleOwnerOverview> {
+    const { profile, client } = await this.loadProfileContext(profileId, tenantId);
+    const location = await client.getLocation(profile.gbpLocationId);
+    const verified = profile.verificationState === 'VERIFIED';
+    const photos = Array.isArray(profile.photos) ? profile.photos : [];
+    const strength = computeProfileStrength(location, { verified, photoCount: photos.length });
+
+    return {
+      profile: {
+        id: profile.id,
+        name: location.title ?? profile.name,
+        logoUrl: null,
+        verified,
+        categoryName: location.categories?.[0]?.displayName ?? profile.categoryDisplayName ?? null,
+        syncStatus: profile.syncStatus as GoogleOwnerOverview['profile']['syncStatus'],
+      },
+      // Desempenho chega na Fase 6
+      interactions: null,
+      strength,
+      actions: resolveCategoryActions(location, verified),
+      suggestions: buildSuggestions({ verified, strength, hasAdsCampaign: Boolean(profile.adsCampaignId) }),
+      reviewLink: buildReviewLink(location.metadata),
+    };
+  }
+
+  /** Prévia do cartão público, montada com os dados do perfil. */
+  async getPublicCard(profileId: string, tenantId: string, now: Date = new Date()): Promise<GooglePublicCard> {
+    const { profile, client } = await this.loadProfileContext(profileId, tenantId);
+    const location = await client.getLocation(profile.gbpLocationId);
+    const photos = (Array.isArray(profile.photos) ? profile.photos : [])
+      .map((url) => safeHttpsUrl(String(url)))
+      .filter((url): url is string => Boolean(url));
+    const extraTab = categoryTab(location);
+
+    return {
+      name: location.title ?? profile.name,
+      categoryName: location.categories?.[0]?.displayName ?? profile.categoryDisplayName ?? null,
+      additionalCategories: (location.categories ?? [])
+        .slice(1)
+        .map((category) => category.displayName)
+        .filter((name): name is string => Boolean(name)),
+      // Avaliações chegam na Fase 4; faixa de preço não vem da API
+      rating: null,
+      priceRange: null,
+      addressLine: formatAddress(location.address),
+      phone: location.phoneNumbers?.primaryPhone ?? null,
+      website: safeHttpUrl(location.websiteUri),
+      description: location.description ?? null,
+      weeklyHours: formatWeeklyHours(location.openInfo?.periods),
+      openStatus: computeOpenStatus(
+        location.openInfo?.periods,
+        location.specialHours?.specialHourPeriods,
+        now,
+        resolveTimeZone(location.address?.administrativeArea),
+      ),
+      photos: photos.map((url) => ({ url, source: 'ady_local' as const, category: null })),
+      photosNotice: photos.length > 0 ? 'ady_local' : null,
+      tabs: ['overview', ...(extraTab ? [extraTab] : []), 'reviews', 'photos', 'about', 'updates'],
+      mapsUri: safeGoogleUrl(location.metadata?.mapsUri),
+    };
+  }
+
+  /** Locais da conta Google conectada ("Perfis"); somente leitura. */
+  async listAccountLocations(profileId: string, tenantId: string): Promise<GoogleAccountLocationsResult> {
+    const { profile, connection, client } = await this.loadProfileContext(profileId, tenantId);
+    if (!connection.accountId) {
+      throw new AppError(404, GOOGLE_ERROR_CODES.NOT_FOUND, 'Nenhuma conta do Google Meu Negócio selecionada.');
+    }
+    const locations = await client.listLocations(connection.accountId);
+    // Compara pelo id final: aceita nome legado v4 (accounts/x/locations/y)
+    const locationId = (name: string) => name.split('/').pop();
+    const activeId = locationId(profile.gbpLocationId);
+
+    return {
+      accountName: connection.accountName ?? null,
+      locations: locations
+        .filter((location) => location.name)
+        .map((location) => ({
+          gbpLocationId: location.name!,
+          name: location.title ?? '',
+          addressLine: formatAddress(location.address),
+          active: locationId(location.name!) === activeId,
+        })),
+    };
+  }
+
   /**
    * Retorna o status de verificação do perfil e os métodos elegíveis (US2).
    */
@@ -843,6 +974,16 @@ export class GoogleService {
     const fieldMask = buildFieldMask(patchPayload);
 
     try {
+      // v1 grava principal + adicionais juntas: preserva as adicionais atuais
+      const newPrimary = patchPayload.categories?.[0];
+      if (newPrimary) {
+        const current = await client.getLocation(profile.gbpLocationId);
+        const additional = (current.categories ?? [])
+          .slice(1)
+          .filter((category) => category.categoryId !== newPrimary.categoryId);
+        patchPayload.categories = [newPrimary, ...additional];
+      }
+
       const updatedLocation = await client.patchLocation(profile.gbpLocationId, patchPayload, fieldMask);
 
       await this.repo(tenantId).patchBusinessProfile(profile.id, {

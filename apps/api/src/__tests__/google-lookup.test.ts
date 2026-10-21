@@ -15,6 +15,7 @@ const {
   mockSearchGoogleLocations,
   mockCreateLocation,
   mockListCategories,
+  mockListLocations,
 } = vi.hoisted(() => ({
   dbMock: {
     query: {
@@ -31,6 +32,7 @@ const {
   mockSearchGoogleLocations: vi.fn(),
   mockCreateLocation: vi.fn(),
   mockListCategories: vi.fn(),
+  mockListLocations: vi.fn(),
 }));
 
 vi.mock('@fury/db', () => ({
@@ -114,9 +116,18 @@ function makeClaimedVerifiedMatch() {
         regionCode: 'BR',
       },
       phoneNumbers: { primaryPhone: '+5511999999999' },
-      verification: { state: 'VERIFIED' },
-      metadata: { canOperateGoogleMyBusiness: true },
+      metadata: { placeId: 'ChIJmockplaceid' },
     },
+  };
+}
+
+// Location da conta conectada (listLocations) — torna o match "do usuário"
+function makeOwnedLocation(overrides: Record<string, unknown> = {}) {
+  return {
+    name: 'locations/789',
+    title: 'Minha Empresa Ltda',
+    metadata: { placeId: 'ChIJmockplaceid', hasVoiceOfMerchant: true },
+    ...overrides,
   };
 }
 
@@ -129,8 +140,7 @@ function makeUnclaimedMatch() {
       title: 'Minha Empresa Ltda',
       address: { addressLines: ['Rua Outra 42'], locality: 'São Paulo', regionCode: 'BR' },
       phoneNumbers: { primaryPhone: '+5511987654321' },
-      verification: { state: 'UNVERIFIED' },
-      metadata: { canOperateGoogleMyBusiness: false },
+      metadata: { placeId: 'ChIJotherplace' },
     },
   };
 }
@@ -141,8 +151,10 @@ function resetMocks() {
     searchGoogleLocations: mockSearchGoogleLocations,
     createLocation: mockCreateLocation,
     listCategories: mockListCategories,
+    listLocations: mockListLocations,
     listAccounts: vi.fn(),
   });
+  mockListLocations.mockResolvedValue([makeOwnedLocation()]);
   dbMock.insert.mockImplementation(() => {
     const valuesResult = Object.assign(Promise.resolve(undefined), {
       returning: vi.fn().mockResolvedValue([{ id: 'profile-1', name: 'Minha Empresa Ltda' }]),
@@ -262,6 +274,30 @@ describe('lookupGoogleProfile — googleLocations:search', () => {
     expect(result.matches).toHaveLength(1);
     expect(result.matches[0].confidence).toBe('HIGH');
     expect(result.matches[0].claimed).toBe(false);
+  });
+
+  it('match é do usuário quando o placeId está nas locations da conta conectada', async () => {
+    mockSearchGoogleLocations.mockResolvedValue([makeClaimedVerifiedMatch()]);
+    mockListLocations.mockResolvedValue([makeOwnedLocation({ metadata: { placeId: 'ChIJmockplaceid' } })]);
+
+    const result = await googleService.lookupGoogleProfile('tenant-A');
+
+    expect(mockListLocations).toHaveBeenCalledWith('accounts/123456');
+    expect(result.found).toBe(true);
+    expect(result.duplicateAlert).toBe(false);
+    expect(result.matches[0]).toMatchObject({ claimed: true, verificationState: 'UNVERIFIED' });
+    expect(result.matches[0].quality?.verified).toBe(false);
+  });
+
+  it('sem conta selecionada não lista locations e trata o match como de outro dono', async () => {
+    dbMock.query.googleConnections.findFirst.mockResolvedValue(makeConnection('tenant-A', { accountId: null }));
+    mockSearchGoogleLocations.mockResolvedValue([makeClaimedVerifiedMatch()]);
+
+    const result = await googleService.lookupGoogleProfile('tenant-A');
+
+    expect(mockListLocations).not.toHaveBeenCalled();
+    expect(result.found).toBe(false);
+    expect(result.duplicateAlert).toBe(true);
   });
 
   it('funciona sem business_profile_settings usando dados do tenant', async () => {

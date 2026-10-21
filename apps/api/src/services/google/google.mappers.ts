@@ -151,7 +151,8 @@ export function getMatchConfidence(match: GbpLocationMatch, searchTitle: string)
   return 'LOW';
 }
 
-export function mapGbpMatch(match: GbpLocationMatch, searchTitle: string): GoogleLookupMatch {
+// `owned`: location da conta conectada com o mesmo placeId (perfil é do usuário)
+export function mapGbpMatch(match: GbpLocationMatch, searchTitle: string, owned?: GbpLocation): GoogleLookupMatch {
   const location = match.location ?? {};
   const address = location.address ?? {};
   const gbpLocationId = location.name ?? match.locationName ?? '';
@@ -167,8 +168,8 @@ export function mapGbpMatch(match: GbpLocationMatch, searchTitle: string): Googl
       country: address.regionCode ?? '',
     },
     phone: location.phoneNumbers?.primaryPhone ?? '',
-    verificationState: location.verification?.state ?? 'UNVERIFIED',
-    claimed: location.metadata?.canOperateGoogleMyBusiness === true,
+    verificationState: owned?.metadata?.hasVoiceOfMerchant ? 'VERIFIED' : 'UNVERIFIED',
+    claimed: Boolean(owned),
     confidence: getMatchConfidence(match, searchTitle),
   };
 }
@@ -216,25 +217,21 @@ export function mapGbpLocationToProfile(
   };
 }
 
-const FIELD_MASK_MAP: Record<string, string> = {
-  name: 'title',
-  phone: 'phoneNumbers',
-  email: 'emailAddress',
-  website: 'websiteUri',
-  categoryId: 'categories',
-  hours: 'openInfo',
-  address: 'address',
-};
+// Chaves do payload (GbpLocation) aceitas na máscara; o client traduz para a v1
+const FIELD_MASK_FIELDS = new Set([
+  'title',
+  'phoneNumbers',
+  'emailAddress',
+  'websiteUri',
+  'categories',
+  'openInfo',
+  'address',
+]);
 
 export function buildFieldMask(updates: Partial<GbpLocation>): string[] {
-  const mask: string[] = [];
-  for (const key of Object.keys(updates)) {
-    const gbpField = FIELD_MASK_MAP[key];
-    if (gbpField) {
-      mask.push(gbpField);
-    }
-  }
-  return mask;
+  return Object.entries(updates)
+    .filter(([key, value]) => FIELD_MASK_FIELDS.has(key) && value !== undefined)
+    .map(([key]) => key);
 }
 
 export function buildGbpPatchPayload(data: Record<string, unknown>): Partial<GbpLocation> {

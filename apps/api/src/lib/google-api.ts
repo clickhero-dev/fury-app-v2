@@ -31,6 +31,8 @@ const VERIFICATIONS_BASE_URL = 'https://mybusinessverifications.googleapis.com/v
 const TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const DEFAULT_LANGUAGE = 'pt-BR';
+// Teto de páginas (100 locais cada) para não esgotar a quota
+const MAX_LOCATION_PAGES = 20;
 
 export class GoogleApiError extends AppError {
   constructor(statusCode: number, code: string, message: string, details?: Record<string, unknown>) {
@@ -60,6 +62,40 @@ export interface GbpOpenPeriod {
   closeTime?: { hours?: number; minutes?: number };
 }
 
+export interface GbpDate {
+  year?: number;
+  month?: number;
+  day?: number;
+}
+
+export interface GbpSpecialHourPeriod {
+  startDate?: GbpDate;
+  endDate?: GbpDate;
+  openTime?: { hours?: number; minutes?: number };
+  closeTime?: { hours?: number; minutes?: number };
+  closed?: boolean;
+}
+
+export interface GbpMoreHours {
+  hoursTypeId?: string;
+  periods?: GbpOpenPeriod[];
+}
+
+export interface GbpLocationMetadata {
+  placeId?: string;
+  mapsUri?: string;
+  newReviewUri?: string;
+  canHaveFoodMenus?: boolean;
+  canOperateLodgingData?: boolean;
+  canOperateLocalPost?: boolean;
+  hasVoiceOfMerchant?: boolean;
+  hasPendingEdits?: boolean;
+  // Ausentes na v1 (sempre undefined); mantidos por compatibilidade
+  canOperateGoogleMyBusiness?: boolean;
+  updateTime?: string;
+}
+
+// Forma interna; o client converte de/para a v1 (fromV1Location/toV1Location)
 export interface GbpLocation {
   name?: string;
   title?: string;
@@ -69,14 +105,43 @@ export interface GbpLocation {
   categories?: GbpCategory[];
   address?: GbpAddress;
   openInfo?: { periods?: GbpOpenPeriod[] };
-  metadata?: {
-    placeId?: string;
-    mapsUri?: string;
-    canOperateGoogleMyBusiness?: boolean;
-    updateTime?: string;
-  };
+  specialHours?: { specialHourPeriods?: GbpSpecialHourPeriod[] };
+  moreHours?: GbpMoreHours[];
+  description?: string;
+  openingStatus?: string;
+  latlng?: { latitude?: number; longitude?: number };
+  labels?: string[];
+  metadata?: GbpLocationMetadata;
   verification?: { state?: string };
-  profile?: { totalReviewCount?: number };
+}
+
+// Formato real da Business Information v1
+interface V1Category {
+  name?: string;
+  displayName?: string;
+}
+
+interface V1Location {
+  name?: string;
+  title?: string;
+  phoneNumbers?: GbpLocation['phoneNumbers'];
+  websiteUri?: string;
+  categories?: { primaryCategory?: V1Category; additionalCategories?: V1Category[] };
+  storefrontAddress?: GbpAddress;
+  regularHours?: { periods?: GbpOpenPeriod[] };
+  specialHours?: GbpLocation['specialHours'];
+  moreHours?: GbpMoreHours[];
+  profile?: { description?: string };
+  openInfo?: { status?: string; canReopen?: boolean; openingDate?: GbpDate };
+  latlng?: GbpLocation['latlng'];
+  labels?: string[];
+  metadata?: GbpLocationMetadata;
+}
+
+interface V1GoogleLocation {
+  name?: string;
+  location?: V1Location;
+  requestAdminRightsUri?: string;
 }
 
 export interface GbpAccount {
@@ -131,12 +196,12 @@ interface GbpAccountsResponse {
 }
 
 interface GbpLocationsResponse {
-  locations?: GbpLocation[];
+  locations?: V1Location[];
   nextPageToken?: string;
 }
 
 interface GbpSearchLocationsResponse {
-  googleLocations?: GbpLocationMatch[];
+  googleLocations?: V1GoogleLocation[];
 }
 
 interface GbpVerificationOptionsResponse {
@@ -148,7 +213,7 @@ interface GbpVerificationsResponse {
 }
 
 interface GbpCategoriesResponse {
-  categories?: Array<GbpCategory & { parentCategory?: string }>;
+  categories?: V1Category[];
   nextPageToken?: string;
 }
 
@@ -174,14 +239,15 @@ interface RequestOptions {
 const MOCK_ACCOUNT_NAME = 'accounts/123456';
 const MOCK_LOCATION_NAME = 'locations/789';
 
-const mockLocation: GbpLocation = {
+const MOCK_WEEKDAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+
+const mockLocation: V1Location = {
   name: MOCK_LOCATION_NAME,
   title: 'Minha Empresa Ltda',
   phoneNumbers: { primaryPhone: '+551****9999' },
   websiteUri: 'https://empresa.com.br',
-  emailAddress: 'contato@empresa.com.br',
-  categories: [{ categoryId: 'gcid:bakery', displayName: 'Padaria' }],
-  address: {
+  categories: { primaryCategory: { name: 'gcid:bakery', displayName: 'Padaria' } },
+  storefrontAddress: {
     addressLines: ['Av. Paulista, 1000'],
     locality: 'São Paulo',
     administrativeArea: 'SP',
@@ -189,36 +255,106 @@ const mockLocation: GbpLocation = {
     regionCode: 'BR',
     languageCode: 'pt-BR',
   },
-  openInfo: {
-    periods: [
-      {
-        openDay: 'MONDAY',
-        openTime: { hours: 8, minutes: 0 },
-        closeDay: 'MONDAY',
-        closeTime: { hours: 18, minutes: 0 },
-      },
-    ],
+  regularHours: {
+    periods: MOCK_WEEKDAYS.map((day) => ({
+      openDay: day,
+      openTime: { hours: 8, minutes: 0 },
+      closeDay: day,
+      closeTime: { hours: 18, minutes: 0 },
+    })),
   },
+  profile: { description: 'Padaria artesanal com pães de fermentação natural, doces e café.' },
+  openInfo: { status: 'OPEN' },
   metadata: {
     placeId: 'ChIJmockplaceid',
     mapsUri: 'https://maps.google.com/?cid=123456789',
-    canOperateGoogleMyBusiness: true,
+    newReviewUri: 'https://search.google.com/local/writereview?placeid=ChIJmockplaceid',
+    canHaveFoodMenus: true,
   },
-  profile: { totalReviewCount: 12 },
 };
 
-const mockLocationMatch: GbpLocationMatch = {
-  locationName: MOCK_LOCATION_NAME,
-  placeId: 'ChIJmockplaceid',
+const mockGoogleLocation: V1GoogleLocation = {
+  name: 'googleLocations/mock-1',
   location: mockLocation,
 };
 
-const mockCategories: Array<GbpCategory & { parentCategory?: string }> = [
-  { categoryId: 'gcid:bakery', displayName: 'Padaria' },
-  { categoryId: 'gcid:bakery_patisserie', displayName: 'Padaria e Confeitaria' },
-  { categoryId: 'gcid:coffee_shop', displayName: 'Cafeteria' },
-  { categoryId: 'gcid:restaurant', displayName: 'Restaurante' },
+const mockCategories: V1Category[] = [
+  { name: 'gcid:bakery', displayName: 'Padaria' },
+  { name: 'gcid:bakery_patisserie', displayName: 'Padaria e Confeitaria' },
+  { name: 'gcid:coffee_shop', displayName: 'Cafeteria' },
+  { name: 'gcid:restaurant', displayName: 'Restaurante' },
 ];
+
+// v1 → interno: storefrontAddress/regularHours/profile/categories{primary,additional}
+function fromV1Category(category: V1Category): GbpCategory {
+  return {
+    categoryId: (category.name ?? '').replace(/^categories\//, ''),
+    displayName: category.displayName,
+  };
+}
+
+export function fromV1Location(raw: V1Location): GbpLocation {
+  const { storefrontAddress, regularHours, categories, profile, openInfo, ...rest } = raw;
+  const location: GbpLocation = { ...rest };
+  const allCategories = [categories?.primaryCategory, ...(categories?.additionalCategories ?? [])]
+    .filter((c): c is V1Category => Boolean(c?.name));
+
+  if (storefrontAddress) location.address = storefrontAddress;
+  if (regularHours?.periods) location.openInfo = { periods: regularHours.periods };
+  if (allCategories.length) location.categories = allCategories.map(fromV1Category);
+  if (profile?.description !== undefined) location.description = profile.description;
+  if (openInfo?.status) location.openingStatus = openInfo.status;
+  return location;
+}
+
+// interno → v1; e-mail não existe na v1 e é descartado
+export function toV1Location(location: Partial<GbpLocation>): V1Location {
+  const {
+    address,
+    openInfo,
+    categories,
+    description,
+    emailAddress: _email,
+    openingStatus: _status,
+    verification: _verification,
+    ...rest
+  } = location;
+  const body: V1Location = { ...rest };
+
+  if (address) body.storefrontAddress = address;
+  if (openInfo?.periods) body.regularHours = { periods: openInfo.periods };
+  if (categories?.length) {
+    const [primary, ...additional] = categories;
+    body.categories = {
+      primaryCategory: { name: primary.categoryId },
+      additionalCategories: additional.map((c) => ({ name: c.categoryId })),
+    };
+  }
+  if (description !== undefined) body.profile = { description };
+  return body;
+}
+
+const V1_MASK_FIELDS: Record<string, string | null> = {
+  address: 'storefrontAddress',
+  openInfo: 'regularHours',
+  description: 'profile.description',
+  emailAddress: null,
+};
+
+export function toV1UpdateMask(fieldMask: string[]): string[] {
+  const mapped = fieldMask.map((field) => (field in V1_MASK_FIELDS ? V1_MASK_FIELDS[field] : field));
+  return [...new Set(mapped.filter((field): field is string => Boolean(field)))];
+}
+
+function fromV1GoogleLocation(match: V1GoogleLocation): GbpLocationMatch {
+  const location = match.location ? fromV1Location(match.location) : undefined;
+  return {
+    locationName: location?.name ?? match.name,
+    placeId: location?.metadata?.placeId,
+    location,
+    requestAdminRightsUrl: match.requestAdminRightsUri,
+  };
+}
 
 const mockVerificationOptions: GbpVerificationOption[] = [
   { verificationMethod: 'POSTAL', announcement: 'Enviar cartão postal para o endereço comercial' },
@@ -251,7 +387,7 @@ function mockGbpRequest<T>(base: string, path: string, options: RequestOptions):
   const method = options.method ?? 'GET';
 
   if (method === 'POST' && path === '/googleLocations:search') {
-    return { googleLocations: [mockLocationMatch] } as T;
+    return { googleLocations: [mockGoogleLocation] } as T;
   }
 
   if (method === 'GET' && base === ACCOUNT_MGMT_BASE_URL && path === '/accounts') {
@@ -325,6 +461,10 @@ const LOCATION_READ_MASK = [
   'phoneNumbers',
   'categories',
   'regularHours',
+  'specialHours',
+  'moreHours',
+  'openInfo',
+  'latlng',
   'websiteUri',
   'metadata',
   'profile',
@@ -455,7 +595,7 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
     }
   }
 
-  return {
+  const api: GoogleApiClient = {
     async listAccounts(): Promise<GbpAccount[]> {
       const response = await request<GbpAccountsResponse>(ACCOUNT_MGMT_BASE_URL, '/accounts');
       return response.accounts ?? [];
@@ -464,6 +604,7 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
     async listLocations(accountName: string): Promise<GbpLocation[]> {
       const locations: GbpLocation[] = [];
       let pageToken: string | undefined;
+      let pages = 0;
 
       do {
         const query: Record<string, string> = {
@@ -477,18 +618,20 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
           `/${accountName}/locations`,
           { query }
         );
-        locations.push(...(response.locations ?? []));
+        locations.push(...(response.locations ?? []).map(fromV1Location));
         pageToken = response.nextPageToken;
-      } while (pageToken);
+        pages += 1;
+      } while (pageToken && pages < MAX_LOCATION_PAGES);
 
       return locations;
     },
 
     async createLocation(accountName: string, location: Partial<GbpLocation>): Promise<GbpLocation> {
-      return request<GbpLocation>(BIZ_INFO_BASE_URL, `/${accountName}/locations`, {
+      const created = await request<V1Location>(BIZ_INFO_BASE_URL, `/${accountName}/locations`, {
         method: 'POST',
-        body: location,
+        body: toV1Location(location),
       });
+      return fromV1Location(created);
     },
 
     async searchGoogleLocations(params: GbpSearchGoogleLocationsParams): Promise<GbpLocationMatch[]> {
@@ -501,21 +644,22 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
           body: {
             pageSize: params.pageSize ?? 3,
             location: {
-              ...location,
+              ...toV1Location(location),
               languageCode: params.languageCode ?? DEFAULT_LANGUAGE,
             },
           },
         }
       );
-      return response.googleLocations ?? [];
+      return (response.googleLocations ?? []).map(fromV1GoogleLocation);
     },
 
     async getLocation(locationName: string): Promise<GbpLocation> {
-      return request<GbpLocation>(
+      const location = await request<V1Location>(
         BIZ_INFO_BASE_URL,
         `/${normalizeLocationName(locationName)}`,
         { query: { readMask: LOCATION_READ_MASK } }
       );
+      return fromV1Location(location);
     },
 
     async patchLocation(
@@ -523,15 +667,21 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
       updates: Partial<GbpLocation>,
       fieldMask: string[]
     ): Promise<GbpLocation> {
-      return request<GbpLocation>(
+      const updateMask = toV1UpdateMask(fieldMask);
+      // Nada a enviar (ex.: só e-mail): devolve o estado atual sem PATCH
+      if (updateMask.length === 0) {
+        return api.getLocation(locationName);
+      }
+      const updated = await request<V1Location>(
         BIZ_INFO_BASE_URL,
         `/${normalizeLocationName(locationName)}`,
         {
           method: 'PATCH',
-          body: updates,
-          query: { updateMask: fieldMask.join(',') },
+          body: toV1Location(updates),
+          query: { updateMask: updateMask.join(',') },
         }
       );
+      return fromV1Location(updated);
     },
 
     async fetchVerificationOptions(locationName: string): Promise<GbpVerificationOption[]> {
@@ -574,10 +724,7 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
       query.view = 'BASIC';
 
       const response = await request<GbpCategoriesResponse>(BIZ_INFO_BASE_URL, '/categories', { query });
-      return (response.categories ?? []).map(({ parentCategory, ...category }) => ({
-        ...category,
-        parentId: parentCategory ?? undefined,
-      }));
+      return (response.categories ?? []).map(fromV1Category);
     },
 
     async getVoiceOfMerchantState(locationName: string): Promise<GbpVoiceOfMerchantState> {
@@ -587,4 +734,6 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
       );
     },
   };
+
+  return api;
 }

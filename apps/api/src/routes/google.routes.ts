@@ -37,6 +37,9 @@ router.post(
 );
 router.get('/profiles/:id', authMiddleware, tenantMiddleware, controllers.google.getProfile);
 router.get('/profiles/:id/quality', authMiddleware, tenantMiddleware, controllers.google.getProfileQuality);
+router.get('/profiles/:id/overview', authMiddleware, tenantMiddleware, controllers.google.getOverview);
+router.get('/profiles/:id/public-card', authMiddleware, tenantMiddleware, controllers.google.getPublicCard);
+router.get('/profiles/:id/locations', authMiddleware, tenantMiddleware, controllers.google.getAccountLocations);
 router.patch('/profiles/:id', authMiddleware, tenantMiddleware, controllers.google.updateProfile);
 router.post('/profiles/:id/sync', authMiddleware, tenantMiddleware, controllers.google.syncProfile);
 router.get('/profiles/:id/sync-logs', authMiddleware, tenantMiddleware, controllers.google.getSyncLogs);

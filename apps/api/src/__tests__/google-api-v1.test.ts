@@ -23,7 +23,6 @@ const { fetchMock } = vi.hoisted(() => ({
 vi.stubGlobal('fetch', fetchMock);
 
 import { createGoogleApiClient } from '../lib/google-api.js';
-import type { GbpLocation, GbpLocationMatch } from '../lib/google-api.js';
 
 const ACCOUNT_MGMT = 'https://mybusinessaccountmanagement.googleapis.com/v1';
 const BIZ_INFO = 'https://mybusinessbusinessinformation.googleapis.com/v1';
@@ -84,14 +83,25 @@ describe('google-api v1 — URLs e payloads', () => {
     expect(locations.length).toBe(1);
   });
 
+  it('listLocations para no teto de 20 páginas', async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ locations: [{ name: 'locations/1' }], nextPageToken: 'sempre' }));
+    const locations = await client().listLocations('accounts/42');
+    expect(fetchMock).toHaveBeenCalledTimes(20);
+    expect(locations).toHaveLength(20);
+  });
+
   it('searchGoogleLocations usa POST /googleLocations:search e mapeia googleLocations', async () => {
-    const googleLocation: GbpLocationMatch = {
-      locationName: 'locations/789',
-      placeId: 'ChIJx',
-      location: { name: 'locations/789', title: 'Loja' },
-      requestAdminRightsUrl: 'https://business.google.com/claim/xyz',
-    };
-    fetchMock.mockResolvedValueOnce(jsonResponse({ googleLocations: [googleLocation] }));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        googleLocations: [
+          {
+            name: 'googleLocations/abc',
+            location: { name: 'locations/789', title: 'Loja', metadata: { placeId: 'ChIJx' } },
+            requestAdminRightsUri: 'https://business.google.com/claim/xyz',
+          },
+        ],
+      })
+    );
     const matches = await client().searchGoogleLocations({
       location: { title: 'Loja', address: { addressLines: ['Rua A'], regionCode: 'BR' } },
       languageCode: 'pt-BR',
@@ -100,9 +110,14 @@ describe('google-api v1 — URLs e payloads', () => {
     const call = lastCall();
     expect(call.url).toBe(`${BIZ_INFO}/googleLocations:search`);
     expect(call.method).toBe('POST');
-    expect(call.body.location).toMatchObject({ title: 'Loja' });
+    expect(call.body.location).toMatchObject({ title: 'Loja', storefrontAddress: { addressLines: ['Rua A'] } });
+    expect(call.body.location.address).toBeUndefined();
     expect(call.body.pageSize).toBe(3);
-    expect(matches[0]?.requestAdminRightsUrl).toBe('https://business.google.com/claim/xyz');
+    expect(matches[0]).toMatchObject({
+      locationName: 'locations/789',
+      placeId: 'ChIJx',
+      requestAdminRightsUrl: 'https://business.google.com/claim/xyz',
+    });
   });
 
   it('getLocation normaliza name v4 → v1 e exige readMask', async () => {
@@ -160,7 +175,7 @@ describe('google-api v1 — URLs e payloads', () => {
   });
 
   it('listCategories usa regionCode+languageCode+view e query vira filter', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ categories: [{ categoryId: 'gcid:bakery', displayName: 'Padaria' }] }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ categories: [{ name: 'gcid:bakery', displayName: 'Padaria' }] }));
     const categories = await client().listCategories({ query: 'pad', regionCode: 'BR', pageSize: 20 });
     const call = lastCall();
     expect(call.url).toContain(`${BIZ_INFO}/categories`);
@@ -169,5 +184,107 @@ describe('google-api v1 — URLs e payloads', () => {
     expect(call.url).toContain('view=BASIC');
     expect(call.url).toContain('filter=displayName%3Dpad');
     expect(categories[0]?.categoryId).toBe('gcid:bakery');
+  });
+});
+
+describe('google-api v1 — conversão de Location', () => {
+  beforeEach(() => {
+    vi.stubEnv('GOOGLE_API_MOCK', 'false');
+    fetchMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const v1Location = {
+    name: 'locations/789',
+    title: 'Loja',
+    storefrontAddress: { addressLines: ['Rua A, 1'], locality: 'São Paulo', regionCode: 'BR' },
+    regularHours: {
+      periods: [{ openDay: 'MONDAY', openTime: { hours: 8 }, closeDay: 'MONDAY', closeTime: { hours: 18 } }],
+    },
+    categories: {
+      primaryCategory: { name: 'gcid:bakery', displayName: 'Padaria' },
+      additionalCategories: [{ name: 'gcid:coffee_shop', displayName: 'Cafeteria' }],
+    },
+    profile: { description: 'Pães artesanais' },
+    openInfo: { status: 'OPEN' },
+    metadata: { placeId: 'ChIJx', newReviewUri: 'https://g.page/r/x/review' },
+  };
+
+  it('getLocation converte a resposta v1 para a forma interna', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(v1Location));
+    const loc = await client().getLocation('locations/789');
+    expect(lastCall().url).toContain('regularHours');
+    expect(loc.address?.addressLines).toEqual(['Rua A, 1']);
+    expect(loc.openInfo?.periods?.[0]?.openDay).toBe('MONDAY');
+    expect(loc.categories).toEqual([
+      { categoryId: 'gcid:bakery', displayName: 'Padaria' },
+      { categoryId: 'gcid:coffee_shop', displayName: 'Cafeteria' },
+    ]);
+    expect(loc.description).toBe('Pães artesanais');
+    expect(loc.openingStatus).toBe('OPEN');
+    expect(loc.metadata?.newReviewUri).toBe('https://g.page/r/x/review');
+  });
+
+  it('patchLocation envia body e updateMask v1 e descarta e-mail', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(v1Location));
+    const loc = await client().patchLocation(
+      'locations/789',
+      {
+        address: { addressLines: ['Rua B'], regionCode: 'BR' },
+        openInfo: { periods: [{ openDay: 'TUESDAY' }] },
+        categories: [{ categoryId: 'gcid:bakery' }],
+        description: 'Nova',
+        emailAddress: 'a@b.com',
+      },
+      ['address', 'openInfo', 'categories', 'description', 'emailAddress']
+    );
+    const call = lastCall();
+    const mask = new URL(call.url).searchParams.get('updateMask');
+    expect(mask).toBe('storefrontAddress,regularHours,categories,profile.description');
+    expect(call.body).toEqual({
+      storefrontAddress: { addressLines: ['Rua B'], regionCode: 'BR' },
+      regularHours: { periods: [{ openDay: 'TUESDAY' }] },
+      categories: { primaryCategory: { name: 'gcid:bakery' }, additionalCategories: [] },
+      profile: { description: 'Nova' },
+    });
+    expect(loc.address?.locality).toBe('São Paulo');
+  });
+
+  it('patchLocation só com e-mail não faz PATCH e devolve o estado atual', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(v1Location));
+    const loc = await client().patchLocation('locations/789', { emailAddress: 'a@b.com' }, ['emailAddress']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lastCall().method).toBe('GET');
+    expect(loc.title).toBe('Loja');
+  });
+
+  it('createLocation envia body v1', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(v1Location));
+    await client().createLocation('accounts/42', {
+      title: 'Loja',
+      address: { addressLines: ['Rua A, 1'], regionCode: 'BR' },
+      categories: [{ categoryId: 'gcid:bakery' }],
+      emailAddress: 'a@b.com',
+    });
+    const call = lastCall();
+    expect(call.method).toBe('POST');
+    expect(call.body).toEqual({
+      title: 'Loja',
+      storefrontAddress: { addressLines: ['Rua A, 1'], regionCode: 'BR' },
+      categories: { primaryCategory: { name: 'gcid:bakery' }, additionalCategories: [] },
+    });
+  });
+
+  it('modo mock devolve a Location já convertida', async () => {
+    vi.stubEnv('GOOGLE_API_MOCK', 'true');
+    const loc = await client().getLocation('locations/789');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(loc.address?.locality).toBe('São Paulo');
+    expect(loc.openInfo?.periods).toHaveLength(6);
+    expect(loc.categories?.[0]?.categoryId).toBe('gcid:bakery');
+    expect(loc.metadata?.newReviewUri).toContain('writereview');
   });
 });
