@@ -13,6 +13,7 @@ import {
   categoriesQuerySchema,
   profileUpdateSchema,
   syncLogsQuerySchema,
+  adsCampaignSchema,
 } from '../schemas/google.schemas.js';
 
 const GOOGLE_MEU_NEGOCIO_PATH = '/configuracoes/google-meu-negocio';
@@ -403,6 +404,46 @@ export class GoogleController {
         data,
         timestamp: new Date().toISOString(),
       });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  createAdsCampaign = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const { id } = profileIdParamsSchema.parse(req.params);
+      const { monthlyBudgetBRL } = adsCampaignSchema.parse(req.body);
+      const data = await this.googleService.criarCampanhaAds(id, req.tenant.tenantId, monthlyBudgetBRL);
+      res.status(201).json({ success: true, data, timestamp: new Date().toISOString() });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  pauseAdsCampaign = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const { id } = profileIdParamsSchema.parse(req.params);
+      const data = await this.googleService.pauseCampanhaAds(id, req.tenant.tenantId);
+      res.status(200).json({ success: true, data, timestamp: new Date().toISOString() });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getAdsCampaignStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const { id } = profileIdParamsSchema.parse(req.params);
+      const data = await this.googleService.getAdsCampaignStatus(id, req.tenant.tenantId);
+      res.status(200).json({ success: true, data, timestamp: new Date().toISOString() });
     } catch (error) {
       next(error);
     }

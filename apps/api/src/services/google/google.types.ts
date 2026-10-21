@@ -14,7 +14,7 @@ import type { exchangeCodeForToken, getGoogleOAuthConfig, revokeGoogleToken } fr
 import type { uploadAsset, deleteAsset } from '../storage/storage.service.js';
 import type { GoogleQualityReport } from './google.quality.js';
 
-export type OAuthContext = 'onboarding' | 'settings';
+export type OAuthContext = 'onboarding' | 'settings' | 'ads';
 
 export interface GoogleAddress {
   street: string;
@@ -35,12 +35,28 @@ export interface GoogleConnectionPublic {
   accountName: string | null;
   tokenExpiresAt: string;
   connected: boolean;
+  /** Escopos OAuth concedidos (URLs completas). */
+  scopes: string[];
+  /** true quando a conta Google Ads está conectada (escopo adwords concedido). */
+  adsConnected: boolean;
 }
 
 export interface GoogleAccount {
   accountId: string;
   accountName: string;
 }
+
+// ── Google Ads (Fluxo 3 — promoção do GBP) ──────────────────────────────
+
+export interface GoogleAdsCampaignResult {
+  campaignId: number;
+  budgetId: number;
+  assetSetId: number;
+}
+
+/** Intervalo aceito de verba mensal (BRL). */
+export const GOOGLE_ADS_MIN_MONTHLY_BUDGET = 30;
+export const GOOGLE_ADS_MAX_MONTHLY_BUDGET = 50_000;
 
 export interface GoogleLookupMatch {
   gbpLocationId: string;
@@ -58,6 +74,8 @@ export interface GoogleLookupResult {
   found: boolean;
   matches: GoogleLookupMatch[];
   duplicateAlert: boolean;
+  /** Perfil espelhado persistido do tenant (null quando ainda não criado/recuperado). */
+  profile: GoogleProfileResult | null;
 }
 
 export interface GoogleSettings {

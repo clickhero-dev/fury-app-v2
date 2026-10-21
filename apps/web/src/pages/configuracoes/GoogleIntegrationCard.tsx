@@ -13,10 +13,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 const SURFACE_CARD = 'rounded-2xl border border-border bg-surface p-6 shadow-sm hover:border-border-light transition-all duration-300';
 const BUTTON_HOVER = 'transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]';
 
+/** Detecta quota excedida/recurso indisponível (Google API). */
+function isQuotaError(err: unknown): boolean {
+  const axiosErr = err as { response?: { data?: { error?: { message?: string } } }; message?: string; responseStatus?: number };
+  const msg = (axiosErr?.response?.data?.error?.message ?? axiosErr?.message ?? '').toLowerCase();
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  return (
+    msg.includes('quota exceeded') || msg.includes('quota excedida') || msg.includes('resource exhausted')
+    || status === 429 || (status === 403 && msg.includes('quota'))
+  );
+}
+
 export function GoogleIntegrationCard() {
   const navigate = useNavigate();
   const { data: connection, isLoading } = useGoogleConnection();
-  const { data: lookup, isLoading: lookupLoading } = useGoogleLookup(!!connection);
+  const { data: lookup, isLoading: lookupLoading, error: lookupError } = useGoogleLookup(!!connection);
   const connectMutation = useGoogleConnect();
   const disconnectMutation = useGoogleDisconnect();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -24,11 +35,28 @@ export function GoogleIntegrationCard() {
   const connected = !!connection;
   const tokenValid = connected && new Date(connection.tokenExpiresAt) > new Date();
   const profileExists = lookup?.found === true || (lookup?.matches?.length ?? 0) > 0;
+  const quotaExceeded = lookupError !== null && isQuotaError(lookupError);
 
   if (isLoading) {
     return (
       <div className={`${SURFACE_CARD} flex items-center justify-center px-6 py-12`}>
         <span className="h-5 w-5 animate-spin rounded-full border-2 border-brand/30 border-t-brand" />
+      </div>
+    );
+  }
+
+  if (quotaExceeded) {
+    return (
+      <div className={`${SURFACE_CARD} flex items-start gap-3`}>
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warning/10 text-warning">
+          <span className="text-lg leading-none">⚠️</span>
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold text-text-primary">Google temporariamente indisponível</h3>
+          <p className="text-xs text-text-tertiary">
+            A API do Google atingiu o limite de uso. Tente novamente em alguns minutos.
+          </p>
+        </div>
       </div>
     );
   }

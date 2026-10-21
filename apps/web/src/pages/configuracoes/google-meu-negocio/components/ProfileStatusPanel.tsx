@@ -1,9 +1,16 @@
-import { Activity, CheckCircle2, Clock, Hourglass, Loader2, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
+import { Activity, CheckCircle2, Clock, Hourglass, Loader2, Megaphone, PauseCircle, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { GoogleBusinessProfile, GoogleSyncLogsResult } from '@/types/google';
+import type { GoogleBusinessProfile, GoogleSyncLogsResult, GoogleAdsCampaignStatus } from '@/types/google';
 
 const SURFACE = 'rounded-2xl border border-border bg-surface p-6 shadow-sm';
 const BUTTON_HOVER = 'transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]';
+
+const ADS_STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  ENABLED: { label: 'Anúncio ativo', className: 'bg-brand/10 text-brand' },
+  PAUSED: { label: 'Anúncio pausado', className: 'bg-warning/10 text-warning' },
+  REMOVED: { label: 'Anúncio removido', className: 'bg-text-tertiary/10 text-text-tertiary' },
+  UNKNOWN: { label: 'Status desconhecido', className: 'bg-text-tertiary/10 text-text-tertiary' },
+};
 
 interface StatusConfig {
   label: string;
@@ -55,14 +62,21 @@ export function ProfileStatusPanel({
   syncLogs,
   isSyncing,
   onSync,
+  adsStatus,
+  onPauseAds,
+  pausingAds,
 }: {
   profile: GoogleBusinessProfile;
   syncLogs: GoogleSyncLogsResult | null;
   isSyncing: boolean;
   onSync: () => void;
+  adsStatus?: GoogleAdsCampaignStatus | null;
+  onPauseAds?: () => void;
+  pausingAds?: boolean;
 }) {
   const config = STATUS_CONFIG[profile.syncStatus] ?? STATUS_CONFIG.error;
   const StatusIcon = config.icon;
+  const adsConfig = adsStatus?.status ? ADS_STATUS_CONFIG[adsStatus.status] : null;
 
   return (
     <div className={`${SURFACE} space-y-5`}>
@@ -103,6 +117,50 @@ export function ProfileStatusPanel({
           {isSyncing ? 'Sincronizando...' : 'Sincronizar agora'}
         </button>
       </div>
+
+      {adsStatus?.campaignId && adsConfig && (
+        <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface-secondary p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <Megaphone className="h-4 w-4 text-brand" />
+            <div className="space-y-0.5">
+              <h4 className="text-sm font-semibold text-text-primary">Promoção no Google Ads</h4>
+              <p className="text-xs text-text-tertiary">
+                {adsStatus.monthlyBudgetBRL
+                  ? `Verba mensal: R$ ${Number(adsStatus.monthlyBudgetBRL).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · `
+                  : ''}
+                {adsStatus.lastServedAt
+                  ? `Status atualizado em ${formatDate(adsStatus.lastServedAt)}`
+                  : 'Aguardando primeira atualização do Google.'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium',
+                adsConfig.className
+              )}
+            >
+              {adsConfig.label}
+            </span>
+            {adsStatus.status === 'ENABLED' && onPauseAds && (
+              <button
+                type="button"
+                onClick={onPauseAds}
+                disabled={pausingAds}
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-text-primary hover:bg-surface-secondary cursor-pointer',
+                  BUTTON_HOVER,
+                  pausingAds && 'opacity-50 cursor-not-allowed'
+                )}
+              >
+                <PauseCircle className="h-3.5 w-3.5" />
+                {pausingAds ? 'Pausando…' : 'Pausar'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         <div className="flex items-center gap-2">

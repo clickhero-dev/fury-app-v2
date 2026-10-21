@@ -2,9 +2,35 @@ import { AppError } from '../middleware/errorHandler.js';
 import { refreshAccessToken } from './google-oauth.js';
 import { GOOGLE_ERROR_CODES } from '../schemas/google.schemas.js';
 
-const GBP_BASE_URL = 'https://mybusiness.googleapis.com/v4';
+/**
+ * Cliente REST do Google Business Profile — stack v1 (2026).
+ *
+ * A API v4 (mybusiness.googleapis.com) foi deprecada pelo Google. A v1
+ * divide-se em TRÊS hosts:
+ *  - Account Management:  mybusinessaccountmanagement.googleapis.com/v1
+ *  - Business Information: mybusinessbusinessinformation.googleapis.com/v1
+ *  - Verifications:        mybusinessverifications.googleapis.com/v1
+ *
+ * Diferenças críticas vs v4:
+ *  - `readMask` OBRIGATÓRIO em accounts.locations.list e locations.get
+ *  - `updateMask` obrigatório em locations.patch
+ *  - googleLocations:search → POST {host v1}/googleLocations:search
+ *    (resposta `googleLocations[]`, não `matchingLocations`)
+ *  - fetchVerificationOptions → POST (v4 era GET)
+ *  - locations.getVoiceOfMerchantState → GET {name}/VoiceOfMerchantState
+ *    (resposta { hasVoiceOfMerchant, hasBusinessAuthority })
+ *  - categories.list → regionCode + languageCode + view OBRIGATÓRIOS;
+ *    busca por prefixo via `filter=displayName=...`
+ *  - Location `name` no formato `locations/{id}` (v4 usava
+ *    `accounts/{a}/locations/{l}`); normalizamos entradas legadas.
+ */
+const ACCOUNT_MGMT_BASE_URL = 'https://mybusinessaccountmanagement.googleapis.com/v1';
+const BIZ_INFO_BASE_URL = 'https://mybusinessbusinessinformation.googleapis.com/v1';
+const VERIFICATIONS_BASE_URL = 'https://mybusinessverifications.googleapis.com/v1';
+
 const TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 15_000;
+const DEFAULT_LANGUAGE = 'pt-BR';
 
 export class GoogleApiError extends AppError {
   constructor(statusCode: number, code: string, message: string, details?: Record<string, unknown>) {
@@ -78,6 +104,13 @@ export interface GbpLocationMatch {
   locationName?: string;
   placeId?: string;
   location?: GbpLocation;
+  /** v1: presente quando o perfil já é de outro dono — redireciona para reivindicação. */
+  requestAdminRightsUrl?: string;
+}
+
+export interface GbpVoiceOfMerchantState {
+  hasVoiceOfMerchant: boolean;
+  hasBusinessAuthority: boolean;
 }
 
 export interface GbpSearchGoogleLocationsParams {
@@ -99,10 +132,11 @@ interface GbpAccountsResponse {
 
 interface GbpLocationsResponse {
   locations?: GbpLocation[];
+  nextPageToken?: string;
 }
 
 interface GbpSearchLocationsResponse {
-  matchingLocations?: GbpLocationMatch[];
+  googleLocations?: GbpLocationMatch[];
 }
 
 interface GbpVerificationOptionsResponse {
@@ -115,10 +149,11 @@ interface GbpVerificationsResponse {
 
 interface GbpCategoriesResponse {
   categories?: Array<GbpCategory & { parentCategory?: string }>;
+  nextPageToken?: string;
 }
 
 interface GbpVerifyLocationResponse {
-  status?: string;
+  verification?: GbpVerification;
 }
 
 interface GoogleApiErrorPayload {
@@ -137,12 +172,12 @@ interface RequestOptions {
 }
 
 const MOCK_ACCOUNT_NAME = 'accounts/123456';
-const MOCK_LOCATION_NAME = `${MOCK_ACCOUNT_NAME}/locations/789`;
+const MOCK_LOCATION_NAME = 'locations/789';
 
 const mockLocation: GbpLocation = {
   name: MOCK_LOCATION_NAME,
   title: 'Minha Empresa Ltda',
-  phoneNumbers: { primaryPhone: '+5511999999999' },
+  phoneNumbers: { primaryPhone: '+551****9999' },
   websiteUri: 'https://empresa.com.br',
   emailAddress: 'contato@empresa.com.br',
   categories: [{ categoryId: 'gcid:bakery', displayName: 'Padaria' }],
@@ -169,7 +204,6 @@ const mockLocation: GbpLocation = {
     mapsUri: 'https://maps.google.com/?cid=123456789',
     canOperateGoogleMyBusiness: true,
   },
-  verification: { state: 'VERIFIED' },
   profile: { totalReviewCount: 12 },
 };
 
@@ -201,14 +235,26 @@ const mockVerifications: GbpVerification[] = [
   },
 ];
 
-function mockGbpRequest<T>(path: string, options: RequestOptions): T {
+/**
+ * Normaliza um resource name de Location para o formato v1 `locations/{id}`.
+ * Aceita entradas legadas v4 (`accounts/{a}/locations/{l}`) e já-normalizadas.
+ */
+export function normalizeLocationName(name: string): string {
+  if (!name) return name;
+  const legacyMatch = name.match(/^accounts\/[^/]+\/locations\/(.+)$/);
+  if (legacyMatch) return `locations/${legacyMatch[1]}`;
+  if (name.startsWith('locations/')) return name;
+  return `locations/${name.replace(/^\/+/, '')}`;
+}
+
+function mockGbpRequest<T>(base: string, path: string, options: RequestOptions): T {
   const method = options.method ?? 'GET';
 
-  if (method === 'POST' && path === '/accounts:searchGoogleLocations') {
-    return { matchingLocations: [mockLocationMatch] } as T;
+  if (method === 'POST' && path === '/googleLocations:search') {
+    return { googleLocations: [mockLocationMatch] } as T;
   }
 
-  if (method === 'GET' && path === '/accounts') {
+  if (method === 'GET' && base === ACCOUNT_MGMT_BASE_URL && path === '/accounts') {
     return { accounts: [{ name: MOCK_ACCOUNT_NAME, accountName: 'Minha Empresa Ltda', type: 'PERSONAL' }] } as T;
   }
 
@@ -224,16 +270,20 @@ function mockGbpRequest<T>(path: string, options: RequestOptions): T {
     return mockLocation as T;
   }
 
-  if (method === 'GET' && path.endsWith(':fetchVerificationOptions')) {
+  if (method === 'POST' && path.endsWith(':fetchVerificationOptions')) {
     return { options: mockVerificationOptions } as T;
   }
 
   if (method === 'POST' && path.endsWith(':verify')) {
-    return { status: 'PENDING' } as T;
+    return { verification: { state: 'PENDING' } } as T;
   }
 
   if (method === 'GET' && path.endsWith('/verifications')) {
     return { verifications: mockVerifications } as T;
+  }
+
+  if (method === 'GET' && path.endsWith('/VoiceOfMerchantState')) {
+    return { hasVoiceOfMerchant: true, hasBusinessAuthority: true } as T;
   }
 
   return mockLocation as T;
@@ -265,7 +315,21 @@ export interface GoogleApiClient {
   verifyLocation(locationName: string, method: string): Promise<GbpVerifyLocationResponse>;
   listVerifications(locationName: string): Promise<GbpVerification[]>;
   listCategories(params: GbpListCategoriesParams): Promise<GbpCategory[]>;
+  getVoiceOfMerchantState(locationName: string): Promise<GbpVoiceOfMerchantState>;
 }
+
+const LOCATION_READ_MASK = [
+  'name',
+  'title',
+  'storefrontAddress',
+  'phoneNumbers',
+  'categories',
+  'regularHours',
+  'websiteUri',
+  'metadata',
+  'profile',
+  'labels',
+].join(',');
 
 export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClient {
   let accessToken = deps.accessToken;
@@ -317,8 +381,8 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
     return accessToken;
   }
 
-  async function rawRequest<T>(path: string, options: RequestOptions, token: string): Promise<T> {
-    const url = new URL(`${GBP_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`);
+  async function rawRequest<T>(base: string, path: string, options: RequestOptions, token: string): Promise<T> {
+    const url = new URL(`${base}${path.startsWith('/') ? path : `/${path}`}`);
     for (const [key, value] of Object.entries(options.query ?? {})) {
       url.searchParams.set(key, value);
     }
@@ -373,19 +437,19 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
     );
   }
 
-  async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  async function request<T>(base: string, path: string, options: RequestOptions = {}): Promise<T> {
     if (isMock) {
-      return mockGbpRequest<T>(path, options);
+      return mockGbpRequest<T>(base, path, options);
     }
 
     const token = await ensureFreshToken();
 
     try {
-      return await rawRequest<T>(path, options, token);
+      return await rawRequest<T>(base, path, options, token);
     } catch (err) {
       if (isUnauthorizedError(err) && refreshToken) {
         await doRefresh();
-        return rawRequest<T>(path, options, accessToken);
+        return rawRequest<T>(base, path, options, accessToken);
       }
       throw err;
     }
@@ -393,35 +457,65 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
 
   return {
     async listAccounts(): Promise<GbpAccount[]> {
-      const response = await request<GbpAccountsResponse>('/accounts');
+      const response = await request<GbpAccountsResponse>(ACCOUNT_MGMT_BASE_URL, '/accounts');
       return response.accounts ?? [];
     },
 
     async listLocations(accountName: string): Promise<GbpLocation[]> {
-      const response = await request<GbpLocationsResponse>(`/${accountName}/locations`, {
-        query: { pageSize: '100' },
-      });
-      return response.locations ?? [];
+      const locations: GbpLocation[] = [];
+      let pageToken: string | undefined;
+
+      do {
+        const query: Record<string, string> = {
+          readMask: LOCATION_READ_MASK,
+          pageSize: '100',
+        };
+        if (pageToken) query.pageToken = pageToken;
+
+        const response = await request<GbpLocationsResponse>(
+          BIZ_INFO_BASE_URL,
+          `/${accountName}/locations`,
+          { query }
+        );
+        locations.push(...(response.locations ?? []));
+        pageToken = response.nextPageToken;
+      } while (pageToken);
+
+      return locations;
     },
 
     async createLocation(accountName: string, location: Partial<GbpLocation>): Promise<GbpLocation> {
-      return request<GbpLocation>(`/${accountName}/locations`, { method: 'POST', body: location });
+      return request<GbpLocation>(BIZ_INFO_BASE_URL, `/${accountName}/locations`, {
+        method: 'POST',
+        body: location,
+      });
     },
 
     async searchGoogleLocations(params: GbpSearchGoogleLocationsParams): Promise<GbpLocationMatch[]> {
-      const response = await request<GbpSearchLocationsResponse>('/accounts:searchGoogleLocations', {
-        method: 'POST',
-        body: {
-          location: params.location ?? {},
-          languageCode: params.languageCode ?? 'pt-BR',
-          pageSize: params.pageSize ?? 3,
-        },
-      });
-      return response.matchingLocations ?? [];
+      const location = params.location ?? {};
+      const response = await request<GbpSearchLocationsResponse>(
+        BIZ_INFO_BASE_URL,
+        '/googleLocations:search',
+        {
+          method: 'POST',
+          body: {
+            pageSize: params.pageSize ?? 3,
+            location: {
+              ...location,
+              languageCode: params.languageCode ?? DEFAULT_LANGUAGE,
+            },
+          },
+        }
+      );
+      return response.googleLocations ?? [];
     },
 
     async getLocation(locationName: string): Promise<GbpLocation> {
-      return request<GbpLocation>(`/${locationName}`);
+      return request<GbpLocation>(
+        BIZ_INFO_BASE_URL,
+        `/${normalizeLocationName(locationName)}`,
+        { query: { readMask: LOCATION_READ_MASK } }
+      );
     },
 
     async patchLocation(
@@ -429,44 +523,68 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
       updates: Partial<GbpLocation>,
       fieldMask: string[]
     ): Promise<GbpLocation> {
-      return request<GbpLocation>(`/${locationName}`, {
-        method: 'PATCH',
-        body: updates,
-        query: { updateMask: fieldMask.join(',') },
-      });
+      return request<GbpLocation>(
+        BIZ_INFO_BASE_URL,
+        `/${normalizeLocationName(locationName)}`,
+        {
+          method: 'PATCH',
+          body: updates,
+          query: { updateMask: fieldMask.join(',') },
+        }
+      );
     },
 
     async fetchVerificationOptions(locationName: string): Promise<GbpVerificationOption[]> {
       const response = await request<GbpVerificationOptionsResponse>(
-        `/${locationName}:fetchVerificationOptions`
+        VERIFICATIONS_BASE_URL,
+        `/${normalizeLocationName(locationName)}:fetchVerificationOptions`,
+        { method: 'POST', body: { languageCode: DEFAULT_LANGUAGE } }
       );
       return response.options ?? [];
     },
 
     async verifyLocation(locationName: string, method: string): Promise<GbpVerifyLocationResponse> {
-      return request<GbpVerifyLocationResponse>(`/${locationName}:verify`, {
-        method: 'POST',
-        body: { method },
-      });
+      return request<GbpVerifyLocationResponse>(
+        VERIFICATIONS_BASE_URL,
+        `/${normalizeLocationName(locationName)}:verify`,
+        {
+          method: 'POST',
+          body: { method, languageCode: DEFAULT_LANGUAGE },
+        }
+      );
     },
 
     async listVerifications(locationName: string): Promise<GbpVerification[]> {
-      const response = await request<GbpVerificationsResponse>(`/${locationName}/verifications`);
+      const response = await request<GbpVerificationsResponse>(
+        VERIFICATIONS_BASE_URL,
+        `/${normalizeLocationName(locationName)}/verifications`
+      );
       return response.verifications ?? [];
     },
 
     async listCategories(params: GbpListCategoriesParams): Promise<GbpCategory[]> {
       const query: Record<string, string> = {};
-      if (params.accountName) query.gmbAccountNames = params.accountName;
-      if (params.query) query.searchTerm = params.query;
+      if (params.query) {
+        // v1: busca por prefixo do displayName via filter (searchTerm não existe mais)
+        query.filter = `displayName=${params.query}`;
+      }
       if (params.regionCode) query.regionCode = params.regionCode;
       if (params.pageSize) query.pageSize = String(params.pageSize);
+      query.languageCode = DEFAULT_LANGUAGE;
+      query.view = 'BASIC';
 
-      const response = await request<GbpCategoriesResponse>('/categories', { query });
+      const response = await request<GbpCategoriesResponse>(BIZ_INFO_BASE_URL, '/categories', { query });
       return (response.categories ?? []).map(({ parentCategory, ...category }) => ({
         ...category,
         parentId: parentCategory ?? undefined,
       }));
+    },
+
+    async getVoiceOfMerchantState(locationName: string): Promise<GbpVoiceOfMerchantState> {
+      return request<GbpVoiceOfMerchantState>(
+        VERIFICATIONS_BASE_URL,
+        `/${normalizeLocationName(locationName)}/VoiceOfMerchantState`
+      );
     },
   };
 }

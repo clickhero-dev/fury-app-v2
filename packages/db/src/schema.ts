@@ -875,6 +875,13 @@ export const metaLeadsRelations = relations(metaLeads, ({ one }) => ({
 
 // ===== Google Meu Negócio (Google Business Profile) tables =====
 
+export const googleAdsCampaignStatusEnum = pgEnum('google_ads_campaign_status', [
+  'ENABLED',
+  'PAUSED',
+  'REMOVED',
+  'UNKNOWN',
+]);
+
 export const googleConnections = pgTable(
   'google_connections',
   {
@@ -888,6 +895,8 @@ export const googleConnections = pgTable(
     tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }).notNull(),
     accountId: varchar('account_id', { length: 255 }),
     accountName: varchar('account_name', { length: 255 }),
+    /** Escopos OAuth concedidos (ex.: business.manage, adwords) — decide se a conta Ads está conectada. */
+    scopes: jsonb('scopes').default(sql`'[]'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -922,6 +931,14 @@ export const googleBusinessProfiles = pgTable(
     syncStatus: googleSyncStatusEnum('sync_status').notNull().default('no_profile'),
     lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
     lastError: text('last_error'),
+    /** Google Ads (Fluxo 3) — campanha de promoção do perfil. */
+    adsCampaignId: varchar('ads_campaign_id', { length: 255 }),
+    adsCampaignStatus: googleAdsCampaignStatusEnum('ads_campaign_status'),
+    /** Verba mensal escolhida pelo cliente (BRL). */
+    adsMonthlyBudget: numeric('ads_monthly_budget', { precision: 12, scale: 2 }),
+    /** Orçamento médio diário enviado ao Google Ads (amount_micros = mensal/30.4). */
+    adsBudgetMicros: bigint('ads_budget_micros', { mode: 'number' }),
+    adsServedAt: timestamp('ads_served_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

@@ -30,6 +30,7 @@ import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due
 import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
 import { startMetaSyncManager, stopMetaSyncManager } from './lib/meta-sync-manager.js';
 import { startLeadStatusManager, stopLeadStatusManager } from './workers/lead-status.worker.js';
+import { startGoogleAdsManager } from './lib/google-ads-manager.js';
 import { seedStartup } from './lib/seed-superadmin.js';
 import { startPlannerWorker, stopPlannerWorker } from './workers/planner.worker.js';
 import { startStudioVideoWorker, stopStudioVideoWorker } from './workers/studio-video.worker.js';
@@ -313,6 +314,9 @@ app.use((req, res) => {
       });
       void startLeadStatusManager().catch((error) => {
         console.error('Failed to start lead-status manager:', error);
+      });
+      void startGoogleAdsManager().catch((error) => {
+        console.error('Failed to start google-ads manager:', error);
       });
       void startPlannerWorker().then(() => {
         return recoverInterruptedPlannerWorkflows().then((count) => {

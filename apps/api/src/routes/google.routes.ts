@@ -48,5 +48,8 @@ router.post(
   controllers.google.uploadPhoto
 );
 router.delete('/profiles/:id/photos', authMiddleware, tenantMiddleware, controllers.google.deletePhoto);
+router.post('/profiles/:id/ads/campaign', authMiddleware, tenantMiddleware, controllers.google.createAdsCampaign);
+router.post('/profiles/:id/ads/campaign/pause', authMiddleware, tenantMiddleware, controllers.google.pauseAdsCampaign);
+router.get('/profiles/:id/ads/status', authMiddleware, tenantMiddleware, controllers.google.getAdsCampaignStatus);
 
 export default router;

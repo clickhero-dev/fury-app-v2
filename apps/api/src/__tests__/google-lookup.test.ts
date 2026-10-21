@@ -149,6 +149,7 @@ function resetMocks() {
     });
     return { values: vi.fn().mockReturnValue(valuesResult) };
   });
+  dbMock.query.googleBusinessProfiles.findFirst.mockResolvedValue(null); // sem perfil persistido por default
   dbMock.update.mockReturnValue({
     set: vi.fn().mockReturnValue({
       where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'conn-1' }]) }),
@@ -182,6 +183,7 @@ describe('lookupGoogleProfile — googleLocations:search', () => {
     expect(result).toEqual({
       found: true,
       duplicateAlert: false,
+      profile: null,
       matches: [
         {
           gbpLocationId: 'accounts/123456/locations/789',
@@ -215,7 +217,39 @@ describe('lookupGoogleProfile — googleLocations:search', () => {
 
     const result = await googleService.lookupGoogleProfile('tenant-A');
 
-    expect(result).toEqual({ found: false, matches: [], duplicateAlert: false });
+    expect(result).toEqual({ found: false, matches: [], duplicateAlert: false, profile: null });
+  });
+
+  it('devolve o perfil persistido do tenant (recuperação pós-reload)', async () => {
+    mockSearchGoogleLocations.mockResolvedValue([makeClaimedVerifiedMatch()]);
+    dbMock.query.googleBusinessProfiles.findFirst.mockResolvedValue({
+      id: 'profile-1',
+      tenantId: 'tenant-A',
+      connectionId: 'conn-1',
+      gbpLocationId: 'accounts/123456/locations/789',
+      name: 'Minha Empresa Ltda',
+      address: { street: 'Av. Paulista 1000', city: 'São Paulo', state: 'SP', postalCode: '01310-100', country: 'BR' },
+      phone: '+5511999999999',
+      email: null,
+      website: null,
+      categoryId: null,
+      categoryDisplayName: null,
+      hours: null,
+      photos: [],
+      verificationState: 'VERIFIED',
+      syncStatus: 'verified',
+      lastSyncedAt: new Date(),
+      lastError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await googleService.lookupGoogleProfile('tenant-A');
+
+    expect(result.profile).not.toBeNull();
+    expect(result.profile?.id).toBe('profile-1');
+    expect(result.profile?.verificationState).toBe('VERIFIED');
+    expect(result.found).toBe(true);
   });
 
   it('duplicateAlert=true quando existem matches não reivindicados (FR-011)', async () => {
@@ -248,7 +282,7 @@ describe('lookupGoogleProfile — googleLocations:search', () => {
     const result = await googleService.lookupGoogleProfile('tenant-A');
 
     expect(mockSearchGoogleLocations).not.toHaveBeenCalled();
-    expect(result).toEqual({ found: false, matches: [], duplicateAlert: false });
+    expect(result).toEqual({ found: false, matches: [], duplicateAlert: false, profile: null });
   });
 });
 

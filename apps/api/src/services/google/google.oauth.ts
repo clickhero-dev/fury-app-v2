@@ -14,6 +14,8 @@ export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 // (sub do usuário) na troca do code — sem eles o userinfo responde 401/403.
 export const GOOGLE_OAUTH_SCOPE =
   'openid email https://www.googleapis.com/auth/business.manage';
+/** Escopo adicional da Google Ads API (Fluxo 3 — promoção do GBP). */
+export const GOOGLE_ADS_OAUTH_SCOPE = 'https://www.googleapis.com/auth/adwords';
 export const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
 export interface OAuthStatePayload {
@@ -32,6 +34,7 @@ export interface GoogleTokenResponse {
 export const RETURN_URLS: Record<OAuthContext, string> = {
   onboarding: '/onboarding/conectar-google?connected=true',
   settings: '/configuracoes/google-meu-negocio?connected=true',
+  ads: '/configuracoes/google-meu-negocio?connected=true&adscopes=1',
 };
 
 function getRequiredEnv(name: string): string {

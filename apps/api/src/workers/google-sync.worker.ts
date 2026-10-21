@@ -43,8 +43,8 @@ export async function processSyncJob(): Promise<void> {
         tokenExpiresAt: connection.tokenExpiresAt,
       });
 
-      const gbpLocation = await client.getLocation(profile.gbpLocationId);
-      const verificationState = gbpLocation.verification?.state ?? 'UNVERIFIED';
+      const voiceState = await client.getVoiceOfMerchantState(profile.gbpLocationId);
+      const verificationState = voiceState.hasVoiceOfMerchant === true ? 'VERIFIED' : 'UNVERIFIED';
 
       if (verificationState === 'VERIFIED') {
         await dbInstance
