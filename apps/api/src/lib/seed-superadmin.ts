@@ -14,6 +14,7 @@ interface SeedUser {
   password: string;
   name: string;
   role: string;
+  platformRole: string;
   tenantName: string;
   tenantSlug: string;
 }
@@ -41,6 +42,7 @@ export async function seedStartup(): Promise<void> {
         password: superadminPass,
         name: 'FURY Admin',
         role: 'superadmin',
+        platformRole: 'super_admin',
         tenantName: 'FURY Superadmin',
         tenantSlug: 'fury-superadmin',
       });
@@ -53,6 +55,7 @@ export async function seedStartup(): Promise<void> {
       password: demoPassword,
       name: 'Fashion Demo',
       role: 'owner',
+      platformRole: 'user',
       tenantName: 'Fashion Demo',
       tenantSlug: 'fashion-demo',
     });
@@ -106,8 +109,8 @@ export async function seedStartup(): Promise<void> {
       // Create user with bcrypt
       const bcryptHash = await bcrypt.hash(seed.password, 10);
       await sql`
-        INSERT INTO "users" (tenant_id, email, password_hash, role, name)
-        VALUES (${tenant.id}, ${seed.email}, ${bcryptHash}, ${seed.role}, ${seed.name})
+        INSERT INTO "users" (tenant_id, email, password_hash, role, platform_role, name)
+        VALUES (${tenant.id}, ${seed.email}, ${bcryptHash}, ${seed.role}, ${seed.platformRole}, ${seed.name})
       `;
 
       console.log(`  ✓ user ${seed.email} created (${seed.role})`);

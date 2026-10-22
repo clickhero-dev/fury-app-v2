@@ -17,6 +17,7 @@ import {
   smallint,
   date,
   primaryKey,
+  uniqueIndex,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -86,6 +87,31 @@ export const leadStatusEnum = pgEnum('lead_status', [
 ]);
 export const faqStatusEnum = pgEnum('faq_status', ['draft', 'published']);
 
+// ==================== RBAC / Parceiros ====================
+
+// Papéis da plataforma (key fixa usada no código)
+export const adyRbacRoles = pgTable('ady_rbac_roles', {
+  key: varchar('key', { length: 50 }).primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  description: text('description'),
+  isSystem: boolean('is_system').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Empresas parceiras
+export const adyPartners = pgTable('ady_partners', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar('name', { length: 255 }).notNull(),
+  maxTenants: integer('max_tenants').notNull().default(0),
+  status: varchar('status', { length: 20 }).notNull().default('active'),
+  openrouterKeyEncrypted: text('openrouter_key_encrypted'),
+  openrouterKeyLast4: varchar('openrouter_key_last4', { length: 4 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});
+
 // Tenants table
 export const tenants = pgTable(
   'tenants',
@@ -95,11 +121,13 @@ export const tenants = pgTable(
     slug: varchar('slug', { length: 255 }).notNull().unique(),
     codigo: varchar('codigo', { length: 20 }).unique(),
     businessContext: text('business_context'),
+    partnerId: uuid('partner_id').references(() => adyPartners.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
     slugIdx: index('tenants_slug_idx').on(table.slug),
     codigoIdx: index('tenants_codigo_idx').on(table.codigo),
+    partnerIdIdx: index('tenants_partner_id_idx').on(table.partnerId),
   })
 );
 
@@ -117,6 +145,11 @@ export const users = pgTable(
     googleId: varchar('google_id', { length: 255 }),
     facebookId: varchar('facebook_id', { length: 255 }),
     role: userRoleEnum('role').notNull().default('member'),
+    platformRole: varchar('platform_role', { length: 50 })
+      .notNull()
+      .default('user')
+      .references(() => adyRbacRoles.key),
+    partnerId: uuid('partner_id').references(() => adyPartners.id, { onDelete: 'set null' }),
     notificationPrefs: jsonb('notification_prefs').default(sql`'{"campanhas":true,"performance":true,"equipe":false}'::jsonb`),
     audienceDefaults: jsonb('audience_defaults').default(sql`'{"city":"","ageMin":18,"ageMax":65,"gender":"all"}'::jsonb`),
     otpCode: varchar('otp_code', { length: 6 }),
@@ -130,6 +163,7 @@ export const users = pgTable(
     tenantIdIdx: index('users_tenant_id_idx').on(table.tenantId),
     emailTenantIdx: index('users_email_tenant_idx').on(table.email, table.tenantId),
     facebookIdIdx: index('users_facebook_id_idx').on(table.facebookId),
+    partnerIdIdx: index('users_partner_id_idx').on(table.partnerId),
   })
 );
 
@@ -420,17 +454,24 @@ export const formSubmissions = pgTable(
 
 // ==================== Billing ====================
 
-// Plans table (global — not per-tenant)
-export const plans = pgTable('plans', {
-  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  name: varchar('name', { length: 100 }).notNull(),
-  priceCents: integer('price_cents').notNull(),
-  interval: planIntervalEnum('interval').notNull().default('monthly'),
-  features: jsonb('features').notNull().default(sql`'{}'::jsonb`),
-  limits: jsonb('limits').notNull().default(sql`'{}'::jsonb`),
-  isActive: boolean('is_active').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+// Plans table (global — not per-tenant; partner_id = plano do parceiro)
+export const plans = pgTable(
+  'plans',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    name: varchar('name', { length: 100 }).notNull(),
+    priceCents: integer('price_cents').notNull(),
+    interval: planIntervalEnum('interval').notNull().default('monthly'),
+    features: jsonb('features').notNull().default(sql`'{}'::jsonb`),
+    limits: jsonb('limits').notNull().default(sql`'{}'::jsonb`),
+    isActive: boolean('is_active').notNull().default(true),
+    partnerId: uuid('partner_id').references(() => adyPartners.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    partnerIdIdx: index('plans_partner_id_idx').on(table.partnerId),
+  })
+);
 
 // Subscriptions table
 export const subscriptions = pgTable(
@@ -1210,6 +1251,84 @@ export const announcementViews = pgTable(
 );
 
 // Export all tables
+// Catálogo de serviços do backend ('all' = todos)
+export const adyRbacServices = pgTable('ady_rbac_services', {
+  key: varchar('key', { length: 100 }).primaryKey(),
+  method: varchar('method', { length: 10 }),
+  route: text('route'),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Catálogo de telas do frontend ('all' = todas)
+export const adyRbacViews = pgTable('ady_rbac_views', {
+  key: varchar('key', { length: 100 }).primaryKey(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Serviços bloqueados por papel (partner_id nulo = todos os parceiros)
+export const adyRbacServicesBlocked = pgTable(
+  'ady_rbac_services_blocked',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    roleKey: varchar('role_key', { length: 50 }).notNull().references(() => adyRbacRoles.key, { onDelete: 'cascade' }),
+    partnerId: uuid('partner_id').references(() => adyPartners.id, { onDelete: 'cascade' }),
+    serviceKey: varchar('service_key', { length: 100 }).notNull().references(() => adyRbacServices.key, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    globalUniq: uniqueIndex('ady_rbac_services_blocked_global_uniq')
+      .on(table.roleKey, table.serviceKey)
+      .where(sql`${table.partnerId} IS NULL`),
+    partnerUniq: uniqueIndex('ady_rbac_services_blocked_partner_uniq')
+      .on(table.roleKey, table.partnerId, table.serviceKey)
+      .where(sql`${table.partnerId} IS NOT NULL`),
+  }),
+);
+
+// Telas bloqueadas por papel (partner_id nulo = todos os parceiros)
+export const adyRbacViewsBlocked = pgTable(
+  'ady_rbac_views_blocked',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    roleKey: varchar('role_key', { length: 50 }).notNull().references(() => adyRbacRoles.key, { onDelete: 'cascade' }),
+    partnerId: uuid('partner_id').references(() => adyPartners.id, { onDelete: 'cascade' }),
+    viewKey: varchar('view_key', { length: 100 }).notNull().references(() => adyRbacViews.key, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    globalUniq: uniqueIndex('ady_rbac_views_blocked_global_uniq')
+      .on(table.roleKey, table.viewKey)
+      .where(sql`${table.partnerId} IS NULL`),
+    partnerUniq: uniqueIndex('ady_rbac_views_blocked_partner_uniq')
+      .on(table.roleKey, table.partnerId, table.viewKey)
+      .where(sql`${table.partnerId} IS NOT NULL`),
+  }),
+);
+
+// Histórico de alterações de RBAC e parceiros
+export const adyRbacAuditLog = pgTable(
+  'ady_rbac_audit_log',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    action: varchar('action', { length: 50 }).notNull(),
+    entityType: varchar('entity_type', { length: 50 }).notNull(),
+    entityKey: text('entity_key'),
+    roleKey: varchar('role_key', { length: 50 }),
+    partnerId: uuid('partner_id'),
+    details: jsonb('details').notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    createdAtIdx: index('ady_rbac_audit_log_created_at_idx').on(table.createdAt),
+    partnerIdIdx: index('ady_rbac_audit_log_partner_id_idx').on(table.partnerId),
+  }),
+);
+
 export const allTables = {
   tenants,
   users,
@@ -1251,4 +1370,11 @@ export const allTables = {
   faqSlugRedirects,
   announcements,
   announcementViews,
+  adyRbacRoles,
+  adyPartners,
+  adyRbacServices,
+  adyRbacViews,
+  adyRbacServicesBlocked,
+  adyRbacViewsBlocked,
+  adyRbacAuditLog,
 };
