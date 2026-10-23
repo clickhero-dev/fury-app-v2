@@ -3,6 +3,7 @@
 import crypto from 'node:crypto';
 import postgres from 'postgres';
 import bcrypt from 'bcrypt';
+import { RBAC_SERVICES } from './rbac-services.js';
 
 const connectionString =
   process.env.NODE_ENV === 'test'
@@ -27,7 +28,24 @@ export async function seedStartup(): Promise<void> {
     await sql.unsafe(`ALTER TYPE "user_role" ADD VALUE IF NOT EXISTS 'superadmin';`);
     console.log('  ✓ user_role enum includes superadmin');
 
-    // 2. Seed users from env vars
+    // 2. Sync RBAC service catalog from lib/rbac-services.ts
+    const byKey = new Map<string, { routes: string[]; description: string }>();
+    for (const entry of RBAC_SERVICES) {
+      const item = byKey.get(entry.key) ?? { routes: [], description: entry.description };
+      item.routes.push(entry.prefix);
+      byKey.set(entry.key, item);
+    }
+    for (const [key, item] of byKey) {
+      const route = item.routes.join(', ');
+      await sql`
+        INSERT INTO "ady_rbac_services" (key, route, description)
+        VALUES (${key}, ${route}, ${item.description})
+        ON CONFLICT (key) DO UPDATE SET route = EXCLUDED.route, description = EXCLUDED.description
+      `;
+    }
+    console.log(`  ✓ rbac service catalog synced (${byKey.size} keys)`);
+
+    // 3. Seed users from env vars
     const superadminEmail = process.env.SUPERADMIN_EMAIL;
     const superadminPass = process.env.SUPERADMIN_PASSWORD;
 

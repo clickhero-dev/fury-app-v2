@@ -31,6 +31,7 @@ import { authMiddleware } from "../middleware/auth.middleware.js";
 import { tenantMiddleware } from "../middleware/tenant.middleware.js";
 import { tenantOrSuperadminMiddleware } from "../middleware/tenantOrSuperadmin.middleware.js";
 import { checkSubscriptionActive } from "../middleware/checkSubscriptionActive.js";
+import { rbacMiddleware } from "../middleware/rbac.middleware.js";
 import { searchMetaLocationsHandler, searchMetaInterestsHandler, findMetaCityByCoordsHandler } from "../controllers/campaigns.controller.js";
 import { createV2Router } from "./v2.routes.js";
 import { controllers } from "../di.js";
@@ -38,6 +39,9 @@ import { controllers } from "../di.js";
 const AUTH_TENANT_SUB = [authMiddleware, tenantMiddleware, checkSubscriptionActive];
 
 const router = Router();
+
+// RBAC global: bloqueia serviços por papel/parceiro (catálogo em lib/rbac-services.ts)
+router.use(rbacMiddleware);
 
 router.use("/health", healthRoutes);
 router.use("/auth", authRoutes);
