@@ -10,6 +10,7 @@ import { useSubscription } from '../../hooks/useBilling';
 import { useBlockedViews } from '../../hooks/useBlockedViews';
 import { viewKeyForPath } from '../../lib/rbac-views';
 import { NotFoundPage } from '../../pages/NotFoundPage';
+import { canAccessAdmin, getStoredPlatformRole } from '../../lib/platform-role';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { setMetaId, setPlan, selectIsPlanExpired, selectUserRole, selectNeedsPolicyAcceptance, setPolicyAccepted } from '../../store/slices/authSlice';
 import {
@@ -145,8 +146,8 @@ export function AuthenticatedShell() {
 
   const reduxPlanExpired = useAppSelector(selectIsPlanExpired);
   const userRole = useAppSelector(selectUserRole);
-  // Admin/superadmin isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
-  const isAdmin = userRole === 'superadmin' || userRole === 'admin';
+  // Isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
+  const isAdmin = userRole === 'admin' || canAccessAdmin(getStoredPlatformRole());
 
   const subscriptionState = useMemo(
     () => computeSubscriptionState(subscription),

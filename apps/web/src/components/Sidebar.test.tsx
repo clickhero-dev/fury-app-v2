@@ -222,4 +222,14 @@ describe('Sidebar — seções e submenu recolhíveis', () => {
     expect(screen.queryByRole('link', { name: /integrações/i })).toBeNull();
     expect(screen.getByRole('link', { name: /configurações/i })).toBeInTheDocument();
   });
+
+  it('mostra "Ir para o Admin" só para quem acessa o admin', () => {
+    const { unmount } = renderSidebar();
+    expect(screen.queryByRole('link', { name: /ir para o admin/i })).toBeNull();
+    unmount();
+
+    window.localStorage.setItem('user', JSON.stringify({ role: 'owner', platformRole: 'admin_partner' }));
+    renderSidebar();
+    expect(screen.getByRole('link', { name: /ir para o admin/i })).toHaveAttribute('href', '/admin/dashboard');
+  });
 });

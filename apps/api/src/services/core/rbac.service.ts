@@ -71,9 +71,19 @@ export class RbacService {
     if (redis) await redis.incr(VERSION_KEY);
   }
 
+  private context(v: string | null, userId: string): Promise<RbacUserContext | null> {
+    return this.cached(v && `rbac:v${v}:ctx:${userId}`, () => this.repo.findUserContext(userId));
+  }
+
+  // platform_role do banco (não do JWT); null = usuário inexistente
+  async getPlatformRole(userId: string): Promise<string | null> {
+    const ctx = await this.context(await this.version(), userId);
+    return ctx?.platformRole ?? null;
+  }
+
   async checkServices(userId: string, serviceKeys: string[]): Promise<ServiceCheckResult> {
     const v = await this.version();
-    const ctx = await this.cached(v && `rbac:v${v}:ctx:${userId}`, () => this.repo.findUserContext(userId));
+    const ctx = await this.context(v, userId);
     if (!ctx) return 'unknown_user';
     if (ctx.platformRole === SUPER_ADMIN_ROLE) return 'allowed';
 
@@ -88,7 +98,7 @@ export class RbacService {
   // Telas bloqueadas já expandidas ('all' e herança pai → filho); null = usuário inexistente
   async listBlockedViews(userId: string): Promise<string[] | null> {
     const v = await this.version();
-    const ctx = await this.cached(v && `rbac:v${v}:ctx:${userId}`, () => this.repo.findUserContext(userId));
+    const ctx = await this.context(v, userId);
     if (!ctx) return null;
     if (ctx.platformRole === SUPER_ADMIN_ROLE) return [];
 

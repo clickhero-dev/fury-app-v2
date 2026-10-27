@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useLogout } from '@/hooks/useLogout';
@@ -21,6 +22,7 @@ import { captureEvent } from '@/lib/posthog';
 import { isNavItemActive, isNavItemCurrent, type NavItemShape } from './sidebarNav';
 import { useBlockedViews } from '@/hooks/useBlockedViews';
 import { viewKeyForPath } from '@/lib/rbac-views';
+import { canAccessAdmin, getStoredPlatformRole } from '@/lib/platform-role';
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -295,6 +297,19 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       {/* Rodapé com Sair e botão de recuar centralizados */}
       <div className="mt-auto space-y-3 pt-4 border-t border-border">
         <SidebarUserCard collapsed={collapsed} />
+
+        {/* Atalho para o admin (super_admin e admin_partner) */}
+        {canAccessAdmin(getStoredPlatformRole()) && (
+          <Link
+            to="/admin/dashboard"
+            onClick={() => onMobileClose?.()}
+            title={collapsed ? 'Ir para o Admin' : undefined}
+            className="flex w-full items-center justify-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-text-secondary hover:bg-sidebar-hover hover:text-text-primary transition-colors"
+          >
+            <ShieldCheck className="size-[18px] shrink-0 text-text-tertiary" />
+            {!collapsed && <span>Ir para o Admin</span>}
+          </Link>
+        )}
 
         {/* Botão Sair */}
         <button

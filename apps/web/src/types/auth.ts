@@ -7,6 +7,8 @@ export interface User {
   tenantName?: string;
   tenantId?: string;
   role?: string;
+  /** Papel na plataforma (super_admin, admin_partner, user_partner, user). */
+  platformRole?: string;
 }
 
 /** Payload enviado no corpo da requisição de login. */

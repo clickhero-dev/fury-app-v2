@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+const { getPlatformRole } = vi.hoisted(() => ({ getPlatformRole: vi.fn(async (_id: string): Promise<string | null> => 'user') }));
+vi.mock('../services/core/rbac.service.js', () => ({ rbacService: { getPlatformRole } }));
 import type { Request, Response, NextFunction } from 'express';
 
 // auth.middleware importa verifyAccessToken de ../lib/jwt.js — isolamos aqui.
@@ -114,75 +116,115 @@ describe('tenantMiddleware', () => {
 });
 
 describe('superadminMiddleware', () => {
-  it('retorna 403 sem req.user', () => {
+  it('retorna 403 sem req.user', async () => {
     const next = mockNext();
-    superadminMiddleware(mockReq(), {} as Response, next);
+    await superadminMiddleware(mockReq(), {} as Response, next);
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
   });
 
-  it('retorna 403 para role diferente de superadmin', () => {
+  it('retorna 403 para platform_role diferente de super_admin', async () => {
     const next = mockNext();
-    superadminMiddleware(mockReq({ user: { role: 'user' } } as any), {} as Response, next);
+    await superadminMiddleware(mockReq({ user: { userId: 'u1', role: 'superadmin' } } as any), {} as Response, next);
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
   });
 
-  it('permite superadmin', () => {
+  it('permite platform_role super_admin', async () => {
+    getPlatformRole.mockResolvedValueOnce('super_admin');
     const next = mockNext();
-    superadminMiddleware(mockReq({ user: { role: 'superadmin' } } as any), {} as Response, next);
+    await superadminMiddleware(mockReq({ user: { userId: 'u1', role: 'owner' } } as any), {} as Response, next);
+    expect(getPlatformRole).toHaveBeenCalledWith('u1');
     expect(next).toHaveBeenCalledWith();
+  });
+
+  it('admin_partner não entra nas rotas de superadmin', async () => {
+    getPlatformRole.mockResolvedValueOnce('admin_partner');
+    const next = mockNext();
+    await superadminMiddleware(mockReq({ user: { userId: 'u1', role: 'owner' } } as any), {} as Response, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
+  });
+
+  it('falha ao ler o papel bloqueia com 503', async () => {
+    getPlatformRole.mockRejectedValueOnce(new Error('db down'));
+    const next = mockNext();
+    await superadminMiddleware(mockReq({ user: { userId: 'u1', role: 'owner' } } as any), {} as Response, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 503 }));
   });
 });
 
 describe('tenantOrSuperadminMiddleware', () => {
-  it('superadmin com query tenantId usa o tenant alvo', () => {
+  it('superadmin com query tenantId usa o tenant alvo', async () => {
+    getPlatformRole.mockResolvedValueOnce('super_admin');
     const req = mockReq({
-      user: { role: 'superadmin', tenantId: 't-admin' },
-      query: { tenantId: 't-target' },
+      user: { userId: 'u1', role: 'owner', tenantId: 't-admin' },
+      query: { tenantId: '11111111-1111-4111-8111-111111111111' },
     } as any);
     const next = mockNext();
 
-    tenantOrSuperadminMiddleware(req, {} as Response, next);
+    await tenantOrSuperadminMiddleware(req, {} as Response, next);
 
-    expect((req.tenant as any).tenantId).toBe('t-target');
+    expect((req.tenant as any).tenantId).toBe('11111111-1111-4111-8111-111111111111');
     expect(next).toHaveBeenCalledWith();
   });
 
-  it('superadmin com header x-tenant-id usa o tenant alvo', () => {
+  it('superadmin com header x-tenant-id usa o tenant alvo', async () => {
+    getPlatformRole.mockResolvedValueOnce('super_admin');
     const req = mockReq({
-      user: { role: 'superadmin', tenantId: 't-admin' },
-      headers: { 'x-tenant-id': 't-header' },
+      user: { userId: 'u1', role: 'owner', tenantId: 't-admin' },
+      headers: { 'x-tenant-id': '22222222-2222-4222-8222-222222222222' },
     } as any);
     const next = mockNext();
 
-    tenantOrSuperadminMiddleware(req, {} as Response, next);
+    await tenantOrSuperadminMiddleware(req, {} as Response, next);
 
-    expect((req.tenant as any).tenantId).toBe('t-header');
+    expect((req.tenant as any).tenantId).toBe('22222222-2222-4222-8222-222222222222');
     expect(next).toHaveBeenCalledWith();
   });
 
-  it('superadmin sem tenant alvo cai para o próprio tenantId', () => {
+  it('superadmin sem tenant alvo cai para o próprio tenantId', async () => {
     const req = mockReq({ user: { role: 'superadmin', tenantId: 't-admin' } } as any);
     const next = mockNext();
 
-    tenantOrSuperadminMiddleware(req, {} as Response, next);
+    await tenantOrSuperadminMiddleware(req, {} as Response, next);
 
     expect((req.tenant as any).tenantId).toBe('t-admin');
     expect(next).toHaveBeenCalledWith();
   });
 
-  it('usuário comum usa o próprio tenantId', () => {
+  it('usuário comum usa o próprio tenantId', async () => {
     const req = mockReq({ user: { role: 'user', tenantId: 't-1' } } as any);
     const next = mockNext();
 
-    tenantOrSuperadminMiddleware(req, {} as Response, next);
+    await tenantOrSuperadminMiddleware(req, {} as Response, next);
 
     expect((req.tenant as any).tenantId).toBe('t-1');
     expect(next).toHaveBeenCalledWith();
   });
 
-  it('retorna 403 sem req.user e sem tenantId', () => {
+  it('retorna 403 sem req.user e sem tenantId', async () => {
     const next = mockNext();
-    tenantOrSuperadminMiddleware(mockReq(), {} as Response, next);
+    await tenantOrSuperadminMiddleware(mockReq(), {} as Response, next);
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403, code: 'FORBIDDEN' }));
+  });
+
+  it('JWT com role superadmin sem platform_role super_admin não troca de tenant', async () => {
+    const req = mockReq({
+      user: { userId: 'u1', role: 'superadmin', tenantId: 't-1' },
+      query: { tenantId: '11111111-1111-4111-8111-111111111111' },
+    } as any);
+    const next = mockNext();
+
+    await tenantOrSuperadminMiddleware(req, {} as Response, next);
+
+    expect((req.tenant as any).tenantId).toBe('t-1');
+  });
+
+  it('tenant alvo que não é UUID em string é ignorado', async () => {
+    getPlatformRole.mockResolvedValue('super_admin');
+    for (const tenantId of [['11111111-1111-4111-8111-111111111111'], 'abc', { x: 1 }]) {
+      const req = mockReq({ user: { userId: 'u1', role: 'owner', tenantId: 't-admin' }, query: { tenantId } } as any);
+      await tenantOrSuperadminMiddleware(req, {} as Response, mockNext());
+      expect((req.tenant as any).tenantId).toBe('t-admin');
+    }
+    getPlatformRole.mockResolvedValue('user');
   });
 });

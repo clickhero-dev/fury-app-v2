@@ -25,4 +25,23 @@ describe('AdminShell', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Ticket aberto com sucesso.');
   });
+
+  it('admin_partner não vê as telas só do super_admin', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'owner', platformRole: 'admin_partner' }));
+    render(
+      <MemoryRouter initialEntries={['/admin/tickets']}>
+        <Routes>
+          <Route path="/admin" element={<AdminShell />}>
+            <Route path="tickets" element={<div>conteúdo tickets</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('link', { name: /tickets/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /faqs/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /usuários/i })).toBeInTheDocument();
+    expect(screen.queryByText('conteúdo tickets')).toBeNull();
+    localStorage.clear();
+  });
 });

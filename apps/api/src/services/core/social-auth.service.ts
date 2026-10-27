@@ -31,6 +31,7 @@ function userToDTO(user: any): UserDTO {
     name: user.name ?? null,
     email: user.email,
     role: user.role,
+    platformRole: user.platformRole,
     tenantId: user.tenantId,
     notificationPrefs: (user.notificationPrefs as UserDTO['notificationPrefs']) ?? DEFAULT_NOTIFICATION_PREFS,
     audienceDefaults: user.audienceDefaults as UserDTO['audienceDefaults'],

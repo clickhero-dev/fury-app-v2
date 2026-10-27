@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+const { getPlatformRole } = vi.hoisted(() => ({ getPlatformRole: vi.fn(async (_id: string): Promise<string | null> => 'user') }));
+vi.mock('../services/core/rbac.service.js', () => ({ rbacService: { getPlatformRole } }));
 import type { Request, Response, NextFunction } from 'express';
 
 const { mockFindFirst } = vi.hoisted(() => ({
@@ -148,8 +150,21 @@ describe('checkSubscriptionActive middleware', () => {
   });
 
   it('superadmin passa mesmo com subscription cancelled (isento de verificação)', async () => {
+    getPlatformRole.mockResolvedValueOnce('super_admin');
     mockFindFirst.mockResolvedValue({ status: 'cancelled', trialEndsAt: null, currentPeriodEnd: null });
     const req = createMockRequest({ user: { userId: 'user-1', tenantId: 'tenant-1', email: 'test@fury.test', role: 'superadmin' } });
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(mockFindFirst).not.toHaveBeenCalled(); // Não faz query, passa direto
+  });
+
+  it('admin_partner passa mesmo com subscription cancelled (isento)', async () => {
+    getPlatformRole.mockResolvedValueOnce('admin_partner');
+    mockFindFirst.mockResolvedValue({ status: 'cancelled', trialEndsAt: null, currentPeriodEnd: null });
+    const req = createMockRequest({ user: { userId: 'user-1', tenantId: 'tenant-1', email: 'test@fury.test', role: 'owner' } });
     const next = createNext();
 
     await checkSubscriptionActive(req, {} as Response, next);

@@ -310,6 +310,18 @@ function fakeViewRepo(ctx: { platformRole: string; partnerId: string | null } | 
   };
 }
 
+describe('RbacService.getPlatformRole', () => {
+  it('lê o platform_role do banco', async () => {
+    const repo = fakeViewRepo({ platformRole: 'admin_partner', partnerId: 'p1' });
+    expect(await new RbacService(repo, () => fakeRedis()).getPlatformRole('u1')).toBe('admin_partner');
+    expect(repo.findUserContext).toHaveBeenCalledWith('u1');
+  });
+
+  it('usuário inexistente → null', async () => {
+    expect(await new RbacService(fakeViewRepo(null), () => fakeRedis()).getPlatformRole('u1')).toBeNull();
+  });
+});
+
 describe('RbacService.listBlockedViews', () => {
   it('usuário inexistente → null', async () => {
     expect(await new RbacService(fakeViewRepo(null), () => fakeRedis()).listBlockedViews('u1')).toBeNull();

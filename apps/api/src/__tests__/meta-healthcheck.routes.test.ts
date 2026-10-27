@@ -23,6 +23,8 @@ Funcionalidade: Restringir healthchecks ao superadmin
 // =============================================================================
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+const { getPlatformRole } = vi.hoisted(() => ({ getPlatformRole: vi.fn(async (_id: string): Promise<string | null> => 'user') }));
+vi.mock('../services/core/rbac.service.js', () => ({ rbacService: { getPlatformRole } }));
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
@@ -71,6 +73,7 @@ describe('BDD: endpoints HTTP Healthchecks', () => {
   });
 
   it('Cenário: superadmin acessa a lista client-safe', async () => {
+    getPlatformRole.mockResolvedValueOnce('super_admin');
     const response = await request(buildApp()).get('/admin/healthchecks/users').set('Authorization', `Bearer ${authToken('superadmin')}`);
     expect(response.status).toBe(200);
     expect(response.body.data).toEqual([]);
