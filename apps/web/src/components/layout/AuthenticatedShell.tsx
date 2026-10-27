@@ -7,6 +7,9 @@ import { AnnouncementsModal } from './AnnouncementsModal';
 import { FabActions } from '../fab/FabActions';
 import api from '../../lib/api';
 import { useSubscription } from '../../hooks/useBilling';
+import { useBlockedViews } from '../../hooks/useBlockedViews';
+import { viewKeyForPath } from '../../lib/rbac-views';
+import { NotFoundPage } from '../../pages/NotFoundPage';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { setMetaId, setPlan, selectIsPlanExpired, selectUserRole, selectNeedsPolicyAcceptance, setPolicyAccepted } from '../../store/slices/authSlice';
 import {
@@ -65,6 +68,8 @@ export function AuthenticatedShell() {
   const isPolicyExempt =
     isPolicyRoute || POLICY_EXEMPT.some((p) => location.pathname.startsWith(p)) || isOnboarding;
   const needsPolicy = useAppSelector(selectNeedsPolicyAcceptance);
+  const { isBlocked } = useBlockedViews();
+  const viewKey = viewKeyForPath(location.pathname);
 
   const shouldCheckPolicy = !!token && !isPolicyExempt;
 
@@ -200,7 +205,11 @@ export function AuthenticatedShell() {
           FabActions retorna null em telas onde não fazem sentido. */}
       <FabActions />
       {/* Outlet renderiza a página da rota ativa com acesso ao ShellContext */}
-      <Outlet context={{ setMobileOpen } satisfies ShellContext} />
+      {viewKey && isBlocked(viewKey) ? (
+        <div className="flex-1"><NotFoundPage /></div>
+      ) : (
+        <Outlet context={{ setMobileOpen } satisfies ShellContext} />
+      )}
     </div>
   );
 }

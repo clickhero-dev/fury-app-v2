@@ -5,6 +5,7 @@ import { showSnack } from '@/lib/snack';
 import { AdminShell } from './AdminShell';
 
 vi.mock('@/hooks/useFavicon', () => ({ useFavicon: vi.fn() }));
+vi.mock('@/hooks/useBlockedViews', () => ({ useBlockedViews: () => ({ isBlocked: () => false }) }));
 
 describe('AdminShell', () => {
   afterEach(() => vi.useRealTimers());

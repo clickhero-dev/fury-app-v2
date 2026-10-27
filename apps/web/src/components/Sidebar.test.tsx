@@ -10,6 +10,12 @@ const mockCaptureEvent = vi.mocked(captureEvent);
 
 vi.mock('@/hooks/useLogout', () => ({ useLogout: () => vi.fn() }));
 
+// RBAC: lista de telas bloqueadas controlada por teste
+let blockedViews: string[] = [];
+vi.mock('@/hooks/useBlockedViews', () => ({
+  useBlockedViews: () => ({ isBlocked: (k: string) => blockedViews.includes(k) }),
+}));
+
 // SidebarUserCard depende de useAuth/useBilling — fora do escopo deste teste
 // (a cobertura aqui é a navegação). Renderiza um slot neutro.
 vi.mock('./SidebarUserCard', () => ({
@@ -27,6 +33,7 @@ function renderSidebar(entry = '/dashboard') {
 describe('Sidebar — navegação', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    blockedViews = [];
   });
 
   it('agrupa a navegação em seções por tarefa (Gestão / Criação / Conta)', () => {
@@ -143,6 +150,7 @@ describe('Sidebar — navegação', () => {
 describe('Sidebar — seções e submenu recolhíveis', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    blockedViews = [];
     window.localStorage.clear();
   });
 
@@ -203,5 +211,15 @@ describe('Sidebar — seções e submenu recolhíveis', () => {
     renderSidebar('/configuracoes/integracoes');
 
     expect(screen.getByRole('link', { name: /integrações/i })).toBeInTheDocument();
+  });
+
+  it('esconde itens bloqueados no RBAC e some com a seção vazia', () => {
+    blockedViews = ['studio', 'calendar', 'settings.integrations'];
+    renderSidebar('/configuracoes');
+
+    expect(screen.queryByRole('link', { name: /estúdio/i })).toBeNull();
+    expect(screen.queryByText('Criação')).toBeNull();
+    expect(screen.queryByRole('link', { name: /integrações/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /configurações/i })).toBeInTheDocument();
   });
 });

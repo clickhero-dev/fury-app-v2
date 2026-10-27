@@ -19,6 +19,8 @@ import { AdySymbol } from '@/components/AdySymbol';
 import { SidebarUserCard } from './SidebarUserCard';
 import { captureEvent } from '@/lib/posthog';
 import { isNavItemActive, isNavItemCurrent, type NavItemShape } from './sidebarNav';
+import { useBlockedViews } from '@/hooks/useBlockedViews';
+import { viewKeyForPath } from '@/lib/rbac-views';
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -147,6 +149,21 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const logout = useLogout();
+  const { isBlocked } = useBlockedViews();
+
+  // RBAC: tira do menu o que está bloqueado; seção vazia some
+  const isVisible = (item: NavItem) => {
+    const key = viewKeyForPath(item.to);
+    return !key || !isBlocked(key);
+  };
+  const visibleSections = sections
+    .map((s) => ({
+      ...s,
+      items: s.items
+        .filter(isVisible)
+        .map((item) => (item.children ? { ...item, children: item.children.filter(isVisible) } : item)),
+    }))
+    .filter((s) => s.items.length > 0);
 
   // Seções e submenus recolhíveis — decisão de UX: clique no rótulo da seção
   // alterna o grupo; clique no item pai navega E alterna o submenu. Padrão
@@ -242,7 +259,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
       {/* Navegação agrupada — seções recolhíveis (clique no rótulo) */}
       <nav className="mt-8 flex flex-1 flex-col overflow-y-auto">
-        {sections.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.label} className="mb-1 flex flex-col gap-1">
             {!collapsed && (
               <button

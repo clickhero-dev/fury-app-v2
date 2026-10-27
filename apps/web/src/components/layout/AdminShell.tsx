@@ -3,6 +3,9 @@ import { Users, Clock, Zap, LogOut, LayoutGrid, ArrowLeft, Ticket, CircleHelp, A
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useFavicon } from '@/hooks/useFavicon';
 import { SnackHost } from './SnackHost';
+import { useBlockedViews } from '@/hooks/useBlockedViews';
+import { viewKeyForPath } from '@/lib/rbac-views';
+import { NotFoundPage } from '@/pages/NotFoundPage';
 
 interface NavItem {
   path: string;
@@ -29,6 +32,12 @@ export function AdminShell() {
   const location = useLocation();
   const tenantId = location.pathname.match(/\/admin\/tenants\/([^/]+)/)?.[1];
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const { isBlocked } = useBlockedViews();
+  const viewKey = viewKeyForPath(location.pathname);
+  const isVisible = (item: NavItem) => {
+    const key = viewKeyForPath(item.path);
+    return !key || !isBlocked(key);
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -83,7 +92,7 @@ export function AdminShell() {
         {/* Nav */}
 
         <nav className="px-2.5 py-3 space-y-0.5">
-  {navItems.map((item) => {
+  {navItems.filter(isVisible).map((item) => {
     // Identifica se estamos exatamente na listagem /admin/tenants (sem ID na URL)
     const isExactTenantsList = location.pathname === '/admin/tenants' || location.pathname === '/admin/tenants/';
 
@@ -165,7 +174,7 @@ export function AdminShell() {
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           <div className="dark p-6 lg:p-8">
             <div className="max-w-6xl mx-auto">
-              <Outlet />
+              {viewKey && isBlocked(viewKey) ? <NotFoundPage /> : <Outlet />}
             </div>
           </div>
         </div>
