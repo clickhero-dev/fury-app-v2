@@ -1,4 +1,4 @@
-import { db as defaultDb, type Database, users, tenants, adyRbacServicesBlocked } from '@fury/db';
+import { db as defaultDb, type Database, users, tenants, adyRbacServicesBlocked, adyRbacViewsBlocked } from '@fury/db';
 import { and, eq, isNull, or } from 'drizzle-orm';
 
 export interface RbacUserContext {
@@ -26,13 +26,20 @@ export class RbacRepository {
   }
 
   async listBlockedServiceKeys(roleKey: string, partnerId: string | null): Promise<string[]> {
-    const partnerFilter = partnerId
-      ? or(isNull(adyRbacServicesBlocked.partnerId), eq(adyRbacServicesBlocked.partnerId, partnerId))
-      : isNull(adyRbacServicesBlocked.partnerId);
+    const t = adyRbacServicesBlocked;
     const rows = await this.db
-      .select({ serviceKey: adyRbacServicesBlocked.serviceKey })
-      .from(adyRbacServicesBlocked)
-      .where(and(eq(adyRbacServicesBlocked.roleKey, roleKey), partnerFilter));
-    return rows.map((r) => r.serviceKey);
+      .select({ key: t.serviceKey })
+      .from(t)
+      .where(and(eq(t.roleKey, roleKey), partnerId ? or(isNull(t.partnerId), eq(t.partnerId, partnerId)) : isNull(t.partnerId)));
+    return rows.map((r) => r.key);
+  }
+
+  async listBlockedViewKeys(roleKey: string, partnerId: string | null): Promise<string[]> {
+    const t = adyRbacViewsBlocked;
+    const rows = await this.db
+      .select({ key: t.viewKey })
+      .from(t)
+      .where(and(eq(t.roleKey, roleKey), partnerId ? or(isNull(t.partnerId), eq(t.partnerId, partnerId)) : isNull(t.partnerId)));
+    return rows.map((r) => r.key);
   }
 }

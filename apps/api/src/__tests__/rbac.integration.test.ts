@@ -6,6 +6,7 @@ import { db } from '@fury/db';
 import * as schema from '@fury/db';
 import { RbacRepository } from '../repository/rbac.repository.js';
 import { rbacService } from '../services/core/rbac.service.js';
+import { RBAC_VIEWS } from '../lib/rbac-views.js';
 
 /**
  * INTEGRAÇÃO (app real + banco de teste + Redis local) — RBAC de serviços.
@@ -34,9 +35,17 @@ describe('RBAC de serviços — integração', () => {
     await rbacService.bumpVersion();
   }
 
+  async function blockView(roleKey: string, viewKey: string, partnerId: string | null = null) {
+    await db.insert(schema.adyRbacViewsBlocked).values({ roleKey, viewKey, partnerId });
+    await rbacService.bumpVersion();
+  }
+
   beforeAll(async () => {
     for (const key of ['goals', 'brand_kit', 'studio', 'studio.video']) {
       await db.insert(schema.adyRbacServices).values({ key }).onConflictDoNothing();
+    }
+    for (const v of RBAC_VIEWS) {
+      await db.insert(schema.adyRbacViews).values({ key: v.key }).onConflictDoNothing();
     }
     await request(app).post('/api/auth/register').send({
       name: 'RBAC User',
@@ -65,6 +74,7 @@ describe('RBAC de serviços — integração', () => {
   });
 
   afterEach(async () => {
+    await db.delete(schema.adyRbacViewsBlocked).where(inArray(schema.adyRbacViewsBlocked.roleKey, ['user', 'user_partner', 'admin_partner', 'super_admin', 'tester']));
     await db.delete(schema.adyRbacServicesBlocked).where(inArray(schema.adyRbacServicesBlocked.roleKey, ['user', 'user_partner', 'admin_partner', 'super_admin', 'tester']));
     await setUser('user');
   });
@@ -150,6 +160,61 @@ describe('RBAC de serviços — integração', () => {
   it('sem token: o RBAC não interfere, a auth da rota responde 401', async () => {
     await block('user', 'all');
     expect((await request(app).get('/api/goals')).status).toBe(401);
+  });
+
+  describe('GET /api/rbac/blocked-views', () => {
+    const views = () => get('/api/rbac/blocked-views');
+
+    it('sem bloqueio → lista vazia, sem cache HTTP', async () => {
+      const res = await views();
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ success: true, data: { blocked: [] } });
+      expect(res.headers['cache-control']).toBe('no-store');
+    });
+
+    it('admin_partner: global do papel + do próprio parceiro, nunca do outro', async () => {
+      await setUser('admin_partner', { userPartner: partnerA });
+      await blockView('admin_partner', 'admin.tickets');
+      await blockView('admin_partner', 'admin.users', partnerA);
+      await blockView('admin_partner', 'admin.faqs', partnerB);
+      await blockView('user_partner', 'admin.plans');
+      expect((await views()).body.data.blocked).toEqual(['admin.users', 'admin.tickets']);
+    });
+
+    it('cliente do parceiro: pai bloqueado expande para os filhos', async () => {
+      await setUser('user_partner', { tenantPartner: partnerA });
+      await blockView('user_partner', 'campaigns', partnerA);
+      expect((await views()).body.data.blocked).toEqual(['campaigns', 'campaigns.create', 'campaigns.rules']);
+    });
+
+    it("'all' → todas as telas", async () => {
+      await setUser('user_partner', { tenantPartner: partnerA });
+      await blockView('user_partner', 'all');
+      expect((await views()).body.data.blocked).toEqual(RBAC_VIEWS.map((v) => v.key));
+    });
+
+    it('super_admin → nada bloqueado', async () => {
+      await setUser('super_admin');
+      await blockView('super_admin', 'all');
+      expect((await views()).body.data.blocked).toEqual([]);
+    });
+
+    it('remover bloqueio + bumpVersion reflete na hora', async () => {
+      await blockView('user', 'plans');
+      expect((await views()).body.data.blocked).toEqual(['plans']);
+      await db.delete(schema.adyRbacViewsBlocked).where(eq(schema.adyRbacViewsBlocked.roleKey, 'user'));
+      await rbacService.bumpVersion();
+      expect((await views()).body.data.blocked).toEqual([]);
+    });
+
+    it("serviços 'all' bloqueados não bloqueiam esta rota (isenta)", async () => {
+      await block('user', 'all');
+      expect((await views()).status).toBe(200);
+    });
+
+    it('sem token → 401', async () => {
+      expect((await request(app).get('/api/rbac/blocked-views')).status).toBe(401);
+    });
   });
 
   describe('RbacRepository (SQL real)', () => {

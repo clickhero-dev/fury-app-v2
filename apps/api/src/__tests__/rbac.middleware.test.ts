@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRbacMiddleware, resolveServiceKeys } from '../middleware/rbac.middleware.js';
 import { RBAC_SERVICES, RBAC_EXEMPT_PREFIXES } from '../lib/rbac-services.js';
+import { RBAC_VIEWS } from '../lib/rbac-views.js';
 import { RbacService } from '../services/core/rbac.service.js';
 import { generateAccessToken } from '../lib/jwt.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -270,6 +271,98 @@ describe('RbacService.checkServices', () => {
     const repo = fakeRepo(null);
     repo.findUserContext.mockRejectedValue(new Error('db down'));
     await expect(new RbacService(repo, () => fakeRedis(false)).checkServices('u1', ['studio'])).rejects.toThrow('db down');
+  });
+});
+
+// ───────────────────────── telas (views) ─────────────────────────
+
+const VIEW_KEYS = RBAC_VIEWS.map((v) => v.key);
+
+describe('catálogo de telas', () => {
+  it('keys únicas, minúsculas e sem espaço', () => {
+    expect(new Set(VIEW_KEYS).size).toBe(VIEW_KEYS.length);
+    for (const k of VIEW_KEYS) expect(k).toMatch(/^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*$/);
+  });
+
+  it("toda key filha tem o pai no catálogo (exceto o grupo 'admin')", () => {
+    const orphans = VIEW_KEYS.filter((k) => k.includes('.') && !k.startsWith('admin.'))
+      .filter((k) => !VIEW_KEYS.includes(k.slice(0, k.lastIndexOf('.'))));
+    expect(orphans).toEqual([]);
+  });
+
+  it("'all' não é uma tela do catálogo", () => {
+    expect(VIEW_KEYS).not.toContain('all');
+  });
+
+  const WEB_MIRROR = path.join(__dirname, '../../../web/src/lib/rbac-views.ts');
+  it.skipIf(!fs.existsSync(WEB_MIRROR))('espelho do front tem exatamente as mesmas keys', () => {
+    const src = fs.readFileSync(WEB_MIRROR, 'utf8');
+    const webKeys = [...src.matchAll(/['"]([a-z][a-z0-9_.]*)['"]/g)].map((m) => m[1]!).filter((k) => k !== 'all');
+    expect([...new Set(webKeys)].sort()).toEqual([...VIEW_KEYS].sort());
+  });
+});
+
+function fakeViewRepo(ctx: { platformRole: string; partnerId: string | null } | null, blockedViews: string[] = []) {
+  return {
+    findUserContext: vi.fn(async () => ctx),
+    listBlockedServiceKeys: vi.fn(async () => []),
+    listBlockedViewKeys: vi.fn(async () => blockedViews),
+  };
+}
+
+describe('RbacService.listBlockedViews', () => {
+  it('usuário inexistente → null', async () => {
+    expect(await new RbacService(fakeViewRepo(null), () => fakeRedis()).listBlockedViews('u1')).toBeNull();
+  });
+
+  it('super_admin → nada bloqueado, sem consultar bloqueios', async () => {
+    const repo = fakeViewRepo({ platformRole: 'super_admin', partnerId: null }, ['all']);
+    expect(await new RbacService(repo, () => fakeRedis()).listBlockedViews('u1')).toEqual([]);
+    expect(repo.listBlockedViewKeys).not.toHaveBeenCalled();
+  });
+
+  it('devolve só as telas bloqueadas', async () => {
+    const repo = fakeViewRepo({ platformRole: 'admin_partner', partnerId: 'p1' }, ['admin.tickets', 'admin.faqs']);
+    expect(await new RbacService(repo, () => fakeRedis()).listBlockedViews('u1')).toEqual(['admin.tickets', 'admin.faqs']);
+    expect(repo.listBlockedViewKeys).toHaveBeenCalledWith('admin_partner', 'p1');
+  });
+
+  it('pai bloqueado expande para os filhos', async () => {
+    const repo = fakeViewRepo({ platformRole: 'user_partner', partnerId: 'p1' }, ['campaigns']);
+    expect(await new RbacService(repo, () => fakeRedis()).listBlockedViews('u1')).toEqual([
+      'campaigns',
+      'campaigns.create',
+      'campaigns.rules',
+    ]);
+  });
+
+  it('prefixo parecido não é filho (campaigns ≠ campaignsx)', async () => {
+    const repo = fakeViewRepo({ platformRole: 'user', partnerId: null }, ['settings.integrations']);
+    expect(await new RbacService(repo, () => fakeRedis()).listBlockedViews('u1')).toEqual(['settings.integrations']);
+  });
+
+  it("'all' expande para todas as telas", async () => {
+    const repo = fakeViewRepo({ platformRole: 'user_partner', partnerId: 'p1' }, ['all']);
+    expect(await new RbacService(repo, () => fakeRedis()).listBlockedViews('u1')).toEqual(VIEW_KEYS);
+  });
+
+  it('cache de telas separado do cache de serviços e invalidado por bumpVersion', async () => {
+    const repo = fakeViewRepo({ platformRole: 'user', partnerId: null }, []);
+    const redis = fakeRedis();
+    const svc = new RbacService(repo, () => redis);
+    expect(await svc.listBlockedViews('u1')).toEqual([]);
+    repo.listBlockedViewKeys.mockResolvedValue(['plans']);
+    expect(await svc.listBlockedViews('u1')).toEqual([]); // ainda em cache
+    await svc.bumpVersion();
+    expect(await svc.listBlockedViews('u1')).toEqual(['plans']);
+    expect([...redis.store.keys()].some((k) => k.includes(':view:'))).toBe(true);
+  });
+
+  it('Redis fora do ar → vai ao banco', async () => {
+    const repo = fakeViewRepo({ platformRole: 'user', partnerId: null }, ['plans']);
+    const redis = fakeRedis(false);
+    expect(await new RbacService(repo, () => redis).listBlockedViews('u1')).toEqual(['plans']);
+    expect(redis.get).not.toHaveBeenCalled();
   });
 });
 

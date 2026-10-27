@@ -1,5 +1,6 @@
 import { getRedis } from '../../lib/redis.js';
 import { RBAC_ALL_KEY } from '../../lib/rbac-services.js';
+import { RBAC_VIEWS } from '../../lib/rbac-views.js';
 import { RbacRepository, type RbacUserContext } from '../../repository/rbac.repository.js';
 
 const CACHE_TTL_SECONDS = 300;
@@ -18,6 +19,7 @@ interface RedisLike {
 interface RbacRepoLike {
   findUserContext(userId: string): Promise<RbacUserContext | null>;
   listBlockedServiceKeys(roleKey: string, partnerId: string | null): Promise<string[]>;
+  listBlockedViewKeys(roleKey: string, partnerId: string | null): Promise<string[]>;
 }
 
 export class RbacService {
@@ -81,6 +83,23 @@ export class RbacService {
     );
     if (blocked.includes(RBAC_ALL_KEY)) return 'blocked';
     return serviceKeys.some((k) => blocked.includes(k)) ? 'blocked' : 'allowed';
+  }
+
+  // Telas bloqueadas já expandidas ('all' e herança pai → filho); null = usuário inexistente
+  async listBlockedViews(userId: string): Promise<string[] | null> {
+    const v = await this.version();
+    const ctx = await this.cached(v && `rbac:v${v}:ctx:${userId}`, () => this.repo.findUserContext(userId));
+    if (!ctx) return null;
+    if (ctx.platformRole === SUPER_ADMIN_ROLE) return [];
+
+    const raw = await this.cached(
+      v && `rbac:v${v}:view:${ctx.platformRole}:${ctx.partnerId ?? 'global'}`,
+      () => this.repo.listBlockedViewKeys(ctx.platformRole, ctx.partnerId),
+    );
+    const all = raw.includes(RBAC_ALL_KEY);
+    return RBAC_VIEWS.map((e) => e.key).filter(
+      (key) => all || raw.some((r) => key === r || key.startsWith(r + '.')),
+    );
   }
 }
 

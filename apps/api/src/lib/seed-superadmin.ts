@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import postgres from 'postgres';
 import bcrypt from 'bcrypt';
 import { RBAC_SERVICES } from './rbac-services.js';
+import { RBAC_VIEWS } from './rbac-views.js';
 
 const connectionString =
   process.env.NODE_ENV === 'test'
@@ -44,6 +45,14 @@ export async function seedStartup(): Promise<void> {
       `;
     }
     console.log(`  ✓ rbac service catalog synced (${byKey.size} keys)`);
+    for (const view of RBAC_VIEWS) {
+      await sql`
+        INSERT INTO "ady_rbac_views" (key, description)
+        VALUES (${view.key}, ${view.description})
+        ON CONFLICT (key) DO UPDATE SET description = EXCLUDED.description
+      `;
+    }
+    console.log(`  ✓ rbac view catalog synced (${RBAC_VIEWS.length} keys)`);
 
     // 3. Seed users from env vars
     const superadminEmail = process.env.SUPERADMIN_EMAIL;

@@ -42,6 +42,7 @@ export const RBAC_EXEMPT_PREFIXES: readonly string[] = [
   '/policy',
   '/admin',
   '/admin/queues',
+  '/rbac',
 ];
 
 export const RBAC_ALL_KEY = 'all';
