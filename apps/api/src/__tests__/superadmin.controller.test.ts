@@ -288,3 +288,54 @@ describe("SuperAdminController — erros e validação", () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: "ZodError" }));
   });
 });
+describe("SuperAdminController — usuários do cliente e aba Público", () => {
+  const sensitive = {
+    passwordHash: "hash", resetToken: "reset", resetTokenExpiresAt: new Date(), otpCode: "123456",
+    otpExpiresAt: new Date(), googleId: "g-1", facebookId: "f-1",
+  };
+  const member = { id: "u-member", name: "Membro", email: "m@x.com", role: "member", platformRole: "user", createdAt: new Date(), ...sensitive };
+  const owner = { ...member, id: "u-owner", name: "Dono", email: "o@x.com", role: "owner" };
+  const partnerAdmin = { ...member, id: "u-adm", role: "owner", platformRole: "admin_partner" };
+
+  function tenantRepo(users: unknown[]) {
+    const repo = mockRepo() as any;
+    repo.getTenantById.mockResolvedValue({ id: "t-1", partnerId: "p-1" });
+    repo.listUsersByTenant.mockResolvedValue(users);
+    repo.updateUserAudienceDefaults = vi.fn();
+    repo.updateTenant = vi.fn();
+    return repo;
+  }
+
+  it("getTenant não devolve senha, token de reset, OTP nem ids sociais", async () => {
+    const repo = tenantRepo([member, owner]);
+    const res = mockRes();
+
+    await new SuperAdminController(repo).getTenant({ ...SUPER, params: { id: "t-1" } } as any, res, vi.fn());
+
+    const users = res.json.mock.calls[0][0].data.users;
+    expect(users).toHaveLength(2);
+    for (const u of users) {
+      expect(Object.keys(u).sort()).toEqual(["createdAt", "email", "id", "name", "platformRole", "role"]);
+    }
+  });
+
+  it("Salvar Público grava no dono, não no primeiro usuário", async () => {
+    const repo = tenantRepo([member, owner]);
+
+    await new SuperAdminController(repo).updateAudience(
+      { ...SUPER, params: { tenantId: "t-1" }, body: { city: "Recife" } } as any, mockRes(), vi.fn(),
+    );
+
+    expect(repo.updateUserAudienceDefaults).toHaveBeenCalledWith("u-owner", expect.objectContaining({ city: "Recife" }));
+  });
+
+  it("parceiro: Público nunca grava em conta de admin", async () => {
+    const repo = tenantRepo([partnerAdmin, member]);
+
+    await new SuperAdminController(repo).updateAudience(
+      { adminScope: { partnerId: "p-1" }, params: { tenantId: "t-1" }, body: { city: "Recife" } } as any, mockRes(), vi.fn(),
+    );
+
+    expect(repo.updateUserAudienceDefaults).toHaveBeenCalledWith("u-member", expect.anything());
+  });
+});

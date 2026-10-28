@@ -133,6 +133,16 @@ function assertRoleAllowed(req: Request, newRole?: string, currentRole?: string)
     throw new AppError(403, "ROLE_FORBIDDEN", "Só o super admin altera o cargo Admin");
 }
 
+// só o que a tela usa: nunca senha, token de reset, OTP ou ids sociais
+function safeUser(u: typeof users.$inferSelect) {
+  return { id: u.id, name: u.name, email: u.email, role: u.role, platformRole: u.platformRole, createdAt: u.createdAt };
+}
+
+// dono do cliente: quem a aba Público lê e grava
+function audienceOwner<T extends { role: string }>(list: T[]): T | undefined {
+  return list.find((u) => u.role === "owner") ?? list[0];
+}
+
 function serializeGoal(row: typeof clientGoals.$inferSelect) {
   return {
     ...row,
@@ -166,6 +176,12 @@ export class SuperAdminController {
     if (!user || outOfScope)
       throw new AppError(404, "USER_NOT_FOUND", "Usuário não encontrado");
     return user;
+  }
+
+  // usuários do cliente; parceiro não vê contas de admin
+  private async visibleUsers(req: Request, tenantId: string) {
+    const list = await this.repo.listUsersByTenant(tenantId);
+    return partnerOf(req) ? list.filter((u) => PARTNER_REACHABLE_ROLES.includes(u.platformRole)) : list;
   }
 
   // router.param das rotas /tenants/:tenantId liberadas ao parceiro
@@ -226,10 +242,7 @@ export class SuperAdminController {
       const repo = this.repo;
       const tenant = await this.tenantInScope(req, req.params.id);
 
-      // parceiro não vê contas de admin
-      const tenantUsers = (await repo.listUsersByTenant(tenant.id)).filter(
-        (u) => !partnerOf(req) || PARTNER_REACHABLE_ROLES.includes(u.platformRole),
-      );
+      const tenantUsers = await this.visibleUsers(req, tenant.id);
 
       const sub = await repo.findLatestSubscriptionByTenant(tenant.id);
 
@@ -244,14 +257,13 @@ export class SuperAdminController {
 
       const goals = await repo.findClientGoalByTenant(tenant.id);
 
-      // Find the owner user (for audience defaults)
-      const owner = tenantUsers.find((u) => u.role === "owner") ?? tenantUsers[0];
+      const owner = audienceOwner(tenantUsers);
 
       res.json({
         success: true,
         data: {
           ...tenant,
-          users: tenantUsers,
+          users: tenantUsers.map(safeUser),
           subscription: sub ? { ...sub, plan } : null,
           furyConfig: config,
           brandKit,
@@ -315,11 +327,9 @@ export class SuperAdminController {
         ...(tenant.partnerId ? { platformRole: "user_partner" } : {}),
       });
 
-      const { passwordHash: _, ...safe } = user;
-
       res
         .status(201)
-        .json({ success: true, data: safe, timestamp: new Date().toISOString() });
+        .json({ success: true, data: safeUser(user), timestamp: new Date().toISOString() });
     } catch (err) {
       next(err);
     }
@@ -665,8 +675,8 @@ export class SuperAdminController {
 
       const repo = this.repo;
 
-      // Find the owner user of this tenant
-      const owner = (await repo.listUsersByTenant(tenantId))[0] ?? null;
+      // mesmo usuário que o getTenant lê
+      const owner = audienceOwner(await this.visibleUsers(req, tenantId));
       if (!owner)
         throw new AppError(
           404,
