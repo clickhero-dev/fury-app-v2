@@ -1,5 +1,5 @@
 import { Worker, type Job } from 'bullmq';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { db, performanceRules, campaigns, furyInsights, tenants } from '@fury/db';
 import { emitToTenant } from '../lib/sse.js';
 import { createBullConnection, RULE_ENGINE_QUEUE_NAME, type RuleEngineJobPayload } from '../lib/queue.js';
@@ -163,7 +163,8 @@ async function processJob(job: Job<RuleEngineJobPayload>): Promise<ProcessingSta
   };
 
   try {
-    const allTenants = await db.query.tenants.findMany();
+    // cliente excluído (soft-delete) fica de fora
+    const allTenants = await db.query.tenants.findMany({ where: isNull(tenants.deletedAt) });
 
     for (const tenant of allTenants) {
       await processTenant(tenant.id, stats);

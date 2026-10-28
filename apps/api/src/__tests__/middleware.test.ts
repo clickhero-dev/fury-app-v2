@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-const { getPlatformRole } = vi.hoisted(() => ({ getPlatformRole: vi.fn(async (_id: string): Promise<string | null> => 'user') }));
-vi.mock('../services/core/rbac.service.js', () => ({ rbacService: { getPlatformRole } }));
+const { getPlatformRole, getAdminScope, getTenantById } = vi.hoisted(() => ({
+  getPlatformRole: vi.fn(async (_id: string): Promise<string | null> => 'user'),
+  getAdminScope: vi.fn(async (_id: string): Promise<{ partnerId: string | null } | null> => null),
+  getTenantById: vi.fn(async (_id: string, _partnerId: string | null): Promise<object | undefined> => undefined),
+}));
+vi.mock('../services/core/rbac.service.js', () => ({ rbacService: { getPlatformRole, getAdminScope } }));
+vi.mock('../repository/superadmin.repository.js', () => ({ SuperAdminRepository: class { getTenantById = getTenantById; } }));
 import type { Request, Response, NextFunction } from 'express';
 
 // auth.middleware importa verifyAccessToken de ../lib/jwt.js — isolamos aqui.
@@ -153,7 +158,7 @@ describe('superadminMiddleware', () => {
 
 describe('tenantOrSuperadminMiddleware', () => {
   it('superadmin com query tenantId usa o tenant alvo', async () => {
-    getPlatformRole.mockResolvedValueOnce('super_admin');
+    getAdminScope.mockResolvedValueOnce({ partnerId: null });
     const req = mockReq({
       user: { userId: 'u1', role: 'owner', tenantId: 't-admin' },
       query: { tenantId: '11111111-1111-4111-8111-111111111111' },
@@ -167,7 +172,7 @@ describe('tenantOrSuperadminMiddleware', () => {
   });
 
   it('superadmin com header x-tenant-id usa o tenant alvo', async () => {
-    getPlatformRole.mockResolvedValueOnce('super_admin');
+    getAdminScope.mockResolvedValueOnce({ partnerId: null });
     const req = mockReq({
       user: { userId: 'u1', role: 'owner', tenantId: 't-admin' },
       headers: { 'x-tenant-id': '22222222-2222-4222-8222-222222222222' },
@@ -178,6 +183,32 @@ describe('tenantOrSuperadminMiddleware', () => {
 
     expect((req.tenant as any).tenantId).toBe('22222222-2222-4222-8222-222222222222');
     expect(next).toHaveBeenCalledWith();
+  });
+
+  it('parceiro troca só para cliente dele', async () => {
+    getAdminScope.mockResolvedValueOnce({ partnerId: 'p-1' });
+    getTenantById.mockResolvedValueOnce({ id: '11111111-1111-4111-8111-111111111111' });
+    const req = mockReq({
+      user: { userId: 'u1', role: 'owner', tenantId: 't-partner' },
+      query: { tenantId: '11111111-1111-4111-8111-111111111111' },
+    } as any);
+
+    await tenantOrSuperadminMiddleware(req, {} as Response, mockNext());
+
+    expect(getTenantById).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', 'p-1');
+    expect((req.tenant as any).tenantId).toBe('11111111-1111-4111-8111-111111111111');
+  });
+
+  it('parceiro com cliente de outro parceiro fica no próprio tenantId', async () => {
+    getAdminScope.mockResolvedValueOnce({ partnerId: 'p-1' });
+    const req = mockReq({
+      user: { userId: 'u1', role: 'owner', tenantId: 't-partner' },
+      query: { tenantId: '11111111-1111-4111-8111-111111111111' },
+    } as any);
+
+    await tenantOrSuperadminMiddleware(req, {} as Response, mockNext());
+
+    expect((req.tenant as any).tenantId).toBe('t-partner');
   });
 
   it('superadmin sem tenant alvo cai para o próprio tenantId', async () => {
@@ -219,7 +250,7 @@ describe('tenantOrSuperadminMiddleware', () => {
   });
 
   it('tenant alvo que não é UUID em string é ignorado', async () => {
-    getPlatformRole.mockResolvedValue('super_admin');
+    getAdminScope.mockResolvedValue({ partnerId: null });
     for (const tenantId of [['11111111-1111-4111-8111-111111111111'], 'abc', { x: 1 }]) {
       const req = mockReq({ user: { userId: 'u1', role: 'owner', tenantId: 't-admin' }, query: { tenantId } } as any);
       await tenantOrSuperadminMiddleware(req, {} as Response, mockNext());

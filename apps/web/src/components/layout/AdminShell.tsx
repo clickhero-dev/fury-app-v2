@@ -27,7 +27,7 @@ const navItems: NavItem[] = [
 ];
 
 // Telas da ady como um todo: só super_admin (a API também recusa)
-const SUPER_ADMIN_ONLY = ['/admin/tickets', '/admin/healthchecks', '/admin/faqs', '/admin/avisos'];
+const SUPER_ADMIN_ONLY = ['/admin/planos', '/admin/tickets', '/admin/healthchecks', '/admin/faqs', '/admin/avisos'];
 
 function isSuperAdminOnly(pathname: string): boolean {
   return SUPER_ADMIN_ONLY.some((p) => pathname === p || pathname.startsWith(p + '/'));

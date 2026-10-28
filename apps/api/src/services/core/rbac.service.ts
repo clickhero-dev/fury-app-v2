@@ -6,6 +6,7 @@ import { RbacRepository, type RbacUserContext } from '../../repository/rbac.repo
 const CACHE_TTL_SECONDS = 300;
 const VERSION_KEY = 'rbac:version';
 const SUPER_ADMIN_ROLE = 'super_admin';
+const PARTNER_ADMIN_ROLE = 'admin_partner';
 
 export type ServiceCheckResult = 'allowed' | 'blocked' | 'unknown_user';
 
@@ -81,11 +82,19 @@ export class RbacService {
     return ctx?.platformRole ?? null;
   }
 
+  // super_admin → todos os clientes; admin_partner → só os do parceiro; null = sem acesso ao admin
+  async getAdminScope(userId: string): Promise<{ partnerId: string | null } | null> {
+    const ctx = await this.context(await this.version(), userId);
+    if (ctx?.platformRole === SUPER_ADMIN_ROLE) return { partnerId: null };
+    if (ctx?.platformRole === PARTNER_ADMIN_ROLE && ctx.partnerId) return { partnerId: ctx.partnerId };
+    return null;
+  }
+
   async checkServices(userId: string, serviceKeys: string[]): Promise<ServiceCheckResult> {
     const v = await this.version();
     const ctx = await this.context(v, userId);
     if (!ctx) return 'unknown_user';
-    if (ctx.platformRole === SUPER_ADMIN_ROLE) return 'allowed';
+    if (ctx.platformRole === SUPER_ADMIN_ROLE || serviceKeys.length === 0) return 'allowed';
 
     const blocked = await this.cached(
       v && `rbac:v${v}:svc:${ctx.platformRole}:${ctx.partnerId ?? 'global'}`,

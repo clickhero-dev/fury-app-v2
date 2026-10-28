@@ -3,8 +3,9 @@ import { z } from "zod";
 import bcrypt from "bcrypt";
 import { db, tenants, users, clientGoals } from "@fury/db";
 import { AppError } from "../middleware/errorHandler.js";
-import { SuperAdminRepository } from "../repository/superadmin.repository.js";
+import { PARTNER_REACHABLE_ROLES, SuperAdminRepository } from "../repository/superadmin.repository.js";
 import { audienceGeoSchema } from "../lib/audience-geo.js";
+import { rbacService } from "../services/core/rbac.service.js";
 
 const createUserSchema = z.object({
   tenantId: z.string().uuid(),
@@ -119,6 +120,19 @@ function fromMoney(json: unknown): number {
   return Number.isNaN(raw) ? 0 : raw / 100;
 }
 
+// null = super_admin (todos os clientes); sem escopo = rota mal montada → nega
+function partnerOf(req: Request): string | null {
+  if (!req.adminScope) throw new AppError(403, "FORBIDDEN", "Acesso negado");
+  return req.adminScope.partnerId;
+}
+
+// cargo Admin (libera sem assinatura): só o super_admin dá ou tira
+function assertRoleAllowed(req: Request, newRole?: string, currentRole?: string) {
+  if (!partnerOf(req) || newRole === undefined || newRole === currentRole) return;
+  if (newRole === "admin" || currentRole === "admin")
+    throw new AppError(403, "ROLE_FORBIDDEN", "Só o super admin altera o cargo Admin");
+}
+
 function serializeGoal(row: typeof clientGoals.$inferSelect) {
   return {
     ...row,
@@ -135,11 +149,40 @@ function serializeGoal(row: typeof clientGoals.$inferSelect) {
 export class SuperAdminController {
   constructor(private repo: SuperAdminRepository) {}
 
+  // cliente fora do escopo do parceiro = 404 (não revela que existe)
+  private async tenantInScope(req: Request, tenantId: string) {
+    const tenant = await this.repo.getTenantById(tenantId, partnerOf(req));
+    if (!tenant)
+      throw new AppError(404, "TENANT_NOT_FOUND", "Tenant não encontrado");
+    return tenant;
+  }
+
+  private async userInScope(req: Request, userId: string) {
+    const user = await this.repo.findUserById(userId);
+    const partnerId = partnerOf(req);
+    const outOfScope = partnerId
+      && (!PARTNER_REACHABLE_ROLES.includes(user?.platformRole ?? "")
+        || !(await this.repo.getTenantById(user!.tenantId, partnerId)));
+    if (!user || outOfScope)
+      throw new AppError(404, "USER_NOT_FOUND", "Usuário não encontrado");
+    return user;
+  }
+
+  // router.param das rotas /tenants/:tenantId liberadas ao parceiro
+  tenantParam = async (req: Request, _res: Response, next: NextFunction, tenantId: string) => {
+    try {
+      if (partnerOf(req)) await this.tenantInScope(req, tenantId);
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+
   // ─── Dashboard ─────────────────────────────────────────────
   getDashboard = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { period } = dashboardPeriodSchema.parse(req.query);
-      const stats = await this.repo.getDashboardStats(period);
+      const stats = await this.repo.getDashboardStats(period, partnerOf(req));
       res.json({ success: true, data: stats, timestamp: new Date().toISOString() });
     } catch (err) {
       next(err);
@@ -151,7 +194,7 @@ export class SuperAdminController {
   listTenants = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const repo = this.repo;
-      const allTenants = await repo.listTenants();
+      const allTenants = await repo.listTenants(partnerOf(req));
 
       const data = await Promise.all(
         allTenants.map(async (t) => {
@@ -181,11 +224,12 @@ export class SuperAdminController {
   getTenant = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const repo = this.repo;
-      const tenant = await repo.getTenantById(req.params.id);
-      if (!tenant)
-        throw new AppError(404, "TENANT_NOT_FOUND", "Tenant não encontrado");
+      const tenant = await this.tenantInScope(req, req.params.id);
 
-      const tenantUsers = await repo.listUsersByTenant(tenant.id);
+      // parceiro não vê contas de admin
+      const tenantUsers = (await repo.listUsersByTenant(tenant.id)).filter(
+        (u) => !partnerOf(req) || PARTNER_REACHABLE_ROLES.includes(u.platformRole),
+      );
 
       const sub = await repo.findLatestSubscriptionByTenant(tenant.id);
 
@@ -231,11 +275,11 @@ export class SuperAdminController {
   deleteTenant = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const repo = this.repo;
-      const tenant = await repo.getTenantById(req.params.id);
-      if (!tenant)
-        throw new AppError(404, "TENANT_NOT_FOUND", "Tenant não encontrado");
+      await this.tenantInScope(req, req.params.id);
 
       await repo.deleteTenant(req.params.id);
+      // derruba o cache do RBAC: acesso cai na hora
+      await rbacService.bumpVersion();
 
       res.json({
         success: true,
@@ -253,6 +297,8 @@ export class SuperAdminController {
     try {
       const repo = this.repo;
       const body = createUserSchema.parse(req.body);
+      const tenant = await this.tenantInScope(req, body.tenantId);
+      assertRoleAllowed(req, body.role);
 
       const existing = await repo.findUserByEmail(body.email);
       if (existing)
@@ -265,6 +311,8 @@ export class SuperAdminController {
         email: body.email,
         passwordHash,
         role: body.role,
+        // cliente de parceiro → usuário do parceiro
+        ...(tenant.partnerId ? { platformRole: "user_partner" } : {}),
       });
 
       const { passwordHash: _, ...safe } = user;
@@ -341,9 +389,8 @@ export class SuperAdminController {
       const repo = this.repo;
       const body = updateUserSchema.parse(req.body);
 
-      const existing = await repo.findUserById(req.params.id);
-      if (!existing)
-        throw new AppError(404, "USER_NOT_FOUND", "Usuário não encontrado");
+      const existing = await this.userInScope(req, req.params.id);
+      assertRoleAllowed(req, body.role, existing.role);
 
       const updates: Record<string, unknown> = {};
       if (body.name !== undefined) updates.name = body.name;
@@ -369,11 +416,10 @@ export class SuperAdminController {
   deleteUser = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const repo = this.repo;
-      const existing = await repo.findUserById(req.params.id);
-      if (!existing)
-        throw new AppError(404, "USER_NOT_FOUND", "Usuário não encontrado");
+      await this.userInScope(req, req.params.id);
 
       await repo.deleteUser(req.params.id);
+      await rbacService.bumpVersion();
 
       res.json({
         success: true,
@@ -756,7 +802,7 @@ export class SuperAdminController {
       const offset = (page - 1) * limit;
       const search = (req.query.search as string)?.trim() || null;
 
-      const { rows, total } = await this.repo.paginateUsersAdmin(search ?? '', limit, offset);
+      const { rows, total } = await this.repo.paginateUsersAdmin(search ?? '', limit, offset, partnerOf(req));
       const pages = Math.ceil(total / limit);
 
       res.json({

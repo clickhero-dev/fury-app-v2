@@ -12,6 +12,10 @@ declare global {
       tenant?: {
         tenantId: string;
       };
+      // escopo do admin: partnerId null = super_admin (todos os clientes)
+      adminScope?: {
+        partnerId: string | null;
+      };
     }
   }
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AuthService } from '../services/core/auth.service.js';
+import bcrypt from 'bcrypt';
 
 vi.mock('../../lib/redis.js', () => ({
   getRedis: vi.fn(() => ({
@@ -19,6 +20,7 @@ function makeRepo(override: Record<string, any> = {}) {
     patchUser: vi.fn(async () => undefined),
     patchTenant: vi.fn(async () => undefined),
     findTenantBySlug: vi.fn(async () => null),
+    isAccountActive: vi.fn(async () => true),
     ...override,
   } as any;
 }
@@ -118,6 +120,16 @@ describe('AuthService (deep DI)', () => {
 
     expect(repo.patchTenant).not.toHaveBeenCalled();
     expect(repo.patchUser).toHaveBeenCalled();
+  });
+
+  it('login de conta excluída (soft-delete) → INVALID_CREDENTIALS, sem emitir token', async () => {
+    const passwordHash = await bcrypt.hash('senha-certa', 4);
+    const repo = makeRepo({
+      findUserByEmail: vi.fn(async () => ({ ...user, passwordHash })),
+      isAccountActive: vi.fn(async () => false),
+    });
+    const svc = makeSvc(repo);
+    await expect(svc.login({ email: 'a@b.com', password: 'senha-certa' })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
   });
 
   it('login de usuário Google (sem passwordHash) → INVALID_CREDENTIALS', async () => {

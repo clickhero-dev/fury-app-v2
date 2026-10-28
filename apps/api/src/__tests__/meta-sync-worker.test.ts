@@ -77,6 +77,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const {
   dbMock,
+  joinRows,
   workerInstances,
   queueAddSpy,
   queueUpsertJobSchedulerSpy,
@@ -87,12 +88,14 @@ const {
   mockCaptureServerException,
   mockCaptureServerEvent,
 } = vi.hoisted(() => {
+  // select().from().innerJoin(tenants).where(não excluído)
+  const joinRows = (rows: unknown[]) => ({ innerJoin: () => ({ where: async () => rows }) });
   const dbMock = {
     select: vi.fn(() => ({
-      from: vi.fn(async () => [
+      from: vi.fn(() => joinRows([
         { tenantId: 't1', adAccountId: 'act_1' },
         { tenantId: 't2', adAccountId: 'act_2' },
-      ]),
+      ])),
     })),
     query: { metaConnections: { findFirst: vi.fn(async () => ({ selectedAdAccountId: 'act_1' })) } },
   } as any;
@@ -105,7 +108,7 @@ const {
   const mockNotifyFailure = vi.fn();
   const mockCaptureServerException = vi.fn();
   const mockCaptureServerEvent = vi.fn();
-  return { dbMock, workerInstances, queueAddSpy, queueUpsertJobSchedulerSpy, mockSyncTenant, mockSyncAdAccount, mockRunHealthcheck, mockNotifyFailure, mockCaptureServerException, mockCaptureServerEvent };
+  return { dbMock, joinRows, workerInstances, queueAddSpy, queueUpsertJobSchedulerSpy, mockSyncTenant, mockSyncAdAccount, mockRunHealthcheck, mockNotifyFailure, mockCaptureServerException, mockCaptureServerEvent };
 });
 
 vi.mock('bullmq', () => {
@@ -161,6 +164,7 @@ vi.mock('../lib/queue.js', () => ({
 vi.mock('../lib/db.js', () => ({
   db: dbMock,
   metaConnections: { tenantId: 'tenant_id' },
+  tenants: { id: 'id', deletedAt: 'deleted_at' },
 }));
 
 vi.mock('../services/meta/meta-sync.service.js', () => ({
@@ -295,11 +299,11 @@ describe('BDD: MetaSyncWorker', () => {
 
   it('Cenário: enqueueMetaSyncRuns deduplica por ad account', async () => {
     dbMock.select.mockReturnValueOnce({
-      from: vi.fn(async () => [
+      from: vi.fn(() => joinRows([
         { adAccountId: 'act_1' },
         { adAccountId: 'act_1' },
         { adAccountId: 'act_2' },
-      ]),
+      ])),
     });
     const ts = '2026-09-25T21:30:00.000Z';
 
@@ -316,9 +320,9 @@ describe('BDD: MetaSyncWorker', () => {
 
   it('Cenário: getMetaSyncAdAccountIds retorna somente contas distintas', async () => {
     dbMock.select.mockReturnValueOnce({
-      from: vi.fn(async () => [
+      from: vi.fn(() => joinRows([
         { adAccountId: 'act_1' }, { adAccountId: 'act_1' }, { adAccountId: 'act_2' },
-      ]),
+      ])),
     });
     await expect(getMetaSyncAdAccountIds()).resolves.toEqual(['act_1', 'act_2']);
   });

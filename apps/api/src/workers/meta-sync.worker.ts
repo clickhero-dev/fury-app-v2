@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq';
-import { db, metaConnections } from '../lib/db.js';
-import { eq } from 'drizzle-orm';
+import { db, metaConnections, tenants } from '../lib/db.js';
+import { eq, isNull } from 'drizzle-orm';
 import { getMetaSyncQueue } from '../lib/queue.js';
 import { metaSyncService, type MetaSyncRunResult } from '../services/meta/meta-sync.service.js';
 import { notifyMetaSyncFailure } from '../lib/meta-sync-alerts.js';
@@ -16,9 +16,13 @@ export function windowKeyFor(timestamp: string): string {
   return new Date(slot).toISOString().slice(0, 16);
 }
 
-/** Tenants com conexão Meta — alvo do sync periódico (leitura via lib/db). */
+/** Tenants com conexão Meta — alvo do sync periódico (leitura via lib/db). Excluídos ficam de fora. */
 export async function getMetaSyncTenantIds(): Promise<string[]> {
-  const rows = await db.select({ tenantId: metaConnections.tenantId }).from(metaConnections);
+  const rows = await db
+    .select({ tenantId: metaConnections.tenantId })
+    .from(metaConnections)
+    .innerJoin(tenants, eq(tenants.id, metaConnections.tenantId))
+    .where(isNull(tenants.deletedAt));
   return rows.map((r) => r.tenantId);
 }
 
@@ -29,7 +33,9 @@ export async function getMetaSyncTenantIds(): Promise<string[]> {
 export async function getMetaSyncAdAccountIds(): Promise<string[]> {
   const rows = await db
     .select({ adAccountId: metaConnections.selectedAdAccountId })
-    .from(metaConnections);
+    .from(metaConnections)
+    .innerJoin(tenants, eq(tenants.id, metaConnections.tenantId))
+    .where(isNull(tenants.deletedAt));
   return [...new Set(rows.map((row) => row.adAccountId).filter((id): id is string => Boolean(id)))];
 }
 

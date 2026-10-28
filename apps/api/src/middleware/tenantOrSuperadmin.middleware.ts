@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from './errorHandler.js';
 import { rbacService } from '../services/core/rbac.service.js';
+import { SuperAdminRepository } from '../repository/superadmin.repository.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -12,7 +13,11 @@ export async function tenantOrSuperadminMiddleware(req: Request, _res: Response,
   const targetTenantId = typeof rawTarget === 'string' && UUID_RE.test(rawTarget) ? rawTarget : null;
   if (targetTenantId && user?.userId && user.role !== 'mock') {
     try {
-      if ((await rbacService.getPlatformRole(user.userId)) === 'super_admin') {
+      const scope = await rbacService.getAdminScope(user.userId);
+      // parceiro só troca para os próprios clientes
+      const allowed = scope && (scope.partnerId === null
+        || !!(await new SuperAdminRepository().getTenantById(targetTenantId, scope.partnerId)));
+      if (allowed) {
         (req.tenant as any) = { tenantId: targetTenantId };
         return next();
       }

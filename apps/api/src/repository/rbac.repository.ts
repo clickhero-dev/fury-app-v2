@@ -9,7 +9,7 @@ export interface RbacUserContext {
 export class RbacRepository {
   constructor(private db: Database = defaultDb) {}
 
-  // partner vem do usuário (admin_partner) ou do tenant (user_partner)
+  // partner vem do usuário (admin_partner) ou do tenant (user_partner); excluído = null
   async findUserContext(userId: string): Promise<RbacUserContext | null> {
     const [row] = await this.db
       .select({
@@ -19,7 +19,7 @@ export class RbacRepository {
       })
       .from(users)
       .innerJoin(tenants, eq(tenants.id, users.tenantId))
-      .where(eq(users.id, userId))
+      .where(and(eq(users.id, userId), isNull(users.deletedAt), isNull(tenants.deletedAt)))
       .limit(1);
     if (!row) return null;
     return { platformRole: row.platformRole, partnerId: row.userPartnerId ?? row.tenantPartnerId ?? null };

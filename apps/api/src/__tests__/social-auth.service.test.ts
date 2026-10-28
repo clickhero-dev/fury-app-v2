@@ -6,7 +6,7 @@ vi.mock('../lib/redis.js', () => ({
 }));
 
 function makeRepo() {
-  return { findUserByGoogleId: vi.fn(), findUserByEmail: vi.fn(), findTenantBySlug: vi.fn(), patchUser: vi.fn() } as any;
+  return { findUserByGoogleId: vi.fn(), findUserByEmail: vi.fn(), findTenantBySlug: vi.fn(), patchUser: vi.fn(), isAccountActive: vi.fn(async () => true) } as any;
 }
 
 function makeSvc() {
@@ -46,6 +46,7 @@ function makeFbSvc(repoOverrides: Record<string, unknown> = {}, userInfo?: Recor
     findUserByEmail: vi.fn(async () => null),
     findTenantBySlug: vi.fn(async () => null),
     patchUser: vi.fn(async () => {}),
+    isAccountActive: vi.fn(async () => true),
     ...repoOverrides,
   } as any;
   const svc = new SocialAuthService(
@@ -124,6 +125,15 @@ describe('SocialAuthService.handleFacebookSocialLogin', () => {
     expect(repo.findUserByEmail).not.toHaveBeenCalled();
     expect(db.transaction).not.toHaveBeenCalled();
     expect(r.isNewUser).toBe(false);
+  });
+
+  it('conta excluída (soft-delete) não entra pelo Facebook', async () => {
+    const existing = { id: 'u9', tenantId: 't9', email: 'x@y.com', role: 'owner' };
+    for (const found of [{ findUserByFacebookId: vi.fn(async () => existing) }, { findUserByEmail: vi.fn(async () => existing) }]) {
+      const { svc, repo } = makeFbSvc({ ...found, isAccountActive: vi.fn(async () => false) });
+      await expect(svc.handleFacebookSocialLogin('code', 'http://cb', fakeTxDb())).rejects.toMatchObject({ code: 'ACCOUNT_DISABLED' });
+      expect(repo.patchUser).not.toHaveBeenCalled();
+    }
   });
 
   it('vincula facebookId a conta comum existente com o mesmo e-mail', async () => {

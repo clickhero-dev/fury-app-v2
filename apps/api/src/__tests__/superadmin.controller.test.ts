@@ -36,6 +36,9 @@ function mockRepo() {
   };
 }
 
+// escopo do super_admin (todos os clientes), gravado pelo adminScopeMiddleware
+const SUPER = { adminScope: { partnerId: null } };
+
 function mockRes() {
   const res = {} as any;
   res.status = vi.fn().mockReturnValue(res);
@@ -62,7 +65,7 @@ describe("SuperAdminController — happy path", () => {
     const res = mockRes();
     const next = vi.fn();
 
-    await c.listTenants({ params: {}, query: {} } as any, res, next);
+    await c.listTenants({ ...SUPER, params: {}, query: {} } as any, res, next);
 
     expect(repo.listTenants).toHaveBeenCalledTimes(1);
     expect(next).not.toHaveBeenCalled();
@@ -88,9 +91,9 @@ describe("SuperAdminController — happy path", () => {
     const res = mockRes();
     const next = vi.fn();
 
-    await c.listUsers({ query: { page: "1", limit: "10", search: "" } } as any, res, next);
+    await c.listUsers({ ...SUPER, query: { page: "1", limit: "10", search: "" } } as any, res, next);
 
-    expect(repo.paginateUsersAdmin).toHaveBeenCalledWith("", 10, 0);
+    expect(repo.paginateUsersAdmin).toHaveBeenCalledWith("", 10, 0, null);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
@@ -115,8 +118,10 @@ describe("SuperAdminController — happy path", () => {
     const res = mockRes();
     const next = vi.fn();
 
+    repo.getTenantById.mockResolvedValue({ id: "e19f2a88-1f1a-4c7b-9e0f-000000000001", partnerId: null });
     await c.createUser(
       {
+        ...SUPER,
         body: {
           tenantId: "e19f2a88-1f1a-4c7b-9e0f-000000000001",
           name: "Ana",
@@ -187,8 +192,10 @@ describe("SuperAdminController — erros e validação", () => {
     const res = mockRes();
     const next = vi.fn();
 
+    repo.getTenantById.mockResolvedValue({ id: "e19f2a88-1f1a-4c7b-9e0f-000000000001", partnerId: null });
     await c.createUser(
       {
+        ...SUPER,
         body: {
           tenantId: "e19f2a88-1f1a-4c7b-9e0f-000000000001",
           name: "Ana",
@@ -205,6 +212,17 @@ describe("SuperAdminController — erros e validação", () => {
     );
   });
 
+  it("sem adminScope (rota fora do adminScopeMiddleware) nega com 403", async () => {
+    const repo = mockRepo();
+    const c = new SuperAdminController(repo as any);
+    const next = vi.fn();
+
+    await c.listTenants({ params: {}, query: {} } as any, mockRes(), next);
+
+    expect(repo.listTenants).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
+  });
+
   it("getTenant com tenant inexistente propaga 404 TENANT_NOT_FOUND", async () => {
     const repo = mockRepo();
     repo.getTenantById.mockResolvedValue(null);
@@ -213,7 +231,7 @@ describe("SuperAdminController — erros e validação", () => {
     const res = mockRes();
     const next = vi.fn();
 
-    await c.getTenant({ params: { id: "t-0" } } as any, res, next);
+    await c.getTenant({ ...SUPER, params: { id: "t-0" } } as any, res, next);
 
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({ statusCode: 404, code: "TENANT_NOT_FOUND" }),

@@ -53,9 +53,9 @@ describe("SuperAdminController.getDashboard", () => {
     const ctrl = new SuperAdminController(repo as any);
     const res = mockRes();
 
-    await ctrl.getDashboard({ query: { period: "30d" } } as any, res, vi.fn() as any);
+    await ctrl.getDashboard({ adminScope: { partnerId: null }, query: { period: "30d" } } as any, res, vi.fn() as any);
 
-    expect(repo.getDashboardStats).toHaveBeenCalledWith("30d");
+    expect(repo.getDashboardStats).toHaveBeenCalledWith("30d", null);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, data: stats }));
   });
 

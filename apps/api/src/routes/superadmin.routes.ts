@@ -2,14 +2,44 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from 'express';
 import { controllers } from "../di.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
-import { superadminMiddleware } from "../middleware/superadmin.middleware.js";
+import { adminScopeMiddleware, superadminMiddleware } from "../middleware/superadmin.middleware.js";
 import multer from 'multer';
 import { AppError } from '../middleware/errorHandler.js';
 
 const router = Router();
 
-// All routes require auth + superadmin role
-router.use(authMiddleware, superadminMiddleware);
+router.use(authMiddleware);
+
+// Liberadas ao parceiro (admin_partner), presas aos clientes dele; o resto do arquivo é só super_admin
+export const partnerRouter = Router();
+partnerRouter.use(adminScopeMiddleware);
+partnerRouter.param("tenantId", controllers.superadmin.tenantParam);
+
+// Dashboard
+partnerRouter.get("/dashboard", controllers.superadmin.getDashboard);
+
+// Tenants
+partnerRouter.get("/tenants", controllers.superadmin.listTenants);
+partnerRouter.get("/tenants/:id", controllers.superadmin.getTenant);
+partnerRouter.delete("/tenants/:id", controllers.superadmin.deleteTenant);
+partnerRouter.get("/tenants/:tenantId/campaigns", controllers.superadmin.listTenantCampaigns);
+partnerRouter.put("/tenants/:tenantId/goals", controllers.superadmin.upsertGoals);
+partnerRouter.patch("/tenants/:tenantId/audience", controllers.superadmin.updateAudience);
+partnerRouter.get("/tenants/:tenantId/brand-kit", controllers.superadmin.getBrandKit);
+partnerRouter.patch("/tenants/:tenantId/brand-kit", controllers.superadmin.upsertBrandKit);
+partnerRouter.patch("/tenants/:tenantId/fury-config", controllers.superadmin.updateFuryConfig);
+
+// Users
+partnerRouter.get("/users", controllers.superadmin.listUsers);
+partnerRouter.post("/users", controllers.superadmin.createUser);
+partnerRouter.get("/users/check-email/:email", controllers.superadmin.checkEmail);
+partnerRouter.patch("/users/:id", controllers.superadmin.updateUser);
+partnerRouter.delete("/users/:id", controllers.superadmin.deleteUser);
+
+router.use(partnerRouter);
+
+// Daqui pra baixo: só super_admin (rota nova cai aqui por padrão)
+router.use(superadminMiddleware);
 
 const ticketAttachmentUpload = multer({
   storage: multer.memoryStorage(),
@@ -54,25 +84,10 @@ router.post('/announcements/format', controllers.announcement.formatText);
 router.patch('/announcements/:id', controllers.announcement.update);
 router.delete('/announcements/:id', controllers.announcement.delete);
 
-// Dashboard (stats globais)
-router.get("/dashboard", controllers.superadmin.getDashboard);
-
 // Healthcheck Meta (global superadmin view)
 router.get('/healthchecks/users', controllers.metaHealthchecks.listUsers);
 router.get('/healthchecks', controllers.metaHealthchecks.getLatest);
 router.post('/healthchecks/run', controllers.metaHealthchecks.run);
-
-// Tenants
-router.get("/tenants", controllers.superadmin.listTenants);
-router.get("/tenants/:id", controllers.superadmin.getTenant);
-router.delete("/tenants/:id", controllers.superadmin.deleteTenant);
-
-// Users
-router.get("/users", controllers.superadmin.listUsers);
-router.post("/users", controllers.superadmin.createUser);
-router.get("/users/check-email/:email", controllers.superadmin.checkEmail);
-router.patch("/users/:id", controllers.superadmin.updateUser);
-router.delete("/users/:id", controllers.superadmin.deleteUser);
 
 // Setup tenant + user
 router.post("/setup-tenant", controllers.superadmin.setupTenant);
@@ -85,34 +100,6 @@ router.patch(
 router.post(
   "/tenants/:tenantId/reset-quota",
   controllers.superadmin.resetQuota,
-);
-
-// Fury Config (Benchmarks)
-router.patch(
-  "/tenants/:tenantId/fury-config",
-  controllers.superadmin.updateFuryConfig,
-);
-
-// Brand Kit
-router.get("/tenants/:tenantId/brand-kit", controllers.superadmin.getBrandKit);
-router.patch(
-  "/tenants/:tenantId/brand-kit",
-  controllers.superadmin.upsertBrandKit,
-);
-
-// Campaigns
-router.get(
-  "/tenants/:tenantId/campaigns",
-  controllers.superadmin.listTenantCampaigns,
-);
-
-// Goals
-router.put("/tenants/:tenantId/goals", controllers.superadmin.upsertGoals);
-
-// Audience
-router.patch(
-  "/tenants/:tenantId/audience",
-  controllers.superadmin.updateAudience,
 );
 
 // Plans

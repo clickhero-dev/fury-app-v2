@@ -58,6 +58,14 @@ export function mapRecentActivity(
   return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10);
 }
 
+// usuários que o parceiro alcança: só os dos clientes, nunca contas de admin
+export const PARTNER_REACHABLE_ROLES = ['user', 'user_partner'];
+
+// clientes não excluídos; com partnerId, só os daquele parceiro
+function liveTenants(partnerId: string | null) {
+  return and(isNull(tenants.deletedAt), partnerId ? eq(tenants.partnerId, partnerId) : undefined);
+}
+
 /**
  * Repositório **SuperAdmin (GLOBAL)** — operações administrativas que cruzam
  * todos os tenants (CRUD de tenants, usuários, planos e assinaturas, além de
@@ -70,11 +78,12 @@ export class SuperAdminRepository extends TenantScopedRepository {
   }
 
   // ── Tenants ──────────────────────────────────────────────────────
-  async listTenants() {
-    return this.db.query.tenants.findMany();
+  // partnerId null = todos os clientes (super_admin)
+  async listTenants(partnerId: string | null = null) {
+    return this.db.query.tenants.findMany({ where: liveTenants(partnerId) });
   }
-  async getTenantById(id: string) {
-    return this.db.query.tenants.findFirst({ where: eq(tenants.id, id) });
+  async getTenantById(id: string, partnerId: string | null = null) {
+    return this.db.query.tenants.findFirst({ where: and(eq(tenants.id, id), liveTenants(partnerId)) });
   }
   async findTenantBySlug(slug: string) {
     return this.db.query.tenants.findFirst({ where: eq(tenants.slug, slug) });
@@ -87,26 +96,28 @@ export class SuperAdminRepository extends TenantScopedRepository {
     const [row] = await this.db.update(tenants).set(data as any).where(eq(tenants.id, id)).returning();
     return row ?? null;
   }
+  // soft-delete: usuários do cliente perdem o acesso junto
   async deleteTenant(id: string) {
-    await this.db.delete(tenants).where(eq(tenants.id, id));
+    await this.db.update(tenants).set({ deletedAt: new Date() }).where(eq(tenants.id, id));
   }
   async countUsersByTenant(tenantId: string): Promise<number> {
-    const rows = await this.db.select({ total: sql`count(*)::int` }).from(users).where(eq(users.tenantId, tenantId));
+    const rows = await this.db.select({ total: sql`count(*)::int` }).from(users).where(and(eq(users.tenantId, tenantId), isNull(users.deletedAt)));
     return Number((rows[0] as any)?.total ?? 0);
   }
 
   // ── Users ────────────────────────────────────────────────────────
+  // inclui excluídos: o e-mail continua preso
   async findUserByEmail(email: string) {
     return this.db.query.users.findFirst({ where: eq(users.email, email) });
   }
   async findUserById(id: string) {
-    return this.db.query.users.findFirst({ where: eq(users.id, id) });
+    return this.db.query.users.findFirst({ where: and(eq(users.id, id), isNull(users.deletedAt)) });
   }
   async findOwnerUser(tenantId: string) {
     return this.db.query.users.findFirst({ where: and(eq(users.tenantId, tenantId), eq(users.role, 'owner')) });
   }
   async listUsersByTenant(tenantId: string) {
-    return this.db.query.users.findMany({ where: eq(users.tenantId, tenantId) });
+    return this.db.query.users.findMany({ where: and(eq(users.tenantId, tenantId), isNull(users.deletedAt)) });
   }
   async listUsersPaged(search: string, limit: number, offset: number) {
     const like = `%${search}%`;
@@ -138,7 +149,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
     return row ?? null;
   }
   async deleteUser(id: string) {
-    await this.db.delete(users).where(eq(users.id, id));
+    await this.db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, id));
   }
 
   // ── Plans ────────────────────────────────────────────────────────
@@ -177,10 +188,15 @@ export class SuperAdminRepository extends TenantScopedRepository {
   }
 
   /** Usuários paginados com nome do tenant (join), busca por nome/email/tenant. */
-  async paginateUsersAdmin(search: string, limit: number, offset: number) {
-    const where = search
-      ? or(ilike(users.name, `%${search}%`), ilike(users.email, `%${search}%`), ilike(tenants.name, `%${search}%`))
-      : undefined;
+  async paginateUsersAdmin(search: string, limit: number, offset: number, partnerId: string | null = null) {
+    const where = and(
+      isNull(users.deletedAt),
+      liveTenants(partnerId),
+      partnerId ? inArray(users.platformRole, PARTNER_REACHABLE_ROLES) : undefined,
+      search
+        ? or(ilike(users.name, `%${search}%`), ilike(users.email, `%${search}%`), ilike(tenants.name, `%${search}%`))
+        : undefined,
+    );
 
     const [countResult] = await this.db
       .select({ total: sql<number>`count(*)` })
@@ -273,14 +289,18 @@ export class SuperAdminRepository extends TenantScopedRepository {
   }
 
   // ── Dashboard (stats globais) ───────────────────────────────────
-  async getDashboardStats(period: DashboardPeriod): Promise<DashboardStats> {
+  async getDashboardStats(period: DashboardPeriod, partnerId: string | null = null): Promise<DashboardStats> {
     const days = parseInt(period, 10);
     const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const now = new Date();
+    // cliente excluído (soft-delete) ou de outro parceiro fica fora das contas
+    const ofPartner = partnerId ? sql` AND partner_id = ${partnerId}` : sql``;
+    const liveTenant = sql`${subscriptions.tenantId} IN (SELECT id FROM tenants WHERE deleted_at IS NULL${ofPartner})`;
 
     // "Ativa" = mesma semântica do middleware checkSubscriptionActive
     const activeSubs = await this.db.query.subscriptions.findMany({
       where: and(
+        liveTenant,
         eq(subscriptions.status, 'active'),
         or(
           eq(subscriptions.isNonExpirable, true),
@@ -290,7 +310,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
       ),
     });
     const trialSubs = await this.db.query.subscriptions.findMany({
-      where: and(eq(subscriptions.status, 'trial'), or(isNull(subscriptions.trialEndsAt), gt(subscriptions.trialEndsAt, now))),
+      where: and(liveTenant, eq(subscriptions.status, 'trial'), or(isNull(subscriptions.trialEndsAt), gt(subscriptions.trialEndsAt, now))),
     });
 
     const planIds = [...new Set(activeSubs.map((s) => s.planId))];
@@ -310,11 +330,11 @@ export class SuperAdminRepository extends TenantScopedRepository {
     const [newClientsRow] = await this.db
       .select({ total: sql<number>`count(*)::int`.mapWith(Number) })
       .from(tenants)
-      .where(gte(tenants.createdAt, start));
+      .where(and(liveTenants(partnerId), gte(tenants.createdAt, start)));
     const [cancelRow] = await this.db
       .select({ total: sql<number>`count(*)::int`.mapWith(Number) })
       .from(subscriptions)
-      .where(and(eq(subscriptions.status, 'cancelled'), gte(subscriptions.updatedAt, start)));
+      .where(and(liveTenant, eq(subscriptions.status, 'cancelled'), gte(subscriptions.updatedAt, start)));
 
     const recentSubs = await this.db
       .select({
@@ -327,11 +347,12 @@ export class SuperAdminRepository extends TenantScopedRepository {
       .from(subscriptions)
       .leftJoin(tenants, eq(subscriptions.tenantId, tenants.id))
       .leftJoin(plans, eq(subscriptions.planId, plans.id))
+      .where(liveTenant)
       .orderBy(desc(sql`GREATEST(${subscriptions.createdAt}, ${subscriptions.updatedAt})`))
       .limit(10);
 
     const recentNewTenants = await this.db.query.tenants.findMany({
-      where: gte(tenants.createdAt, start),
+      where: and(liveTenants(partnerId), gte(tenants.createdAt, start)),
       orderBy: [desc(tenants.createdAt)],
       limit: 5,
     });

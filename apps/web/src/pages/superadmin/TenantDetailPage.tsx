@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import api from "@/lib/api";
+import { getStoredPlatformRole } from "@/lib/platform-role";
 import type { AudienceGeo } from "@/components/campaign-wizard/types";
 import { isValidGeo, legacyFromGeo, EMPTY_GEO } from "@/components/campaign-wizard/types";
 import { LocationEditor } from "@/pages/configuracoes/LocationEditor";
@@ -132,6 +133,8 @@ export function TenantDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [renewingQuota, setRenewingQuota] = useState(false);
+  // assinatura e planos: só super_admin (a API também recusa)
+  const isSuperAdmin = getStoredPlatformRole() === "super_admin";
   const [msg, setMsg] = useState("");
 
   // Users
@@ -213,7 +216,10 @@ export function TenantDetailPage() {
   const photosInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    Promise.all([api.get(`/admin/tenants/${id}`), api.get("/admin/plans")])
+    Promise.all([
+      api.get(`/admin/tenants/${id}`),
+      isSuperAdmin ? api.get("/admin/plans") : Promise.resolve({ data: { data: [] } }),
+    ])
       .then(([tRes, pRes]) => {
         const t = tRes.data.data as TenantData;
         setData(t);
@@ -573,7 +579,8 @@ export function TenantDetailPage() {
                   className={inputCls}
                 >
                   <option value="member">Membro</option>
-                  <option value="admin">Admin</option>
+                  {/* cargo Admin: só super_admin */}
+                  {isSuperAdmin && <option value="admin">Admin</option>}
                   <option value="owner">Owner</option>
                 </select>
                 <button
@@ -702,10 +709,11 @@ export function TenantDetailPage() {
                   onChange={(e) =>
                     setEditUser({ ...editUser, role: e.target.value })
                   }
+                  disabled={!isSuperAdmin && editUser.role === "admin"}
                   className={inputCls}
                 >
                   <option value="member">Membro</option>
-                  <option value="admin">Admin</option>
+                  {(isSuperAdmin || editUser.role === "admin") && <option value="admin">Admin</option>}
                   <option value="owner">Owner</option>
                 </select>
               </div>
@@ -809,7 +817,7 @@ export function TenantDetailPage() {
                       <p className="mt-1 text-sm font-semibold text-admin-text">Créditos ilimitados</p>
                     )}
                   </div>
-                  {hasLimitedQuota && (
+                  {hasLimitedQuota && isSuperAdmin && (
                     <button
                       onClick={renewCreativeQuota}
                       disabled={renewingQuota}
@@ -890,6 +898,7 @@ export function TenantDetailPage() {
             />
             Plano não expirável (ignora vencimento)
           </label>
+          {isSuperAdmin && (
           <div className="flex items-center gap-3">
             <button onClick={saveSub} disabled={saving} className={btnCls}>
               <Save className="w-4 h-4" /> Salvar
@@ -913,6 +922,7 @@ export function TenantDetailPage() {
               Ativar (30 dias)
             </button>
           </div>
+          )}
         </div>
         </div>
       )}

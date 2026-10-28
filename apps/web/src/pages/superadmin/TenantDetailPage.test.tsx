@@ -16,6 +16,10 @@ Cenário: superadmin renova a cota com sucesso
   Quando o superadmin solicita a renovação
   Então a API administrativa é chamada e a tela confirma a renovação
 
+Cenário: parceiro não altera a assinatura
+  Dado que quem abre a aba Assinatura é um parceiro (admin_partner)
+  Então vê o saldo, mas não os botões Salvar e Renovar cota, e os planos não são carregados
+
 Cenário: renovação de cota falha
   Dado que a API não consegue renovar a cota
   Quando o superadmin solicita a renovação
@@ -57,6 +61,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.setItem('user', JSON.stringify({ platformRole: 'super_admin' }));
   mockGet.mockImplementation((url: string) => Promise.resolve(url === '/admin/plans' ? { data: { data: [] } } : tenantResponse()));
 });
 
@@ -69,6 +74,18 @@ describe('TenantDetailPage — créditos de imagem', () => {
     expect(await screen.findByText('Créditos de imagem')).toBeInTheDocument();
     expect(screen.getByText('2 de 10 disponíveis')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Renovar cota' })).toBeEnabled();
+  });
+
+  it('parceiro vê o saldo sem Salvar nem Renovar cota', async () => {
+    localStorage.setItem('user', JSON.stringify({ platformRole: 'admin_partner' }));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Assinatura' }));
+
+    expect(await screen.findByText('2 de 10 disponíveis')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Renovar cota' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Salvar' })).not.toBeInTheDocument();
+    expect(mockGet).not.toHaveBeenCalledWith('/admin/plans');
   });
 
   it('mostra créditos ilimitados sem oferecer renovação', async () => {

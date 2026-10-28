@@ -35,8 +35,8 @@ export function createRbacMiddleware(service: Pick<RbacService, 'checkServices'>
   return async function rbacMiddleware(req: Request, _res: Response, next: NextFunction) {
     const keys = resolveServiceKeys(req.path);
     if (keys === null) return next(new AppError(400, 'INVALID_PATH', 'Caminho inválido'));
-    if (keys.length === 0) return next();
 
+    // sem keys ainda confere o usuário: excluído (soft-delete) perde o acesso
     const users = peekUsersFromRequest(req).filter((u) => u.role !== 'mock');
     try {
       for (const user of users) {

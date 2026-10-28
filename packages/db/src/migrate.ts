@@ -159,6 +159,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0049_brand_kit_photos' },
   { tag: '0050_announcements' },
   { tag: '0051_ady_rbac_partners' },
+  { tag: '0052_soft_delete_tenants_users' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */

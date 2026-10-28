@@ -168,7 +168,15 @@ function fakeRepo(ctx: { platformRole: string; partnerId: string | null } | null
 }
 
 describe('RbacService.checkServices', () => {
-  it('usuário inexistente → unknown_user', async () => {
+  it('sem keys: só confere se o usuário existe (bloqueio "all" não derruba rota fora do catálogo)', async () => {
+    const repo = fakeViewRepo({ platformRole: 'user', partnerId: null }, []);
+    repo.listBlockedServiceKeys.mockResolvedValue(['all']);
+    const svc = new RbacService(repo, () => fakeRedis());
+    expect(await svc.checkServices('u1', [])).toBe('allowed');
+    expect(await new RbacService(fakeViewRepo(null), () => fakeRedis()).checkServices('u1', [])).toBe('unknown_user');
+  });
+
+    it('usuário inexistente → unknown_user', async () => {
     const svc = new RbacService(fakeRepo(null), () => fakeRedis());
     expect(await svc.checkServices('u1', ['studio'])).toBe('unknown_user');
   });
@@ -322,6 +330,26 @@ describe('RbacService.getPlatformRole', () => {
   });
 });
 
+describe('RbacService.getAdminScope', () => {
+  const scopeOf = (ctx: { platformRole: string; partnerId: string | null } | null) =>
+    new RbacService(fakeViewRepo(ctx), () => fakeRedis()).getAdminScope('u1');
+
+  it('super_admin → todos os clientes', async () => {
+    expect(await scopeOf({ platformRole: 'super_admin', partnerId: null })).toEqual({ partnerId: null });
+  });
+
+  it('admin_partner → só o parceiro dele', async () => {
+    expect(await scopeOf({ platformRole: 'admin_partner', partnerId: 'p1' })).toEqual({ partnerId: 'p1' });
+  });
+
+  it('admin_partner sem parceiro, outros papéis e usuário inexistente → sem acesso', async () => {
+    expect(await scopeOf({ platformRole: 'admin_partner', partnerId: null })).toBeNull();
+    expect(await scopeOf({ platformRole: 'user_partner', partnerId: 'p1' })).toBeNull();
+    expect(await scopeOf({ platformRole: 'user', partnerId: null })).toBeNull();
+    expect(await scopeOf(null)).toBeNull();
+  });
+});
+
 describe('RbacService.listBlockedViews', () => {
   it('usuário inexistente → null', async () => {
     expect(await new RbacService(fakeViewRepo(null), () => fakeRedis()).listBlockedViews('u1')).toBeNull();
@@ -391,6 +419,7 @@ let serviceShouldThrow = false;
 const checkServices = vi.fn(async (userId: string, keys: string[]) => {
   if (serviceShouldThrow) throw new Error('db down');
   if (unknownUsers.has(userId)) return 'unknown_user' as const;
+  if (keys.length === 0) return 'allowed' as const;
   const blocked = blockedByUser.get(userId) ?? new Set();
   if (blocked.has('all') || keys.some((k) => blocked.has(k))) return 'blocked' as const;
   return 'allowed' as const;
@@ -539,11 +568,12 @@ describe('rbacMiddleware — Express real espelhando o index.ts', () => {
     for (const p of RBAC_EXEMPT_PREFIXES) expect((await rawRequest('/api' + p + '/x', auth)).status).not.toBe(403);
   });
 
-  it('isentos nem consultam o serviço', async () => {
+  it('isentos não passam keys de serviço (só conferem se o usuário existe)', async () => {
     const auth = { authorization: `Bearer ${tokenFor('u1')}` };
     for (const p of RBAC_EXEMPT_PREFIXES) await rawRequest('/api' + p + '/x', auth);
     await rawRequest('/api/rota-inexistente', auth);
-    expect(checkServices).not.toHaveBeenCalled();
+    expect(checkServices).toHaveBeenCalled();
+    for (const [, keys] of checkServices.mock.calls) expect(keys).toEqual([]);
   });
 
   it('resposta 403 SERVICE_BLOCKED', async () => {
@@ -608,7 +638,14 @@ describe('rbacMiddleware — Express real espelhando o index.ts', () => {
     expect(res).toEqual({ status: 401, body: { code: 'UNAUTHORIZED' } });
   });
 
-  it('falha ao verificar → 503 (nunca libera)', async () => {
+  it('usuário excluído → 401 também em rota fora do catálogo', async () => {
+    expect(resolveServiceKeys('/auth/me')).toEqual([]);
+    unknownUsers.add('ghost');
+    const res = await rawRequest('/api/auth/me', { authorization: `Bearer ${tokenFor('ghost')}` });
+    expect(res).toEqual({ status: 401, body: { code: 'UNAUTHORIZED' } });
+  });
+
+    it('falha ao verificar → 503 (nunca libera)', async () => {
     serviceShouldThrow = true;
     const res = await rawRequest('/api/campaigns/x', { authorization: `Bearer ${tokenFor('u1')}` });
     expect(res).toEqual({ status: 503, body: { code: 'RBAC_UNAVAILABLE' } });

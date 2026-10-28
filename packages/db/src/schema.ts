@@ -123,6 +123,8 @@ export const tenants = pgTable(
     businessContext: text('business_context'),
     partnerId: uuid('partner_id').references(() => adyPartners.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    // soft-delete: excluído some do admin e perde o acesso
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => ({
     slugIdx: index('tenants_slug_idx').on(table.slug),
@@ -158,6 +160,8 @@ export const users = pgTable(
     resetToken: varchar('reset_token', { length: 255 }),
     resetTokenExpiresAt: timestamp('reset_token_expires_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    // soft-delete: e-mail continua preso (unique) para permitir restaurar
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => ({
     tenantIdIdx: index('users_tenant_id_idx').on(table.tenantId),

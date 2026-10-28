@@ -24,7 +24,8 @@ Funcionalidade: Restringir healthchecks ao superadmin
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { getPlatformRole } = vi.hoisted(() => ({ getPlatformRole: vi.fn(async (_id: string): Promise<string | null> => 'user') }));
-vi.mock('../services/core/rbac.service.js', () => ({ rbacService: { getPlatformRole } }));
+// escopo de parceiro: passa no adminScope, mas healthchecks seguem só do super_admin
+vi.mock('../services/core/rbac.service.js', () => ({ rbacService: { getPlatformRole, getAdminScope: async () => ({ partnerId: 'p-1' }) } }));
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
