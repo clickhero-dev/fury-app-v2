@@ -45,6 +45,8 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { TenantsPage } from './pages/superadmin/TenantsPage';
 import { TenantDetailPage } from './pages/superadmin/TenantDetailPage';
 import { PlansPage } from './pages/superadmin/PlansPage';
+import { PartnersPage } from './pages/superadmin/PartnersPage';
+import { PartnerConfigPage } from './pages/superadmin/PartnerConfigPage';
 import { UsersPage } from './pages/superadmin/UsersPage';
 import { TenantCampaignsPage } from './pages/superadmin/TenantCampaignsPage';
 import { DashboardAdminPage } from './pages/superadmin/AdminDashboard';
@@ -222,6 +224,8 @@ export const router = createBrowserRouter([
       { path: 'tenants/:id', element: <TenantDetailPage /> },
       { path: 'tenants/:id/campaigns', element: <TenantCampaignsPage /> },
       { path: 'planos', element: <PlansPage /> },
+      { path: 'parceiros', element: <PartnersPage /> },
+      { path: 'parceiros/:id', element: <PartnerConfigPage /> },
       { path: 'tenants', element: <TenantsPage /> },
       { path: 'tickets', element: <TicketsPage /> },
       { path: 'healthchecks', element: <HealthchecksPage /> },

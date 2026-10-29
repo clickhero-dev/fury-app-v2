@@ -102,6 +102,14 @@ router.post(
   controllers.superadmin.resetQuota,
 );
 
+// Parceiros (empresa + conta do parceiro) e restauração de cliente excluído
+router.get("/partners", controllers.partners.list);
+router.post("/partners", controllers.partners.create);
+router.get("/partners/:id", controllers.partners.get);
+router.patch("/partners/:id", controllers.partners.update);
+router.get("/deleted-tenants", controllers.partners.listDeletedTenants);
+router.post("/deleted-tenants/:id/restore", controllers.partners.restoreTenant);
+
 // Plans
 router.get("/plans", controllers.superadmin.listPlans);
 router.post("/plans", controllers.superadmin.createPlan);

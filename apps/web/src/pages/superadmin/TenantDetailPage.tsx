@@ -766,7 +766,7 @@ export function TenantDetailPage() {
               ?
             </p>
             <p className="text-xs text-admin-text-faint mb-6">
-              O usuário perderá acesso ao sistema. Não é reversível.
+              O usuário perderá acesso ao sistema.
             </p>
             <div className="flex gap-3">
               <button

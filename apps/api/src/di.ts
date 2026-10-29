@@ -61,6 +61,8 @@ import { MetaSyncRepository } from './repository/meta-sync.repository.js';
 import { enqueueMetaSyncTenantRun } from './workers/meta-sync.worker.js';
 import { SuperAdminRepository } from './repository/superadmin.repository.js';
 import { SuperAdminController } from './controllers/superadmin.controller.js';
+import { PartnerRepository } from './repository/partner.repository.js';
+import { PartnerController } from './controllers/partner.controller.js';
 import { ClickUpTicketsClient } from './lib/clickup-tickets.client.js';
 import { TicketService } from './services/tickets/ticket.service.js';
 import { TicketsController } from './controllers/tickets.controller.js';
@@ -154,6 +156,7 @@ export const controllers = {
   dashboard: new DashboardController(getInstagramDashboardInsights),
   budget: new BudgetController(budgetOptimizerService),
   superadmin: new SuperAdminController(superAdminRepository),
+  partners: new PartnerController(new PartnerRepository(), superAdminRepository),
   campaigns: new CampaignsController(
     campaignsService,
     (tenantId: string) => new CampaignRepository(tenantId),

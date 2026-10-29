@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Building2, Users, CreditCard, X, Trash2 } from "lucide-react";
+import { Search, Building2, Users, CreditCard, X, Trash2, RotateCcw } from "lucide-react";
 import api from "@/lib/api";
+import { getStoredPlatformRole } from "@/lib/platform-role";
+import { apiMessage } from "./PartnersPage";
+
+interface DeletedTenant {
+  id: string;
+  name: string;
+  deletedAt: string;
+  partnerName: string | null;
+}
 
 interface Tenant {
   id: string;
@@ -24,6 +33,30 @@ export function TenantsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Tenant | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [msg, setMsg] = useState("");
+  // excluídos e restaurar: só super_admin
+  const isSuperAdmin = getStoredPlatformRole() === "super_admin";
+  const [view, setView] = useState<"ativos" | "excluidos">("ativos");
+  const [deleted, setDeleted] = useState<DeletedTenant[]>([]);
+  const [restoring, setRestoring] = useState<string | null>(null);
+
+  function loadDeleted() {
+    api.get("/admin/deleted-tenants").then((res) => setDeleted(res.data.data)).catch(() => {});
+  }
+
+  async function handleRestore(t: DeletedTenant) {
+    setRestoring(t.id);
+    try {
+      await api.post(`/admin/deleted-tenants/${t.id}/restore`);
+      setDeleted((prev) => prev.filter((d) => d.id !== t.id));
+      const res = await api.get("/admin/tenants");
+      setTenants(res.data.data);
+      setMsg(`Cliente "${t.name}" restaurado`);
+    } catch (err) {
+      setMsg(apiMessage(err, "Erro ao restaurar cliente"));
+    } finally {
+      setRestoring(null);
+    }
+  }
 
   useEffect(() => {
     api
@@ -97,6 +130,47 @@ export function TenantsPage() {
         </div>
       </div>
 
+      {isSuperAdmin && (
+        <div role="group" aria-label="Filtro de clientes" className="inline-flex mb-4 rounded-lg border border-[#2A2D27] p-1 gap-1">
+          {(["ativos", "excluidos"] as const).map((v) => (
+            <button
+              key={v}
+              aria-pressed={view === v}
+              onClick={() => { setView(v); if (v === "excluidos") loadDeleted(); }}
+              className={`px-3 py-1.5 rounded-md text-sm ${view === v ? "bg-[#1E88A8]/20 text-[#ECEDEF] font-medium" : "text-[#7E8480] hover:text-[#ECEDEF]"}`}
+            >
+              {v === "ativos" ? "Ativos" : "Excluídos"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {view === "excluidos" && (
+        <div className="grid gap-3">
+          {deleted.length === 0 && (
+            <div className="text-center py-12 text-[#5A605C] text-sm">Nenhum cliente excluído</div>
+          )}
+          {deleted.map((t) => (
+            <div key={t.id} className="flex items-center justify-between bg-[#161714] border border-[#2A2D27] rounded-lg p-5">
+              <div>
+                <div className="font-semibold text-[#ECEDEF]">{t.name}</div>
+                <div className="text-xs text-[#5A605C] mt-0.5">
+                  {t.partnerName ? `Parceiro ${t.partnerName}` : "Cliente ady"} · excluído em {new Date(t.deletedAt).toLocaleDateString("pt-BR")}
+                </div>
+              </div>
+              <button
+                onClick={() => handleRestore(t)}
+                disabled={restoring === t.id}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#2A2D27] text-sm text-[#ECEDEF] hover:border-[#1E88A8]/40 disabled:opacity-50"
+              >
+                <RotateCcw className="w-4 h-4" /> {restoring === t.id ? "Restaurando..." : "Restaurar"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {view === "ativos" && (
       <div className="grid gap-3">
         {filtered.length === 0 && (
           <div className="text-center py-12 text-[#5A605C] text-sm">
@@ -150,6 +224,7 @@ export function TenantsPage() {
           </div>
         ))}
       </div>
+      )}
 
       {/* Deletar Tenant Confirmação */}
       {deleteTarget && (
@@ -173,7 +248,7 @@ export function TenantsPage() {
               <strong className="text-[#ECEDEF]">{deleteTarget.name}</strong>?
             </p>
             <p className="text-xs text-[#3E4440] mb-6">
-              Esta ação remove todos os dados do tenant, incluindo usuários, campanhas e assinaturas. Não é reversível.
+              O cliente e os usuários dele perdem o acesso na hora. Os dados ficam guardados e o super admin pode restaurar.
             </p>
 
             <div className="flex gap-3">
