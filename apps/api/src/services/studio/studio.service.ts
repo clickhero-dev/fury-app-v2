@@ -65,7 +65,7 @@ async function persistStudioImage(input: StudioGenerationJobData): Promise<Gener
   // let retries = 3;
   // while (!complianceEnqueued && retries > 0) {
   //   try {
-  //     await complianceQueue.add('compliance-check', { creativeAssetId: asset.id, tenantId: input.tenantId }, {
+  //     await complianceQueue.add('worker-studio-compliance-check', { creativeAssetId: asset.id, tenantId: input.tenantId }, {
   //       removeOnComplete: 1000,
   //       removeOnFail: 5000,
   //       attempts: 4,
@@ -247,7 +247,7 @@ export async function processPlannerImageJob(input: StudioGenerationJobData): Pr
     // let retries = 3;
     // while (!complianceEnqueued && retries > 0) {
     //   try {
-    //     await complianceQueue.add('compliance-check', { creativeAssetId: creativeAsset.id, tenantId: input.tenantId }, {
+    //     await complianceQueue.add('worker-studio-compliance-check', { creativeAssetId: creativeAsset.id, tenantId: input.tenantId }, {
     //       removeOnComplete: 1000,
     //       removeOnFail: 5000,
     //       attempts: 4,

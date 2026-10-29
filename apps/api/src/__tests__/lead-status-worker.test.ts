@@ -10,7 +10,7 @@ Funcionalidade: Regra automática de status de clientes (1º dia novo, 2º dia n
     Dado startLeadStatusManager
     Quando registra o repeat job
     Então o padrão é '0 3 * * *' (diário 03:00)
-    E enfileira um job 'lead-status:cron' com jobId determinístico
+    E configura scheduler 'cron-crm-leads-mark-stale' com ID estável
     E inicia o consumidor da fila para que o cron seja processado
     E fixa o fuso UTC e retenta falhas transitórias
 
@@ -48,6 +48,7 @@ const {
   workerInstances,
   queueInstances,
   queueAddSpy,
+  queueSchedulerSpy,
   mockRepoUpdate,
   mockCaptureEvent,
 } = vi.hoisted(() => {
@@ -62,22 +63,29 @@ const {
   }> = [];
   const queueInstances: Array<{ name: string; close: ReturnType<typeof vi.fn> }> = [];
   const queueAddSpy = vi.fn();
+  const queueSchedulerSpy = vi.fn();
   const mockRepoUpdate = vi.fn();
   const mockCaptureEvent = vi.fn();
-  return { dbMock, workerInstances, queueInstances, queueAddSpy, mockRepoUpdate, mockCaptureEvent };
+  return { dbMock, workerInstances, queueInstances, queueAddSpy, queueSchedulerSpy, mockRepoUpdate, mockCaptureEvent };
 });
 
 vi.mock('bullmq', () => {
   class QueueMock {
     name: string;
     add: typeof queueAddSpy;
+    upsertJobScheduler: typeof queueSchedulerSpy;
     close: ReturnType<typeof vi.fn>;
     constructor(name: string) {
       this.name = name;
       this.add = queueAddSpy;
+      this.upsertJobScheduler = queueSchedulerSpy;
       this.close = vi.fn(async () => {});
       queueInstances.push({ name, close: this.close });
     }
+    async getRepeatableJobs() { return []; }
+    async removeRepeatableByKey() { return true; }
+    async getJobSchedulers() { return [{ key: 'lead-status-daily' }]; }
+    async removeJobScheduler() { return true; }
   }
   class WorkerMock {
     name: string;
@@ -92,7 +100,7 @@ vi.mock('bullmq', () => {
       workerInstances.push({ name, processor, close: this.close });
     }
   }
-  return { Queue: QueueMock, Worker: WorkerMock };
+  return { Queue: QueueMock, Worker: WorkerMock, MetricsTime: { ONE_WEEK: 7 * 24 * 60 * 60 * 1000 } };
 });
 
 vi.mock('../lib/queue.js', () => ({
@@ -135,14 +143,15 @@ beforeEach(() => {
 describe('BDD: LeadStatusWorker', () => {
   it('Cenário: manager agenda o cron diário às 03:00', async () => {
     await startLeadStatusManager();
-    const addCalls = queueAddSpy.mock.calls;
-    const cronCall = addCalls.find((c) => c[0] === 'lead-status:cron');
-    expect(cronCall).toBeTruthy();
-    expect(cronCall![2].repeat.pattern).toBe('0 3 * * *');
-    expect(cronCall![2].repeat.tz).toBe('UTC');
-    expect(cronCall![2].jobId).toBe('lead-status-cron');
-    expect(cronCall![2].attempts).toBe(3);
-    expect(cronCall![2].backoff).toEqual({ type: 'exponential', delay: 5_000 });
+    expect(queueSchedulerSpy).toHaveBeenCalledWith(
+      'cron-crm-leads-mark-stale-daily-0300-utc',
+      { pattern: '0 3 * * *', tz: 'UTC' },
+      {
+        name: 'cron-crm-leads-mark-stale',
+        data: { cutoff: null },
+        opts: { attempts: 3, backoff: { type: 'exponential', delay: 5_000 } },
+      },
+    );
     expect(workerInstances.some((worker) => worker.name === 'lead-status')).toBe(true);
   });
 
@@ -186,7 +195,7 @@ describe('BDD: LeadStatusWorker', () => {
     expect(mockCaptureEvent).toHaveBeenCalledWith('lead_status_stale_marked', expect.objectContaining({ updated: 0, tenants: 0 }));
   });
 
-  it('Cenário: worker processa o job lead-status:run', async () => {
+  it('Cenário: worker processa o job worker-crm-leads-mark-stale', async () => {
     dbMock.select.mockImplementation(() => ({
       from: vi.fn(() => ({ groupBy: vi.fn(async () => [{ tenantId: 't1' }]) })),
     }));
@@ -195,7 +204,7 @@ describe('BDD: LeadStatusWorker', () => {
     const worker = await startLeadStatusWorker();
     const instance = workerInstances.find((w) => w.name === 'lead-status');
     expect(instance).toBeTruthy();
-    await instance!.processor({ name: 'lead-status:run', data: { cutoff: '2026-09-26T00:00:00Z' } });
+    await instance!.processor({ name: 'worker-crm-leads-mark-stale', data: { cutoff: '2026-09-26T00:00:00Z' } });
     expect(mockRepoUpdate).toHaveBeenCalledTimes(1);
 
     await stopLeadStatusWorker();

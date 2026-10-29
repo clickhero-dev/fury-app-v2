@@ -524,6 +524,7 @@ export const brandKitPhotos = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     /** Soft delete: preenchido = removida (some da biblioteca e da geração). */
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    hiddenFromReferencePanel: boolean('hidden_from_reference_panel').notNull().default(false),
   },
   (table) => ({
     tenantKindIdx: index('brand_kit_photos_tenant_kind_idx').on(table.tenantId, table.kind),

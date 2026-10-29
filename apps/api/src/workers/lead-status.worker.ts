@@ -1,7 +1,9 @@
 import { Worker, Queue } from 'bullmq';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { db, metaLeads } from '../lib/db.js';
 import { MetaSyncRepository } from '../repository/meta-sync.repository.js';
 import { captureServerEvent } from '../lib/analytics.js';
+import { replaceLegacyRepeatablesWithScheduler } from '../lib/job-scheduler.js';
 
 export const LEAD_STATUS_QUEUE_NAME = 'lead-status';
 
@@ -45,14 +47,24 @@ export async function startLeadStatusWorker(): Promise<Worker> {
   const worker = new Worker(
     LEAD_STATUS_QUEUE_NAME,
     async (job) => {
-      if (job.name === 'lead-status:run' || job.name === 'lead-status:cron') {
+      if (
+        job.name === 'worker-crm-leads-mark-stale' ||
+        job.name === 'cron-crm-leads-mark-stale' ||
+        job.name === 'worker:crm:refresh_lead_status' ||
+        job.name === 'cron:crm:refresh_lead_status' ||
+        job.name === 'lead-status:run' ||
+        job.name === 'lead-status:cron'
+      ) {
         const cutoff = job.data.cutoff ? new Date(job.data.cutoff) : undefined;
         await processLeadStatusRun(cutoff);
+      } else {
+        throw new Error(`Unsupported lead status job: ${job.name}`);
       }
     },
     {
       connection: (await import('../lib/redis.js')).getRedis().duplicate(),
       concurrency: 1,
+      ...getWorkerMetricsOptions('lead-status-worker'),
     }
   );
 
@@ -80,15 +92,17 @@ export async function startLeadStatusManager(): Promise<void> {
   const queue = new Queue(LEAD_STATUS_QUEUE_NAME, { connection });
   leadStatusQueueInstance = queue;
 
-  await queue.add(
-    'lead-status:cron',
-    { cutoff: null },
+  await replaceLegacyRepeatablesWithScheduler(
+    queue,
+    ['lead-status:cron'],
+    ['lead-status-daily'],
+    'cron-crm-leads-mark-stale-daily-0300-utc',
+    { pattern: '0 3 * * *', tz: 'UTC' },
     {
-      repeat: { pattern: '0 3 * * *', tz: 'UTC' },
-      jobId: 'lead-status-cron',
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 5_000 },
-    }
+      name: 'cron-crm-leads-mark-stale',
+      data: { cutoff: null },
+      opts: { attempts: 3, backoff: { type: 'exponential', delay: 5_000 } },
+    },
   );
 
   console.log('✅ Lead-status scheduler started (daily 03:00)');

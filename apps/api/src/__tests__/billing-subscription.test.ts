@@ -25,6 +25,25 @@ function createNext(): NextFunction {
 }
 
 describe('checkSubscriptionActive middleware', () => {
+  /* Funcionalidade: bloqueio de assinatura vencida
+   * Cenário: assinatura marcada não expirável com período encerrado
+   * Dado que o prazo da assinatura terminou
+   * Quando a pessoa tenta acessar um recurso protegido
+   * Então o acesso é bloqueado mesmo com a marcação antiga.
+   */
+  it('bloqueia período vencido apesar da marcação não expirável', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'active', isNonExpirable: true, trialEndsAt: null, currentPeriodEnd: new Date('2020-01-01T00:00:00Z') });
+    const next = createNext();
+    await checkSubscriptionActive(createMockRequest(), {} as Response, next);
+    expect((next as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ statusCode: 403, code: 'SUBSCRIPTION_EXPIRED' });
+  });
+
+  it('bloqueia trial vencido apesar da marcação não expirável', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'trial', isNonExpirable: true, trialEndsAt: new Date('2020-01-01T00:00:00Z'), currentPeriodEnd: null });
+    const next = createNext();
+    await checkSubscriptionActive(createMockRequest(), {} as Response, next);
+    expect((next as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ statusCode: 403, code: 'TRIAL_EXPIRED' });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });

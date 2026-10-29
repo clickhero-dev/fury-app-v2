@@ -105,7 +105,7 @@ export const complianceAdjuster = {
 
     const queue = await getComplianceQueue();
     await queue.add(
-      'compliance-check',
+      'worker-studio-compliance-check',
       { creativeAssetId, tenantId },
       { removeOnComplete: 1000, removeOnFail: 5000, attempts: 4, backoff: { type: 'exponential', delay: 10_000 } },
     );

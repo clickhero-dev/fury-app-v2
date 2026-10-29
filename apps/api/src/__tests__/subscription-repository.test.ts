@@ -102,11 +102,33 @@ describe('SubscriptionRepository', () => {
       expect(await repo.getPlanCreativesLimit('p-1')).toBe(30);
     });
 
-    it('renewSubscription atualiza a assinatura (periodo + cota)', async () => {
+    it('renewSubscription consome o ciclo original e retorna se o compare-and-set atualizou a assinatura', async () => {
       const { db, update } = makeDb();
       const repo = new SubscriptionRepository('', db);
-      await repo.renewSubscription('s-1', new Date('2026-10-10T00:00:00Z'), 12);
+      const originalPeriodEnd = new Date('2026-09-10T00:00:00Z');
+      const nextPeriodEnd = new Date('2026-10-10T00:00:00Z');
+
+      const applied = await repo.renewSubscription('s-1', originalPeriodEnd, nextPeriodEnd, 12);
+
+      expect(applied).toBe(true);
       expect(update).toHaveBeenCalledTimes(1);
+    });
+
+    it('renewSubscription retorna false quando outra execução já consumiu o ciclo', async () => {
+      const { db } = makeDb();
+      db.update.mockImplementation(() => ({
+        set: () => ({ where: () => ({ returning: async () => [] }) }),
+      }));
+      const repo = new SubscriptionRepository('', db);
+
+      const applied = await repo.renewSubscription(
+        's-1',
+        new Date('2026-09-10T00:00:00Z'),
+        new Date('2026-10-10T00:00:00Z'),
+        null,
+      );
+
+      expect(applied).toBe(false);
     });
   });
 });
