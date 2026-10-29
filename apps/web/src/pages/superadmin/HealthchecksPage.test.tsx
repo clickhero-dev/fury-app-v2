@@ -25,6 +25,7 @@ Funcionalidade: diagnosticar integrações Meta no superadmin
     Dado que o superadmin está na segunda página
     Quando seleciona Falha
     Então a lista filtrada começa na primeira página
+    E vê os resultados filtrados dessa página
 
   Cenário: mostrar vazio quando nenhum cliente corresponde
     Dado que a combinação de filtros não encontra clientes
@@ -123,6 +124,33 @@ describe('HealthchecksPage', () => {
     expect(screen.getByText('9 resultados')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Ana.*Loja Ana/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Pessoa 4.*Loja 4/ })).toBeInTheDocument();
+  });
+
+  it('reinicia na primeira página ao selecionar um status', async () => {
+    const manyRows = Array.from({ length: 20 }, (_, index) => ({
+      ...userRow,
+      userId: `pagination-${index + 1}`,
+      name: `Cliente ${index + 1}`,
+      tenantId: `tenant-${index + 1}`,
+      tenantName: `Loja ${index + 1}`,
+      status: index < 10 ? 'failed' : 'success',
+    }));
+    mockGet.mockImplementation((url: string) => url === '/admin/healthchecks/users'
+      ? Promise.resolve({ data: { data: manyRows } })
+      : Promise.reject(new Error(`Unexpected URL ${url}`)));
+    render(<HealthchecksPage />);
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Cliente 1.*Loja 1/ });
+    await user.click(screen.getByRole('button', { name: 'Próxima página' }));
+    expect(screen.getByText('Página 2 de 3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Cliente 10.*Loja 10/ })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Status do healthcheck' }), 'failed');
+
+    expect(screen.getByText('10 resultados')).toBeInTheDocument();
+    expect(screen.getByText('Página 1 de 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Cliente 1.*Loja 1/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Cliente 10.*Loja 10/ })).not.toBeInTheDocument();
   });
 
   it('mostra vazio para combinação sem correspondência', async () => {
