@@ -62,6 +62,7 @@ describe('Parceiros (super_admin) — integração', () => {
     // a conta entra e vira admin do parceiro
     const acc = await login(`pt-acc-${id}@test.com`);
     expect(acc.status).toBe(200);
+    expect(acc.body.data.user.platformRole).toBe('admin_partner');
     partnerToken = acc.body.data.token;
     expect((await request(app).get('/api/admin/tenants').set(asPartner())).body.data).toEqual([]);
 
