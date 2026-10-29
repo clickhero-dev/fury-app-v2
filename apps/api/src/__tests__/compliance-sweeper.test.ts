@@ -36,7 +36,7 @@ describe('sweepOrphanComplianceAnalysis — análise órfã é re-enfileirada (n
 
     expect(n).toBe(1);
     expect(add).toHaveBeenCalledWith(
-      'compliance-check',
+      'worker-studio-compliance-check',
       { creativeAssetId: 'asset-1', tenantId: 't-1' },
       expect.objectContaining({ attempts: 4, backoff: { type: 'exponential', delay: 10_000 } })
     );

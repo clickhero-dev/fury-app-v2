@@ -24,7 +24,7 @@ import { startSubscriptionRenewalManager, stopSubscriptionRenewalManager } from 
 import { ensureStudioAssetsDir, studioAssetsDir } from './lib/temp-storage.js';
 import { startStudioGenerationWorker, stopStudioGenerationWorker } from './workers/studio-generation.worker.js';
 import { startComplianceCheckWorker, stopComplianceCheckWorker } from './workers/compliance-check.worker.js';
-import { startComplianceSweeper, stopComplianceSweeper } from './services/studio/compliance-sweeper.js';
+import { startComplianceSweeper, stopComplianceSweeper } from './workers/compliance-sweeper.worker.js';
 import { startBudgetOptimizerWorker, stopBudgetOptimizerWorker } from './workers/budget-optimizer.worker.js';
 import { startPublishDueManager, stopPublishDueManager } from './lib/publish-due-manager.js';
 import { startGoogleSyncManager, stopGoogleSyncManager } from './lib/google-sync-manager.js';
@@ -38,6 +38,7 @@ import { slugify } from './lib/slug.js';
 import { recoverInterruptedPlannerWorkflows } from './planner-workflow-runner.js';
 import { runApiStartupWorkflow } from './workflows/api-startup-runner.js';
 import { flushAnalytics, captureServerException } from './lib/analytics.js';
+import { initializeBullBoardRoutes, shutdownBullBoardMetrics } from './routes/bull-board.routes.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -245,7 +246,6 @@ app.use((req, res) => {
     // 🚀 Run seed: ensures superadmin + demo users exist before accepting requests
     await seedStartup();
 
-    // ponytail: setInterval, não BullMQ. Migrate quando precisar de retry ou isolamento.
     const server = app.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
       console.log(`📝 Environment: ${NODE_ENV}`);
@@ -276,6 +276,9 @@ app.use((req, res) => {
       void ensureStudioAssetsDir().catch((error) => {
         console.error('Failed to prepare studio assets dir:', error);
       });
+      void initializeBullBoardRoutes().catch((error) => {
+        console.error('Failed to start Bull Board metrics recorder:', error);
+      });
       void startSyncJobsWorker().catch((error) => {
         console.error('Failed to start Meta sync worker:', error);
       });
@@ -294,8 +297,10 @@ app.use((req, res) => {
       // });
       // Rede de segurança: varre a cada 5min por análises de compliance órfãs
       // (assets pendentes há >10min sem job em fila) e re-enfileira.
-      // startComplianceSweeper();
-      startSubscriptionRenewalManager();
+      // void startComplianceSweeper().catch((error) => console.error('Failed to start compliance sweeper:', error));
+      void startSubscriptionRenewalManager().catch((error) => {
+        console.error('Failed to start billing renewal scheduler:', error);
+      });
       void startBudgetOptimizerWorker().catch((error) => {
         console.error('Failed to start Budget optimizer worker:', error);
       });
@@ -337,8 +342,8 @@ app.use((req, res) => {
         await stopStudioGenerationWorker();
         await stopStudioVideoWorker();
         await stopComplianceCheckWorker();
-        stopComplianceSweeper();
-        stopSubscriptionRenewalManager();
+        await stopComplianceSweeper();
+        await stopSubscriptionRenewalManager();
         await stopBudgetOptimizerWorker();
         await stopFuryEngine();
         await stopPlannerWorker();
@@ -347,6 +352,7 @@ app.use((req, res) => {
         await closeFuryEngineQueue();
         await closePublishDueQueue();
         await closeMetaSyncQueue();
+        shutdownBullBoardMetrics();
         await closeRedisConnection();
         await closeRedis();
         await flushAnalytics();

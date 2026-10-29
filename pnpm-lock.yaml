@@ -74,11 +74,14 @@ importers:
         specifier: ^3.1064.0
         version: 3.1116.0
       '@bull-board/api':
-        specifier: ~9.4.0
-        version: 9.4.0(@bull-board/ui@9.4.0(bullmq@5.81.3(supports-color@7.2.0)))(bullmq@5.81.3(supports-color@7.2.0))
+        specifier: ~9.10.5
+        version: 9.10.5(@bull-board/ui@9.10.5(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3))(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3)
       '@bull-board/express':
-        specifier: ~9.4.0
-        version: 9.4.0(bullmq@5.81.3(supports-color@7.2.0))(supports-color@7.2.0)
+        specifier: ~9.10.5
+        version: 9.10.5(bullmq@5.81.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3)
+      '@bull-board/metrics':
+        specifier: 9.10.5
+        version: 9.10.5(@bull-board/ui@9.10.5(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3))(bullmq@5.81.3(supports-color@7.2.0))(ioredis@5.11.1(supports-color@7.2.0))(typescript@5.9.3)
       '@fury/db':
         specifier: '*'
         version: link:../../packages/db
@@ -578,23 +581,29 @@ packages:
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
 
-  '@bull-board/api@9.4.0':
-    resolution: {integrity: sha512-poPku55iQd/VS65BUD8yn/uIHUruDwOVOiPEbThzjCd1nHAzEUEj/D+LWW1t9vzRsvN6xBr5jXlbJDapBnz7aw==}
+  '@bull-board/api@9.10.5':
+    resolution: {integrity: sha512-CMA5WCN5rkpQWG8+IQBFuwf54JVrWE+1mjHEiwyb9+rdHAqXTbZOpjJLZZB0QA+2DGQCK8z0WqqdprCFnhy8aA==}
     peerDependencies:
-      '@bull-board/ui': 9.4.0
+      '@bull-board/ui': 9.10.5
       bull: ^4.16.5
-      bullmq: ^5.79.2 || ^6.0.0
+      bullmq: ^5.56.0 || ^6.0.0
     peerDependenciesMeta:
       bull:
         optional: true
       bullmq:
         optional: true
 
-  '@bull-board/express@9.4.0':
-    resolution: {integrity: sha512-VpK4kPqVJtF/Abc3Ajvc7E8jrRNSwRKjjIjkwrDXKF4on84hwoKUpKpnl8T394X5MiNOhchWIpvJ8xlFFNS4UQ==}
+  '@bull-board/express@9.10.5':
+    resolution: {integrity: sha512-SLaT82KDiEXDHeSfJBsfwN/Q7Zp5fizx7PaaJm//o4rzonlbWielyTRPtzSLsUlX1ZjW5JdQJjAks25uKqZmyw==}
 
-  '@bull-board/ui@9.4.0':
-    resolution: {integrity: sha512-oRuCjMawEdpwFpHWWT6tzZLVqaqP+sK7xs1C1AhvTGm4pViNyPKwV7chtSExFOdVZuXJnJOl74WTXsHRfKMF3A==}
+  '@bull-board/metrics@9.10.5':
+    resolution: {integrity: sha512-bt1a/rpt+pg5u1L3fnpr2QnilNZxxMqcJgg1XZCURcrtwcCjakzv+ZkqygU6rVLsIMZLaslFyu/mS0bFYJ7G7Q==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      ioredis: ^5.0.0 || ^6.0.0
+
+  '@bull-board/ui@9.10.5':
+    resolution: {integrity: sha512-CW97tdUiD0e7VMvezb0+cjDUdwfBU2Vo1ChLRvqNgn4qoUuqX/q9PnX+y9sF7bkXnc4Kor2u+rj/wRge9pqeVg==}
 
   '@cfworker/json-schema@4.1.1':
     resolution: {integrity: sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==}
@@ -5153,6 +5162,14 @@ packages:
   v8-compile-cache-lib@3.0.1:
     resolution: {integrity: sha512-wa7YjyUGfNZngI/vtK0UHAN+lgDCxBPCylVXGp0zu59Fz5aiGtNXaq3DhIov063MorB+VfufLh3JlF2KdTK3xg==}
 
+  valibot@1.5.0:
+    resolution: {integrity: sha512-nil6AkP2TChWL43Z5uJ6GTxX01CUA+g8LWUM+N/rB9NBbkUMaUsi9PUNzlUPgoKASgmx9f7eGOYpJ04/fSa6FQ==}
+    peerDependencies:
+      typescript: '>=5'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   vary@1.1.2:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
     engines: {node: '>= 0.8'}
@@ -5701,30 +5718,45 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@bull-board/api@9.4.0(@bull-board/ui@9.4.0(bullmq@5.81.3(supports-color@7.2.0)))(bullmq@5.81.3(supports-color@7.2.0))':
+  '@bull-board/api@9.10.5(@bull-board/ui@9.10.5(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3))(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3)':
     dependencies:
-      '@bull-board/ui': 9.4.0(bullmq@5.81.3(supports-color@7.2.0))
+      '@bull-board/ui': 9.10.5(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3)
       redis-info: 3.1.0
+      valibot: 1.5.0(typescript@5.9.3)
     optionalDependencies:
       bullmq: 5.81.3(supports-color@7.2.0)
+    transitivePeerDependencies:
+      - typescript
 
-  '@bull-board/express@9.4.0(bullmq@5.81.3(supports-color@7.2.0))(supports-color@7.2.0)':
+  '@bull-board/express@9.10.5(bullmq@5.81.3(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3)':
     dependencies:
-      '@bull-board/api': 9.4.0(@bull-board/ui@9.4.0(bullmq@5.81.3(supports-color@7.2.0)))(bullmq@5.81.3(supports-color@7.2.0))
-      '@bull-board/ui': 9.4.0(bullmq@5.81.3(supports-color@7.2.0))
+      '@bull-board/api': 9.10.5(@bull-board/ui@9.10.5(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3))(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3)
+      '@bull-board/ui': 9.10.5(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3)
       ejs: 6.0.1
       express: 5.2.1(supports-color@7.2.0)
     transitivePeerDependencies:
       - bull
       - bullmq
       - supports-color
+      - typescript
 
-  '@bull-board/ui@9.4.0(bullmq@5.81.3(supports-color@7.2.0))':
+  '@bull-board/metrics@9.10.5(@bull-board/ui@9.10.5(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3))(bullmq@5.81.3(supports-color@7.2.0))(ioredis@5.11.1(supports-color@7.2.0))(typescript@5.9.3)':
     dependencies:
-      '@bull-board/api': 9.4.0(@bull-board/ui@9.4.0(bullmq@5.81.3(supports-color@7.2.0)))(bullmq@5.81.3(supports-color@7.2.0))
+      '@bull-board/api': 9.10.5(@bull-board/ui@9.10.5(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3))(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3)
+      ioredis: 5.11.1(supports-color@7.2.0)
+    transitivePeerDependencies:
+      - '@bull-board/ui'
+      - bull
+      - bullmq
+      - typescript
+
+  '@bull-board/ui@9.10.5(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3)':
+    dependencies:
+      '@bull-board/api': 9.10.5(@bull-board/ui@9.10.5(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3))(bullmq@5.81.3(supports-color@7.2.0))(typescript@5.9.3)
     transitivePeerDependencies:
       - bull
       - bullmq
+      - typescript
 
   '@cfworker/json-schema@4.1.1': {}
 
@@ -10225,6 +10257,10 @@ snapshots:
   utils-merge@1.0.1: {}
 
   v8-compile-cache-lib@3.0.1: {}
+
+  valibot@1.5.0(typescript@5.9.3):
+    optionalDependencies:
+      typescript: 5.9.3
 
   vary@1.1.2: {}
 

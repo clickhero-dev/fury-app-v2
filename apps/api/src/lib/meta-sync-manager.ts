@@ -1,6 +1,7 @@
 import { Worker, Queue } from 'bullmq';
 import { getRedisConnection } from './queue.js';
 import { startMetaSyncWorker, stopMetaSyncWorker } from '../workers/meta-sync.worker.js';
+import { replaceLegacyRepeatablesWithScheduler } from './job-scheduler.js';
 
 let worker: Worker | null = null;
 
@@ -14,28 +15,27 @@ export async function startMetaSyncManager(): Promise<void> {
 
   const queue = new Queue('meta-sync', { connection });
 
-  // Remove o repeatable legado antes de registrar o Job Scheduler v5. Os dois
-  // mecanismos usam metadados distintos no Redis; o upsert não substitui o
-  // repeatable criado pela API antiga, o que causaria ticks duplicados.
-  await queue.removeRepeatable('meta-sync:tick', { pattern: '*/15 * * * *' }, 'meta-sync-tick');
-
-  // Cron de reconciliação a cada 15 minutos. O Job Scheduler mantém o próximo
-  // tick de forma atômica no Redis e o id estável torna startups repetidos idempotentes.
-  await queue.upsertJobScheduler(
-    'meta-sync-tick',
+  await replaceLegacyRepeatablesWithScheduler(
+    queue,
+    ['meta-sync:tick'],
+    ['meta-sync-tick'],
+    'cron-meta-sync-ad-account-data-every-15m',
     { pattern: '*/15 * * * *' },
-    { name: 'meta-sync:tick', data: {} },
+    { name: 'cron-meta-sync-ad-account-data', data: {} },
   );
 
-  await queue.upsertJobScheduler(
-    'meta-healthcheck-every-12h',
+  await replaceLegacyRepeatablesWithScheduler(
+    queue,
+    ['meta-healthcheck:run-all'],
+    ['meta-healthcheck-every-12h'],
+    'cron-meta-check-connection-health-every-12h',
     { pattern: '0 */12 * * *' },
-    { name: 'meta-healthcheck:run-all', data: {} },
+    { name: 'cron-meta-check-connection-health', data: {} },
   );
 
   // Bootstrap: roda imediatamente no startup (todos os tenants conectados).
   await queue.add(
-    'meta-sync:bootstrap',
+    'worker-meta-sync-all-connected-ad-accounts',
     { timestamp: new Date().toISOString() },
     { jobId: 'meta-sync-bootstrap' }
   );

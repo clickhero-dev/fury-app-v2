@@ -1,4 +1,5 @@
 import { Worker } from 'bullmq';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { processStudioGenerationJob, type StudioGenerationJobData, type GenerateStudioImageResult } from '../services/studio/studio.service.js';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -18,6 +19,7 @@ export async function startStudioGenerationWorker(): Promise<void> {
         url: redisUrl,
       },
       concurrency: 6,
+      ...getWorkerMetricsOptions('studio-generate-image-worker'),
     }
   );
 
