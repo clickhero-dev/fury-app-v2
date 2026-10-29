@@ -44,6 +44,7 @@ describe('AdminShell', () => {
     expect(screen.getByRole('link', { name: /usuários/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /clientes/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /planos/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /integrações/i })).toBeInTheDocument();
     expect(screen.queryByText('conteúdo tickets')).toBeNull();
     localStorage.clear();
   });
@@ -61,6 +62,7 @@ describe('AdminShell', () => {
     );
 
     expect(screen.queryByRole('link', { name: /clientes/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /integrações/i })).toBeNull();
     expect(screen.queryByText('conteúdo clientes')).toBeNull();
     expect(screen.getByRole('link', { name: /parceiros/i })).toBeInTheDocument();
     localStorage.clear();

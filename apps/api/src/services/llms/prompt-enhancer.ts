@@ -8,9 +8,6 @@ import { openrouterService } from './openrouter.service.js';
 export async function enhancePromptForImage(prompt: string): Promise<string> {
   if (prompt.length >= 100) return prompt;
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return prompt;
-
   const systemMessage = [
     'Você é um especialista em publicidade digital especializado em descrições de imagens.',
     'Preserve o tema principal do prompt original. Adicione detalhes visuais (iluminação, composição, ângulo, cores) SEM mudar o assunto principal.',

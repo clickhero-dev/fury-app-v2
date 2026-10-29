@@ -179,11 +179,13 @@ describe('Rotas do admin liberadas ao parceiro', () => {
 
   it('lista fechada', () => {
     expect(routesOf((partnerRouter as any).stack).sort()).toEqual([
+      'DELETE /my-partner/ai-key',
       'DELETE /plans/:id',
       'DELETE /tenants/:id',
       'DELETE /users/:id',
       'GET /dashboard',
       'GET /my-partner',
+      'GET /my-partner/ai-key',
       'GET /plans',
       'GET /tenants',
       'GET /tenants/:id',
@@ -202,6 +204,7 @@ describe('Rotas do admin liberadas ao parceiro', () => {
       'POST /plans',
       'POST /tenants/:tenantId/reset-quota',
       'POST /users',
+      'PUT /my-partner/ai-key',
       'PUT /tenants/:tenantId/goals',
     ]);
   });

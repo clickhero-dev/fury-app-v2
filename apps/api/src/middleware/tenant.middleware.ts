@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from './errorHandler.js';
+import { runWithTenant } from '../lib/ai-key-context.js';
 
 export function tenantMiddleware(req: Request, res: Response, next: NextFunction) {
   if (!req.user || !req.user.tenantId) {
@@ -8,5 +9,6 @@ export function tenantMiddleware(req: Request, res: Response, next: NextFunction
   }
 
   req.tenant = { tenantId: req.user.tenantId };
-  next();
+  // chamadas de IA desta requisição usam a chave do dono deste cliente
+  runWithTenant(req.user.tenantId, next);
 }

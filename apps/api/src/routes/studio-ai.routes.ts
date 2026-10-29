@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
+import { aiContextMiddleware } from '../lib/ai-key-context.js';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { unlink } from 'node:fs/promises';
@@ -29,6 +30,8 @@ router.post(
   authMiddleware,
   tenantMiddleware,
   maskUpload.single('mask'),
+  // multer perde o contexto do cliente: reabre para a IA usar a chave certa
+  aiContextMiddleware,
   async (req: Request, res: Response, next: NextFunction) => {
     const maskFile = (req as any).file as Express.Multer.File | undefined;
     try {

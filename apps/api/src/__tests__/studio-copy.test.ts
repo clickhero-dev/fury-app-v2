@@ -4,19 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import studioRoutes from '../routes/studio.routes'
 
 const mocks = vi.hoisted(() => ({
-  chatCreate: vi.fn(),
+  chat: vi.fn(),
 }))
 
-vi.mock('openai', () => {
-  return {
-    default: vi.fn().mockImplementation(() => ({
-      chat: {
-        completions: {
-          create: mocks.chatCreate,
-        },
-      },
-    })),
-  }
+// IA real do sistema é o OpenRouter; a regra de chave tem testes próprios
+vi.mock('../services/llms/openrouter.service.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../services/llms/openrouter.service.js')>()
+  return { ...real, openrouterService: { ...real.openrouterService, chat: mocks.chat } }
 })
 
 vi.mock('../middleware/auth.middleware.js', () => ({
@@ -41,8 +35,8 @@ describe('POST /api/studio/generate-copy', () => {
     app.use('/api/studio', studioRoutes)
   })
 
-  it('should return fallback variations when OPENAI_API_KEY is not set', async () => {
-    delete process.env.OPENAI_API_KEY
+  it('sem chave de IA: erro, nunca texto de exemplo', async () => {
+    mocks.chat.mockRejectedValue(Object.assign(new Error('IA indisponível no momento. Fale com seu parceiro.'), { statusCode: 503, code: 'AI_UNAVAILABLE' }))
 
     const response = await request(app)
       .post('/api/studio/generate-copy')
@@ -55,10 +49,8 @@ describe('POST /api/studio/generate-copy', () => {
         quantidadeVariacoes: 3,
       })
 
-    expect(response.status).toBe(200)
-    expect(response.body).toHaveProperty('variacoes')
-    expect(response.body.variacoes).toHaveLength(3)
-    expect(response.body.variacoes[0].texto).toContain('Super Cadeira')
+    expect(response.status).not.toBe(200)
+    expect(response.body).not.toHaveProperty('variacoes')
   })
 
   it('should return 400 for invalid body', async () => {
@@ -78,23 +70,13 @@ describe('POST /api/studio/generate-copy', () => {
   })
 
   it('should generate copy and calculate score', async () => {
-    process.env.OPENAI_API_KEY = 'fake-key'
-
-    mocks.chatCreate.mockResolvedValue({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              variacoes: [
-                { texto: 'Compre a cadeira do futuro, hoje.' },
-                { texto: 'Ergonomia e design para seu escritório. Saiba mais agora!' },
-                { texto: 'Sua coluna agradece. Clique e garanta.' },
-              ],
-            }),
-          },
-        },
+    mocks.chat.mockResolvedValue(JSON.stringify({
+      variacoes: [
+        { texto: 'Compre a cadeira do futuro, hoje.' },
+        { texto: 'Ergonomia e design para seu escritório. Saiba mais agora!' },
+        { texto: 'Sua coluna agradece. Clique e garanta.' },
       ],
-    })
+    }))
 
     const response = await request(app)
       .post('/api/studio/generate-copy')

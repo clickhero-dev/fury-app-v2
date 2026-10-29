@@ -39,6 +39,10 @@ partnerRouter.delete("/users/:id", controllers.superadmin.deleteUser);
 // Clientes do parceiro (vagas + Novo Cliente)
 partnerRouter.get("/my-partner", controllers.superadmin.mySlots);
 partnerRouter.post("/my-partner/clients", controllers.superadmin.createPartnerClient);
+// Chave de IA do próprio parceiro (Integrações)
+partnerRouter.get("/my-partner/ai-key", controllers.partners.getAiKey);
+partnerRouter.put("/my-partner/ai-key", controllers.partners.saveAiKey);
+partnerRouter.delete("/my-partner/ai-key", controllers.partners.clearAiKey);
 
 // Planos (cada um vê os seus: parceiro os dele, super os da ady) e assinatura dos clientes
 partnerRouter.get("/plans", controllers.superadmin.listPlans);
@@ -110,6 +114,8 @@ router.get("/partners", controllers.partners.list);
 router.post("/partners", controllers.partners.create);
 router.get("/partners/:id", controllers.partners.get);
 router.patch("/partners/:id", controllers.partners.update);
+// chave de IA: super só vê se existe; quem cadastra é o próprio parceiro
+router.get("/partners/:id/ai-key", controllers.partners.getAiKey);
 router.get("/deleted-tenants", controllers.partners.listDeletedTenants);
 router.post("/deleted-tenants/:id/restore", controllers.partners.restoreTenant);
 

@@ -1,4 +1,4 @@
-import { db as defaultDb, type Database, adyPartners, tenants, users } from '@fury/db';
+import { db as defaultDb, type Database, adyPartners, adyRbacAuditLog, tenants, users } from '@fury/db';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 
 export interface PartnerSummary {
@@ -89,5 +89,52 @@ export class PartnerRepository {
 
   async restoreTenant(id: string) {
     await this.db.update(tenants).set({ deletedAt: null }).where(eq(tenants.id, id));
+  }
+
+  // ── Chave de IA (criptografada; a chave em claro nunca sai daqui) ──
+  async getAiKeyStatus(partnerId: string) {
+    const [row] = await this.db
+      .select({ last4: adyPartners.openrouterKeyLast4 })
+      .from(adyPartners)
+      .where(and(eq(adyPartners.id, partnerId), isNull(adyPartners.deletedAt)));
+    return row ? { configured: row.last4 !== null, last4: row.last4 } : null;
+  }
+
+  // grava (ou limpa, com null) e registra no histórico, sem o valor
+  async setAiKey(partnerId: string, value: { encrypted: string; last4: string } | null, actorUserId: string) {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(adyPartners)
+        .set({ openrouterKeyEncrypted: value?.encrypted ?? null, openrouterKeyLast4: value?.last4 ?? null, updatedAt: new Date() })
+        .where(eq(adyPartners.id, partnerId));
+      await tx.insert(adyRbacAuditLog).values({
+        actorUserId,
+        action: value ? 'ai_key_set' : 'ai_key_cleared',
+        entityType: 'partner',
+        entityKey: partnerId,
+        partnerId,
+        details: value ? { last4: value.last4 } : {},
+      });
+    });
+  }
+
+  // parceiro dono do cliente (ou da conta própria do parceiro) e a chave dele; cliente ady = partnerId null
+  async findAiKeyByTenant(tenantId: string) {
+    const [row] = await this.db
+      .select({
+        partnerId: sql<string | null>`coalesce(${tenants.partnerId}, (SELECT u.partner_id FROM users u WHERE u.tenant_id = "tenants"."id" AND u.platform_role = 'admin_partner' AND u.partner_id IS NOT NULL LIMIT 1))`,
+        // conta de parceiro mesmo sem vínculo (ex.: parceiro apagado no banco): nunca vira cliente ady
+        partnerAccount: sql<boolean>`EXISTS (SELECT 1 FROM users u WHERE u.tenant_id = "tenants"."id" AND u.platform_role = 'admin_partner')`,
+      })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId));
+    if (!row) return null;
+    if (!row.partnerId) return row.partnerAccount ? { partnerId: 'sem-vinculo', encrypted: null } : { partnerId: null, encrypted: null };
+    // parceiro excluído = sem chave
+    const [partner] = await this.db
+      .select({ encrypted: adyPartners.openrouterKeyEncrypted })
+      .from(adyPartners)
+      .where(and(eq(adyPartners.id, row.partnerId), isNull(adyPartners.deletedAt)));
+    return { partnerId: row.partnerId, encrypted: partner?.encrypted ?? null };
   }
 }

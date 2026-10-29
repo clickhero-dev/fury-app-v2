@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Clock, Zap, LogOut, LayoutGrid, ArrowLeft, Ticket, CircleHelp, Activity, Megaphone, MonitorSmartphone, Briefcase, Building2 } from 'lucide-react';
+import { Users, Clock, Zap, LogOut, LayoutGrid, ArrowLeft, Ticket, CircleHelp, Activity, Megaphone, MonitorSmartphone, Briefcase, Building2, KeyRound } from 'lucide-react';
 import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useFavicon } from '@/hooks/useFavicon';
 import { SnackHost } from './SnackHost';
@@ -26,13 +26,14 @@ const navItems: NavItem[] = [
   { path: '/admin/avisos', label: 'Avisos', icon: Megaphone },
   { path: '/admin/tenants', label: 'Campanhas', icon: Zap },
   { path: '/admin/parceiros', label: 'Parceiros', icon: Briefcase },
+  { path: '/admin/integracoes', label: 'Integrações', icon: KeyRound },
 ];
 
 // Telas da ady como um todo: só super_admin (a API também recusa)
 const SUPER_ADMIN_ONLY = ['/admin/tickets', '/admin/healthchecks', '/admin/faqs', '/admin/avisos', '/admin/parceiros'];
 
 // Telas só do parceiro (admin_partner)
-const PARTNER_ONLY = ['/admin/clientes'];
+const PARTNER_ONLY = ['/admin/clientes', '/admin/integracoes'];
 
 function isPartnerOnly(pathname: string): boolean {
   return PARTNER_ONLY.some((p) => pathname === p || pathname.startsWith(p + '/'));

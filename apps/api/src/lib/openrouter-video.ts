@@ -1,4 +1,5 @@
 import { AppError } from '../middleware/errorHandler.js';
+import { resolveAiKey } from './ai-key-context.js';
 
 // API assíncrona de vídeo: POST /videos → GET /videos/{id} → GET /videos/{id}/content
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
@@ -21,10 +22,9 @@ export interface VideoJobState {
   unsignedUrls: string[];
 }
 
-function apiKey(): string {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) throw new AppError(500, 'OPENROUTER_API_KEY_MISSING', 'OPENROUTER_API_KEY não configurada.');
-  return key;
+// chave do dono do cliente (ady ou parceiro); ver lib/ai-key-context
+async function apiKey(): Promise<string> {
+  return (await resolveAiKey()).key;
 }
 
 /** Corpo enviado ao OpenRouter. */
@@ -46,7 +46,7 @@ export const openrouterVideoClient = {
   async submit(p: VideoSubmitParams): Promise<string> {
     const res = await fetch(`${OPENROUTER_BASE}/videos`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey()}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await apiKey()}` },
       body: JSON.stringify(buildVideoRequestBody(p)),
       signal: AbortSignal.timeout(60_000),
     });
@@ -62,7 +62,7 @@ export const openrouterVideoClient = {
 
   async getJob(id: string): Promise<VideoJobState> {
     const res = await fetch(`${OPENROUTER_BASE}/videos/${encodeURIComponent(id)}`, {
-      headers: { Authorization: `Bearer ${apiKey()}` },
+      headers: { Authorization: `Bearer ${await apiKey()}` },
       signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
@@ -81,7 +81,7 @@ export const openrouterVideoClient = {
 
   async download(id: string): Promise<Buffer> {
     const res = await fetch(`${OPENROUTER_BASE}/videos/${encodeURIComponent(id)}/content?index=0`, {
-      headers: { Authorization: `Bearer ${apiKey()}` },
+      headers: { Authorization: `Bearer ${await apiKey()}` },
       signal: AbortSignal.timeout(180_000),
     });
     if (!res.ok) throw new AppError(502, 'OPENROUTER_VIDEO_DOWNLOAD_ERROR', `Falha ao baixar o vídeo (${res.status}).`);

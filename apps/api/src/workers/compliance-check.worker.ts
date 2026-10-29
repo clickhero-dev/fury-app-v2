@@ -8,6 +8,7 @@ import { complianceAdjuster } from '../services/studio/compliance-adjuster.servi
 import { buildComplianceUserPrompt } from '../services/studio/compliance-prompt.js';
 import { PlannerRepository } from '../repository/planner.repository.js';
 import { StudioRepository } from '../repository/studio.repository.js';
+import { runWithTenant } from '../lib/ai-key-context.js';
 
 interface ComplianceJobData {
   creativeAssetId: string;
@@ -25,7 +26,8 @@ let complianceWorkerInstance: Worker<ComplianceJobData> | null = null;
 const createComplianceWorker = (): Worker<ComplianceJobData> => {
   return new Worker<ComplianceJobData>(
     STUDIO_COMPLIANCE_QUEUE_NAME,
-    async (job) => {
+    // IA da análise usa a chave do dono do cliente
+    async (job) => runWithTenant(job.data.tenantId, async () => {
       const { creativeAssetId, tenantId } = job.data;
 
       console.log(`[COMPLIANCE] 🔍 Iniciando análise do asset: ${creativeAssetId} | Tenant: ${tenantId}`);
@@ -221,7 +223,7 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
           { approved: false, issues: [], text_percentage: 0 }
         );
       }
-    },
+    }),
     {
       connection: getRedis(),
       concurrency: 5,
