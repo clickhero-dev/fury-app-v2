@@ -439,7 +439,6 @@ export function TenantDetailPage() {
     try {
       await api.patch(`/admin/users/${editUser.id}`, {
         name: editUser.name,
-        email: editUser.email,
         role: editUser.role,
       });
       setMsg("Usuário atualizado");
@@ -695,11 +694,10 @@ export function TenantDetailPage() {
                 <label className={labelCls}>Email</label>
                 <input
                   value={editUser.email}
-                  onChange={(e) =>
-                    setEditUser({ ...editUser, email: e.target.value })
-                  }
+                  readOnly
+                  disabled
                   type="email"
-                  className={inputCls}
+                  className={`${inputCls} opacity-60`}
                 />
               </div>
               <div>

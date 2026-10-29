@@ -110,6 +110,12 @@ router.patch("/partners/:id", controllers.partners.update);
 router.get("/deleted-tenants", controllers.partners.listDeletedTenants);
 router.post("/deleted-tenants/:id/restore", controllers.partners.restoreTenant);
 
+// Permissões (telas bloqueadas) por parceiro e padrão (todos)
+router.get("/partners/:id/permissions", controllers.permissions.get);
+router.put("/partners/:id/permissions", controllers.permissions.set);
+router.get("/permissions/default", controllers.permissions.get);
+router.put("/permissions/default", controllers.permissions.set);
+
 // Plans
 router.get("/plans", controllers.superadmin.listPlans);
 router.post("/plans", controllers.superadmin.createPlan);

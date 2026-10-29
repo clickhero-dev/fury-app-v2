@@ -83,12 +83,20 @@ export function PartnersPage() {
             <p className="text-sm text-[#7E8480]">Empresas parceiras e quantos clientes cada uma pode ter.</p>
           </div>
         </div>
+        <div className="flex flex-wrap gap-2">
+        <Link
+          to="/admin/parceiros/padrao"
+          className="px-4 py-2.5 rounded-lg border border-[#2A2D27] text-[#ECEDEF] hover:border-[#1E88A8]/40 text-sm font-medium"
+        >
+          Permissões padrão (todos)
+        </Link>
         <button
           onClick={() => { setError(""); setShowModal(true); }}
           className="bg-[#1E88A8] hover:bg-[#2299BC] text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
         >
           <Plus className="w-4 h-4" strokeWidth={2.5} /> Novo parceiro
         </button>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3 mb-6">

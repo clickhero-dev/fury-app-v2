@@ -2,14 +2,15 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import api from "@/lib/api";
 import { apiMessage, SlotsBar, type Partner } from "./PartnersPage";
+import { PermissionsPanel } from "./PermissionsPanel";
 
-type Tab = "dados" | "limites";
+type Tab = "dados" | "limites" | "permissoes";
 
 const inputCls =
   "w-full bg-[#1A1C18] border border-[#2A2D27] rounded-lg px-3 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 disabled:opacity-60";
 const btnCls = "bg-[#1E88A8] hover:bg-[#2299BC] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-medium";
 
-// Configurações do parceiro; Permissões e Integrações chegam nas tarefas 8 e 10
+// Configurações do parceiro; Integrações chega na tarefa 10
 export function PartnerConfigPage() {
   const { id } = useParams();
   const [partner, setPartner] = useState<Partner | null>(null);
@@ -67,6 +68,9 @@ export function PartnerConfigPage() {
         <button role="tab" aria-selected={tab === "limites"} className={tabCls("limites")} onClick={() => { setTab("limites"); setMsg(""); }}>
           Limites
         </button>
+        <button role="tab" aria-selected={tab === "permissoes"} className={tabCls("permissoes")} onClick={() => { setTab("permissoes"); setMsg(""); }}>
+          Permissões
+        </button>
       </div>
 
       {msg && <div role="status" className="text-sm text-[#ECEDEF]">{msg}</div>}
@@ -109,6 +113,8 @@ export function PartnerConfigPage() {
           </button>
         </div>
       )}
+
+      {tab === "permissoes" && <PermissionsPanel partnerId={partner.id} />}
     </div>
   );
 }

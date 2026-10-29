@@ -131,6 +131,17 @@ describe('Escopo do parceiro no admin — integração', () => {
     expect((await request(app).patch(`/api/admin/users/${userA}`).set(asPartner()).send({ name: 'Novo', role: 'admin' })).status).toBe(200);
   });
 
+  it('e-mail não é editável, nem pelo super_admin', async () => {
+    for (const as of [asPartner, asSuper]) {
+      const res = await request(app).patch(`/api/admin/users/${userA}`).set(as()).send({ email: `ps-novo-${id}@test.com` });
+      expect(res.status).toBe(400);
+    }
+    // mesmo e-mail (sem troca) passa
+    expect((await request(app).patch(`/api/admin/users/${userA}`).set(asSuper()).send({ name: 'N', email: `ps-cli-a-${id}@test.com` })).status).toBe(200);
+    const [row] = await db.select().from(schema.users).where(eq(schema.users.id, userA));
+    expect(row?.email).toBe(`ps-cli-a-${id}@test.com`);
+  });
+
   it('conta de admin dentro do cliente fica fora do alcance do parceiro', async () => {
     const [other] = await db
       .insert(schema.users)

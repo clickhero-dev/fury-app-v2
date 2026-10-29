@@ -401,10 +401,12 @@ export class SuperAdminController {
 
       const existing = await this.userInScope(req, req.params.id);
       assertRoleAllowed(req, body.role, existing.role);
+      // e-mail não é editável, nem pelo super_admin
+      if (body.email !== undefined && body.email !== existing.email)
+        throw new AppError(400, "EMAIL_NOT_EDITABLE", "O e-mail não pode ser alterado");
 
       const updates: Record<string, unknown> = {};
       if (body.name !== undefined) updates.name = body.name;
-      if (body.email !== undefined) updates.email = body.email;
       if (body.role !== undefined) updates.role = body.role;
       if (body.audienceDefaults !== undefined)
         updates.audienceDefaults = body.audienceDefaults;
