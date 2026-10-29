@@ -42,9 +42,9 @@ export function GoogleIntegrationCard() {
               <Building2 className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-text-primary">Google Ads e Perfil da Empresa</h3>
+              <h3 className="text-base font-semibold text-text-primary">Google Meu Negócio</h3>
               <p className="mt-0.5 text-xs text-text-tertiary">
-                Anúncios e presença da sua empresa no Google
+                Perfil da sua empresa no Google
               </p>
             </div>
           </div>
@@ -74,7 +74,7 @@ export function GoogleIntegrationCard() {
 
         {connected && !tokenValid && (
           <p className="text-xs text-warning">
-            Sua conexão com o Google expirou. Reconecte para continuar anunciando e gerenciando seu perfil.
+            Sua conexão com o Google expirou. Reconecte para continuar gerenciando seu perfil.
           </p>
         )}
       </div>
@@ -83,7 +83,7 @@ export function GoogleIntegrationCard() {
         {connected && !tokenValid && (
           <button
             type="button"
-            onClick={() => connectMutation.mutate('ads')}
+            onClick={() => connectMutation.mutate('settings')}
             disabled={connectMutation.isPending}
             className={cn(
               'flex flex-1 items-center justify-center gap-2 rounded-full bg-[#17708A] py-2 text-xs font-semibold text-white cursor-pointer',
@@ -143,7 +143,7 @@ export function GoogleIntegrationCard() {
         ) : (
           <button
             type="button"
-            onClick={() => connectMutation.mutate('ads')}
+            onClick={() => connectMutation.mutate('settings')}
             disabled={connectMutation.isPending}
             className={cn(
               'flex flex-1 items-center justify-center gap-2 rounded-full bg-[#17708A] py-2 text-xs font-semibold text-white cursor-pointer',
@@ -151,7 +151,7 @@ export function GoogleIntegrationCard() {
               connectMutation.isPending && 'opacity-50'
             )}
           >
-            {connectMutation.isPending ? 'Carregando...' : 'Conectar Google Ads'}
+            {connectMutation.isPending ? 'Carregando...' : 'Conectar Google'}
           </button>
         )}
       </div>

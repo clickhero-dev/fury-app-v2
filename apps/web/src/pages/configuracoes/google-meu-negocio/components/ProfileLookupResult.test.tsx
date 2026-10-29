@@ -115,19 +115,4 @@ describe('ProfileLookupResult — qualidade do perfil (pré-envio)', () => {
 
     expect(screen.getByRole('button', { name: /Criar perfil/i })).toBeEnabled();
   });
-
-  it('explica que o Google está temporariamente indisponível quando a cota é excedida', () => {
-    render(
-      <ProfileLookupResult
-        {...BASE_PROPS}
-        result={null}
-        isError
-        errorCode="GOOGLE_QUOTA_EXCEEDED"
-      />,
-    );
-
-    expect(screen.getByText('Google temporariamente indisponível')).toBeInTheDocument();
-    expect(screen.getByText(/limite temporário de consultas/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Sua conexão com o Google pode ter expirado/i)).not.toBeInTheDocument();
-  });
 });

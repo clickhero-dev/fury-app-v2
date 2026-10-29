@@ -19,7 +19,7 @@ import { GoogleRepository } from '../../repository/google.repository.js';
 // Google Meu Negócio. O service continua sendo o ponto de composição (DI).
 import {
   GOOGLE_AUTH_URL,
-  getGoogleOAuthScope,
+  GOOGLE_OAUTH_SCOPE,
   RETURN_URLS,
   signOAuthState,
   verifyOAuthState,
@@ -119,7 +119,7 @@ export class GoogleService {
     authUrl.searchParams.set('client_id', clientId);
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('scope', getGoogleOAuthScope(context));
+    authUrl.searchParams.set('scope', GOOGLE_OAUTH_SCOPE);
     authUrl.searchParams.set('access_type', 'offline');
     authUrl.searchParams.set('prompt', 'consent');
     authUrl.searchParams.set('state', state);
@@ -285,63 +285,12 @@ export class GoogleService {
 
     const searchLocation = buildSearchLocation(settings, tenant);
     const searchTitle = searchLocation.title ?? '';
-    const client = this.createClientForConnection(connection);
-
-    // A fonte de verdade após OAuth é a lista de localizações administradas
-    // pela própria conta. A busca textual é mantida apenas como fallback para
-    // detectar possível perfil duplicado que ainda não pertence ao usuário.
-    const accounts = await client.listAccounts();
-    const locationsByAccount = await Promise.all(
-      accounts
-        .filter((account) => Boolean(account.name))
-        .map((account) => client.listLocations(account.name ?? '')),
-    );
-    const managedLocations = locationsByAccount.flat();
-
-    if (managedLocations.length > 0) {
-      const matches = managedLocations.map((location) => ({
-        ...mapGbpMatch(
-          { locationName: location.name, location },
-          searchTitle || location.title || '',
-        ),
-        claimed: true,
-        quality: this.assessGoogleProfileQuality(location),
-      }));
-
-      const existingProfile = await repo.findGoogleBusinessProfile();
-      const managedLocation = managedLocations.find(
-        (location) => location.name === existingProfile?.gbpLocationId,
-      ) ?? managedLocations[0];
-      const managedMatch = matches.find(
-        (match) => match.gbpLocationId === managedLocation.name,
-      ) ?? matches[0];
-      const verificationState = existingProfile?.verificationState ?? 'UNVERIFIED';
-      const profileData = {
-        connectionId: connection.id,
-        gbpLocationId: managedMatch.gbpLocationId,
-        name: managedMatch.name,
-        address: managedMatch.address,
-        phone: managedMatch.phone || null,
-        email: managedLocation.emailAddress ?? null,
-        website: managedLocation.websiteUri ?? null,
-        categoryId: managedLocation.categories?.[0]?.categoryId ?? null,
-        categoryDisplayName: managedLocation.categories?.[0]?.displayName ?? null,
-        verificationState,
-        syncStatus: 'synced' as const,
-        lastSyncedAt: new Date(),
-        lastError: null,
-      };
-      const profile = existingProfile
-        ? (await repo.patchBusinessProfile(existingProfile.id, profileData)) ?? existingProfile
-        : await repo.createBusinessProfile(profileData);
-
-      return { found: true, matches, duplicateAlert: false, profile: { id: profile.id } };
-    }
 
     if (!searchTitle) {
       return { found: false, matches: [], duplicateAlert: false };
     }
 
+    const client = this.createClientForConnection(connection);
     const matches = await client.searchGoogleLocations({
       location: searchLocation,
       languageCode: 'pt-BR',

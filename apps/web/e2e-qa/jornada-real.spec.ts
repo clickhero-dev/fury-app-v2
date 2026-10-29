@@ -135,10 +135,6 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       await page.goto('/criar-campanha');
       const next = page.getByRole('button', { name: 'Continuar' });
 
-      // a entrada de Campanhas pede a ação e a plataforma antes do wizard Meta
-      await page.getByRole('button', { name: /Criar campanha/ }).click();
-      await page.getByRole('button', { name: /Meta/ }).click();
-
       // objetivo: formulário de captação + WhatsApp
       await page.getByRole('button', { name: /Formulário de captação/ }).click();
       const phone = page.locator('input[inputmode="tel"]');

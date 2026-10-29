@@ -14,7 +14,6 @@ export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 // (sub do usuário) na troca do code — sem eles o userinfo responde 401/403.
 export const GOOGLE_OAUTH_SCOPE =
   'openid email https://www.googleapis.com/auth/business.manage';
-export const GOOGLE_ADS_OAUTH_SCOPE = 'https://www.googleapis.com/auth/adwords';
 export const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
 export interface OAuthStatePayload {
@@ -33,14 +32,7 @@ export interface GoogleTokenResponse {
 export const RETURN_URLS: Record<OAuthContext, string> = {
   onboarding: '/onboarding/conectar-google?connected=true',
   settings: '/configuracoes/google-meu-negocio?connected=true',
-  ads: '/criar-campanha?platform=google&connected=true',
 };
-
-export function getGoogleOAuthScope(context: OAuthContext): string {
-  return context === 'ads'
-    ? `${GOOGLE_OAUTH_SCOPE} ${GOOGLE_ADS_OAUTH_SCOPE}`
-    : GOOGLE_OAUTH_SCOPE;
-}
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
