@@ -1,7 +1,30 @@
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useSubscription } from '@/hooks/useBilling';
+import { computeSubscriptionState } from '@/components/layout/subscriptionGuard';
 import { AlertTriangle, Mail, ArrowRight } from 'lucide-react';
 import { AdySymbol } from '@/components/AdySymbol';
 
+const REDIRECT_DELAY_MS = 1_500;
+
 export function AssinaturaVencida() {
+  const navigate = useNavigate();
+  const { data: subscription, isError, isSuccess } = useSubscription({ refetchInterval: 60_000 });
+  const subscriptionState = computeSubscriptionState(subscription);
+  const accessReleased = isSuccess && subscriptionState === 'active';
+
+  useEffect(() => {
+    if (!accessReleased) return;
+    const timeout = window.setTimeout(() => navigate('/dashboard', { replace: true }), REDIRECT_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [accessReleased, navigate]);
+
+  if (accessReleased) {
+    return <main role="status" aria-live="polite" className="flex min-h-screen items-center justify-center bg-[#f3f6f8] px-5 text-slate-900 dark:bg-[#0c0d0a] dark:text-white">
+      <p>Acesso liberado. Redirecionando você…</p>
+    </main>;
+  }
+
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-[#f3f6f8] dark:bg-[#0c0d0a] px-5 py-16 text-slate-900 dark:text-white transition-colors duration-300 overflow-hidden">
 
@@ -51,6 +74,12 @@ export function AssinaturaVencida() {
               Sua assinatura expirou. Para continuar aproveitando todas as funcionalidades do ady, escolha um novo plano ou entre em contato com o suporte.
             </p>
           </div>
+
+          {isError && (
+            <p role="status" aria-live="polite" className="text-sm text-amber-700 dark:text-amber-300">
+              Não foi possível atualizar seu acesso agora. Tentaremos novamente em breve.
+            </p>
+          )}
 
           {/* Canais de Atendimento */}
           <div className="rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-[#12130F] p-4 text-left">
