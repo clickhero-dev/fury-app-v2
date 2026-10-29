@@ -57,6 +57,21 @@ beforeEach(() => { vi.useFakeTimers(); mockApiGet.mockReset(); });
 afterEach(() => { vi.useRealTimers(); });
 
 describe('AssinaturaVencida — recuperação de acesso', () => {
+  /* Funcionalidade: mostrar vencimento ao invés de redirecionamento em loop
+   * Cenário: assinatura com data encerrada e marcação não expirável
+   * Dado que a consulta retorna um período passado com a marcação antiga
+   * Quando a pessoa acessa a tela de assinatura vencida
+   * Então permanece na tela, sem mensagem de acesso liberado.
+   */
+  it('mostra a tela vencida mesmo com a marcação não expirável', async () => {
+    mockApiGet.mockResolvedValue({ data: { data: { ...active, isNonExpirable: true, currentPeriodEnd: '2020-01-01T00:00:00Z' } } });
+    renderPage();
+    await flushQueryUpdates();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(screen.getByText('Assinatura Vencida')).toBeInTheDocument();
+    expect(screen.queryByText('Acesso liberado. Redirecionando você…')).not.toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/assinatura-vencida');
+  });
   it('leva ao dashboard quando a consulta inicial confirma assinatura válida', async () => {
     mockApiGet.mockResolvedValue({ data: { data: active } });
     renderPage();
