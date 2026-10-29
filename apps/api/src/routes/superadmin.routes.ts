@@ -36,6 +36,10 @@ partnerRouter.get("/users/check-email/:email", controllers.superadmin.checkEmail
 partnerRouter.patch("/users/:id", controllers.superadmin.updateUser);
 partnerRouter.delete("/users/:id", controllers.superadmin.deleteUser);
 
+// Clientes do parceiro (vagas + Novo Cliente)
+partnerRouter.get("/my-partner", controllers.superadmin.mySlots);
+partnerRouter.post("/my-partner/clients", controllers.superadmin.createPartnerClient);
+
 router.use(partnerRouter);
 
 // Daqui pra baixo: só super_admin (rota nova cai aqui por padrão)

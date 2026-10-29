@@ -185,6 +185,7 @@ describe('Rotas do admin liberadas ao parceiro', () => {
       'DELETE /tenants/:id',
       'DELETE /users/:id',
       'GET /dashboard',
+      'GET /my-partner',
       'GET /tenants',
       'GET /tenants/:id',
       'GET /tenants/:tenantId/brand-kit',
@@ -195,6 +196,7 @@ describe('Rotas do admin liberadas ao parceiro', () => {
       'PATCH /tenants/:tenantId/brand-kit',
       'PATCH /tenants/:tenantId/fury-config',
       'PATCH /users/:id',
+      'POST /my-partner/clients',
       'POST /users',
       'PUT /tenants/:tenantId/goals',
     ]);

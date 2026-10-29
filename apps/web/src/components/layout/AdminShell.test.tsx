@@ -42,7 +42,26 @@ describe('AdminShell', () => {
     expect(screen.queryByRole('link', { name: /faqs/i })).toBeNull();
     expect(screen.queryByRole('link', { name: /parceiros/i })).toBeNull();
     expect(screen.getByRole('link', { name: /usuários/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /clientes/i })).toBeInTheDocument();
     expect(screen.queryByText('conteúdo tickets')).toBeNull();
+    localStorage.clear();
+  });
+
+  it('super_admin não vê a tela Clientes (só do parceiro)', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'owner', platformRole: 'super_admin' }));
+    render(
+      <MemoryRouter initialEntries={['/admin/clientes']}>
+        <Routes>
+          <Route path="/admin" element={<AdminShell />}>
+            <Route path="clientes" element={<div>conteúdo clientes</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('link', { name: /clientes/i })).toBeNull();
+    expect(screen.queryByText('conteúdo clientes')).toBeNull();
+    expect(screen.getByRole('link', { name: /parceiros/i })).toBeInTheDocument();
     localStorage.clear();
   });
 });

@@ -6,6 +6,7 @@ import { AppError } from "../middleware/errorHandler.js";
 import { PARTNER_REACHABLE_ROLES, SuperAdminRepository } from "../repository/superadmin.repository.js";
 import { audienceGeoSchema } from "../lib/audience-geo.js";
 import { rbacService } from "../services/core/rbac.service.js";
+import { slugify } from "./partner.controller.js";
 
 const createUserSchema = z.object({
   tenantId: z.string().uuid(),
@@ -22,6 +23,14 @@ const setupTenantSchema = z.object({
   userEmail: z.string().email(),
   userPassword: z.string().min(8).max(255),
   userRole: z.enum(["owner", "admin", "member"]).default("owner"),
+});
+
+// parceiro cria cliente: cargo, parceiro e slug nunca vêm do body
+const partnerClientSchema = z.object({
+  name: z.string().trim().min(1).max(255),
+  userName: z.string().trim().min(1).max(255),
+  userEmail: z.string().trim().email(),
+  userPassword: z.string().min(8).max(255),
 });
 
 const updateUserSchema = z.object({
@@ -380,6 +389,45 @@ export class SuperAdminController {
         data: { tenant: result.tenant, user: safeUser },
         timestamp: new Date().toISOString(),
       });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // vagas do parceiro logado; super_admin não tem
+  mySlots = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const partnerId = partnerOf(req);
+      const slots = partnerId ? await this.repo.partnerSlots(partnerId) : null;
+      if (!slots) throw new AppError(404, "PARTNER_NOT_FOUND", "Parceiro não encontrado");
+      res.json({ success: true, data: slots, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // "Novo Cliente" do parceiro, sempre dentro do limite de vagas
+  createPartnerClient = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const partnerId = partnerOf(req);
+      if (!partnerId) throw new AppError(404, "PARTNER_NOT_FOUND", "Parceiro não encontrado");
+      const body = partnerClientSchema.parse(req.body);
+
+      // e-mail preso mesmo de conta excluída
+      if (await this.repo.findUserByEmail(body.userEmail))
+        throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
+
+      const base = slugify(body.name) || "cliente";
+      const slug = (await this.repo.findTenantBySlug(base)) ? `${base}-${Date.now().toString(36)}` : base;
+      const passwordHash = await bcrypt.hash(body.userPassword, 10);
+
+      const result = await this.repo.createPartnerClient(partnerId, { name: body.name, slug, userName: body.userName, userEmail: body.userEmail, passwordHash });
+      if (result.status === "not_found") throw new AppError(404, "PARTNER_NOT_FOUND", "Parceiro não encontrado");
+      if (result.status === "limit")
+        throw new AppError(409, "PARTNER_LIMIT", `Limite de clientes atingido (${result.maxTenants} de ${result.maxTenants}).`);
+
+      const { id, name } = result.tenant;
+      res.status(201).json({ success: true, data: { tenant: { id, name, slug: result.tenant.slug }, user: safeUser(result.user) }, timestamp: new Date().toISOString() });
     } catch (err) {
       next(err);
     }

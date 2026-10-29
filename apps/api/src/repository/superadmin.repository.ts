@@ -10,8 +10,9 @@ import {
   furyConfig,
   campaigns,
   creativeAssets,
+  adyPartners,
 } from '@fury/db';
-import { and, desc, eq, gt, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type Tenant = typeof tenants.$inferSelect;
@@ -87,6 +88,57 @@ export class SuperAdminRepository extends TenantScopedRepository {
   }
   async findTenantBySlug(slug: string) {
     return this.db.query.tenants.findFirst({ where: eq(tenants.slug, slug) });
+  }
+
+  // ── Clientes do parceiro ─────────────────────────────────────────
+  // vagas do próprio parceiro: sem chave nem e-mail da conta
+  async partnerSlots(partnerId: string) {
+    const [row] = await this.db
+      .select({
+        id: adyPartners.id,
+        name: adyPartners.name,
+        maxTenants: adyPartners.maxTenants,
+        usedTenants: sql<number>`(SELECT count(*)::int FROM tenants t WHERE t.partner_id = "ady_partners"."id" AND t.deleted_at IS NULL)`.mapWith(Number),
+      })
+      .from(adyPartners)
+      .where(and(eq(adyPartners.id, partnerId), isNull(adyPartners.deletedAt)));
+    return row ?? null;
+  }
+
+  // cliente + dono (+ assinatura no plano do parceiro); linha do parceiro travada = nunca passa do limite
+  async createPartnerClient(
+    partnerId: string,
+    data: { name: string; slug: string; userName: string; userEmail: string; passwordHash: string },
+  ) {
+    return this.db.transaction(async (tx) => {
+      const [partner] = await tx
+        .select({ maxTenants: adyPartners.maxTenants })
+        .from(adyPartners)
+        .where(and(eq(adyPartners.id, partnerId), isNull(adyPartners.deletedAt)))
+        .for('update');
+      if (!partner) return { status: 'not_found' as const };
+      const [{ used }] = await tx.select({ used: sql<number>`count(*)::int`.mapWith(Number) }).from(tenants).where(liveTenants(partnerId));
+      if (used! >= partner.maxTenants) return { status: 'limit' as const, maxTenants: partner.maxTenants };
+
+      const [tenant] = await tx.insert(tenants).values({ name: data.name, slug: data.slug, partnerId }).returning();
+      const [user] = await tx
+        .insert(users)
+        .values({ tenantId: tenant!.id, name: data.userName, email: data.userEmail, passwordHash: data.passwordHash, role: 'owner', platformRole: 'user_partner' })
+        .returning();
+
+      // provisório até a tarefa 10: primeiro plano do parceiro, ativo por 30 dias
+      const plan = await tx.query.plans.findFirst({ where: eq(plans.partnerId, partnerId), orderBy: [asc(plans.createdAt)] });
+      if (plan) {
+        await tx.insert(subscriptions).values({
+          tenantId: tenant!.id,
+          planId: plan.id,
+          status: 'active',
+          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          creativesRemaining: (plan.limits as { creativesPerMonth?: number | null } | null)?.creativesPerMonth ?? null,
+        });
+      }
+      return { status: 'created' as const, tenant: tenant!, user: user! };
+    });
   }
   async createTenant(data: Partial<Tenant>): Promise<Tenant> {
     const [row] = await this.db.insert(tenants).values(data as any).returning();

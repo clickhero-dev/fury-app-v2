@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Clock, Zap, LogOut, LayoutGrid, ArrowLeft, Ticket, CircleHelp, Activity, Megaphone, MonitorSmartphone, Briefcase } from 'lucide-react';
+import { Users, Clock, Zap, LogOut, LayoutGrid, ArrowLeft, Ticket, CircleHelp, Activity, Megaphone, MonitorSmartphone, Briefcase, Building2 } from 'lucide-react';
 import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useFavicon } from '@/hooks/useFavicon';
 import { SnackHost } from './SnackHost';
@@ -17,6 +17,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutGrid },
+  { path: '/admin/clientes', label: 'Clientes', icon: Building2 },
   { path: '/admin/users', label: 'Usuários', icon: Users },
   { path: '/admin/planos', label: 'Planos', icon: Clock },
   { path: '/admin/tickets', label: 'Tickets', icon: Ticket },
@@ -29,6 +30,13 @@ const navItems: NavItem[] = [
 
 // Telas da ady como um todo: só super_admin (a API também recusa)
 const SUPER_ADMIN_ONLY = ['/admin/planos', '/admin/tickets', '/admin/healthchecks', '/admin/faqs', '/admin/avisos', '/admin/parceiros'];
+
+// Telas só do parceiro (admin_partner)
+const PARTNER_ONLY = ['/admin/clientes'];
+
+function isPartnerOnly(pathname: string): boolean {
+  return PARTNER_ONLY.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}
 
 function isSuperAdminOnly(pathname: string): boolean {
   return SUPER_ADMIN_ONLY.some((p) => pathname === p || pathname.startsWith(p + '/'));
@@ -44,13 +52,17 @@ export function AdminShell() {
   const { isBlocked } = useBlockedViews();
   const viewKey = viewKeyForPath(location.pathname);
   const isSuperAdmin = getStoredPlatformRole() === 'super_admin';
+  const isPartner = getStoredPlatformRole() === 'admin_partner';
   const isVisible = (item: NavItem) => {
     if (!isSuperAdmin && isSuperAdminOnly(item.path)) return false;
+    if (!isPartner && isPartnerOnly(item.path)) return false;
     const key = viewKeyForPath(item.path);
     return !key || !isBlocked(key);
   };
   const isPageBlocked =
-    (!isSuperAdmin && isSuperAdminOnly(location.pathname)) || (viewKey !== null && isBlocked(viewKey));
+    (!isSuperAdmin && isSuperAdminOnly(location.pathname)) ||
+    (!isPartner && isPartnerOnly(location.pathname)) ||
+    (viewKey !== null && isBlocked(viewKey));
 
   const handleLogout = () => {
     localStorage.removeItem('token');

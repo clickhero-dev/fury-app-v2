@@ -21,7 +21,7 @@ const updatePartnerSchema = z.object({
   maxTenants: z.number().int().min(0).max(10000).optional(),
 });
 
-function slugify(name: string) {
+export function slugify(name: string) {
   return name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
