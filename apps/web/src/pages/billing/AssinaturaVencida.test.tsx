@@ -11,6 +11,10 @@ Cenário: pessoa já possui assinatura válida
 Dado que a pessoa autenticada abre /assinatura-vencida
 Quando a consulta retorna assinatura válida
 Então ela deve chegar a /dashboard sem permanecer na tela vencida
+Cenário: existe assinatura ativa antiga no cache, mas o estado atual está vencido
+Dado que a consulta compartilhada guarda uma assinatura ativa ainda considerada fresca
+Quando a pessoa abre /assinatura-vencida e a API retorna assinatura vencida
+Então a tela não deve liberar acesso com base somente no valor antigo em cache
 Cenário: renovação identificada durante a espera
 Dado que a assinatura está vencida na tela
 Quando a consulta periódica retorna assinatura válida
@@ -36,8 +40,7 @@ const active: Subscription = {
 const expired: Subscription = { ...active, status: 'past_due', currentPeriodEnd: '2020-01-01T00:00:00.000Z' };
 
 function Location() { return <output data-testid="location">{useLocation().pathname}</output>; }
-function renderPage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderPage(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/assinatura-vencida']}>
     <Routes><Route path="/assinatura-vencida" element={<AssinaturaVencida />} /><Route path="/dashboard" element={<p>Início do Ady</p>} /></Routes>
     <Location />
@@ -63,6 +66,19 @@ describe('AssinaturaVencida — recuperação de acesso', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
     expect(screen.getByTestId('location')).toHaveTextContent('/dashboard');
     expect(screen.queryByText('Assinatura Vencida')).not.toBeInTheDocument();
+  });
+
+  it('não libera acesso usando assinatura ativa em cache antes da consulta atual', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(['billing', 'subscription'], active);
+    mockApiGet.mockResolvedValue({ data: { data: expired } });
+
+    renderPage(client);
+    await flushQueryUpdates();
+
+    expect(screen.queryByText('Acesso liberado. Redirecionando você…')).not.toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/assinatura-vencida');
+    expect(mockApiGet).toHaveBeenCalledTimes(1);
   });
 
   it('consulta novamente após 60 segundos, confirma renovação e direciona ao dashboard', async () => {
