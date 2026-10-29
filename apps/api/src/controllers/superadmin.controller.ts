@@ -31,6 +31,7 @@ const partnerClientSchema = z.object({
   userName: z.string().trim().min(1).max(255),
   userEmail: z.string().trim().email(),
   userPassword: z.string().min(8).max(255),
+  planId: z.string().uuid().optional(),
 });
 
 const updateUserSchema = z.object({
@@ -115,6 +116,8 @@ const updatePlanSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function toMoney(v: number) {
   return { amount: Math.round(v * 100) };
 }
@@ -174,6 +177,13 @@ export class SuperAdminController {
     if (!tenant)
       throw new AppError(404, "TENANT_NOT_FOUND", "Tenant não encontrado");
     return tenant;
+  }
+
+  // plano do escopo (parceiro: os dele; super: os da ady); outro dono = 404
+  private async planInScope(id: string, partnerId: string | null, code = "PLAN_NOT_FOUND") {
+    const plan = UUID_RE.test(id) ? await this.repo.findPlanInScope(id, partnerId) : undefined;
+    if (!plan) throw new AppError(404, code, "Plano não encontrado");
+    return plan;
   }
 
   private async userInScope(req: Request, userId: string) {
@@ -421,7 +431,8 @@ export class SuperAdminController {
       const slug = (await this.repo.findTenantBySlug(base)) ? `${base}-${Date.now().toString(36)}` : base;
       const passwordHash = await bcrypt.hash(body.userPassword, 10);
 
-      const result = await this.repo.createPartnerClient(partnerId, { name: body.name, slug, userName: body.userName, userEmail: body.userEmail, passwordHash });
+      const result = await this.repo.createPartnerClient(partnerId, { name: body.name, slug, userName: body.userName, userEmail: body.userEmail, passwordHash, planId: body.planId });
+      if (result.status === "plan_not_found") throw new AppError(404, "PLAN_NOT_FOUND", "Plano não encontrado");
       if (result.status === "not_found") throw new AppError(404, "PARTNER_NOT_FOUND", "Parceiro não encontrado");
       if (result.status === "limit")
         throw new AppError(409, "PARTNER_LIMIT", `Limite de clientes atingido (${result.maxTenants} de ${result.maxTenants}).`);
@@ -517,6 +528,13 @@ export class SuperAdminController {
     try {
       const repo = this.repo;
       const body = updateSubscriptionSchema.parse(req.body);
+      // forma de pagamento (Asaas) é só da ady
+      if (partnerOf(req)) delete body.billingType;
+
+      // plano precisa ser do mesmo dono do cliente (ady ou o parceiro dele)
+      const tenant = await this.tenantInScope(req, req.params.tenantId);
+      const owner = tenant.partnerId ?? null;
+      if (body.planId !== undefined) await this.planInScope(body.planId, owner);
 
       const sub = await repo.findLatestSubscriptionByTenant(req.params.tenantId);
 
@@ -526,7 +544,7 @@ export class SuperAdminController {
         // Create subscription if none exists
         const planId =
           body.planId ??
-          (await repo.getFirstPlan())?.id;
+          (await repo.getFirstPlan(owner))?.id;
         if (!planId)
           throw new AppError(400, "PLAN_REQUIRED", "Informe um plano ou crie um antes");
 
@@ -755,10 +773,21 @@ export class SuperAdminController {
 
   // ─── Plans ─────────────────────────────────────────────
 
+  // planos que dá para pôr neste cliente: os do dono dele
+  assignablePlans = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tenant = await this.tenantInScope(req, req.params.tenantId);
+      const data = await this.repo.listPlans(tenant.partnerId ?? null);
+      res.json({ success: true, data, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
   listPlans = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const repo = this.repo;
-      const allPlans = await repo.listPlans();
+      const allPlans = await repo.listPlans(partnerOf(req));
 
       const counts = await repo.listSubscriberCountsByPlan();
 
@@ -782,7 +811,8 @@ export class SuperAdminController {
   createPlan = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = createPlanSchema.parse(req.body);
-      const plan = await this.repo.createPlan(body);
+      // dono vem do escopo, nunca do body
+      const plan = await this.repo.createPlan({ ...body, partnerId: partnerOf(req) });
       res
         .status(201)
         .json({ success: true, data: plan, timestamp: new Date().toISOString() });
@@ -795,9 +825,7 @@ export class SuperAdminController {
     try {
       const repo = this.repo;
       const body = updatePlanSchema.parse(req.body);
-      const existing = await repo.findPlanById(req.params.id);
-      if (!existing)
-        throw new AppError(404, "PLAN_NOT_FOUND", "Plano não encontrado");
+      await this.planInScope(req.params.id, partnerOf(req));
 
       await repo.updatePlan(req.params.id, body);
       res.json({
@@ -816,9 +844,7 @@ export class SuperAdminController {
       const { id } = req.params;
       const migrateTo = typeof req.query.migrateTo === "string" ? req.query.migrateTo : undefined;
 
-      const plan = await repo.findPlanById(id);
-      if (!plan)
-        throw new AppError(404, "PLAN_NOT_FOUND", "Plano não encontrado");
+      await this.planInScope(id, partnerOf(req));
 
       // Count subscribers
       const subscriberCount = await repo.countSubscriptionsByPlan(id);
@@ -833,10 +859,8 @@ export class SuperAdminController {
           );
         }
 
-        // ponytail: verify target exists before migrating
-        const targetPlan = await repo.findPlanById(migrateTo);
-        if (!targetPlan)
-          throw new AppError(404, "TARGET_PLAN_NOT_FOUND", "Plano de destino não encontrado");
+        // destino só do mesmo dono
+        await this.planInScope(migrateTo, partnerOf(req), "TARGET_PLAN_NOT_FOUND");
 
         await repo.migratePlanSubscriptions(id, migrateTo);
       }

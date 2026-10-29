@@ -7,6 +7,7 @@ function mockRepo() {
     countUsersByTenant: vi.fn(),
     findLatestSubscriptionByTenant: vi.fn(),
     findPlanById: vi.fn(),
+    findPlanInScope: vi.fn(),
     getTenantById: vi.fn(),
     listUsersByTenant: vi.fn(),
     findFuryConfig: vi.fn(),
@@ -153,7 +154,7 @@ describe("SuperAdminController — happy path", () => {
     const res = mockRes();
     const next = vi.fn();
 
-    await c.listPlans({ params: {}, query: {} } as any, res, next);
+    await c.listPlans({ ...SUPER, params: {}, query: {} } as any, res, next);
 
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -240,13 +241,13 @@ describe("SuperAdminController — erros e validação", () => {
 
   it("updatePlan com plano inexistente propaga 404 PLAN_NOT_FOUND", async () => {
     const repo = mockRepo();
-    repo.findPlanById.mockResolvedValue(null);
+    repo.findPlanInScope.mockResolvedValue(undefined);
 
     const c = new SuperAdminController(repo as any);
     const res = mockRes();
     const next = vi.fn();
 
-    await c.updatePlan({ params: { id: "plan-0" }, body: { name: "X" } } as any, res, next);
+    await c.updatePlan({ ...SUPER, params: { id: "00000000-0000-4000-8000-000000000000" }, body: { name: "X" } } as any, res, next);
 
     expect(repo.updatePlan).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(
@@ -256,14 +257,14 @@ describe("SuperAdminController — erros e validação", () => {
 
   it("deletePlan com assinantes e sem migrateTo propaga 409 PLAN_HAS_SUBSCRIBERS", async () => {
     const repo = mockRepo();
-    repo.findPlanById.mockResolvedValue({ id: "plan-1" });
+    repo.findPlanInScope.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000001" });
     repo.countSubscriptionsByPlan.mockResolvedValue(2);
 
     const c = new SuperAdminController(repo as any);
     const res = mockRes();
     const next = vi.fn();
 
-    await c.deletePlan({ params: { id: "plan-1" }, query: {} } as any, res, next);
+    await c.deletePlan({ ...SUPER, params: { id: "00000000-0000-4000-8000-000000000001" }, query: {} } as any, res, next);
 
     expect(repo.deletePlan).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(

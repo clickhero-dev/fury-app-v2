@@ -40,6 +40,15 @@ partnerRouter.delete("/users/:id", controllers.superadmin.deleteUser);
 partnerRouter.get("/my-partner", controllers.superadmin.mySlots);
 partnerRouter.post("/my-partner/clients", controllers.superadmin.createPartnerClient);
 
+// Planos (cada um vê os seus: parceiro os dele, super os da ady) e assinatura dos clientes
+partnerRouter.get("/plans", controllers.superadmin.listPlans);
+partnerRouter.post("/plans", controllers.superadmin.createPlan);
+partnerRouter.patch("/plans/:id", controllers.superadmin.updatePlan);
+partnerRouter.delete("/plans/:id", controllers.superadmin.deletePlan);
+partnerRouter.get("/tenants/:tenantId/assignable-plans", controllers.superadmin.assignablePlans);
+partnerRouter.patch("/tenants/:tenantId/subscription", controllers.superadmin.updateSubscription);
+partnerRouter.post("/tenants/:tenantId/reset-quota", controllers.superadmin.resetQuota);
+
 router.use(partnerRouter);
 
 // Daqui pra baixo: só super_admin (rota nova cai aqui por padrão)
@@ -96,16 +105,6 @@ router.post('/healthchecks/run', controllers.metaHealthchecks.run);
 // Setup tenant + user
 router.post("/setup-tenant", controllers.superadmin.setupTenant);
 
-// Subscription
-router.patch(
-  "/tenants/:tenantId/subscription",
-  controllers.superadmin.updateSubscription,
-);
-router.post(
-  "/tenants/:tenantId/reset-quota",
-  controllers.superadmin.resetQuota,
-);
-
 // Parceiros (empresa + conta do parceiro) e restauração de cliente excluído
 router.get("/partners", controllers.partners.list);
 router.post("/partners", controllers.partners.create);
@@ -119,11 +118,5 @@ router.get("/partners/:id/permissions", controllers.permissions.get);
 router.put("/partners/:id/permissions", controllers.permissions.set);
 router.get("/permissions/default", controllers.permissions.get);
 router.put("/permissions/default", controllers.permissions.set);
-
-// Plans
-router.get("/plans", controllers.superadmin.listPlans);
-router.post("/plans", controllers.superadmin.createPlan);
-router.patch("/plans/:id", controllers.superadmin.updatePlan);
-router.delete("/plans/:id", controllers.superadmin.deletePlan);
 
 export default router;

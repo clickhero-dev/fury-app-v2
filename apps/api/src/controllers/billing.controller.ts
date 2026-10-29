@@ -14,9 +14,9 @@ const subscribeSchema = z.object({
 export class BillingController {
   constructor(private service: BillingService) {}
 
-  listPlans = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  listPlans = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const data = await this.service.listActivePlans();
+      const data = await this.service.listActivePlans(req.tenant!.tenantId);
       res.json({ success: true, data, timestamp: new Date().toISOString() });
     } catch (e) { next(e); }
   };

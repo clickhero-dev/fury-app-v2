@@ -102,11 +102,15 @@ describe('Clientes do parceiro — integração', () => {
     expect((await request(app).get('/api/admin/my-partner').set(bearer(tokenA))).body.data.usedTenants).toBe(1);
   });
 
-  it('com plano do parceiro, cliente nasce com assinatura ativa', async () => {
+  it('com plano escolhido, cliente nasce com assinatura ativa; plano desativado não vale', async () => {
     const [plan] = await db.insert(schema.plans)
-      .values({ name: `PC Básico ${id}`, priceCents: 100, interval: 'monthly', isActive: false, partnerId: partnerB, limits: { creativesPerMonth: 8 } })
+      .values({ name: `PC Básico ${id}`, priceCents: 100, interval: 'monthly', partnerId: partnerB, limits: { creativesPerMonth: 8 } })
       .returning();
-    const res = track(await create(tokenB));
+    const [off] = await db.insert(schema.plans)
+      .values({ name: `PC Off ${id}`, priceCents: 100, interval: 'monthly', isActive: false, partnerId: partnerB })
+      .returning();
+    expect((await create(tokenB, client({ planId: off!.id }))).status).toBe(404);
+    const res = track(await create(tokenB, client({ planId: plan!.id })));
     expect(res.status).toBe(201);
     const [sub] = await db.select().from(schema.subscriptions).where(eq(schema.subscriptions.tenantId, res.body.data.tenant.id));
     expect(sub).toMatchObject({ planId: plan!.id, status: 'active', creativesRemaining: 8 });

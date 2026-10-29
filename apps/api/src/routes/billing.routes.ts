@@ -6,14 +6,13 @@ import { cacheMiddleware } from '../middleware/cache.middleware.js';
 
 const router = Router();
 
-// Public
-router.get('/plans', controllers.billing.listPlans);
-
 // Webhook (sem auth — validado pelo header de token no controller)
 router.post('/webhook', controllers.billing.webhook);
 
 // Protected (auth + tenant)
 router.use(authMiddleware, tenantMiddleware);
+// planos variam por cliente (ady ou parceiro), por isso exige login
+router.get('/plans', controllers.billing.listPlans);
 router.post('/subscribe', controllers.billing.subscribe);
 router.get('/subscription', cacheMiddleware({ ttl: 60 }), controllers.billing.getSubscription);
 router.get('/invoices', controllers.billing.listInvoices);

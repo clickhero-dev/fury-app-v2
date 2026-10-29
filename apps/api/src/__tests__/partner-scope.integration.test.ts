@@ -157,10 +157,7 @@ describe('Escopo do parceiro no admin — integração', () => {
 
   it('rotas só do super_admin → 403 para o parceiro', async () => {
     const calls = [
-      request(app).patch(`/api/admin/tenants/${clientA}/subscription`).send({ status: 'active' }),
-      request(app).post(`/api/admin/tenants/${clientA}/reset-quota`),
       request(app).post('/api/admin/setup-tenant').send({}),
-      request(app).get('/api/admin/plans'),
       request(app).get('/api/admin/tickets'),
       request(app).get('/api/admin/healthchecks/users'),
     ];
@@ -182,21 +179,28 @@ describe('Rotas do admin liberadas ao parceiro', () => {
 
   it('lista fechada', () => {
     expect(routesOf((partnerRouter as any).stack).sort()).toEqual([
+      'DELETE /plans/:id',
       'DELETE /tenants/:id',
       'DELETE /users/:id',
       'GET /dashboard',
       'GET /my-partner',
+      'GET /plans',
       'GET /tenants',
       'GET /tenants/:id',
+      'GET /tenants/:tenantId/assignable-plans',
       'GET /tenants/:tenantId/brand-kit',
       'GET /tenants/:tenantId/campaigns',
       'GET /users',
       'GET /users/check-email/:email',
+      'PATCH /plans/:id',
       'PATCH /tenants/:tenantId/audience',
       'PATCH /tenants/:tenantId/brand-kit',
       'PATCH /tenants/:tenantId/fury-config',
+      'PATCH /tenants/:tenantId/subscription',
       'PATCH /users/:id',
       'POST /my-partner/clients',
+      'POST /plans',
+      'POST /tenants/:tenantId/reset-quota',
       'POST /users',
       'PUT /tenants/:tenantId/goals',
     ]);

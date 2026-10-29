@@ -48,8 +48,10 @@ export class BillingService {
     return this.repoFactory(tenantId);
   }
 
-  async listActivePlans() {
-    return this.repo('').listActivePlans();
+  // cliente de parceiro vê só os planos do parceiro; cliente ady, só os da ady
+  async listActivePlans(tenantId: string) {
+    const tenant = await this.repo(tenantId).findTenant();
+    return this.repo('').listActivePlans(tenant?.partnerId ?? null);
   }
 
   async handleWebhook(event: WebhookEvent): Promise<boolean> {
@@ -92,8 +94,11 @@ export class BillingService {
   }
 
   async subscribe(tenantId: string, payload: SubscribePayload) {
+    // cliente de parceiro não paga pela ady: o parceiro atribui o plano
+    if ((await this.repo(tenantId).findTenant())?.partnerId)
+      throw new AppError(403, 'PARTNER_MANAGED', 'Sua assinatura é gerenciada pelo seu parceiro');
     const plan = await this.repo('').findPlanById(payload.planId, true);
-    if (!plan) throw new AppError(404, 'PLAN_NOT_FOUND', 'Plano não encontrado');
+    if (!plan || plan.partnerId) throw new AppError(404, 'PLAN_NOT_FOUND', 'Plano não encontrado');
 
     const now = new Date();
     const existing = await this.repo(tenantId).findSubscription();

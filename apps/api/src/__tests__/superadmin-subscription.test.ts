@@ -5,12 +5,14 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const {
+  mockTenantFindFirst,
   mockSubFindFirst,
   mockPlanFindFirst,
   mockInsert,
   mockInsertReturn,
   mockUpdate,
 } = vi.hoisted(() => ({
+  mockTenantFindFirst: vi.fn(async () => ({ id: "tenant-1", partnerId: null })),
   mockSubFindFirst: vi.fn(),
   mockPlanFindFirst: vi.fn(),
   mockInsert: vi.fn(),
@@ -21,6 +23,7 @@ const {
 vi.mock("@fury/db", () => ({
   db: {
     query: {
+      tenants: { findFirst: mockTenantFindFirst },
       subscriptions: { findFirst: mockSubFindFirst },
       plans: { findFirst: mockPlanFindFirst },
     },
@@ -60,6 +63,8 @@ function mockReq(overrides: Record<string, unknown> = {}): Request {
   return {
     params: { tenantId: "tenant-1" },
     body: {},
+    // escopo do super_admin, gravado pelo adminScopeMiddleware
+    adminScope: { partnerId: null },
     ...overrides,
   } as unknown as Request;
 }
@@ -154,9 +159,9 @@ describe("updateSubscription (superadmin)", () => {
 
     await controller.updateSubscription(req, res, next);
 
-    // Não busca plano fallback (planId já veio no body), mas ainda busca
-    // o plano escolhido 1x para ler os limits e definir creativesRemaining.
-    expect(mockPlanFindFirst).toHaveBeenCalledTimes(1);
+    // Não busca plano fallback (planId já veio no body); busca o plano 2x:
+    // confere o dono e lê os limits para definir creativesRemaining.
+    expect(mockPlanFindFirst).toHaveBeenCalledTimes(2);
     const inserted = mockInsert.mock.calls[0][0];
     expect(inserted.planId).toBe("00000000-0000-4000-8000-000000000001");
   });

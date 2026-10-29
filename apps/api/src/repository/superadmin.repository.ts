@@ -12,7 +12,7 @@ import {
   creativeAssets,
   adyPartners,
 } from '@fury/db';
-import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type Tenant = typeof tenants.$inferSelect;
@@ -62,6 +62,11 @@ export function mapRecentActivity(
 // usuários que o parceiro alcança: só os dos clientes, nunca contas de admin
 export const PARTNER_REACHABLE_ROLES = ['user', 'user_partner'];
 
+// dono do plano: null = ady, senão o parceiro
+function planOwner(partnerId: string | null) {
+  return partnerId ? eq(plans.partnerId, partnerId) : isNull(plans.partnerId);
+}
+
 // clientes não excluídos; com partnerId, só os daquele parceiro
 function liveTenants(partnerId: string | null) {
   return and(isNull(tenants.deletedAt), partnerId ? eq(tenants.partnerId, partnerId) : undefined);
@@ -108,7 +113,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
   // cliente + dono (+ assinatura no plano do parceiro); linha do parceiro travada = nunca passa do limite
   async createPartnerClient(
     partnerId: string,
-    data: { name: string; slug: string; userName: string; userEmail: string; passwordHash: string },
+    data: { name: string; slug: string; userName: string; userEmail: string; passwordHash: string; planId?: string },
   ) {
     return this.db.transaction(async (tx) => {
       const [partner] = await tx
@@ -119,6 +124,11 @@ export class SuperAdminRepository extends TenantScopedRepository {
       if (!partner) return { status: 'not_found' as const };
       const [{ used }] = await tx.select({ used: sql<number>`count(*)::int`.mapWith(Number) }).from(tenants).where(liveTenants(partnerId));
       if (used! >= partner.maxTenants) return { status: 'limit' as const, maxTenants: partner.maxTenants };
+      // plano escolhido: só um plano ativo do próprio parceiro
+      const plan = data.planId
+        ? await tx.query.plans.findFirst({ where: and(eq(plans.id, data.planId), eq(plans.partnerId, partnerId), eq(plans.isActive, true)) })
+        : undefined;
+      if (data.planId && !plan) return { status: 'plan_not_found' as const };
 
       const [tenant] = await tx.insert(tenants).values({ name: data.name, slug: data.slug, partnerId }).returning();
       const [user] = await tx
@@ -126,8 +136,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
         .values({ tenantId: tenant!.id, name: data.userName, email: data.userEmail, passwordHash: data.passwordHash, role: 'owner', platformRole: 'user_partner' })
         .returning();
 
-      // provisório até a tarefa 10: primeiro plano do parceiro, ativo por 30 dias
-      const plan = await tx.query.plans.findFirst({ where: eq(plans.partnerId, partnerId), orderBy: [asc(plans.createdAt)] });
+      // com plano: assinatura ativa por 30 dias; sem plano, o parceiro atribui depois
       if (plan) {
         await tx.insert(subscriptions).values({
           tenantId: tenant!.id,
@@ -205,14 +214,18 @@ export class SuperAdminRepository extends TenantScopedRepository {
   }
 
   // ── Plans ────────────────────────────────────────────────────────
-  async listPlans() {
-    return this.db.query.plans.findMany({ orderBy: [desc(plans.createdAt)] });
+  // partnerId null = planos da ady; senão só os daquele parceiro
+  async listPlans(partnerId: string | null = null) {
+    return this.db.query.plans.findMany({ where: planOwner(partnerId), orderBy: [desc(plans.createdAt)] });
   }
   async findPlanById(id: string) {
     return this.db.query.plans.findFirst({ where: eq(plans.id, id) });
   }
-  async getFirstPlan() {
-    return this.db.query.plans.findFirst({ orderBy: [plans.createdAt] });
+  async findPlanInScope(id: string, partnerId: string | null) {
+    return this.db.query.plans.findFirst({ where: and(eq(plans.id, id), planOwner(partnerId)) });
+  }
+  async getFirstPlan(partnerId: string | null = null) {
+    return this.db.query.plans.findFirst({ where: planOwner(partnerId), orderBy: [plans.createdAt] });
   }
   async createPlan(data: Partial<Plan>): Promise<Plan> {
     const [row] = await this.db.insert(plans).values(data as any).returning();

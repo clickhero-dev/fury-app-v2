@@ -16,7 +16,14 @@ interface Client {
   createdAt: string;
 }
 
-const EMPTY_FORM = { name: "", userName: "", userEmail: "", userPassword: "" };
+interface PlanOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+const EMPTY_FORM = { name: "", userName: "", userEmail: "", userPassword: "", planId: "" };
 
 const inputCls =
   "w-full bg-[#1A1C18] border border-[#2A2D27] rounded-lg px-3 py-2.5 text-sm text-[#ECEDEF] placeholder:text-[#5A605C] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30";
@@ -25,16 +32,19 @@ const inputCls =
 export function ClientesPage() {
   const [slots, setSlots] = useState<Slots | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const load = () =>
-    Promise.all([api.get("/admin/my-partner"), api.get("/admin/tenants")])
-      .then(([s, t]) => {
+    Promise.all([api.get("/admin/my-partner"), api.get("/admin/tenants"), api.get("/admin/plans")])
+      .then(([s, t, p]) => {
         setSlots(s.data.data);
         setClients(t.data.data);
+        // só os ativos, do mais antigo para o mais novo
+        setPlans((p.data.data as PlanOption[]).filter((x) => x.isActive).sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
       })
       .catch((err) => setError(apiMessage(err, "Não foi possível carregar os clientes.")));
 
@@ -47,7 +57,8 @@ export function ClientesPage() {
     setSaving(true);
     setError("");
     try {
-      await api.post("/admin/my-partner/clients", form);
+      const { planId, ...rest } = form;
+      await api.post("/admin/my-partner/clients", planId ? form : rest);
       setShowModal(false);
       setForm(EMPTY_FORM);
       await load();
@@ -79,7 +90,7 @@ export function ClientesPage() {
         </div>
         <button
           disabled={full}
-          onClick={() => { setError(""); setShowModal(true); }}
+          onClick={() => { setError(""); setForm({ ...EMPTY_FORM, planId: plans[0]?.id ?? "" }); setShowModal(true); }}
           className="bg-[#1E88A8] hover:bg-[#2299BC] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
         >
           <Plus className="w-4 h-4" strokeWidth={2.5} /> Novo Cliente
@@ -145,6 +156,14 @@ export function ClientesPage() {
               <span className="text-xs font-medium text-[#7E8480]">Senha inicial (mínimo 8 caracteres)</span>
               <input required type="password" minLength={8} className={inputCls} value={form.userPassword}
                 onChange={(e) => setForm({ ...form, userPassword: e.target.value })} />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium text-[#7E8480]">Plano</span>
+              <select className={inputCls} value={form.planId} onChange={(e) => setForm({ ...form, planId: e.target.value })}>
+                <option value="">Sem plano (atribuir depois)</option>
+                {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              {!form.planId && <span className="block text-xs text-[#7E8480]">Sem plano, o cliente só entra no app depois que você atribuir um.</span>}
             </label>
             {error && <p role="alert" className="text-sm text-[#E05A4B]">{error}</p>}
             <button type="submit" disabled={saving}

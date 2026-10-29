@@ -29,7 +29,7 @@ const navItems: NavItem[] = [
 ];
 
 // Telas da ady como um todo: só super_admin (a API também recusa)
-const SUPER_ADMIN_ONLY = ['/admin/planos', '/admin/tickets', '/admin/healthchecks', '/admin/faqs', '/admin/avisos', '/admin/parceiros'];
+const SUPER_ADMIN_ONLY = ['/admin/tickets', '/admin/healthchecks', '/admin/faqs', '/admin/avisos', '/admin/parceiros'];
 
 // Telas só do parceiro (admin_partner)
 const PARTNER_ONLY = ['/admin/clientes'];

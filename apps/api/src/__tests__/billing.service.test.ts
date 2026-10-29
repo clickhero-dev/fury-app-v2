@@ -7,6 +7,7 @@ const subRow = { id: 's1', planId: 'p1', status: 'trial' };
 function makeRepo(override: Record<string, any> = {}) {
   const base = {
     listActivePlans: vi.fn(async () => [plan]),
+    findTenant: vi.fn(async () => ({ id: 't-1', partnerId: null })),
     findPlanById: vi.fn(async () => plan),
     findSubscription: vi.fn(async () => null),
     findSubscriptionByAsaasId: vi.fn(async () => null),
@@ -35,7 +36,7 @@ const svc = new BillingService(() => repo as any, asaas as any);
 
 describe('BillingService', () => {
   it('listActivePlans', async () => {
-    await expect(svc.listActivePlans()).resolves.toEqual([plan]);
+    await expect(svc.listActivePlans('t-1')).resolves.toEqual([plan]);
   });
 
   it('handleWebhook cria invoice e ativa subscription quando pago', async () => {
@@ -48,6 +49,14 @@ describe('BillingService', () => {
   it('subscribe bloqueia quando já assinatura ativa', async () => {
     repo = makeRepo({ findSubscription: vi.fn(async () => ({ id: 's1', status: 'active', currentPeriodEnd: new Date(Date.now() + 86400000) })) });
     await expect(svc.subscribe('t-1', { planId: 'p1', billingType: 'PIX', customerName: 'N', customerEmail: 'e@e.com', customerCpfCnpj: '12345678909' })).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('subscribe: cliente de parceiro não paga pela ady; plano de parceiro não vale para cliente ady', async () => {
+    const payload = { planId: 'p1', billingType: 'PIX' as const, customerName: 'N', customerEmail: 'e@e.com', customerCpfCnpj: '12345678909' };
+    repo = makeRepo({ findTenant: vi.fn(async () => ({ id: 't-1', partnerId: 'par-1' })) });
+    await expect(svc.subscribe('t-1', payload)).rejects.toMatchObject({ statusCode: 403, code: 'PARTNER_MANAGED' });
+    repo = makeRepo({ findPlanById: vi.fn(async () => ({ ...plan, partnerId: 'par-1' })) });
+    await expect(svc.subscribe('t-1', payload)).rejects.toMatchObject({ statusCode: 404 });
   });
 
   it('subscribe persiste subscription trial', async () => {

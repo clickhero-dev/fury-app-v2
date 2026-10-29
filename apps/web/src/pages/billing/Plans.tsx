@@ -15,6 +15,7 @@ import {
 import { usePlans, useSubscription, useSubscribe } from '@/hooks/useBilling';
 import { useAuth } from '@/hooks/useAuth';
 import type { Plan } from '@/types/billing';
+import { getStoredPlatformRole } from '@/lib/platform-role';
 
 const PLAN_DISPLAY: Record<string, {
   icon: React.ReactNode;
@@ -233,9 +234,11 @@ interface PlanCardProps {
   plan: Plan;
   isCurrentPlan: boolean;
   onSubscribe: () => void;
+  // cliente de parceiro: quem assina é o parceiro
+  managedByPartner?: boolean;
 }
 
-function PlanCard({ plan, isCurrentPlan, onSubscribe }: PlanCardProps) {
+function PlanCard({ plan, isCurrentPlan, onSubscribe, managedByPartner = false }: PlanCardProps) {
   const key = getPlanKey(plan.name);
   const display = PLAN_DISPLAY[key] ?? PLAN_DISPLAY.starter;
   const features = (plan.features && plan.features.length > 0) ? plan.features : display.features;
@@ -301,10 +304,10 @@ function PlanCard({ plan, isCurrentPlan, onSubscribe }: PlanCardProps) {
             ? 'bg-[#17708A] hover:bg-[#17708A]/80 text-white border-transparent'
             : 'border-white/10 text-text-primary hover:bg-white/5'
         }`}
-        disabled={isCurrentPlan}
+        disabled={isCurrentPlan || managedByPartner}
         onClick={onSubscribe}
       >
-        {isCurrentPlan ? 'Plano atual' : 'Assinar agora'}
+        {isCurrentPlan ? 'Plano atual' : managedByPartner ? 'Fale com seu parceiro' : 'Assinar agora'}
       </Button>
     </div>
   );
@@ -315,8 +318,10 @@ export function Plans() {
   const { data: subscription } = useSubscription();
   const { user } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const managedByPartner = getStoredPlatformRole() === 'user_partner';
 
-  const staticPlans: Plan[] = plans.length > 0 ? plans : [
+  // planos de exemplo só para cliente ady
+  const staticPlans: Plan[] = plans.length > 0 || managedByPartner ? plans : [
     { id: '', name: 'Starter', priceCents: 29700, interval: 'monthly', features: null, isActive: true, createdAt: '' },
     { id: '', name: 'Pro', priceCents: 59700, interval: 'monthly', features: null, isActive: true, createdAt: '' },
     { id: '', name: 'Enterprise', priceCents: 149700, interval: 'monthly', features: null, isActive: true, createdAt: '' },
@@ -341,9 +346,15 @@ export function Plans() {
                 Turbine seus resultados com o plano certo
               </h2>
               <p className="text-text-secondary text-sm">
-                Todos os planos incluem 7 dias de trial gratuito. Cancele quando quiser.
+                {managedByPartner
+                  ? 'Seu plano é contratado e alterado pelo seu parceiro.'
+                  : 'Todos os planos incluem 7 dias de trial gratuito. Cancele quando quiser.'}
               </p>
             </div>
+
+            {staticPlans.length === 0 && (
+              <p className="text-center text-sm text-text-secondary">Seu parceiro ainda não publicou planos.</p>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
               {staticPlans.map((plan) => (
@@ -352,13 +363,16 @@ export function Plans() {
                   plan={plan}
                   isCurrentPlan={subscription?.planId === plan.id && plan.id !== '' && subscription?.status !== 'cancelled'}
                   onSubscribe={() => setSelectedPlan(plan)}
+                  managedByPartner={managedByPartner}
                 />
               ))}
             </div>
 
-            <p className="text-center text-xs text-text-secondary pt-2">
-              Pagamento processado com segurança via Asaas. Aceita PIX, Boleto e Cartão de Crédito.
-            </p>
+            {!managedByPartner && (
+              <p className="text-center text-xs text-text-secondary pt-2">
+                Pagamento processado com segurança via Asaas. Aceita PIX, Boleto e Cartão de Crédito.
+              </p>
+            )}
           </div>
         )}
 

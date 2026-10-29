@@ -218,7 +218,8 @@ export function TenantDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/admin/tenants/${id}`),
-      isSuperAdmin ? api.get("/admin/plans") : Promise.resolve({ data: { data: [] } }),
+      // só os planos do dono do cliente (ady ou o parceiro)
+      api.get(`/admin/tenants/${id}/assignable-plans`),
     ])
       .then(([tRes, pRes]) => {
         const t = tRes.data.data as TenantData;
@@ -815,7 +816,7 @@ export function TenantDetailPage() {
                       <p className="mt-1 text-sm font-semibold text-admin-text">Créditos ilimitados</p>
                     )}
                   </div>
-                  {hasLimitedQuota && isSuperAdmin && (
+                  {hasLimitedQuota && (
                     <button
                       onClick={renewCreativeQuota}
                       disabled={renewingQuota}
@@ -896,7 +897,6 @@ export function TenantDetailPage() {
             />
             Plano não expirável (ignora vencimento)
           </label>
-          {isSuperAdmin && (
           <div className="flex items-center gap-3">
             <button onClick={saveSub} disabled={saving} className={btnCls}>
               <Save className="w-4 h-4" /> Salvar
@@ -920,7 +920,6 @@ export function TenantDetailPage() {
               Ativar (30 dias)
             </button>
           </div>
-          )}
         </div>
         </div>
       )}

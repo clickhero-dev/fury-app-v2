@@ -43,6 +43,7 @@ describe('AdminShell', () => {
     expect(screen.queryByRole('link', { name: /parceiros/i })).toBeNull();
     expect(screen.getByRole('link', { name: /usuários/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /clientes/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /planos/i })).toBeInTheDocument();
     expect(screen.queryByText('conteúdo tickets')).toBeNull();
     localStorage.clear();
   });

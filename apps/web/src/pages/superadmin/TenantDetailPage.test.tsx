@@ -16,9 +16,9 @@ Cenário: superadmin renova a cota com sucesso
   Quando o superadmin solicita a renovação
   Então a API administrativa é chamada e a tela confirma a renovação
 
-Cenário: parceiro não altera a assinatura
+Cenário: parceiro administra a assinatura do próprio cliente
   Dado que quem abre a aba Assinatura é um parceiro (admin_partner)
-  Então vê o saldo, mas não os botões Salvar e Renovar cota, e os planos não são carregados
+  Então vê Salvar e Renovar cota, e só os planos que dá para atribuir a este cliente
 
 Cenário: renovação de cota falha
   Dado que a API não consegue renovar a cota
@@ -62,7 +62,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.setItem('user', JSON.stringify({ platformRole: 'super_admin' }));
-  mockGet.mockImplementation((url: string) => Promise.resolve(url === '/admin/plans' ? { data: { data: [] } } : tenantResponse()));
+  mockGet.mockImplementation((url: string) => Promise.resolve(url.endsWith('/assignable-plans') ? { data: { data: [] } } : tenantResponse()));
 });
 
 describe('TenantDetailPage — créditos de imagem', () => {
@@ -76,20 +76,25 @@ describe('TenantDetailPage — créditos de imagem', () => {
     expect(screen.getByRole('button', { name: 'Renovar cota' })).toBeEnabled();
   });
 
-  it('parceiro vê o saldo sem Salvar nem Renovar cota', async () => {
+  it('parceiro administra a assinatura com os planos do cliente', async () => {
     localStorage.setItem('user', JSON.stringify({ platformRole: 'admin_partner' }));
+    mockGet.mockImplementation((url: string) => Promise.resolve(url.endsWith('/assignable-plans')
+      ? { data: { data: [{ id: 'plan-p', name: 'Básico Parceiro', priceCents: 5000, interval: 'monthly', isActive: true }] } }
+      : tenantResponse()));
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Assinatura' }));
 
     expect(await screen.findByText('2 de 10 disponíveis')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Renovar cota' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Salvar' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Renovar cota' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Salvar' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Básico Parceiro/ })).toBeInTheDocument();
+    expect(mockGet).toHaveBeenCalledWith('/admin/tenants/tenant-1/assignable-plans');
     expect(mockGet).not.toHaveBeenCalledWith('/admin/plans');
   });
 
   it('mostra créditos ilimitados sem oferecer renovação', async () => {
-    mockGet.mockImplementation((url: string) => Promise.resolve(url === '/admin/plans' ? { data: { data: [] } } : tenantResponse({ creativesRemaining: null, plan: { id: 'plan-1', name: 'Enterprise', priceCents: 0, interval: 'month', limits: { creativesPerMonth: null } } })));
+    mockGet.mockImplementation((url: string) => Promise.resolve(url.endsWith('/assignable-plans') ? { data: { data: [] } } : tenantResponse({ creativesRemaining: null, plan: { id: 'plan-1', name: 'Enterprise', priceCents: 0, interval: 'month', limits: { creativesPerMonth: null } } })));
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Assinatura' }));
