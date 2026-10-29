@@ -3,11 +3,6 @@
 
 Funcionalidade: Confirmação de desconexão Meta
 
- Cenário: mostrar a integração Google ao lado da Meta
-   Dado que a pessoa abriu a página de Integrações
-   Quando as conexões são carregadas
-   Então ela vê o card Google com seu status
-
   Cenário: informar os dados apagados e confirmar a desconexão
     Dado uma conta Meta conectada
     Quando a pessoa abre o diálogo e confirma Desconectar
@@ -89,15 +84,6 @@ describe('IntegracoesContent — status de conexão da conta Meta', () => {
 
     expect(await screen.findByText('Ativa')).toBeInTheDocument();
     expect(screen.queryByText('Pausada')).not.toBeInTheDocument();
-  });
-
-  it('mostra o card Google com o status da conexão', async () => {
-    mockApi([]);
-
-    render(<IntegracoesContent />, { wrapper: makeWrapper() });
-
-    expect(await screen.findByRole('heading', { name: 'Google Ads e Perfil da Empresa' })).toBeInTheDocument();
-    expect(screen.getByText('Não conectado')).toBeInTheDocument();
   });
 
   it('exibe o badge "Pausada" quando o token da conexão Meta expirou', async () => {

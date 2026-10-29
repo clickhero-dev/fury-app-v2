@@ -34,7 +34,6 @@ import { type Period, getPeriodDates, formatPeriodLabel } from '@/lib/period-uti
 import { PeriodSelector } from '@/components/PeriodSelector';
 import { MetaSyncNotice } from '../../components/MetaSyncNotice';
 import { getLatestSync } from '../../lib/format-last-sync';
-import { getSprint7Campaigns, getSprint7DashboardMetrics, type Sprint7Provider } from '@/lib/google-sprint-7-mock-data';
 
 // ─── Design tokens (ady) ──────────────────────────────────────────────────────
 
@@ -687,77 +686,8 @@ function InstagramEngagementSection({
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
-function ProviderSwitcher({ value, onChange }: { value: Sprint7Provider; onChange: (provider: Sprint7Provider) => void }) {
-  return (
-    <div className="inline-flex rounded-full border border-[#262824] bg-[#161814] p-1" aria-label="Canal de anúncios">
-      {(['meta', 'google'] as const).map((provider) => (
-        <button
-          key={provider}
-          type="button"
-          aria-pressed={value === provider}
-          onClick={() => onChange(provider)}
-          className={`min-h-9 rounded-full px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] ${value === provider ? 'bg-[#1E88A8] text-white' : 'text-[#A3A8B3] hover:text-white'}`}
-        >
-          {provider === 'meta' ? 'Meta' : 'Google'}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function GoogleDashboardMock({ onProviderChange }: { onProviderChange: (provider: Sprint7Provider) => void }) {
-  const metrics = getSprint7DashboardMetrics('google');
-  const campaigns = getSprint7Campaigns('google');
-  const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-  const count = new Intl.NumberFormat('pt-BR');
-
-  return (
-    <AppLayout>
-      <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 text-[#ECEDEF] sm:px-10">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Painel</h1>
-            <p className="mt-1 text-sm text-[#9A9D96]">Google Ads · {metrics.periodLabel}</p>
-          </div>
-          <ProviderSwitcher value="google" onChange={onProviderChange} />
-        </div>
-        <section aria-label="Resumo do Google Ads" className="grid gap-4 sm:grid-cols-3">
-          {[
-            { label: 'Impressões', value: count.format(metrics.impressions) },
-            { label: 'Cliques', value: count.format(metrics.clicks) },
-            { label: 'Investimento', value: money.format(metrics.spendBrl) },
-          ].map((metric) => (
-            <article key={metric.label} className={`${SURFACE} p-5`}>
-              <p className="text-sm text-[#9A9D96]">{metric.label}</p>
-              <p className="mt-2 text-2xl font-bold">{metric.value}</p>
-              <p className="mt-2 text-xs text-[#8A8D86]">Dado demonstrativo · últimos 30 dias</p>
-            </article>
-          ))}
-        </section>
-        <section aria-labelledby="google-campaigns-title" className={`${SURFACE} overflow-hidden`}>
-          <div className="flex items-center justify-between border-b border-[#262824] px-5 py-4">
-            <h2 id="google-campaigns-title" className="font-semibold">Campanhas Google</h2>
-            <span className="text-xs text-[#8A8D86]">Exemplos simulados</span>
-          </div>
-          <ul className="divide-y divide-[#262824]">
-            {campaigns.map((campaign) => (
-              <li key={campaign.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-                <span className="font-medium">{campaign.name}</span>
-                <span className="rounded-full bg-[#1E88A8]/15 px-3 py-1 text-xs text-[#68B7CE]">
-                  {campaign.status === 'active' ? 'Ativa' : campaign.status === 'review' ? 'Em revisão' : 'Pausada'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
-    </AppLayout>
-  );
-}
-
 export function Dashboard() {
   const [period, setPeriod] = useState<Period>('this_month');
-  const [provider, setProvider] = useState<Sprint7Provider>('meta');
   const { startDate, endDate } = getPeriodDates(period);
 
   const {
@@ -908,10 +838,6 @@ export function Dashboard() {
     Math.ceil((new Date(endDate).getTime() - Date.now()) / 86_400_000)
   );
 
-  if (provider === 'google') {
-    return <GoogleDashboardMock onProviderChange={setProvider} />;
-  }
-
   if (loadingGoals) {
     return (
       <AppLayout>
@@ -944,7 +870,6 @@ export function Dashboard() {
           </span>
 
           <div className="flex shrink-0 items-center gap-3">
-            <ProviderSwitcher value={provider} onChange={setProvider} />
             {fetchingGoals && (
               <span className="text-xs text-[#8A8D86]">Atualizando…</span>
             )}

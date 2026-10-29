@@ -4,7 +4,6 @@ export const GOOGLE_ERROR_CODES = {
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   MISSING_ENV: 'MISSING_ENV',
   GOOGLE_TOKEN_EXPIRED: 'GOOGLE_TOKEN_EXPIRED',
-  GOOGLE_QUOTA_EXCEEDED: 'GOOGLE_QUOTA_EXCEEDED',
   GOOGLE_TOKEN_EXCHANGE_FAILED: 'GOOGLE_TOKEN_EXCHANGE_FAILED',
   INVALID_OAUTH_STATE: 'INVALID_OAUTH_STATE',
   NOT_FOUND: 'NOT_FOUND',
@@ -48,19 +47,6 @@ export const settingsSchema = z.object({
 
 export const profileUpdateSchema = settingsSchema.partial();
 
-export const googleAdsCampaignSchema = z.object({
-  customerId: z.string().regex(/^\d{6,20}$/, 'Conta Google Ads inválida'),
-  objective: z.enum(['leads', 'website', 'calls']),
-  locationLevel: z.enum(['city', 'state', 'country']),
-  locationValue: z.string().min(1, 'Localização configurada é obrigatória').max(255),
-  headlines: z.array(z.string().min(1).max(30)).min(3).max(15),
-  longHeadline: z.string().min(1).max(90),
-  descriptions: z.array(z.string().min(1).max(90)).min(2).max(5),
-  destinationUrl: z.string().url(),
-  dailyBudgetBrl: z.number().positive().max(100_000),
-  imageUrls: z.array(z.string().url()).min(2).max(20),
-});
-
 export const verificationSchema = z.object({
   method: z.enum(['POSTAL', 'PHONE', 'EMAIL'], {
     errorMap: () => ({ message: 'Método de verificação inválido' }),
@@ -76,7 +62,7 @@ export const profileIdParamsSchema = z.object({
 });
 
 export const contextQuerySchema = z.object({
-  context: z.enum(['onboarding', 'settings', 'ads']).default('settings'),
+  context: z.enum(['onboarding', 'settings']).default('settings'),
   // Origin de onde o OAuth está sendo iniciado (ex.: http://localhost:5173).
   // Embutido no state e usado no redirect pós-callback (multi-ambiente).
   frontendUrl: z.string().url('frontendUrl inválida').optional(),
