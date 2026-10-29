@@ -21,6 +21,13 @@ Funcionalidade: diagnosticar integrações Meta no superadmin
     Quando seleciona Não validado
     Então vê somente esses clientes
 
+  Cenário: selecionar Saudável e Parcial e remover o filtro
+    Dado que há clientes Saudável, Parcial e Falha
+    Quando seleciona Saudável e depois Parcial
+    Então vê somente clientes de cada estado selecionado
+    Quando volta para Todos os status
+    Então vê novamente a lista completa
+
   Cenário: reiniciar paginação ao filtrar
     Dado que o superadmin está na segunda página
     Quando seleciona Falha
@@ -124,6 +131,27 @@ describe('HealthchecksPage', () => {
     expect(screen.getByText('9 resultados')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Ana.*Loja Ana/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Pessoa 4.*Loja 4/ })).toBeInTheDocument();
+  });
+
+  it('seleciona Saudável e Parcial e permite voltar a todos os status', async () => {
+    render(<HealthchecksPage />);
+    const user = userEvent.setup();
+    const status = await screen.findByRole('combobox', { name: 'Status do healthcheck' });
+
+    await user.selectOptions(status, 'success');
+    expect(screen.getByText('1 resultado')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Pessoa 2.*Loja 2/ })).toHaveTextContent('Saudável');
+    expect(screen.queryByRole('button', { name: /Ana.*Loja Ana/ })).not.toBeInTheDocument();
+
+    await user.selectOptions(status, 'partial');
+    expect(screen.getByText('1 resultado')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ana.*Loja Ana/ })).toHaveTextContent('Parcial');
+    expect(screen.queryByRole('button', { name: /Pessoa 2.*Loja 2/ })).not.toBeInTheDocument();
+
+    await user.selectOptions(status, 'all');
+    expect(screen.getByText('12 resultados')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ana.*Loja Ana/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Pessoa 2.*Loja 2/ })).toBeInTheDocument();
   });
 
   it('reinicia na primeira página ao selecionar um status', async () => {
