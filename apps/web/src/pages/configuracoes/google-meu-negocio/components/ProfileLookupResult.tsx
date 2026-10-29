@@ -171,6 +171,7 @@ export function ProfileLookupResult({
   result,
   isLoading,
   isError,
+  errorCode,
   hasConnection,
   settingsComplete,
   createdProfile,
@@ -184,6 +185,7 @@ export function ProfileLookupResult({
   result: GoogleLookupResult | null;
   isLoading: boolean;
   isError: boolean;
+  errorCode?: string;
   hasConnection: boolean;
   settingsComplete: boolean;
   createdProfile: GoogleCreateProfileResult | null;
@@ -208,13 +210,18 @@ export function ProfileLookupResult({
   }
 
   if (isError || !result) {
+    const quotaExceeded = errorCode === 'GOOGLE_QUOTA_EXCEEDED';
     return (
-      <div className={`${SURFACE} flex items-start gap-3 border-error/40 bg-error/10 p-5`}>
-        <AlertTriangle className="h-5 w-5 shrink-0 text-error" />
+      <div className={cn(SURFACE, 'flex items-start gap-3 p-5', quotaExceeded ? 'border-warning/40 bg-warning/10' : 'border-error/40 bg-error/10')}>
+        <AlertTriangle className={cn('h-5 w-5 shrink-0', quotaExceeded ? 'text-warning' : 'text-error')} />
         <div className="space-y-1">
-          <h3 className="text-sm font-semibold text-text-primary">Não foi possível verificar o perfil</h3>
+          <h3 className="text-sm font-semibold text-text-primary">
+            {quotaExceeded ? 'Google temporariamente indisponível' : 'Não foi possível verificar o perfil'}
+          </h3>
           <p className="text-xs text-text-tertiary">
-            Sua conexão com o Google pode ter expirado. Reconecte sua conta e tente novamente.
+            {quotaExceeded
+              ? 'O Google atingiu um limite temporário de consultas. Aguarde alguns minutos e tente novamente.'
+              : 'Sua conexão com o Google pode ter expirado. Reconecte sua conta e tente novamente.'}
           </p>
         </div>
       </div>

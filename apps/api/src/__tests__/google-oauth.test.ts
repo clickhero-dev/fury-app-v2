@@ -1,6 +1,15 @@
 /**
  * Testes unitários do fluxo OAuth do Google Meu Negócio (US1).
  *
+ * # Language: pt-BR
+ *
+ * Funcionalidade: autorização Google para Perfil da Empresa e Google Ads
+ *
+ *   Cenário: solicitar permissões para gerenciar perfil e criar anúncios
+ *     Dado que a pessoa iniciou a conexão Google para campanhas
+ *     Quando a URL OAuth é gerada
+ *     Então ela contém business.manage e adwords
+ *
  * Cobre assinatura/validação do state JWT (10m), troca code→token,
  * criptografia AES-256-GCM dos tokens em repouso (utils/crypto.ts),
  * upsert 1-por-tenant em google_connections, INVALID_OAUTH_STATE e
@@ -208,6 +217,17 @@ describe('Google OAuth — state JWT', () => {
     expect(scope).toContain('openid');
     expect(scope).toContain('email');
     expect(scope).toContain('https://www.googleapis.com/auth/business.manage');
+  });
+
+  it('gera URL de campanhas com permissões do Perfil da Empresa e Google Ads', () => {
+    const authUrl = googleService.generateGoogleAuthUrl('tenant-1', 'ads');
+    const parsed = new URL(authUrl);
+    const scope = parsed.searchParams.get('scope') ?? '';
+    const state = jwt.decode(parsed.searchParams.get('state') ?? '') as { context?: string };
+
+    expect(scope).toContain('https://www.googleapis.com/auth/business.manage');
+    expect(scope).toContain('https://www.googleapis.com/auth/adwords');
+    expect(state.context).toBe('ads');
   });
 });
 

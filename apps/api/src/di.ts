@@ -42,6 +42,9 @@ import { MetricsService } from './services/campaigns/metrics.service.js';
 import { MetricsController } from './controllers/metrics.controller.js';
 import { GoogleService, googleService } from './services/google/google.service.js';
 import { GoogleController } from './controllers/google.controller.js';
+import { GoogleAdsController } from './controllers/google-ads.controller.js';
+import { GoogleAdsService } from './services/google/google-ads.service.js';
+import { GoogleRepository } from './repository/google.repository.js';
 import { MetaService, metaService } from './services/meta/meta.service.js';
 import { MetaController } from './controllers/meta.controller.js';
 import { instagramService } from './services/meta/instagram.service.js';
@@ -104,6 +107,7 @@ export const authService = new AuthService();
 export const socialAuthService = new SocialAuthService();
 export const metricsService = new MetricsService(metricsProvider);
 export const budgetOptimizerService = new BudgetOptimizerService();
+export const googleAdsService = new GoogleAdsService((tenantId) => new GoogleRepository(tenantId));
 export { metaSyncService };
 
 // SuperAdmin (GLOBAL) — único repositório/controller não escopado por tenant.
@@ -148,6 +152,7 @@ export const controllers = {
   auth: new AuthController(authService, socialAuthService, policyService),
   automation: new AutomationController(automationService),
   google: new GoogleController(googleService),
+  googleAds: new GoogleAdsController(googleAdsService),
   meta: new MetaController(metaService),
   instagram: new InstagramController(instagramService, metaService),
   planner: new PlannerController(plannerService),

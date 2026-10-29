@@ -1,8 +1,8 @@
 /**
  * Testes unitários do lookup de perfil existente no Google (US1).
  *
- * Cobre googleLocations:search → matches normalizados, detecção de duplicado
- * (duplicateAlert — FR-011), isolamento entre tenants (tenant A nunca vê
+ * Cobre localização administrada pela conta conectada, busca de duplicado
+ * (googleLocations:search), isolamento entre tenants (tenant A nunca vê
  * dados de tenant B) e GOOGLE_TOKEN_EXPIRED em falha de refresh.
  * Mocks no nível de lib/db e lib/google-api — sem HTTP real.
  */
@@ -13,6 +13,8 @@ const {
   dbMock,
   mockCreateGoogleApiClient,
   mockSearchGoogleLocations,
+  mockListAccounts,
+  mockListLocations,
   mockCreateLocation,
   mockListCategories,
 } = vi.hoisted(() => ({
@@ -29,6 +31,8 @@ const {
   } as any,
   mockCreateGoogleApiClient: vi.fn(),
   mockSearchGoogleLocations: vi.fn(),
+  mockListAccounts: vi.fn(),
+  mockListLocations: vi.fn(),
   mockCreateLocation: vi.fn(),
   mockListCategories: vi.fn(),
 }));
@@ -137,11 +141,16 @@ function makeUnclaimedMatch() {
 
 function resetMocks() {
   vi.clearAllMocks();
+  mockListAccounts.mockReset();
+  mockListLocations.mockReset();
+  mockListAccounts.mockResolvedValue([]);
+  mockListLocations.mockResolvedValue([]);
   mockCreateGoogleApiClient.mockReturnValue({
     searchGoogleLocations: mockSearchGoogleLocations,
+    listAccounts: mockListAccounts,
+    listLocations: mockListLocations,
     createLocation: mockCreateLocation,
     listCategories: mockListCategories,
-    listAccounts: vi.fn(),
   });
   dbMock.insert.mockImplementation(() => {
     const valuesResult = Object.assign(Promise.resolve(undefined), {
@@ -166,6 +175,41 @@ describe('lookupGoogleProfile — googleLocations:search', () => {
     dbMock.query.googleConnections.findFirst.mockResolvedValue(makeConnection('tenant-A'));
     dbMock.query.businessProfileSettings.findFirst.mockResolvedValue(makeSettings('tenant-A'));
     dbMock.query.tenants.findFirst.mockResolvedValue(makeTenant('tenant-A'));
+  });
+
+  it('carrega a localização que a conta conectada já administra, mesmo sem dados locais de busca', async () => {
+    dbMock.query.businessProfileSettings.findFirst.mockResolvedValue(null);
+    dbMock.query.tenants.findFirst.mockResolvedValue({ ...makeTenant('tenant-A'), name: '' });
+    mockListAccounts.mockResolvedValue([
+      { name: 'accounts/123456', accountName: 'Minha Empresa Ltda', type: 'PERSONAL' },
+    ]);
+    mockListLocations.mockResolvedValue([
+      {
+        name: 'locations/789',
+        title: 'Perfil já existente',
+        address: { locality: 'São Paulo', administrativeArea: 'SP', regionCode: 'BR' },
+        phoneNumbers: { primaryPhone: '+5511999999999' },
+      },
+    ]);
+
+    const result = await googleService.lookupGoogleProfile('tenant-A');
+
+    expect(mockListAccounts).toHaveBeenCalledTimes(1);
+    expect(mockListLocations).toHaveBeenCalledWith('accounts/123456');
+    expect(mockSearchGoogleLocations).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      found: true,
+      duplicateAlert: false,
+      profile: { id: 'profile-1' },
+      matches: [
+        expect.objectContaining({
+          gbpLocationId: 'locations/789',
+          name: 'Perfil já existente',
+          claimed: true,
+        }),
+      ],
+    });
+    expect(dbMock.insert).toHaveBeenCalledTimes(1);
   });
 
   it('mapeia os matches do googleLocations:search para o contrato', async () => {

@@ -60,6 +60,7 @@ export interface GoogleLookupResult {
   found: boolean;
   matches: GoogleLookupMatch[];
   duplicateAlert: boolean;
+  profile?: Pick<GoogleBusinessProfile, 'id'>;
 }
 
 /** Horário de funcionamento no formato do Google Business Profile. */

@@ -2,9 +2,22 @@ import { AppError } from '../middleware/errorHandler.js';
 import { refreshAccessToken } from './google-oauth.js';
 import { GOOGLE_ERROR_CODES } from '../schemas/google.schemas.js';
 
-const GBP_BASE_URL = 'https://mybusiness.googleapis.com/v4';
+const GBP_ACCOUNT_MANAGEMENT_BASE_URL = 'https://mybusinessaccountmanagement.googleapis.com/v1';
+const GBP_BUSINESS_INFORMATION_BASE_URL = 'https://mybusinessbusinessinformation.googleapis.com/v1';
+const GBP_VERIFICATIONS_BASE_URL = 'https://mybusinessverifications.googleapis.com/v1';
 const TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 15_000;
+const LOCATION_READ_MASK = [
+  'name',
+  'title',
+  'phoneNumbers',
+  'websiteUri',
+  'emailAddress',
+  'categories',
+  'address',
+  'openInfo',
+  'metadata',
+].join(',');
 
 export class GoogleApiError extends AppError {
   constructor(statusCode: number, code: string, message: string, details?: Record<string, unknown>) {
@@ -103,6 +116,7 @@ interface GbpLocationsResponse {
 
 interface GbpSearchLocationsResponse {
   matchingLocations?: GbpLocationMatch[];
+  googleLocations?: GbpLocationMatch[];
 }
 
 interface GbpVerificationOptionsResponse {
@@ -134,6 +148,12 @@ interface RequestOptions {
   method?: string;
   body?: unknown;
   query?: Record<string, string>;
+  baseUrl?: string;
+}
+
+function normalizeLocationName(locationName: string): string {
+  const locationId = locationName.match(/(?:^|\/)locations\/([^/]+)$/)?.[1];
+  return locationId ? `locations/${locationId}` : locationName;
 }
 
 const MOCK_ACCOUNT_NAME = 'accounts/123456';
@@ -204,7 +224,7 @@ const mockVerifications: GbpVerification[] = [
 function mockGbpRequest<T>(path: string, options: RequestOptions): T {
   const method = options.method ?? 'GET';
 
-  if (method === 'POST' && path === '/accounts:searchGoogleLocations') {
+  if (method === 'POST' && (path === '/accounts:searchGoogleLocations' || path === '/googleLocations:search')) {
     return { matchingLocations: [mockLocationMatch] } as T;
   }
 
@@ -224,7 +244,7 @@ function mockGbpRequest<T>(path: string, options: RequestOptions): T {
     return mockLocation as T;
   }
 
-  if (method === 'GET' && path.endsWith(':fetchVerificationOptions')) {
+  if (method === 'POST' && path.endsWith(':fetchVerificationOptions')) {
     return { options: mockVerificationOptions } as T;
   }
 
@@ -318,7 +338,8 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
   }
 
   async function rawRequest<T>(path: string, options: RequestOptions, token: string): Promise<T> {
-    const url = new URL(`${GBP_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`);
+    const baseUrl = options.baseUrl ?? GBP_BUSINESS_INFORMATION_BASE_URL;
+    const url = new URL(`${baseUrl}${path.startsWith('/') ? path : `/${path}`}`);
     for (const [key, value] of Object.entries(options.query ?? {})) {
       url.searchParams.set(key, value);
     }
@@ -354,7 +375,10 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
       const errorPayload = payload as GoogleApiErrorPayload;
       const message =
         errorPayload?.error?.message || `Erro da API do Google (${response.status}) ao chamar ${path}.`;
-      throw new GoogleApiError(response.status, 'GOOGLE_API_ERROR', message, {
+      const code = response.status === 429
+        ? GOOGLE_ERROR_CODES.GOOGLE_QUOTA_EXCEEDED
+        : 'GOOGLE_API_ERROR';
+      throw new GoogleApiError(response.status, code, message, {
         googleError: errorPayload?.error ?? null,
         path,
       });
@@ -393,13 +417,15 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
 
   return {
     async listAccounts(): Promise<GbpAccount[]> {
-      const response = await request<GbpAccountsResponse>('/accounts');
+      const response = await request<GbpAccountsResponse>('/accounts', {
+        baseUrl: GBP_ACCOUNT_MANAGEMENT_BASE_URL,
+      });
       return response.accounts ?? [];
     },
 
     async listLocations(accountName: string): Promise<GbpLocation[]> {
       const response = await request<GbpLocationsResponse>(`/${accountName}/locations`, {
-        query: { pageSize: '100' },
+        query: { pageSize: '100', readMask: LOCATION_READ_MASK },
       });
       return response.locations ?? [];
     },
@@ -409,7 +435,7 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
     },
 
     async searchGoogleLocations(params: GbpSearchGoogleLocationsParams): Promise<GbpLocationMatch[]> {
-      const response = await request<GbpSearchLocationsResponse>('/accounts:searchGoogleLocations', {
+      const response = await request<GbpSearchLocationsResponse>('/googleLocations:search', {
         method: 'POST',
         body: {
           location: params.location ?? {},
@@ -417,11 +443,13 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
           pageSize: params.pageSize ?? 3,
         },
       });
-      return response.matchingLocations ?? [];
+      return response.googleLocations ?? response.matchingLocations ?? [];
     },
 
     async getLocation(locationName: string): Promise<GbpLocation> {
-      return request<GbpLocation>(`/${locationName}`);
+      return request<GbpLocation>(`/${normalizeLocationName(locationName)}`, {
+        query: { readMask: LOCATION_READ_MASK },
+      });
     },
 
     async patchLocation(
@@ -429,7 +457,7 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
       updates: Partial<GbpLocation>,
       fieldMask: string[]
     ): Promise<GbpLocation> {
-      return request<GbpLocation>(`/${locationName}`, {
+      return request<GbpLocation>(`/${normalizeLocationName(locationName)}`, {
         method: 'PATCH',
         body: updates,
         query: { updateMask: fieldMask.join(',') },
@@ -438,28 +466,34 @@ export function createGoogleApiClient(deps: GoogleApiClientDeps): GoogleApiClien
 
     async fetchVerificationOptions(locationName: string): Promise<GbpVerificationOption[]> {
       const response = await request<GbpVerificationOptionsResponse>(
-        `/${locationName}:fetchVerificationOptions`
+        `/${normalizeLocationName(locationName)}:fetchVerificationOptions`,
+        { method: 'POST', baseUrl: GBP_VERIFICATIONS_BASE_URL }
       );
       return response.options ?? [];
     },
 
     async verifyLocation(locationName: string, method: string): Promise<GbpVerifyLocationResponse> {
-      return request<GbpVerifyLocationResponse>(`/${locationName}:verify`, {
+      return request<GbpVerifyLocationResponse>(`/${normalizeLocationName(locationName)}:verify`, {
         method: 'POST',
         body: { method },
+        baseUrl: GBP_VERIFICATIONS_BASE_URL,
       });
     },
 
     async listVerifications(locationName: string): Promise<GbpVerification[]> {
-      const response = await request<GbpVerificationsResponse>(`/${locationName}/verifications`);
+      const response = await request<GbpVerificationsResponse>(
+        `/${normalizeLocationName(locationName)}/verifications`,
+        { baseUrl: GBP_VERIFICATIONS_BASE_URL },
+      );
       return response.verifications ?? [];
     },
 
     async listCategories(params: GbpListCategoriesParams): Promise<GbpCategory[]> {
       const query: Record<string, string> = {};
-      if (params.accountName) query.gmbAccountNames = params.accountName;
-      if (params.query) query.searchTerm = params.query;
-      if (params.regionCode) query.regionCode = params.regionCode;
+      if (params.query) query.filter = `displayName=${params.query}`;
+      query.regionCode = params.regionCode ?? 'BR';
+      query.languageCode = 'pt-BR';
+      query.view = 'BASIC';
       if (params.pageSize) query.pageSize = String(params.pageSize);
 
       const response = await request<GbpCategoriesResponse>('/categories', { query });
