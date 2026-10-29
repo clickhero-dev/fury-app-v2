@@ -35,7 +35,7 @@ export function usePlans() {
  * const { data: subscription } = useSubscription();
  * if (!subscription) return <UpgradePrompt />;
  */
-export function useSubscription() {
+export function useSubscription(options: { refetchInterval?: number | false } = {}) {
   return useQuery({
     queryKey: ['billing', 'subscription'],
     queryFn: async (): Promise<Subscription | null> => {
@@ -43,6 +43,7 @@ export function useSubscription() {
       return res.data.data;
     },
     staleTime: 60 * 1000,
+    refetchInterval: options.refetchInterval,
     placeholderData: keepPreviousData,
     retry: false,
   });
