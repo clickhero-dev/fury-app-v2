@@ -1,3 +1,10 @@
+/*
+Funcionalidade: impedir renovação duplicada do mesmo ciclo
+Cenário: uma execução concorrente já consumiu o vencimento original
+Dado que a assinatura foi listada como vencida
+Quando o job tenta renovar um ciclo já alterado por outra execução
+Então a assinatura é contabilizada como ignorada e não como renovada
+*/
 import { describe, it, expect, vi } from 'vitest';
 import {
   SubscriptionRenewalService,
@@ -16,7 +23,7 @@ function makeRepo(overrides: Partial<SubscriptionRenewalRepo> = {}) {
   return {
     listSubscriptionsDueForRenewal: vi.fn().mockResolvedValue([]),
     getPlanCreativesLimit: vi.fn().mockResolvedValue(10),
-    renewSubscription: vi.fn().mockResolvedValue(undefined),
+    renewSubscription: vi.fn().mockResolvedValue(true),
     ...overrides,
   } as unknown as SubscriptionRenewalRepo;
 }
@@ -36,6 +43,19 @@ describe('addMonths', () => {
 });
 
 describe('SubscriptionRenewalService.renewAllDue', () => {
+  it('ignora o ciclo já consumido por uma execução concorrente', async () => {
+    const due = [{ id: 's1', planId: 'p1', currentPeriodEnd: new Date(2026, 7, 10) }];
+    const repo = makeRepo({
+      listSubscriptionsDueForRenewal: vi.fn().mockResolvedValue(due),
+      renewSubscription: vi.fn().mockResolvedValue(false),
+    });
+
+    const result = await new SubscriptionRenewalService(repo).renewAllDue(new Date(2026, 7, 20));
+
+    expect(result).toEqual({ renewed: 0, skipped: 1 });
+    expect(repo.renewSubscription).toHaveBeenCalledWith('s1', new Date(2026, 7, 10), new Date(2026, 8, 10), 10);
+  });
+
   it('renova cada vencida: avança período +1 mês e reseta cota ao teto do plano', async () => {
     const due = [{ id: 's1', planId: 'p1', currentPeriodEnd: new Date(2026, 7, 10) }];
     const repo = makeRepo({
@@ -47,7 +67,7 @@ describe('SubscriptionRenewalService.renewAllDue', () => {
     const result = await service.renewAllDue(new Date(2026, 7, 20));
 
     expect(result).toEqual({ renewed: 1, skipped: 0 });
-    expect(repo.renewSubscription).toHaveBeenCalledWith('s1', new Date(2026, 8, 10), 12);
+    expect(repo.renewSubscription).toHaveBeenCalledWith('s1', new Date(2026, 7, 10), new Date(2026, 8, 10), 12);
   });
 
   it('plano sem teto → reseta cota para null (sem limite)', async () => {
@@ -60,7 +80,7 @@ describe('SubscriptionRenewalService.renewAllDue', () => {
 
     const result = await service.renewAllDue(new Date(2026, 7, 20));
 
-    expect(repo.renewSubscription).toHaveBeenCalledWith('s1', expect.any(Date), null);
+    expect(repo.renewSubscription).toHaveBeenCalledWith('s1', new Date(2026, 7, 10), expect.any(Date), null);
     expect(result.renewed).toBe(1);
   });
 
@@ -72,7 +92,7 @@ describe('SubscriptionRenewalService.renewAllDue', () => {
     const renew = vi
       .fn()
       .mockRejectedValueOnce(new Error('db down'))
-      .mockResolvedValueOnce(undefined);
+      .mockResolvedValueOnce(true);
     const repo = makeRepo({
       listSubscriptionsDueForRenewal: vi.fn().mockResolvedValue(due),
       getPlanCreativesLimit: vi.fn().mockResolvedValue(5),

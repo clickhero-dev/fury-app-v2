@@ -24,7 +24,7 @@ export interface RenewalSubscription {
 export interface SubscriptionRenewalRepo {
   listSubscriptionsDueForRenewal(now: Date): Promise<RenewalSubscription[]>;
   getPlanCreativesLimit(planId: string): Promise<number | null>;
-  renewSubscription(id: string, nextPeriodEnd: Date, creativesLimit: number | null): Promise<void>;
+  renewSubscription(id: string, expectedPeriodEnd: Date, nextPeriodEnd: Date, creativesLimit: number | null): Promise<boolean>;
 }
 
 export interface RenewalResult {
@@ -61,8 +61,14 @@ export class SubscriptionRenewalService {
       try {
         const creativesLimit = await this.repo.getPlanCreativesLimit(sub.planId);
         const nextPeriodEnd = addMonths(sub.currentPeriodEnd ?? now, 1);
-        await this.repo.renewSubscription(sub.id, nextPeriodEnd, creativesLimit);
-        renewed++;
+        const applied = await this.repo.renewSubscription(
+          sub.id,
+          sub.currentPeriodEnd ?? now,
+          nextPeriodEnd,
+          creativesLimit,
+        );
+        if (applied) renewed++;
+        else skipped++;
       } catch (error) {
         skipped++;
         console.error(

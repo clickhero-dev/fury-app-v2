@@ -216,15 +216,23 @@ export class SubscriptionRepository extends TenantScopedRepository {
   }
 
   /** Avança o ciclo (nextPeriodEnd já calculado) e reseta a cota ao teto (null = sem teto). */
-  async renewSubscription(id: string, nextPeriodEnd: Date, creativesLimit: number | null): Promise<void> {
-    await this.db
+  async renewSubscription(id: string, expectedPeriodEnd: Date, nextPeriodEnd: Date, creativesLimit: number | null): Promise<boolean> {
+    const updated = await this.db
       .update(subscriptions)
       .set({
         currentPeriodEnd: nextPeriodEnd,
         creativesRemaining: creativesLimit,
         updatedAt: new Date(),
       })
-      .where(eq(subscriptions.id, id));
+      .where(and(
+        eq(subscriptions.id, id),
+        eq(subscriptions.status, 'active'),
+        eq(subscriptions.isNonExpirable, false),
+        eq(subscriptions.currentPeriodEnd, expectedPeriodEnd),
+        lte(subscriptions.currentPeriodEnd, expectedPeriodEnd),
+      ))
+      .returning({ id: subscriptions.id });
+    return updated.length === 1;
   }
 }
 
