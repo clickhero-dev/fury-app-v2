@@ -34,6 +34,7 @@ import { checkSubscriptionActive } from "../middleware/checkSubscriptionActive.j
 import { searchMetaLocationsHandler, searchMetaInterestsHandler, findMetaCityByCoordsHandler } from "../controllers/campaigns.controller.js";
 import { createV2Router } from "./v2.routes.js";
 import { controllers } from "../di.js";
+import { idempotencyMiddleware } from "../middleware/idempotency.middleware.js";
 
 const AUTH_TENANT_SUB = [authMiddleware, tenantMiddleware, checkSubscriptionActive];
 
@@ -45,6 +46,22 @@ router.use('/faqs', faqRoutes);
 router.use('/announcements', announcementRoutes);
 router.use("/meta", metaRoutes);
 router.use("/google", googleRoutes);
+router.post(
+  "/google-ads/campaigns",
+  ...AUTH_TENANT_SUB,
+  idempotencyMiddleware,
+  controllers.googleAds.createCampaign,
+);
+router.get(
+  "/google-ads/accounts",
+  ...AUTH_TENANT_SUB,
+  controllers.googleAds.listAccessibleCustomers,
+);
+router.put(
+  "/google-ads/accounts/selected",
+  ...AUTH_TENANT_SUB,
+  controllers.googleAds.selectCustomer,
+);
 
 router.use("/metrics", ...AUTH_TENANT_SUB, metricsRoutes);
 router.use("/automation", automationRoutes);

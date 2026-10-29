@@ -68,7 +68,7 @@ describe('Sidebar — navegação', () => {
     renderSidebar();
 
     expect(screen.getByRole('link', { name: /painel/i })).toHaveAttribute('href', '/dashboard');
-    expect(screen.getByRole('link', { name: /campanhas/i })).toHaveAttribute('href', '/campanhas');
+    expect(screen.getByRole('link', { name: /campanhas/i })).toHaveAttribute('href', '/criar-campanha');
     expect(screen.getByRole('link', { name: /clientes/i })).toHaveAttribute('href', '/leads');
     expect(screen.getByRole('link', { name: /estúdio/i })).toHaveAttribute('href', '/estudio');
     expect(screen.getByRole('link', { name: /configurações/i })).toHaveAttribute('href', '/configuracoes');

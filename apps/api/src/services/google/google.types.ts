@@ -14,7 +14,7 @@ import type { exchangeCodeForToken, getGoogleOAuthConfig, revokeGoogleToken } fr
 import type { uploadAsset, deleteAsset } from '../storage/storage.service.js';
 import type { GoogleQualityReport } from './google.quality.js';
 
-export type OAuthContext = 'onboarding' | 'settings';
+export type OAuthContext = 'onboarding' | 'settings' | 'ads';
 
 export interface GoogleAddress {
   street: string;
@@ -58,6 +58,7 @@ export interface GoogleLookupResult {
   found: boolean;
   matches: GoogleLookupMatch[];
   duplicateAlert: boolean;
+  profile?: Pick<GoogleProfileResult, 'id'>;
 }
 
 export interface GoogleSettings {

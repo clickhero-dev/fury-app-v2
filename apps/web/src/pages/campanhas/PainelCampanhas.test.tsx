@@ -8,6 +8,11 @@ Funcionalidade: manter totais de Campanhas sincronizados com o período selecion
     Quando o usuário seleciona outro período e a consulta ainda está pendente
     Então a lista e os totais anteriores são substituídos por skeletons
     E os totais do novo período aparecem quando a consulta termina
+
+  Cenário: visualizar campanhas Google demonstrativas
+    Dado que a pessoa está no painel de campanhas
+    Quando seleciona Google
+    Então vê campanhas simuladas sem consultar endpoints Google
 */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -68,6 +73,19 @@ describe('PainelCampanhas — Total Clientes = soma das linhas de campanha', () 
 
   beforeEach(() => {
     mockApiGet.mockReset();
+  });
+
+  it('mostra campanhas Google demonstrativas sem consultar endpoints Google', async () => {
+    mockCampaigns([]);
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Google' }));
+
+    expect(await screen.findByText('Padaria perto de você')).toBeInTheDocument();
+    expect(screen.getByText(/Exemplos simulados · Google Ads/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Meta' }));
+    expect(await screen.findByText('Nenhuma campanha por aqui ainda')).toBeInTheDocument();
+    expect(mockApiGet.mock.calls.some(([url]) => String(url).includes('/google'))).toBe(false);
   });
 
   it('o "Total Clientes" é a soma das conversões das linhas exibidas (ativas + pausadas, padrão)', async () => {

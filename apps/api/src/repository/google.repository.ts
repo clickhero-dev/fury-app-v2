@@ -55,7 +55,9 @@ export class GoogleRepository extends TenantScopedRepository {
   }
 
   async patchGoogleConnection(id: string, data: Partial<GoogleConnection>) {
-    const [row] = await this.db.update(googleConnections).set(data as any).where(eq(googleConnections.id, id)).returning();
+    const [row] = await this.db.update(googleConnections).set(data as any).where(
+      and(eq(googleConnections.id, id), eq(googleConnections.tenantId, this.tenantId)),
+    ).returning();
     return row ?? null;
   }
 
@@ -81,6 +83,12 @@ export class GoogleRepository extends TenantScopedRepository {
   async createBusinessProfile(data: Partial<GoogleBusinessProfile>): Promise<GoogleBusinessProfile> {
     const [row] = await this.db.insert(googleBusinessProfiles).values({ ...data, tenantId: this.tenantId } as any).returning();
     return row;
+  }
+
+  async findGoogleBusinessProfile() {
+    return this.db.query.googleBusinessProfiles.findFirst({
+      where: eq(googleBusinessProfiles.tenantId, this.tenantId),
+    });
   }
 
   async getBusinessProfile(id: string) {

@@ -30,8 +30,7 @@ import { PlanejadorPage } from './pages/planejador/PlanejadorPage';
 import { CalendarioPage } from './pages/planejador/CalendarioPage';
 import { Configuracoes } from './pages/configuracoes/Configuracoes';
 import { Integracoes } from './pages/configuracoes/Integracoes';
-// Google Meu Negócio oculto (feature incompleta) — 2026-09
-// import { GoogleMeuNegocioPage } from './pages/configuracoes/google-meu-negocio/GoogleMeuNegocioPage';
+import { GoogleMeuNegocioPage } from './pages/configuracoes/google-meu-negocio/GoogleMeuNegocioPage';
 import { MinhasRegras } from './pages/automacao/MinhasRegras';
 import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
@@ -141,7 +140,11 @@ export const router = createBrowserRouter([
       },
       {
         path: '/criar-campanha',
-        element: <CriarCampanhaPage />,
+        element: (
+          <AppLayout>
+            <CriarCampanhaPage />
+          </AppLayout>
+        ),
       },
       {
         path: '/campanhas/regras',
@@ -170,8 +173,7 @@ export const router = createBrowserRouter([
       { path: '/calendario', element: <CalendarioPage /> },
       { path: '/configuracoes', element: <Configuracoes /> },
       { path: '/configuracoes/integracoes', element: <Integracoes /> },
-      // Google Meu Negócio oculto (feature incompleta) — 2026-09
-      // { path: '/configuracoes/google-meu-negocio', element: <GoogleMeuNegocioPage /> },
+      { path: '/configuracoes/google-meu-negocio', element: <GoogleMeuNegocioPage /> },
       { path: '/configuracoes/brand-kit', element: <Navigate to="/configuracoes?tab=publico" replace /> },
       { path: '/planos', element: <Plans /> },
       { path: '/assinatura', element: <Subscription /> },

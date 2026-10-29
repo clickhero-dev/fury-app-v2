@@ -38,6 +38,12 @@ Funcionalidade: Dashboard passa a chamar /v2/* para dados Meta do banco
     Dado que o período anterior está visível
     Quando a consulta do resumo do novo período falha
     Então o skeleton desaparece e o fallback é exibido sem o total anterior
+
+  Cenário: alternar para métricas Google demonstrativas
+    Dado que o dashboard está aberto no canal Meta
+    Quando a pessoa seleciona Google
+    Então vê métricas demonstrativas do Google
+    E nenhuma API Google é consultada
 */
 // =============================================================================
 
@@ -125,6 +131,19 @@ describe('BDD: Dashboard usa endpoints v2', () => {
       }
       return Promise.resolve({ data: { success: true, data: [] } });
     });
+  });
+
+  it('alterna para métricas Google demonstrativas sem consultar APIs Google', async () => {
+    render(<Dashboard />, { wrapper });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Google' }));
+
+    expect(screen.getByText('18.420')).toBeInTheDocument();
+    expect(screen.getByText('R$ 684,20')).toBeInTheDocument();
+    expect(screen.getByText(/dados demonstrativos/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Meta' }));
+    expect(screen.getByRole('button', { name: 'Google' })).toHaveAttribute('aria-pressed', 'false');
+    expect(mockApiGet.mock.calls.some(([url]) => String(url).includes('/google'))).toBe(false);
   });
 
   it('Cenário: instagram-insights, summary e daily usam /v2', async () => {

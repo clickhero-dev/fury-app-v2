@@ -22,6 +22,8 @@ import {
 } from '@/lib/format-campaign-metrics';
 import { type Period, getPeriodDates, formatPeriodLabel } from '@/lib/period-utils';
 import { MetaSyncNotice } from '../../components/MetaSyncNotice';
+import { getSprint7Campaigns } from '@/lib/google-sprint-7-mock-data';
+import type { Sprint7Provider } from '@/lib/google-sprint-7-mock-data';
 
 type FilterType = 'todos' | 'ativo' | 'pausado' | 'finalizado';
 
@@ -42,6 +44,28 @@ const StatusBadgeAdapter = ({ status }: { status: CampaignData['status'] }) => {
 
 const PAGE_SIZE = 10;
 
+function CampaignProviderSwitcher({ value, onChange }: { value: Sprint7Provider; onChange: (value: Sprint7Provider) => void }) {
+  return <div className="inline-flex rounded-full border border-border bg-surface p-1" aria-label="Plataforma de campanhas">{(['meta', 'google'] as const).map((platform) => <button key={platform} type="button" aria-pressed={value === platform} onClick={() => onChange(platform)} className={`min-h-9 rounded-full px-4 text-sm font-semibold ${value === platform ? 'bg-brand text-white' : 'text-text-secondary hover:text-text-primary'}`}>{platform === 'meta' ? 'Meta' : 'Google'}</button>)}</div>;
+}
+
+function GoogleCampaignsMock({ onProviderChange, onCreate }: { onProviderChange: (value: Sprint7Provider) => void; onCreate: () => void }) {
+  const campaigns = getSprint7Campaigns('google');
+  const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  const count = new Intl.NumberFormat('pt-BR');
+  return (
+    <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 sm:px-10">
+      <PageHeader title="Campanhas" description="Acompanhe seus anúncios no Google e na Meta" actions={<button type="button" onClick={onCreate} className="rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white">Nova campanha</button>} />
+      <div className="flex flex-wrap items-center justify-between gap-3"><CampaignProviderSwitcher value="google" onChange={onProviderChange} /><span className="text-xs text-text-secondary">Exemplos simulados · Google Ads</span></div>
+      <div className="overflow-x-auto rounded-2xl border border-border bg-surface">
+        <table className="w-full min-w-[640px] text-left text-sm">
+          <thead className="border-b border-border bg-surface-secondary/40 text-xs uppercase text-text-tertiary"><tr><th className="px-4 py-3">Campanha</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Objetivo</th><th className="px-4 py-3 text-right">Orçamento diário</th><th className="px-4 py-3 text-right">Impressões</th><th className="px-4 py-3 text-right">Cliques</th></tr></thead>
+          <tbody className="divide-y divide-border">{campaigns.map((campaign) => <tr key={campaign.id}><td className="px-4 py-4 font-semibold text-text-primary">{campaign.name}</td><td className="px-4 py-4"><span className="rounded-full bg-brand/10 px-3 py-1 text-xs text-brand">{campaign.status === 'active' ? 'Ativa' : campaign.status === 'review' ? 'Em revisão' : 'Pausada'}</span></td><td className="px-4 py-4 text-text-secondary">{campaign.objective}</td><td className="px-4 py-4 text-right text-text-primary">{money.format(campaign.dailyBudgetBrl)}</td><td className="px-4 py-4 text-right text-text-primary">{count.format(campaign.impressions)}</td><td className="px-4 py-4 text-right text-text-primary">{count.format(campaign.clicks)}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function PainelCampanhas() {
   const navigate = useNavigate();
   const { setPreSelectedAsset, clearPreSelectedAsset } = useCampaignWizardContext();
@@ -52,6 +76,7 @@ export function PainelCampanhas() {
   const [campaignToDelete, setCampaignToDelete] = useState<CampaignData | null>(null);
   const [actionError, setActionError] = useState<string>('');
   const [period, setPeriod] = useState<Period>('this_month');
+  const [provider, setProvider] = useState<Sprint7Provider>('meta');
 
   const { startDate, endDate } = getPeriodDates(period);
   const { data: result = { data: [] }, isLoading, isPlaceholderData, isError, refetch } = useCampaigns({ startDate, endDate });
@@ -63,7 +88,7 @@ export function PainelCampanhas() {
   const deleteMutation = useDeleteCampaign();
   const handleCreateCampaign = () => {
     clearPreSelectedAsset();
-    navigate('/criar-campanha');
+    navigate(provider === 'google' ? '/criar-campanha?platform=google' : '/criar-campanha');
   };
 
   const pendingCampaignId =
@@ -227,6 +252,10 @@ export function PainelCampanhas() {
     },
   ];
 
+  if (provider === 'google') {
+    return <GoogleCampaignsMock onProviderChange={setProvider} onCreate={handleCreateCampaign} />;
+  }
+
   return (
       <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 sm:px-10">
       {/* Header Limpo Sem a Data no Topo */}
@@ -244,6 +273,8 @@ export function PainelCampanhas() {
           </button>
         }
       />
+
+      <CampaignProviderSwitcher value={provider} onChange={setProvider} />
 
    {/* Seletor de Período + Data Centralizada Logo Abaixo */}
     <div className="space-y-2.5">

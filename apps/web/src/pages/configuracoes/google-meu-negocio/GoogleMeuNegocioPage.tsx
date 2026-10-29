@@ -8,6 +8,7 @@ import { ProfileLookupResult } from './components/ProfileLookupResult';
 import { BusinessProfileForm } from './components/BusinessProfileForm';
 import { ProfileStatusPanel } from './components/ProfileStatusPanel';
 import { PhotoUploader } from './components/PhotoUploader';
+import { GoogleMeuNegocioMock } from './GoogleMeuNegocioMock';
 import {
   useGoogleConnection,
   useGoogleLookup,
@@ -46,24 +47,30 @@ function GoogleMeuNegocioContent() {
   const [createdProfile, setCreatedProfile] = useState<GoogleCreateProfileResult | null>(null);
 
   const { data: connection, isLoading: connectionLoading } = useGoogleConnection();
-  const { data: lookup, isLoading: lookupLoading, isError: lookupError } = useGoogleLookup(!!connection);
+  const {
+    data: lookup,
+    isLoading: lookupLoading,
+    isError: lookupError,
+    error: lookupRequestError,
+  } = useGoogleLookup(!!connection);
   const { data: settings } = useGoogleSettings();
   const connectMutation = useGoogleConnect();
   const disconnectMutation = useGoogleDisconnect();
   const createMutation = useCreateProfile();
+  const activeProfileId = createdProfile?.id ?? lookup?.profile?.id ?? null;
   const { data: verification, isLoading: verificationLoading } = useVerification(
-    createdProfile?.id ?? null,
+    activeProfileId,
     !!createdProfile
   );
   const completeMutation = useCompleteVerification();
   const { data: profile, isLoading: profileLoading } = useGoogleProfile(
-    createdProfile?.id ?? null,
-    !!createdProfile
+    activeProfileId,
+    !!activeProfileId
   );
   const syncMutation = useSyncProfile();
   const { data: syncLogs, isLoading: syncLogsLoading } = useSyncLogs(
-    createdProfile?.id ?? null,
-    !!createdProfile
+    activeProfileId,
+    !!activeProfileId
   );
 
   const settingsComplete = Boolean(
@@ -168,6 +175,7 @@ function GoogleMeuNegocioContent() {
         result={lookup}
         isLoading={lookupLoading}
         isError={lookupError}
+        errorCode={(lookupRequestError as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code}
         hasConnection={!!connection}
         settingsComplete={settingsComplete}
         createdProfile={createdProfile}
@@ -179,13 +187,13 @@ function GoogleMeuNegocioContent() {
         isCompleting={completeMutation.isPending}
       />
 
-      {createdProfile && !profileLoading && profile && (
+      {activeProfileId && !profileLoading && profile && (
         <ProfileStatusPanel
           profile={profile}
           syncLogs={syncLogs}
           isSyncing={syncLogsLoading || syncMutation.isPending}
           onSync={() =>
-            syncMutation.mutate(createdProfile.id, {
+            syncMutation.mutate(activeProfileId, {
               onSuccess: (synced) => {
                 if (synced.syncStatus === 'verified') {
                   setCreatedProfile(null);
@@ -200,9 +208,9 @@ function GoogleMeuNegocioContent() {
         />
       )}
 
-      {createdProfile && !profileLoading && profile && (
+      {activeProfileId && !profileLoading && profile && (
         <PhotoUploader
-          profileId={createdProfile.id}
+          profileId={activeProfileId}
           photos={profile.photos}
           onPhotosChange={(photos) => {
             // O query cache é invalidado automaticamente pelo hook
@@ -219,10 +227,13 @@ function GoogleMeuNegocioContent() {
 }
 
 export function GoogleMeuNegocioPage() {
+  const [searchParams] = useSearchParams();
+  const showIntegration = searchParams.get('modo') === 'integracao';
+
   return (
     <ErrorBoundary>
       <AppLayout>
-        <GoogleMeuNegocioContent />
+        {showIntegration ? <GoogleMeuNegocioContent /> : <GoogleMeuNegocioMock />}
       </AppLayout>
     </ErrorBoundary>
   );
