@@ -4,7 +4,6 @@ import { getRedis } from '../../lib/redis.js';
 import { getComplianceQueue, STUDIO_COMPLIANCE_QUEUE_NAME } from '../../lib/queue.js';
 
 export const ORPHAN_AFTER_MS = 30 * 60 * 1000; // >30min pendente → análise órfã (evita falsos órfãos de gerações lentas)
-const SWEEPER_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_CANDIDATES = 100;
 
 export type OrphanCandidate = { id: string; tenantId: string; createdAt: Date };
@@ -72,7 +71,7 @@ export async function sweepOrphanComplianceAnalysis(deps: {
   for (const candidate of candidates) {
     if (inFlight.has(candidate.id)) continue;
     await queue.add(
-      'compliance-check',
+      'worker-studio-compliance-check',
       { creativeAssetId: candidate.id, tenantId: candidate.tenantId },
       {
         removeOnComplete: 1000,
@@ -88,24 +87,4 @@ export async function sweepOrphanComplianceAnalysis(deps: {
     console.log(`[COMPLIANCE-SWEEPER] ${reenqueued} análise(s) órfã(s) re-enfileirada(s).`);
   }
   return reenqueued;
-}
-
-let sweeperTimer: NodeJS.Timeout | null = null;
-
-/** Agenda o sweep periódico (a cada 5min). Nunca derruba o processo. */
-export function startComplianceSweeper(intervalMs: number = SWEEPER_INTERVAL_MS): void {
-  if (sweeperTimer) return;
-  sweeperTimer = setInterval(() => {
-    void sweepOrphanComplianceAnalysis().catch((err) =>
-      console.error('[COMPLIANCE-SWEEPER] erro no sweep:', err instanceof Error ? err.message : err)
-    );
-  }, intervalMs);
-  sweeperTimer.unref?.();
-}
-
-export function stopComplianceSweeper(): void {
-  if (sweeperTimer) {
-    clearInterval(sweeperTimer);
-    sweeperTimer = null;
-  }
 }

@@ -8,20 +8,26 @@ Funcionalidade: Agendamento e processamento do sync assíncrono Meta
 
   Cenário: manager agenda o cron a cada 15min + bootstrap
     Dado startMetaSyncManager
-    Quando registra o repeat job
+    Quando registra o job scheduler
     Então o padrão é 'a cada 15 minutos' (cron *&#47;15 * * * *)
-    E enfileira um job 'meta-sync:bootstrap' no startup
+    E enfileira um job 'worker-meta-sync-all-connected-ad-accounts' no startup
+    E troca o repeatable legado sem manter ticks duplicados
 
   Cenário: manager registra um Job Scheduler estável sem duplicar em novo startup
     Dado dois startups do manager
     Quando o scheduler é registrado
-    Então usa upsertJobScheduler com id 'meta-sync-tick'
+    Então usa upsertJobScheduler com id 'cron-meta-sync-ad-account-data-every-15m'
     E o bootstrap mantém jobId fixo
 
+  Cenário: nome worker da migração anterior continua processável
+    Dado um job de sync por conta enfileirado com o nome anterior
+    Quando o worker recebe o job
+    Então o tenant ainda é sincronizado
+
   Cenário: job de tick processa um run por tenant
-    Dado job 'meta-sync:tick'
+    Dado job 'cron-meta-sync-ad-account-data'
     Quando o worker processa
-    Então enfileira jobs 'meta-sync:run' para cada tenant com conexão Meta
+    Então enfileira jobs 'worker-meta-sync-ad-account-data' para cada tenant com conexão Meta
 
   Cenário: jobId é determinístico por tenant + ciclo (dedupe multi-pod)
     Dado dois pods processando o mesmo tick no mesmo ciclo
@@ -54,7 +60,7 @@ Funcionalidade: Agendamento e processamento do sync assíncrono Meta
     Então captureServerException recebe somente tenantId e adAccountId do job
 
   Cenário: job novo por adAccountId sincroniza a conta sem alertar em sucesso
-    Dado um job 'meta-sync:run' com adAccountId e resultado success
+    Dado um job 'worker-meta-sync-ad-account-data' com adAccountId e resultado success
     Quando o worker processa
     Então syncAdAccount é chamado com a conta
     E notifyMetaSyncFailure NÃO é chamado
@@ -146,11 +152,23 @@ vi.mock('bullmq', () => {
     async removeRepeatable() {
       return true;
     }
+    async getRepeatableJobs() {
+      return [];
+    }
+    async removeRepeatableByKey() {
+      return true;
+    }
+    async getJobSchedulers() {
+      return [{ key: 'meta-sync-tick' }, { key: 'meta-healthcheck-every-12h' }];
+    }
+    async removeJobScheduler() {
+      return true;
+    }
     async close() {
       return undefined;
     }
   }
-  return { Worker: WorkerMock, Queue: QueueMock };
+  return { Worker: WorkerMock, Queue: QueueMock, MetricsTime: { ONE_WEEK: 7 * 24 * 60 * 60 * 1000 } };
 });
 
 vi.mock('../lib/queue.js', () => ({
@@ -206,12 +224,12 @@ describe('BDD: MetaSyncManager (agendamento)', () => {
     await startMetaSyncManager();
 
     expect(queueUpsertJobSchedulerSpy).toHaveBeenCalledWith(
-      'meta-sync-tick',
+      'cron-meta-sync-ad-account-data-every-15m',
       { pattern: '*/15 * * * *' },
-      { name: 'meta-sync:tick', data: {} },
+      { name: 'cron-meta-sync-ad-account-data', data: {} },
     );
 
-    const bootstrapCall = queueAddSpy.mock.calls.find((args) => args[0] === 'meta-sync:bootstrap');
+    const bootstrapCall = queueAddSpy.mock.calls.find((args) => args[0] === 'worker-meta-sync-all-connected-ad-accounts');
     expect(bootstrapCall).toBeTruthy();
     expect(bootstrapCall![2].jobId).toBe('meta-sync-bootstrap');
 
@@ -224,12 +242,12 @@ describe('BDD: MetaSyncManager (agendamento)', () => {
 
     expect(queueUpsertJobSchedulerSpy).toHaveBeenCalledTimes(4);
     expect(queueUpsertJobSchedulerSpy).toHaveBeenCalledWith(
-      'meta-healthcheck-every-12h',
+      'cron-meta-check-connection-health-every-12h',
       { pattern: '0 */12 * * *' },
-      { name: 'meta-healthcheck:run-all', data: {} },
+      { name: 'cron-meta-check-connection-health', data: {} },
     );
-    expect(queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:tick')).toHaveLength(0);
-    expect(queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:bootstrap')).toHaveLength(2);
+    expect(queueAddSpy.mock.calls.filter((args) => args[0] === 'cron-meta-sync-ad-account-data')).toHaveLength(0);
+    expect(queueAddSpy.mock.calls.filter((args) => args[0] === 'worker-meta-sync-all-connected-ad-accounts')).toHaveLength(2);
 
     await stopMetaSyncManager();
   });
@@ -246,7 +264,7 @@ describe('BDD: MetaHealthcheck worker', () => {
     await startMetaSyncWorker();
     const worker = workerInstances.at(-1)!;
 
-    await worker.processor({ name: 'meta-healthcheck:run-all', data: {} });
+    await worker.processor({ name: 'cron-meta-check-connection-health', data: {} });
 
     expect(mockRunHealthcheck).toHaveBeenCalledWith('t1');
     expect(mockRunHealthcheck).toHaveBeenCalledWith('t2');
@@ -260,7 +278,7 @@ describe('BDD: MetaHealthcheck worker', () => {
     await startMetaSyncWorker();
     const worker = workerInstances.at(-1)!;
 
-    await worker.processor({ name: 'meta-healthcheck:run-all', data: {} });
+    await worker.processor({ name: 'cron-meta-check-connection-health', data: {} });
 
     expect(mockRunHealthcheck).toHaveBeenCalledTimes(2);
     expect(mockCaptureServerException).toHaveBeenCalledWith(expect.any(Error), { path: 'meta-healthcheck:worker', tenantId: 't1' });
@@ -286,7 +304,7 @@ describe('BDD: MetaSyncWorker', () => {
     const ts = '2026-09-25T21:30:00.000Z';
     await enqueueMetaSyncRuns(ts, { add: queueAddSpy });
 
-    const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:run');
+    const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'worker-meta-sync-ad-account-data');
     expect(runCalls.length).toBe(2);
     expect(runCalls[0][1].adAccountId).toBe('act_1');
     expect(runCalls[0][2].jobId).toBe('meta-sync-acc-act_1-' + windowKeyFor(ts).replace(/[:.]/g, '-'));
@@ -305,7 +323,7 @@ describe('BDD: MetaSyncWorker', () => {
 
     await enqueueMetaSyncRuns(ts, { add: queueAddSpy });
 
-    const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:run');
+    const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'worker-meta-sync-ad-account-data');
     expect(runCalls).toHaveLength(2);
     expect(runCalls.map((args) => args[1])).toEqual([
       { adAccountId: 'act_1', reason: 'scheduled' },
@@ -328,14 +346,14 @@ describe('BDD: MetaSyncWorker', () => {
     await enqueueMetaSyncRuns(ts, { add: queueAddSpy });
     await enqueueMetaSyncRuns('2026-09-25T21:35:00.000Z', { add: queueAddSpy });
 
-    const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:run');
+    const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'worker-meta-sync-ad-account-data');
     const accountJobs = runCalls.filter((args) => args[1].adAccountId === 'act_1');
     expect(new Set(accountJobs.map((args) => args[2].jobId)).size).toBe(1);
   });
 
   it('Cenário: refresh stale usa uma chave por tenant para evitar jobs por request', async () => {
     await enqueueMetaSyncTenantRun({ tenantId: 't1', reason: 'stale-fallback', timestamp: '2026-09-25T21:30:00.000Z', queue: { add: queueAddSpy } });
-    const [call] = queueAddSpy.mock.calls.filter((args) => args[0] === 'meta-sync:run');
+    const [call] = queueAddSpy.mock.calls.filter((args) => args[0] === 'worker-meta-sync-ad-account-data');
     expect(call[2].jobId).toBe('meta-sync-stale-t1');
     expect(call[2].removeOnComplete).toMatchObject({ age: 300 });
   });
@@ -408,8 +426,26 @@ describe('BDD: MetaSyncWorker', () => {
   it('Cenário: worker processa job de run e job de tick', async () => {
     const worker = await startMetaSyncWorker();
     mockSyncTenant.mockResolvedValue({ status: 'success', partialFailures: [], campaignsCount: 0, leadsCount: 0, insightsCount: 0 });
+    await worker.processor({ name: 'worker-meta-sync-ad-account-data', data: { tenantId: 't1', reason: 'tick' } });
+    expect(mockSyncTenant).toHaveBeenCalledWith({ tenantId: 't1', reason: 'tick' });
+    await stopMetaSyncWorker();
+  });
+
+  it('Cenário: job Meta antigo ainda pendente é processado durante a drenagem', async () => {
+    const worker = await startMetaSyncWorker();
+    mockSyncTenant.mockResolvedValue({ status: 'success', partialFailures: [], campaignsCount: 0, leadsCount: 0, insightsCount: 0 });
     await worker.processor({ name: 'meta-sync:run', data: { tenantId: 't1', reason: 'tick' } });
     expect(mockSyncTenant).toHaveBeenCalledWith({ tenantId: 't1', reason: 'tick' });
+    await stopMetaSyncWorker();
+  });
+
+  it('Cenário: nome worker da migração anterior continua processável', async () => {
+    const worker = await startMetaSyncWorker();
+    mockSyncTenant.mockResolvedValue({ status: 'success', partialFailures: [], campaignsCount: 0, leadsCount: 0, insightsCount: 0 });
+
+    await worker.processor({ name: 'worker:meta:sync_account', data: { tenantId: 't1', reason: 'scheduled' } });
+
+    expect(mockSyncTenant).toHaveBeenCalledWith({ tenantId: 't1', reason: 'scheduled' });
     await stopMetaSyncWorker();
   });
 
@@ -418,7 +454,7 @@ describe('BDD: MetaSyncWorker', () => {
     mockSyncAdAccount.mockResolvedValue([
       { tenantId: 't1', status: 'success', partialFailures: [], campaignsCount: 5, leadsCount: 0, insightsCount: 0 },
     ]);
-    await worker.processor({ name: 'meta-sync:run', data: { tenantId: 't1', adAccountId: 'act_1', reason: 'tick' } });
+    await worker.processor({ name: 'worker-meta-sync-ad-account-data', data: { tenantId: 't1', adAccountId: 'act_1', reason: 'tick' } });
 
     expect(mockSyncAdAccount).toHaveBeenCalledWith({ adAccountId: 'act_1', reason: 'tick' });
     expect(mockNotifyFailure).not.toHaveBeenCalled();
@@ -431,7 +467,7 @@ describe('BDD: MetaSyncWorker', () => {
     mockSyncAdAccount.mockRejectedValue(new Error('token expirado'));
 
     await expect(
-      worker.processor({ name: 'meta-sync:run', data: { tenantId: 't1', adAccountId: 'act_1', reason: 'tick' } })
+      worker.processor({ name: 'worker-meta-sync-ad-account-data', data: { tenantId: 't1', adAccountId: 'act_1', reason: 'tick' } })
     ).rejects.toThrow('token expirado');
 
     expect(mockNotifyFailure).toHaveBeenCalledWith({
@@ -448,7 +484,7 @@ describe('BDD: MetaSyncWorker', () => {
       { tenantId: 't1', status: 'failed', errorCode: 'META_RATE_LIMIT', errorMessage: 'limite excedido', partialFailures: [] },
       { tenantId: 't2', status: 'success', partialFailures: [], campaignsCount: 1, leadsCount: 0, insightsCount: 0 },
     ]);
-    await worker.processor({ name: 'meta-sync:run', data: { tenantId: 't1', adAccountId: 'act_1', reason: 'tick' } });
+    await worker.processor({ name: 'worker-meta-sync-ad-account-data', data: { tenantId: 't1', adAccountId: 'act_1', reason: 'tick' } });
 
     expect(mockNotifyFailure).toHaveBeenCalledTimes(1);
     expect(mockNotifyFailure).toHaveBeenCalledWith({

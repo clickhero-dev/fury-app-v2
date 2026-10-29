@@ -1,4 +1,5 @@
 import { Worker, type Job } from 'bullmq';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { eq } from 'drizzle-orm';
 import { db, campaigns, tenants } from '@fury/db';
 import { emitToTenant } from '../lib/sse.js';
@@ -65,6 +66,7 @@ export async function startFuryEngineWorker(): Promise<Worker<FuryEngineJobPaylo
   const worker = new Worker<FuryEngineJobPayload>(FURY_ENGINE_QUEUE_NAME, processJob, {
     connection,
     concurrency: 1,
+    ...getWorkerMetricsOptions('fury-engine-worker'),
   });
 
   worker.on('completed', (job, result) => {
