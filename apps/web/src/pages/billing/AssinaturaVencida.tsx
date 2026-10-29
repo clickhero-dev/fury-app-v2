@@ -9,9 +9,12 @@ const REDIRECT_DELAY_MS = 1_500;
 
 export function AssinaturaVencida() {
   const navigate = useNavigate();
-  const { data: subscription, isError, isSuccess } = useSubscription({ refetchInterval: 60_000 });
+  const { data: subscription, isError, isSuccess, isFetchedAfterMount } = useSubscription({
+    refetchInterval: 60_000,
+    refetchOnMount: 'always',
+  });
   const subscriptionState = computeSubscriptionState(subscription);
-  const accessReleased = isSuccess && subscriptionState === 'active';
+  const accessReleased = isSuccess && isFetchedAfterMount && subscriptionState === 'active';
 
   useEffect(() => {
     if (!accessReleased) return;
