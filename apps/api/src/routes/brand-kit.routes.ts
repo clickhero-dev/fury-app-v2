@@ -61,6 +61,7 @@ router.post('/photos', photosUpload.array('files[]'), controllers.brandKit.uploa
 router.delete('/photos', controllers.brandKit.deletePhoto);
 router.get('/library', controllers.brandKitPhotos.list);
 router.post('/library', libraryUploadMiddleware, controllers.brandKitPhotos.upload);
+router.post('/library/:id/hide-from-reference-panel', controllers.brandKitPhotos.hideFromReferencePanel);
 router.delete('/library/:id', controllers.brandKitPhotos.remove);
 
 export default router;

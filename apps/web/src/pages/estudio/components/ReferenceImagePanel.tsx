@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Loader2, Upload, X } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { KIND_META, countByKind, useStudioLibrary, type LibraryFilter, type LibraryPhoto } from '@/hooks/useStudioLibrary';
 
 type Filter = LibraryFilter;
@@ -100,8 +103,27 @@ interface Props {
  */
 export function ReferenceImagePanel({ templateId, artPhotoIds, onPickTemplate, onToggleArtPhoto, onUploadClick, uploading, hideTemplates }: Props) {
   const { data: library = [], isLoading } = useStudioLibrary();
-  const photos = hideTemplates ? library.filter((p) => p.kind !== 'modelo') : library;
+  const photos = library.filter((p) => !p.hidden_from_reference_panel && (!hideTemplates || p.kind !== 'modelo'));
   const [filter, setFilter] = useState<Filter>('todas');
+  const [toHide, setToHide] = useState<LibraryPhoto | null>(null);
+  const [feedback, setFeedback] = useState('');
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void queryClient.invalidateQueries({ queryKey: ['studio-library'] });
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [queryClient]);
+  const hide = useMutation({
+    mutationFn: async (id: string) => { await api.post(`/brand-kit/library/${id}/hide-from-reference-panel`); },
+    onSuccess: async (_result, id) => {
+      queryClient.setQueryData<LibraryPhoto[]>(['studio-library'], (old) => old?.map((p) => p.id === id ? { ...p, hidden_from_reference_panel: true } : p));
+      setToHide(null);
+      setFeedback('Imagem ocultada do painel. Ela continua na biblioteca.');
+      await queryClient.invalidateQueries({ queryKey: ['studio-library'] });
+    },
+    onError: () => setFeedback('Não foi possível ocultar a imagem. Tente novamente.'),
+  });
   const visible = filter === 'todas' ? photos : photos.filter((p) => p.kind === filter);
 
   return (
@@ -125,6 +147,7 @@ export function ReferenceImagePanel({ templateId, artPhotoIds, onPickTemplate, o
         <FilterChips options={hideTemplates ? ['todas', 'produto', 'equipe'] : ['todas', 'modelo', 'produto', 'equipe']} value={filter} counts={countByKind(photos)} onChange={setFilter} />
       </div>
 
+      {feedback && <p role="status" className="text-xs text-text-secondary">{feedback}</p>}
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
         {isLoading ? (
           <div className="flex justify-center py-6">
@@ -132,24 +155,40 @@ export function ReferenceImagePanel({ templateId, artPhotoIds, onPickTemplate, o
           </div>
         ) : visible.length === 0 ? (
           <p className="py-6 text-center text-xs text-text-tertiary">
-            {photos.length === 0 ? 'Nenhuma imagem ainda. Envie a primeira.' : 'Nenhuma imagem neste filtro.'}
+            {photos.length === 0
+              ? library.some((p) => p.hidden_from_reference_panel && (!hideTemplates || p.kind !== 'modelo'))
+                ? 'Há imagens ocultas neste painel. Elas continuam na biblioteca.'
+                : 'Nenhuma imagem ainda. Envie a primeira.'
+              : 'Nenhuma imagem neste filtro.'}
           </p>
         ) : (
           <div className="grid grid-cols-3 gap-2">
             {visible.map((photo) => {
               const selected = photo.kind === 'modelo' ? photo.id === templateId : artPhotoIds.includes(photo.id);
               return (
+                <div key={photo.id} className="relative">
                 <LibraryTile
-                  key={photo.id}
                   photo={photo}
                   selected={selected}
                   onClick={() => (photo.kind === 'modelo' ? onPickTemplate?.(photo) : onToggleArtPhoto(photo))}
                 />
+                <button type="button" aria-label={`Ocultar imagem: ${KIND_META[photo.kind].label}`} title="Ocultar do painel" onClick={() => { hide.reset(); setFeedback(''); setToHide(photo); }} className="absolute right-1 bottom-1 rounded bg-surface p-1 text-text-primary shadow"><X className="h-4 w-4" /></button>
+                </div>
               );
             })}
           </div>
         )}
       </div>
+      <Dialog open={!!toHide} onOpenChange={(open) => { if (!open && !hide.isPending) setToHide(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Ocultar imagem do painel?</DialogTitle><DialogDescription>A imagem continuará na biblioteca e nas seleções já feitas. Ela ficará oculta neste painel para toda a equipe.</DialogDescription></DialogHeader>
+          {hide.isError && <p role="alert" className="text-sm text-error">Não foi possível ocultar a imagem. Tente novamente.</p>}
+          <DialogFooter>
+            <button type="button" disabled={hide.isPending} onClick={() => setToHide(null)}>Cancelar</button>
+            <button type="button" disabled={hide.isPending} onClick={() => { if (toHide) hide.mutate(toHide.id); }} className="rounded bg-brand-hover px-4 py-2 text-white">Ocultar</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </aside>
   );
 }

@@ -8,6 +8,7 @@ export interface LibraryPhoto {
   kind: LibraryKind;
   url: string;
   created_at: string;
+  hidden_from_reference_panel?: boolean;
 }
 
 interface ApiResponse<T> {
