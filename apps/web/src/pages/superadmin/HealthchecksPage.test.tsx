@@ -10,6 +10,26 @@ Funcionalidade: diagnosticar integrações Meta no superadmin
     Dado usuário com resultado anterior
     Quando clica no card
     Então vê detalhes e pode executar nova validação
+
+  Cenário: filtrar status em conjunto com a busca
+    Dado clientes com estados diferentes
+    Quando seleciona Falha e pesquisa Pessoa 3
+    Então vê somente clientes que correspondem aos dois critérios
+
+  Cenário: filtrar clientes sem validação
+    Dado que há clientes sem status
+    Quando seleciona Não validado
+    Então vê somente esses clientes
+
+  Cenário: reiniciar paginação ao filtrar
+    Dado que o superadmin está na segunda página
+    Quando seleciona Falha
+    Então a lista filtrada começa na primeira página
+
+  Cenário: mostrar vazio quando nenhum cliente corresponde
+    Dado que a combinação de filtros não encontra clientes
+    Quando o superadmin aplica os filtros
+    Então vê uma mensagem clara de lista vazia
 */
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -83,6 +103,35 @@ describe('HealthchecksPage', () => {
     expect(card).toHaveTextContent('Parcial');
     expect(card).toHaveAttribute('aria-label', expect.stringContaining('saúde parcial'));
     expect(card).toHaveClass('border-amber-400/40');
+  });
+
+  it('filtra status em conjunto com a busca', async () => {
+    render(<HealthchecksPage />);
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Ana.*Loja Ana/ });
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Status do healthcheck' }), 'failed');
+    await user.type(screen.getByRole('searchbox', { name: 'Pesquisar usuários' }), 'Pessoa 3');
+    expect(screen.getByRole('button', { name: /Pessoa 3.*Loja 3/ })).toBeInTheDocument();
+    expect(screen.getByText('1 resultado')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Ana.*Loja Ana/ })).not.toBeInTheDocument();
+  });
+
+  it('filtra clientes sem validação', async () => {
+    render(<HealthchecksPage />);
+    await screen.findByRole('button', { name: /Ana.*Loja Ana/ });
+    await userEvent.setup().selectOptions(screen.getByRole('combobox', { name: 'Status do healthcheck' }), 'unvalidated');
+    expect(screen.getByText('9 resultados')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Ana.*Loja Ana/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Pessoa 4.*Loja 4/ })).toBeInTheDocument();
+  });
+
+  it('mostra vazio para combinação sem correspondência', async () => {
+    render(<HealthchecksPage />);
+    await screen.findByRole('button', { name: /Ana.*Loja Ana/ });
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Status do healthcheck' }), 'failed');
+    await user.type(screen.getByRole('searchbox', { name: 'Pesquisar usuários' }), 'desconhecido');
+    expect(screen.getByText('Nenhum usuário corresponde aos filtros.')).toBeInTheDocument();
   });
 
   it('mostra erro seguro se a lista falha', async () => {

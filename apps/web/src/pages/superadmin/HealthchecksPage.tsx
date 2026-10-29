@@ -73,6 +73,7 @@ function dateLabel(value?: string | null) {
 export function HealthchecksPage() {
   const [users, setUsers] = useState<HealthcheckUser[]>([]);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'partial' | 'failed' | 'unvalidated'>('all');
   const [page, setPage] = useState(1);
   const [selectedUser, setSelectedUser] = useState<HealthcheckUser | null>(null);
   const [result, setResult] = useState<HealthcheckResult | null>(null);
@@ -101,10 +102,14 @@ export function HealthchecksPage() {
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('pt-BR');
-    if (!query) return users;
-    return users.filter((user) => [user.name, user.email, user.tenantName, user.tenantId]
-      .some((value) => value?.toLocaleLowerCase('pt-BR').includes(query)));
-  }, [search, users]);
+    return users.filter((user) => {
+      const matchesSearch = !query || [user.name, user.email, user.tenantName, user.tenantId]
+        .some((value) => value?.toLocaleLowerCase('pt-BR').includes(query));
+      const matchesStatus = statusFilter === 'all'
+        || (statusFilter === 'unvalidated' ? user.status == null : user.status === statusFilter);
+      return matchesSearch && matchesStatus;
+    });
+  }, [search, statusFilter, users]);
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -171,13 +176,25 @@ export function HealthchecksPage() {
     {error && !selectedUser && <div role="alert" className="rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-100">{error}</div>}
 
     <section className="space-y-4">
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A8F8B]" aria-hidden="true" />
-        <input aria-label="Pesquisar usuários" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Pesquisar por usuário, email ou tenant…" className="w-full rounded-lg border border-[#2A2D27] bg-[#161714] py-3 pl-10 pr-4 text-sm text-[#ECEDEF] outline-none placeholder:text-[#777C77] focus:border-[#1E88A8]" />
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A8F8B]" aria-hidden="true" />
+          <input aria-label="Pesquisar usuários" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Pesquisar por usuário, email ou tenant…" className="w-full rounded-lg border border-[#2A2D27] bg-[#161714] py-3 pl-10 pr-4 text-sm text-[#ECEDEF] outline-none placeholder:text-[#777C77] focus:border-[#1E88A8]" />
+        </div>
+        <label className="flex shrink-0 items-center gap-2 text-sm text-[#A1A6A1]">
+          <span>Status do healthcheck</span>
+          <select aria-label="Status do healthcheck" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as typeof statusFilter); setPage(1); }} className="rounded-lg border border-[#2A2D27] bg-[#161714] px-3 py-3 text-sm text-[#ECEDEF] outline-none focus:border-[#1E88A8]">
+            <option value="all">Todos os status</option>
+            <option value="success">Saudável</option>
+            <option value="partial">Parcial</option>
+            <option value="failed">Falha</option>
+            <option value="unvalidated">Não validado</option>
+          </select>
+        </label>
       </div>
 
       {loadingUsers ? <div className="rounded-xl border border-[#2A2D27] bg-[#161714] p-8 text-center text-sm text-[#8A8F8B]">Carregando usuários…</div>
-        : pageUsers.length === 0 ? <div className="rounded-xl border border-[#2A2D27] bg-[#161714] p-8 text-center text-sm text-[#8A8F8B]">{users.length === 0 ? 'Nenhum usuário com integração Meta encontrado.' : 'Nenhum usuário corresponde à pesquisa.'}</div>
+        : pageUsers.length === 0 ? <div className="rounded-xl border border-[#2A2D27] bg-[#161714] p-8 text-center text-sm text-[#8A8F8B]">{users.length === 0 ? 'Nenhum usuário com integração Meta encontrado.' : statusFilter !== 'all' ? 'Nenhum usuário corresponde aos filtros.' : 'Nenhum usuário corresponde à pesquisa.'}</div>
           : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {pageUsers.map((user) => {
               const name = user.name || user.email;
