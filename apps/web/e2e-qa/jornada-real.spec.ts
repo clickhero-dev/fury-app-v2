@@ -10,6 +10,11 @@ Funcionalidade: jornada real do cliente (QA com dados reais, sem mocks)
     E ao final (sucesso ou falha) a campanha é pausada e arquivada e a imagem arquivada
 */
 import { expect, test, type Page, type Response } from '@playwright/test';
+import {
+  describePreflightResponseFailures,
+  evaluateQaPreflight,
+  type QaPreflightInput,
+} from '../src/lib/qa-jornada-preflight';
 
 const apiURL = process.env.QA_API_URL ?? 'http://localhost:3000/api';
 // credenciais via GitHub Secrets no CI, variáveis de ambiente local
@@ -85,6 +90,37 @@ function apiClient(page: Page, getToken: () => string) {
       const body = await res.json();
       return { remaining: body.creativesRemaining ?? null, limit: body.creativesLimit ?? null };
     },
+    async preflight(): Promise<QaPreflightInput> {
+      const [subscriptionResponse, connectionsResponse, assetSelectionResponse, quotaResponse] = await Promise.all([
+        page.request.get(`${apiURL}/billing/subscription`, { headers: headers() }),
+        page.request.get(`${apiURL}/meta/connections`, { headers: headers() }),
+        page.request.get(`${apiURL}/meta/asset-selection`, { headers: headers() }),
+        page.request.get(`${apiURL}/studio/assets`, { headers: headers(), params: { limit: 1 } }),
+      ]);
+
+      const preflightStatuses = {
+        subscription: subscriptionResponse.status(),
+        connections: connectionsResponse.status(),
+        assetSelection: assetSelectionResponse.status(),
+        quota: quotaResponse.status(),
+      };
+      const responseFailure = describePreflightResponseFailures(preflightStatuses);
+      if (responseFailure) throw new Error(responseFailure);
+
+      const subscriptionBody = await subscriptionResponse.json();
+      const connectionsBody = await connectionsResponse.json();
+      const assetSelectionBody = await assetSelectionResponse.json();
+      const quotaBody = await quotaResponse.json();
+      return {
+        subscription: subscriptionBody?.data ?? null,
+        metaConnections: connectionsBody?.data,
+        metaPages: assetSelectionBody?.data?.pages,
+        quota: {
+          creativesRemaining: quotaBody?.creativesRemaining ?? null,
+          creativesLimit: quotaBody?.creativesLimit ?? null,
+        },
+      };
+    },
     async assets(): Promise<Asset[]> {
       const res = await page.request.get(`${apiURL}/studio/assets`, { headers: headers(), params: { limit: 100 } });
       expect(res.ok(), `GET /studio/assets -> ${res.status()}`).toBeTruthy();
@@ -105,6 +141,7 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
   let token = '';
   let campaignId: string | undefined;
   let assetId: string | undefined;
+  let cleanupFailure: Error | undefined;
   const api = apiClient(page, () => token);
 
   // banner de cookies pode cobrir botões a qualquer momento
@@ -129,6 +166,11 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
       token = (await page.evaluate(() => localStorage.getItem('token'))) ?? '';
       expect(token, 'token salvo após login').not.toBe('');
+    });
+
+    await test.step('Preflight read-only', async () => {
+      const result = evaluateQaPreflight(await api.preflight());
+      if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
     });
 
     await test.step('Criar campanha (wizard)', async () => {
@@ -283,7 +325,8 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
     if (cleanupErrors.length) {
       console.error(`[QA] Falha na limpeza:\n${cleanupErrors.join('\n')}`);
       // não mascara o erro original da jornada
-      if (!failed) throw new Error(`Limpeza falhou: ${cleanupErrors.join(' | ')}`);
+      if (!failed) cleanupFailure = new Error(`Limpeza falhou: ${cleanupErrors.join(' | ')}`);
     }
   }
+  if (cleanupFailure) throw cleanupFailure;
 });
