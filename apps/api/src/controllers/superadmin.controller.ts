@@ -80,7 +80,7 @@ const upsertGoalsSchema = z.object({
 });
 
 const planLimitsSchema = z.object({
-  creativesPerMonth: z.number().int().positive().nullable().optional(),
+  creativesPerMonth: z.number().int().min(0).nullable().optional(),
   modificationsPerCreative: z.number().int().positive().nullable().optional(),
   // vídeo: 0 desliga a criação de vídeo no plano
   videosPerMonth: z.number().int().min(0).nullable().optional(),
@@ -89,20 +89,30 @@ const planLimitsSchema = z.object({
 
 const createPlanSchema = z.object({
   name: z.string().min(1).max(100),
-  priceCents: z.number().int().positive(),
+  technicalKey: z.string().max(100).nullable().optional(),
+  priceCents: z.number().int().min(0),
   interval: z.enum(["monthly", "yearly"]).default("monthly"),
   features: z.record(z.boolean()).default({}),
   limits: planLimitsSchema.default({}),
   isActive: z.boolean().default(true),
+}).superRefine((value, ctx) => {
+  if (value.priceCents === 0 && value.technicalKey !== 'trial_new_signup') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['priceCents'], message: 'Preço zero é reservado ao plano Trial.' });
+  }
 });
 
 const updatePlanSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  priceCents: z.number().int().positive().optional(),
+  technicalKey: z.string().max(100).nullable().optional(),
+  priceCents: z.number().int().min(0).optional(),
   interval: z.enum(["monthly", "yearly"]).optional(),
   features: z.record(z.boolean()).optional(),
   limits: planLimitsSchema.optional(),
   isActive: z.boolean().optional(),
+}).superRefine((value, ctx) => {
+  if (value.priceCents === 0 && value.technicalKey !== 'trial_new_signup') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['priceCents'], message: 'Preço zero é reservado ao plano Trial.' });
+  }
 });
 
 function toMoney(v: number) {

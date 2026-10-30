@@ -156,6 +156,12 @@ export class SuperAdminRepository extends TenantScopedRepository {
     return row;
   }
   async updatePlan(id: string, data: Partial<Plan>) {
+    if (data.technicalKey !== undefined) {
+      const existing = await this.db.query.plans.findFirst({ where: eq(plans.id, id) });
+      if (existing?.technicalKey && existing.technicalKey !== data.technicalKey) {
+        throw new Error('PLAN_TECHNICAL_KEY_IMMUTABLE');
+      }
+    }
     const [row] = await this.db.update(plans).set(data as any).where(eq(plans.id, id)).returning();
     return row ?? null;
   }

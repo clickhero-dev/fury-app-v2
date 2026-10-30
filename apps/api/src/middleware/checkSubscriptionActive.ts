@@ -33,7 +33,7 @@ export function checkSubscriptionActive(
         return next(new AppError(403, 'SUBSCRIPTION_EXPIRED', 'Sua assinatura está vencida. Entre em contato com o suporte.'));
       }
 
-      if (sub.status === 'trial' && sub.trialEndsAt && now > sub.trialEndsAt) {
+      if (sub.status === 'trial' && sub.trialEndsAt && now >= sub.trialEndsAt) {
         return next(new AppError(403, 'TRIAL_EXPIRED', 'Seu período de teste expirou. Entre em contato com o suporte.'));
       }
 

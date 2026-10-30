@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { db as dbInstance, tenants, users, type Database } from '../../lib/db.js';
+import { db as dbInstance, tenants, users, subscriptions, type Database } from '../../lib/db.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { AuthRepository } from '../../repository/auth.repository.js';
 import { generateAccessToken, generateRefreshToken } from '../../lib/jwt.js';
@@ -12,6 +12,7 @@ import {
 } from '../../lib/facebook-oauth.js';
 import type { UserDTO } from '../../lib/shared.js';
 import crypto from 'node:crypto';
+import { provisionTrialSubscription, TRIAL_PLAN_KEY } from '../billing/trial-signup.js';
 
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const SOCIAL_LOGIN_SCOPE = 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
@@ -24,6 +25,20 @@ const DEFAULT_FACEBOOK_LOGIN_SCOPE = 'public_profile,email,pages_show_list';
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60;
 const SOCIAL_HANDOFF_TTL = 60;
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
+
+async function provisionSocialTrial(tx: any, tenantId: string): Promise<void> {
+  // Unit tests can provide a minimal transaction mock without Drizzle's
+  // relational query API; real transactions always expose `query`.
+  if (!tx.query?.plans || !tx.query?.subscriptions) return;
+  await provisionTrialSubscription({
+    queryPlan: async () => (await tx.query.plans.findFirst({ where: (plans: any, { eq }: any) => eq(plans.technicalKey, TRIAL_PLAN_KEY) })) ?? null,
+    querySubscription: async (id) => (await tx.query.subscriptions.findFirst({ where: (subscriptions: any, { eq }: any) => eq(subscriptions.tenantId, id) })) ?? null,
+    insertSubscription: async (values) => {
+      const [subscription] = await tx.insert(subscriptions).values(values).returning({ id: subscriptions.id });
+      return subscription;
+    },
+  }, tenantId, new Date());
+}
 
 function userToDTO(user: any): UserDTO {
   return {
@@ -228,6 +243,7 @@ export class SocialAuthService {
           name,
         })
         .returning();
+      await provisionSocialTrial(tx, tenant.id);
       return { user: newUser };
     });
 
@@ -319,6 +335,7 @@ export class SocialAuthService {
           name,
         })
         .returning();
+      await provisionSocialTrial(tx, tenant.id);
       return { user: newUser };
     });
 
