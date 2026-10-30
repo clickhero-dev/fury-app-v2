@@ -1225,6 +1225,28 @@ export const announcementViews = pgTable(
   }),
 );
 
+// Notificações persistentes por usuário, sempre filtradas por tenant na API.
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    recipientUserId: uuid('recipient_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    type: varchar('type', { length: 32 }).notNull().default('general'),
+    title: varchar('title', { length: 120 }).notNull(),
+    body: varchar('body', { length: 500 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    idempotencyKey: varchar('idempotency_key', { length: 128 }),
+    payloadHash: varchar('payload_hash', { length: 64 }),
+  },
+  (table) => ({
+    recipientCreatedIdx: index('notifications_recipient_created_idx').on(table.tenantId, table.recipientUserId, table.createdAt, table.id),
+    unreadIdx: index('notifications_recipient_unread_idx').on(table.tenantId, table.recipientUserId, table.readAt, table.createdAt),
+  }),
+);
+
 // Export all tables
 export const allTables = {
   tenants,
@@ -1267,4 +1289,5 @@ export const allTables = {
   faqSlugRedirects,
   announcements,
   announcementViews,
+  notifications,
 };

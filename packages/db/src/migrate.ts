@@ -160,6 +160,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0050_announcements' },
   { tag: '0051_brand_kit_photo_panel_visibility' },
   { tag: '0052_subscription_renewal_events' },
+  { tag: '0053_notifications' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
@@ -205,6 +206,7 @@ export const REQUIRED_TABLES = [
   'faq_slug_redirects',
   'announcements',
   'announcement_views',
+  'notifications',
 ];
 
 /**

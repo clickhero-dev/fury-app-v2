@@ -71,6 +71,10 @@ import { AnnouncementController } from './controllers/announcement.controller.js
 import { MetaHealthcheckRepository } from './repository/meta-healthcheck.repository.js';
 import { metaHealthcheckService } from './services/meta/meta-healthcheck.service.js';
 import { MetaHealthcheckController } from './controllers/meta-healthcheck.controller.js';
+import { NotificationRepository } from './repository/notification.repository.js';
+import { NotificationService } from './services/notifications/notification.service.js';
+import { NotificationController } from './controllers/notification.controller.js';
+import { emitToUser } from './lib/sse.js';
 import { BusinessContextService } from './services/core/business-context.service.js';
 import { BusinessContextController } from './controllers/business-context.controller.js';
 
@@ -117,6 +121,8 @@ export const ticketService = new TicketService(clickUpTicketsClient);
 export const faqRepository = new FaqRepository();
 export const announcementRepository = new AnnouncementRepository();
 export const metaHealthcheckRepository = new MetaHealthcheckRepository();
+export const notificationRepository = new NotificationRepository();
+export const notificationService = new NotificationService(notificationRepository, (tenantId, userId) => emitToUser(tenantId, userId, 'notifications.changed', { version: 1 }));
 
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
@@ -136,6 +142,7 @@ export const controllers = {
   faq: new FaqController(faqRepository),
   announcement: new AnnouncementController(announcementRepository),
   metaHealthchecks: new MetaHealthcheckController(metaHealthcheckRepository, metaHealthcheckService),
+  notification: new NotificationController(notificationService),
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),
   brandKitPhotos: new BrandKitPhotoController(brandKitPhotoService),
