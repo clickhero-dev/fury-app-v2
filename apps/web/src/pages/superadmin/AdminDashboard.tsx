@@ -106,6 +106,10 @@ export function DashboardAdminPage() {
       label: 'Cancelamentos', value: String(stats.cancellations), sub: 'no período', color: '#C0392B',
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>,
     },
+    {
+      label: 'Contas com plano vencido', value: String(stats.expiredAccounts), sub: 'contas distintas · situação atual', color: '#CF6F03',
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>,
+    },
   ];
 
   return (
@@ -160,7 +164,7 @@ export function DashboardAdminPage() {
     </div>
 
     {/* KPI cards */}
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }}>
       {kpis.map((kpi) => (
         <div key={kpi.label} style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -236,6 +240,11 @@ export function DashboardAdminPage() {
           })}
           {stats.recentActivity.length === 0 && (
             <div style={{ fontSize: 13, color: '#5A605C' }}>Sem atividade no período.</div>
+          )}
+          {stats.renewalActivityCoverage === 'unavailable' && (
+            <div style={{ marginTop: 14, fontSize: 11, lineHeight: 1.5, color: '#7E8480' }}>
+              Renovações não estão disponíveis no histórico: nenhum evento confiável foi persistido. Nenhuma renovação foi inferida por alterações de assinatura.
+            </div>
           )}
         </div>
       </div>

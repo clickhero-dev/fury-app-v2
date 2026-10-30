@@ -11,7 +11,7 @@ import {
   campaigns,
   creativeAssets,
 } from '@fury/db';
-import { and, desc, eq, gt, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type Tenant = typeof tenants.$inferSelect;
@@ -35,8 +35,25 @@ export interface DashboardStats {
   newClients: number;
   activeTrials: number;
   cancellations: number;
+  expiredAccounts: number;
+  renewalActivityCoverage: 'unavailable';
   plans: Array<{ planId: string; name: string; priceCents: number; interval: string; clients: number }>;
   recentActivity: ActivityItem[];
+}
+
+/** Conta contas distintas, não assinaturas, para o retrato de vencimento atual. */
+export function countExpiredAccounts(rows: Array<{ tenantId: string }>): number {
+  return new Set(rows.map((row) => row.tenantId)).size;
+}
+
+export function isExpiredSubscription(
+  subscription: { status: string; isNonExpirable: boolean | null; currentPeriodEnd: Date | null },
+  now: Date,
+): boolean {
+  return subscription.status === 'active'
+    && subscription.isNonExpirable === false
+    && subscription.currentPeriodEnd !== null
+    && subscription.currentPeriodEnd <= now;
 }
 
 /** Monta a lista "Atividade Recente" (puro — sem DB). Subs já vêm do JOIN com tenants/plans. */
@@ -292,6 +309,14 @@ export class SuperAdminRepository extends TenantScopedRepository {
     const trialSubs = await this.db.query.subscriptions.findMany({
       where: and(eq(subscriptions.status, 'trial'), or(isNull(subscriptions.trialEndsAt), gt(subscriptions.trialEndsAt, now))),
     });
+    const expiredSubs = await this.db.query.subscriptions.findMany({
+      where: and(
+        eq(subscriptions.status, 'active'),
+        eq(subscriptions.isNonExpirable, false),
+        lte(subscriptions.currentPeriodEnd, now),
+      ),
+      columns: { tenantId: true },
+    });
 
     const planIds = [...new Set(activeSubs.map((s) => s.planId))];
     const planRows = planIds.length ? await this.db.query.plans.findMany({ where: inArray(plans.id, planIds) }) : [];
@@ -342,6 +367,9 @@ export class SuperAdminRepository extends TenantScopedRepository {
       newClients: Number((newClientsRow as any)?.total ?? 0),
       activeTrials: trialSubs.length,
       cancellations: Number((cancelRow as any)?.total ?? 0),
+      expiredAccounts: countExpiredAccounts(expiredSubs),
+      // O schema atual não persiste eventos de renovação; não inferir por updatedAt.
+      renewalActivityCoverage: 'unavailable',
       plans: [...countByPlan.entries()]
         .map(([planId, clients]) => {
           const p = planById.get(planId);

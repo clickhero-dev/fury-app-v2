@@ -6,6 +6,8 @@ export interface AdminDashboardStats {
   newClients: number;
   activeTrials: number;
   cancellations: number;
+  expiredAccounts: number;
+  renewalActivityCoverage: 'unavailable';
   plans: Array<{ planId: string; name: string; priceCents: number; interval: string; clients: number }>;
   recentActivity: Array<{ tipo: 'novo' | 'trial' | 'plano' | 'cancelamento'; tenantName: string; description: string; at: string }>;
 }

@@ -1,6 +1,13 @@
+/*
+ * Funcionalidade: dashboard global do superadmin
+ * Cenário: contas vencidas são contadas sem duplicar tenants
+ * Dado assinaturas vencidas e elegíveis de contas repetidas
+ * Quando o dashboard calcula o retrato atual
+ * Então cada conta é contada uma única vez
+ */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SuperAdminController } from "../controllers/superadmin.controller.js";
-import { mapRecentActivity } from "../repository/superadmin.repository.js";
+import { countExpiredAccounts, isExpiredSubscription, mapRecentActivity } from "../repository/superadmin.repository.js";
 
 function mockRepo() {
   return { getDashboardStats: vi.fn() };
@@ -40,6 +47,30 @@ describe("mapRecentActivity (puro, sem DB)", () => {
     const items = mapRecentActivity(subs as any, tenants as any);
     expect(items.length).toBe(10);
     expect(items.some((i) => i.tipo === "novo")).toBe(true);
+  });
+});
+
+describe("countExpiredAccounts", () => {
+  it("conta tenants distintos de assinaturas ativas vencidas", () => {
+    expect(countExpiredAccounts([
+      { tenantId: "tenant-a" },
+      { tenantId: "tenant-a" },
+      { tenantId: "tenant-b" },
+    ])).toBe(2);
+  });
+
+  it("não inventa contas quando não há assinaturas vencidas", () => {
+    expect(countExpiredAccounts([])).toBe(0);
+  });
+
+  it("considera somente active expirável com fim de período no passado ou agora", () => {
+    const now = new Date("2026-10-30T12:00:00Z");
+    expect(isExpiredSubscription({ status: "active", isNonExpirable: false, currentPeriodEnd: new Date("2026-10-30T12:00:00Z") }, now)).toBe(true);
+    expect(isExpiredSubscription({ status: "active", isNonExpirable: false, currentPeriodEnd: new Date("2026-10-30T11:59:59Z") }, now)).toBe(true);
+    expect(isExpiredSubscription({ status: "active", isNonExpirable: false, currentPeriodEnd: new Date("2026-10-30T12:00:01Z") }, now)).toBe(false);
+    expect(isExpiredSubscription({ status: "active", isNonExpirable: true, currentPeriodEnd: new Date("2026-01-01T00:00:00Z") }, now)).toBe(false);
+    expect(isExpiredSubscription({ status: "trial", isNonExpirable: false, currentPeriodEnd: new Date("2026-01-01T00:00:00Z") }, now)).toBe(false);
+    expect(isExpiredSubscription({ status: "active", isNonExpirable: false, currentPeriodEnd: null }, now)).toBe(false);
   });
 });
 
