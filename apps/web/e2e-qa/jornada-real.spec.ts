@@ -87,22 +87,25 @@ function apiClient(page: Page, getToken: () => string) {
       return { remaining: body.creativesRemaining ?? null, limit: body.creativesLimit ?? null };
     },
     async preflight(): Promise<QaPreflightInput> {
-      const [subscriptionResponse, connectionsResponse, quotaResponse] = await Promise.all([
+      const [subscriptionResponse, connectionsResponse, assetSelectionResponse, quotaResponse] = await Promise.all([
         page.request.get(`${apiURL}/billing/subscription`, { headers: headers() }),
         page.request.get(`${apiURL}/meta/connections`, { headers: headers() }),
+        page.request.get(`${apiURL}/meta/asset-selection`, { headers: headers() }),
         page.request.get(`${apiURL}/studio/assets`, { headers: headers(), params: { limit: 1 } }),
       ]);
 
-      if (!subscriptionResponse.ok() || !connectionsResponse.ok() || !quotaResponse.ok()) {
+      if (!subscriptionResponse.ok() || !connectionsResponse.ok() || !assetSelectionResponse.ok() || !quotaResponse.ok()) {
         throw new Error('PREFLIGHT_UNKNOWN: não foi possível consultar as pré-condições read-only da conta QA.');
       }
 
       const subscriptionBody = await subscriptionResponse.json();
       const connectionsBody = await connectionsResponse.json();
+      const assetSelectionBody = await assetSelectionResponse.json();
       const quotaBody = await quotaResponse.json();
       return {
         subscription: subscriptionBody?.data ?? null,
         metaConnections: connectionsBody?.data,
+        metaPages: assetSelectionBody?.data?.pages,
         quota: {
           creativesRemaining: quotaBody?.creativesRemaining ?? null,
           creativesLimit: quotaBody?.creativesLimit ?? null,

@@ -8,6 +8,7 @@ export type QaSubscription = {
 export type QaPreflightInput = {
   subscription?: QaSubscription | null;
   metaConnections?: Array<{ id: string; selectedAdAccountId: string | null }>;
+  metaPages?: Array<{ pageId: string; hasWhatsApp: boolean }>;
   quota?: { creativesRemaining: number | null; creativesLimit: number | null };
 };
 
@@ -33,7 +34,12 @@ function subscriptionIsEligible(subscription: QaSubscription): boolean | null {
 }
 
 export function evaluateQaPreflight(input: QaPreflightInput): QaPreflightResult {
-  if (input.subscription === undefined || input.metaConnections === undefined || input.quota === undefined) {
+  if (
+    input.subscription === undefined ||
+    input.metaConnections === undefined ||
+    input.metaPages === undefined ||
+    input.quota === undefined
+  ) {
     return UNKNOWN;
   }
 
@@ -52,6 +58,9 @@ export function evaluateQaPreflight(input: QaPreflightInput): QaPreflightResult 
   }
   if (!input.metaConnections.some((connection) => connection.id && connection.selectedAdAccountId)) {
     return { ok: false, code: 'META_NOT_READY', message: 'A conta QA não possui conta de anúncios selecionada.' };
+  }
+  if (input.metaPages.length === 0 || !input.metaPages.some((page) => page.pageId)) {
+    return { ok: false, code: 'META_NOT_READY', message: 'A conta QA não possui Página Meta disponível.' };
   }
 
   const { creativesRemaining } = input.quota;

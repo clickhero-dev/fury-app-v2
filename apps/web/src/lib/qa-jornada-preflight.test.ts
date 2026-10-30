@@ -22,6 +22,7 @@ import { evaluateQaPreflight, type QaPreflightInput } from './qa-jornada-preflig
 const eligible: QaPreflightInput = {
   subscription: { status: 'active', currentPeriodEnd: '2099-01-01T00:00:00.000Z' },
   metaConnections: [{ id: 'connection-1', selectedAdAccountId: 'act_1' }],
+  metaPages: [{ pageId: 'page-1', hasWhatsApp: true }],
   quota: { creativesRemaining: 2, creativesLimit: 8 },
 };
 
@@ -52,6 +53,13 @@ describe('evaluateQaPreflight', () => {
     expect(
       evaluateQaPreflight({ ...eligible, metaConnections: [{ id: 'connection-1', selectedAdAccountId: null }] }),
     ).toMatchObject({ ok: false, code: 'META_NOT_READY' });
+  });
+
+  it('bloqueia quando não há Página Meta disponível para o wizard', () => {
+    expect(evaluateQaPreflight({ ...eligible, metaPages: [] })).toMatchObject({
+      ok: false,
+      code: 'META_NOT_READY',
+    });
   });
 
   it('bloqueia cota esgotada', () => {
