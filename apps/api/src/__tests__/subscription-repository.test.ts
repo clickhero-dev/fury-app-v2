@@ -20,6 +20,7 @@ function makeDb() {
     },
     update,
     insert,
+    transaction: vi.fn(async (callback: (tx: any) => unknown) => callback({ update, insert })),
     delete: vi.fn(() => ({ where: async () => {} })),
   };
   return { db, update, insert };

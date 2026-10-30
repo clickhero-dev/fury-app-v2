@@ -2,7 +2,7 @@ import {
   db as defaultDb,
   type Database,
   subscriptions,
-  subscriptionRenewalEvents,
+  renewalEvents,
   plans,
   invoices,
   budgetOptimizations,
@@ -236,9 +236,9 @@ export class SubscriptionRepository extends TenantScopedRepository {
         .returning({ id: subscriptions.id, tenantId: subscriptions.tenantId });
       if (!updated) return false;
 
-      await tx.insert(subscriptionRenewalEvents).values({
-        tenantId: updated.tenantId,
+      await tx.insert(renewalEvents).values({
         subscriptionId: updated.id,
+        tenantId: updated.tenantId,
         previousPeriodEnd: expectedPeriodEnd,
       });
       return true;

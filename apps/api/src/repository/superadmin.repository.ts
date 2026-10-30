@@ -5,7 +5,7 @@ import {
   users,
   plans,
   subscriptions,
-  subscriptionRenewalEvents,
+  renewalEvents,
   brandKits,
   clientGoals,
   furyConfig,
@@ -372,13 +372,13 @@ export class SuperAdminRepository extends TenantScopedRepository {
     const recentRenewals = await this.db
       .select({
         tenantName: tenants.name,
-        renewedAt: subscriptionRenewalEvents.renewedAt,
-        previousPeriodEnd: subscriptionRenewalEvents.previousPeriodEnd,
+        renewedAt: renewalEvents.renewedAt,
+        previousPeriodEnd: renewalEvents.previousPeriodEnd,
       })
-      .from(subscriptionRenewalEvents)
-      .leftJoin(tenants, eq(subscriptionRenewalEvents.tenantId, tenants.id))
-      .where(gte(subscriptionRenewalEvents.renewedAt, start))
-      .orderBy(desc(subscriptionRenewalEvents.renewedAt))
+      .from(renewalEvents)
+      .leftJoin(tenants, eq(renewalEvents.tenantId, tenants.id))
+      .where(gte(renewalEvents.renewedAt, start))
+      .orderBy(desc(renewalEvents.renewedAt))
       .limit(10);
 
     return {

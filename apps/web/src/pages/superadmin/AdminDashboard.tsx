@@ -107,6 +107,10 @@ export function DashboardAdminPage() {
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
     },
     {
+      label: 'Contas Vencidas', value: String(stats.expiredAccounts), sub: 'situação atual', color: '#C0392B',
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="6" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+    },
+    {
       label: 'Cancelamentos', value: String(stats.cancellations), sub: 'no período', color: '#C0392B',
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>,
     },
@@ -216,7 +220,8 @@ export function DashboardAdminPage() {
 
       {/* Atividade recente */}
       <div style={{ ...cardStyle, padding: '20px 24px' }}>
-        <h2 style={{ fontSize: 13, fontWeight: 600, color: '#ECEDEF', margin: '0 0 16px', letterSpacing: '-0.2px' }}>Atividade Recente</h2>
+        <h2 style={{ fontSize: 13, fontWeight: 600, color: '#ECEDEF', margin: '0 0 4px', letterSpacing: '-0.2px' }}>Atividade Recente</h2>
+        <div style={{ fontSize: 11, color: '#5A605C', marginBottom: 12 }}>Renovações exibidas a partir do início do registro.</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {stats.recentActivity.map((a, i) => {
             const s = ATIVIDADE_CORES[a.tipo];
