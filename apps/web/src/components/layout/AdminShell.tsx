@@ -3,6 +3,7 @@ import { Users, Clock, Zap, LogOut, LayoutGrid, ArrowLeft, Ticket, CircleHelp, A
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useFavicon } from '@/hooks/useFavicon';
 import { SnackHost } from './SnackHost';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface NavItem {
   path: string;
@@ -29,6 +30,7 @@ export function AdminShell() {
   const location = useLocation();
   const tenantId = location.pathname.match(/\/admin\/tenants\/([^/]+)/)?.[1];
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -136,7 +138,7 @@ export function AdminShell() {
         {/* Footer */}
         <div className="px-2.5 py-3 border-t border-[#252721] mt-auto">
           <button
-            onClick={handleLogout}
+            onClick={() => setLogoutDialogOpen(true)}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#4A4F4B] hover:text-[#ECEDEF] transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.8} />
@@ -144,6 +146,18 @@ export function AdminShell() {
           </button>
         </div>
       </aside>
+      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <DialogContent className="border-[#2A2D27] bg-[#161714] text-[#ECEDEF]">
+          <DialogHeader>
+            <DialogTitle className="text-[#ECEDEF]">Sair da conta?</DialogTitle>
+            <DialogDescription className="text-[#A0A49F]">Você realmente deseja sair?</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button type="button" autoFocus onClick={() => setLogoutDialogOpen(false)} className="rounded-lg border border-[#3A3D36] px-4 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">Cancelar</button>
+            <button type="button" onClick={() => { setLogoutDialogOpen(false); handleLogout(); }} className="rounded-lg bg-[#1E88A8] px-4 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">Sim, sair</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Main */}
       <main className="flex-1 flex flex-col bg-[#0C0D0A] overflow-hidden text-[#ECEDEF]">

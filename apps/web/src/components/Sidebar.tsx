@@ -19,6 +19,7 @@ import { AdySymbol } from '@/components/AdySymbol';
 import { SidebarUserCard } from './SidebarUserCard';
 import { captureEvent } from '@/lib/posthog';
 import { isNavItemActive, isNavItemCurrent, type NavItemShape } from './sidebarNav';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -145,6 +146,7 @@ function SidebarItem({
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const location = useLocation();
   const logout = useLogout();
 
@@ -281,11 +283,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
         {/* Botão Sair */}
         <button
-          onClick={() => {
-            onMobileClose?.();
-            captureEvent('logout');
-            logout();
-          }}
+          onClick={() => setLogoutDialogOpen(true)}
           title={collapsed ? 'Sair' : undefined}
           className="flex w-full items-center justify-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-text-secondary hover:bg-sidebar-hover hover:text-text-primary transition-colors"
         >
@@ -311,6 +309,18 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           </button>
         </div>
       </div>
+      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <DialogContent className="border-border bg-surface text-text-primary">
+          <DialogHeader>
+            <DialogTitle>Sair da conta?</DialogTitle>
+            <DialogDescription>Você realmente deseja sair?</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button type="button" autoFocus onClick={() => setLogoutDialogOpen(false)} className="rounded-lg border border-border px-4 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">Cancelar</button>
+            <button type="button" onClick={() => { setLogoutDialogOpen(false); onMobileClose?.(); captureEvent('logout'); logout(); }} className="rounded-lg bg-brand px-4 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">Sim, sair</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </aside>
   );
 }

@@ -8,7 +8,8 @@ vi.mock('@/lib/posthog', () => ({ captureEvent: vi.fn() }));
 
 const mockCaptureEvent = vi.mocked(captureEvent);
 
-vi.mock('@/hooks/useLogout', () => ({ useLogout: () => vi.fn() }));
+const { mockLogout } = vi.hoisted(() => ({ mockLogout: vi.fn() }));
+vi.mock('@/hooks/useLogout', () => ({ useLogout: () => mockLogout }));
 
 // SidebarUserCard depende de useAuth/useBilling — fora do escopo deste teste
 // (a cobertura aqui é a navegação). Renderiza um slot neutro.
@@ -203,5 +204,30 @@ describe('Sidebar — seções e submenu recolhíveis', () => {
     renderSidebar('/configuracoes/integracoes');
 
     expect(screen.getByRole('link', { name: /integrações/i })).toBeInTheDocument();
+  });
+});
+
+// Funcionalidade: confirmação de logout na sidebar principal
+// Cenário: cancelar ou confirmar o encerramento da sessão
+// Dado que estou autenticado, Quando aciono Sair, Então só confirmando encerro a sessão.
+describe('Sidebar — confirmação de logout', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('abre confirmação e cancelar mantém o logout sem execução', async () => {
+    renderSidebar();
+    fireEvent.click(screen.getByRole('button', { name: 'Sair' }));
+    expect(await screen.findByRole('dialog', { name: 'Sair da conta?' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockLogout).not.toHaveBeenCalled();
+    expect(mockCaptureEvent).not.toHaveBeenCalledWith('logout');
+  });
+
+  it('confirma uma vez e registra o evento de logout somente após confirmação', async () => {
+    renderSidebar();
+    fireEvent.click(screen.getByRole('button', { name: 'Sair' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sim, sair' }));
+    expect(mockLogout).toHaveBeenCalledTimes(1);
+    expect(mockCaptureEvent).toHaveBeenCalledWith('logout');
   });
 });
