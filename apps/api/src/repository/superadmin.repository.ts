@@ -10,6 +10,7 @@ import {
   furyConfig,
   campaigns,
   creativeAssets,
+  renewalEvents,
 } from '@fury/db';
 import { and, desc, eq, gt, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
@@ -23,7 +24,7 @@ type Subscription = typeof subscriptions.$inferSelect;
 export type DashboardPeriod = '7d' | '30d' | '90d';
 
 export type ActivityItem = {
-  tipo: 'novo' | 'trial' | 'plano' | 'cancelamento';
+  tipo: 'novo' | 'trial' | 'plano' | 'cancelamento' | 'renovacao';
   tenantName: string;
   description: string;
   at: string; // ISO
@@ -35,14 +36,27 @@ export interface DashboardStats {
   newClients: number;
   activeTrials: number;
   cancellations: number;
+  expiredAccounts: number;
   plans: Array<{ planId: string; name: string; priceCents: number; interval: string; clients: number }>;
   recentActivity: ActivityItem[];
+}
+
+export function countExpiredAccounts(
+  subs: Array<{ tenantId: string; status: string; isNonExpirable: boolean; currentPeriodEnd: Date | null }>,
+  now: Date,
+): number {
+  return new Set(
+    subs
+      .filter((s) => s.status === 'active' && !s.isNonExpirable && s.currentPeriodEnd !== null && s.currentPeriodEnd.getTime() <= now.getTime())
+      .map((s) => s.tenantId),
+  ).size;
 }
 
 /** Monta a lista "Atividade Recente" (puro — sem DB). Subs já vêm do JOIN com tenants/plans. */
 export function mapRecentActivity(
   subs: Array<{ status: string; createdAt: Date; updatedAt: Date; tenantName: string | null; planName: string | null }>,
-  newTenants: Array<{ name: string; createdAt: Date }>
+  newTenants: Array<{ name: string; createdAt: Date }>,
+  renewals: Array<{ tenantName: string | null; planName: string | null; renewedAt: Date }> = [],
 ): ActivityItem[] {
   const items: ActivityItem[] = [
     ...subs.map((s): ActivityItem => {
@@ -54,6 +68,12 @@ export function mapRecentActivity(
       return { tipo: 'plano', tenantName, description: s.planName ? `assinou o plano ${s.planName}` : 'assinou um plano', at: s.createdAt.toISOString() };
     }),
     ...newTenants.map((t): ActivityItem => ({ tipo: 'novo', tenantName: t.name, description: 'criou conta na plataforma', at: t.createdAt.toISOString() })),
+    ...renewals.map((r): ActivityItem => ({
+      tipo: 'renovacao',
+      tenantName: r.tenantName ?? 'Tenant',
+      description: r.planName ? `renovou o período do plano ${r.planName}` : 'renovou o período do plano',
+      at: r.renewedAt.toISOString(),
+    })),
   ];
   return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10);
 }
@@ -295,6 +315,9 @@ export class SuperAdminRepository extends TenantScopedRepository {
         )
       ),
     });
+    const allActiveSubs = await this.db.query.subscriptions.findMany({
+      where: eq(subscriptions.status, 'active'),
+    });
     const trialSubs = await this.db.query.subscriptions.findMany({
       where: and(eq(subscriptions.status, 'trial'), or(isNull(subscriptions.trialEndsAt), gt(subscriptions.trialEndsAt, now))),
     });
@@ -342,19 +365,29 @@ export class SuperAdminRepository extends TenantScopedRepository {
       limit: 5,
     });
 
+    const recentRenewals = await this.db
+      .select({ tenantName: tenants.name, planName: plans.name, renewedAt: renewalEvents.renewedAt })
+      .from(renewalEvents)
+      .leftJoin(tenants, eq(renewalEvents.tenantId, tenants.id))
+      .leftJoin(subscriptions, eq(renewalEvents.subscriptionId, subscriptions.id))
+      .leftJoin(plans, eq(subscriptions.planId, plans.id))
+      .orderBy(desc(renewalEvents.renewedAt))
+      .limit(10);
+
     return {
       mrrCents,
       activeClients: activeSubs.length,
       newClients: Number((newClientsRow as any)?.total ?? 0),
       activeTrials: trialSubs.length,
       cancellations: Number((cancelRow as any)?.total ?? 0),
+      expiredAccounts: countExpiredAccounts(allActiveSubs, now),
       plans: [...countByPlan.entries()]
         .map(([planId, clients]) => {
           const p = planById.get(planId);
           return { planId, name: p?.name ?? 'Plano removido', priceCents: p?.priceCents ?? 0, interval: p?.interval ?? 'monthly', clients };
         })
         .sort((a, b) => b.clients - a.clients),
-      recentActivity: mapRecentActivity(recentSubs as any, recentNewTenants as any),
+      recentActivity: mapRecentActivity(recentSubs as any, recentNewTenants as any, recentRenewals as any),
     };
   }
 }

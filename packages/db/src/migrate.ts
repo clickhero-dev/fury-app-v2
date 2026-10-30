@@ -160,6 +160,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0050_announcements' },
   { tag: '0051_brand_kit_photo_panel_visibility' },
   { tag: '0052_trial_plan_technical_key' },
+  { tag: '0052_subscription_renewal_events' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
