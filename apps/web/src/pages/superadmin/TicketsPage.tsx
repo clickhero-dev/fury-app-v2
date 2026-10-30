@@ -7,7 +7,7 @@ import { z } from 'zod';
 import api from '@/lib/api';
 import { showSnack } from '@/lib/snack';
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 10;
 const MAX_ATTACHMENTS = 5;
 const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
 const acceptedAttachmentTypes = ['image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'video/quicktime'];
@@ -114,15 +114,43 @@ const queueEmpty: Record<Queue, string> = {
 };
 
 /** Lista única com abas por fila, altura limitada com scroll e paginação local. */
+const EMPTY_STATUS = '__empty_status__';
+
+function normalizeStatus(status: string): string {
+  return status.trim().toLocaleLowerCase() || EMPTY_STATUS;
+}
+
 function TicketsTabs({ lists, loading }: { lists: TicketLists; loading: boolean }) {
   const [queue, setQueue] = useState<Queue>('open');
   const [page, setPage] = useState(0);
-  const tickets = lists[queue];
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const statusOptions = Array.from(new Map(
+    [...lists.open, ...lists.resolved].map((ticket) => {
+      const value = normalizeStatus(ticket.status);
+      return [value, { value, label: value === EMPTY_STATUS ? 'Sem status' : statusLabel(ticket.status) }] as const;
+    }),
+  ).values());
+  if (statusFilter && !statusOptions.some((option) => option.value === statusFilter)) {
+    statusOptions.push({ value: statusFilter, label: statusFilter === EMPTY_STATUS ? 'Sem status' : statusLabel(statusFilter) });
+  }
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const filteredLists = (Object.keys(queueLabels) as Queue[]).reduce((result, key) => {
+    result[key] = lists[key].filter((ticket) => {
+      const matchesSearch = !normalizedSearch || ticket.name.toLocaleLowerCase().includes(normalizedSearch);
+      const matchesStatus = !statusFilter || normalizeStatus(ticket.status) === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+    return result;
+  }, { open: [], resolved: [] } as TicketLists);
+  const tickets = filteredLists[queue];
   const pageCount = Math.max(1, Math.ceil(tickets.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const visible = tickets.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   const selectQueue = (next: Queue) => { setQueue(next); setPage(0); };
+  const updateSearch = (value: string) => { setSearch(value); setPage(0); };
+  const updateStatus = (value: string) => { setStatusFilter(value); setPage(0); };
 
   return <section className="rounded-xl border border-[#2A2D27] bg-[#161714]">
     <div role="tablist" aria-label="Filas de chamados" className="flex gap-1 border-b border-[#2A2D27] p-2">
@@ -141,15 +169,29 @@ function TicketsTabs({ lists, loading }: { lists: TicketLists; loading: boolean 
           }`}
         >
           {queueLabels[key]}
-          <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${selected ? 'bg-[#1E88A8]/25 text-[#5cc5e4]' : 'bg-[#0C0D0A] text-[#8A8F8B]'}`}>{loading ? '…' : lists[key].length}</span>
+          <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${selected ? 'bg-[#1E88A8]/25 text-[#5cc5e4]' : 'bg-[#0C0D0A] text-[#8A8F8B]'}`}>{loading ? '…' : filteredLists[key].length}</span>
         </button>;
       })}
     </div>
     <div role="tabpanel" id={`panel-${queue}`} aria-labelledby={`tab-${queue}`} className="p-5 pt-4">
+      <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.6fr)_auto] sm:items-end">
+        <label className="block text-sm text-[#8A8F8B]">
+          Pesquisar por assunto
+          <input type="search" aria-label="Pesquisar por assunto" value={search} onChange={(event) => updateSearch(event.target.value)} placeholder="Digite parte do assunto" className="mt-1 w-full rounded-lg border border-[#2A2D27] bg-[#0C0D0A] px-3 py-2.5 text-sm text-[#ECEDEF] outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30" />
+        </label>
+        <label className="block text-sm text-[#8A8F8B]">
+          Status
+          <select aria-label="Status" value={statusFilter} onChange={(event) => updateStatus(event.target.value)} className="mt-1 w-full rounded-lg border border-[#2A2D27] bg-[#0C0D0A] px-3 py-2.5 text-sm text-[#ECEDEF] outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30">
+            <option value="">Todos os status</option>
+            {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={() => { updateSearch(''); updateStatus(''); }} disabled={!search && !statusFilter} className="rounded-lg border border-[#2A2D27] px-3 py-2.5 text-sm text-[#ECEDEF] transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Limpar filtros</button>
+      </div>
       {loading ? <p className="text-sm text-[#8A8F8B]" aria-busy="true">Carregando chamados…</p> : tickets.length === 0 ? (
         <div className="flex items-start gap-2 rounded-lg bg-[#0C0D0A] px-3 py-2.5">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#8A8F8B]" aria-hidden="true" />
-          <p className="text-sm text-[#8A8F8B]">{queueEmpty[queue]}</p>
+          <p className="text-sm text-[#8A8F8B]">{search || statusFilter ? 'Nenhum chamado encontrado para os filtros selecionados.' : queueEmpty[queue]}</p>
         </div>
       ) : (
         <>
