@@ -20,6 +20,10 @@ const ATIVIDADE_CORES: Record<string, { bg: string; color: string; icon: React.R
     bg: 'rgba(30,136,168,0.12)', color: '#1E88A8',
     icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 11 21 7 17 3"/><line x1="21" y1="7" x2="9" y2="7"/><polyline points="7 21 3 17 7 13"/><line x1="15" y1="17" x2="3" y2="17"/></svg>,
   },
+  renovacao: {
+    bg: 'rgba(30,136,168,0.12)', color: '#1E88A8',
+    icon: <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 11 21 7 17 3"/><line x1="21" y1="7" x2="9" y2="7"/><polyline points="7 21 3 17 7 13"/><line x1="15" y1="17" x2="3" y2="17"/></svg>,
+  },
 };
 
 const periodos: { id: DashboardPeriod; label: string }[] = [
@@ -106,6 +110,10 @@ export function DashboardAdminPage() {
       label: 'Cancelamentos', value: String(stats.cancellations), sub: 'no período', color: '#C0392B',
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>,
     },
+    {
+      label: 'Contas vencidas', value: String(stats.expiredAccounts), sub: 'situação atual', color: '#CF6F03',
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="7" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+    },
   ];
 
   return (
@@ -160,7 +168,7 @@ export function DashboardAdminPage() {
     </div>
 
     {/* KPI cards */}
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }}>
       {kpis.map((kpi) => (
         <div key={kpi.label} style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>

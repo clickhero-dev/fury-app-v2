@@ -5,13 +5,14 @@ import {
   users,
   plans,
   subscriptions,
+  subscriptionRenewalEvents,
   brandKits,
   clientGoals,
   furyConfig,
   campaigns,
   creativeAssets,
 } from '@fury/db';
-import { and, desc, eq, gt, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type Tenant = typeof tenants.$inferSelect;
@@ -23,7 +24,7 @@ type Subscription = typeof subscriptions.$inferSelect;
 export type DashboardPeriod = '7d' | '30d' | '90d';
 
 export type ActivityItem = {
-  tipo: 'novo' | 'trial' | 'plano' | 'cancelamento';
+  tipo: 'novo' | 'trial' | 'plano' | 'cancelamento' | 'renovacao';
   tenantName: string;
   description: string;
   at: string; // ISO
@@ -37,12 +38,29 @@ export interface DashboardStats {
   cancellations: number;
   plans: Array<{ planId: string; name: string; priceCents: number; interval: string; clients: number }>;
   recentActivity: ActivityItem[];
+  expiredAccounts: number;
+}
+
+export type ExpiredAccountRow = {
+  tenantId: string;
+  status: string;
+  isNonExpirable: boolean;
+  currentPeriodEnd: Date | null;
+};
+
+export function countExpiredAccounts(rows: ExpiredAccountRow[], now: Date): number {
+  return new Set(
+    rows
+      .filter((row) => row.status === 'active' && !row.isNonExpirable && row.currentPeriodEnd !== null && row.currentPeriodEnd.getTime() <= now.getTime())
+      .map((row) => row.tenantId),
+  ).size;
 }
 
 /** Monta a lista "Atividade Recente" (puro — sem DB). Subs já vêm do JOIN com tenants/plans. */
 export function mapRecentActivity(
   subs: Array<{ status: string; createdAt: Date; updatedAt: Date; tenantName: string | null; planName: string | null }>,
-  newTenants: Array<{ name: string; createdAt: Date }>
+  newTenants: Array<{ name: string; createdAt: Date }>,
+  renewals: Array<{ tenantName: string | null; renewedAt: Date; previousPeriodEnd: Date }> = [],
 ): ActivityItem[] {
   const items: ActivityItem[] = [
     ...subs.map((s): ActivityItem => {
@@ -54,6 +72,7 @@ export function mapRecentActivity(
       return { tipo: 'plano', tenantName, description: s.planName ? `assinou o plano ${s.planName}` : 'assinou um plano', at: s.createdAt.toISOString() };
     }),
     ...newTenants.map((t): ActivityItem => ({ tipo: 'novo', tenantName: t.name, description: 'criou conta na plataforma', at: t.createdAt.toISOString() })),
+    ...renewals.map((r): ActivityItem => ({ tipo: 'renovacao', tenantName: r.tenantName ?? 'Tenant', description: 'renovou o período do plano', at: r.renewedAt.toISOString() })),
   ];
   return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10);
 }
@@ -336,6 +355,32 @@ export class SuperAdminRepository extends TenantScopedRepository {
       limit: 5,
     });
 
+    const expiredRows = await this.db
+      .select({
+        tenantId: subscriptions.tenantId,
+        status: subscriptions.status,
+        isNonExpirable: subscriptions.isNonExpirable,
+        currentPeriodEnd: subscriptions.currentPeriodEnd,
+      })
+      .from(subscriptions)
+      .where(and(
+        eq(subscriptions.status, 'active'),
+        eq(subscriptions.isNonExpirable, false),
+        lte(subscriptions.currentPeriodEnd, now),
+      ));
+
+    const recentRenewals = await this.db
+      .select({
+        tenantName: tenants.name,
+        renewedAt: subscriptionRenewalEvents.renewedAt,
+        previousPeriodEnd: subscriptionRenewalEvents.previousPeriodEnd,
+      })
+      .from(subscriptionRenewalEvents)
+      .leftJoin(tenants, eq(subscriptionRenewalEvents.tenantId, tenants.id))
+      .where(gte(subscriptionRenewalEvents.renewedAt, start))
+      .orderBy(desc(subscriptionRenewalEvents.renewedAt))
+      .limit(10);
+
     return {
       mrrCents,
       activeClients: activeSubs.length,
@@ -348,7 +393,8 @@ export class SuperAdminRepository extends TenantScopedRepository {
           return { planId, name: p?.name ?? 'Plano removido', priceCents: p?.priceCents ?? 0, interval: p?.interval ?? 'monthly', clients };
         })
         .sort((a, b) => b.clients - a.clients),
-      recentActivity: mapRecentActivity(recentSubs as any, recentNewTenants as any),
+      expiredAccounts: countExpiredAccounts(expiredRows as any, now),
+      recentActivity: mapRecentActivity(recentSubs as any, recentNewTenants as any, recentRenewals as any),
     };
   }
 }
