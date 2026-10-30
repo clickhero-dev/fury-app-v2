@@ -14,8 +14,22 @@ export type QaPreflightInput = {
 
 export type QaPreflightResult = { ok: true } | { ok: false; code: string; message: string };
 
-const UNKNOWN = {
-  ok: false as const,
+export type QaPreflightResponseStatuses = {
+  subscription: number;
+  connections: number;
+  assetSelection: number;
+  quota: number;
+};
+
+export function describePreflightResponseFailures(statuses: QaPreflightResponseStatuses): string | null {
+  const failures = Object.entries(statuses)
+    .filter(([, status]) => status < 200 || status >= 300)
+    .map(([name, status]) => `${name}(${status})`);
+  return failures.length > 0 ? `PREFLIGHT_UNKNOWN: endpoints indisponíveis: ${failures.join(', ')}.` : null;
+}
+
+const UNKNOWN: QaPreflightResult = {
+  ok: false,
   code: 'PREFLIGHT_UNKNOWN',
   message: 'Pré-condições da conta QA não puderam ser verificadas.',
 };

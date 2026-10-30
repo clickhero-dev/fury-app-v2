@@ -10,7 +10,11 @@ Funcionalidade: jornada real do cliente (QA com dados reais, sem mocks)
     E ao final (sucesso ou falha) a campanha é pausada e arquivada e a imagem arquivada
 */
 import { expect, test, type Page, type Response } from '@playwright/test';
-import { evaluateQaPreflight, type QaPreflightInput } from '../src/lib/qa-jornada-preflight';
+import {
+  describePreflightResponseFailures,
+  evaluateQaPreflight,
+  type QaPreflightInput,
+} from '../src/lib/qa-jornada-preflight';
 
 const apiURL = process.env.QA_API_URL ?? 'http://localhost:3000/api';
 // credenciais via GitHub Secrets no CI, variáveis de ambiente local
@@ -94,9 +98,14 @@ function apiClient(page: Page, getToken: () => string) {
         page.request.get(`${apiURL}/studio/assets`, { headers: headers(), params: { limit: 1 } }),
       ]);
 
-      if (!subscriptionResponse.ok() || !connectionsResponse.ok() || !assetSelectionResponse.ok() || !quotaResponse.ok()) {
-        throw new Error('PREFLIGHT_UNKNOWN: não foi possível consultar as pré-condições read-only da conta QA.');
-      }
+      const preflightStatuses = {
+        subscription: subscriptionResponse.status(),
+        connections: connectionsResponse.status(),
+        assetSelection: assetSelectionResponse.status(),
+        quota: quotaResponse.status(),
+      };
+      const responseFailure = describePreflightResponseFailures(preflightStatuses);
+      if (responseFailure) throw new Error(responseFailure);
 
       const subscriptionBody = await subscriptionResponse.json();
       const connectionsBody = await connectionsResponse.json();

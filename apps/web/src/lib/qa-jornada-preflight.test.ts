@@ -17,7 +17,11 @@ Quando o preflight avalia as respostas read-only
 Então falha explicitamente sem classificar a conta como elegível
 */
 import { describe, expect, it } from 'vitest';
-import { evaluateQaPreflight, type QaPreflightInput } from './qa-jornada-preflight';
+import {
+  describePreflightResponseFailures,
+  evaluateQaPreflight,
+  type QaPreflightInput,
+} from './qa-jornada-preflight';
 
 const eligible: QaPreflightInput = {
   subscription: { status: 'active', currentPeriodEnd: '2099-01-01T00:00:00.000Z' },
@@ -27,6 +31,17 @@ const eligible: QaPreflightInput = {
 };
 
 describe('evaluateQaPreflight', () => {
+  it('identifica endpoints read-only indisponíveis sem expor o corpo da resposta', () => {
+    expect(
+      describePreflightResponseFailures({
+        subscription: 200,
+        connections: 403,
+        assetSelection: 200,
+        quota: 500,
+      }),
+    ).toBe('PREFLIGHT_UNKNOWN: endpoints indisponíveis: connections(403), quota(500).');
+  });
+
   it('autoriza somente quando assinatura, Meta e cota estão verificáveis e elegíveis', () => {
     expect(evaluateQaPreflight(eligible)).toEqual({ ok: true });
   });
