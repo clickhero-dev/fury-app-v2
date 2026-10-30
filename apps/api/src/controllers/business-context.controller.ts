@@ -11,7 +11,7 @@ export class BusinessContextController {
     try {
       const { text } = improveSchema.parse(req.body);
       const abort = new AbortController();
-      req.on('close', () => abort.abort());
+      req.on('aborted', () => abort.abort());
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');

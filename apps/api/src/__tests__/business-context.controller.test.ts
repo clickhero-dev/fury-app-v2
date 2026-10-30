@@ -30,6 +30,17 @@ describe('BusinessContextController', () => {
     expect(res.end).toHaveBeenCalled();
   });
 
+  it('cancela o stream somente quando o request é abortado', async () => {
+    const service = { stream: vi.fn(() => (async function* () { yield { done: true }; })()) };
+    const controller = new BusinessContextController(service as any);
+    const req = { body: { text: 'Texto original' }, on: vi.fn() };
+
+    await controller.improve(req as any, response(), vi.fn());
+
+    expect(req.on).toHaveBeenCalledWith('aborted', expect.any(Function));
+    expect(req.on).not.toHaveBeenCalledWith('close', expect.any(Function));
+  });
+
   it('encaminha erro de entrada inválida e não inicia stream', async () => {
     const service = { stream: vi.fn(() => { throw Object.assign(new Error('bad'), { statusCode: 400 }); }) };
     const controller = new BusinessContextController(service as any);
