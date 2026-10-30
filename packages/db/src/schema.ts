@@ -456,7 +456,22 @@ export const subscriptions = pgTable(
   (table) => ({
     tenantIdIdx: index('subscriptions_tenant_id_idx').on(table.tenantId),
     statusIdx: index('subscriptions_status_idx').on(table.status),
-  })
+  }),
+);
+
+export const renewalEvents = pgTable(
+  'subscription_renewal_events',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    subscriptionId: uuid('subscription_id').notNull().references(() => subscriptions.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    previousPeriodEnd: timestamp('previous_period_end', { withTimezone: true }).notNull(),
+    renewedAt: timestamp('renewed_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    subscriptionPeriodUnique: unique('subscription_renewal_events_subscription_period_unique').on(table.subscriptionId, table.previousPeriodEnd),
+    renewedAtIdx: index('subscription_renewal_events_renewed_at_idx').on(table.renewedAt),
+  }),
 );
 
 // Invoices table
