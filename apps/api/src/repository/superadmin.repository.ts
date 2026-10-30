@@ -60,7 +60,7 @@ export function countExpiredAccounts(rows: ExpiredAccountRow[], now: Date): numb
 export function mapRecentActivity(
   subs: Array<{ status: string; createdAt: Date; updatedAt: Date; tenantName: string | null; planName: string | null }>,
   newTenants: Array<{ name: string; createdAt: Date }>,
-  renewals: Array<{ tenantName: string | null; renewedAt: Date; previousPeriodEnd: Date }> = [],
+  renewals: Array<{ tenantName: string | null; planName?: string | null; renewedAt: Date; previousPeriodEnd?: Date }> = [],
 ): ActivityItem[] {
   const items: ActivityItem[] = [
     ...subs.map((s): ActivityItem => {
@@ -72,7 +72,12 @@ export function mapRecentActivity(
       return { tipo: 'plano', tenantName, description: s.planName ? `assinou o plano ${s.planName}` : 'assinou um plano', at: s.createdAt.toISOString() };
     }),
     ...newTenants.map((t): ActivityItem => ({ tipo: 'novo', tenantName: t.name, description: 'criou conta na plataforma', at: t.createdAt.toISOString() })),
-    ...renewals.map((r): ActivityItem => ({ tipo: 'renovacao', tenantName: r.tenantName ?? 'Tenant', description: 'renovou o período do plano', at: r.renewedAt.toISOString() })),
+    ...renewals.map((r): ActivityItem => ({
+      tipo: 'renovacao',
+      tenantName: r.tenantName ?? 'Tenant',
+      description: r.planName ? `renovou o período do plano ${r.planName}` : 'renovou o período do plano',
+      at: r.renewedAt.toISOString(),
+    })),
   ];
   return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10);
 }
@@ -372,11 +377,14 @@ export class SuperAdminRepository extends TenantScopedRepository {
     const recentRenewals = await this.db
       .select({
         tenantName: tenants.name,
+        planName: plans.name,
         renewedAt: renewalEvents.renewedAt,
         previousPeriodEnd: renewalEvents.previousPeriodEnd,
       })
       .from(renewalEvents)
       .leftJoin(tenants, eq(renewalEvents.tenantId, tenants.id))
+      .leftJoin(subscriptions, eq(renewalEvents.subscriptionId, subscriptions.id))
+      .leftJoin(plans, eq(subscriptions.planId, plans.id))
       .where(gte(renewalEvents.renewedAt, start))
       .orderBy(desc(renewalEvents.renewedAt))
       .limit(10);
