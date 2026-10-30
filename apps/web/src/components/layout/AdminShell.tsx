@@ -3,6 +3,7 @@ import { Users, Clock, Zap, LogOut, LayoutGrid, ArrowLeft, Ticket, CircleHelp, A
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useFavicon } from '@/hooks/useFavicon';
 import { SnackHost } from './SnackHost';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface NavItem {
   path: string;
@@ -29,8 +30,10 @@ export function AdminShell() {
   const location = useLocation();
   const tenantId = location.pathname.match(/\/admin\/tenants\/([^/]+)/)?.[1];
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
 
   const handleLogout = () => {
+    setLogoutDialogOpen(false);
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
@@ -51,6 +54,15 @@ export function AdminShell() {
   return (
     <div className="min-h-screen bg-[#0C0D0A] text-[#ECEDEF] flex font-sans">
       <SnackHost />
+      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <DialogContent aria-describedby="admin-logout-description">
+          <DialogHeader><DialogTitle>Sair da conta?</DialogTitle><DialogDescription id="admin-logout-description">Você realmente deseja sair?</DialogDescription></DialogHeader>
+          <DialogFooter>
+            <button type="button" onClick={() => setLogoutDialogOpen(false)} className="rounded-lg border border-border px-4 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">Cancelar</button>
+            <button type="button" onClick={handleLogout} className="rounded-lg bg-brand px-4 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">Sim, sair</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Toast */}
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 bg-[#1E88A8] text-white px-4 py-3 rounded-lg shadow-lg text-sm font-medium">
@@ -136,7 +148,7 @@ export function AdminShell() {
         {/* Footer */}
         <div className="px-2.5 py-3 border-t border-[#252721] mt-auto">
           <button
-            onClick={handleLogout}
+            onClick={() => setLogoutDialogOpen(true)}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#4A4F4B] hover:text-[#ECEDEF] transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.8} />
