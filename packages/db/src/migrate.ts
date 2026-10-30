@@ -180,6 +180,7 @@ export const REQUIRED_TABLES = [
   'form_submissions',
   'plans',
   'subscriptions',
+  'subscription_renewal_events',
   'invoices',
   'brand_kits',
   'brand_kit_photos',

@@ -12,7 +12,7 @@ Então somente uma execução registra a renovação e a outra contabiliza o cic
 */
 import { afterAll, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { db, plans, subscriptions, tenants } from '@fury/db';
+import { db, plans, subscriptions, subscriptionRenewalEvents, tenants } from '@fury/db';
 import { SubscriptionRepository } from '../repository/subscription.repository.js';
 import { SubscriptionRenewalService } from '../services/billing/subscription-renewal.service.js';
 
@@ -55,6 +55,7 @@ describe('E2E local: ciclo de renovação com banco real fury_test', () => {
     const afterFirstRun = await db.query.subscriptions.findFirst({ where: eq(subscriptions.id, subscription.id) });
     const secondRun = await service.renewAllDue(new Date('2026-09-20T00:00:00.000Z'));
     const afterSecondRun = await db.query.subscriptions.findFirst({ where: eq(subscriptions.id, subscription.id) });
+    const events = await db.query.subscriptionRenewalEvents.findMany({ where: eq(subscriptionRenewalEvents.subscriptionId, subscription.id) });
 
     expect(firstRun).toEqual({ renewed: 1, skipped: 0 });
     expect(afterFirstRun?.currentPeriodEnd?.toISOString()).toBe('2026-10-10T00:00:00.000Z');
@@ -62,6 +63,7 @@ describe('E2E local: ciclo de renovação com banco real fury_test', () => {
     expect(secondRun).toEqual({ renewed: 0, skipped: 0 });
     expect(afterSecondRun?.currentPeriodEnd?.toISOString()).toBe('2026-10-10T00:00:00.000Z');
     expect(afterSecondRun?.creativesRemaining).toBe(7);
+    expect(events).toHaveLength(1);
   });
 
   it('concorrência no mesmo ciclo tem um único vencedor pelo compare-and-set', async () => {
@@ -91,9 +93,11 @@ describe('E2E local: ciclo de renovação com banco real fury_test', () => {
       repository.renewSubscription(subscription.id, new Date('2026-09-10T00:00:00.000Z'), new Date('2026-10-10T00:00:00.000Z'), 9),
     ]);
     const finalState = await db.query.subscriptions.findFirst({ where: and(eq(subscriptions.id, subscription.id), eq(subscriptions.status, 'active')) });
+    const events = await db.query.subscriptionRenewalEvents.findMany({ where: eq(subscriptionRenewalEvents.subscriptionId, subscription.id) });
 
     expect(outcomes.filter(Boolean)).toHaveLength(1);
     expect(finalState?.currentPeriodEnd?.toISOString()).toBe('2026-10-10T00:00:00.000Z');
     expect(finalState?.creativesRemaining).toBe(9);
+    expect(events).toHaveLength(1);
   });
 });

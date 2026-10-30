@@ -5,14 +5,14 @@ import {
   users,
   plans,
   subscriptions,
+  renewalEvents,
   brandKits,
   clientGoals,
   furyConfig,
   campaigns,
   creativeAssets,
-  renewalEvents,
 } from '@fury/db';
-import { and, desc, eq, gt, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type Tenant = typeof tenants.$inferSelect;
@@ -36,19 +36,23 @@ export interface DashboardStats {
   newClients: number;
   activeTrials: number;
   cancellations: number;
-  expiredAccounts: number;
   plans: Array<{ planId: string; name: string; priceCents: number; interval: string; clients: number }>;
   recentActivity: ActivityItem[];
+  expiredAccounts: number;
 }
 
-export function countExpiredAccounts(
-  subs: Array<{ tenantId: string; status: string; isNonExpirable: boolean; currentPeriodEnd: Date | null }>,
-  now: Date,
-): number {
+export type ExpiredAccountRow = {
+  tenantId: string;
+  status: string;
+  isNonExpirable: boolean;
+  currentPeriodEnd: Date | null;
+};
+
+export function countExpiredAccounts(rows: ExpiredAccountRow[], now: Date): number {
   return new Set(
-    subs
-      .filter((s) => s.status === 'active' && !s.isNonExpirable && s.currentPeriodEnd !== null && s.currentPeriodEnd.getTime() <= now.getTime())
-      .map((s) => s.tenantId),
+    rows
+      .filter((row) => row.status === 'active' && !row.isNonExpirable && row.currentPeriodEnd !== null && row.currentPeriodEnd.getTime() <= now.getTime())
+      .map((row) => row.tenantId),
   ).size;
 }
 
@@ -56,7 +60,7 @@ export function countExpiredAccounts(
 export function mapRecentActivity(
   subs: Array<{ status: string; createdAt: Date; updatedAt: Date; tenantName: string | null; planName: string | null }>,
   newTenants: Array<{ name: string; createdAt: Date }>,
-  renewals: Array<{ tenantName: string | null; planName: string | null; renewedAt: Date }> = [],
+  renewals: Array<{ tenantName: string | null; planName?: string | null; renewedAt: Date; previousPeriodEnd?: Date }> = [],
 ): ActivityItem[] {
   const items: ActivityItem[] = [
     ...subs.map((s): ActivityItem => {
@@ -309,9 +313,6 @@ export class SuperAdminRepository extends TenantScopedRepository {
         )
       ),
     });
-    const allActiveSubs = await this.db.query.subscriptions.findMany({
-      where: eq(subscriptions.status, 'active'),
-    });
     const trialSubs = await this.db.query.subscriptions.findMany({
       where: and(eq(subscriptions.status, 'trial'), or(isNull(subscriptions.trialEndsAt), gt(subscriptions.trialEndsAt, now))),
     });
@@ -359,12 +360,32 @@ export class SuperAdminRepository extends TenantScopedRepository {
       limit: 5,
     });
 
+    const expiredRows = await this.db
+      .select({
+        tenantId: subscriptions.tenantId,
+        status: subscriptions.status,
+        isNonExpirable: subscriptions.isNonExpirable,
+        currentPeriodEnd: subscriptions.currentPeriodEnd,
+      })
+      .from(subscriptions)
+      .where(and(
+        eq(subscriptions.status, 'active'),
+        eq(subscriptions.isNonExpirable, false),
+        lte(subscriptions.currentPeriodEnd, now),
+      ));
+
     const recentRenewals = await this.db
-      .select({ tenantName: tenants.name, planName: plans.name, renewedAt: renewalEvents.renewedAt })
+      .select({
+        tenantName: tenants.name,
+        planName: plans.name,
+        renewedAt: renewalEvents.renewedAt,
+        previousPeriodEnd: renewalEvents.previousPeriodEnd,
+      })
       .from(renewalEvents)
       .leftJoin(tenants, eq(renewalEvents.tenantId, tenants.id))
       .leftJoin(subscriptions, eq(renewalEvents.subscriptionId, subscriptions.id))
       .leftJoin(plans, eq(subscriptions.planId, plans.id))
+      .where(gte(renewalEvents.renewedAt, start))
       .orderBy(desc(renewalEvents.renewedAt))
       .limit(10);
 
@@ -374,13 +395,13 @@ export class SuperAdminRepository extends TenantScopedRepository {
       newClients: Number((newClientsRow as any)?.total ?? 0),
       activeTrials: trialSubs.length,
       cancellations: Number((cancelRow as any)?.total ?? 0),
-      expiredAccounts: countExpiredAccounts(allActiveSubs, now),
       plans: [...countByPlan.entries()]
         .map(([planId, clients]) => {
           const p = planById.get(planId);
           return { planId, name: p?.name ?? 'Plano removido', priceCents: p?.priceCents ?? 0, interval: p?.interval ?? 'monthly', clients };
         })
         .sort((a, b) => b.clients - a.clients),
+      expiredAccounts: countExpiredAccounts(expiredRows as any, now),
       recentActivity: mapRecentActivity(recentSubs as any, recentNewTenants as any, recentRenewals as any),
     };
   }

@@ -2,11 +2,11 @@ import {
   db as defaultDb,
   type Database,
   subscriptions,
+  renewalEvents,
   plans,
   invoices,
   budgetOptimizations,
   creativeAssets,
-  renewalEvents,
 } from '@fury/db';
 import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
@@ -219,9 +219,13 @@ export class SubscriptionRepository extends TenantScopedRepository {
   /** Avança o ciclo (nextPeriodEnd já calculado) e reseta a cota ao teto (null = sem teto). */
   async renewSubscription(id: string, expectedPeriodEnd: Date, nextPeriodEnd: Date, creativesLimit: number | null): Promise<boolean> {
     return this.db.transaction(async (tx) => {
-      const updated = await tx
+      const [updated] = await tx
         .update(subscriptions)
-        .set({ currentPeriodEnd: nextPeriodEnd, creativesRemaining: creativesLimit, updatedAt: new Date() })
+        .set({
+          currentPeriodEnd: nextPeriodEnd,
+          creativesRemaining: creativesLimit,
+          updatedAt: new Date(),
+        })
         .where(and(
           eq(subscriptions.id, id),
           eq(subscriptions.status, 'active'),
@@ -230,10 +234,11 @@ export class SubscriptionRepository extends TenantScopedRepository {
           lte(subscriptions.currentPeriodEnd, expectedPeriodEnd),
         ))
         .returning({ id: subscriptions.id, tenantId: subscriptions.tenantId });
-      if (updated.length !== 1) return false;
+      if (!updated) return false;
+
       await tx.insert(renewalEvents).values({
-        subscriptionId: id,
-        tenantId: updated[0].tenantId,
+        subscriptionId: updated.id,
+        tenantId: updated.tenantId,
         previousPeriodEnd: expectedPeriodEnd,
       });
       return true;
