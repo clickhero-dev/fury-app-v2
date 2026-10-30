@@ -10,6 +10,7 @@ import {
 } from '@fury/db';
 import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
+import { isTrialExpired } from '../services/billing/trial-signup.js';
 
 type Subscription = typeof subscriptions.$inferSelect;
 
@@ -77,6 +78,12 @@ export class SubscriptionRepository extends TenantScopedRepository {
     return this.db.query.plans.findFirst({ where: and(...filters) });
   }
 
+  async findActivePlanByTechnicalKey(technicalKey: string) {
+    return this.db.query.plans.findFirst({
+      where: and(eq(plans.technicalKey, technicalKey), eq(plans.isActive, true)),
+    });
+  }
+
   // ── Invoices ─────────────────────────────────────────────────────
 
   async findInvoiceByPaymentId(paymentId: string) {
@@ -121,6 +128,7 @@ export class SubscriptionRepository extends TenantScopedRepository {
   async consumeCreativeQuota(): Promise<boolean> {
     const sub = await this.findSubscription();
     if (!sub || sub.creativesRemaining === null) return true;
+    if (sub.status === 'trial' && isTrialExpired(new Date(), sub.trialEndsAt)) return false;
     const updated = await this.db
       .update(subscriptions)
       .set({ creativesRemaining: sql`${subscriptions.creativesRemaining} - 1`, updatedAt: new Date() })

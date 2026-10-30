@@ -424,6 +424,7 @@ export const formSubmissions = pgTable(
 export const plans = pgTable('plans', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   name: varchar('name', { length: 100 }).notNull(),
+  technicalKey: varchar('technical_key', { length: 100 }),
   priceCents: integer('price_cents').notNull(),
   interval: planIntervalEnum('interval').notNull().default('monthly'),
   features: jsonb('features').notNull().default(sql`'{}'::jsonb`),
