@@ -16,6 +16,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const swaggerJson = JSON.parse(readFileSync(join(__dirname, '..', 'swagger.json'), 'utf-8'));
 import { closeRedis, waitForRedisReady } from './lib/redis.js';
+import { startNotificationRetentionWorker, stopNotificationRetentionWorker } from './workers/notification-retention.worker.js';
 import { closeComplianceQueue, closeStudioQueue, closeRedisConnection, closeFuryEngineQueue, closePublishDueQueue, closeMetaSyncQueue } from './lib/queue.js';
 import { startSyncJobsWorker, stopSyncJobsWorker } from './lib/sync-jobs.js';
 import { startRuleEngine, stopRuleEngine } from './lib/rule-engine-manager.js';
@@ -319,6 +320,7 @@ app.use((req, res) => {
       void startLeadStatusManager().catch((error) => {
         console.error('Failed to start lead-status manager:', error);
       });
+      void startNotificationRetentionWorker().catch((error) => console.error('Failed to start notification retention worker:', error));
       void startPlannerWorker().then(() => {
         return recoverInterruptedPlannerWorkflows().then((count) => {
           if (count > 0) console.log(`♻️  Recuperados ${count} workflows interrompidos`);
@@ -336,6 +338,7 @@ app.use((req, res) => {
         await stopGoogleSyncManager();
         await stopMetaSyncManager();
         await stopLeadStatusManager();
+        await stopNotificationRetentionWorker();
         await flushRequestLogs();
         await stopSyncJobsWorker();
         await stopRuleEngine();

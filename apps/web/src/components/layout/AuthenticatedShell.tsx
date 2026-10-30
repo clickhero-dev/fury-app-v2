@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from '../Sidebar';
 import { SnackHost } from './SnackHost';
 import { AnnouncementsModal } from './AnnouncementsModal';
+import { NotificationsBell } from '../notifications/NotificationsBell';
 import { FabActions } from '../fab/FabActions';
 import api from '../../lib/api';
 import { useSubscription } from '../../hooks/useBilling';
@@ -193,6 +194,7 @@ export function AuthenticatedShell() {
         />
       )}
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+      <NotificationsBell />
       <SnackHost />
       <AnnouncementsModal enabled={!isOnboarding} />
       {/* Ações flutuantes de criação (fora das rotas: sobrevivem à navegação).
