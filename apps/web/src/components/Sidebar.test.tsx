@@ -36,6 +36,17 @@ describe('Sidebar — navegação', () => {
     blockedViews = [];
   });
 
+  it('conta do parceiro (vitalícia) não vê Assinatura; cliente vê', () => {
+    localStorage.setItem('user', JSON.stringify({ platformRole: 'admin_partner' }));
+    const { unmount } = renderSidebar();
+    expect(screen.queryByRole('link', { name: /assinatura/i })).toBeNull();
+    unmount();
+    localStorage.setItem('user', JSON.stringify({ platformRole: 'user_partner' }));
+    renderSidebar();
+    expect(screen.getByRole('link', { name: /assinatura/i })).toBeInTheDocument();
+    localStorage.clear();
+  });
+
   it('agrupa a navegação em seções por tarefa (Gestão / Criação / Conta)', () => {
     renderSidebar();
 

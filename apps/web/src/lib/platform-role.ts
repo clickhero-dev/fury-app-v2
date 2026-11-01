@@ -18,3 +18,14 @@ export function getStoredPlatformRole(): PlatformRole {
 export function canAccessAdmin(role: PlatformRole): boolean {
   return role === 'super_admin' || role === 'admin_partner';
 }
+
+// Conta do parceiro é vitalícia: sem planos, assinatura nem faturamento
+export function hasLifetimeAccess(role: PlatformRole = getStoredPlatformRole()): boolean {
+  return role === 'admin_partner';
+}
+
+const BILLING_PATHS = ['/planos', '/assinatura'];
+
+export function isBillingPath(pathname: string): boolean {
+  return BILLING_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}

@@ -4,6 +4,7 @@ import { useSubscription } from '@/hooks/useBilling';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CircleAlert, CircleCheck, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { hasLifetimeAccess } from '@/lib/platform-role';
 
 interface UsageBadgeProps {
   /** Criativos restantes no ciclo atual; null = desconhecido (não renderiza). */
@@ -148,7 +149,7 @@ export function UsageBadge({ remaining, limit, className = '', unit = 'criativos
           <span className="whitespace-nowrap">
             {exhausted ? 'Limite do mês atingido' : renew ?? 'reinicia todo mês'}
           </span>
-          {exhausted && (
+          {exhausted && !hasLifetimeAccess() && (
             <Link
               to="/planos"
               data-testid="usage-upgrade-cta"

@@ -185,4 +185,11 @@ describe('Planos do parceiro — integração', () => {
     expect(sub.status).toBe(403);
     expect(sub.body.error.code).toBe('PARTNER_MANAGED');
   });
+
+  it('conta do parceiro é vitalícia: não compra plano', async () => {
+    const res = await request(app).post('/api/billing/subscribe').set(bearer(tokenA))
+      .send({ planId: planAdy, customerName: 'Parceiro A', customerEmail: 'p@p.com', customerCpfCnpj: '12345678909' });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('LIFETIME_ACCOUNT');
+  });
 });

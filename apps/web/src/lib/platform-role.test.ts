@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { canAccessAdmin, getStoredPlatformRole, platformRoleOf } from './platform-role';
+import { canAccessAdmin, getStoredPlatformRole, hasLifetimeAccess, isBillingPath, platformRoleOf } from './platform-role';
 
 afterEach(() => localStorage.clear());
 
@@ -30,5 +30,19 @@ describe('canAccessAdmin', () => {
     expect(canAccessAdmin('admin_partner')).toBe(true);
     expect(canAccessAdmin('user_partner')).toBe(false);
     expect(canAccessAdmin('user')).toBe(false);
+  });
+});
+
+describe('conta vitalícia (parceiro)', () => {
+  it('só o admin_partner não tem plano', () => {
+    expect(hasLifetimeAccess('admin_partner')).toBe(true);
+    for (const role of ['super_admin', 'user_partner', 'user'] as const) expect(hasLifetimeAccess(role)).toBe(false);
+  });
+
+  it('telas de cobrança: /planos e /assinatura (por segmento)', () => {
+    expect(isBillingPath('/planos')).toBe(true);
+    expect(isBillingPath('/assinatura')).toBe(true);
+    expect(isBillingPath('/assinatura-vencida')).toBe(false);
+    expect(isBillingPath('/dashboard')).toBe(false);
   });
 });

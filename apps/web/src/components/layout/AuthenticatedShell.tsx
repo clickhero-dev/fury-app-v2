@@ -10,7 +10,7 @@ import { useSubscription } from '../../hooks/useBilling';
 import { useBlockedViews } from '../../hooks/useBlockedViews';
 import { viewKeyForPath } from '../../lib/rbac-views';
 import { NotFoundPage } from '../../pages/NotFoundPage';
-import { canAccessAdmin, getStoredPlatformRole } from '../../lib/platform-role';
+import { canAccessAdmin, getStoredPlatformRole, hasLifetimeAccess, isBillingPath } from '../../lib/platform-role';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { setMetaId, setPlan, selectIsPlanExpired, selectUserRole, selectNeedsPolicyAcceptance, setPolicyAccepted } from '../../store/slices/authSlice';
 import {
@@ -206,7 +206,7 @@ export function AuthenticatedShell() {
           FabActions retorna null em telas onde não fazem sentido. */}
       <FabActions />
       {/* Outlet renderiza a página da rota ativa com acesso ao ShellContext */}
-      {viewKey && isBlocked(viewKey) ? (
+      {(viewKey && isBlocked(viewKey)) || (hasLifetimeAccess() && isBillingPath(location.pathname)) ? (
         <div className="flex-1"><NotFoundPage /></div>
       ) : (
         <Outlet context={{ setMobileOpen } satisfies ShellContext} />

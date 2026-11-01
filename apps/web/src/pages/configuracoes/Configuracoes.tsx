@@ -19,6 +19,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { hasLifetimeAccess } from '@/lib/platform-role';
 
 type TabType = 'geral' | 'seguranca' | 'faturamento' | 'metas' | 'publico';
 const VALID_TABS: TabType[] = ['geral', 'seguranca', 'faturamento', 'metas', 'publico'];
@@ -71,7 +72,9 @@ export function Configuracoes() {
   const [copiedLink, setCopiedLink] = useState(false);
 
   const rawTab = searchParams.get('tab') as TabType | null;
-  const activeTab: TabType = rawTab && VALID_TABS.includes(rawTab) ? rawTab : 'geral';
+  // conta vitalícia (parceiro) não tem a aba Faturamento
+  const allowed = rawTab && VALID_TABS.includes(rawTab) && !(rawTab === 'faturamento' && hasLifetimeAccess());
+  const activeTab: TabType = allowed ? rawTab : 'geral';
 
   function setTab(tab: string) {
     setSearchParams({ tab }, { replace: true });
