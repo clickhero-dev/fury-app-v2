@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ImagePlus, Megaphone, Send } from 'lucide-react';
+import { ImagePlus, Megaphone, MessageCircle, Send } from 'lucide-react';
 import { captureEvent } from '@/lib/posthog';
 
 /**
@@ -21,6 +21,7 @@ const EXCLUDED_PREFIXES = [
 ];
 
 const actions = [
+  { key: 'conversa', label: 'Abrir conversa com Ady', icon: MessageCircle, to: '/conversa' },
   { key: 'criar-campanha', label: 'Criar campanha', icon: Megaphone, to: '/criar-campanha' },
   { key: 'criar-imagem', label: 'Criar imagem', icon: ImagePlus, to: '/estudio?criar=rapida' },
   { key: 'postar', label: 'Postar', icon: Send, to: '/calendario?criar=post' },
