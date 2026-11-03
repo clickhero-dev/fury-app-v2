@@ -2,7 +2,8 @@ import { Worker } from 'bullmq';
 import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { PUBLISH_DUE_QUEUE_NAME } from '../lib/queue.js';
 import { publishDuePosts } from '../services/planner/planner.service.js';
-import { db } from '@fury/db';
+import { db, tenants } from '@fury/db';
+import { isNull } from 'drizzle-orm';
 
 interface PublishDueJobData {
   timestamp: string;
@@ -14,7 +15,8 @@ export async function startPublishDueWorker(): Promise<Worker<PublishDueJobData>
   const worker = new Worker<PublishDueJobData>(
     PUBLISH_DUE_QUEUE_NAME,
     async (_job) => {
-      const allTenants = await db.query.tenants.findMany();
+      // cliente excluído (soft-delete) não publica
+      const allTenants = await db.query.tenants.findMany({ where: isNull(tenants.deletedAt) });
       let total = 0;
       for (const tenant of allTenants) {
         try {

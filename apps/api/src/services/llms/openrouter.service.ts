@@ -1,5 +1,6 @@
 import { AppError } from '../../middleware/errorHandler.js';
 import { persistOpenRouterImageResponse } from './openrouter-image-response.js';
+import { resolveAiKey } from '../../lib/ai-key-context.js';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
@@ -14,10 +15,9 @@ const ASPECT_RATIO_TARGET_PX: Record<string, { width: number; height: number }> 
   '9:16': { width: 1080, height: 1920 },
 };
 
-function getClient() {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new AppError(500, 'OPENROUTER_API_KEY_MISSING', 'OPENROUTER_API_KEY não configurada.');
-  return apiKey;
+// chave do dono do cliente (ady ou parceiro); ver lib/ai-key-context
+async function getClient() {
+  return (await resolveAiKey()).key;
 }
 
 /**
@@ -63,7 +63,8 @@ const CREDIT_CHECK_TTL_MS = 60_000;
 const INSUFFICIENT_CREDITS_MESSAGE =
   'Estamos impossibilitados de gerar imagens no momento. Por favor, contate o suporte.';
 
-let creditCache: { expiresAt: number; state: CreditState } | null = null;
+// por dono da chave: saldo de um parceiro nunca vale para outro
+const creditCache = new Map<string, { expiresAt: number; state: CreditState }>();
 
 /** Extrai o saldo restante (USD) de qualquer shape que o OpenRouter retorne. */
 function parseRemainingCredits(body: { data?: Record<string, unknown> }): number | null {
@@ -78,8 +79,7 @@ function parseRemainingCredits(body: { data?: Record<string, unknown> }): number
   return null;
 }
 
-async function fetchCreditStateFromOpenRouter(): Promise<CreditState> {
-  const apiKey = getClient();
+async function fetchCreditStateFromOpenRouter(apiKey: string): Promise<CreditState> {
   let res: Response;
   try {
     res = await fetch(`${OPENROUTER_BASE}/auth/key`, {
@@ -122,7 +122,7 @@ export const openrouterService = {
     messages: ChatMessage[],
     options: { model?: string; temperature?: number; max_tokens?: number; response_format?: { type: 'json_object' } } = {},
   ): Promise<string> {
-    const apiKey = getClient();
+    const apiKey = await getClient();
     const response = await fetchWithTimeout(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -136,7 +136,9 @@ export const openrouterService = {
     });
     if (!response.ok) {
       const err = await response.text();
-      throw new AppError(502, 'OPENROUTER_CHAT_ERROR', `OpenRouter chat error: ${err}`);
+      // detalhe do provedor só no log; o cliente recebe mensagem neutra
+      console.error('[openrouter] chat error', response.status, err.slice(0, 500));
+      throw new AppError(502, 'OPENROUTER_CHAT_ERROR', 'Falha ao gerar o texto. Tente novamente.');
     }
     const data = (await response.json()) as any;
     return data.choices?.[0]?.message?.content ?? '';
@@ -144,15 +146,28 @@ export const openrouterService = {
 
   /** Estado atual do saldo OpenRouter, com cache em memória (TTL). */
   async getCreditState(force = false): Promise<CreditState> {
-    if (!force && creditCache && creditCache.expiresAt > Date.now()) return creditCache.state;
-    const state = await fetchCreditStateFromOpenRouter();
-    creditCache = { expiresAt: Date.now() + CREDIT_CHECK_TTL_MS, state };
+    const { key, scope } = await resolveAiKey();
+    const hit = creditCache.get(scope);
+    if (!force && hit && hit.expiresAt > Date.now()) return hit.state;
+    const state = await fetchCreditStateFromOpenRouter(key);
+    creditCache.set(scope, { expiresAt: Date.now() + CREDIT_CHECK_TTL_MS, state });
     return state;
+  },
+
+  // chave nova do parceiro: confere no provedor antes de gravar
+  async verifyKey(key: string): Promise<'valid' | 'invalid' | 'unavailable'> {
+    try {
+      const res = await fetchWithTimeout(`${OPENROUTER_BASE}/auth/key`, { headers: { Authorization: `Bearer ${key}` } }, 10_000);
+      if (res.ok) return 'valid';
+      return res.status === 401 || res.status === 403 ? 'invalid' : 'unavailable';
+    } catch {
+      return 'unavailable';
+    }
   },
 
   /** Reset do cache de créditos (útil em testes e pós-recarga de saldo). */
   clearCreditCache(): void {
-    creditCache = null;
+    creditCache.clear();
   },
 
   /**
@@ -181,7 +196,7 @@ export const openrouterService = {
     /** Fotos de referência do tenant (máx. 2, já validadas como pertencentes a ele) — array oficial do OpenRouter. */
     referenceImageUrls?: string[];
   }): Promise<{ dataUrl: string; costUsd: number | null; model: string }> {
-    const apiKey = getClient();
+    const apiKey = await getClient();
     const target = options.normalizePixels && options.aspect_ratio
       ? ASPECT_RATIO_TARGET_PX[options.aspect_ratio]
       : undefined;
@@ -288,7 +303,7 @@ export const openrouterService = {
     aspect_ratio?: string;
     generate_audio?: boolean;
   }): Promise<string> {
-    const apiKey = getClient();
+    const apiKey = await getClient();
 
     // Helper: submit a video job and return the polling URL
     async function submitJob(prompt: string): Promise<string> {
@@ -311,7 +326,10 @@ export const openrouterService = {
       const submitData = (await submitResponse.json()) as any;
       const pollingUrl = submitData.polling_url;
       if (!pollingUrl) throw new AppError(500, 'OPENROUTER_VIDEO_NO_POLL', 'OpenRouter não retornou polling_url.');
-      return pollingUrl;
+      // a chave vai junto no polling: só para o host do provedor
+      if (new URL(pollingUrl, OPENROUTER_BASE).origin !== new URL(OPENROUTER_BASE).origin)
+        throw new AppError(502, 'OPENROUTER_VIDEO_NO_POLL', 'Serviço de vídeo devolveu um endereço inválido.');
+      return new URL(pollingUrl, OPENROUTER_BASE).toString();
     }
 
     // Helper: poll until completion
@@ -369,7 +387,7 @@ export const openrouterService = {
     primaryColor?: string;
     logoUrl?: string;
   }): Promise<string> {
-    const apiKey = getClient();
+    const apiKey = await getClient();
     const enhancePrompt = [
       'Você recebe um prompt original de anúncio e um feedback de ajuste.',
       `Prompt original: "${options.originalPrompt}"`,
@@ -424,7 +442,7 @@ export const openrouterService = {
     instructions: string;
     maskImageUrl?: string;
   }): Promise<string> {
-    const apiKey = getClient();
+    const apiKey = await getClient();
     const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -468,7 +486,7 @@ export const openrouterService = {
     temperature?: number;
     jsonMode?: boolean;
   }): Promise<{ content: string; costUsd: number | null }> {
-    const apiKey = getClient();
+    const apiKey = await getClient();
     const response = await fetchWithTimeout(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -510,7 +528,7 @@ export const openrouterService = {
     imageUrls: string[];
     aspect_ratio: string;
   }): Promise<{ dataUrl: string; costUsd: number | null }> {
-    const apiKey = getClient();
+    const apiKey = await getClient();
     const response = await fetchWithTimeout(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },

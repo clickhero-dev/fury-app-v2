@@ -41,11 +41,11 @@ describe('StudioService', () => {
     expect(deps.copy.generateAdCopy).toHaveBeenCalled();
   });
 
-  it('generateCopyLegacy sem OPENROUTER_API_KEY → variações mock (3-5)', async () => {
+  it('generateCopyLegacy sem chave: erro da IA sobe, nunca texto de exemplo', async () => {
     delete (process.env as any).OPENROUTER_API_KEY;
-    const out = await svc.generateCopyLegacy({ produto: 'X', publico: 'Y' }, 'descricao', 4);
-    expect(out.variacoes).toHaveLength(4);
-    expect(out.variacoes[0]).toHaveProperty('pontuacao');
+    (deps.llm.chat as ReturnType<typeof vi.fn>).mockRejectedValueOnce(Object.assign(new Error('IA indisponível'), { statusCode: 503 }));
+    await expect(svc.generateCopyLegacy({ produto: 'X', publico: 'Y' }, 'descricao', 4)).rejects.toMatchObject({ statusCode: 503 });
+    expect(deps.llm.chat).toHaveBeenCalled();
   });
 
   it('generateCopyLegacy com OPENROUTER_API_KEY → variações do LLM (OpenRouter)', async () => {
