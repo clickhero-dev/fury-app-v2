@@ -71,6 +71,9 @@ import { AnnouncementController } from './controllers/announcement.controller.js
 import { MetaHealthcheckRepository } from './repository/meta-healthcheck.repository.js';
 import { metaHealthcheckService } from './services/meta/meta-healthcheck.service.js';
 import { MetaHealthcheckController } from './controllers/meta-healthcheck.controller.js';
+import { DemoDashboardRepository } from './repository/demo-dashboard.repository.js';
+import { DemoDashboardService } from './services/dashboard/demo-dashboard.service.js';
+import { DemoDashboardController } from './controllers/demo-dashboard.controller.js';
 
 /**
  * Composition root (DI) da API.
@@ -104,6 +107,9 @@ export const authService = new AuthService();
 export const socialAuthService = new SocialAuthService();
 export const metricsService = new MetricsService(metricsProvider);
 export const budgetOptimizerService = new BudgetOptimizerService();
+export const demoDashboardService = new DemoDashboardService(
+  (tenantId: string) => new DemoDashboardRepository(tenantId),
+);
 export { metaSyncService };
 
 // SuperAdmin (GLOBAL) — único repositório/controller não escopado por tenant.
@@ -163,6 +169,7 @@ export const controllers = {
     (tenantId: string) => new MetaSyncRepository(tenantId),
     enqueueMetaSyncTenantRun,
   ),
+  demoDashboard: new DemoDashboardController(demoDashboardService),
   wppWebhook: new WppWebhookController(wppWebhookService),
   wppVerify: new WppVerificationController(wppVerificationService),
 };
