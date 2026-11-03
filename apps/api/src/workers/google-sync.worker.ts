@@ -1,4 +1,5 @@
 import { Worker } from 'bullmq';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
   db as dbInstance,
@@ -103,6 +104,7 @@ export async function startGoogleSyncWorker(): Promise<Worker<{ timestamp: strin
     {
       connection: (await import('../lib/redis.js')).getRedis().duplicate(),
       concurrency: 1,
+      ...getWorkerMetricsOptions('google-sync-worker'),
     }
   );
 

@@ -1,4 +1,5 @@
 import { Worker } from 'bullmq';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { db, creativeAssets } from '@fury/db';
 import { eq } from 'drizzle-orm';
 import { getRedis } from '../lib/redis.js';
@@ -227,6 +228,7 @@ const createComplianceWorker = (): Worker<ComplianceJobData> => {
     {
       connection: getRedis(),
       concurrency: 5,
+      ...getWorkerMetricsOptions('studio-compliance-check-worker'),
     }
   );
 };

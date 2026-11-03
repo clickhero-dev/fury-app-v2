@@ -1,4 +1,5 @@
 import { Worker, Queue } from 'bullmq';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { getRedis } from '../lib/redis.js';
 import type { StudioVideoService } from '../services/studio/studio-video.service.js';
 
@@ -21,7 +22,7 @@ function getStudioVideoQueue(): Queue<StudioVideoJobData> {
 
 export async function enqueueStudioVideo(jobId: string, tenantId: string): Promise<void> {
   // Sem retry automático (cada envio é cobrado); jobId = id do workflow_job
-  await getStudioVideoQueue().add('generate', { jobId, tenantId }, {
+  await getStudioVideoQueue().add('worker-studio-video-generate', { jobId, tenantId }, {
     jobId,
     attempts: 1,
     removeOnComplete: 100,
@@ -38,6 +39,7 @@ export async function startStudioVideoWorker(service: StudioVideoService): Promi
     {
       connection: getRedis(),
       concurrency: 4,
+      ...getWorkerMetricsOptions('studio-video-worker'),
       // job dura minutos: lock longo evita marcar como stalled
       lockDuration: 5 * 60 * 1000,
     },

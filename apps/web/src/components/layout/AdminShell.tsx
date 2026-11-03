@@ -7,6 +7,7 @@ import { useBlockedViews } from '@/hooks/useBlockedViews';
 import { viewKeyForPath } from '@/lib/rbac-views';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { getStoredPlatformRole } from '@/lib/platform-role';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface NavItem {
   path: string;
@@ -64,8 +65,10 @@ export function AdminShell() {
     (!isSuperAdmin && isSuperAdminOnly(location.pathname)) ||
     (!isPartner && isPartnerOnly(location.pathname)) ||
     (viewKey !== null && isBlocked(viewKey));
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
 
   const handleLogout = () => {
+    setLogoutDialogOpen(false);
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
@@ -86,6 +89,15 @@ export function AdminShell() {
   return (
     <div className="min-h-screen bg-[#0C0D0A] text-[#ECEDEF] flex font-sans">
       <SnackHost />
+      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <DialogContent aria-describedby="admin-logout-description">
+          <DialogHeader><DialogTitle>Sair da conta?</DialogTitle><DialogDescription id="admin-logout-description">Você realmente deseja sair?</DialogDescription></DialogHeader>
+          <DialogFooter>
+            <button type="button" onClick={() => setLogoutDialogOpen(false)} className="rounded-lg border border-border px-4 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">Cancelar</button>
+            <button type="button" onClick={handleLogout} className="rounded-lg bg-brand px-4 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">Sim, sair</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Toast */}
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 bg-[#1E88A8] text-white px-4 py-3 rounded-lg shadow-lg text-sm font-medium">
@@ -178,7 +190,7 @@ export function AdminShell() {
             <span>Ir para a plataforma</span>
           </Link>
           <button
-            onClick={handleLogout}
+            onClick={() => setLogoutDialogOpen(true)}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#4A4F4B] hover:text-[#ECEDEF] transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.8} />

@@ -1,4 +1,5 @@
 import { Worker } from 'bullmq';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { PUBLISH_DUE_QUEUE_NAME } from '../lib/queue.js';
 import { publishDuePosts } from '../services/planner/planner.service.js';
 import { db, tenants } from '@fury/db';
@@ -34,6 +35,7 @@ export async function startPublishDueWorker(): Promise<Worker<PublishDueJobData>
     {
       connection: (await import('../lib/redis.js')).getRedis().duplicate(),
       concurrency: 1,
+      ...getWorkerMetricsOptions('publish-due-worker'),
     },
   );
 

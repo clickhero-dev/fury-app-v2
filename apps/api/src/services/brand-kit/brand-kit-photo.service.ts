@@ -10,7 +10,7 @@ import { uploadAsset, deleteAsset } from '../storage/storage.service.js';
 type PhotoRepo = Pick<
   BrandKitPhotoRepository,
   'list' | 'create' | 'softDeleteById' | 'findBrandKit' | 'upsertTenantBrandKit'
->;
+> & { hideFromReferencePanel(id: string): Promise<{ id: string } | undefined> };
 type Storage = { uploadAsset: typeof uploadAsset; deleteAsset: typeof deleteAsset };
 
 interface UploadFile {
@@ -21,7 +21,7 @@ interface UploadFile {
 export const BRAND_KIT_PHOTO_KINDS = ['modelo', 'produto', 'equipe'] as const;
 
 function toResponse(photo: BrandKitPhoto) {
-  return { id: photo.id, kind: photo.kind, url: photo.url, created_at: photo.createdAt };
+  return { id: photo.id, kind: photo.kind, url: photo.url, created_at: photo.createdAt, hidden_from_reference_panel: photo.hiddenFromReferencePanel ?? false };
 }
 
 // confere a assinatura real do arquivo, não só o mimetype declarado
@@ -40,6 +40,11 @@ export class BrandKitPhotoService {
   async list(tenantId: string, kind?: BrandKitPhotoKind) {
     const rows = await this.repoFactory(tenantId).list(kind);
     return rows.map(toResponse);
+  }
+
+  async hideFromReferencePanel(tenantId: string, id: string): Promise<void> {
+    const row = await this.repoFactory(tenantId).hideFromReferencePanel(id);
+    if (!row) throw new AppError(404, 'PHOTO_NOT_FOUND', 'Imagem não encontrada.');
   }
 
   async upload(tenantId: string, kind: BrandKitPhotoKind, files: UploadFile[]) {

@@ -1,4 +1,5 @@
 import { Worker, type Job } from 'bullmq';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { and, eq, isNull } from 'drizzle-orm';
 import { db, performanceRules, campaigns, furyInsights, tenants } from '@fury/db';
 import { emitToTenant } from '../lib/sse.js';
@@ -188,6 +189,7 @@ export async function startRuleEngineWorker(): Promise<Worker<RuleEngineJobPaylo
   const worker = new Worker<RuleEngineJobPayload>(RULE_ENGINE_QUEUE_NAME, processJob, {
     connection,
     concurrency: 1,
+    ...getWorkerMetricsOptions('rule-engine-worker'),
   });
 
   worker.on('completed', (job, result) => {

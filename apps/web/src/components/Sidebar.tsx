@@ -23,6 +23,7 @@ import { isNavItemActive, isNavItemCurrent, type NavItemShape } from './sidebarN
 import { useBlockedViews } from '@/hooks/useBlockedViews';
 import { viewKeyForPath } from '@/lib/rbac-views';
 import { canAccessAdmin, getStoredPlatformRole, hasLifetimeAccess, isBillingPath } from '@/lib/platform-role';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -168,6 +169,13 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         .map((item) => (item.children ? { ...item, children: item.children.filter(isVisible) } : item)),
     }))
     .filter((s) => s.items.length > 0);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+  const confirmLogout = () => {
+    captureEvent('logout');
+    logout();
+    onMobileClose?.();
+    setLogoutDialogOpen(false);
+  };
 
   // Seções e submenus recolhíveis — decisão de UX: clique no rótulo da seção
   // alterna o grupo; clique no item pai navega E alterna o submenu. Padrão
@@ -296,6 +304,16 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         ))}
       </nav>
 
+      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <DialogContent aria-describedby="logout-description" className="z-[70]">
+          <DialogHeader><DialogTitle>Sair da conta?</DialogTitle><DialogDescription id="logout-description">Você realmente deseja sair?</DialogDescription></DialogHeader>
+          <DialogFooter>
+            <button type="button" onClick={() => setLogoutDialogOpen(false)} className="rounded-lg border border-border px-4 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">Cancelar</button>
+            <button type="button" onClick={confirmLogout} className="rounded-lg bg-brand px-4 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">Sim, sair</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Rodapé com Sair e botão de recuar centralizados */}
       <div className="mt-auto space-y-3 pt-4 border-t border-border">
         <SidebarUserCard collapsed={collapsed} />
@@ -315,11 +333,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
         {/* Botão Sair */}
         <button
-          onClick={() => {
-            onMobileClose?.();
-            captureEvent('logout');
-            logout();
-          }}
+          onClick={() => setLogoutDialogOpen(true)}
           title={collapsed ? 'Sair' : undefined}
           className="flex w-full items-center justify-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-text-secondary hover:bg-sidebar-hover hover:text-text-primary transition-colors"
         >

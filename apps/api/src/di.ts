@@ -75,6 +75,8 @@ import { AnnouncementController } from './controllers/announcement.controller.js
 import { MetaHealthcheckRepository } from './repository/meta-healthcheck.repository.js';
 import { metaHealthcheckService } from './services/meta/meta-healthcheck.service.js';
 import { MetaHealthcheckController } from './controllers/meta-healthcheck.controller.js';
+import { BusinessContextService } from './services/core/business-context.service.js';
+import { BusinessContextController } from './controllers/business-context.controller.js';
 
 /**
  * Composition root (DI) da API.
@@ -105,6 +107,8 @@ export const observabilityService = new ObservabilityService();
 export const formsService = new FormsService();
 export const automationService = new AutomationService();
 export const authService = new AuthService();
+export const businessContextService = new BusinessContextService();
+export const businessContextController = new BusinessContextController(businessContextService);
 export const socialAuthService = new SocialAuthService();
 export const metricsService = new MetricsService(metricsProvider);
 export const budgetOptimizerService = new BudgetOptimizerService();
@@ -150,6 +154,7 @@ export const controllers = {
   forms: new FormsController(formsService),
   metrics: new MetricsController(metricsService),
   auth: new AuthController(authService, socialAuthService, policyService),
+  businessContext: businessContextController,
   automation: new AutomationController(automationService),
   google: new GoogleController(googleService),
   meta: new MetaController(metaService),

@@ -41,6 +41,16 @@ export class BrandKitPhotoController {
     }
   };
 
+  hideFromReferencePanel = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = idParamSchema.parse(req.params);
+      await this.service.hideFromReferencePanel(req.tenant!.tenantId, id);
+      res.json({ success: true, timestamp: new Date().toISOString() });
+    } catch (err) {
+      if (!this.validationError(res, err)) next(err);
+    }
+  };
+
   remove = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { tenantId } = req.tenant!;

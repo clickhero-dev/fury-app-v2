@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SuperAdminController } from "../controllers/superadmin.controller.js";
-import { mapRecentActivity } from "../repository/superadmin.repository.js";
+import { countExpiredAccounts, mapRecentActivity } from "../repository/superadmin.repository.js";
 
 function mockRepo() {
   return { getDashboardStats: vi.fn() };
@@ -28,6 +28,10 @@ describe("mapRecentActivity (puro, sem DB)", () => {
     expect(items[2].description).toBe("iniciou período trial do plano Pro");
   });
 
+  it("inclui renovação comprovada sem chamá-la de pagamento", () => {
+    const items = mapRecentActivity([], [], [{ tenantName: "Loja", planName: "Pro", renewedAt: new Date("2026-10-05T10:00:00Z") }]);
+    expect(items).toEqual([expect.objectContaining({ tipo: "renovacao", description: "renovou o período do plano Pro" })]);
+  });
   it("novos tenants entram como 'novo' e limite é 10", () => {
     const subs = Array.from({ length: 8 }, (_, i) => ({
       status: "active" as const,
@@ -40,6 +44,27 @@ describe("mapRecentActivity (puro, sem DB)", () => {
     const items = mapRecentActivity(subs as any, tenants as any);
     expect(items.length).toBe(10);
     expect(items.some((i) => i.tipo === "novo")).toBe(true);
+  });
+});
+
+describe("contas com plano vencido", () => {
+  /*
+  Funcionalidade: mostrar contas com plano vencido
+  Cenário: deduplicar e excluir assinaturas que não representam vencimento
+  Dado duas assinaturas vencidas do mesmo tenant e assinaturas não elegíveis
+  Quando o dashboard calcula o retrato atual
+  Então conta somente tenants distintos elegíveis
+  */
+  it("deduplica tenants e exclui trial, cancelada, não-expirável e sem data", () => {
+    expect(countExpiredAccounts([
+      { tenantId: "t1", status: "active", isNonExpirable: false, currentPeriodEnd: new Date("2026-10-01") },
+      { tenantId: "t1", status: "active", isNonExpirable: false, currentPeriodEnd: new Date("2026-10-02") },
+      { tenantId: "t2", status: "trial", isNonExpirable: false, currentPeriodEnd: new Date("2026-10-01") },
+      { tenantId: "t3", status: "cancelled", isNonExpirable: false, currentPeriodEnd: new Date("2026-10-01") },
+      { tenantId: "t4", status: "active", isNonExpirable: true, currentPeriodEnd: new Date("2026-10-01") },
+      { tenantId: "t5", status: "active", isNonExpirable: false, currentPeriodEnd: null },
+      { tenantId: "t6", status: "active", isNonExpirable: false, currentPeriodEnd: new Date("2026-10-20") },
+    ], new Date("2026-10-10"))).toBe(1);
   });
 });
 

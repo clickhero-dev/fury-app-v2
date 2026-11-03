@@ -4,11 +4,21 @@ import { MemoryRouter } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { captureEvent } from '@/lib/posthog';
 
+/* Funcionalidade: confirmar logout. Cenário: cancelar preserva sessão; confirmar encerra uma vez.
+Dado usuário autenticado, Quando aciona Sair, Então só sai após confirmação. */
+
+/*
+Funcionalidade: confirmar o encerramento da sessão
+Cenário: cancelar mantém a sessão; confirmar aciona o logout uma única vez.
+  Dado que estou na sidebar autenticada, Quando aciono Sair, Então só saio após confirmar.
+*/
+
 vi.mock('@/lib/posthog', () => ({ captureEvent: vi.fn() }));
 
 const mockCaptureEvent = vi.mocked(captureEvent);
 
-vi.mock('@/hooks/useLogout', () => ({ useLogout: () => vi.fn() }));
+const mockLogout = vi.fn();
+vi.mock('@/hooks/useLogout', () => ({ useLogout: () => mockLogout }));
 
 // RBAC: lista de telas bloqueadas controlada por teste
 let blockedViews: string[] = [];
@@ -242,5 +252,19 @@ describe('Sidebar — seções e submenu recolhíveis', () => {
     window.localStorage.setItem('user', JSON.stringify({ role: 'owner', platformRole: 'admin_partner' }));
     renderSidebar();
     expect(screen.getByRole('link', { name: /ir para o admin/i })).toHaveAttribute('href', '/admin/dashboard');
+  });
+});
+
+describe('Sidebar — confirmação de logout', () => {
+  it('não encerra ao cancelar e confirma uma única vez', () => {
+    renderSidebar();
+    fireEvent.click(screen.getByRole('button', { name: /sair/i }));
+    expect(screen.getByRole('dialog')).toHaveAccessibleName('Sair da conta?');
+    expect(mockLogout).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(mockLogout).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /sair/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sim, sair' }));
+    expect(mockLogout).toHaveBeenCalledTimes(1);
   });
 });
