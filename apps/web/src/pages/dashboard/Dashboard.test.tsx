@@ -38,6 +38,17 @@ Funcionalidade: Dashboard passa a chamar /v2/* para dados Meta do banco
     Dado que o período anterior está visível
     Quando a consulta do resumo do novo período falha
     Então o skeleton desaparece e o fallback é exibido sem o total anterior
+
+  Cenário: conta demo mostra insights e não consulta provedores reais
+    Dado que o contrato server-side identifica o tenant como demo
+    Quando o Dashboard carrega
+    Então identifica os dados como demonstrativos e mostra os melhores criativos, posts e alertas de fadiga
+    E não chama os endpoints Meta de métricas, campanhas ou Instagram
+
+  Cenário: fontes de insights vazias não inventam resultados
+    Dado um contrato demo sem posts, criativos ou alertas
+    Quando o Dashboard carrega
+    Então cada bloco mostra um estado vazio compreensível
 */
 // =============================================================================
 
@@ -105,6 +116,9 @@ describe('BDD: Dashboard usa endpoints v2', () => {
       if (url === '/v2/dashboard/instagram-insights') {
         return Promise.resolve({ data: { success: true, data: { comments: 1, saves: 2, followers: 0 } } });
       }
+      if (url === '/v2/dashboard/demo') {
+        return Promise.resolve({ data: { success: true, data: { demo: false } } });
+      }
       if (url === '/v2/metrics/summary') {
         return Promise.resolve({ data: { success: true, data: { summary: { spend: 100, roas: 1, cpa: 20, conversions: 5 } } } });
       }
@@ -132,6 +146,36 @@ describe('BDD: Dashboard usa endpoints v2', () => {
     await waitFor(() => expect(mockApiGet.mock.calls.some((c) => c[0] === '/v2/campaigns')).toBe(true), { timeout: 5000 });
     const urls = mockApiGet.mock.calls.map((c) => c[0]);
     expect(urls.some((u) => u === '/metrics/campaigns')).toBe(false);
+  });
+
+  it('identifica a conta demo e mostra insights sem consultar provedores reais', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/v2/dashboard/demo') {
+        return Promise.resolve({ data: { success: true, data: {
+          demo: true,
+          summary: { spend: 8420, roas: 4.8, cpa: 28.26, conversions: 298 },
+          goals: { objective: 'aumentar_vendas', targetConversions: 360, projectedConversions: 382 },
+          daily: [], campaigns: [], instagram: { comments: 428, saves: 916, followers: 284 },
+          insights: {
+            bestCreatives: [{ id: 'creative-1', name: 'Look Aurora', conversions: 74, customers: 61, periodLabel: 'No período selecionado' }],
+            topPosts: [{ id: 'post-1', title: 'Editorial Primavera', engagement: 1840, likes: 1120, comments: 186, saves: 534, periodLabel: 'No período selecionado' }],
+            tiredCreatives: [{ id: 'tired-1', name: 'Liquidação', reason: 'Frequência alta (4,8).', frequency: 4.8, ctrDropPercent: 12, cpaIncreasePercent: 14 }],
+          },
+        } } });
+      }
+      throw new Error(`A demo não deve chamar ${url}`);
+    });
+
+    render(<Dashboard />, { wrapper });
+
+    expect(await screen.findByText(/dados demonstrativos/i)).toBeInTheDocument();
+    expect(screen.getByText('Melhores criativos')).toBeInTheDocument();
+    expect(screen.getByText('Posts com maior engajamento')).toBeInTheDocument();
+    expect(screen.getByText('Criativos cansados')).toBeInTheDocument();
+    expect(screen.getByText(/Look Aurora/)).toBeInTheDocument();
+    expect(screen.getByText('Editorial Primavera')).toBeInTheDocument();
+    expect(screen.getByText(/Frequência alta/)).toBeInTheDocument();
+    expect(mockApiGet.mock.calls.map((call) => call[0])).toEqual(['/v2/dashboard/demo']);
   });
 
   it('mostra skeleton para o Dashboard inteiro enquanto o novo período está carregando', async () => {

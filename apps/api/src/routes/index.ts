@@ -76,6 +76,6 @@ router.use("/planner", ...AUTH_TENANT_SUB, plannerRoutes); // NOVO
 router.use("/wpp", wppRoutes);
 
 // Endpoints v2 (dados Meta direto do banco + fallback stale) — reversão = só não usar o path.
-router.use("/v2", authMiddleware, tenantMiddleware, createV2Router(controllers.metaSyncV2));
+router.use("/v2", authMiddleware, tenantMiddleware, createV2Router(controllers.metaSyncV2, controllers.demoDashboard));
 
 export default router;
