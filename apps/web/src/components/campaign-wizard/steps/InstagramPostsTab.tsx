@@ -23,6 +23,7 @@ interface InstagramPost {
   insights: InstagramPostInsights;
   score: number;
   recommended: boolean;
+  recommendationReason?: string;
 }
 
 interface InstagramPostsResponse {
@@ -193,6 +194,10 @@ export function InstagramPostsTab({ selected, onToggle, canAdd, objective, insta
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
       {posts.map((post) => {
         const isSelected = selectedPostIds.has(post.id);
+        const recommendationReason =
+          post.recommended && typeof post.recommendationReason === 'string'
+            ? post.recommendationReason.trim()
+            : '';
         return (
           <button
             key={post.id}
@@ -234,6 +239,9 @@ export function InstagramPostsTab({ selected, onToggle, canAdd, objective, insta
                 <p className="text-xs text-text-secondary line-clamp-2 mb-1">{post.caption}</p>
               )}
               <p className="text-[11px] text-text-secondary">{formatMetrics(objective, post)}</p>
+              {recommendationReason && (
+                <p className="mt-1 text-[11px] font-medium text-brand">{recommendationReason}</p>
+              )}
             </div>
           </button>
         );
