@@ -54,6 +54,9 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
   const [showSchedule, setShowSchedule] = useState(mode === 'schedule' || !!preselectedDate);
   const [mediaSource, setMediaSource] = useState<'upload' | 'library'>('upload');
   const [selectedLibraryAsset, setSelectedLibraryAsset] = useState<StudioAsset | null>(null);
+  const [preparedSingleUrl, setPreparedSingleUrl] = useState<string | null>(null);
+  const [preparedCarouselUrls, setPreparedCarouselUrls] = useState<string[] | null>(null);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const carouselInputRef = useRef<HTMLInputElement>(null);
 
@@ -98,6 +101,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
     if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
     setMediaFile(file);
     setMediaPreview(URL.createObjectURL(file));
+    setPreparedSingleUrl(null);
   };
 
   const handleCarouselFiles = (files: File[]) => {
@@ -108,11 +112,13 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
     const newPreviews = toAdd.map(f => URL.createObjectURL(f));
     setCarouselFiles(newFiles);
     setCarouselPreviews(prev => [...prev, ...newPreviews]);
+    setPreparedCarouselUrls(null);
   };
 
   const removeCarouselFile = (idx: number) => {
     setCarouselFiles(prev => prev.filter((_, i) => i !== idx));
     setCarouselPreviews(prev => prev.filter((_, i) => i !== idx));
+    setPreparedCarouselUrls(null);
   };
 
   const handleDrop = (e: DragEvent) => {
@@ -150,19 +156,20 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
     if (mediaSource === 'library' && selectedLibraryAsset?.url) {
       return { imageUrl: selectedLibraryAsset.url };
     }
-    let imageUrl: string | undefined;
-    let imageUrls: string[] | undefined;
+    let imageUrl: string | undefined = preparedSingleUrl ?? undefined;
+    let imageUrls: string[] | undefined = preparedCarouselUrls ?? undefined;
     // Upload single image/video
-    if (mediaFile) {
+    if (mediaFile && !imageUrl) {
       const formData = new FormData();
       formData.append('file', mediaFile);
       const { data: uploadRes } = await api.post('/planner/posts/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       imageUrl = uploadRes.data.url;
+      setPreparedSingleUrl(imageUrl);
     }
     // Upload carousel images
-    if (postType === 'carousel' && carouselFiles.length > 0) {
+    if (postType === 'carousel' && carouselFiles.length > 0 && !imageUrls) {
       const uploadedUrls: string[] = [];
       for (const file of carouselFiles) {
         const formData = new FormData();
@@ -173,9 +180,41 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
         uploadedUrls.push(uploadRes.data.url);
       }
       imageUrls = uploadedUrls.length > 0 ? uploadedUrls : undefined;
+      setPreparedCarouselUrls(imageUrls ?? null);
     }
     return { imageUrl, imageUrls };
   };
+
+  const suggestMutation = useMutation({
+    mutationFn: async () => {
+      const context = caption.trim();
+      const videoOnly = postType === 'reel' || postType === 'stories';
+      let imageUrl: string | undefined;
+      if (!videoOnly && mediaSource === 'library') imageUrl = selectedLibraryAsset?.url;
+      if (!videoOnly && mediaSource === 'upload' && mediaFile?.type.startsWith('image/')) {
+        if (preparedSingleUrl) imageUrl = preparedSingleUrl;
+        else {
+          const media = await uploadMedia();
+          imageUrl = media.imageUrl;
+        }
+      }
+      if (!videoOnly && postType === 'carousel' && carouselFiles.length) {
+        const media = await uploadMedia();
+        imageUrl = media.imageUrls?.[0];
+      }
+      const { data } = await api.post('/planner/posts/suggest-caption', {
+        ...(context ? { context } : {}),
+        ...(imageUrl ? { imageUrl } : {}),
+      });
+      return data.data as { caption: string; imageUsed: boolean };
+    },
+    onSuccess: (data) => {
+      setCaption(data.caption);
+      setSuggestError(data.imageUsed ? null : (hasVisualContext ? 'A imagem não pôde ser usada; sugestão baseada no texto.' : null));
+      clearRetryState();
+    },
+    onError: () => setSuggestError('Não foi possível gerar a legenda. Tente novamente ou escreva manualmente.'),
+  });
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -234,7 +273,12 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
     },
   });
 
-  const canCreate = caption.trim() && !mutation.isPending && (
+  const hasVisualContext = postType !== 'reel' && postType !== 'stories' && (
+    (mediaSource === 'library' && Boolean(selectedLibraryAsset)) ||
+    (mediaSource === 'upload' && (Boolean(mediaFile?.type.startsWith('image/')) || (postType === 'carousel' && carouselFiles.length > 0)))
+  );
+  const canSuggest = !suggestMutation.isPending && (Boolean(caption.trim()) || hasVisualContext);
+  const canCreate = caption.trim() && !mutation.isPending && !suggestMutation.isPending && (
     (postType === 'carousel' && carouselFiles.length > 0) ||
     (postType !== 'carousel' && (mediaFile || (mediaSource === 'library' && selectedLibraryAsset)))
   );
@@ -349,7 +393,7 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
                           <img src={mediaPreview} alt="Preview" className="w-full aspect-square object-cover" />
                         )}
                         <button
-                          onClick={() => { setMediaFile(null); setMediaPreview(null); }}
+                          onClick={() => { setMediaFile(null); setMediaPreview(null); setPreparedSingleUrl(null); }}
                           className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -519,16 +563,33 @@ export function CreatePostDialog({ mode, onClose, onCreated, preselectedDay, pre
 
             {/* Caption */}
             <div>
-              <label className="block text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1">
-                Legenda <span className="text-error">*</span>
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <label className="block text-xs font-medium text-text-tertiary uppercase tracking-wider">
+                  Legenda <span className="text-error">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => { setSuggestError(null); suggestMutation.mutate(); }}
+                  disabled={!canSuggest}
+                  aria-busy={suggestMutation.isPending}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-accent disabled:text-text-tertiary disabled:cursor-not-allowed"
+                >
+                  {suggestMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {suggestMutation.isPending ? 'Gerando...' : 'Gerar legenda com IA'}
+                </button>
+              </div>
               <textarea
                 value={caption}
                 onChange={e => { setCaption(e.target.value); clearRetryState(); }}
+                disabled={suggestMutation.isPending}
                 rows={4}
                 className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2.5 text-text-primary text-sm resize-none focus:border-accent focus:outline-none transition-colors"
                 placeholder="Escreva a legenda do post..."
               />
+              {(postType === 'reel' || postType === 'stories') && !caption.trim() && (
+                <p className="mt-1 text-xs text-text-tertiary">Para vídeos, escreva um tema na legenda antes de gerar.</p>
+              )}
+              {suggestError && <p role="alert" className="mt-1 text-xs text-error">{suggestError}</p>}
             </div>
 
             {/* Actions */}

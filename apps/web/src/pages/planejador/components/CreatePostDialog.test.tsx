@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CreatePostDialog } from './CreatePostDialog';
 
@@ -72,5 +72,34 @@ describe('CreatePostDialog — resposta de /studio/assets', () => {
     libraryBtn.click();
 
     expect(await screen.findByText(/Nenhuma imagem na biblioteca/i)).toBeTruthy();
+  });
+
+  /*
+  Funcionalidade: legenda assistida no Planejador
+
+    Cenário: gerar a partir de tema
+      Dado um tema escrito no campo Legenda
+      Quando a pessoa clica em Gerar legenda com IA
+      Então a sugestão preenche a textarea e continua editável sem salvar o post
+
+    Cenário: ausência de contexto
+      Dado que não há imagem nem tema
+      Quando o diálogo é aberto
+      Então o botão de geração fica desabilitado
+  */
+  it('Cenário: tema gera legenda editável sem criar ou publicar post', async () => {
+    mockApiGet.mockResolvedValue({ data: { assets: [] } });
+    mockApiPost.mockResolvedValueOnce({ data: { success: true, data: { caption: 'Sugestão pronta.', imageUsed: false } } });
+    renderDialog();
+
+    const textarea = screen.getByPlaceholderText('Escreva a legenda do post...');
+    expect(screen.getByRole('button', { name: /Gerar legenda com IA/i })).toBeDisabled();
+    fireEvent.change(textarea, { target: { value: 'Promoção de verão' } });
+    fireEvent.click(screen.getByRole('button', { name: /Gerar legenda com IA/i }));
+
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/planner/posts/suggest-caption', { context: 'Promoção de verão' }));
+    expect(textarea).toHaveValue('Sugestão pronta.');
+    fireEvent.change(textarea, { target: { value: 'Sugestão editada.' } });
+    expect(textarea).toHaveValue('Sugestão editada.');
   });
 });

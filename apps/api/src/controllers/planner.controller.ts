@@ -7,6 +7,8 @@ import { openrouterService } from '../services/llms/openrouter.service.js';
 import { plannerService } from '../services/planner/planner.service.js';
 import type { PlannerService } from '../services/planner/planner.service.js';
 import { SubscriptionRepository } from '../repository/subscription.repository.js';
+import type { PlannerCaptionSuggestionService } from '../services/planner/planner-caption-suggestion.service.js';
+import type { StudioRepository } from '../repository/studio.repository.js';
 
 const listPlansSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(10),
@@ -14,7 +16,23 @@ const listPlansSchema = z.object({
 
 /** Controller de planner/campanha — glue HTTP fino. Recebe o service no construtor (injeção). */
 export class PlannerController {
-  constructor(private plannerService: PlannerService) {}
+  constructor(
+    private plannerService: PlannerService,
+    private captionSuggestionService?: PlannerCaptionSuggestionService,
+    private studioRepositoryFor?: (tenantId: string) => Pick<StudioRepository, 'createAsset'>,
+  ) {}
+
+  handleSuggestCaption = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = z.object({
+        context: z.string().trim().min(1).max(5000).optional(),
+        imageUrl: z.string().url().refine((url) => url.startsWith('https://'), 'imageUrl precisa usar HTTPS').optional(),
+      }).strict().refine((value) => value.context || value.imageUrl, 'Informe um tema ou uma imagem').parse(req.body);
+      if (!this.captionSuggestionService) throw new AppError(503, 'CAPTION_SUGGESTION_UNAVAILABLE', 'Não foi possível gerar a legenda. Tente novamente ou escreva manualmente.');
+      const result = await this.captionSuggestionService.suggest(req.tenant!.tenantId, body);
+      res.json({ success: true, data: result, timestamp: new Date().toISOString() });
+    } catch (err) { next(err); }
+  };
 
   generatePlan = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -281,6 +299,14 @@ export class PlannerController {
         : 'png';
       const fileName = `posts/${tenantId}/${randomUUID()}.${ext}`;
       const url = await uploadAsset(req.file.buffer, fileName, req.file.mimetype);
+      // Upload antecipado para sugestão também precisa tornar a URL reconhecível
+      // pelo resolver tenant-scoped. Não há post nem legenda persistidos aqui.
+      await this.studioRepositoryFor?.(tenantId).createAsset({
+        tenantId,
+        type: req.file.mimetype.startsWith('image/') ? 'image' : 'video',
+        url,
+        complianceStatus: 'pending_compliance',
+      } as never);
       res.json({ success: true, data: { url } });
     } catch (err) { next(err); }
   };

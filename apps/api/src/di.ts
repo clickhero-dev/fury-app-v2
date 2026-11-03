@@ -64,6 +64,9 @@ import { FaqController } from './controllers/faq.controller.js';
 import { MetaHealthcheckRepository } from './repository/meta-healthcheck.repository.js';
 import { metaHealthcheckService } from './services/meta/meta-healthcheck.service.js';
 import { MetaHealthcheckController } from './controllers/meta-healthcheck.controller.js';
+import { PlannerCaptionSuggestionService } from './services/planner/planner-caption-suggestion.service.js';
+import { StudioRepository } from './repository/studio.repository.js';
+import { openrouterService } from './services/llms/openrouter.service.js';
 
 /**
  * Composition root (DI) da API.
@@ -100,6 +103,10 @@ export const clickUpTicketsClient = new ClickUpTicketsClient();
 export const ticketService = new TicketService(clickUpTicketsClient);
 export const faqRepository = new FaqRepository();
 export const metaHealthcheckRepository = new MetaHealthcheckRepository();
+export const plannerCaptionSuggestionService = new PlannerCaptionSuggestionService(
+  openrouterService,
+  (tenantId) => new StudioRepository(tenantId),
+);
 
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
@@ -134,7 +141,11 @@ export const controllers = {
   google: new GoogleController(googleService),
   meta: new MetaController(metaService),
   instagram: new InstagramController(instagramService, metaService),
-  planner: new PlannerController(plannerService),
+  planner: new PlannerController(
+    plannerService,
+    plannerCaptionSuggestionService,
+    (tenantId) => new StudioRepository(tenantId),
+  ),
   dashboard: new DashboardController(getInstagramDashboardInsights),
   budget: new BudgetController(budgetOptimizerService),
   superadmin: new SuperAdminController(superAdminRepository),
