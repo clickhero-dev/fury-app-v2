@@ -25,7 +25,9 @@ import { InsightsCampanha } from './pages/campanhas/InsightsCampanha';
 import { CriarCampanhaPage } from './pages/campanhas/CriarCampanhaPage';
 // CreativeStudio (rota órfã duplicada do Estúdio) — import removido após canonicalização para /estudio
 import { EstudioHome } from './pages/estudio/EstudioHome';
+import { CreativeStudio } from './pages/estudio/CreativeStudio';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
+import { ChatMobilePage } from './pages/chat/ChatMobilePage';
 import { PlanejadorPage } from './pages/planejador/PlanejadorPage';
 import { CalendarioPage } from './pages/planejador/CalendarioPage';
 import { Configuracoes } from './pages/configuracoes/Configuracoes';
@@ -164,7 +166,9 @@ export const router = createBrowserRouter([
       // /estudio-criativo é rota órfã (tela duplicada do Estúdio) — canonicaliza p/ /estudio
       { path: '/estudio-criativo', element: <Navigate to="/estudio" replace /> },
       { path: '/estudio', element: <EstudioHome /> },
+      { path: '/estudio/criativo', element: <CreativeStudio /> },
       { path: '/estudio/imagem', element: <GeradorImagem /> },
+      { path: '/conversa', element: <ChatMobilePage /> },
       { path: '/planejador', element: <PlanejadorPage /> },
       { path: '/calendario', element: <CalendarioPage /> },
       { path: '/configuracoes', element: <Configuracoes /> },

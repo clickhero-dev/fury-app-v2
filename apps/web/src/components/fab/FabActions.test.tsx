@@ -31,12 +31,22 @@ describe('FabActions — ações flutuantes de criação', () => {
     vi.clearAllMocks();
   });
 
-  it('renderiza as 3 ações com nome acessível (ícone-only exige aria-label)', () => {
+  it('renderiza as ações com nome acessível (ícone-only exige aria-label)', () => {
     renderFab();
 
     expect(screen.getByRole('button', { name: /criar campanha/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /criar imagem/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /postar/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /abrir conversa com ady/i })).toBeInTheDocument();
+  });
+
+  it('abre a conversa do Ady', async () => {
+    const user = userEvent.setup();
+    renderFab();
+
+    await user.click(screen.getByRole('button', { name: /abrir conversa com ady/i }));
+
+    expect(screen.getByTestId('location-probe').textContent).toBe('/conversa');
   });
 
   it('navega para o wizard de campanha ao clicar em "Criar campanha"', async () => {
