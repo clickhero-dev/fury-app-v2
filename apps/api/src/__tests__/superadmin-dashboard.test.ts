@@ -45,6 +45,39 @@ describe("mapRecentActivity (puro, sem DB)", () => {
     expect(items.length).toBe(10);
     expect(items.some((i) => i.tipo === "novo")).toBe(true);
   });
+
+  it("renovação persistida aparece como atividade de plano, sem alegar pagamento", () => {
+    const items = mapRecentActivity([], [], [
+      { tenantName: "Loja Moda SP", renewedAt: new Date("2026-09-04T10:00:00Z"), previousPeriodEnd: new Date("2026-09-03T10:00:00Z") },
+    ]);
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        tipo: "renovacao",
+        tenantName: "Loja Moda SP",
+        description: "renovou o período do plano",
+        at: "2026-09-04T10:00:00.000Z",
+      }),
+    ]);
+  });
+});
+
+describe("countExpiredAccounts", () => {
+  it("conta tenants distintos e exclui estados sem vencimento elegível", () => {
+    const now = new Date("2026-09-20T00:00:00.000Z");
+    const rows = [
+      { tenantId: "t1", status: "active", isNonExpirable: false, currentPeriodEnd: new Date("2026-09-19T00:00:00.000Z") },
+      { tenantId: "t1", status: "active", isNonExpirable: false, currentPeriodEnd: new Date("2026-09-18T00:00:00.000Z") },
+      { tenantId: "t2", status: "active", isNonExpirable: false, currentPeriodEnd: now },
+      { tenantId: "t3", status: "active", isNonExpirable: true, currentPeriodEnd: new Date("2026-09-01T00:00:00.000Z") },
+      { tenantId: "t4", status: "trial", isNonExpirable: false, currentPeriodEnd: new Date("2026-09-01T00:00:00.000Z") },
+      { tenantId: "t5", status: "cancelled", isNonExpirable: false, currentPeriodEnd: new Date("2026-09-01T00:00:00.000Z") },
+      { tenantId: "t6", status: "active", isNonExpirable: false, currentPeriodEnd: null },
+      { tenantId: "t7", status: "active", isNonExpirable: false, currentPeriodEnd: new Date("2026-09-21T00:00:00.000Z") },
+    ];
+
+    expect(countExpiredAccounts(rows, now)).toBe(2);
+  });
 });
 
 describe("contas com plano vencido", () => {

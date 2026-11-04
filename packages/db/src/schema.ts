@@ -11,13 +11,13 @@ import {
   numeric,
   integer,
   unique,
+  uniqueIndex,
   inet,
   bigint,
   bigserial,
   smallint,
   date,
   primaryKey,
-  uniqueIndex,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -515,6 +515,23 @@ export const renewalEvents = pgTable(
   },
   (table) => ({
     subscriptionPeriodUnique: unique('subscription_renewal_events_subscription_period_unique').on(table.subscriptionId, table.previousPeriodEnd),
+    renewedAtIdx: index('subscription_renewal_events_renewed_at_idx').on(table.renewedAt),
+  }),
+);
+
+// Renewal events are the auditable source for dashboard activity. They do not
+// represent payment confirmation; they only record a conditional period advance.
+export const subscriptionRenewalEvents = pgTable(
+  'subscription_renewal_events',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    subscriptionId: uuid('subscription_id').notNull().references(() => subscriptions.id, { onDelete: 'cascade' }),
+    previousPeriodEnd: timestamp('previous_period_end', { withTimezone: true }).notNull(),
+    renewedAt: timestamp('renewed_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    subscriptionPreviousPeriodUnique: uniqueIndex('subscription_renewal_events_subscription_period_idx').on(table.subscriptionId, table.previousPeriodEnd),
     renewedAtIdx: index('subscription_renewal_events_renewed_at_idx').on(table.renewedAt),
   }),
 );
