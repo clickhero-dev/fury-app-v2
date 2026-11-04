@@ -7,6 +7,11 @@ vi.mock('../services/email/notify.js', () => ({
   sendToTenant: vi.fn().mockResolvedValue(undefined),
 }));
 
+const { mockChat } = vi.hoisted(() => ({ mockChat: vi.fn() }));
+vi.mock('../services/llms/openrouter.service.js', () => ({
+  openrouterService: { chat: mockChat },
+}));
+
 function makeReq(overrides: Partial<Request> = {}): Request {
   return {
     body: {},
@@ -455,6 +460,45 @@ describe('CampaignsController', () => {
       await ctrl.getAllCampaignLeads(req, res, next);
 
       expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'META_CONNECTION_NOT_FOUND', statusCode: 403 }));
+    });
+  });
+
+  describe('suggestText com vídeo do Estúdio', () => {
+    const VIDEO_ID = '11111111-1111-4111-8111-111111111111';
+    function makeVideoController(asset: Record<string, unknown> | null) {
+      const repo = {
+        findCreativeAsset: vi.fn().mockResolvedValue(asset),
+        findBrandKit: vi.fn().mockResolvedValue(null),
+        findTenant: vi.fn().mockResolvedValue({ businessContext: 'Padaria' }),
+      };
+      return new CampaignsController({} as CampaignsService, (() => repo) as any);
+    }
+
+    it('gera a sugestão só com texto a partir do roteiro', async () => {
+      mockChat.mockResolvedValue('{"headline":"Pão quentinho","primaryText":"Venha provar hoje mesmo!"}');
+      const ctrl = makeVideoController({
+        id: VIDEO_ID, type: 'video',
+        complianceNotes: JSON.stringify({ prompt: 'Promo do pão', scenes: [{ visual: 'forno', narration: 'Saindo agora' }] }),
+      });
+      const res = makeRes();
+
+      await ctrl.suggestText(makeReq({ body: { assetId: VIDEO_ID } }), res, next);
+
+      const userMsg = mockChat.mock.calls[0][0][1];
+      expect(typeof userMsg.content).toBe('string');
+      expect(userMsg.content).toContain('Saindo agora');
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        data: { headline: 'Pão quentinho', primaryText: 'Venha provar hoje mesmo!' },
+      }));
+    });
+
+    it('asset que não é vídeo → 404', async () => {
+      const ctrl = makeVideoController({ id: VIDEO_ID, type: 'image', complianceNotes: null });
+
+      await ctrl.suggestText(makeReq({ body: { assetId: VIDEO_ID } }), makeRes(), next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'CREATIVE_ASSET_NOT_FOUND' }));
+      expect(mockChat).not.toHaveBeenCalled();
     });
   });
 });

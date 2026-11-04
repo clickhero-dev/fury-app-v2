@@ -1,0 +1,53 @@
+name: QA - jornada real
+
+# Jornada real (login, campanha, pausa, imagem) com a conta de teste,
+# rodando o front da branch do PR contra a API do hmg.
+on:
+  pull_request:
+  workflow_dispatch:
+
+# uma execução por vez em todo o repositório
+concurrency:
+  group: qa-jornada-real
+  cancel-in-progress: false
+
+jobs:
+  jornada-real:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable pnpm (corepack)
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install web deps (standalone)
+        working-directory: apps/web
+        run: pnpm i --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
+
+      - name: Install Chromium
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run QA jornada real
+        working-directory: apps/web
+        env:
+          QA_BASE_URL: http://127.0.0.1:5173
+          QA_API_URL: https://clickhero-hmg-fury-api.u7pe19.easypanel.host/api
+          QA_EMAIL: ${{ secrets.QA_EMAIL }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+        run: pnpm test:qa
+
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-jornada-real-report
+          path: |
+            apps/web/playwright-report-qa
+            apps/web/test-results-qa
+          retention-days: 7

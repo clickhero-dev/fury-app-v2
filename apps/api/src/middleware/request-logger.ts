@@ -27,7 +27,8 @@ function resolveRequestId(req: Request): string {
 // requests em request_logs. As demais rotas de auth seguem passando por
 // sanitizeBody (que redige senha/otp/token).
 // case-insensitive: o roteamento do Express casa `/API/Auth/Facebook/...`
-const SENSITIVE_PATH_RE = /^\/api\/auth\/(facebook|google|social)(\/|$)/i;
+// login social e chave de IA: nunca gravar corpo nem query
+const SENSITIVE_PATH_RE = /^\/api\/(auth\/(facebook|google|social)|admin\/(my-partner|partners\/[^/]+)\/ai-key)(\/|$)/i;
 function isSensitivePath(req: Request): boolean {
   return SENSITIVE_PATH_RE.test(req.path || req.originalUrl || '');
 }

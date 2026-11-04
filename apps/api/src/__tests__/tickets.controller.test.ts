@@ -16,10 +16,30 @@
  * Quando o ticket é aberto
  * Então a API devolve um erro seguro, sem segredo ou payload do provedor
  *
+ * Cenário: classificar um ticket
+ * Dado que há uma etiqueta de escopo e duas etiquetas de área
+ * Quando o superadmin abre o chamado
+ * Então a API preserva a classificação para a integração
+ *
+ * Cenário: rejeitar uma área isolada
+ * Dado que há somente uma etiqueta de área
+ * Quando a API recebe o chamado
+ * Então responde 400 sem chamar a integração
+ *
  * Cenário: acompanhar tickets
  * Dado que há chamados pendentes, em progresso e concluídos
  * Quando o superadmin abre a tela
  * Então recebe as listas Abertos e Resolvidos separadas
+ *
+ * Cenário: receber ticket multipart com anexos
+ * Dado que o formulário envia campos textuais como multipart
+ * Quando o superadmin abre o chamado com uma evidência
+ * Então a API converte os campos e encaminha o arquivo ao serviço
+ *
+ * Cenário: falha parcial de anexos
+ * Dado que o ClickUp criou a tarefa mas falhou ao anexar um arquivo
+ * Quando a API devolve o erro ao painel
+ * Então preserva apenas a URL segura da tarefa criada
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TicketsController } from '../controllers/tickets.controller.js';
@@ -40,6 +60,7 @@ const validInput = {
   priority: 'high',
   level: 'N1',
   assigneeId: 101281834,
+  labels: ['app', 'meta', 'sincronizacao-dados'],
 };
 
 describe('TicketsController', () => {
@@ -62,6 +83,52 @@ describe('TicketsController', () => {
 
     expect(service.createTicket).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+  });
+
+  it('aceita N5 para solicitações de feature', async () => {
+    const service = { createTicket: vi.fn().mockResolvedValue({ clickupTaskId: 'feature-123', clickupTaskUrl: 'https://app.clickup.com/t/feature-123' }) };
+    const response = mockRes();
+    const input = { ...validInput, level: 'N5', subject: 'Exportar relatórios em CSV' };
+
+    await new TicketsController(service as any).create({ body: input } as any, response, vi.fn());
+
+    expect(service.createTicket).toHaveBeenCalledWith(input);
+    expect(response.status).toHaveBeenCalledWith(201);
+  });
+
+  it('aceita ticket sem etiquetas de escopo ou área', async () => {
+    const service = { createTicket: vi.fn().mockResolvedValue({ clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' }) };
+    const response = mockRes();
+    const { labels: _labels, ...input } = validInput;
+
+    await new TicketsController(service as any).create({ body: input } as any, response, vi.fn());
+
+    expect(service.createTicket).toHaveBeenCalledWith({ ...input, labels: [] });
+    expect(response.status).toHaveBeenCalledWith(201);
+  });
+
+  it('normaliza campos multipart e encaminha os anexos', async () => {
+    const service = { createTicket: vi.fn().mockResolvedValue({ clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' }) };
+    const response = mockRes();
+    const file = { buffer: Buffer.from('imagem'), originalname: 'erro.png', mimetype: 'image/png' };
+    const multipartBody = { ...validInput, assigneeId: '101281834', labels: JSON.stringify(validInput.labels) };
+
+    await new TicketsController(service as any).create({ body: multipartBody, files: [file] } as any, response, vi.fn());
+
+    expect(service.createTicket).toHaveBeenCalledWith({ ...validInput, attachments: [{ buffer: file.buffer, filename: 'erro.png', mimeType: 'image/png' }] });
+  });
+
+  it('preserva o link seguro da tarefa em uma falha parcial de anexos', async () => {
+    const client = { createTicket: vi.fn().mockRejectedValue(new ClickUpTicketsError(502, 'CLICKUP_ATTACHMENT_FAILED', 'detalhe privado', 'https://app.clickup.com/t/task-123')) };
+    const next = vi.fn();
+
+    await new TicketsController(new TicketService(client as any)).create({ body: validInput } as any, mockRes(), next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 502,
+      code: 'TICKET_ATTACHMENTS_UNAVAILABLE',
+      details: { clickupTaskUrl: 'https://app.clickup.com/t/task-123' },
+    }));
   });
 
   it('propaga somente erro seguro quando o ClickUp está indisponível', async () => {

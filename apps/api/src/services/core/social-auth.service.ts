@@ -31,6 +31,7 @@ function userToDTO(user: any): UserDTO {
     name: user.name ?? null,
     email: user.email,
     role: user.role,
+    platformRole: user.platformRole,
     tenantId: user.tenantId,
     notificationPrefs: (user.notificationPrefs as UserDTO['notificationPrefs']) ?? DEFAULT_NOTIFICATION_PREFS,
     audienceDefaults: user.audienceDefaults as UserDTO['audienceDefaults'],
@@ -97,6 +98,13 @@ export class SocialAuthService {
 
   private repo(t: string): AuthRepository {
     return this.repoFactory(t);
+  }
+
+  // conta excluída (soft-delete) não entra nem é recriada: o e-mail continua preso
+  private async assertActive(userId: string): Promise<void> {
+    if (!(await this.repo('').isAccountActive(userId))) {
+      throw new AppError(403, 'ACCOUNT_DISABLED', 'Esta conta foi desativada. Fale com o suporte.');
+    }
   }
 
   /** Gera URL de OAuth social Google (apenas userinfo, sem business.manage). */
@@ -183,6 +191,7 @@ export class SocialAuthService {
 
     let user = await this.repo('').findUserByGoogleId(googleId);
     if (user) {
+      await this.assertActive(user.id);
       const accessToken = this.deps.jwt.generateAccessToken({ userId: user.id, tenantId: user.tenantId, email: user.email, role: user.role });
       const refreshToken = this.deps.jwt.generateRefreshToken(user.id);
       await revokeRefreshToken(user.id);
@@ -192,6 +201,7 @@ export class SocialAuthService {
 
     user = await this.repo('').findUserByEmail(email);
     if (user) {
+      await this.assertActive(user.id);
       // Paridade com o Facebook: conta de STAFF da plataforma nunca é
       // auto-vinculada por match de e-mail de provedor social.
       if (user.role === 'superadmin' || user.role === 'admin') {
@@ -272,6 +282,7 @@ export class SocialAuthService {
     // 1) já vinculado por facebookId
     let user = await this.repo('').findUserByFacebookId(facebookId);
     if (user) {
+      await this.assertActive(user.id);
       return { user: userToDTO(user), isNewUser: false };
     }
 
@@ -287,6 +298,7 @@ export class SocialAuthService {
     // nunca são auto-vinculadas.
     user = await this.repo('').findUserByEmail(email);
     if (user) {
+      await this.assertActive(user.id);
       if (user.role === 'superadmin' || user.role === 'admin') {
         throw new AppError(
           409,

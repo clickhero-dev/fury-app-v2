@@ -124,6 +124,20 @@ export function normalizeWizardCreatives(args: {
   }];
 }
 
+// Espera do processamento do vídeo na Meta (cabe no timeout de 120s do wizard)
+const VIDEO_PROCESSING_TIMEOUT_MS = 60_000;
+const VIDEO_POLL_INTERVAL_MS = 3_000;
+
+// Capa do vídeo do Estúdio = 1ª foto de referência (hospedada por nós)
+export function videoThumbFromNotes(notes: string | null | undefined): string | undefined {
+  try {
+    const url = JSON.parse(notes ?? '')?.photos?.[0]?.url;
+    return typeof url === 'string' && /^https?:\/\//.test(url) ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** A Meta varia o texto da colisão entre idiomas e versões da Graph API. */
 function isLeadFormNameConflict(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
@@ -885,6 +899,42 @@ export class CampaignsService {
     }
   }
 
+  /** Sobe o vídeo na conta, espera a Meta processar e define a capa. */
+  private async prepareAdVideo(
+    adAccountId: string,
+    accessToken: string,
+    video: { url: string; thumbUrl?: string },
+  ): Promise<{ videoId: string; thumbUrl: string }> {
+    const file = await this.meta.downloadImage(video.url, AbortSignal.timeout(90_000));
+    if (!file) throw new AppError(400, 'CREATIVE_VIDEO_DOWNLOAD_FAILED', 'Não foi possível acessar o vídeo do Estúdio. Tente novamente.');
+    const contentType = file.contentType.startsWith('video/') ? file.contentType.split(';')[0] : 'video/mp4';
+
+    const videoId = await this.meta.uploadAdVideo({
+      adAccountId,
+      buffer: file.buffer,
+      filename: `fury_video_${Date.now()}.mp4`,
+      contentType,
+      accessToken,
+    });
+
+    const deadline = Date.now() + VIDEO_PROCESSING_TIMEOUT_MS;
+    for (;;) {
+      const { status, picture } = await this.meta.getAdVideoStatus(videoId, accessToken);
+      if (status === 'ready') {
+        const thumbUrl = video.thumbUrl || picture;
+        if (!thumbUrl) throw new AppError(502, 'META_VIDEO_THUMBNAIL_MISSING', 'Não foi possível definir a capa do vídeo. Tente novamente.');
+        return { videoId, thumbUrl };
+      }
+      if (status === 'error' || status === 'expired') {
+        throw new AppError(400, 'META_VIDEO_PROCESSING_FAILED', 'A Meta não conseguiu processar este vídeo. Tente outro vídeo.');
+      }
+      if (Date.now() >= deadline) {
+        throw new AppError(504, 'META_VIDEO_PROCESSING_TIMEOUT', 'A Meta ainda está processando o vídeo. Tente publicar novamente em alguns minutos.');
+      }
+      await new Promise((r) => setTimeout(r, VIDEO_POLL_INTERVAL_MS));
+    }
+  }
+
   async createCampaignFromWizard(args: CreateWizardCampaignArgs): Promise<CreateWizardCampaignResult> {
     const metaConn = await this.repo.findMetaConnection(args.tenantId);
     if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
@@ -922,19 +972,21 @@ export class CampaignsService {
     const creativeAssetIds: string[] = [];
     const imageHashByUrl = new Map<string, string | undefined>();
 
-    // 1) URLs das imagens de todos os criativos em paralelo (galeria / upload / Instagram)
+    // 1) Mídia de todos os criativos em paralelo (galeria / upload / Instagram)
     const resolved = await Promise.all(
       creatives.map(async (c) => {
         let imageUrl = c.creativeInstagramMediaId ? c.creativeMediaUrl : c.creativeUploadUrl;
+        let video: { url: string; thumbUrl?: string } | undefined;
         if (!imageUrl && c.creativeAssetId) {
           const asset = await this.repo.findCreativeAsset(c.creativeAssetId, args.tenantId);
           if (!asset) throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', `Asset criativo ${c.creativeAssetId} não encontrado.`);
-          imageUrl = asset.url;
+          if (asset.type === 'video') video = { url: asset.url, thumbUrl: videoThumbFromNotes(asset.complianceNotes) };
+          else imageUrl = asset.url;
         }
-        return imageUrl;
+        return { imageUrl, video };
       })
     );
-    if (resolved.every((u, i) => !u && !creatives[i].creativeInstagramMediaId)) {
+    if (resolved.every((r, i) => !r.imageUrl && !r.video && !creatives[i].creativeInstagramMediaId)) {
       throw new AppError(400, 'CREATIVE_IMAGE_MISSING', 'Selecione uma imagem da galeria ou envie um arquivo.');
     }
 
@@ -1001,6 +1053,18 @@ export class CampaignsService {
       } catch { /* mantém pageId vazio, erro abaixo */ }
     }
     if (!pageId) throw new AppError(400, 'PAGE_NOT_FOUND', 'Nenhuma Página do Facebook configurada. Selecione uma página em Configurações → Integrações.');
+
+    // Vídeos: upload + processamento ANTES de criar objetos no Meta (falha sem rollback)
+    const videoAdData = new Map<number, { videoId: string; thumbUrl: string }>();
+    for (let i = 0; i < resolved.length; i++) {
+      const video = resolved[i].video;
+      if (!video) continue;
+      try {
+        videoAdData.set(i, await this.prepareAdVideo(adAccountId, accessToken, video));
+      } catch (err) {
+        mapWizardMetaError(err, 'video');
+      }
+    }
 
     let messagingDestinationType: string | undefined;
     let promotedObject: Record<string, unknown> | undefined;
@@ -1221,17 +1285,39 @@ export class CampaignsService {
         value: { lead_gen_form_id: leadFormId! },
       });
 
+      // video_data não tem link próprio: o link vai no call_to_action
+      const videoDataFor = (c: WizardCreativeInput, v: { videoId: string; thumbUrl: string }) => {
+        const callToAction: { type: string; value?: Record<string, unknown> } = args.objective === 'leads'
+          ? { type: 'SIGN_UP', value: { ...leadsCtaFor().value, link: 'https://fb.me/' } }
+          : messagingDestinationType
+            ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' }
+            : { type: objectiveConfig.cta, value: { link: creativeLinkFor(c) } };
+        return {
+          video_id: v.videoId,
+          image_url: v.thumbUrl,
+          message: c.primaryText,
+          // title não é aceito com LIKE_PAGE
+          ...(callToAction.type === 'LIKE_PAGE' ? {} : { title: c.headline }),
+          call_to_action: callToAction,
+        };
+      };
+
       for (let i = 0; i < creatives.length; i++) {
         const c = creatives[i];
-        const imageUrl = resolved[i];
-        if (imageUrl) creativeImageUrls.push(imageUrl);
+        const { imageUrl } = resolved[i];
+        const video = videoAdData.get(i);
+        // vídeo: a capa serve de prévia
+        const previewUrl = video?.thumbUrl ?? imageUrl;
+        if (previewUrl) creativeImageUrls.push(previewUrl);
         if (c.creativeAssetId) creativeAssetIds.push(c.creativeAssetId);
 
         const isInstagramCreative = Boolean(c.creativeInstagramMediaId);
-        const adImageHash = !isInstagramCreative ? await getAdImageHash(imageUrl) : undefined;
+        const adImageHash = !isInstagramCreative && !video ? await getAdImageHash(imageUrl) : undefined;
 
-        const creativeBody: Record<string, unknown> = isInstagramCreative
-          ? { object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: c.creativeInstagramMediaId, call_to_action: JSON.stringify({ type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: c.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
+        const creativeBody: Record<string, unknown> = video
+          ? { name: `Creative — ady #${i + 1}`, object_story_spec: { page_id: pageId, video_data: videoDataFor(c, video) } }
+          : isInstagramCreative
+          ?{ object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: c.creativeInstagramMediaId, call_to_action: JSON.stringify(args.objective === 'leads' ? { ...leadsCtaFor(), value: { ...leadsCtaFor().value, link: 'https://fb.me/' } } : { type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: c.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
           : { name: `Creative — ady #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads'
             // Doc Lead Ads: o campo link no link_data é OBRIGATÓRIO mesmo para
             // formulários instantâneos, e o valor deve ser https://fb.me/ (o

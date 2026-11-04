@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq';
 import { createRuleEngineQueue, RULE_ENGINE_QUEUE_NAME, type RuleEngineJobPayload } from './queue.js';
 import { startRuleEngineWorker } from '../workers/rule-engine.worker.js';
+import { replaceLegacyRepeatablesWithScheduler } from './job-scheduler.js';
 
 let worker: Worker<RuleEngineJobPayload> | null = null;
 
@@ -12,10 +13,18 @@ export async function startRuleEngine(): Promise<void> {
     // Inicia o worker (deve usar a mesma conexão – ajuste o worker se necessário)
     worker = await startRuleEngineWorker();
 
-    // Adiciona job recorrente (a cada 30 minutos)
-    await queue.add('process-rules', { timestamp: new Date().toISOString() }, {
-      repeat: { pattern: '*/30 * * * *' },
-    });
+    await replaceLegacyRepeatablesWithScheduler(
+      queue,
+      ['process-rules'],
+      ['rule-engine-every-30-minutes'],
+      'cron-ady-rule-engine-process-rules-every-30m',
+      { pattern: '*/30 * * * *' },
+      {
+        name: 'cron-ady-rule-engine-process-rules',
+        data: { timestamp: new Date().toISOString() },
+        opts: { attempts: 3, backoff: { type: 'exponential', delay: 10_000 } },
+      },
+    );
 
     console.log('✅ Rule engine scheduler started (runs every 30 minutes)');
   } catch (error) {

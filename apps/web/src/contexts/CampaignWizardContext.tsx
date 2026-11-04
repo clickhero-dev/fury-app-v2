@@ -3,6 +3,7 @@ import { createContext, useContext, useState, ReactNode } from 'react';
 interface PreSelectedAsset {
   id?: string;
   url?: string;
+  isVideo?: boolean;
 }
 
 interface CampaignWizardContextValue {

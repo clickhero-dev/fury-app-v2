@@ -8,7 +8,6 @@ import { plannerService } from '../services/planner/planner.service.js';
 import type { PlannerService } from '../services/planner/planner.service.js';
 import { SubscriptionRepository } from '../repository/subscription.repository.js';
 import type { PlannerCaptionSuggestionService } from '../services/planner/planner-caption-suggestion.service.js';
-import type { StudioRepository } from '../repository/studio.repository.js';
 
 const listPlansSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(10),
@@ -19,7 +18,6 @@ export class PlannerController {
   constructor(
     private plannerService: PlannerService,
     private captionSuggestionService?: PlannerCaptionSuggestionService,
-    private studioRepositoryFor?: (tenantId: string) => Pick<StudioRepository, 'createAsset'>,
   ) {}
 
   handleSuggestCaption = async (req: Request, res: Response, next: NextFunction) => {
@@ -193,7 +191,7 @@ export class PlannerController {
         scheduledAt: z.string().datetime().optional(),
         title: z.string().max(255).optional(),
         imageUrl: z.string().url().optional(),
-        imageUrls: z.array(z.string().url()).max(5).optional(),
+        imageUrls: z.array(z.string().url()).max(10).optional(),
       }).and(
         z.union([
           z.object({ date: z.string().date() }), // Novo: ISO date "2026-08-19"
@@ -278,7 +276,7 @@ export class PlannerController {
         platform: z.string().max(50).optional(),
         title: z.string().max(255).optional(),
         imageUrl: z.string().url().optional(),
-        imageUrls: z.array(z.string().url()).max(5).optional(),
+        imageUrls: z.array(z.string().url()).max(10).optional(),
       });
       const payload = bodySchema.parse(req.body);
       const result = await this.plannerService.publishNow(tenantId, payload);
@@ -294,19 +292,14 @@ export class PlannerController {
       }
       const ext = req.file.mimetype === 'image/png' ? 'png'
         : req.file.mimetype === 'image/jpeg' ? 'jpg'
+        : req.file.mimetype === 'image/webp' ? 'webp'
         : req.file.mimetype === 'video/mp4' ? 'mp4'
         : req.file.mimetype === 'video/quicktime' ? 'mov'
         : 'png';
       const fileName = `posts/${tenantId}/${randomUUID()}.${ext}`;
       const url = await uploadAsset(req.file.buffer, fileName, req.file.mimetype);
-      // Upload antecipado para sugestão também precisa tornar a URL reconhecível
-      // pelo resolver tenant-scoped. Não há post nem legenda persistidos aqui.
-      await this.studioRepositoryFor?.(tenantId).createAsset({
-        tenantId,
-        type: req.file.mimetype.startsWith('image/') ? 'image' : 'video',
-        url,
-        complianceStatus: 'pending_compliance',
-      } as never);
+      // Registra o upload na biblioteca para permitir uso posterior e resolução tenant-scoped.
+      await this.plannerService.saveUploadToLibrary(tenantId, url, req.file.mimetype);
       res.json({ success: true, data: { url } });
     } catch (err) { next(err); }
   };
@@ -333,8 +326,9 @@ const editPostSchema = z.union([
     caption: z.string().optional(),
     cta: z.string().optional(),
     hashtags: z.array(z.string()).optional(),
-    imageUrl: z.string().url().optional(),
-    imageUrls: z.array(z.string().url()).max(5).optional(),
+    postType: z.enum(['image', 'carousel', 'reel', 'stories']).optional(),
+    imageUrl: z.string().url().startsWith('https://').nullable().optional(),
+    imageUrls: z.array(z.string().url().startsWith('https://')).max(10).optional(),
     scheduledAt: z.string().datetime().nullable().optional(),
   }),
 ]);

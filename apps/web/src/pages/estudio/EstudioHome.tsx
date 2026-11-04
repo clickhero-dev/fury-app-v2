@@ -1,27 +1,28 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Loader2, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Wand2, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Info, Loader2, Play, Plus, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Video, Wand2, X } from 'lucide-react';
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import { UsageBadge } from '@/components/UsageBadge';
-import { useUploadPhotos } from '@/hooks/useBrandKit';
+import type { LibraryPhoto } from '@/hooks/useStudioLibrary';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import type { StudioAsset, GenerateCreativeResponse } from '@/types/studio';
+import type { StudioAsset, GenerateCreativeResponse, StudioVideoJob } from '@/types/studio';
+import { formatDuration, parseVideoMeta, useActiveStudioVideoJobs, useStudioVideoOptions } from '@/hooks/useStudioVideo';
 import { CreativeResult } from './components/CreativeResult';
 import { ArchiveConfirmDialog } from './components/ArchiveConfirmDialog';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ArchivedAssetsModal } from './components/ArchivedAssetsModal';
 import { ReferenceImagePanel } from './components/ReferenceImagePanel';
+import { VideoCreateForm } from './components/VideoCreateForm';
+import { VideoProgress } from './components/VideoProgress';
+import { LibraryUploadFlow, type UploadRequest } from './components/LibraryUploadFlow';
+import { LibraryPickerDialog, type PickerMode } from './components/LibraryPickerDialog';
+import { useBlockedViews } from '@/hooks/useBlockedViews';
 
-type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create';
-
-const FEATURES = {
-  videoAnuncios: false,
-};
+type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create' | 'video-progress';
 
 const CREATIVE_TYPE = 'image' as const;
 const IMAGE_MODEL = 'black-forest-labs/flux.2-pro';
@@ -51,11 +52,21 @@ export function EstudioHome() {
   const [confirmArchiveAsset, setConfirmArchiveAsset] = useState<StudioAsset | null>(null);
   const [showArchivedModal, setShowArchivedModal] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [createMode, setCreateMode] = useState<'image' | 'video'>('image');
+  const [videoJobId, setVideoJobId] = useState<string | null>(null);
+  const { data: activeVideoJobs = [] } = useActiveStudioVideoJobs();
+  // cota de vídeo 0 ou vídeo bloqueado no RBAC: sem criação nem filtro de vídeo
+  const { data: videoOptions } = useStudioVideoOptions();
+  const { isBlocked } = useBlockedViews();
+  const videoEnabled = videoOptions?.enabled === true && !isBlocked('studio.video');
 
   // ─── OpenRouter state ──────────────────────────────────────────────
   const [orPrompt, setOrPrompt] = useState('');
   const [orAspectRatio, setOrAspectRatio] = useState<'1:1' | '9:16'>('1:1');
-  const [referenceContextUrls, setReferenceContextUrls] = useState<string[]>([]);
+  const [templatePhoto, setTemplatePhoto] = useState<LibraryPhoto | null>(null);
+  const [artPhotos, setArtPhotos] = useState<LibraryPhoto[]>([]);
+  const [uploadRequest, setUploadRequest] = useState<UploadRequest | null>(null);
+  const [pickerMode, setPickerMode] = useState<PickerMode | null>(null);
   const [progressMessage, setProgressMessage] = useState('');
   const [quotaErrorMessage, setQuotaErrorMessage] = useState<string | null>(null);
   const [selectedImageModel, setSelectedImageModel] = useState(IMAGE_MODEL);
@@ -99,8 +110,14 @@ export function EstudioHome() {
   });
 
   const orImageMutation = useMutation({
-    mutationFn: async (payload: { model: string; prompt: string; aspect_ratio: '1:1' | '9:16'; reference_image_urls?: string[] }) => {
-      setProgressMessage('Gerando imagem...');
+    mutationFn: async (payload: {
+      model: string;
+      prompt: string;
+      aspect_ratio: '1:1' | '9:16';
+      template_photo_id?: string;
+      photo_ids?: string[];
+    }) => {
+      if (!payload.template_photo_id) setProgressMessage('Gerando imagem...');
       const res = await api.post('/studio/ai/generate-image', payload);
       return res.data;
     },
@@ -150,7 +167,8 @@ export function EstudioHome() {
   const handleStartQuickCreate = () => {
     setOrPrompt('');
     setQuotaErrorMessage(null);
-    setReferenceContextUrls([]);
+    setTemplatePhoto(null);
+    setArtPhotos([]);
     setView('quick-create');
   };
 
@@ -166,6 +184,7 @@ export function EstudioHome() {
   if (criarParam !== prevCriarParam) {
     setPrevCriarParam(criarParam);
     if (criarParam === 'rapida') {
+      setCreateMode('image');
       handleStartQuickCreate();
     }
   }
@@ -180,73 +199,72 @@ export function EstudioHome() {
     }
   }, [criarParam, searchParams, setSearchParams]);
 
-  // Regra de precedência (Decisão 6, plan.md): contexto atual = últimas até
-  // 2 imagens adicionadas, venham do painel lateral (RF-09) ou do Upload B
-  // (RF-10, Fase 5) — mesma função pras duas origens.
-  const MAX_REFERENCE_CONTEXT = 2;
-  const addToReferenceContext = (urls: string[]) => {
-    setReferenceContextUrls((prev) => {
-      const combined = [...prev, ...urls];
-      if (combined.length > MAX_REFERENCE_CONTEXT) {
-        setToast({ message: 'Limite de 2 imagens de referência — a mais antiga foi substituída.', type: 'success' });
+  // Fotos na arte: no máximo 2; nova escolha substitui a mais antiga
+  const MAX_ART_PHOTOS = 2;
+  const addArtPhotos = (photos: LibraryPhoto[]) => {
+    setArtPhotos((prev) => {
+      const combined = [...prev.filter((p) => !photos.some((n) => n.id === p.id)), ...photos];
+      if (combined.length > MAX_ART_PHOTOS) {
+        setToast({ message: 'Limite de 2 fotos na arte — a mais antiga foi substituída.', type: 'success' });
         setTimeout(() => setToast(null), 3000);
       }
-      return combined.slice(-MAX_REFERENCE_CONTEXT);
+      return combined.slice(-MAX_ART_PHOTOS);
     });
   };
 
-  const removeFromReferenceContext = (url: string) => {
-    setReferenceContextUrls((prev) => prev.filter((u) => u !== url));
-  };
-
-  // Upload B (RF-10) — separado do painel lateral: no máximo 2 arquivos por
-  // vez, salva na mesma biblioteca (Upload A/painel reflete junto) E já
-  // entra automaticamente no contexto da geração, sem passo de seleção.
-  const uploadReferenceB = useUploadPhotos();
-  const [showUploadBLimitAlert, setShowUploadBLimitAlert] = useState(false);
-  const handleUploadB = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (files.length === 0) return;
-    if (files.length > 2) {
-      setShowUploadBLimitAlert(true);
-      e.target.value = '';
-      return;
+  const toggleArtPhoto = (photo: LibraryPhoto) => {
+    if (artPhotos.some((p) => p.id === photo.id)) {
+      setArtPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+    } else {
+      addArtPhotos([photo]);
     }
-    uploadReferenceB.mutate(files, {
-      onSuccess: (data) => addToReferenceContext(data.urls),
-    });
-    e.target.value = '';
+  };
+
+  const toggleTemplate = (photo: LibraryPhoto) => {
+    setTemplatePhoto((prev) => (prev?.id === photo.id ? null : photo));
+  };
+
+  const requestTemplateUpload = (files: File[]) => {
+    setUploadRequest({ kinds: ['modelo'], max: 1, files, onDone: (photos) => setTemplatePhoto(photos[0] ?? null) });
+  };
+
+  const requestArtUpload = () => {
+    setUploadRequest({ kinds: ['produto', 'equipe'], max: MAX_ART_PHOTOS, onDone: addArtPhotos });
   };
 
   const handleQuickCreate = async () => {
     const finalPrompt = orPrompt.trim();
     if (finalPrompt.length < 10) return;
     setView('loading');
-    setProgressMessage('Aprimorando explicação detalhada...');
     // cronômetro começa no clique — cobre enhance-prompt + geração
     setGenerationStartedAt(Date.now());
+    const photo_ids = artPhotos.length ? artPhotos.map((p) => p.id) : undefined;
 
+    // com modelo: o texto é "o que muda" — vai direto, sem aprimorar
+    if (templatePhoto) {
+      setProgressMessage('Analisando o modelo e trocando os textos...');
+      orImageMutation.mutate({
+        model: selectedImageModel,
+        prompt: finalPrompt,
+        aspect_ratio: orAspectRatio,
+        template_photo_id: templatePhoto.id,
+        photo_ids,
+      });
+      return;
+    }
+
+    setProgressMessage('Aprimorando explicação detalhada...');
     try {
       const enhanceRes = await api.post('/studio/ai/enhance-prompt', {
         prompt: finalPrompt,
         type: CREATIVE_TYPE,
+        // com fotos, o aprimoramento monta a cena em volta delas
+        photo_kinds: artPhotos.length ? artPhotos.map((p) => p.kind) : undefined,
       });
       const { enhancedPrompt } = enhanceRes.data as { enhancedPrompt: string };
-      setProgressMessage('Gerando imagem...');
-      orImageMutation.mutate({
-        model: selectedImageModel,
-        prompt: enhancedPrompt,
-        aspect_ratio: orAspectRatio,
-        reference_image_urls: referenceContextUrls.length ? referenceContextUrls : undefined,
-      });
+      orImageMutation.mutate({ model: selectedImageModel, prompt: enhancedPrompt, aspect_ratio: orAspectRatio, photo_ids });
     } catch {
-      setProgressMessage('Gerando imagem...');
-      orImageMutation.mutate({
-        model: selectedImageModel,
-        prompt: finalPrompt,
-        aspect_ratio: orAspectRatio,
-        reference_image_urls: referenceContextUrls.length ? referenceContextUrls : undefined,
-      });
+      orImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt, aspect_ratio: orAspectRatio, photo_ids });
     }
   };
 
@@ -256,6 +274,19 @@ export function EstudioHome() {
   };
 
   const handleViewDetails = (asset: StudioAsset) => {
+    if (asset.type === 'video') {
+      setGenerationResult({
+        type: 'video',
+        assetId: asset.id,
+        imageUrl: '',
+        videoUrl: asset.url ?? undefined,
+        creativeData: {},
+        videoMeta: parseVideoMeta(asset.complianceNotes),
+        modificationsRemaining: asset.modificationsRemaining ?? null,
+      });
+      setView('result');
+      return;
+    }
     let creativeData = { headline: '', primary_text: '', cta: '', subheadline: '', layout: '', color_scheme: '' };
     try {
       const meta = JSON.parse(asset.complianceNotes ?? '{}');
@@ -273,15 +304,44 @@ export function EstudioHome() {
     setView('result');
   };
 
+  const handleTrackVideo = (jobId: string) => {
+    setVideoJobId(jobId);
+    setView('video-progress');
+  };
+
+  const handleVideoDone = async (job: StudioVideoJob) => {
+    void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+    void queryClient.invalidateQueries({ queryKey: ['studio-video', 'jobs'] });
+    if (!job.assetId) return;
+    let complianceNotes: string | null = null;
+    let modificationsRemaining: number | null = null;
+    try {
+      const detail = (await api.get(`/studio/assets/${job.assetId}`)).data;
+      complianceNotes = detail?.complianceNotes ?? null;
+      modificationsRemaining = detail?.modificationsRemaining ?? null;
+    } catch { /* sem metadados */ }
+    setGenerationResult({
+      type: 'video',
+      assetId: job.assetId,
+      imageUrl: '',
+      videoUrl: job.videoUrl ?? undefined,
+      creativeData: {},
+      videoMeta: parseVideoMeta(complianceNotes),
+      modificationsRemaining,
+    });
+    // usuário pode ter saído da tela de progresso durante o await
+    setView((v) => (v === 'video-progress' ? 'result' : v));
+  };
+
   const handleUseInCampaign = (asset: StudioAsset) => {
-    setPreSelectedAsset({ id: asset.id, url: asset.url ?? undefined });
+    setPreSelectedAsset({ id: asset.id, url: asset.url ?? undefined, isVideo: asset.type === 'video' });
     navigate('/criar-campanha');
   };
 
   const typeOptions: Array<{ value: 'all' | 'image' | 'video'; label: string }> = [
     { value: 'all' as const, label: 'Todos' },
     { value: 'image' as const, label: 'Imagens' },
-    ...(FEATURES.videoAnuncios ? [{ value: 'video' as const, label: 'Vídeos' }] : []),
+    ...(videoEnabled ? [{ value: 'video' as const, label: 'Vídeos' }] : []),
   ];
 
   const statusOptions: Array<{ value: 'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'; label: string }> = [
@@ -317,8 +377,9 @@ export function EstudioHome() {
       'library': 'Estúdio de anúncios',
       'quick-create': 'Criação rápida',
       'loading': 'Gerando...',
-      'result': 'Seu anúncio',
+      'result': generationResult?.type === 'video' ? 'Seu vídeo' : 'Seu anúncio',
       'error': 'Erro na geração',
+      'video-progress': 'Gerando vídeo...',
     };
 
     return (
@@ -462,7 +523,7 @@ export function EstudioHome() {
                 <div className={`${SURFACE} flex items-center justify-center px-6 py-20`}>
                   <LoadingSpinner />
                 </div>
-              ) : filteredAssets.length === 0 ? (
+              ) : filteredAssets.length === 0 && (filterType === 'image' || activeVideoJobs.length === 0) ? (
                 <div className={`${SURFACE} flex flex-col items-center gap-3 px-6 py-16 text-center`}>
                   <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-brand">
                     <ImageIcon className="h-5 w-5" />
@@ -482,6 +543,9 @@ export function EstudioHome() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {filterType !== 'image' && activeVideoJobs.map((job) => (
+                    <GeneratingVideoCard key={job.jobId} job={job} onTrack={() => handleTrackVideo(job.jobId)} />
+                  ))}
                   {filteredAssets.map((asset) => (
                     <AssetCard
                       key={asset.id}
@@ -498,7 +562,33 @@ export function EstudioHome() {
         )}
 
         {/* QUICK CREATE VIEW */}
-        {view === 'quick-create' && (
+        {view === 'quick-create' && videoEnabled && (
+          <div className="flex items-center gap-1 self-start rounded-full border border-border bg-surface-secondary p-1 w-fit">
+            {([['image', 'Imagem', ImageIcon], ['video', 'Vídeo', Video]] as const).map(([mode, label, Icon]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setCreateMode(mode)}
+                aria-pressed={createMode === mode}
+                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm transition ${createMode === mode ? 'bg-brand font-semibold text-white shadow-sm' : CHIP_OFF}`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {view === 'quick-create' && videoEnabled && createMode === 'video' && (
+          <>
+            <p className="text-sm text-text-tertiary">
+              Descreva o vídeo, revise o roteiro e o ady gera o vídeo com IA usando suas fotos
+            </p>
+            <VideoCreateForm onCreated={handleTrackVideo} />
+          </>
+        )}
+
+        {view === 'quick-create' && (createMode === 'image' || !videoEnabled) && (
           <div className="w-full space-y-5">
             <p className="text-sm text-text-tertiary">
               Descreva o anúncio que deseja gerar para criar a imagem ideal
@@ -515,29 +605,192 @@ export function EstudioHome() {
             <div className="space-y-5">
             <Card className={`${SURFACE} border-0 bg-transparent p-0 shadow-none`}>
               <CardContent className={`${SURFACE} space-y-3 p-5`}>
-                <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">
-                  Descreva o anúncio
-                </label>
+                <div className="ady-decor flex flex-wrap items-center gap-2">
+                  <label htmlFor="quick-create-prompt" className="block text-xs font-semibold uppercase tracking-[0.14em] text-text-tertiary">
+                    {templatePhoto ? 'O que muda no modelo?' : 'Descreva o anúncio'}
+                  </label>
+                  {templatePhoto && (
+                    <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">Modelo anexado</span>
+                  )}
+                </div>
                 <textarea
+                  id="quick-create-prompt"
                   value={orPrompt}
                   maxLength={1000}
                   onChange={(e) => setOrPrompt(e.target.value)}
-                  placeholder="Ex: Anúncio fashion minimalista com luz natural, modelo feminina, fundo branco, cores suaves..."
+                  placeholder={
+                    templatePhoto
+                      ? 'Diga o que trocar. Ex: Empresa DUO Oral Care, vaga de Consultor(a) em Joinville-SC, fixo de R$ 3.000 + comissões...'
+                      : 'Ex: Anúncio fashion minimalista com luz natural, modelo feminina, fundo branco, cores suaves...'
+                  }
                   className="min-h-36 w-full resize-none rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm text-text-primary placeholder:text-text-disabled outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                 />
-                <div className="flex items-center justify-between text-xs text-text-tertiary">
+                <div className="flex items-center justify-between gap-3 text-xs text-text-tertiary">
                   <span>{orPrompt.trim().length}/1000</span>
-                  <span>Imagem • explicação detalhada = melhor resultado</span>
+                  <span>
+                    {templatePhoto
+                      ? 'Com modelo, é só dizer o que trocar. O resto fica igual.'
+                      : 'Imagem • explicação detalhada = melhor resultado'}
+                  </span>
                 </div>
 
-                <div className="ady-decor flex flex-wrap items-center gap-2.5 pt-1">
-                  <ModelSelect
-                    models={imageModels}
-                    selectedModel={selectedImageModel}
-                    onSelect={setSelectedImageModel}
-                    id="quick-create-model-select"
-                    compact
-                  />
+                {/* Imagens: modelo (copia o estilo) e fotos na arte (aparecem no anúncio) */}
+                <div className="ady-decor space-y-2.5 border-t border-border pt-4">
+                  <div className="flex items-baseline gap-2">
+                    <h3 className="text-sm font-semibold text-text-primary">Quer usar imagens?</h3>
+                    <span className="text-xs text-text-tertiary">Opcional</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className={`rounded-xl border p-4 ${templatePhoto ? 'border-2 border-brand' : 'border-border'}`}>
+                      {templatePhoto ? (
+                        <div className="flex gap-3">
+                          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-border">
+                            <img src={templatePhoto.url} alt="" className="h-full w-full object-cover" />
+                            <span className="absolute bottom-1 left-1 rounded-full bg-brand-hover px-1.5 py-px text-[9px] font-bold text-white">Modelo</span>
+                          </div>
+                          <div className="min-w-0 space-y-1.5">
+                            <p className="text-sm font-semibold text-text-primary">Modelo escolhido</p>
+                            <p className="text-xs leading-relaxed text-text-secondary">
+                              Vamos seguir o layout, as cores e o estilo deste anúncio e trocar só os textos.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setPickerMode('modelo')}
+                                className="ady-btn rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-text-primary"
+                              >
+                                Trocar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTemplatePhoto(null)}
+                                className="ady-btn rounded-full px-2 py-1.5 text-xs font-semibold text-destructive"
+                              >
+                                Remover
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-text-primary">Usar um anúncio como modelo</p>
+                            <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">1 imagem</span>
+                          </div>
+                          <p className="text-xs leading-relaxed text-text-secondary">
+                            Gostou de um anúncio? A gente analisa e cria um parecido, com os seus textos.
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setPickerMode('modelo')}
+                              className="ady-btn rounded-full bg-brand-hover px-3.5 py-2 text-xs font-semibold text-white"
+                            >
+                              Meus modelos
+                            </button>
+                            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-brand/50 bg-brand/5 px-3.5 py-2 text-xs font-semibold text-brand hover:bg-brand/10">
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg"
+                                className="sr-only"
+                                aria-label="Enviar modelo"
+                                onChange={(e) => {
+                                  const files = Array.from(e.target.files ?? []);
+                                  e.target.value = '';
+                                  if (files.length) requestTemplateUpload(files);
+                                }}
+                              />
+                              <Upload className="h-3.5 w-3.5" />
+                              Enviar modelo
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={`rounded-xl border p-4 ${artPhotos.length ? 'border-2 border-amber-600' : 'border-border'}`}>
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-text-primary">
+                            {artPhotos.length ? 'Fotos na arte' : 'Colocar foto na arte'}
+                          </p>
+                          <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+                            {artPhotos.length ? `${artPhotos.length} de ${MAX_ART_PHOTOS}` : `até ${MAX_ART_PHOTOS} fotos`}
+                          </span>
+                        </div>
+                        {artPhotos.length ? (
+                          <div className="flex flex-wrap gap-2">
+                            {artPhotos.map((photo) => (
+                              <div key={photo.id} className="relative h-20 w-20 overflow-hidden rounded-lg border border-border">
+                                <img src={photo.url} alt="" className="h-full w-full object-cover" />
+                                <button
+                                  type="button"
+                                  onClick={() => toggleArtPhoto(photo)}
+                                  aria-label="Remover foto da arte"
+                                  className="ady-btn absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface text-text-tertiary hover:text-destructive"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                            {artPhotos.length < MAX_ART_PHOTOS && (
+                              <button
+                                type="button"
+                                onClick={() => setPickerMode('arte')}
+                                className="ady-btn flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-amber-600/60 text-xs font-semibold text-amber-700"
+                              >
+                                <Plus className="h-4 w-4" />
+                                Adicionar
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-xs leading-relaxed text-text-secondary">
+                              Seu produto, você ou sua equipe aparecendo dentro do anúncio.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setPickerMode('arte')}
+                                className="ady-btn rounded-full bg-amber-700 px-3.5 py-2 text-xs font-semibold text-white"
+                              >
+                                Minhas fotos
+                              </button>
+                              <button
+                                type="button"
+                                onClick={requestArtUpload}
+                                className="ady-btn inline-flex items-center gap-1.5 rounded-full border border-dashed border-amber-600/60 bg-amber-500/5 px-3.5 py-2 text-xs font-semibold text-amber-700"
+                              >
+                                <Upload className="h-3.5 w-3.5" />
+                                Enviar foto
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {templatePhoto && (
+                    <p className="text-xs text-text-tertiary">Use artes suas ou que você tenha direito de usar.</p>
+                  )}
+                </div>
+
+                <div className="ady-decor flex flex-wrap items-center gap-2.5 border-t border-border pt-4">
+                  {templatePhoto ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+                      <Info className="h-3.5 w-3.5" />
+                      IA escolhida automaticamente para seguir o modelo
+                    </span>
+                  ) : (
+                    <ModelSelect
+                      models={imageModels}
+                      selectedModel={selectedImageModel}
+                      onSelect={setSelectedImageModel}
+                      id="quick-create-model-select"
+                      compact
+                    />
+                  )}
 
                   <div className="flex items-center gap-1 rounded-full border border-border bg-surface-muted p-1">
                     <button
@@ -560,33 +813,6 @@ export function EstudioHome() {
                     </button>
                   </div>
 
-                  <label
-                    className={`flex items-center gap-1.5 rounded-full border border-brand/40 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand/20 ${
-                      uploadReferenceB.isPending ? 'cursor-wait opacity-60' : 'cursor-pointer'
-                    }`}
-                  >
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg"
-                      multiple
-                      className="hidden"
-                      onChange={handleUploadB}
-                      disabled={uploadReferenceB.isPending}
-                      aria-label="Enviar fotos"
-                    />
-                    {uploadReferenceB.isPending ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Enviando...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-3.5 w-3.5" />
-                        Enviar fotos
-                      </>
-                    )}
-                  </label>
-
                   <button
                     type="button"
                     onClick={handleQuickCreate}
@@ -601,37 +827,29 @@ export function EstudioHome() {
                     Gerar imagem
                   </button>
                 </div>
-
-                {referenceContextUrls.length > 0 && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <span className="text-xs text-text-tertiary">Referências nesta criação:</span>
-                    {referenceContextUrls.map((url) => (
-                      <div key={url} className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-brand">
-                        <img src={url} alt="" className="h-full w-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => removeFromReferenceContext(url)}
-                          aria-label="Remover imagem de referência"
-                          className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-border bg-surface text-text-tertiary hover:text-destructive"
-                        >
-                          <X className="h-2.5 w-2.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </CardContent>
             </Card>
             <UsageBadge remaining={creativesRemaining} limit={creativesLimit} className="mt-1 w-full max-w-none" />
             </div>
 
             <ReferenceImagePanel
-              contextUrls={referenceContextUrls}
-              onAdd={addToReferenceContext}
-              onRemove={removeFromReferenceContext}
+              templateId={templatePhoto?.id ?? null}
+              artPhotoIds={artPhotos.map((p) => p.id)}
+              onPickTemplate={toggleTemplate}
+              onToggleArtPhoto={toggleArtPhoto}
+              onUploadClick={() => setUploadRequest({ kinds: ['modelo', 'produto', 'equipe'], max: null })}
             />
             </div>
           </div>
+        )}
+
+        {view === 'video-progress' && videoJobId && (
+          <VideoProgress
+            jobId={videoJobId}
+            onDone={(job) => void handleVideoDone(job)}
+            onRetry={handleStartQuickCreate}
+            onBack={handleBackToLibrary}
+          />
         )}
 
         {/* LOADING VIEW */}
@@ -650,8 +868,17 @@ export function EstudioHome() {
               </p>
             </div>
             <div className="flex flex-col gap-1.5 text-xs text-text-tertiary">
-              <span><span className="text-warning">✦</span> Aprimorando a explicação detalhada com o contexto da marca</span>
-              <span><span className="text-warning">✦</span> Gerando imagem com IA</span>
+              {templatePhoto ? (
+                <>
+                  <span><span className="text-warning">✦</span> Analisando o layout do modelo</span>
+                  <span><span className="text-warning">✦</span> Trocando os textos pelos seus</span>
+                </>
+              ) : (
+                <>
+                  <span><span className="text-warning">✦</span> Aprimorando a explicação detalhada com o contexto da marca</span>
+                  <span><span className="text-warning">✦</span> Gerando imagem com IA</span>
+                </>
+              )}
               <span><span className="text-warning">✦</span> Salvando na biblioteca</span>
             </div>
           </div>
@@ -661,14 +888,24 @@ export function EstudioHome() {
         {view === 'result' && generationResult && (
           <>
             <div className="pt-1">
-              <p className="text-sm text-text-tertiary">Regenere com ajustes, salve ou publique direto na sua conta</p>
+              <p className="text-sm text-text-tertiary">
+                {generationResult.type === 'video'
+                  ? 'Assista, baixe ou peça um ajuste'
+                  : 'Regenere com ajustes, salve ou publique direto na sua conta'}
+              </p>
             </div>
             <CreativeResult
               result={generationResult}
               onBack={handleBackToLibrary}
               onNewCreative={handleStartQuickCreate}
+              onTrackVideo={handleTrackVideo}
               onPublish={() => {
-                setPreSelectedAsset({ id: generationResult.assetId, url: generationResult.imageUrl });
+                const isVideo = generationResult.type === 'video';
+                setPreSelectedAsset({
+                  id: generationResult.assetId,
+                  url: isVideo ? generationResult.videoUrl : generationResult.imageUrl,
+                  isVideo,
+                });
                 navigate('/criar-campanha');
               }}
             />
@@ -727,26 +964,26 @@ export function EstudioHome() {
         />
       )}
 
-      <Dialog open={showUploadBLimitAlert} onOpenChange={setShowUploadBLimitAlert}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Máximo de 2 fotos por vez</DialogTitle>
-            <DialogDescription>
-              Esse botão aceita no máximo 2 fotos de cada vez. Selecione até 2 fotos e envie novamente ou use o
-              painel lateral, que aceita quantas fotos você quiser.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <button
-              type="button"
-              onClick={() => setShowUploadBLimitAlert(false)}
-              className="px-5 py-2.5 rounded-xl bg-brand-hover hover:opacity-90 text-white text-sm font-medium transition-colors"
-            >
-              Entendi
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <LibraryUploadFlow request={uploadRequest} onClose={() => setUploadRequest(null)} />
+      <LibraryPickerDialog
+        mode={pickerMode}
+        selectedIds={pickerMode === 'modelo' ? (templatePhoto ? [templatePhoto.id] : []) : artPhotos.map((p) => p.id)}
+        maxArt={MAX_ART_PHOTOS}
+        onClose={() => setPickerMode(null)}
+        onConfirm={(photos) => {
+          if (pickerMode === 'modelo') setTemplatePhoto(photos[0] ?? null);
+          else setArtPhotos(photos.slice(0, MAX_ART_PHOTOS));
+          setPickerMode(null);
+        }}
+        onUploadFiles={(files) => {
+          setPickerMode(null);
+          requestTemplateUpload(files);
+        }}
+        onUploadClick={() => {
+          setPickerMode(null);
+          requestArtUpload();
+        }}
+      />
     </AppLayout>
   );
 }
@@ -773,9 +1010,21 @@ function resolveAssetUrl(url: string | null | undefined): string | null {
 export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onUseInCampaign, onRestore, restorePending }: AssetCardProps) {
   const imageUrl = resolveAssetUrl(asset.url);
   const badge = complianceBadge(asset.complianceStatus, asset.complianceNotes);
+  const isVideo = asset.type === 'video';
+  const videoMeta = isVideo ? parseVideoMeta(asset.complianceNotes) : null;
+  const duration = formatDuration(videoMeta?.durationSeconds);
   return (
     <div className={`group ${SURFACE} ${CARD_HOVER} overflow-hidden`}>
-      {imageUrl && asset.type === 'image' ? (
+      {imageUrl && isVideo ? (
+        <div className="relative aspect-square w-full overflow-hidden bg-surface-secondary">
+          {/* #t=0.1 força o navegador a mostrar o 1º quadro como miniatura */}
+          <video src={`${imageUrl}#t=0.1`} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+          <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white">
+            <Play className="h-3 w-3 fill-current" />
+            {duration ? `Vídeo · ${duration}` : 'Vídeo'}
+          </span>
+        </div>
+      ) : imageUrl && asset.type === 'image' ? (
         <div className="relative aspect-square w-full overflow-hidden bg-surface-muted">
           <img
             src={imageUrl}
@@ -855,7 +1104,7 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
       <div className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <h3 className="line-clamp-2 flex-1 text-sm font-semibold text-text-primary transition-colors group-hover:text-text-primary">
-            {asset.name ?? `Anúncio de ${asset.type === 'image' ? 'imagem' : asset.type}`}
+            {videoMeta?.prompt ?? asset.name ?? `Anúncio de ${asset.type === 'image' ? 'imagem' : 'vídeo'}`}
           </h3>
           {!archived && (
             <button
@@ -896,6 +1145,27 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
             Ver detalhes
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function GeneratingVideoCard({ job, onTrack }: { job: StudioVideoJob; onTrack: () => void }) {
+  return (
+    <div className={`${SURFACE} overflow-hidden`}>
+      <div className="flex aspect-square w-full flex-col items-center justify-center gap-3 bg-surface-secondary p-6 text-center">
+        <Loader2 className="h-7 w-7 animate-spin text-brand" />
+        <span className="text-sm font-semibold text-text-primary">Gerando vídeo...</span>
+      </div>
+      <div className="space-y-3 p-4">
+        <h3 className="line-clamp-2 text-sm font-semibold text-text-primary">{job.prompt}</h3>
+        <button
+          type="button"
+          onClick={onTrack}
+          className="w-full rounded-full bg-brand-hover px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-brand-hover/90"
+        >
+          Acompanhar
+        </button>
       </div>
     </div>
   );

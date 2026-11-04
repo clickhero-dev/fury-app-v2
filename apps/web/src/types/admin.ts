@@ -6,12 +6,13 @@ export interface AdminDashboardStats {
   newClients: number;
   activeTrials: number;
   cancellations: number;
+  expiredAccounts: number;
   plans: Array<{ planId: string; name: string; priceCents: number; interval: string; clients: number }>;
-  recentActivity: Array<{ tipo: 'novo' | 'trial' | 'plano' | 'cancelamento'; tenantName: string; description: string; at: string }>;
+  recentActivity: Array<{ tipo: 'novo' | 'trial' | 'plano' | 'cancelamento' | 'renovacao'; tenantName: string; description: string; at: string }>;
 }
 
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
-export type TicketLevel = 'N1' | 'N2' | 'N3' | 'N4';
+export type TicketLevel = 'N1' | 'N2' | 'N3' | 'N4' | 'N5';
 
 export interface CreateTicketRequest {
   email: string;

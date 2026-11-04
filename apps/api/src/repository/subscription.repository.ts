@@ -2,12 +2,13 @@ import {
   db as defaultDb,
   type Database,
   subscriptions,
+  renewalEvents,
   plans,
   invoices,
   budgetOptimizations,
   creativeAssets,
 } from '@fury/db';
-import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 
 type Subscription = typeof subscriptions.$inferSelect;
@@ -63,9 +64,10 @@ export class SubscriptionRepository extends TenantScopedRepository {
 
   // ── Planos (catálogo GLOBAL + plano do tenant) ────────────────────
 
-  async listActivePlans() {
+  // partnerId null = planos da ady; senão só os daquele parceiro
+  async listActivePlans(partnerId: string | null = null) {
     return this.db.query.plans.findMany({
-      where: eq(plans.isActive, true),
+      where: and(eq(plans.isActive, true), partnerId ? eq(plans.partnerId, partnerId) : isNull(plans.partnerId)),
       orderBy: [plans.priceCents],
     });
   }
@@ -216,15 +218,32 @@ export class SubscriptionRepository extends TenantScopedRepository {
   }
 
   /** Avança o ciclo (nextPeriodEnd já calculado) e reseta a cota ao teto (null = sem teto). */
-  async renewSubscription(id: string, nextPeriodEnd: Date, creativesLimit: number | null): Promise<void> {
-    await this.db
-      .update(subscriptions)
-      .set({
-        currentPeriodEnd: nextPeriodEnd,
-        creativesRemaining: creativesLimit,
-        updatedAt: new Date(),
-      })
-      .where(eq(subscriptions.id, id));
+  async renewSubscription(id: string, expectedPeriodEnd: Date, nextPeriodEnd: Date, creativesLimit: number | null): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(subscriptions)
+        .set({
+          currentPeriodEnd: nextPeriodEnd,
+          creativesRemaining: creativesLimit,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(subscriptions.id, id),
+          eq(subscriptions.status, 'active'),
+          eq(subscriptions.isNonExpirable, false),
+          eq(subscriptions.currentPeriodEnd, expectedPeriodEnd),
+          lte(subscriptions.currentPeriodEnd, expectedPeriodEnd),
+        ))
+        .returning({ id: subscriptions.id, tenantId: subscriptions.tenantId });
+      if (!updated) return false;
+
+      await tx.insert(renewalEvents).values({
+        subscriptionId: updated.id,
+        tenantId: updated.tenantId,
+        previousPeriodEnd: expectedPeriodEnd,
+      });
+      return true;
+    });
   }
 }
 

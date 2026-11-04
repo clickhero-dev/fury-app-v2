@@ -5,10 +5,15 @@ import { GoalService } from './services/goals/goal.service.js';
 import { GoalController } from './controllers/goal.controller.js';
 import { BrandKitService } from './services/brand-kit/brand-kit.service.js';
 import { BrandKitController } from './controllers/brand-kit.controller.js';
+import { BrandKitPhotoService } from './services/brand-kit/brand-kit-photo.service.js';
+import { BrandKitPhotoController } from './controllers/brand-kit-photo.controller.js';
 import { FuryEngineService } from './services/fury/fury-engine.service.js';
 import { FuryController } from './controllers/fury.controller.js';
 import { StudioAiService } from './services/studio/studio-ai.service.js';
 import { StudioAiController } from './controllers/studio-ai.controller.js';
+import { StudioVideoService } from './services/studio/studio-video.service.js';
+import { StudioVideoController } from './controllers/studio-video.controller.js';
+import { enqueueStudioVideo } from './workers/studio-video.worker.js';
 import { StudioService } from './services/studio/creative-studio.service.js';
 import { StudioPublishingService } from './services/studio/studio-publishing.service.js';
 import { CreativeStudioController } from './controllers/creative-studio.controller.js';
@@ -56,17 +61,29 @@ import { MetaSyncRepository } from './repository/meta-sync.repository.js';
 import { enqueueMetaSyncTenantRun } from './workers/meta-sync.worker.js';
 import { SuperAdminRepository } from './repository/superadmin.repository.js';
 import { SuperAdminController } from './controllers/superadmin.controller.js';
+import { PartnerRepository } from './repository/partner.repository.js';
+import { PartnerController } from './controllers/partner.controller.js';
+import { PermissionsController } from './controllers/permissions.controller.js';
+import { RbacRepository } from './repository/rbac.repository.js';
 import { ClickUpTicketsClient } from './lib/clickup-tickets.client.js';
 import { TicketService } from './services/tickets/ticket.service.js';
 import { TicketsController } from './controllers/tickets.controller.js';
 import { FaqRepository } from './repository/faq.repository.js';
 import { FaqController } from './controllers/faq.controller.js';
+import { AnnouncementRepository } from './repository/announcement.repository.js';
+import { AnnouncementController } from './controllers/announcement.controller.js';
 import { MetaHealthcheckRepository } from './repository/meta-healthcheck.repository.js';
 import { metaHealthcheckService } from './services/meta/meta-healthcheck.service.js';
 import { MetaHealthcheckController } from './controllers/meta-healthcheck.controller.js';
 import { PlannerCaptionSuggestionService } from './services/planner/planner-caption-suggestion.service.js';
 import { StudioRepository } from './repository/studio.repository.js';
 import { openrouterService } from './services/llms/openrouter.service.js';
+import { NotificationRepository } from './repository/notification.repository.js';
+import { NotificationService } from './services/notifications/notification.service.js';
+import { NotificationController } from './controllers/notification.controller.js';
+import { emitToUser } from './lib/sse.js';
+import { BusinessContextService } from './services/core/business-context.service.js';
+import { BusinessContextController } from './controllers/business-context.controller.js';
 
 /**
  * Composition root (DI) da API.
@@ -82,8 +99,13 @@ const metricsProvider: IMetricsProvider =
 
 export const goalService = new GoalService(metricsProvider);
 export const brandKitService = new BrandKitService();
+export const brandKitPhotoService = new BrandKitPhotoService();
 export const furyEngineService = new FuryEngineService();
 export const studioAiService = new StudioAiService();
+export const studioVideoService = new StudioVideoService({
+  enqueue: enqueueStudioVideo,
+  brand: (tenantId) => studioAiService.getBrandContext(tenantId),
+});
 export const studioService = new StudioService();
 export const studioPublishingService = new StudioPublishingService();
 export const billingService = new BillingService();
@@ -92,6 +114,8 @@ export const observabilityService = new ObservabilityService();
 export const formsService = new FormsService();
 export const automationService = new AutomationService();
 export const authService = new AuthService();
+export const businessContextService = new BusinessContextService();
+export const businessContextController = new BusinessContextController(businessContextService);
 export const socialAuthService = new SocialAuthService();
 export const metricsService = new MetricsService(metricsProvider);
 export const budgetOptimizerService = new BudgetOptimizerService();
@@ -102,11 +126,14 @@ export const superAdminRepository = new SuperAdminRepository("");
 export const clickUpTicketsClient = new ClickUpTicketsClient();
 export const ticketService = new TicketService(clickUpTicketsClient);
 export const faqRepository = new FaqRepository();
+export const announcementRepository = new AnnouncementRepository();
 export const metaHealthcheckRepository = new MetaHealthcheckRepository();
 export const plannerCaptionSuggestionService = new PlannerCaptionSuggestionService(
   openrouterService,
   (tenantId) => new StudioRepository(tenantId),
 );
+export const notificationRepository = new NotificationRepository();
+export const notificationService = new NotificationService(notificationRepository, (tenantId, userId) => emitToUser(tenantId, userId, 'notifications.changed', { version: 1 }));
 
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
@@ -124,11 +151,15 @@ export const wppVerificationService = new WppVerificationService(
 export const controllers = {
   tickets: new TicketsController(ticketService),
   faq: new FaqController(faqRepository),
+  announcement: new AnnouncementController(announcementRepository),
   metaHealthchecks: new MetaHealthcheckController(metaHealthcheckRepository, metaHealthcheckService),
+  notification: new NotificationController(notificationService),
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),
+  brandKitPhotos: new BrandKitPhotoController(brandKitPhotoService),
   fury: new FuryController(furyEngineService),
   studioAi: new StudioAiController(studioAiService),
+  studioVideo: new StudioVideoController(studioVideoService),
   studio: new CreativeStudioController(studioService),
   studioPublishing: new StudioPublishingController(studioPublishingService),
   billing: new BillingController(billingService),
@@ -137,6 +168,7 @@ export const controllers = {
   forms: new FormsController(formsService),
   metrics: new MetricsController(metricsService),
   auth: new AuthController(authService, socialAuthService, policyService),
+  businessContext: businessContextController,
   automation: new AutomationController(automationService),
   google: new GoogleController(googleService),
   meta: new MetaController(metaService),
@@ -144,11 +176,12 @@ export const controllers = {
   planner: new PlannerController(
     plannerService,
     plannerCaptionSuggestionService,
-    (tenantId) => new StudioRepository(tenantId),
   ),
   dashboard: new DashboardController(getInstagramDashboardInsights),
   budget: new BudgetController(budgetOptimizerService),
   superadmin: new SuperAdminController(superAdminRepository),
+  partners: new PartnerController(new PartnerRepository(), superAdminRepository),
+  permissions: new PermissionsController(new RbacRepository(), new PartnerRepository()),
   campaigns: new CampaignsController(
     campaignsService,
     (tenantId: string) => new CampaignRepository(tenantId),

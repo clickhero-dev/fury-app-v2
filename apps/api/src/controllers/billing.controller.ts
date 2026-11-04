@@ -2,6 +2,8 @@ import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { BillingService } from '../services/billing/billing.service.js';
 import { invalidateHttpCache } from '../lib/http-cache.js';
+import { AppError } from '../middleware/errorHandler.js';
+import { rbacService } from '../services/core/rbac.service.js';
 
 const subscribeSchema = z.object({
   planId: z.string().uuid(),
@@ -14,9 +16,9 @@ const subscribeSchema = z.object({
 export class BillingController {
   constructor(private service: BillingService) {}
 
-  listPlans = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  listPlans = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const data = await this.service.listActivePlans();
+      const data = await this.service.listActivePlans(req.tenant!.tenantId);
       res.json({ success: true, data, timestamp: new Date().toISOString() });
     } catch (e) { next(e); }
   };
@@ -37,6 +39,9 @@ export class BillingController {
   subscribe = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { tenantId } = req.tenant!;
+      // conta do parceiro é vitalícia: não compra plano
+      if ((await rbacService.getPlatformRole(req.user!.userId)) === 'admin_partner')
+        throw new AppError(403, 'LIFETIME_ACCOUNT', 'Sua conta não precisa de plano.');
       const payload = subscribeSchema.parse(req.body);
       const sub = await this.service.subscribe(tenantId, payload);
       await invalidateHttpCache(tenantId, ['/api/billing']);

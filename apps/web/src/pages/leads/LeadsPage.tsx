@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, MessageCircle, ChevronDown, Check } from 'lucide-react';
+import { Users, MessageCircle, ChevronDown, ChevronLeft, ChevronRight, Check, Copy, Mail, Phone, CalendarDays } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useCampaignLeads, type CampaignLead } from '@/hooks/useCampaignLeads';
@@ -9,19 +9,7 @@ import { normalizePhoneToMeta } from '@/components/campaign-wizard/lib/phone-for
 import { MetaSyncNotice } from '../../components/MetaSyncNotice';
 import { getLatestSync } from '../../lib/format-last-sync';
 
-// A página também exporta estas constantes para que o teste valide a mesma classe usada no layout.
-export const LEADS_TABLE_MIN_WIDTH_CLASS = 'min-w-[1320px]';
-export const LEADS_TABLE_NO_CAMPAIGN_MIN_WIDTH_CLASS = 'min-w-[1110px]';
-// eslint-disable-next-line react-refresh/only-export-components
-export const LEADS_TABLE_COLUMN_WIDTH_CLASSES = {
-  name: 'w-[190px]',
-  email: 'w-[270px]',
-  phone: 'w-[150px]',
-  campaign: 'w-[210px]',
-  date: 'w-[200px]',
-  status: 'w-[160px]',
-  action: 'w-[140px]',
-} as const;
+const PAGE_SIZE = 12;
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
@@ -32,6 +20,12 @@ function formatDate(dateStr: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function initials(name: string | null): string {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  return ((parts[0][0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 }
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
@@ -82,12 +76,138 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-type LeadColumn = {
-  key: keyof CampaignLead;
-  label: string;
-  thClass?: string;
-  render: (value: unknown, row?: CampaignLead) => React.ReactNode;
-};
+function CopyButton({ value, label }: { value: string | null; label: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!value) return null;
+
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      aria-label={copied ? `${label} copiado` : `Copiar ${label}`}
+      title={copied ? 'Copiado!' : `Copiar ${label}`}
+      className={`flex size-6 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${
+        copied ? 'text-success' : 'text-text-tertiary hover:bg-surface-secondary hover:text-text-primary'
+      }`}
+    >
+      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+    </button>
+  );
+}
+
+function LeadCard({
+  lead,
+  showCampaign,
+  onStatusChange,
+}: {
+  lead: CampaignLead;
+  showCampaign: boolean;
+  onStatusChange: (leadId: string, status: string) => void;
+}) {
+  const status = lead.status ?? 'novo';
+  const email = lead.email ?? '—';
+
+  return (
+    <li className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-4 transition-colors duration-200 hover:border-border-light">
+      <div className="flex items-start gap-3">
+        <div
+          aria-hidden="true"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand/10 text-sm font-semibold text-brand"
+        >
+          {initials(lead.name)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1">
+            <p className="truncate font-medium text-text-primary">{lead.name ?? '—'}</p>
+            <CopyButton value={lead.name} label="nome" />
+          </div>
+          {showCampaign && (
+            <p className="truncate text-xs text-text-tertiary" title={lead.campaignName ?? undefined}>
+              {lead.campaignName ?? '—'}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2 text-sm">
+        <div className="flex items-center gap-2 text-text-primary">
+          <Mail className="size-3.5 shrink-0 text-text-tertiary" aria-hidden="true" />
+          <span className="truncate" title={email}>{email}</span>
+          <CopyButton value={lead.email} label="e-mail" />
+        </div>
+        <div className="flex items-center gap-2 text-text-primary">
+          <Phone className="size-3.5 shrink-0 text-text-tertiary" aria-hidden="true" />
+          <span className="truncate whitespace-nowrap">{lead.phone ?? '—'}</span>
+          <CopyButton value={lead.phone} label="telefone" />
+        </div>
+        <div className="flex items-center gap-2 text-xs text-text-secondary">
+          <CalendarDays className="size-3.5 shrink-0 text-text-tertiary" aria-hidden="true" />
+          <span className="truncate whitespace-nowrap">{formatDate(lead.createdAt)}</span>
+        </div>
+      </div>
+
+      <div className="mt-auto flex items-center gap-2 border-t border-border pt-3">
+        <div className="min-w-0 flex-1">
+          {lead.id ? (
+            <StatusSelect status={status} name={lead.name} onSelect={(s) => onStatusChange(lead.id!, s)} />
+          ) : (
+            <StatusBadge status={status} />
+          )}
+        </div>
+        {lead.phone && (
+          <a
+            href={`https://wa.me/${normalizePhoneToMeta(lead.phone)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Conversar no WhatsApp com ${lead.name ?? 'o cliente'}`}
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-success/30 bg-success/10 px-2.5 py-1.5 text-xs font-semibold text-success hover:bg-success/20 transition-colors"
+          >
+            <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+            WhatsApp
+          </a>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function Pagination({ page, totalPages, total, onChange }: { page: number; totalPages: number; total: number; onChange: (p: number) => void }) {
+  const from = (page - 1) * PAGE_SIZE + 1;
+  const to = Math.min(page * PAGE_SIZE, total);
+  const btn =
+    'inline-flex items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:border-text-tertiary/50 disabled:cursor-not-allowed disabled:opacity-40';
+
+  return (
+    <nav aria-label="Paginação de clientes" className="flex flex-col items-center justify-between gap-3 sm:flex-row">
+      <p className="text-xs text-text-tertiary">
+        Mostrando {from}–{to} de {total} clientes
+      </p>
+      <div className="flex items-center gap-2">
+        <button type="button" className={btn} onClick={() => onChange(page - 1)} disabled={page <= 1} aria-label="Página anterior">
+          <ChevronLeft className="size-3.5" />
+          Anterior
+        </button>
+        <span className="text-xs text-text-secondary" aria-current="page">
+          Página {page} de {totalPages}
+        </span>
+        <button type="button" className={btn} onClick={() => onChange(page + 1)} disabled={page >= totalPages} aria-label="Próxima página">
+          Próxima
+          <ChevronRight className="size-3.5" />
+        </button>
+      </div>
+    </nav>
+  );
+}
 
 /**
  * Página dedicada de leads de formulário (objetivo 'leads').
@@ -96,6 +216,7 @@ type LeadColumn = {
  */
 export function LeadsPage() {
   const [campaignId, setCampaignId] = useState<string>('');
+  const [page, setPage] = useState(1);
   const { campaigns, isLoading: loadingCampaigns, isError: errorCampaigns, degraded: campaignsDegraded, firstSyncPending: campaignsFirstSync, syncedAt: campaignsSyncedAt } = useLeadCampaigns();
   const { leads, isLoading, isError, errorMessage, degraded: leadsDegraded, firstSyncPending: leadsFirstSync, syncedAt: leadsSyncedAt } = useCampaignLeads(
     campaignId || null,
@@ -108,105 +229,17 @@ export function LeadsPage() {
     leadStatusMutation.mutate({ id: leadId, status: status as (typeof LEAD_STATUS_OPTIONS)[number] });
   };
 
-  const showCampaignColumn = campaignId === '';
-  const tableMinWidthClass = showCampaignColumn
-    ? LEADS_TABLE_MIN_WIDTH_CLASS
-    : LEADS_TABLE_NO_CAMPAIGN_MIN_WIDTH_CLASS;
+  const onSelectCampaign = (id: string) => {
+    setCampaignId(id);
+    setPage(1);
+  };
 
-  const columns: LeadColumn[] = [
-    {
-      key: 'name' as const,
-      label: 'Nome',
-      thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.name,
-      render: (value: unknown) => {
-        const name = String(value ?? '—');
-        return <span className="block truncate text-text-primary font-medium" title={name}>{name}</span>;
-      },
-    },
-    {
-      key: 'email' as const,
-      label: 'E-mail',
-      thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.email,
-      render: (value: unknown) => {
-        const email = String(value ?? '—');
-        return (
-          <span className="block truncate text-text-primary" title={email}>
-            {email}
-          </span>
-        );
-      },
-    },
-    {
-      key: 'phone' as const,
-      label: 'Telefone',
-      thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.phone,
-      render: (value: unknown) => {
-        const phone = String(value ?? '—');
-        return <span className="block truncate text-text-primary whitespace-nowrap" title={phone}>{phone}</span>;
-      },
-    },
-    ...(showCampaignColumn
-      ? [{
-          key: 'campaignName' as keyof CampaignLead,
-          label: 'Campanha',
-          thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.campaign,
-          render: (value: unknown) => {
-            const campaignName = String(value ?? '—');
-            return <span className="block truncate text-text-secondary" title={campaignName}>{campaignName}</span>;
-          },
-        }]
-      : []),
-    {
-      key: 'createdAt' as const,
-      label: 'Data',
-      thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.date,
-      render: (value: unknown) => (
-        <span className="block truncate text-text-secondary whitespace-nowrap">{formatDate(value as string | null)}</span>
-      ),
-    },
-    {
-      key: 'status' as const,
-      label: 'Status',
-      thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.status,
-      render: (value: unknown, row?: CampaignLead) => {
-        const status = (value as string | undefined) ?? 'novo';
-        if (!row?.id) {
-          return <StatusBadge status={status} />;
-        }
-        return (
-          <StatusSelect
-            status={status}
-            name={row.name}
-            onSelect={(s) => onLeadStatusChange(row.id!, s)}
-          />
-        );
-      },
-    },
-    {
-      key: 'phone' as const,
-      label: 'Ação',
-      thClass: LEADS_TABLE_COLUMN_WIDTH_CLASSES.action,
-      render: (value: unknown, row: CampaignLead) => {
-        const phone = row.phone;
-        if (!phone) {
-          return <span className="text-text-tertiary">—</span>;
-        }
-        const wa = `https://wa.me/${normalizePhoneToMeta(phone)}`;
-        return (
-          <a
-            href={wa}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Conversar no WhatsApp com ${row.name ?? 'o cliente'}`}
-            className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-success/30 bg-success/10 px-2.5 py-1.5 text-xs font-semibold text-success hover:bg-success/20 transition-colors"
-          >
-            <MessageCircle className="w-3.5 h-3.5 shrink-0" />
-            WhatsApp
-          </a>
-        );
-      },
-    },
-  ];
+  const showCampaign = campaignId === '';
+  const totalPages = Math.max(1, Math.ceil(leads.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageLeads = leads.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  const panelClass = 'rounded-2xl border border-border bg-surface';
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 sm:px-10">
@@ -237,7 +270,7 @@ export function LeadsPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-80 w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto">
               {[{ id: '', name: 'Todas as campanhas' }, ...campaigns].map((c) => (
-                <DropdownMenuItem key={c.id || 'all'} onSelect={() => setCampaignId(c.id)} className="justify-between gap-3">
+                <DropdownMenuItem key={c.id || 'all'} onSelect={() => onSelectCampaign(c.id)} className="justify-between gap-3">
                   <span className="truncate">{c.name}</span>
                   {c.id === campaignId && <Check className="size-3.5 shrink-0 text-brand" />}
                 </DropdownMenuItem>
@@ -256,68 +289,63 @@ export function LeadsPage() {
       {(campaignsDegraded || leadsDegraded) && <MetaSyncNotice firstSyncPending={campaignsFirstSync || leadsFirstSync} syncedAt={getLatestSync(campaignsSyncedAt, leadsSyncedAt)} />}
 
       {/* Lista de leads */}
-      <div className="rounded-2xl border border-border bg-surface transition-all duration-300 hover:border-border-light overflow-x-auto">
-        {isLoading ? (
-          <div data-testid="leads-table-scroll" className="overflow-x-auto">
-            <div
-              role="status"
-              aria-label="Carregando clientes..."
-              aria-busy="true"
-              className={`p-4 space-y-2.5 ${tableMinWidthClass}`}
-            >
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className={`grid ${showCampaignColumn ? 'grid-cols-7' : 'grid-cols-6'} gap-4 rounded-xl bg-surface-secondary/40 p-3 animate-pulse`}>
-                  {columns.map((column, index) => (
-                    <div key={index} className={`h-3 rounded bg-surface-secondary/80 ${column.thClass ?? ''}`} />
-                  ))}
-                </div>
-              ))}
-              <span className="sr-only">Carregando clientes...</span>
+      {isLoading ? (
+        <div
+          role="status"
+          aria-label="Carregando clientes..."
+          aria-busy="true"
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className={`${panelClass} space-y-4 p-4 animate-pulse`}>
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-full bg-surface-secondary/80" />
+                <div className="h-3 flex-1 rounded bg-surface-secondary/80" />
+              </div>
+              <div className="h-3 w-3/4 rounded bg-surface-secondary/80" />
+              <div className="h-3 w-1/2 rounded bg-surface-secondary/80" />
+              <div className="h-7 rounded-full bg-surface-secondary/80" />
             </div>
-          </div>
-        ) : isError ? (
-          <div className="py-16 px-6 text-sm text-error text-center">
-            {errorMessage || 'Não foi possível carregar os clientes. Tente novamente.'}
-          </div>
-        ) : !isLoading && campaigns.length === 0 && !(campaignsFirstSync || leadsFirstSync) ? (
+          ))}
+          <span className="sr-only">Carregando clientes...</span>
+        </div>
+      ) : isError ? (
+        <div className={`${panelClass} py-16 px-6 text-sm text-error text-center`}>
+          {errorMessage || 'Não foi possível carregar os clientes. Tente novamente.'}
+        </div>
+      ) : !isLoading && campaigns.length === 0 && !(campaignsFirstSync || leadsFirstSync) ? (
+        <div className={panelClass}>
           <EmptyState
             icon={<Users className="w-6 h-6" />}
             title="Nenhuma campanha de Formulário"
             description="Crie uma campanha com o objetivo Formulário para coletar clientes por aqui."
           />
-        ) : leads.length === 0 && !(campaignsFirstSync || leadsFirstSync) ? (
+        </div>
+      ) : leads.length === 0 && !(campaignsFirstSync || leadsFirstSync) ? (
+        <div className={panelClass}>
           <EmptyState
             icon={<Users className="w-6 h-6" />}
             title="Nenhum cliente ainda"
             description="Quando alguém preencher o formulário dos seus anúncios, os contatos aparecerão aqui."
           />
-        ) : (
-          <div data-testid="leads-table-scroll" className="overflow-x-auto">
-            <table className={`w-full table-fixed text-sm ${tableMinWidthClass}`}>
-            <thead>
-              <tr className="border-b border-border bg-surface-secondary/40">
-                {columns.map((col) => (
-                  <th key={`${col.key}-${col.label}`} className={`text-left uppercase text-[11px] text-text-tertiary tracking-wider font-semibold py-4 px-4 ${col.thClass ?? ''}`}>
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {leads.map((lead, i) => (
-                <tr key={`${lead.email ?? 'lead'}-${i}`} className="hover:bg-surface-secondary/30 transition-colors">
-                  {columns.map((col) => (
-                    <td key={`${col.key}-${col.label}`} className={`py-3 px-4 ${col.thClass ?? ''}`}>
-                      {col.render(lead[col.key], lead)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <ul aria-label="Clientes" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {pageLeads.map((lead, i) => (
+              <LeadCard
+                key={lead.id ?? `${lead.email ?? 'lead'}-${(currentPage - 1) * PAGE_SIZE + i}`}
+                lead={lead}
+                showCampaign={showCampaign}
+                onStatusChange={onLeadStatusChange}
+              />
+            ))}
+          </ul>
+          {leads.length > PAGE_SIZE && (
+            <Pagination page={currentPage} totalPages={totalPages} total={leads.length} onChange={setPage} />
+          )}
+        </div>
+      )}
     </div>
   );
 }

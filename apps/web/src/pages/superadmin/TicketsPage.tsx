@@ -1,26 +1,39 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, ExternalLink, Plus, RefreshCw, Send, Users, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, ExternalLink, Paperclip, Plus, RefreshCw, Send, Trash2, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import api from '@/lib/api';
+import { showSnack } from '@/lib/snack';
 
 const PAGE_SIZE = 10;
+const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
+const acceptedAttachmentTypes = ['image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'video/quicktime'];
+const scopeLabels = [
+  ['app', 'App'], ['ux', 'UX'], ['infra', 'Infra'], ['api', 'API'], ['dados', 'Dados'], ['integracoes', 'Integrações'], ['seguranca', 'Segurança'],
+] as const;
+const areaLabels = [
+  ['meta', 'Meta'], ['sincronizacao-dados', 'Sincronização de dados'], ['dados-usuario', 'Dados do usuário'], ['google', 'Google'],
+] as const;
+const allLabels = [...scopeLabels, ...areaLabels];
+type TicketLabel = (typeof allLabels)[number][0];
 
 const ticketSchema = z.object({
   email: z.string().trim().email('Informe um e-mail válido.'),
   subject: z.string().trim().min(3, 'Informe um assunto com pelo menos 3 caracteres.').max(160),
   description: z.string().trim().min(10, 'Descreva o chamado com pelo menos 10 caracteres.').max(5_000),
   priority: z.enum(['low', 'normal', 'high', 'urgent']),
-  level: z.enum(['N1', 'N2', 'N3', 'N4']),
+  level: z.enum(['N1', 'N2', 'N3', 'N4', 'N5']),
   assigneeId: z.preprocess((value) => value === '' ? undefined : Number(value), z.number().int().positive().optional()),
+  labels: z.array(z.enum(allLabels.map(([value]) => value) as [TicketLabel, ...TicketLabel[]])).max(4, 'Selecione no máximo quatro etiquetas.').default([]),
 });
 
 type TicketForm = z.infer<typeof ticketSchema>;
 type CreatedTicket = { clickupTaskId: string; clickupTaskUrl: string };
-type TicketApiResponse = { data?: CreatedTicket; error?: { message?: string } };
-type Ticket = { id: string; name: string; status: string; priority: string | null; url: string; createdAt: string };
+type TicketApiResponse = { data?: CreatedTicket; error?: { message?: string; details?: { clickupTaskUrl?: string } } };
+type Ticket = { id: string; name: string; status: string; priority: string | null; url: string; createdAt: string; labels?: TicketLabel[] };
 type TicketLists = { open: Ticket[]; resolved: Ticket[] };
 type Assignee = { id: number; name: string; email: string | null };
 type Queue = 'open' | 'resolved';
@@ -30,6 +43,7 @@ const levelHelp = [
   ['N2 — Problema pontual', 'Algo não funciona para um usuário, mas existe alternativa.'],
   ['N3 — Bloqueio importante', 'Uma função essencial está indisponível ou vários usuários foram afetados.'],
   ['N4 — Crítico', 'A plataforma está indisponível ou há risco de dados e segurança.'],
+  ['N5 — Solicitação de feature', 'Pedido de criação ou evolução de funcionalidade para avaliação do produto.'],
 ] as const;
 
 const fieldErrors: Record<keyof TicketForm, { link: string; field: string }> = {
@@ -39,6 +53,7 @@ const fieldErrors: Record<keyof TicketForm, { link: string; field: string }> = {
   priority: { link: 'Prioridade', field: 'ticket-priority' },
   level: { link: 'Nível', field: 'ticket-level' },
   assigneeId: { link: 'Responsável', field: 'ticket-assignee' },
+  labels: { link: 'Etiquetas', field: 'ticket-labels' },
 };
 
 const statusLabels: Record<string, string> = {
@@ -86,6 +101,7 @@ function TicketRow({ ticket }: { ticket: Ticket }) {
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-[#8A8F8B]">
       <Chip>{statusLabel(ticket.status)}</Chip>
       {priority && <Chip className={priority.chip}>{priority.label}</Chip>}
+      {ticket.labels?.map((label) => <Chip key={label}>{allLabels.find(([value]) => value === label)?.[1] ?? label}</Chip>)}
       {age && <span>{age}</span>}
     </div>
   </li>;
@@ -98,15 +114,43 @@ const queueEmpty: Record<Queue, string> = {
 };
 
 /** Lista única com abas por fila, altura limitada com scroll e paginação local. */
+const EMPTY_STATUS = '__empty_status__';
+
+function normalizeStatus(status: string): string {
+  return status.trim().toLocaleLowerCase() || EMPTY_STATUS;
+}
+
 function TicketsTabs({ lists, loading }: { lists: TicketLists; loading: boolean }) {
   const [queue, setQueue] = useState<Queue>('open');
   const [page, setPage] = useState(0);
-  const tickets = lists[queue];
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const statusOptions = Array.from(new Map(
+    [...lists.open, ...lists.resolved].map((ticket) => {
+      const value = normalizeStatus(ticket.status);
+      return [value, { value, label: value === EMPTY_STATUS ? 'Sem status' : statusLabel(ticket.status) }] as const;
+    }),
+  ).values());
+  if (statusFilter && !statusOptions.some((option) => option.value === statusFilter)) {
+    statusOptions.push({ value: statusFilter, label: statusFilter === EMPTY_STATUS ? 'Sem status' : statusLabel(statusFilter) });
+  }
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const filteredLists = (Object.keys(queueLabels) as Queue[]).reduce((result, key) => {
+    result[key] = lists[key].filter((ticket) => {
+      const matchesSearch = !normalizedSearch || ticket.name.toLocaleLowerCase().includes(normalizedSearch);
+      const matchesStatus = !statusFilter || normalizeStatus(ticket.status) === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+    return result;
+  }, { open: [], resolved: [] } as TicketLists);
+  const tickets = filteredLists[queue];
   const pageCount = Math.max(1, Math.ceil(tickets.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const visible = tickets.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   const selectQueue = (next: Queue) => { setQueue(next); setPage(0); };
+  const updateSearch = (value: string) => { setSearch(value); setPage(0); };
+  const updateStatus = (value: string) => { setStatusFilter(value); setPage(0); };
 
   return <section className="rounded-xl border border-[#2A2D27] bg-[#161714]">
     <div role="tablist" aria-label="Filas de chamados" className="flex gap-1 border-b border-[#2A2D27] p-2">
@@ -125,30 +169,42 @@ function TicketsTabs({ lists, loading }: { lists: TicketLists; loading: boolean 
           }`}
         >
           {queueLabels[key]}
-          <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${selected ? 'bg-[#1E88A8]/25 text-[#5cc5e4]' : 'bg-[#0C0D0A] text-[#8A8F8B]'}`}>{loading ? '…' : lists[key].length}</span>
+          <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${selected ? 'bg-[#1E88A8]/25 text-[#5cc5e4]' : 'bg-[#0C0D0A] text-[#8A8F8B]'}`}>{loading ? '…' : filteredLists[key].length}</span>
         </button>;
       })}
     </div>
     <div role="tabpanel" id={`panel-${queue}`} aria-labelledby={`tab-${queue}`} className="p-5 pt-4">
+      <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.6fr)_auto] sm:items-end">
+        <label className="block text-sm text-[#8A8F8B]">
+          Pesquisar por assunto
+          <input type="search" aria-label="Pesquisar por assunto" value={search} onChange={(event) => updateSearch(event.target.value)} placeholder="Digite parte do assunto" className="mt-1 w-full rounded-lg border border-[#2A2D27] bg-[#0C0D0A] px-3 py-2.5 text-sm text-[#ECEDEF] outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30" />
+        </label>
+        <label className="block text-sm text-[#8A8F8B]">
+          Status
+          <select aria-label="Status" value={statusFilter} onChange={(event) => updateStatus(event.target.value)} className="mt-1 w-full rounded-lg border border-[#2A2D27] bg-[#0C0D0A] px-3 py-2.5 text-sm text-[#ECEDEF] outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30">
+            <option value="">Todos os status</option>
+            {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={() => { updateSearch(''); updateStatus(''); }} disabled={!search && !statusFilter} className="rounded-lg border border-[#2A2D27] px-3 py-2.5 text-sm text-[#ECEDEF] transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Limpar filtros</button>
+      </div>
       {loading ? <p className="text-sm text-[#8A8F8B]" aria-busy="true">Carregando chamados…</p> : tickets.length === 0 ? (
         <div className="flex items-start gap-2 rounded-lg bg-[#0C0D0A] px-3 py-2.5">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#8A8F8B]" aria-hidden="true" />
-          <p className="text-sm text-[#8A8F8B]">{queueEmpty[queue]}</p>
+          <p className="text-sm text-[#8A8F8B]">{search || statusFilter ? 'Nenhum chamado encontrado para os filtros selecionados.' : queueEmpty[queue]}</p>
         </div>
       ) : (
         <>
           <ul className="max-h-[480px] space-y-2 overflow-y-auto pr-1">
             {visible.map((ticket) => <TicketRow key={ticket.id} ticket={ticket} />)}
           </ul>
-          {pageCount > 1 && (
-            <nav aria-label="Paginação de chamados" className="mt-4 flex items-center justify-between gap-2 text-sm text-[#8A8F8B]">
-              <span role="status">Página {safePage + 1} de {pageCount}</span>
-              <span className="flex gap-2">
-                <button type="button" aria-label="Página anterior" disabled={safePage === 0} onClick={() => setPage(safePage - 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#2A2D27] px-3 py-1.5 transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft className="h-4 w-4" aria-hidden="true" /> Anterior</button>
-                <button type="button" aria-label="Próxima página" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#2A2D27] px-3 py-1.5 transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Próxima <ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
-              </span>
-            </nav>
-          )}
+          <nav aria-label="Paginação de chamados" className="mt-4 flex items-center justify-between gap-2 text-sm text-[#8A8F8B]">
+            <span role="status">Página {safePage + 1} de {pageCount}</span>
+            <span className="flex gap-2">
+              <button type="button" aria-label="Página anterior" disabled={safePage === 0} onClick={() => setPage(safePage - 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#2A2D27] px-3 py-1.5 transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft className="h-4 w-4" aria-hidden="true" /> Anterior</button>
+              <button type="button" aria-label="Próxima página" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#2A2D27] px-3 py-1.5 transition-colors hover:border-[#3A3D36] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Próxima <ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
+            </span>
+          </nav>
         </>
       )}
     </div>
@@ -162,26 +218,76 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
   assignees: Assignee[];
   onCreated: () => void;
 }) {
-  const [createdTicket, setCreatedTicket] = useState<CreatedTicket | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset, watch } = useForm<TicketForm>({
-    resolver: zodResolver(ticketSchema), defaultValues: { priority: 'normal', level: 'N1', email: '', subject: '', description: '', assigneeId: undefined },
+    resolver: zodResolver(ticketSchema), defaultValues: { priority: 'normal', level: 'N1', email: '', subject: '', description: '', assigneeId: undefined, labels: [] },
   });
   const descriptionValue = watch('description') ?? '';
+  const selectedLabels = watch('labels') ?? [];
 
   const handleOpenChange = (next: boolean) => {
-    if (next) { setCreatedTicket(null); setSubmitError(null); reset(); }
+    if (next) { setAttachments([]); setAttachmentError(null); reset(); }
     onOpenChange(next);
   };
 
-  const onSubmit = (values: TicketForm) => {
-    setSubmitError(null); setCreatedTicket(null);
-    void api.post<TicketApiResponse>('/admin/tickets', values).then((response) => {
+  const closeAndReset = () => {
+    setAttachments([]);
+    setAttachmentError(null);
+    reset();
+    onOpenChange(false);
+  };
+
+  const onSubmit = async (values: TicketForm) => {
+    const payload = attachments.length === 0 ? values : (() => {
+      const formData = new FormData();
+      formData.append('email', values.email);
+      formData.append('subject', values.subject);
+      formData.append('description', values.description);
+      formData.append('priority', values.priority);
+      formData.append('level', values.level);
+      if (values.assigneeId) formData.append('assigneeId', String(values.assigneeId));
+      if (values.labels.length > 0) formData.append('labels', JSON.stringify(values.labels));
+      attachments.forEach((file) => formData.append('attachments', file));
+      return formData;
+    })();
+
+    try {
+      const response = await api.post<TicketApiResponse>('/admin/tickets', payload);
       const ticket = response.data?.data;
-      if (!ticket?.clickupTaskId || !ticket?.clickupTaskUrl) { setSubmitError(response.data?.error?.message ?? 'Não foi possível abrir o ticket agora. Tente novamente.'); return; }
-      setCreatedTicket(ticket);
+      if (!ticket?.clickupTaskId || !ticket?.clickupTaskUrl) throw new Error(response.data?.error?.message ?? 'Não foi possível abrir o ticket agora. Tente novamente.');
+      closeAndReset();
+      showSnack('Ticket aberto com sucesso.', 'success');
       onCreated();
-    }).catch((error: unknown) => setSubmitError((error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Não foi possível abrir o ticket agora. Tente novamente.'));
+    } catch (error) {
+      const responseError = (error as { response?: { data?: TicketApiResponse } })?.response?.data?.error;
+      const message = responseError?.message ?? (error instanceof Error ? error.message : 'Não foi possível abrir o ticket agora. Tente novamente.');
+      closeAndReset();
+      if (responseError?.details?.clickupTaskUrl) {
+        showSnack(message, 'error', { label: 'Abrir tarefa', href: responseError.details.clickupTaskUrl });
+      } else {
+        showSnack(message, 'error');
+      }
+    }
+  };
+
+  const addAttachments = (files: FileList | null) => {
+    const nextFiles = Array.from(files ?? []);
+    if (nextFiles.length === 0) return;
+    if (nextFiles.some((file) => !acceptedAttachmentTypes.includes(file.type))) {
+      setAttachmentError('Envie imagens PNG, JPG ou WebP, ou vídeos MP4 ou MOV.');
+      return;
+    }
+    if (nextFiles.some((file) => file.size > MAX_ATTACHMENT_SIZE)) {
+      setAttachmentError('Cada anexo pode ter no máximo 50 MB.');
+      return;
+    }
+    if (attachments.length + nextFiles.length > MAX_ATTACHMENTS) {
+      setAttachmentError('Envie no máximo cinco anexos por ticket.');
+      return;
+    }
+    setAttachmentError(null);
+    setAttachments((current) => [...current, ...nextFiles]);
   };
 
   const fieldClass = 'mt-1 w-full rounded-lg border border-[#2A2D27] bg-[#0C0D0A] px-3 py-2.5 text-sm text-[#ECEDEF] outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30';
@@ -204,11 +310,6 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
               <span className="sr-only">Fechar</span>
             </DialogPrimitive.Close>
           </div>
-          {createdTicket && <div className="mt-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-emerald-100">
-            <p className="font-medium">Ticket aberto com sucesso.</p>
-            <a className="mt-2 inline-flex items-center gap-1 text-[#5cc5e4] underline" href={createdTicket.clickupTaskUrl} target="_blank" rel="noreferrer">Abrir ticket no ClickUp <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></a>
-          </div>}
-          {submitError && <div role="alert" className="mt-4 rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-100">{submitError}</div>}
           <form className="mt-5 space-y-5" onSubmit={handleSubmit(onSubmit)} noValidate>
             {summaryEntries.length > 0 && (
               <div role="alert" tabIndex={-1} aria-labelledby="ticket-error-title" className="rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-100">
@@ -247,7 +348,7 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
               <div>
                 <label className="text-sm font-medium" htmlFor="ticket-level">Nível</label>
                 <select id="ticket-level" className={fieldClass} {...register('level')}>
-                  <option value="N1">N1</option><option value="N2">N2</option><option value="N3">N3</option><option value="N4">N4</option>
+                  <option value="N1">N1</option><option value="N2">N2</option><option value="N3">N3</option><option value="N4">N4</option><option value="N5">N5 — Solicitação de feature</option>
                 </select>
               </div>
               <div>
@@ -258,6 +359,35 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
                 </select>
               </div>
             </div>
+            <fieldset id="ticket-labels">
+              <legend className="text-sm font-medium">Etiquetas <span className="text-xs font-normal text-[#8A8F8B]">(opcional)</span></legend>
+              <p className="mt-0.5 text-xs text-[#8A8F8B]">Classifique o chamado, se fizer sentido. Você pode deixar tudo sem seleção.</p>
+              <div className="mt-3 space-y-3">
+                <LabelGroup title="Escopo" labels={scopeLabels} selected={selectedLabels} register={register} />
+                <LabelGroup title="Área do playbook" labels={areaLabels} selected={selectedLabels} register={register} />
+              </div>
+              {errors.labels && <p className="mt-2 text-xs text-red-300">{errors.labels.message}</p>}
+            </fieldset>
+            <fieldset>
+              <legend className="text-sm font-medium">Anexos (imagens ou vídeos)</legend>
+              <p className="mt-0.5 text-xs text-[#8A8F8B]">Até 5 arquivos: PNG, JPG, WebP, MP4 ou MOV, com até 50 MB cada.</p>
+              <input
+                id="ticket-attachments"
+                aria-label="Anexos (imagens ou vídeos)"
+                type="file"
+                multiple
+                accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
+                className="mt-2 block w-full text-sm text-[#8A8F8B] file:mr-3 file:rounded-lg file:border-0 file:bg-[#1E88A8]/15 file:px-3 file:py-2 file:text-sm file:font-medium file:text-[#5cc5e4] hover:file:bg-[#1E88A8]/25"
+                onChange={(event) => { addAttachments(event.target.files); event.target.value = ''; }}
+              />
+              {attachmentError && <p role="alert" className="mt-2 text-xs text-red-300">{attachmentError}</p>}
+              {attachments.length > 0 && <ul className="mt-3 space-y-2" aria-label="Anexos selecionados">
+                {attachments.map((file, index) => <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 rounded-lg bg-[#0C0D0A] px-3 py-2 text-sm">
+                  <span className="flex min-w-0 items-center gap-2"><Paperclip className="h-4 w-4 shrink-0 text-[#5cc5e4]" aria-hidden="true" /><span className="truncate">{file.name}</span></span>
+                  <button type="button" onClick={() => setAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index))} aria-label={`Remover ${file.name}`} className="rounded p-1 text-[#8A8F8B] hover:bg-[#2A2D27] hover:text-[#ECEDEF]"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
+                </li>)}
+              </ul>}
+            </fieldset>
             <button type="submit" disabled={isSubmitting} className="inline-flex items-center gap-2 rounded-lg bg-[#17708A] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1E88A8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#161714] disabled:cursor-not-allowed disabled:opacity-60">
               <Send className="h-4 w-4" aria-hidden="true" />
               {isSubmitting ? 'Abrindo ticket…' : 'Abrir ticket'}
@@ -267,6 +397,14 @@ function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
   );
+}
+
+function LabelGroup({ title, labels, selected, register }: { title: string; labels: readonly (readonly [TicketLabel, string])[]; selected: TicketLabel[]; register: ReturnType<typeof useForm<TicketForm>>['register'] }) {
+  return <div><p className="text-xs font-medium text-[#8A8F8B]">{title}</p><div className="mt-1.5 flex flex-wrap gap-2">
+    {labels.map(([value, label]) => <label key={value} className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs ${selected.includes(value) ? 'border-[#1E88A8] bg-[#1E88A8]/15 text-[#5cc5e4]' : 'border-[#2A2D27] text-[#ECEDEF]'}`}>
+      <input className="sr-only" type="checkbox" value={value} {...register('labels')} />{label}
+    </label>)}
+  </div></div>;
 }
 
 export function TicketsPage() {

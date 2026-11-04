@@ -9,6 +9,7 @@ import { AGE_OPTIONS, isValidGeo, legacyFromGeo, EMPTY_GEO } from '@/components/
 import { LocationEditor } from './LocationEditor';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
+import { BusinessContextImprover } from './BusinessContextImprover';
 
 interface AudienceDefaults {
   city?: string;
@@ -145,6 +146,7 @@ export function PublicoContent() {
               Seja detalhado: quanto mais informações, melhor a IA entenderá seu negócio.
               Ex: nicho, porte, região, ticket médio, diferencial competitivo, público-alvo.
             </p>
+            <BusinessContextImprover value={businessContext} onChange={setBusinessContext} />
           </div>
         </div>
       </Card>

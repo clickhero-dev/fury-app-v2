@@ -1,5 +1,9 @@
 # Troubleshooting
 
+> Para problemas recorrentes do produto, integrações, filas, publicação, banco ou
+> deploy, consulte o [conhecimento operacional](operations/README.md). Este arquivo
+> permanece focado em preparar e executar o ambiente local.
+
 ## Problemas ao Rodar Localmente
 
 ### `npm install` falha com erros de dependência
@@ -79,7 +83,7 @@ Se precisar usar a API real, verifique:
 mkdir -p /tmp/studio-assets
 ```
 
-Em produção, garanta que as variáveis `R2_*` estão preenchidas — sem R2, as imagens não persistem entre deploys no Railway.
+Em produção, garanta que as variáveis `R2_*` estão preenchidas — sem R2, as imagens não persistem entre deploys no EasyPanel.
 
 ---
 
@@ -108,26 +112,26 @@ Se o banco estiver muito desatualizado, pode ser necessário rodar as migrations
 
 **Em desenvolvimento:** o Redis é opcional para funcionalidades básicas. Se não tiver Redis local, você pode comentar a `REDIS_URL` temporariamente — o cache será ignorado.
 
-**Em produção:** verifique se o serviço Redis está ativo no Railway.
+**Em produção:** verifique se o serviço Redis está ativo no EasyPanel.
 
 ---
 
 ## Erros Comuns em Produção
 
-### Deploy no Railway trava no build
+### Deploy no EasyPanel trava no build
 
-1. Verifique os logs em Railway → seu serviço → *Deployments* → último deploy
+1. Verifique os logs no EasyPanel → projeto `clickhero` → serviço afetado → último deploy
 2. Erros de TypeScript bloqueiam o build — corrija localmente e faça novo push
 
 ### Frontend em produção mostra dados antigos (cache)
 
-A Vercel tem cache agressivo. Para forçar rebuild:
-1. Acesse Vercel → seu projeto → *Deployments*
-2. Clique no último deploy → *Redeploy*
+Verifique se o deploy mais recente do `fury_web` terminou no EasyPanel. Se uma
+variável `VITE_*` mudou, ela só entra no bundle durante o build: dispare um novo
+deploy do frontend e confirme o valor configurado antes do build.
 
 ### API em produção retorna 500 sem mensagem clara
 
-1. Acesse Railway → seu serviço → *Logs*
+1. Acesse EasyPanel → projeto `clickhero` → serviço `fury_api` → logs
 2. Procure por `Error:` ou `Unhandled` nos logs em tempo real
 3. Verifique se todas as variáveis de ambiente estão preenchidas (uma variável faltando causa 500 em cascata)
 
@@ -135,7 +139,7 @@ A Vercel tem cache agressivo. Para forçar rebuild:
 
 ## Onde pedir ajuda
 
-- **Logs da API:** Railway → Logs
-- **Logs do Frontend:** Vercel → Functions logs
+- **Logs da API:** EasyPanel → `clickhero` → `fury_api` → Logs
+- **Logs do Frontend:** EasyPanel → `clickhero` → `fury_web` → Logs
 - **Banco:** Neon → Monitoring
 - **Dúvidas no código:** abra uma issue no repositório ou pergunte no canal do time

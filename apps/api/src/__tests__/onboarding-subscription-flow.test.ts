@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+const { getPlatformRole } = vi.hoisted(() => ({ getPlatformRole: vi.fn(async (_id: string): Promise<string | null> => 'user') }));
+vi.mock('../services/core/rbac.service.js', () => ({ rbacService: { getPlatformRole } }));
 import type { Request, Response, NextFunction } from 'express';
 import { checkSubscriptionActive } from '../middleware/checkSubscriptionActive.js';
 
@@ -55,6 +57,7 @@ describe('Onboarding with Subscription Check Integration', () => {
     });
 
     it('superadmin com subscription cancelled deve passar (isento)', async () => {
+      getPlatformRole.mockResolvedValueOnce('super_admin');
       mockFindFirst.mockResolvedValue({
         status: 'cancelled',
         isNonExpirable: false,

@@ -25,6 +25,7 @@ interface CampaignWizardProps {
   onOpenChange?: (open: boolean) => void;
   preSelectedAssetId?: string;
   preSelectedAssetUrl?: string;
+  preSelectedAssetIsVideo?: boolean;
   mode?: 'modal' | 'page';
   onViewCampaigns?: () => void;
   onCreateAnother?: () => void;
@@ -52,6 +53,7 @@ export function CampaignWizard({
   onOpenChange,
   preSelectedAssetId,
   preSelectedAssetUrl,
+  preSelectedAssetIsVideo,
   mode = 'page',
   onViewCampaigns,
   onCreateAnother,
@@ -75,7 +77,7 @@ export function CampaignWizard({
     preSelectedAssetUrl &&
     !state.creatives[0]?.assetUrl
   ) {
-    wizard.updateCreative(state.creatives[0].id, { assetUrl: preSelectedAssetUrl });
+    wizard.updateCreative(state.creatives[0].id, { assetUrl: preSelectedAssetUrl, isVideo: preSelectedAssetIsVideo });
   }
 
   // Resolve automaticamente a Pagina do tenant a partir da selecao salva do

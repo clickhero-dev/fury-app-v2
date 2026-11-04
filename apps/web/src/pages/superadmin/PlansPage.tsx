@@ -5,6 +5,20 @@ import api from '@/lib/api';
 interface PlanLimits {
   creativesPerMonth: number | null;
   modificationsPerCreative: number | null;
+  // vídeo: chave ausente vale 0 (vídeo desligado no plano)
+  videosPerMonth?: number | null;
+  modificationsPerVideo?: number | null;
+}
+
+const INPUT_CLASS = 'w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]';
+const EMPTY_LIMITS: PlanLimits = { creativesPerMonth: null, modificationsPerCreative: null, videosPerMonth: 0, modificationsPerVideo: 0 };
+
+function parseLimit(raw: string): number | null {
+  return raw === '' ? null : Math.max(0, parseInt(raw, 10) || 0);
+}
+
+function videoLimit(v: number | null | undefined): number | '' {
+  return v === undefined ? 0 : v ?? '';
 }
 
 interface Plan {
@@ -29,7 +43,7 @@ export function PlansPage() {
     priceCents: 0,
     interval: 'monthly',
     isActive: true,
-    limits: { creativesPerMonth: null, modificationsPerCreative: null } as PlanLimits,
+    limits: EMPTY_LIMITS,
   });
   const [editing, setEditing] = useState<Record<string, Partial<Plan>>>({});
 
@@ -54,7 +68,7 @@ export function PlansPage() {
       await api.post('/admin/plans', { ...newPlan, priceCents: Math.round(newPlan.priceCents * 100) });
       setMsg('Plano criado');
       setShowNew(false);
-      setNewPlan({ name: '', priceCents: 0, interval: 'monthly', isActive: true, limits: { creativesPerMonth: null, modificationsPerCreative: null } });
+      setNewPlan({ name: '', priceCents: 0, interval: 'monthly', isActive: true, limits: EMPTY_LIMITS });
       const r = await api.get('/admin/plans');
       setPlans(r.data.data);
     } catch { setMsg('Erro ao criar'); }
@@ -84,7 +98,7 @@ export function PlansPage() {
   };
 
   const setLimitEdit = (plan: Plan, field: keyof PlanLimits, raw: string) => {
-    const value = raw === '' ? null : Math.max(0, parseInt(raw, 10) || 0);
+    const value = parseLimit(raw);
     const base = editing[plan.id]?.limits ?? plan.limits ?? { creativesPerMonth: null, modificationsPerCreative: null };
     setEdit(plan.id, 'limits', { ...base, [field]: value });
   };
@@ -187,6 +201,18 @@ export function PlansPage() {
                 onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, modificationsPerCreative: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) } })}
                 placeholder="Sem limite" className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
             </div>
+            <div>
+              <label className="text-xs text-[#7E8480] mb-1 block">Vídeos por mês (0 = sem vídeo, vazio = sem limite)</label>
+              <input type="number" min={0} value={videoLimit(newPlan.limits.videosPerMonth)}
+                onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, videosPerMonth: parseLimit(e.target.value) } })}
+                placeholder="Sem limite" className={INPUT_CLASS} />
+            </div>
+            <div>
+              <label className="text-xs text-[#7E8480] mb-1 block">Modificações por vídeo (vazio = sem limite)</label>
+              <input type="number" min={0} value={videoLimit(newPlan.limits.modificationsPerVideo)}
+                onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, modificationsPerVideo: parseLimit(e.target.value) } })}
+                placeholder="Sem limite" className={INPUT_CLASS} />
+            </div>
           </div>
         </div>
       )}
@@ -261,6 +287,18 @@ export function PlansPage() {
                   <input type="number" min={0} value={effectiveLimits.modificationsPerCreative ?? ''}
                     onChange={(e) => setLimitEdit(plan, 'modificationsPerCreative', e.target.value)}
                     placeholder="Sem limite" className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
+                </div>
+                <div>
+                  <label className="text-xs text-[#7E8480] mb-1 block">Vídeos por mês (0 = sem vídeo, vazio = sem limite)</label>
+                  <input type="number" min={0} value={videoLimit(effectiveLimits.videosPerMonth)}
+                    onChange={(e) => setLimitEdit(plan, 'videosPerMonth', e.target.value)}
+                    placeholder="Sem limite" className={INPUT_CLASS} />
+                </div>
+                <div>
+                  <label className="text-xs text-[#7E8480] mb-1 block">Modificações por vídeo (vazio = sem limite)</label>
+                  <input type="number" min={0} value={videoLimit(effectiveLimits.modificationsPerVideo)}
+                    onChange={(e) => setLimitEdit(plan, 'modificationsPerVideo', e.target.value)}
+                    placeholder="Sem limite" className={INPUT_CLASS} />
                 </div>
               </div>
               <div className="text-xs text-[#3E4440]">

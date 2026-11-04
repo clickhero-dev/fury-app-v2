@@ -41,7 +41,7 @@ Funcionalidade: Dashboard passa a chamar /v2/* para dados Meta do banco
 */
 // =============================================================================
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -98,6 +98,15 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe('BDD: Dashboard usa endpoints v2', () => {
+  // data fixa: "Este mês" e "7 dias" coincidem no dia 8 e o teste perde o sentido
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-15T15:00:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseGoalsProgress.mockReturnValue({ data: null, isFetching: false, isLoading: false });

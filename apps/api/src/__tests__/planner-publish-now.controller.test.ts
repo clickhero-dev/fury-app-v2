@@ -58,9 +58,9 @@ describe('PlannerController.handlePublishNow', () => {
     expect(res.status).toHaveBeenCalledWith(201);
   });
 
-  it('Cenário: carousel → next com AppError 400 CAROUSEL_NOT_SUPPORTED', async () => {
+  it('Cenário: carousel → next com AppError 400 CAROUSEL_TOO_FEW_ITEMS', async () => {
     const { AppError } = await import('../middleware/errorHandler.js');
-    svc.publishNow.mockRejectedValue(new AppError(400, 'CAROUSEL_NOT_SUPPORTED', 'x'));
+    svc.publishNow.mockRejectedValue(new AppError(400, 'CAROUSEL_TOO_FEW_ITEMS', 'x'));
     const res = mockRes();
     const next = vi.fn();
     const req = { tenant: { tenantId: 't1' }, body: { postType: 'carousel' }, idempotencyKey: 'key-D' } as any;
@@ -69,7 +69,7 @@ describe('PlannerController.handlePublishNow', () => {
 
     const err = next.mock.calls[0][0] as any;
     expect(err.statusCode).toBe(400);
-    expect(err.code).toBe('CAROUSEL_NOT_SUPPORTED');
+    expect(err.code).toBe('CAROUSEL_TOO_FEW_ITEMS');
     expect(res.json).not.toHaveBeenCalled();
   });
 

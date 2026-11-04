@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq';
-import { db, metaConnections } from '../lib/db.js';
-import { eq } from 'drizzle-orm';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
+import { db, metaConnections, tenants } from '../lib/db.js';
+import { eq, isNull } from 'drizzle-orm';
 import { getMetaSyncQueue } from '../lib/queue.js';
 import { metaSyncService, type MetaSyncRunResult } from '../services/meta/meta-sync.service.js';
 import { notifyMetaSyncFailure } from '../lib/meta-sync-alerts.js';
@@ -8,6 +9,10 @@ import { captureServerException, captureServerEvent } from '../lib/analytics.js'
 import { metaHealthcheckService } from '../services/meta/meta-healthcheck.service.js';
 
 export const META_SYNC_QUEUE_NAME = 'meta-sync';
+export const META_SYNC_RUN_JOB_NAME = 'worker-meta-sync-ad-account-data';
+export const META_SYNC_TICK_JOB_NAME = 'cron-meta-sync-ad-account-data';
+export const META_SYNC_BOOTSTRAP_JOB_NAME = 'worker-meta-sync-all-connected-ad-accounts';
+export const META_HEALTHCHECK_JOB_NAME = 'cron-meta-check-connection-health';
 
 /** Janela de 15min (ciclo) a partir de um timestamp — chave do jobId determinístico. */
 export function windowKeyFor(timestamp: string): string {
@@ -16,9 +21,13 @@ export function windowKeyFor(timestamp: string): string {
   return new Date(slot).toISOString().slice(0, 16);
 }
 
-/** Tenants com conexão Meta — alvo do sync periódico (leitura via lib/db). */
+/** Tenants com conexão Meta — alvo do sync periódico (leitura via lib/db). Excluídos ficam de fora. */
 export async function getMetaSyncTenantIds(): Promise<string[]> {
-  const rows = await db.select({ tenantId: metaConnections.tenantId }).from(metaConnections);
+  const rows = await db
+    .select({ tenantId: metaConnections.tenantId })
+    .from(metaConnections)
+    .innerJoin(tenants, eq(tenants.id, metaConnections.tenantId))
+    .where(isNull(tenants.deletedAt));
   return rows.map((r) => r.tenantId);
 }
 
@@ -29,7 +38,9 @@ export async function getMetaSyncTenantIds(): Promise<string[]> {
 export async function getMetaSyncAdAccountIds(): Promise<string[]> {
   const rows = await db
     .select({ adAccountId: metaConnections.selectedAdAccountId })
-    .from(metaConnections);
+    .from(metaConnections)
+    .innerJoin(tenants, eq(tenants.id, metaConnections.tenantId))
+    .where(isNull(tenants.deletedAt));
   return [...new Set(rows.map((row) => row.adAccountId).filter((id): id is string => Boolean(id)))];
 }
 
@@ -52,7 +63,7 @@ export async function enqueueMetaSyncRuns(
   const windowKey = windowKeyFor(timestamp).replace(/:/g, '-');
   for (const adAccountId of adAccountIds) {
     await queue.add(
-      'meta-sync:run',
+      META_SYNC_RUN_JOB_NAME,
       { adAccountId, reason: 'scheduled' },
       { jobId: `meta-sync-acc-${adAccountId}-${windowKey}` },
     );
@@ -72,7 +83,7 @@ export async function enqueueMetaSyncTenantRun(args: {
   const windowKey = windowKeyFor(args.timestamp ?? new Date().toISOString()).replace(/:/g, '-');
   const staleRefresh = args.reason === 'stale-fallback';
   await queue.add(
-    'meta-sync:run',
+    META_SYNC_RUN_JOB_NAME,
     { tenantId: args.tenantId, adAccountId, reason: args.reason },
     staleRefresh
       ? { jobId: `meta-sync-stale-${args.tenantId}`, removeOnComplete: { age: 300 } }
@@ -122,9 +133,17 @@ export async function startMetaSyncWorker(): Promise<Worker> {
   const worker = new Worker<MetaSyncJobData>(
     META_SYNC_QUEUE_NAME,
     async (job) => {
-      if (job.name === 'meta-healthcheck:run-all') {
+      if (
+        job.name === META_HEALTHCHECK_JOB_NAME ||
+        job.name === 'cron:meta:healthcheck' ||
+        job.name === 'meta-healthcheck:run-all'
+      ) {
         await processMetaHealthcheckRuns();
-      } else if (job.name === 'meta-sync:run') {
+      } else if (
+        job.name === META_SYNC_RUN_JOB_NAME ||
+        job.name === 'worker:meta:sync_account' ||
+        job.name === 'meta-sync:run'
+      ) {
         const { tenantId, adAccountId, reason } = job.data;
         if (adAccountId) {
           let results: Array<{ tenantId: string } & MetaSyncRunResult>;
@@ -162,16 +181,26 @@ export async function startMetaSyncWorker(): Promise<Worker> {
           // Jobs legados em voo continuam compatíveis durante o deploy.
           await processMetaSyncRun(tenantId, reason ?? 'scheduled');
         }
-      } else {
-        // 'meta-sync:tick' / 'meta-sync:bootstrap' → enfileira runs por tenant.
+      } else if (
+        job.name === META_SYNC_TICK_JOB_NAME ||
+        job.name === META_SYNC_BOOTSTRAP_JOB_NAME ||
+        job.name === 'cron:meta:sync' ||
+        job.name === 'worker:meta:bootstrap_sync' ||
+        job.name === 'meta-sync:tick' ||
+        job.name === 'meta-sync:bootstrap'
+      ) {
+        // Cron/bootstrap → enfileira runs por conta Meta.
         const ts = job.data.timestamp ?? new Date().toISOString();
         const queue = await getMetaSyncQueue();
         await enqueueMetaSyncRuns(ts, queue);
+      } else {
+        throw new Error(`Unsupported Meta sync job: ${job.name}`);
       }
     },
     {
       connection: (await import('../lib/redis.js')).getRedis().duplicate(),
       concurrency: 2,
+      ...getWorkerMetricsOptions('meta-sync-worker'),
     }
   );
 

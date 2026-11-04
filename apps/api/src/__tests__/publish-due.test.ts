@@ -72,9 +72,9 @@ describe('publishSinglePost', () => {
         accessToken,
       );
 
-      // 1º poll (3s): IN_PROGRESS → continua; 2º poll (6s): FINISHED → break
-      await vi.advanceTimersByTimeAsync(3_000);
-      await vi.advanceTimersByTimeAsync(6_000);
+      // vídeo: 1º poll (5s) IN_PROGRESS, 2º poll (+5s) FINISHED
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(5_000);
 
       const result = await resultPromise;
 
@@ -133,8 +133,39 @@ describe('publishSinglePost', () => {
       const result = await resultPromise;
 
       expect(result.mediaId).toBe('media_story');
+      expect(createInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, {
+        imageUrl: 'https://cdn.example.com/story.png',
+        caption: undefined,
+        mediaType: 'STORIES',
+      });
       expect(getMediaContainerStatus).toHaveBeenCalledTimes(2);
       expect(publishInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, 'container_story');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stories com vídeo: envia video_url + STORIES', async () => {
+    createInstagramMedia.mockResolvedValue('container_story_video');
+    getMediaContainerStatus.mockResolvedValue('FINISHED');
+    publishInstagramMedia.mockResolvedValue('media_story_video');
+
+    vi.useFakeTimers();
+    try {
+      const resultPromise = publishSinglePost(
+        { id: 'post-story-video', postType: 'stories', caption: 'x', imageUrl: 'https://cdn.example.com/story.mp4' },
+        igUserId,
+        accessToken,
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+      const result = await resultPromise;
+
+      expect(result.mediaId).toBe('media_story_video');
+      expect(createInstagramMedia).toHaveBeenCalledWith(igUserId, accessToken, {
+        videoUrl: 'https://cdn.example.com/story.mp4',
+        caption: undefined,
+        mediaType: 'STORIES',
+      });
     } finally {
       vi.useRealTimers();
     }
@@ -193,7 +224,7 @@ describe('publishSinglePost', () => {
     }
   });
 
-  it('lança erro se container de vídeo fica IN_PROGRESS após 3 polls', async () => {
+  it('lança erro se container de vídeo fica IN_PROGRESS após 7 polls (~85s)', async () => {
     createInstagramMedia.mockResolvedValue('container_stuck');
     getMediaContainerStatus.mockResolvedValue('IN_PROGRESS'); // nunca termina
 
@@ -209,13 +240,11 @@ describe('publishSinglePost', () => {
       // "unhandled rejection" quando a promise lança durante o advance.
       const rejection = expect(resultPromise).rejects.toThrow('still IN_PROGRESS');
 
-      // 3 polls (3s/6s/12s) — todos IN_PROGRESS → lança erro no último
-      await vi.advanceTimersByTimeAsync(3_000);
-      await vi.advanceTimersByTimeAsync(6_000);
-      await vi.advanceTimersByTimeAsync(12_000);
+      // 7 polls de vídeo (5+5+10+10+15+20+20 = 85s) — todos IN_PROGRESS
+      await vi.advanceTimersByTimeAsync(85_000);
 
       await rejection;
-      expect(getMediaContainerStatus).toHaveBeenCalledTimes(3);
+      expect(getMediaContainerStatus).toHaveBeenCalledTimes(7);
       expect(publishInstagramMedia).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
@@ -226,13 +255,30 @@ describe('publishSinglePost', () => {
     createInstagramMedia.mockResolvedValue('container_err');
     getMediaContainerStatus.mockRejectedValue(new Error('Instagram media container error: processing failed'));
 
-    await expect(
-      publishSinglePost(
+    vi.useFakeTimers();
+    try {
+      const resultPromise = publishSinglePost(
         { id: 'post-5', postType: 'reel', imageUrl: 'https://cdn.example.com/video.mp4' },
         igUserId,
         accessToken,
+      );
+      const rejection = expect(resultPromise).rejects.toThrow('processing failed');
+      await vi.advanceTimersByTimeAsync(5_000);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reel com imagem: falha sem chamar a Meta', async () => {
+    await expect(
+      publishSinglePost(
+        { id: 'post-7', postType: 'reel', imageUrl: 'https://cdn.example.com/img.png' },
+        igUserId,
+        accessToken,
       ),
-    ).rejects.toThrow('processing failed');
+    ).rejects.toThrow('precisa de vídeo');
+    expect(createInstagramMedia).not.toHaveBeenCalled();
   });
 
   it('lança erro de rede ao criar container', async () => {

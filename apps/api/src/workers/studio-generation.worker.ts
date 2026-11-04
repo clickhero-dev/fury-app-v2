@@ -1,4 +1,6 @@
 import { Worker } from 'bullmq';
+import { runWithTenant } from '../lib/ai-key-context.js';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { processStudioGenerationJob, type StudioGenerationJobData, type GenerateStudioImageResult } from '../services/studio/studio.service.js';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -12,12 +14,14 @@ export async function startStudioGenerationWorker(): Promise<void> {
 
   studioWorker = new Worker<StudioGenerationJobData, GenerateStudioImageResult>(
     'studio-generate-image',
-    async (job) => processStudioGenerationJob(job.data),
+    // IA das imagens usa a chave do dono do cliente
+    async (job) => runWithTenant(job.data.tenantId, () => processStudioGenerationJob(job.data)),
     {
       connection: {
         url: redisUrl,
       },
       concurrency: 6,
+      ...getWorkerMetricsOptions('studio-generate-image-worker'),
     }
   );
 
