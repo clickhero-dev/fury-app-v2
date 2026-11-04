@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Users, Search, ChevronLeft, ChevronRight, UserPlus, X } from "lucide-react";
 import api from "@/lib/api";
+import { getStoredPlatformRole } from "@/lib/platform-role";
 
 interface User {
   id: string;
@@ -234,6 +235,8 @@ export function UsersPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* novo cliente (setup-tenant): só super_admin por enquanto */}
+          {getStoredPlatformRole() === "super_admin" && (
           <button
             onClick={() => {
               setForm({
@@ -252,6 +255,7 @@ export function UsersPage() {
           >
             <UserPlus className="w-4 h-4" strokeWidth={2.5} /> Novo Cliente
           </button>
+          )}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5A605C]" strokeWidth={2} />
             <form onSubmit={handleSearch}>

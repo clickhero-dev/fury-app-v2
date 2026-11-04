@@ -8,6 +8,7 @@ import { BrandKitPhotoRepository } from '../../repository/brand-kit-photo.reposi
 import { openrouterService } from '../llms/openrouter.service.js';
 import { SubscriptionRepository } from '../../repository/subscription.repository.js';
 import { openrouterVideoClient, type OpenRouterVideoClient, type VideoSubmitParams } from '../../lib/openrouter-video.js';
+import { runWithTenant } from '../../lib/ai-key-context.js';
 import { ensureStudioAssetsDir, studioAssetsDir } from '../../lib/temp-storage.js';
 import { uploadAsset } from '../storage/storage.service.js';
 import { AD_VIDEO_MODELS, DEFAULT_AD_VIDEO_MODEL } from './studio-model-catalog.js';
@@ -509,9 +510,14 @@ export class StudioVideoService {
 
   /** Executado pelo worker: envia ao OpenRouter, acompanha, salva na biblioteca. Retomável pelo openrouterJobId. */
   async processJob(jobId: string): Promise<void> {
-    const { jobRepo, video } = this.deps;
-    const job = await jobRepo.getWorkflowJob(jobId);
+    const job = await this.deps.jobRepo.getWorkflowJob(jobId);
     if (!job || job.status === 'done' || job.status === 'error') return;
+    // IA do vídeo usa a chave do dono do cliente
+    return runWithTenant(job.tenantId, () => this.processLoadedJob(jobId, job));
+  }
+
+  private async processLoadedJob(jobId: string, job: NonNullable<Awaited<ReturnType<Deps['jobRepo']['getWorkflowJob']>>>): Promise<void> {
+    const { jobRepo, video } = this.deps;
     const meta = { ...(job.metadata as unknown as VideoJobMetadata) };
     meta.log = [...(meta.log ?? [])];
     const startedAt = new Date(meta.startedAt).getTime();

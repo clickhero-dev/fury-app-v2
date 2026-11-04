@@ -52,6 +52,7 @@ function userToDTO(user: any): UserDTO {
     name: user.name ?? null,
     email: user.email,
     role: user.role,
+    platformRole: user.platformRole,
     tenantId: user.tenantId,
     notificationPrefs: (user.notificationPrefs as UserDTO['notificationPrefs']) ?? DEFAULT_NOTIFICATION_PREFS,
     audienceDefaults: user.audienceDefaults as UserDTO['audienceDefaults'],
@@ -156,6 +157,8 @@ export class AuthService {
 
     const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
     if (!isPasswordValid) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    // conta excluída responde igual a senha errada (não revela que existe)
+    if (!(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
 
     const accessToken = this.deps.jwt.generateAccessToken({
       userId: user.id,
@@ -179,7 +182,7 @@ export class AuthService {
 
     const user = await this.repo('').findUserById(payload.userId);
     const t3 = Date.now();
-    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user || !(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
 
     await revokeRefreshToken(user.id);
     const accessToken = this.deps.jwt.generateAccessToken({

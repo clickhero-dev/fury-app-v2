@@ -20,6 +20,7 @@ import { VideoCreateForm } from './components/VideoCreateForm';
 import { VideoProgress } from './components/VideoProgress';
 import { LibraryUploadFlow, type UploadRequest } from './components/LibraryUploadFlow';
 import { LibraryPickerDialog, type PickerMode } from './components/LibraryPickerDialog';
+import { useBlockedViews } from '@/hooks/useBlockedViews';
 
 type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create' | 'video-progress';
 
@@ -54,9 +55,10 @@ export function EstudioHome() {
   const [createMode, setCreateMode] = useState<'image' | 'video'>('image');
   const [videoJobId, setVideoJobId] = useState<string | null>(null);
   const { data: activeVideoJobs = [] } = useActiveStudioVideoJobs();
-  // plano com cota de vídeo 0: sem criação nem filtro de vídeo
+  // cota de vídeo 0 ou vídeo bloqueado no RBAC: sem criação nem filtro de vídeo
   const { data: videoOptions } = useStudioVideoOptions();
-  const videoEnabled = videoOptions?.enabled === true;
+  const { isBlocked } = useBlockedViews();
+  const videoEnabled = videoOptions?.enabled === true && !isBlocked('studio.video');
 
   // ─── OpenRouter state ──────────────────────────────────────────────
   const [orPrompt, setOrPrompt] = useState('');

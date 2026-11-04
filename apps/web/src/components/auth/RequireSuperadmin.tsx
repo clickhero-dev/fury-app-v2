@@ -1,16 +1,16 @@
 import { Navigate } from 'react-router-dom';
-import type { User } from '@/types/auth';
+import { canAccessAdmin, getStoredPlatformRole } from '@/lib/platform-role';
 
 interface RequireSuperadminProps {
   children: React.ReactNode;
 }
 
 /**
- * Componente de rota protegida por role de superadmin.
+ * Componente de rota protegida do admin.
  *
- * Verifica se há um token JWT e se o usuário tem role === 'superadmin'
- * no localStorage antes de renderizar o conteúdo filho.
- * Se não houver token OU role !== 'superadmin', redireciona para `/admin/login`.
+ * Verifica se há um token JWT e se o platformRole salvo é super_admin ou
+ * admin_partner antes de renderizar o conteúdo filho. O servidor confere de novo.
+ * Caso contrário, redireciona para `/admin/login`.
  *
  * @param children - Conteúdo a ser renderizado se autenticado como superadmin
  *
@@ -22,17 +22,7 @@ interface RequireSuperadminProps {
 export function RequireSuperadmin({ children }: RequireSuperadminProps) {
   const token = localStorage.getItem('token');
 
-  let isSuperadmin = false;
-  if (token) {
-    try {
-      const user: User = JSON.parse(localStorage.getItem('user') || '{}');
-      isSuperadmin = user.role === 'superadmin';
-    } catch {
-      isSuperadmin = false;
-    }
-  }
-
-  if (!token || !isSuperadmin) {
+  if (!token || !canAccessAdmin(getStoredPlatformRole())) {
     return <Navigate to="/admin/login" replace />;
   }
 

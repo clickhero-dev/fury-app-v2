@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
 import { AnnouncementRepository } from '../repository/announcement.repository.js';
 import { formatAnnouncementText } from '../services/llms/announcement-formatter.js';
+import { runAsAdy } from '../lib/ai-key-context.js';
 
 const writeSchema = z.object({
   title: z.string().trim().min(3).max(255),
@@ -43,7 +44,8 @@ export class AnnouncementController {
   } catch (e) { next(e); } };
   formatText = async (req: Request, res: Response, next: NextFunction) => { try {
     const { text } = formatSchema.parse(req.body);
-    res.json({ success: true, data: { markdown: await this.format(text) } });
+    // tarefa da ady (só super_admin): usa a chave da ady
+    res.json({ success: true, data: { markdown: await runAsAdy(() => this.format(text)) } });
   } catch (e) { next(e); } };
 
   listPending = async (req: Request, res: Response, next: NextFunction) => { try {
