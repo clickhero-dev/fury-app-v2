@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import api from "@/lib/api";
+import { getStoredPlatformRole } from "@/lib/platform-role";
 import type { AudienceGeo } from "@/components/campaign-wizard/types";
 import { isValidGeo, legacyFromGeo, EMPTY_GEO } from "@/components/campaign-wizard/types";
 import { LocationEditor } from "@/pages/configuracoes/LocationEditor";
@@ -132,6 +133,8 @@ export function TenantDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [renewingQuota, setRenewingQuota] = useState(false);
+  // assinatura e planos: só super_admin (a API também recusa)
+  const isSuperAdmin = getStoredPlatformRole() === "super_admin";
   const [msg, setMsg] = useState("");
 
   // Users
@@ -213,7 +216,11 @@ export function TenantDetailPage() {
   const photosInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    Promise.all([api.get(`/admin/tenants/${id}`), api.get("/admin/plans")])
+    Promise.all([
+      api.get(`/admin/tenants/${id}`),
+      // só os planos do dono do cliente (ady ou o parceiro)
+      api.get(`/admin/tenants/${id}/assignable-plans`),
+    ])
       .then(([tRes, pRes]) => {
         const t = tRes.data.data as TenantData;
         setData(t);
@@ -433,7 +440,6 @@ export function TenantDetailPage() {
     try {
       await api.patch(`/admin/users/${editUser.id}`, {
         name: editUser.name,
-        email: editUser.email,
         role: editUser.role,
       });
       setMsg("Usuário atualizado");
@@ -573,7 +579,8 @@ export function TenantDetailPage() {
                   className={inputCls}
                 >
                   <option value="member">Membro</option>
-                  <option value="admin">Admin</option>
+                  {/* cargo Admin: só super_admin */}
+                  {isSuperAdmin && <option value="admin">Admin</option>}
                   <option value="owner">Owner</option>
                 </select>
                 <button
@@ -688,11 +695,10 @@ export function TenantDetailPage() {
                 <label className={labelCls}>Email</label>
                 <input
                   value={editUser.email}
-                  onChange={(e) =>
-                    setEditUser({ ...editUser, email: e.target.value })
-                  }
+                  readOnly
+                  disabled
                   type="email"
-                  className={inputCls}
+                  className={`${inputCls} opacity-60`}
                 />
               </div>
               <div>
@@ -702,10 +708,11 @@ export function TenantDetailPage() {
                   onChange={(e) =>
                     setEditUser({ ...editUser, role: e.target.value })
                   }
+                  disabled={!isSuperAdmin && editUser.role === "admin"}
                   className={inputCls}
                 >
                   <option value="member">Membro</option>
-                  <option value="admin">Admin</option>
+                  {(isSuperAdmin || editUser.role === "admin") && <option value="admin">Admin</option>}
                   <option value="owner">Owner</option>
                 </select>
               </div>
@@ -758,7 +765,7 @@ export function TenantDetailPage() {
               ?
             </p>
             <p className="text-xs text-admin-text-faint mb-6">
-              O usuário perderá acesso ao sistema. Não é reversível.
+              O usuário perderá acesso ao sistema.
             </p>
             <div className="flex gap-3">
               <button

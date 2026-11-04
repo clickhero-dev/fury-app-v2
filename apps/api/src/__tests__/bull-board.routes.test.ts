@@ -37,6 +37,10 @@ const { setBasePath, registeredQueueNames, adapterOptions, boardRegistrations, m
 }));
 
 vi.mock('../lib/queue.js', () => ({ getRedisConnection: vi.fn(async () => ({})) }));
+// papel vem do platform_role no banco (superadminMiddleware); aqui o id do token diz o papel
+vi.mock('../services/core/rbac.service.js', () => ({
+  rbacService: { getPlatformRole: vi.fn(async (userId: string) => (userId === 'super-1' ? 'super_admin' : 'user')) },
+}));
 vi.mock('bullmq', () => ({ Queue: class Queue { constructor(public name: string) {} } }));
 vi.mock('@bull-board/api/bullMQAdapter', () => ({
   BullMQAdapter: class BullMQAdapter {
@@ -94,7 +98,8 @@ function buildApp() {
 }
 
 function authToken(role: string) {
-  return jwt.sign({ userId: 'user-1', tenantId: 'tenant-1', email: 'a@example.com', role }, process.env.JWT_SECRET!);
+  const userId = role === 'superadmin' ? 'super-1' : 'user-1';
+  return jwt.sign({ userId, tenantId: 'tenant-1', email: 'a@example.com', role }, process.env.JWT_SECRET!);
 }
 
 describe('Bull Board routes', () => {

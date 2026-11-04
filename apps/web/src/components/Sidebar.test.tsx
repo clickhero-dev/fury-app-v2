@@ -20,6 +20,12 @@ const mockCaptureEvent = vi.mocked(captureEvent);
 const mockLogout = vi.fn();
 vi.mock('@/hooks/useLogout', () => ({ useLogout: () => mockLogout }));
 
+// RBAC: lista de telas bloqueadas controlada por teste
+let blockedViews: string[] = [];
+vi.mock('@/hooks/useBlockedViews', () => ({
+  useBlockedViews: () => ({ isBlocked: (k: string) => blockedViews.includes(k) }),
+}));
+
 // SidebarUserCard depende de useAuth/useBilling — fora do escopo deste teste
 // (a cobertura aqui é a navegação). Renderiza um slot neutro.
 vi.mock('./SidebarUserCard', () => ({
@@ -37,6 +43,18 @@ function renderSidebar(entry = '/dashboard') {
 describe('Sidebar — navegação', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    blockedViews = [];
+  });
+
+  it('conta do parceiro (vitalícia) não vê Assinatura; cliente vê', () => {
+    localStorage.setItem('user', JSON.stringify({ platformRole: 'admin_partner' }));
+    const { unmount } = renderSidebar();
+    expect(screen.queryByRole('link', { name: /assinatura/i })).toBeNull();
+    unmount();
+    localStorage.setItem('user', JSON.stringify({ platformRole: 'user_partner' }));
+    renderSidebar();
+    expect(screen.getByRole('link', { name: /assinatura/i })).toBeInTheDocument();
+    localStorage.clear();
   });
 
   it('agrupa a navegação em seções por tarefa (Gestão / Criação / Conta)', () => {
@@ -153,6 +171,7 @@ describe('Sidebar — navegação', () => {
 describe('Sidebar — seções e submenu recolhíveis', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    blockedViews = [];
     window.localStorage.clear();
   });
 
@@ -213,6 +232,26 @@ describe('Sidebar — seções e submenu recolhíveis', () => {
     renderSidebar('/configuracoes/integracoes');
 
     expect(screen.getByRole('link', { name: /integrações/i })).toBeInTheDocument();
+  });
+
+  it('esconde itens bloqueados no RBAC e some com a seção vazia', () => {
+    blockedViews = ['studio', 'calendar', 'settings.integrations'];
+    renderSidebar('/configuracoes');
+
+    expect(screen.queryByRole('link', { name: /estúdio/i })).toBeNull();
+    expect(screen.queryByText('Criação')).toBeNull();
+    expect(screen.queryByRole('link', { name: /integrações/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /configurações/i })).toBeInTheDocument();
+  });
+
+  it('mostra "Ir para o Admin" só para quem acessa o admin', () => {
+    const { unmount } = renderSidebar();
+    expect(screen.queryByRole('link', { name: /ir para o admin/i })).toBeNull();
+    unmount();
+
+    window.localStorage.setItem('user', JSON.stringify({ role: 'owner', platformRole: 'admin_partner' }));
+    renderSidebar();
+    expect(screen.getByRole('link', { name: /ir para o admin/i })).toHaveAttribute('href', '/admin/dashboard');
   });
 });
 

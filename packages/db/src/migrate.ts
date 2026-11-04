@@ -159,7 +159,10 @@ const STEPS: MigrationStep[] = [
   { tag: '0049_brand_kit_photos' },
   { tag: '0050_announcements' },
   { tag: '0051_brand_kit_photo_panel_visibility' },
-  { tag: '0052_subscription_renewal_events' },
+  { tag: '0051_ady_rbac_partners' },
+  { tag: '0052_soft_delete_tenants_users' },
+  { tag: '0053_notifications' },
+  { tag: '0054_subscription_renewal_events' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
@@ -206,6 +209,14 @@ export const REQUIRED_TABLES = [
   'faq_slug_redirects',
   'announcements',
   'announcement_views',
+  'ady_rbac_roles',
+  'ady_partners',
+  'ady_rbac_services',
+  'ady_rbac_views',
+  'ady_rbac_services_blocked',
+  'ady_rbac_views_blocked',
+  'ady_rbac_audit_log',
+  'notifications',
 ];
 
 /**

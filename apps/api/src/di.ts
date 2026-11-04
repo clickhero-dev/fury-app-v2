@@ -61,6 +61,10 @@ import { MetaSyncRepository } from './repository/meta-sync.repository.js';
 import { enqueueMetaSyncTenantRun } from './workers/meta-sync.worker.js';
 import { SuperAdminRepository } from './repository/superadmin.repository.js';
 import { SuperAdminController } from './controllers/superadmin.controller.js';
+import { PartnerRepository } from './repository/partner.repository.js';
+import { PartnerController } from './controllers/partner.controller.js';
+import { PermissionsController } from './controllers/permissions.controller.js';
+import { RbacRepository } from './repository/rbac.repository.js';
 import { ClickUpTicketsClient } from './lib/clickup-tickets.client.js';
 import { TicketService } from './services/tickets/ticket.service.js';
 import { TicketsController } from './controllers/tickets.controller.js';
@@ -71,6 +75,10 @@ import { AnnouncementController } from './controllers/announcement.controller.js
 import { MetaHealthcheckRepository } from './repository/meta-healthcheck.repository.js';
 import { metaHealthcheckService } from './services/meta/meta-healthcheck.service.js';
 import { MetaHealthcheckController } from './controllers/meta-healthcheck.controller.js';
+import { NotificationRepository } from './repository/notification.repository.js';
+import { NotificationService } from './services/notifications/notification.service.js';
+import { NotificationController } from './controllers/notification.controller.js';
+import { emitToUser } from './lib/sse.js';
 import { BusinessContextService } from './services/core/business-context.service.js';
 import { BusinessContextController } from './controllers/business-context.controller.js';
 
@@ -117,6 +125,8 @@ export const ticketService = new TicketService(clickUpTicketsClient);
 export const faqRepository = new FaqRepository();
 export const announcementRepository = new AnnouncementRepository();
 export const metaHealthcheckRepository = new MetaHealthcheckRepository();
+export const notificationRepository = new NotificationRepository();
+export const notificationService = new NotificationService(notificationRepository, (tenantId, userId) => emitToUser(tenantId, userId, 'notifications.changed', { version: 1 }));
 
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
@@ -136,6 +146,7 @@ export const controllers = {
   faq: new FaqController(faqRepository),
   announcement: new AnnouncementController(announcementRepository),
   metaHealthchecks: new MetaHealthcheckController(metaHealthcheckRepository, metaHealthcheckService),
+  notification: new NotificationController(notificationService),
   goal: new GoalController(goalService),
   brandKit: new BrandKitController(brandKitService),
   brandKitPhotos: new BrandKitPhotoController(brandKitPhotoService),
@@ -159,6 +170,8 @@ export const controllers = {
   dashboard: new DashboardController(getInstagramDashboardInsights),
   budget: new BudgetController(budgetOptimizerService),
   superadmin: new SuperAdminController(superAdminRepository),
+  partners: new PartnerController(new PartnerRepository(), superAdminRepository),
+  permissions: new PermissionsController(new RbacRepository(), new PartnerRepository()),
   campaigns: new CampaignsController(
     campaignsService,
     (tenantId: string) => new CampaignRepository(tenantId),

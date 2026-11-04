@@ -1,6 +1,7 @@
 import { type Request, type Response, type NextFunction } from 'express';
 import { AppError } from './errorHandler.js';
 import { SubscriptionRepository } from '../repository/subscription.repository.js';
+import { rbacService } from '../services/core/rbac.service.js';
 
 export function checkSubscriptionActive(
   req: Request,
@@ -9,12 +10,16 @@ export function checkSubscriptionActive(
 ) {
   return (async () => {
     try {
-      // Superadmin and admin are exempt from plan checks
-      // - Superadmin: System-level access (always exempt)
+      // Exempt from plan checks:
+      // - super_admin / admin_partner (platform_role): no plan of their own
       // - Admin: Tenant admin role can manage tenant even if plan is expired
       //   (needed to renew subscription, handle billing, etc)
       // Only 'member' and 'owner' roles are subject to subscription verification
-      if (req.user?.role === 'superadmin' || req.user?.role === 'admin') return next();
+      if (req.user?.role === 'admin') return next();
+      if (req.user?.userId && req.user.role !== 'mock') {
+        const platformRole = await rbacService.getPlatformRole(req.user.userId);
+        if (platformRole === 'super_admin' || platformRole === 'admin_partner') return next();
+      }
 
       const tenantId = req.tenant?.tenantId ?? req.user?.tenantId;
       if (!tenantId) return next(new AppError(401, 'UNAUTHORIZED', 'Tenant não encontrado'));

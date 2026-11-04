@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { createBasicAgent } from './base.agent.js';
+import { resolveAiKey } from '../lib/ai-key-context.js';
 import { parseAgentJSON } from './utils.js';
 import type { PlannerContext, PlannerPrompt, PlannerContentItem } from './types.js';
 
@@ -157,7 +158,9 @@ export async function generateContentPrompts(context: PlannerContext, dates: Con
   const count = dates.length;
   if (count === 0) return [];
 
-  const agent = createBasicAgent(PROMPTS_SYSTEM_PROMPT(count), 'deepseek/deepseek-v4-flash', contentSchema);
+  // chave do dono do cliente, pela mesma regra do resto da IA
+  const { key } = await resolveAiKey();
+  const agent = createBasicAgent(PROMPTS_SYSTEM_PROMPT(count), key, 'deepseek/deepseek-v4-flash', contentSchema);
   const user = [
     brandDescription(context),
     '',
