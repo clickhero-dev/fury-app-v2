@@ -162,6 +162,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0052_subscription_renewal_events' },
   { tag: '0051_ady_rbac_partners' },
   { tag: '0052_soft_delete_tenants_users' },
+  { tag: '0053_notifications' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
@@ -214,6 +215,7 @@ export const REQUIRED_TABLES = [
   'ady_rbac_services_blocked',
   'ady_rbac_views_blocked',
   'ady_rbac_audit_log',
+  'notifications',
 ];
 
 /**

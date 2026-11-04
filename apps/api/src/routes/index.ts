@@ -26,6 +26,7 @@ import plannerRoutes from "./planner.routes.js"; // NOVO
 import wppRoutes from "./wpp.routes.js";
 import faqRoutes from './faq.routes.js';
 import announcementRoutes from './announcement.routes.js';
+import notificationRoutes from './notification.routes.js';
 import rbacRoutes from "./rbac.routes.js";
 
 import { authMiddleware } from "../middleware/auth.middleware.js";
@@ -48,6 +49,7 @@ router.use("/health", healthRoutes);
 router.use("/auth", authRoutes);
 router.use('/faqs', faqRoutes);
 router.use('/announcements', announcementRoutes);
+router.use('/notifications', notificationRoutes);
 router.use('/rbac', rbacRoutes);
 router.use("/meta", metaRoutes);
 router.use("/google", googleRoutes);
