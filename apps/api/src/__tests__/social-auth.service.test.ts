@@ -1,3 +1,11 @@
+/*
+Funcionalidade: cadastro social com Trial sem fricção
+
+Cenário: uma pessoa cria a conta pelo Facebook
+  Dado que o catálogo possui o plano técnico Trial válido
+  Quando o tenant e o usuário forem criados
+  Então a assinatura Trial de sete dias será gravada na mesma transação
+*/
 import { describe, it, expect, vi } from 'vitest';
 import { SocialAuthService } from '../services/core/social-auth.service.js';
 
@@ -72,11 +80,19 @@ describe('SocialAuthService.issueSession', () => {
 });
 
 function fakeTxDb() {
+  const insertedValues: any[] = [];
   const tx = {
-    insert: vi.fn(() => ({ values: (v: any) => ({ returning: async () => [{ id: v.slug ? 't1' : 'u1', ...v }] }) })),
+    insert: vi.fn(() => ({ values: (v: any) => {
+      insertedValues.push(v);
+      return { returning: async () => [{ id: v.slug ? 't1' : 'u1', ...v }] };
+    } })),
     update: vi.fn(() => ({ set: () => ({ where: async () => {} }) })),
+    query: {
+      plans: { findFirst: vi.fn(async () => ({ id: 'trial-plan', technicalKey: 'trial_new_signup', priceCents: 0, isActive: true, limits: { creativesPerMonth: 5 } })) },
+      subscriptions: { findFirst: vi.fn(async () => null) },
+    },
   };
-  return { transaction: vi.fn(async (cb: any) => cb(tx)) } as any;
+  return { transaction: vi.fn(async (cb: any) => cb(tx)), tx, insertedValues } as any;
 }
 
 describe('SocialAuthService.generateFacebookLoginUrl', () => {
@@ -113,6 +129,10 @@ describe('SocialAuthService.handleFacebookSocialLogin', () => {
     expect(r.user.email).toBe('ana@example.com');
     // não emite tokens aqui — isso é feito em issueSession/handoff
     expect(r).not.toHaveProperty('tokens');
+    const subscriptionValues = db.insertedValues.find((values: any) => values?.status === 'trial');
+    expect(subscriptionValues).toMatchObject({
+      tenantId: 't1', planId: 'trial-plan', status: 'trial', creativesRemaining: 5,
+    });
   });
 
   it('loga usuário já vinculado por facebookId sem tocar em e-mail nem criar tenant', async () => {
