@@ -24,7 +24,11 @@ describe('NotificationsBell', () => {
     expect(await screen.findByLabelText(/notificações, 1 não lida/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /notificações/i }));
     expect(await screen.findByText('Aviso')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /marcar aviso como lida/i }));
+    const markReadButton = screen.getByRole('button', { name: /marcar aviso como lida/i });
+    expect(markReadButton).toHaveAttribute('title', 'Marcar como lida');
+    expect(markReadButton.querySelector('svg')).toBeInTheDocument();
+    expect(markReadButton).not.toHaveTextContent('Marcar como lida');
+    fireEvent.click(markReadButton);
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/notifications/n1/read'));
   });
 });
