@@ -41,4 +41,17 @@ describe('NotificationService', () => {
 
     await expect(service.create({ tenantId: 't1', callerId: 'u1', recipientUserId: 'u2', type: 'general', title: 'Novo', body: 'Texto', idempotencyKey: 'retry-1' })).rejects.toMatchObject({ statusCode: 409 });
   });
+
+  it('rejects a recipient outside the caller tenant without creating a notification', async () => {
+    const repository = {
+      findUserInTenant: vi.fn().mockResolvedValue(null),
+      create: vi.fn(),
+      findByIdempotencyKey: vi.fn(),
+    };
+    const service = new NotificationService(repository as any, vi.fn());
+
+    await expect(service.create({ tenantId: 't1', callerId: 'u1', recipientUserId: 'u2', type: 'general', title: 'Aviso', body: 'Texto' }))
+      .rejects.toMatchObject({ statusCode: 404, code: 'RECIPIENT_NOT_FOUND' });
+    expect(repository.create).not.toHaveBeenCalled();
+  });
 });

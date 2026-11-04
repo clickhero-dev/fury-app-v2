@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { registerSSEClient, removeSSEClient, emitToTenant } from '../lib/sse.js';
+import { registerSSEClient, removeSSEClient, emitToTenant, registerSSEUserClient, emitToUser } from '../lib/sse.js';
 
 function makeMockRes() {
   const write = vi.fn();
@@ -60,5 +60,34 @@ describe('sse', () => {
     emitToTenant('tenant-4', 'update', { x: 1 });
     expect(res1.write).toHaveBeenCalledTimes(1);
     expect(res2.write).toHaveBeenCalledTimes(1);
+  });
+
+  it('isolates user events by tenant and user', () => {
+    const first = makeMockRes();
+    const second = makeMockRes();
+    const otherTenant = makeMockRes();
+    expect(registerSSEUserClient('tenant-user-a', 'user-1', first)).toBe(true);
+    expect(registerSSEUserClient('tenant-user-a', 'user-2', second)).toBe(true);
+    expect(registerSSEUserClient('tenant-user-b', 'user-1', otherTenant)).toBe(true);
+
+    emitToUser('tenant-user-a', 'user-1', 'notifications.changed', {});
+
+    expect(first.write).toHaveBeenCalledTimes(1);
+    expect(second.write).not.toHaveBeenCalled();
+    expect(otherTenant.write).not.toHaveBeenCalled();
+  });
+
+  it('limits each user to five connections and frees a slot on close', () => {
+    const responses = Array.from({ length: 7 }, () => {
+      const callbacks = new Map<string, () => void>();
+      const res = { write: vi.fn(), writableEnded: false, on: vi.fn((event: string, callback: () => void) => { callbacks.set(event, callback); return res; }) } as any;
+      return { res, callbacks };
+    });
+    for (const { res } of responses.slice(0, 5)) {
+      expect(registerSSEUserClient('tenant-limit', 'user-limit', res)).toBe(true);
+    }
+    expect(registerSSEUserClient('tenant-limit', 'user-limit', responses[5].res)).toBe(false);
+    responses[0].callbacks.get('close')?.();
+    expect(registerSSEUserClient('tenant-limit', 'user-limit', responses[6].res)).toBe(true);
   });
 });
