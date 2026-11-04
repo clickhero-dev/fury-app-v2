@@ -1,3 +1,11 @@
+/*
+Funcionalidade: atividade administrativa de contas assinantes
+
+Cenário: renovação de conta sem usuários ativos
+  Dado um tenant assinante sem usuários ativos
+  Quando a atividade recente registra uma renovação
+  Então a atividade identifica a conta e seu detalhe administrativo
+*/
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SuperAdminController } from "../controllers/superadmin.controller.js";
 import { countExpiredAccounts, mapRecentActivity } from "../repository/superadmin.repository.js";
@@ -30,7 +38,23 @@ describe("mapRecentActivity (puro, sem DB)", () => {
 
   it("inclui renovação comprovada sem chamá-la de pagamento", () => {
     const items = mapRecentActivity([], [], [{ tenantName: "Loja", planName: "Pro", renewedAt: new Date("2026-10-05T10:00:00Z") }]);
-    expect(items).toEqual([expect.objectContaining({ tipo: "renovacao", description: "renovou o período do plano Pro" })]);
+    expect(items).toEqual([expect.objectContaining({ tipo: "renovacao", description: "a conta renovou o período do plano Pro" })]);
+  });
+
+  it("identifica a renovação como atividade da conta e preserva seu tenantId", () => {
+    const items = mapRecentActivity([], [], [{
+      tenantId: "tenant-sem-usuarios",
+      tenantName: "Jesus Cristo",
+      planName: "Intermediário",
+      renewedAt: new Date("2026-11-04T10:00:00Z"),
+    }] as any);
+
+    expect(items).toEqual([expect.objectContaining({
+      tipo: "renovacao",
+      tenantId: "tenant-sem-usuarios",
+      tenantName: "Jesus Cristo",
+      description: "a conta renovou o período do plano Intermediário",
+    })]);
   });
   it("novos tenants entram como 'novo' e limite é 10", () => {
     const subs = Array.from({ length: 8 }, (_, i) => ({
@@ -55,7 +79,7 @@ describe("mapRecentActivity (puro, sem DB)", () => {
       expect.objectContaining({
         tipo: "renovacao",
         tenantName: "Loja Moda SP",
-        description: "renovou o período do plano",
+        description: "a conta renovou o período do plano",
         at: "2026-09-04T10:00:00.000Z",
       }),
     ]);

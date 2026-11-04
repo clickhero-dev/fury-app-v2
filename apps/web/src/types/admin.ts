@@ -8,7 +8,7 @@ export interface AdminDashboardStats {
   cancellations: number;
   expiredAccounts: number;
   plans: Array<{ planId: string; name: string; priceCents: number; interval: string; clients: number }>;
-  recentActivity: Array<{ tipo: 'novo' | 'trial' | 'plano' | 'cancelamento' | 'renovacao'; tenantName: string; description: string; at: string }>;
+  recentActivity: Array<{ tipo: 'novo' | 'trial' | 'plano' | 'cancelamento' | 'renovacao'; tenantId?: string; tenantName: string; description: string; at: string }>;
 }
 
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';

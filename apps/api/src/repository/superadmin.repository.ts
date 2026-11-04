@@ -26,6 +26,7 @@ export type DashboardPeriod = '7d' | '30d' | '90d';
 
 export type ActivityItem = {
   tipo: 'novo' | 'trial' | 'plano' | 'cancelamento' | 'renovacao';
+  tenantId?: string;
   tenantName: string;
   description: string;
   at: string; // ISO
@@ -59,24 +60,25 @@ export function countExpiredAccounts(rows: ExpiredAccountRow[], now: Date): numb
 
 /** Monta a lista "Atividade Recente" (puro — sem DB). Subs já vêm do JOIN com tenants/plans. */
 export function mapRecentActivity(
-  subs: Array<{ status: string; createdAt: Date; updatedAt: Date; tenantName: string | null; planName: string | null }>,
-  newTenants: Array<{ name: string; createdAt: Date }>,
-  renewals: Array<{ tenantName: string | null; planName?: string | null; renewedAt: Date; previousPeriodEnd?: Date }> = [],
+  subs: Array<{ tenantId?: string; status: string; createdAt: Date; updatedAt: Date; tenantName: string | null; planName: string | null }>,
+  newTenants: Array<{ id?: string; name: string; createdAt: Date }>,
+  renewals: Array<{ tenantId?: string; tenantName: string | null; planName?: string | null; renewedAt: Date; previousPeriodEnd?: Date }> = [],
 ): ActivityItem[] {
   const items: ActivityItem[] = [
     ...subs.map((s): ActivityItem => {
       const tenantName = s.tenantName ?? 'Tenant';
       if (s.status === 'cancelled')
-        return { tipo: 'cancelamento', tenantName, description: s.planName ? `cancelou o plano ${s.planName}` : 'cancelou a assinatura', at: s.updatedAt.toISOString() };
+        return { tipo: 'cancelamento', tenantId: s.tenantId, tenantName, description: s.planName ? `cancelou o plano ${s.planName}` : 'cancelou a assinatura', at: s.updatedAt.toISOString() };
       if (s.status === 'trial')
-        return { tipo: 'trial', tenantName, description: s.planName ? `iniciou período trial do plano ${s.planName}` : 'iniciou período trial', at: s.createdAt.toISOString() };
-      return { tipo: 'plano', tenantName, description: s.planName ? `assinou o plano ${s.planName}` : 'assinou um plano', at: s.createdAt.toISOString() };
+        return { tipo: 'trial', tenantId: s.tenantId, tenantName, description: s.planName ? `iniciou período trial do plano ${s.planName}` : 'iniciou período trial', at: s.createdAt.toISOString() };
+      return { tipo: 'plano', tenantId: s.tenantId, tenantName, description: s.planName ? `assinou o plano ${s.planName}` : 'assinou um plano', at: s.createdAt.toISOString() };
     }),
-    ...newTenants.map((t): ActivityItem => ({ tipo: 'novo', tenantName: t.name, description: 'criou conta na plataforma', at: t.createdAt.toISOString() })),
+    ...newTenants.map((t): ActivityItem => ({ tipo: 'novo', tenantId: t.id, tenantName: t.name, description: 'criou conta na plataforma', at: t.createdAt.toISOString() })),
     ...renewals.map((r): ActivityItem => ({
       tipo: 'renovacao',
+      ...(r.tenantId ? { tenantId: r.tenantId } : {}),
       tenantName: r.tenantName ?? 'Tenant',
-      description: r.planName ? `renovou o período do plano ${r.planName}` : 'renovou o período do plano',
+      description: r.planName ? `a conta renovou o período do plano ${r.planName}` : 'a conta renovou o período do plano',
       at: r.renewedAt.toISOString(),
     })),
   ];
@@ -188,6 +190,20 @@ export class SuperAdminRepository extends TenantScopedRepository {
   async countUsersByTenant(tenantId: string): Promise<number> {
     const rows = await this.db.select({ total: sql`count(*)::int` }).from(users).where(and(eq(users.tenantId, tenantId), isNull(users.deletedAt)));
     return Number((rows[0] as any)?.total ?? 0);
+  }
+  async hasAccessibleSubscription(tenantId: string, now: Date = new Date()): Promise<boolean> {
+    const subscription = await this.db.query.subscriptions.findFirst({
+      where: and(
+        eq(subscriptions.tenantId, tenantId),
+        eq(subscriptions.status, 'active'),
+        or(
+          eq(subscriptions.isNonExpirable, true),
+          isNull(subscriptions.currentPeriodEnd),
+          gt(subscriptions.currentPeriodEnd, now),
+        ),
+      ),
+    });
+    return !!subscription;
   }
 
   // ── Users ────────────────────────────────────────────────────────
@@ -427,6 +443,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
 
     const recentSubs = await this.db
       .select({
+        tenantId: subscriptions.tenantId,
         status: subscriptions.status,
         createdAt: subscriptions.createdAt,
         updatedAt: subscriptions.updatedAt,
@@ -462,6 +479,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
 
     const recentRenewals = await this.db
       .select({
+        tenantId: renewalEvents.tenantId,
         tenantName: tenants.name,
         planName: plans.name,
         renewedAt: renewalEvents.renewedAt,
