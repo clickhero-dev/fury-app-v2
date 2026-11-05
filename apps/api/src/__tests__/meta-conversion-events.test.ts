@@ -133,5 +133,23 @@ describe('meta-conversion-events', () => {
       expect(getConversionsFromActions(actions, 'OUTCOME_LEADS')).toBe(4);
       expect(getConversionsFromActions([{ action_type: 'lead', value: '4' }], 'OUTCOME_LEADS')).toBe(4);
     });
+
+    // # Language: pt-BR
+    // Cenário: campanha manual com conversão personalizada do pixel no site externo
+    //   Dado uma campanha OUTCOME_LEADS sem formulário instantâneo do Ady
+    //   E a Meta retorna a ação offsite_conversion.custom.<id>
+    //   Quando o painel calcula Clientes
+    //   Então exibe os leads únicos do pixel, e não zero
+    it('conta lead de conversão personalizada do pixel em site externo', () => {
+      const actions = [
+        { action_type: 'link_click', value: '61' },
+        { action_type: 'offsite_conversion.custom.987654321', value: '12' },
+      ];
+      const uniqueActions = [
+        { action_type: 'offsite_conversion.custom.987654321', value: '9' },
+      ];
+
+      expect(getConversionsFromActions(actions, 'OUTCOME_LEADS', uniqueActions)).toBe(9);
+    });
   });
 });
