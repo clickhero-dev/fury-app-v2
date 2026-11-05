@@ -1124,6 +1124,8 @@ export async function metaApiCall<T>(
   options?: {
     method?: string;
     body?: Record<string, unknown>;
+    // multipart (upload de vídeo)
+    formData?: FormData;
   }
 ): Promise<T> {
   // Só ativa mock quando META_API_MOCK=true E o token NÃO é um token real do Meta (EAAC*).
@@ -1135,6 +1137,14 @@ export async function metaApiCall<T>(
 
     if (method === 'POST' && path.includes('/adimages')) {
       return { images: { 'fury_upload': { hash: `mock_hash_${Date.now()}` } } } as T;
+    }
+
+    if (method === 'POST' && path.includes('/advideos')) {
+      return { id: `mock_video_${Date.now()}` } as T;
+    }
+
+    if (method === 'GET' && path.includes('fields=status,picture')) {
+      return { status: { video_status: 'ready' }, picture: 'https://placehold.co/600x600?text=Video' } as T;
     }
 
     if (method === 'POST' && path.includes('/campaigns')) {
@@ -1346,7 +1356,10 @@ export async function metaApiCall<T>(
     signal: AbortSignal.timeout(90_000),
   };
 
-  if (options?.body) {
+  if (options?.formData) {
+    // fetch define o boundary do multipart
+    fetchOptions.body = options.formData;
+  } else if (options?.body) {
     fetchOptions.headers = { ...fetchOptions.headers, 'Content-Type': 'application/json' };
     fetchOptions.body = JSON.stringify(options.body);
   }
@@ -1758,6 +1771,41 @@ export async function uploadAdImage(params: {
   // A Meta devolve uma URL CDN no campo `url`. O campo `picture` do criativo
   // exige uma URL valida — hash puro causa erro 100 "picture should represent a valid URL".
   return imageData.url || imageData.hash;
+}
+
+/** Envia o vídeo (multipart `source`) para a biblioteca da conta de anúncios. */
+export async function uploadAdVideo(params: {
+  adAccountId: string;
+  buffer: Buffer;
+  filename: string;
+  contentType: string;
+  accessToken: string;
+}): Promise<string> {
+  const form = new FormData();
+  form.append('name', params.filename);
+  form.append('source', new Blob([new Uint8Array(params.buffer)], { type: params.contentType }), params.filename);
+
+  const response = await metaApiCall<{ id?: string }>(
+    `/${encodeURIComponent(params.adAccountId)}/advideos`,
+    params.accessToken,
+    { method: 'POST', formData: form }
+  );
+  if (!response?.id) {
+    throw new AppError(502, 'META_VIDEO_UPLOAD_FAILED', 'Meta nao retornou o id do video enviado.');
+  }
+  return response.id;
+}
+
+/** Status de processamento (ready/processing/error) e capa gerada pela Meta. */
+export async function getAdVideoStatus(
+  videoId: string,
+  accessToken: string
+): Promise<{ status?: string; picture?: string }> {
+  const response = await metaApiCall<{ status?: { video_status?: string }; picture?: string }>(
+    `/${encodeURIComponent(videoId)}?fields=status,picture`,
+    accessToken
+  );
+  return { status: response.status?.video_status, picture: response.picture };
 }
 
 export interface MetaInterestResult {

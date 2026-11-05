@@ -353,13 +353,13 @@ describe('CampaignsService.updateCampaignStatus & softDeleteCampaign', () => {
     expect(updateCampaignSnapshot).toHaveBeenCalledWith(TENANT_ID, 'mc1', { status: 'ARCHIVED' });
   });
 
-  it('softDelete bloqueia campanha local de outro tenant (403 FORBIDDEN)', async () => {
+  it('softDelete não enxerga campanha local de outro tenant (404)', async () => {
     const { service, repo } = makeService();
     repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
     const otherCampaign = await repo.createCampaign({ tenantId: 'tenant-2', metaCampaignId: 'mc2', name: 'Other' } as any);
 
     await expect(service.softDeleteCampaign({ tenantId: TENANT_ID, campaignId: otherCampaign.id, userId: 'u1' }))
-      .rejects.toMatchObject({ code: 'FORBIDDEN', statusCode: 403 });
+      .rejects.toMatchObject({ code: 'CAMPAIGN_NOT_FOUND', statusCode: 404 });
     expect(repo.campaigns.find((c) => c.id === otherCampaign.id)?.status).not.toBe('archived');
   });
 });
@@ -427,6 +427,71 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     expect(upsertCampaignSnapshot).toHaveBeenCalledWith(TENANT_ID, expect.objectContaining({
       metaCampaignId: 'meta_campaign_1', name: 'Oferta', status: 'ACTIVE', objective: 'OUTCOME_TRAFFIC',
     }));
+  });
+
+  describe('criativo de vídeo do Estúdio', () => {
+    function setupVideo(complianceNotes: string | null) {
+      const ctx = makeService();
+      ctx.repo.metaConnections.push({
+        tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+        adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+        createdAt: new Date(),
+      } as any);
+      ctx.repo.creativeAssets.push({
+        id: 'vid_1', tenantId: TENANT_ID, url: 'https://cdn.ady/v.mp4', type: 'video',
+        complianceNotes, createdAt: new Date(),
+      });
+      ctx.meta.locationsResult = [{ key: 'city_key_1' }];
+      ctx.meta.downloadImageResult = { buffer: Buffer.from('mp4'), contentType: 'video/mp4' };
+      return ctx;
+    }
+    const videoArgs = {
+      tenantId: TENANT_ID, objective: 'visits' as const,
+      creatives: [{ creativeAssetId: 'vid_1', headline: 'Oferta', primaryText: 'Imperdivel', destinationUrl: 'https://example.com' }],
+      locationCity: 'Sao Paulo', locationRadiusKm: 30,
+      ageMin: 18, ageMax: 65, gender: 'all' as const, dailyBudgetBrl: 100,
+    };
+
+    it('sobe o vídeo e cria o criativo com video_data (capa = foto de referência)', async () => {
+      const { service, meta, repo } = setupVideo(JSON.stringify({ photos: [{ url: 'https://cdn.ady/foto.jpg' }] }));
+      const uploadImage = vi.spyOn(meta, 'uploadAdImage');
+
+      await service.createCampaignFromWizard(videoArgs);
+
+      expect(meta.uploadAdVideoCalls).toHaveLength(1);
+      expect(meta.uploadAdVideoCalls[0]).toMatchObject({ adAccountId: 'act_123', contentType: 'video/mp4' });
+      expect(uploadImage).not.toHaveBeenCalled();
+      const spec = (meta.createdAdCreatives[0] as any).object_story_spec;
+      expect(spec.link_data).toBeUndefined();
+      expect(spec.video_data).toEqual({
+        video_id: 'mock_video_id',
+        image_url: 'https://cdn.ady/foto.jpg',
+        message: 'Imperdivel',
+        title: 'Oferta',
+        call_to_action: { type: 'LEARN_MORE', value: { link: 'https://example.com' } },
+      });
+      expect((repo.campaigns[0] as any).budget.creative_image_urls).toEqual(['https://cdn.ady/foto.jpg']);
+    });
+
+    it('sem foto de referência usa a capa gerada pela Meta; LIKE_PAGE sem title', async () => {
+      const { service, meta } = setupVideo(null);
+
+      await service.createCampaignFromWizard({ ...videoArgs, objective: 'engagement' });
+
+      const videoData = (meta.createdAdCreatives[0] as any).object_story_spec.video_data;
+      expect(videoData.image_url).toBe('https://cdn.meta/thumb.jpg');
+      expect(videoData.call_to_action.type).toBe('LIKE_PAGE');
+      expect(videoData).not.toHaveProperty('title');
+    });
+
+    it('falha no processamento do vídeo não cria nada no Meta', async () => {
+      const { service, meta, repo } = setupVideo(null);
+      meta.videoStatusResult = { status: 'error' };
+
+      await expect(service.createCampaignFromWizard(videoArgs)).rejects.toMatchObject({ code: 'META_VIDEO_PROCESSING_FAILED' });
+      expect(meta.createdCampaigns).toHaveLength(0);
+      expect(repo.campaigns).toHaveLength(0);
+    });
   });
 
   const wizardArgs = {
@@ -1561,16 +1626,17 @@ describe('CampaignsService.getCampaignLeads', () => {
       .rejects.toMatchObject({ code: 'CAMPAIGN_NOT_FOUND', statusCode: 404 });
   });
 
-  it('fallback META_SYSTEM_ACCESS_TOKEN sem leads_retrieval (#200) → META_PERMISSION_DENIED (403)', async () => {
+  it('sem conexão Meta não usa o token de sistema para leads (403, Meta nem é chamada)', async () => {
     const prev = process.env.META_SYSTEM_ACCESS_TOKEN;
     process.env.META_SYSTEM_ACCESS_TOKEN = 'system_token_for_test';
     try {
       const { service, meta } = makeService();
-      // Sem conexão Meta local → usa o token de sistema; o Meta responde #200 (falta leads_retrieval).
-      meta.getCampaignAds = async () => { throw metaError(200, '(#200) Permission error', { metaType: 'OAuthException' }); };
+      let called = false;
+      meta.getCampaignAds = async () => { called = true; return { data: [] } as any; };
 
       await expect(service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_externa' }))
-        .rejects.toMatchObject({ code: 'META_PERMISSION_DENIED', statusCode: 403 });
+        .rejects.toMatchObject({ code: 'META_CONNECTION_NOT_FOUND', statusCode: 403 });
+      expect(called).toBe(false);
     } finally {
       if (prev === undefined) delete process.env.META_SYSTEM_ACCESS_TOKEN;
       else process.env.META_SYSTEM_ACCESS_TOKEN = prev;

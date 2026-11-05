@@ -1,4 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// regra de chave por cliente tem testes próprios (ai-key-resolution); aqui só o provedor
+vi.mock('../lib/ai-key-context.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/ai-key-context.js')>()),
+  resolveAiKey: async () => ({ key: process.env.OPENROUTER_API_KEY ?? 'test-key', scope: 'ady' }),
+}));
 import { openrouterService, type CreditState } from '../services/llms/openrouter.service.js';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';

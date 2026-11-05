@@ -45,6 +45,11 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { TenantsPage } from './pages/superadmin/TenantsPage';
 import { TenantDetailPage } from './pages/superadmin/TenantDetailPage';
 import { PlansPage } from './pages/superadmin/PlansPage';
+import { PartnersPage } from './pages/superadmin/PartnersPage';
+import { PartnerConfigPage } from './pages/superadmin/PartnerConfigPage';
+import { DefaultPermissionsPage } from './pages/superadmin/DefaultPermissionsPage';
+import { ClientesPage } from './pages/superadmin/ClientesPage';
+import { MyIntegrationsPage } from './pages/superadmin/IntegrationsPanel';
 import { UsersPage } from './pages/superadmin/UsersPage';
 import { TenantCampaignsPage } from './pages/superadmin/TenantCampaignsPage';
 import { DashboardAdminPage } from './pages/superadmin/AdminDashboard';
@@ -56,7 +61,6 @@ import { HelpCenterPage } from './pages/help/HelpCenterPage';
 import { FaqPublicPage } from './pages/help/FaqPublicPage';
 
 // 1. IMPORTAR O FORCE DARK MODE QUE VOCÊ CRIOU
-import { ForceDarkMode } from './pages/superadmin/ForceDarkMode';
 
 export const router = createBrowserRouter([
   {
@@ -192,27 +196,21 @@ export const router = createBrowserRouter([
   },
 
   /* =========================================================
-     ÁREA DE LOGIN DO ADMIN (Forçada no Modo Escuro)
+     ÁREA DE LOGIN DO ADMIN (segue o tema do cliente)
      ========================================================= */
   {
     path: '/admin/login',
-    element: (
-      <ForceDarkMode>
-        <AdminLogin />
-      </ForceDarkMode>
-    ),
+    element: <AdminLogin />,
   },
 
   /* =========================================================
-     ÁREA RESTRITA DO SUPERADMIN (Forçada no Modo Escuro)
+     ÁREA RESTRITA DO SUPERADMIN (segue o tema do cliente)
      ========================================================= */
   {
     path: '/admin',
     element: (
       <RequireSuperadmin>
-        <ForceDarkMode>
-          <AdminShell />
-        </ForceDarkMode>
+        <AdminShell />
       </RequireSuperadmin>
     ),
     children: [
@@ -222,6 +220,11 @@ export const router = createBrowserRouter([
       { path: 'tenants/:id', element: <TenantDetailPage /> },
       { path: 'tenants/:id/campaigns', element: <TenantCampaignsPage /> },
       { path: 'planos', element: <PlansPage /> },
+      { path: 'parceiros', element: <PartnersPage /> },
+      { path: 'parceiros/padrao', element: <DefaultPermissionsPage /> },
+      { path: 'parceiros/:id', element: <PartnerConfigPage /> },
+      { path: 'clientes', element: <ClientesPage /> },
+      { path: 'integracoes', element: <MyIntegrationsPage /> },
       { path: 'tenants', element: <TenantsPage /> },
       { path: 'tickets', element: <TicketsPage /> },
       { path: 'healthchecks', element: <HealthchecksPage /> },

@@ -69,7 +69,7 @@ export async function enqueuePlannerImageJobs({
       post,
       logoUrl,
     };
-    await queue.add('generate', payload, {
+    await queue.add('worker-studio-image-generate', payload, {
       removeOnComplete: 100,
       removeOnFail: 500,
       attempts: 2,

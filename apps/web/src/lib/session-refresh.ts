@@ -1,7 +1,7 @@
 import axios from 'axios';
-import { queryClient } from './query-client';
 import { store } from '../store';
-import { logout, setTokens } from '../store/slices/authSlice';
+import { setTokens } from '../store/slices/authSlice';
+import { clearSession } from './clear-session';
 
 export const SESSION_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const REFRESH_LOCK_NAME = 'fury-session-refresh';
@@ -31,11 +31,7 @@ function persistTokens(tokens: { accessToken: string; refreshToken: string }) {
 }
 
 function forceLogout() {
-  localStorage.removeItem('token');
-  localStorage.removeItem('refreshToken');
-  localStorage.removeItem('user');
-  queryClient.clear();
-  store.dispatch(logout());
+  clearSession();
 }
 
 /** Renova os tokens uma única vez por aba e persiste a rotação. */

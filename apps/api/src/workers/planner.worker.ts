@@ -1,4 +1,5 @@
 import { Worker, Queue } from 'bullmq';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { getRedis } from '../lib/redis.js';
 import { runPlannerWorkflow } from '../planner-workflow-runner.js';
 
@@ -27,7 +28,7 @@ export async function enqueuePlanGeneration(jobId: string, tenantId: string, pos
   // (removeOnFail: 500) faz o BullMQ ignorar silenciosamente os generates do
   // resto do dia — a linha workflow_jobs fica 'pending' órfã e trava o lock.
   // A deduplicação por tenant já é feita pelo lock Postgres (findActiveByLockKey).
-  await queue.add('generate', { jobId, tenantId, postsCount }, {
+  await queue.add('worker-planner-content-plan-generate', { jobId, tenantId, postsCount }, {
     removeOnComplete: 100,
     removeOnFail: 500,
     attempts: 3,
@@ -47,6 +48,7 @@ export async function startPlannerWorker(): Promise<void> {
     {
       connection: getRedis(),
       concurrency: 1,
+      ...getWorkerMetricsOptions('planner-generate-worker'),
     },
   );
 

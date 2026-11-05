@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+const { getPlatformRole } = vi.hoisted(() => ({ getPlatformRole: vi.fn(async (_id: string): Promise<string | null> => 'user') }));
+vi.mock('../services/core/rbac.service.js', () => ({ rbacService: { getPlatformRole } }));
 import type { Request, Response, NextFunction } from 'express';
 
 const { mockFindFirst } = vi.hoisted(() => ({
@@ -25,6 +27,25 @@ function createNext(): NextFunction {
 }
 
 describe('checkSubscriptionActive middleware', () => {
+  /* Funcionalidade: bloqueio de assinatura vencida
+   * Cenário: assinatura marcada não expirável com período encerrado
+   * Dado que o prazo da assinatura terminou
+   * Quando a pessoa tenta acessar um recurso protegido
+   * Então o acesso é bloqueado mesmo com a marcação antiga.
+   */
+  it('bloqueia período vencido apesar da marcação não expirável', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'active', isNonExpirable: true, trialEndsAt: null, currentPeriodEnd: new Date('2020-01-01T00:00:00Z') });
+    const next = createNext();
+    await checkSubscriptionActive(createMockRequest(), {} as Response, next);
+    expect((next as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ statusCode: 403, code: 'SUBSCRIPTION_EXPIRED' });
+  });
+
+  it('bloqueia trial vencido apesar da marcação não expirável', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'trial', isNonExpirable: true, trialEndsAt: new Date('2020-01-01T00:00:00Z'), currentPeriodEnd: null });
+    const next = createNext();
+    await checkSubscriptionActive(createMockRequest(), {} as Response, next);
+    expect((next as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ statusCode: 403, code: 'TRIAL_EXPIRED' });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -148,8 +169,21 @@ describe('checkSubscriptionActive middleware', () => {
   });
 
   it('superadmin passa mesmo com subscription cancelled (isento de verificação)', async () => {
+    getPlatformRole.mockResolvedValueOnce('super_admin');
     mockFindFirst.mockResolvedValue({ status: 'cancelled', trialEndsAt: null, currentPeriodEnd: null });
     const req = createMockRequest({ user: { userId: 'user-1', tenantId: 'tenant-1', email: 'test@fury.test', role: 'superadmin' } });
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(mockFindFirst).not.toHaveBeenCalled(); // Não faz query, passa direto
+  });
+
+  it('admin_partner passa mesmo com subscription cancelled (isento)', async () => {
+    getPlatformRole.mockResolvedValueOnce('admin_partner');
+    mockFindFirst.mockResolvedValue({ status: 'cancelled', trialEndsAt: null, currentPeriodEnd: null });
+    const req = createMockRequest({ user: { userId: 'user-1', tenantId: 'tenant-1', email: 'test@fury.test', role: 'owner' } });
     const next = createNext();
 
     await checkSubscriptionActive(req, {} as Response, next);

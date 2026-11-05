@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { db } from '../../lib/db.js';
-import { tenants, users } from '../../lib/db.js';
+import { tenants, users, subscriptions } from '../../lib/db.js';
 import { eq } from 'drizzle-orm';
 import { getRedis } from '../../lib/redis.js';
 import { AppError } from '../../middleware/errorHandler.js';
@@ -14,6 +14,7 @@ import { emailService, type EmailService } from '../email/email.service.js';
 import type { UserDTO } from '../../lib/shared.js';
 import { AuthRepository } from '../../repository/auth.repository.js';
 import { slugify } from '../../lib/slug.js';
+import { provisionTrialSubscription, TRIAL_PLAN_KEY } from '../billing/trial-signup.js';
 
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
@@ -52,6 +53,7 @@ function userToDTO(user: any): UserDTO {
     name: user.name ?? null,
     email: user.email,
     role: user.role,
+    platformRole: user.platformRole,
     tenantId: user.tenantId,
     notificationPrefs: (user.notificationPrefs as UserDTO['notificationPrefs']) ?? DEFAULT_NOTIFICATION_PREFS,
     audienceDefaults: user.audienceDefaults as UserDTO['audienceDefaults'],
@@ -135,6 +137,14 @@ export class AuthService {
         .insert(users)
         .values({ tenantId: tenant.id, email: data.email, passwordHash, role: 'owner' })
         .returning();
+      await provisionTrialSubscription({
+        queryPlan: async () => (await tx.query.plans.findFirst({ where: (plans: any, { eq }: any) => eq(plans.technicalKey, TRIAL_PLAN_KEY) })) ?? null,
+        querySubscription: async (tenantId) => (await tx.query.subscriptions.findFirst({ where: (subscriptions: any, { eq }: any) => eq(subscriptions.tenantId, tenantId) })) ?? null,
+        insertSubscription: async (values) => {
+          const [subscription] = await tx.insert(subscriptions).values(values as any).returning({ id: subscriptions.id });
+          return subscription;
+        },
+      }, tenant.id, new Date());
       return { tenant: { ...tenant, codigo }, user };
     });
 
@@ -156,6 +166,8 @@ export class AuthService {
 
     const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
     if (!isPasswordValid) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    // conta excluída responde igual a senha errada (não revela que existe)
+    if (!(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
 
     const accessToken = this.deps.jwt.generateAccessToken({
       userId: user.id,
@@ -179,7 +191,7 @@ export class AuthService {
 
     const user = await this.repo('').findUserById(payload.userId);
     const t3 = Date.now();
-    if (!user) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
+    if (!user || !(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'USER_NOT_FOUND', 'User not found');
 
     await revokeRefreshToken(user.id);
     const accessToken = this.deps.jwt.generateAccessToken({

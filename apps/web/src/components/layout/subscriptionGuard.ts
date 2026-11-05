@@ -12,10 +12,6 @@ export function computeSubscriptionState(
 ): SubscriptionState {
   if (!subscription) return 'none';
 
-  if (subscription.isNonExpirable) {
-    return ['cancelled', 'inactive'].includes(subscription.status) ? 'expired' : 'active';
-  }
-
   const now = Date.now();
 
   if (['cancelled', 'inactive', 'past_due'].includes(subscription.status)) return 'expired';
@@ -37,10 +33,15 @@ export function computeSubscriptionState(
   return 'active';
 }
 
-/**
- * Avalia uma data de expiração persistida.
- * Retorna `true` (vencida), `false` (válida) ou `null` (desconhecido — sem data válida).
- */
+/** Seleciona a data que efetivamente limita a assinatura. */
+export function getSubscriptionExpiration(subscription: Subscription | null | undefined): string | null {
+  if (!subscription) return null;
+  return subscription.status === 'trial'
+    ? subscription.trialEndsAt ?? null
+    : subscription.currentPeriodEnd ?? null;
+}
+
+/** Retorna true para vencida, false para válida ou null para data desconhecida. */
 export function isPlanExpiredFromDate(planExpiration: string | null | undefined): boolean | null {
   if (!planExpiration) return null;
   const exp = new Date(planExpiration).getTime();
@@ -69,8 +70,10 @@ export function shouldRedirectToExpired({
   state,
   reduxPlanExpired,
 }: RedirectDecision): boolean {
-  if (reduxPlanExpired === true) return true; // Redux persistido confirma expiração.
-  if (state === 'active') return false; // assinatura ativa → nunca redireciona.
+  if (subscriptionChecked && state === 'active') return false; // assinatura confirmada prevalece sobre data antiga.
+  if (subscriptionChecked && state === 'expired') return true;
+  if (reduxPlanExpired === true) return true; // Em falha ou espera, mantém último vencimento conhecido.
+  if (state === 'active') return false;
   if (!subscriptionChecked) return false; // fetch ainda carregando → aguarda.
 
   // Sem plano ou expirado pela API → redireciona, exceto se o Redux persistido ainda diz data futura.
