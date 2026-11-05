@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '@/lib/api';
 import type { AdminDashboardStats, DashboardPeriod } from '../../types/admin';
 import { formatBRL, planColor } from './adminDashboard.utils';
@@ -238,7 +239,17 @@ export function DashboardAdminPage() {
                   {s.icon}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#ECEDEF' }}>{a.tenantName}</span>
+                  {a.tenantId ? (
+                    <Link
+                      to={`/admin/tenants/${a.tenantId}`}
+                      aria-label={`Abrir conta ${a.tenantName}`}
+                      style={{ fontSize: 13, fontWeight: 600, color: '#ECEDEF', textDecoration: 'underline', textUnderlineOffset: 3 }}
+                    >
+                      Conta: {a.tenantName}
+                    </Link>
+                  ) : (
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#ECEDEF' }}>Conta: {a.tenantName}</span>
+                  )}
                   <span style={{ fontSize: 13, color: '#7E8480' }}> {a.description}</span>
                 </div>
                 <span style={{ fontSize: 11, color: '#3E4440', whiteSpace: 'nowrap', flexShrink: 0 }}>

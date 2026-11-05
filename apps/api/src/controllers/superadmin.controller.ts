@@ -487,7 +487,15 @@ export class SuperAdminController {
   deleteUser = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const repo = this.repo;
-      await this.userInScope(req, req.params.id);
+      const user = await this.userInScope(req, req.params.id);
+
+      if (await repo.countUsersByTenant(user.tenantId) <= 1 && await repo.hasAccessibleSubscription(user.tenantId)) {
+        throw new AppError(
+          409,
+          "LAST_SUBSCRIBER_USER",
+          "Não é possível remover o último usuário de uma conta com assinatura ativa. Crie ou associe outro usuário antes.",
+        );
+      }
 
       await repo.deleteUser(req.params.id);
       await rbacService.bumpVersion();
