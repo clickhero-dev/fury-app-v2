@@ -181,17 +181,17 @@ export function AdminShell() {
 </nav>
 
         {/* Footer */}
-        <div className="px-2.5 py-3 border-t border-[#252721] mt-auto">
+        <div className="px-2.5 py-3 border-t border-[#252721] mt-auto space-y-2">
           <Link
             to="/dashboard"
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#8A8F8B] hover:text-[#ECEDEF] transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium border border-[#1E88A8]/30 bg-[#1E88A8]/10 text-[#1E88A8] hover:bg-[#1E88A8]/20 transition-colors"
           >
             <MonitorSmartphone className="w-4 h-4 shrink-0" strokeWidth={1.8} />
             <span>Ir para a plataforma</span>
           </Link>
           <button
             onClick={() => setLogoutDialogOpen(true)}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-[#4A4F4B] hover:text-[#ECEDEF] transition-colors cursor-pointer"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium border border-[#E05A4B]/20 bg-[#E05A4B]/10 text-[#E05A4B] hover:bg-[#E05A4B]/20 transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.8} />
             <span>Sair</span>

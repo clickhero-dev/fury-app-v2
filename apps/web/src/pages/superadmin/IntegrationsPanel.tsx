@@ -12,7 +12,7 @@ const inputCls =
   "w-full bg-[#1A1C18] border border-[#2A2D27] rounded-lg px-3 py-2.5 text-sm text-[#ECEDEF] placeholder:text-[#5A605C] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30";
 const btnCls = "bg-[#1E88A8] hover:bg-[#2299BC] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-medium";
 
-// Chave de IA do parceiro; a chave inteira nunca volta do servidor
+// Chave OpenRouter do parceiro; a chave inteira nunca volta do servidor
 // readOnly: super_admin só vê se existe (quem cadastra é o próprio parceiro)
 export function IntegrationsPanel({ url, readOnly = false }: { url: string; readOnly?: boolean }) {
   const [status, setStatus] = useState<AiKeyStatus | null>(null);
@@ -46,10 +46,10 @@ export function IntegrationsPanel({ url, readOnly = false }: { url: string; read
   return (
     <div className="bg-[#161714] border border-[#2A2D27] rounded-lg p-5 space-y-4 max-w-xl">
       <div className="flex items-center gap-2 text-sm font-semibold text-[#ECEDEF]">
-        <KeyRound className="w-4 h-4 text-[#1E88A8]" /> Chave de IA
+        <KeyRound className="w-4 h-4 text-[#1E88A8]" /> Chave da OpenRouter
       </div>
       <p className="text-xs text-[#7E8480]">
-        Usada pelo parceiro e pelos clientes dele em todos os recursos de IA. Sem chave, ninguém usa IA.
+        Cole a chave da sua conta OpenRouter (começa com <code>sk-or-</code>). Usada pelo parceiro e pelos clientes dele em todos os recursos de IA. Sem chave, ninguém usa IA.
       </p>
 
       {readOnly ? (
@@ -78,7 +78,7 @@ export function IntegrationsPanel({ url, readOnly = false }: { url: string; read
         >
           <label className="block space-y-1.5">
             <span className="text-xs font-medium text-[#7E8480]">Nova chave</span>
-            <input type="password" autoComplete="off" required className={inputCls} value={key} onChange={(e) => setKey(e.target.value)} />
+            <input type="password" autoComplete="off" required placeholder="sk-or-..." className={inputCls} value={key} onChange={(e) => setKey(e.target.value)} />
           </label>
           <div className="flex gap-2">
             <button type="submit" className={btnCls} disabled={busy || !key.trim()}>{busy ? "Testando..." : "Salvar"}</button>

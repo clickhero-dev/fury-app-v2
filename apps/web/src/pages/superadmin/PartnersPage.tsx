@@ -118,7 +118,7 @@ export function PartnersPage() {
             <tr className="text-left text-xs text-[#7E8480] border-b border-[#2A2D27]">
               <th className="px-4 py-3 font-medium">Parceiro</th>
               <th className="px-4 py-3 font-medium">Vagas</th>
-              <th className="px-4 py-3 font-medium">Chave de IA</th>
+              <th className="px-4 py-3 font-medium">Chave OpenRouter</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>

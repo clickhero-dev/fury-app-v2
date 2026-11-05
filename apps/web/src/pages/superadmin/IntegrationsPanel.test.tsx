@@ -41,7 +41,7 @@ describe('IntegrationsPanel', () => {
     expect(mockPut).toHaveBeenCalledWith(URL, { key: 'sk-or-v1-abcdwxyz' });
     expect(await screen.findByText('Chave configurada: ••••wxyz')).toBeInTheDocument();
     expect(screen.queryByText(/sk-or-v1-abcdwxyz/)).toBeNull();
-    expect(screen.queryByText(/OpenRouter/i)).toBeNull();
+    expect(screen.getByText('Chave da OpenRouter')).toBeInTheDocument();
   });
 
   it('com chave: remover limpa', async () => {
