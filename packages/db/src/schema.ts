@@ -470,7 +470,6 @@ export const plans = pgTable(
     features: jsonb('features').notNull().default(sql`'{}'::jsonb`),
     limits: jsonb('limits').notNull().default(sql`'{}'::jsonb`),
     isActive: boolean('is_active').notNull().default(true),
-    technicalKey: varchar('technical_key', { length: 100 }),
     partnerId: uuid('partner_id').references(() => adyPartners.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
