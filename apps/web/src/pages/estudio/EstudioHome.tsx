@@ -122,10 +122,17 @@ export function EstudioHome() {
       if (progress >= 100) {
         window.clearInterval(timer);
         setGenerationProgress((current) => current ? { ...current, phase: 'complete', progress: 100 } : current);
-        setView((current) => current === 'loading' ? 'result' : current);
       }
     }, 50);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [generationPhase]);
+
+  useEffect(() => {
+    if (generationPhase !== 'complete') return;
+    const revealTimer = window.setTimeout(() => setView((current) => current === 'loading' ? 'result' : current), 50);
+    return () => window.clearTimeout(revealTimer);
   }, [generationPhase]);
 
   const modelsQuery = useQuery({
