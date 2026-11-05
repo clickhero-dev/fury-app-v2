@@ -12,13 +12,6 @@ import type {
   StudioComplianceStatusResponse,
   StudioTemplate,
 } from '@/types/studio';
-import {
-  completeGeneration,
-  failGeneration,
-  startGeneration,
-  tickGeneration,
-  type GenerationProgressState,
-} from './creative-generation-progress';
 
 interface GenerateImageResponse {
   creativeAssetId: string;
@@ -65,40 +58,6 @@ function getComplianceTone(status?: StudioComplianceStatusResponse['complianceSt
   return 'pending_compliance';
 }
 
-function GenerationProgressIndicator({ state }: { state: GenerationProgressState }) {
-  const isWaiting = state.progress >= 95 && state.phase === 'generating';
-  const label = state.phase === 'completing'
-    ? 'Finalizando a geração...'
-    : isWaiting
-      ? 'A geração ainda está em andamento. A confirmação pode levar mais alguns instantes.'
-      : 'O ady está criando seu anúncio...';
-
-  return (
-    <div className="w-full space-y-3 text-left" aria-live="polite">
-      <div className="flex items-center justify-between gap-4 text-sm font-semibold text-[#101828]">
-        <span>{label}</span>
-        <span className="text-[#E8631A]">{state.progress}%</span>
-      </div>
-      <div
-        className="h-2.5 overflow-hidden rounded-full bg-[#FDE7D8]"
-        role="progressbar"
-        aria-label="Progresso estimado da geração da imagem"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={state.progress}
-      >
-        <div
-          className="h-full rounded-full bg-[#E8631A] transition-[width] duration-300 ease-out"
-          style={{ width: `${state.progress}%` }}
-        />
-      </div>
-      <p className="text-sm text-[#667085]">
-        {state.phase === 'completing' ? 'A imagem foi recebida. Preparando o resultado.' : 'O percentual é uma estimativa visual e não representa o processamento real.'}
-      </p>
-    </div>
-  );
-}
-
 export function CreativeStudio() {
   const navigate = useNavigate();
   const { setPreSelectedAsset } = useCampaignWizardContext();
@@ -109,9 +68,6 @@ export function CreativeStudio() {
   const [pollStartedAt, setPollStartedAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
-  const [generationProgress, setGenerationProgress] = useState<GenerationProgressState | null>(null);
-  const generationPhase = generationProgress?.phase;
-  const generationStartedAtForProgress = generationProgress?.startedAt;
 
   // ─── OpenRouter state ──────────────────────────────────────
   const [creativeType, setCreativeType] = useState<'image' | 'video'>('image');
@@ -138,34 +94,6 @@ export function CreativeStudio() {
     };
   }, []);
 
-  useEffect(() => {
-    if (generationPhase !== 'generating') return;
-
-    const updateProgress = () => {
-      setGenerationProgress((current) => current ? tickGeneration(current, Date.now()) : current);
-    };
-    updateProgress();
-    const timer = window.setInterval(updateProgress, 250);
-
-    return () => window.clearInterval(timer);
-  }, [generationPhase, generationStartedAtForProgress]);
-
-  useEffect(() => {
-    if (generationPhase !== 'completing') return;
-
-    const completionStartedAt = Date.now();
-    const timer = window.setInterval(() => {
-      const progress = Math.min(100, 95 + Math.round(((Date.now() - completionStartedAt) / 400) * 5));
-      setGenerationProgress((current) => current ? { ...current, progress } : current);
-      if (progress >= 100) {
-        window.clearInterval(timer);
-        setGenerationProgress((current) => current ? { ...current, phase: 'complete', progress: 100 } : current);
-      }
-    }, 50);
-
-    return () => window.clearInterval(timer);
-  }, [generationPhase]);
-
   const activeTemplate = useMemo(
     () => TEMPLATES.find((template) => template.id === selectedTemplateId) ?? TEMPLATES[0],
     [selectedTemplateId]
@@ -177,22 +105,16 @@ export function CreativeStudio() {
       return response.data;
     },
     onMutate: () => {
-      const startedAt = Date.now();
-      setGenerationStartedAt(startedAt);
-      setGenerationProgress(startGeneration(startedAt));
+      setGenerationStartedAt(Date.now());
     },
     onSuccess: (data: GenerateImageResponse) => {
       setCurrentAssetId(data.creativeAssetId);
       setPollStartedAt(Date.now());
       setGeneratedUrl(data.imageUrl);
       setGenerationStartedAt(null);
-      setGenerationProgress((current) => current ? completeGeneration(current) : current);
       queryClient.setQueryData(['studio', 'asset', data.creativeAssetId], data);
     },
-    onError: () => {
-      setGenerationStartedAt(null);
-      setGenerationProgress((current) => current ? failGeneration(current) : current);
-    },
+    onError: () => setGenerationStartedAt(null),
   });
 
   const generateVideoMutation = useMutation({
@@ -237,7 +159,6 @@ export function CreativeStudio() {
   const canPublish = currentCompliance?.complianceStatus === 'approved';
 
   const isGenerating = generateImageMutation.isPending || generateVideoMutation.isPending;
-  const isImageGenerationComplete = creativeType !== 'image' || generationProgress?.phase === 'complete';
 
   const elapsedSeconds = generationStartedAt ? Math.max(0, Math.round((nowMs - generationStartedAt) / 1000)) : 0;
 
@@ -397,26 +318,14 @@ export function CreativeStudio() {
                 </Button>
               </div>
 
-              {isGenerating && creativeType === 'image' && generationProgress && (
+              {isGenerating && (
                 <div className="rounded-2xl border border-[#FFE3D4] bg-[#FFF7F2] p-4 text-sm text-[#7A4A27]">
                   <div className="flex items-center gap-3">
                     <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
-                    <GenerationProgressIndicator state={generationProgress} />
-                  </div>
-                </div>
-              )}
-
-              {generateImageMutation.isError && (
-                <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                  Não foi possível concluir a geração da imagem. Tente novamente.
-                </div>
-              )}
-
-              {isGenerating && creativeType === 'video' && (
-                <div className="rounded-2xl border border-[#FFE3D4] bg-[#FFF7F2] p-4 text-sm text-[#7A4A27]">
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
-                    <span>O ady está criando seu vídeo... {elapsedSeconds > 0 && `(${elapsedSeconds}s)`}</span>
+                    <span>
+                      O ady está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...
+                      {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
+                    </span>
                   </div>
                 </div>
               )}
@@ -465,34 +374,24 @@ export function CreativeStudio() {
                 </div>
               )}
 
-              {isGenerating && creativeType === 'image' && generationProgress && (
-                <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[#E6E8EC] bg-gradient-to-br from-[#FFF7F2] to-white">
-                  <div className="w-full max-w-md space-y-4 px-6 text-center">
-                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
-                    <GenerationProgressIndicator state={generationProgress} />
-                    <p className="text-sm text-[#667085]">A geração via OpenRouter e a checagem de compliance são processadas em sequência.</p>
-                  </div>
-                </div>
-              )}
-
-              {isGenerating && creativeType === 'video' && (
+              {isGenerating && (
                 <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[#E6E8EC] bg-gradient-to-br from-[#FFF7F2] to-white">
                   <div className="space-y-4 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
-                    <p className="text-base font-semibold text-[#101828]">O ady está criando seu vídeo...</p>
+                    <p className="text-base font-semibold text-[#101828]">
+                      O ady está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...
+                      {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
+                    </p>
+                    <p className="text-sm text-[#667085]">A geração via OpenRouter e a checagem de compliance são processadas em sequência.</p>
                   </div>
                 </div>
               )}
 
               {currentAssetId && !isGenerating && !currentCompliance && (
                 <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[#E6E8EC] bg-gradient-to-br from-[#FFF7F2] to-white">
-                  <div className="w-full max-w-md space-y-4 px-6 text-center">
+                  <div className="space-y-4 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
-                    {generationPhase === 'completing' && generationProgress ? (
-                      <GenerationProgressIndicator state={generationProgress} />
-                    ) : (
-                      <p className="text-base font-semibold text-[#101828]">O ady está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...</p>
-                    )}
+                    <p className="text-base font-semibold text-[#101828]">O ady está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...</p>
                     <p className="text-sm text-[#667085]">
                       {isWithinPollingWindow ? 'Análise de compliance em andamento.' : 'A janela de polling terminou. Atualize ou gere novamente.'}
                     </p>
@@ -500,16 +399,7 @@ export function CreativeStudio() {
                 </div>
               )}
 
-              {currentAssetId && currentCompliance && !isGenerating && !isImageGenerationComplete && (
-                <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[#E6E8EC] bg-gradient-to-br from-[#FFF7F2] to-white">
-                  <div className="w-full max-w-md space-y-4 px-6 text-center">
-                    {generationProgress && <GenerationProgressIndicator state={generationProgress} />}
-                    <p className="text-sm text-[#667085]">Preparando o resultado final.</p>
-                  </div>
-                </div>
-              )}
-
-              {currentAssetId && currentCompliance && !isGenerating && isImageGenerationComplete && (
+              {currentAssetId && currentCompliance && !isGenerating && (
                 <div className="space-y-6">
                   <div className="overflow-hidden rounded-[28px] border border-[#E6E8EC] bg-[#101828]">
                     <div className="relative aspect-square md:aspect-[16/11]">
