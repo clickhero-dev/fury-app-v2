@@ -7,6 +7,7 @@ import { complianceBadge } from '@/lib/compliance.utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { layoutLabel, isKnownLayout } from '@/lib/layout-labels';
+import { variationDirections } from '@/lib/creative-variations';
 import type { GenerateCreativeResponse, StudioPublishResponse, StudioAssetGroupDetail } from '@/types/studio';
 import { VersionCarousel } from './VersionCarousel';
 import { formatDuration, parseVideoMeta, useAdjustStudioVideo } from '@/hooks/useStudioVideo';
@@ -15,11 +16,10 @@ interface Props {
   result: GenerateCreativeResponse;
   onBack: () => void;
   onNewCreative: () => void;
-  // ponytail: quando presente, "Publicar no Meta" abre o wizard (imagem presetada)
-  // em vez de publicar direto — alinha com o botão "Usar em campanha".
   onPublish?: () => void;
   /** Vídeo: ajuste gera um job novo; a tela de progresso acompanha. */
   onTrackVideo?: (jobId: string) => void;
+  showVariationSuggestion?: boolean;
 }
 
 // ponytail: gera máscara de inpainting a partir do canvas de pintura
@@ -42,9 +42,11 @@ function generateMaskBlob(source: HTMLCanvasElement): Blob | null {
   return new Promise((resolve) => mask.toBlob((b) => resolve(b), 'image/png')) as unknown as Blob | null;
 }
 
-export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTrackVideo }: Props) {
+export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTrackVideo, showVariationSuggestion = false }: Props) {
   const queryClient = useQueryClient();
   const [currentResult, setCurrentResult] = useState(result);
+  const [showVariationPrompt, setShowVariationPrompt] = useState(showVariationSuggestion);
+  const [variations, setVariations] = useState<GenerateCreativeResponse[]>([]);
   const [feedback, setFeedback] = useState('');
   const [publishFeedback, setPublishFeedback] = useState<StudioPublishResponse | null>(null);
 
@@ -201,6 +203,28 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
       return res.data;
     },
     onSuccess: (data) => setPublishFeedback(data),
+  });
+
+  const variationsMutation = useMutation({
+    mutationFn: async (assetId: string) => {
+      const responses = await Promise.allSettled(
+        variationDirections.map(async (feedback) => {
+          const res = await api.post<GenerateCreativeResponse>('/studio/creative/regenerate', { assetId, feedback });
+          return res.data;
+        })
+      );
+      const generated = responses.flatMap((response) => response.status === 'fulfilled' ? [response.value] : []);
+
+      if (generated.length === 0) {
+        throw new Error('Não foi possível gerar variações.');
+      }
+
+      return generated;
+    },
+    onSuccess: (data) => {
+      setVariations(data);
+      void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+    },
   });
 
   const handleSaveToLibrary = () => {
@@ -530,6 +554,72 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
           </div>
         </div>
       </div>
+
+      {showVariationPrompt && !isLegacy && (
+        <section className="rounded-2xl border border-[#F5C9AF] bg-[#FFF7F2] p-5" aria-live="polite">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-[#101828]">Deseja gerar variações deste criativo?</p>
+              <p className="mt-1 text-sm text-[#7A4A27]">A IA criará três novas abordagens para você comparar.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setShowVariationPrompt(false);
+                  variationsMutation.mutate(currentResult.assetId);
+                }}
+                disabled={variationsMutation.isPending}
+                className="bg-[#E8631A] hover:bg-[#D45714] text-white"
+              >
+                Sim, gerar variações
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowVariationPrompt(false)} disabled={variationsMutation.isPending}>
+                Agora não
+              </Button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {variationsMutation.isPending && (
+        <div className="flex items-center gap-3 rounded-2xl border border-[#E6E8EC] bg-[#FCFCFD] p-4 text-sm text-[#667085]" role="status">
+          <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
+          Gerando variações do seu criativo...
+        </div>
+      )}
+
+      {variationsMutation.isError && (
+        <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <AlertCircle className="h-4 w-4" />
+          Não foi possível gerar as variações. Tente novamente mais tarde.
+        </div>
+      )}
+
+      {variations.length > 0 && (
+        <section className="space-y-3" aria-labelledby="creative-variations-title">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E8631A]">Mais opções</p>
+            <h2 id="creative-variations-title" className="text-xl font-bold text-[#101828]">Variações geradas</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {variations.map((variation, index) => (
+              <button
+                key={variation.assetId}
+                type="button"
+                onClick={() => setCurrentResult(variation)}
+                className="overflow-hidden rounded-2xl border border-[#E6E8EC] bg-white text-left transition hover:border-[#E8631A] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#E8631A]/30"
+              >
+                <img src={variation.imageUrl} alt={`Variação ${index + 1} do criativo`} className="aspect-square w-full object-cover" />
+                <div className="p-3">
+                  <p className="text-sm font-semibold text-[#101828]">Variação {index + 1}</p>
+                  <p className="mt-1 text-xs text-[#667085]">Clique para selecionar e editar</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

@@ -47,6 +47,7 @@ export function EstudioHome() {
   const { setPreSelectedAsset } = useCampaignWizardContext();
   const [view, setView] = useState<ViewState>('library');
   const [generationResult, setGenerationResult] = useState<GenerateCreativeResponse | null>(null);
+  const [isNewGeneration, setIsNewGeneration] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'>('all');
   const [confirmArchiveAsset, setConfirmArchiveAsset] = useState<StudioAsset | null>(null);
@@ -122,6 +123,7 @@ export function EstudioHome() {
       return res.data;
     },
     onSuccess: (data: { creativeAssetId: string; imageUrl: string; modificationsRemaining?: number | null }) => {
+      setIsNewGeneration(true);
       setGenerationResult({
         type: 'image',
         assetId: data.creativeAssetId,
@@ -271,6 +273,11 @@ export function EstudioHome() {
   const handleBackToLibrary = () => {
     setView('library');
     setGenerationResult(null);
+    setIsNewGeneration(false);
+  };
+  const handleNewCreative = () => {
+    setIsNewGeneration(false);
+    handleStartQuickCreate();
   };
 
   const handleViewDetails = (asset: StudioAsset) => {
@@ -301,6 +308,7 @@ export function EstudioHome() {
       complianceNotes: asset.complianceNotes,
       modificationsRemaining: asset.modificationsRemaining ?? null,
     });
+    setIsNewGeneration(false);
     setView('result');
   };
 
@@ -897,7 +905,8 @@ export function EstudioHome() {
             <CreativeResult
               result={generationResult}
               onBack={handleBackToLibrary}
-              onNewCreative={handleStartQuickCreate}
+              onNewCreative={handleNewCreative}
+              showVariationSuggestion={isNewGeneration}
               onTrackVideo={handleTrackVideo}
               onPublish={() => {
                 const isVideo = generationResult.type === 'video';
