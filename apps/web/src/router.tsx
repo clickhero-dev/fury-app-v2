@@ -61,7 +61,6 @@ import { HelpCenterPage } from './pages/help/HelpCenterPage';
 import { FaqPublicPage } from './pages/help/FaqPublicPage';
 
 // 1. IMPORTAR O FORCE DARK MODE QUE VOCÊ CRIOU
-import { ForceDarkMode } from './pages/superadmin/ForceDarkMode';
 
 export const router = createBrowserRouter([
   {
@@ -197,27 +196,21 @@ export const router = createBrowserRouter([
   },
 
   /* =========================================================
-     ÁREA DE LOGIN DO ADMIN (Forçada no Modo Escuro)
+     ÁREA DE LOGIN DO ADMIN (segue o tema do cliente)
      ========================================================= */
   {
     path: '/admin/login',
-    element: (
-      <ForceDarkMode>
-        <AdminLogin />
-      </ForceDarkMode>
-    ),
+    element: <AdminLogin />,
   },
 
   /* =========================================================
-     ÁREA RESTRITA DO SUPERADMIN (Forçada no Modo Escuro)
+     ÁREA RESTRITA DO SUPERADMIN (segue o tema do cliente)
      ========================================================= */
   {
     path: '/admin',
     element: (
       <RequireSuperadmin>
-        <ForceDarkMode>
-          <AdminShell />
-        </ForceDarkMode>
+        <AdminShell />
       </RequireSuperadmin>
     ),
     children: [

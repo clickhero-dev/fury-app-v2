@@ -371,6 +371,14 @@ html:not(.dark) {
     border: inherit !important;
   }
 
+  /* Exceção: form já dentro de um card não vira outro card */
+  form.ady-form-plain {
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
   /* Inputs dentro do Formulário */
   form input {
     background-color: #f8fafc !important;

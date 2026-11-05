@@ -86,7 +86,7 @@ export function AdminShell() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0C0D0A] text-[#ECEDEF] flex font-sans">
+    <div className="min-h-screen bg-background text-text-primary flex font-sans">
       <SnackHost />
       <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
         <DialogContent aria-describedby="admin-logout-description">
@@ -99,15 +99,15 @@ export function AdminShell() {
       </Dialog>
       {/* Toast */}
       {toastMessage && (
-        <div className="fixed top-4 right-4 z-50 bg-[#1E88A8] text-white px-4 py-3 rounded-lg shadow-lg text-sm font-medium">
+        <div className="fixed top-4 right-4 z-50 bg-[#17708A] text-white px-4 py-3 rounded-lg shadow-lg text-sm font-medium">
           {toastMessage}
         </div>
       )}
 
       {/* Sidebar */}
-      <aside className="w-56 bg-[#11120E] border-r border-[#252721] flex flex-col shrink-0 select-none">
+      <aside className="w-56 bg-sidebar border-r border-border flex flex-col shrink-0 select-none">
         {/* Header */}
-        <div className="px-5 py-5 border-b border-[#252721]">
+        <div className="px-5 py-5 border-b border-border">
           <div className="flex items-center gap-2.5 mb-1.5">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
               <path
@@ -121,7 +121,7 @@ export function AdminShell() {
             </svg>
             <span className="text-lg font-bold tracking-tight">Ady</span>
           </div>
-          <div className="text-[9px] font-semibold uppercase tracking-wider text-[#8A8F8B] pl-0.5 mt-1">
+          <div className="text-[9px] font-semibold uppercase tracking-wider text-text-tertiary pl-0.5 mt-1">
             {isSuperAdmin ? 'Superadmin' : 'Parceiro'}
           </div>
         </div>
@@ -141,10 +141,10 @@ export function AdminShell() {
         <button
           key={item.label}
           onClick={handleCampanhasClick}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer ${
+          className={`ady-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer ${
             isCampanhasActive
-              ? 'bg-[#1E88A8]/15 text-[#1E88A8] font-medium'
-              : 'text-[#8A8F8B] hover:text-[#ECEDEF]'
+              ? 'bg-sidebar-active text-[#17708A] dark:text-[#2A9BC0] font-semibold'
+              : 'text-text-secondary hover:bg-sidebar-hover hover:text-text-primary'
           }`}
         >
           <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.8} />
@@ -167,8 +167,8 @@ export function AdminShell() {
         className={({ isActive }) =>
           `w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
             isActive || isUserActive
-              ? 'bg-[#1E88A8]/15 text-[#1E88A8] font-medium'
-              : 'text-[#8A8F8B] hover:text-[#ECEDEF]'
+              ? 'bg-sidebar-active text-[#17708A] dark:text-[#2A9BC0] font-semibold'
+              : 'text-text-secondary hover:bg-sidebar-hover hover:text-text-primary'
           }`
         }
       >
@@ -180,26 +180,26 @@ export function AdminShell() {
 </nav>
 
         {/* Footer */}
-        <div className="px-2.5 py-3 border-t border-[#252721] mt-auto space-y-2">
+        <div className="px-2.5 py-3 border-t border-border mt-auto space-y-2">
           <Link
             to="/dashboard"
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium border border-[#1E88A8]/30 bg-[#1E88A8]/10 text-[#1E88A8] hover:bg-[#1E88A8]/20 transition-colors"
+            className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-brand/30 bg-brand/10 px-3.5 py-2.5 text-sm font-medium text-brand hover:bg-brand/20 transition-colors"
           >
-            <MonitorSmartphone className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+            <MonitorSmartphone className="size-[18px] shrink-0 text-brand" strokeWidth={1.8} />
             <span>Ir para a plataforma</span>
           </Link>
           <button
             onClick={() => setLogoutDialogOpen(true)}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium border border-[#E05A4B]/20 bg-[#E05A4B]/10 text-[#E05A4B] hover:bg-[#E05A4B]/20 transition-colors cursor-pointer"
+            className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-error/20 bg-error/10 px-3.5 py-2.5 text-sm font-medium text-error hover:bg-error/20 transition-colors cursor-pointer"
           >
-            <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.8} />
+            <LogOut className="size-[18px] shrink-0 text-error" strokeWidth={1.8} />
             <span>Sair</span>
           </button>
         </div>
       </aside>
 
       {/* Main */}
-      <main className="flex-1 flex flex-col bg-[#0C0D0A] overflow-hidden text-[#ECEDEF]">
+      <main className="flex-1 flex flex-col bg-background overflow-hidden text-text-primary">
       {tenantId && (
     <div className="px-6 pt-4 shrink-0">
       <button
@@ -208,7 +208,7 @@ export function AdminShell() {
           navigate(-1); 
           // Caso queira forçar a ida direta para a lista principal, use: navigate('/admin/tenants');
         }}
-        className="flex items-center gap-2 text-sm text-[#4A4F4B] hover:text-[#ECEDEF] transition-colors cursor-pointer"
+        className="flex items-center gap-2 text-sm text-text-tertiary hover:text-text-primary transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4" />
         Voltar para Clientes
@@ -216,7 +216,7 @@ export function AdminShell() {
     </div>
      )}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="dark p-6 lg:p-8">
+          <div className="p-6 lg:p-8">
             <div className="max-w-6xl mx-auto">
               {isPageBlocked ? <NotFoundPage /> : <Outlet />}
             </div>
