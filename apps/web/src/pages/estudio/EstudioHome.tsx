@@ -21,6 +21,13 @@ import { VideoProgress } from './components/VideoProgress';
 import { LibraryUploadFlow, type UploadRequest } from './components/LibraryUploadFlow';
 import { LibraryPickerDialog, type PickerMode } from './components/LibraryPickerDialog';
 import { useBlockedViews } from '@/hooks/useBlockedViews';
+import {
+  completeGeneration,
+  failGeneration,
+  startGeneration,
+  tickGeneration,
+  type GenerationProgressState,
+} from './creative-generation-progress';
 
 type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create' | 'video-progress';
 
@@ -31,6 +38,30 @@ const IMAGE_MODEL = 'black-forest-labs/flux.2-pro';
 const SURFACE = 'rounded-2xl border border-border bg-surface shadow-sm';
 const CARD_HOVER = 'transition-all duration-300 ease-in-out hover:border-brand/50 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5';
 const BUTTON_HOVER = 'transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]';
+
+function GenerationProgressIndicator({ state }: { state: GenerationProgressState }) {
+  const waiting = state.progress >= 95 && state.phase === 'generating';
+  const label = state.phase === 'completing'
+    ? 'Finalizando a geração...'
+    : waiting
+      ? 'A geração ainda está em andamento. A confirmação pode levar mais alguns instantes.'
+      : 'O ady está criando sua imagem...';
+
+  return (
+    <div className="w-full max-w-md space-y-3 text-left" aria-live="polite">
+      <div className="flex items-center justify-between gap-4 text-sm font-semibold text-text-primary">
+        <span>{label}</span>
+        <span className="text-brand">{state.progress}%</span>
+      </div>
+      <div role="progressbar" aria-label="Progresso estimado da geração da imagem" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.progress} className="h-2.5 overflow-hidden rounded-full bg-brand/15">
+        <div className="h-full rounded-full bg-brand transition-[width] duration-300 ease-out" style={{ width: `${state.progress}%` }} />
+      </div>
+      <p className="text-sm text-text-tertiary">
+        {state.phase === 'completing' ? 'A imagem foi recebida. Preparando o resultado.' : 'O percentual é uma estimativa visual e não representa o processamento real.'}
+      </p>
+    </div>
+  );
+}
 
 const CHIP_ON = 'bg-brand text-white font-semibold shadow-sm';
 const CHIP_OFF = 'text-text-tertiary hover:text-text-primary hover:bg-surface-hover font-medium';
@@ -70,18 +101,32 @@ export function EstudioHome() {
   const [progressMessage, setProgressMessage] = useState('');
   const [quotaErrorMessage, setQuotaErrorMessage] = useState<string | null>(null);
   const [selectedImageModel, setSelectedImageModel] = useState(IMAGE_MODEL);
-  const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [generationProgress, setGenerationProgress] = useState<GenerationProgressState | null>(null);
+  const generationPhase = generationProgress?.phase;
+  const generationStartedAtForProgress = generationProgress?.startedAt;
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, 1000);
-
+    if (generationPhase !== 'generating') return;
+    const update = () => setGenerationProgress((current) => current ? tickGeneration(current, Date.now()) : current);
+    update();
+    const timer = window.setInterval(update, 250);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [generationPhase, generationStartedAtForProgress]);
 
-  const elapsedSeconds = generationStartedAt ? Math.max(0, Math.round((nowMs - generationStartedAt) / 1000)) : 0;
+  useEffect(() => {
+    if (generationPhase !== 'completing') return;
+    const completionStartedAt = Date.now();
+    const timer = window.setInterval(() => {
+      const progress = Math.min(100, 95 + Math.round(((Date.now() - completionStartedAt) / 400) * 5));
+      setGenerationProgress((current) => current ? { ...current, progress } : current);
+      if (progress >= 100) {
+        window.clearInterval(timer);
+        setGenerationProgress((current) => current ? { ...current, phase: 'complete', progress: 100 } : current);
+        setView((current) => current === 'loading' ? 'result' : current);
+      }
+    }, 50);
+    return () => window.clearInterval(timer);
+  }, [generationPhase]);
 
   const modelsQuery = useQuery({
     queryKey: ['studio-ai', 'models'],
@@ -129,13 +174,12 @@ export function EstudioHome() {
         creativeData: { headline: '', primary_text: '', cta: '' },
         modificationsRemaining: data.modificationsRemaining ?? null,
       });
-      setGenerationStartedAt(null);
-      setView('result');
+      setGenerationProgress((current) => current ? completeGeneration(current) : current);
       setProgressMessage('');
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
     onError: (error: { response?: { data?: { error?: { message?: string } } } }) => {
-      setGenerationStartedAt(null);
+      setGenerationProgress((current) => current ? failGeneration(current) : current);
       setView('error');
       setProgressMessage('');
       setQuotaErrorMessage(error?.response?.data?.error?.message ?? null);
@@ -237,7 +281,8 @@ export function EstudioHome() {
     if (finalPrompt.length < 10) return;
     setView('loading');
     // cronômetro começa no clique — cobre enhance-prompt + geração
-    setGenerationStartedAt(Date.now());
+    const startedAt = Date.now();
+    setGenerationProgress(startGeneration(startedAt));
     const photo_ids = artPhotos.length ? artPhotos.map((p) => p.id) : undefined;
 
     // com modelo: o texto é "o que muda" — vai direto, sem aprimorar
@@ -861,11 +906,9 @@ export function EstudioHome() {
             <div>
               <h2 className="text-2xl font-semibold tracking-[-0.02em] text-text-primary">
                 {progressMessage || 'O ady está criando sua imagem...'}
-                {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
               </h2>
-              <p className="mt-2 text-sm text-text-tertiary">
-                A geração com IA e a renderização podem levar de 1 a 2 minutos
-              </p>
+              {generationProgress && <GenerationProgressIndicator state={generationProgress} />}
+              <p className="mt-2 text-sm text-text-tertiary">A geração com IA e a renderização podem levar de 1 a 2 minutos</p>
             </div>
             <div className="flex flex-col gap-1.5 text-xs text-text-tertiary">
               {templatePhoto ? (
