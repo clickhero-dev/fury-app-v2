@@ -1,19 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useCallback } from 'react';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { selectTheme, setTheme as setThemeAction } from '../store/slices/authSlice';
 
+/**
+ * Hook de tema baseado no Redux (fonte única de verdade).
+ *
+ * setDark persiste em `fury-theme` e atualiza o store; a aplicação no <html>
+ * (classe .dark + data-theme + colorScheme) é feita pelo ThemeProvider global.
+ */
 export function useTheme() {
-  const [isDark, setIsDark] = useState<boolean>(() => {
-    return localStorage.getItem('fury-theme') === 'dark';
-  });
+  const theme = useAppSelector(selectTheme);
+  const dispatch = useAppDispatch();
 
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('fury-theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('fury-theme', 'light');
-    }
-  }, [isDark]);
+  const isDark = theme === 'dark';
 
-  return { isDark, setDark: setIsDark };
+  const setDark = useCallback(
+    (value: boolean) => {
+      const newTheme = value ? 'dark' : 'light';
+      dispatch(setThemeAction(newTheme));
+      localStorage.setItem('fury-theme', newTheme);
+    },
+    [dispatch]
+  );
+
+  return { isDark, setDark };
 }

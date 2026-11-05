@@ -34,3 +34,25 @@ CREATE POLICY client_goals_tenant_isolation ON client_goals
 -- Create policies for fury_insights
 CREATE POLICY fury_insights_tenant_isolation ON fury_insights
   USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+
+-- Enable RLS on Google Meu Negocio tables
+ALTER TABLE google_connections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE google_business_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE business_profile_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE google_sync_logs ENABLE ROW LEVEL SECURITY;
+
+-- Create policies for google_connections
+CREATE POLICY google_connections_tenant_isolation ON google_connections
+  USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+
+-- Create policies for google_business_profiles
+CREATE POLICY google_business_profiles_tenant_isolation ON google_business_profiles
+  USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+
+-- Create policies for business_profile_settings
+CREATE POLICY business_profile_settings_tenant_isolation ON business_profile_settings
+  USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+
+-- Create policies for google_sync_logs
+CREATE POLICY google_sync_logs_tenant_isolation ON google_sync_logs
+  USING (tenant_id = current_setting('app.current_tenant_id')::uuid);

@@ -1,5 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
-import type { WizardObjective, WizardState } from '../types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { WizardCreativeState, WizardObjective, WizardState } from '../types';
+import { createEmptyCreative, MAX_CREATIVES, isValidGeo } from '../types';
+import { isCreativesStepValid } from '../lib/creativeValidation';
+import { isValidBusinessPhone } from '../lib/phone-format';
+import api from '@/lib/api';
 
 const TOTAL_STEPS = 5;
 
@@ -7,17 +11,13 @@ function createInitialState(preSelectedAssetId?: string): WizardState {
   return {
     currentStep: 1,
     objective: null,
-    creative: {
-      assetId: preSelectedAssetId,
-      headline: '',
-      primaryText: '',
-    },
+    creatives: preSelectedAssetId ? [createEmptyCreative(preSelectedAssetId)] : [],
     audience: {
       city: '',
-      radiusKm: 10,
       ageMin: 18,
       ageMax: 65,
       gender: 'all',
+      audienceInterests: [],
     },
     budget: {
       dailyBudgetBrl: 20,
@@ -30,13 +30,70 @@ function createInitialState(preSelectedAssetId?: string): WizardState {
 
 export function useCampaignWizard(preSelectedAssetId?: string) {
   const [state, setState] = useState<WizardState>(() => createInitialState(preSelectedAssetId));
+  const [audienceLoaded, setAudienceLoaded] = useState(false);
+
+  // Load audience defaults from user configuration
+  useEffect(() => {
+    api.get<{ success: boolean; data: { audienceDefaults?: { city?: string; cityKey?: string; ageMin?: number; ageMax?: number; gender?: 'all' | 'male' | 'female'; audienceInterests?: { id: string; name: string }[]; geo?: unknown } } }>('/auth/me')
+      .then((res) => {
+        const defaults = res.data.data?.audienceDefaults;
+        if (defaults) {
+          setState((prev) => ({
+            ...prev,
+            audience: {
+              ...prev.audience,
+              city: defaults.city || '',
+              cityKey: defaults.cityKey,
+              ageMin: defaults.ageMin || 18,
+              ageMax: defaults.ageMax || 65,
+              gender: defaults.gender || 'all',
+              audienceInterests: defaults.audienceInterests || [],
+              // geo antigo/inválido é ignorado
+              geo: isValidGeo(defaults.geo) ? defaults.geo : undefined,
+            },
+          }));
+        }
+        setAudienceLoaded(true);
+      })
+      .catch(() => {
+        // silently ignore - audience stays with default values
+        setAudienceLoaded(true);
+      });
+  }, []);
+
+  // Check if audience data is configured (city is the main requirement)
+  const hasAudienceData = useMemo(() => {
+    return (
+      state.audience.city.trim().length > 0 &&
+      audienceLoaded
+    );
+  }, [state.audience, audienceLoaded]);
 
   const setObjective = useCallback((objective: WizardObjective) => {
     setState((prev) => ({ ...prev, objective }));
   }, []);
 
-  const setCreative = useCallback((updates: Partial<WizardState['creative']>) => {
-    setState((prev) => ({ ...prev, creative: { ...prev.creative, ...updates } }));
+  const setCreatives = useCallback((creatives: WizardCreativeState[]) => {
+    setState((prev) => ({ ...prev, creatives }));
+  }, []);
+
+  const addCreative = useCallback(() => {
+    setState((prev) =>
+      prev.creatives.length >= MAX_CREATIVES
+        ? prev
+        : { ...prev, creatives: [...prev.creatives, createEmptyCreative()] }
+    );
+  }, []);
+
+  const updateCreative = useCallback((id: string, updates: Partial<WizardCreativeState>) => {
+    setState((prev) => ({
+      ...prev,
+      creatives: prev.creatives.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+    }));
+  }, []);
+
+  const removeCreative = useCallback((id: string) => {
+    setState((prev) => ({ ...prev, creatives: prev.creatives.filter((c) => c.id !== id) }));
   }, []);
 
   const setAudience = useCallback((updates: Partial<WizardState['audience']>) => {
@@ -56,11 +113,20 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
   }, []);
 
   const goNext = useCallback(() => {
-    setState((prev) => ({
-      ...prev,
-      currentStep: (Math.min(prev.currentStep + 1, TOTAL_STEPS) as WizardState['currentStep']),
-    }));
-  }, []);
+    setState((prev) => {
+      let nextStep = prev.currentStep + 1;
+      
+      // Skip step 3 (Audience) if audience data is already configured
+      if (prev.currentStep === 2 && hasAudienceData) {
+        nextStep = 4;
+      }
+      
+      return {
+        ...prev,
+        currentStep: (Math.min(nextStep, TOTAL_STEPS) as WizardState['currentStep']),
+      };
+    });
+  }, [hasAudienceData]);
 
   const goBack = useCallback(() => {
     setState((prev) => ({
@@ -75,21 +141,26 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
 
   const isStepValid = useMemo(() => {
     return {
-      1: state.objective !== null,
-      2: Boolean(
-        (state.creative.assetId || state.creative.uploadUrl || state.creative.instagramMediaId) &&
-          state.creative.headline.trim().length > 0 &&
-          state.creative.primaryText.trim().length > 0 &&
-          (state.objective !== 'visits' || /^https?:\/\//.test(state.creative.destinationUrl?.trim() ?? ''))
-      ),
-      3: Boolean(
-        state.audience.city.trim().length > 0 &&
+      1: Boolean(
+        state.objective !== null &&
           (state.objective !== 'whatsapp' ||
             (state.whatsapp.pageId &&
               state.whatsapp.destinations.length > 0 &&
-              (!state.whatsapp.destinations.includes('whatsapp') || state.whatsapp.phoneNumberId)))
+              (!state.whatsapp.destinations.includes('whatsapp') || state.whatsapp.phoneNumberId))) &&
+          // Formulário: Página + número de WhatsApp (Brand Kit, pré-preenchido).
+          // isValidBusinessPhone aceita nacional 10/11 (DDD 55 do RS incluso)
+          // ou completo 12/13 com DDI — não exige WABA/phoneNumberId.
+          (state.objective !== 'leads' ||
+            (state.whatsapp.pageId && isValidBusinessPhone(state.whatsapp.phoneNumberDisplay ?? '')))
       ),
-      4: state.budget.dailyBudgetBrl >= 5,
+      2: isCreativesStepValid(state.creatives, state.objective),
+      3: Boolean(
+        state.audience.city.trim().length > 0 &&
+        state.audience.ageMin >= 18 &&
+        state.audience.ageMax <= 65 &&
+        state.audience.ageMin <= state.audience.ageMax
+      ),
+      4: state.budget.dailyBudgetBrl >= 7,
       5: true,
     } as Record<WizardState['currentStep'], boolean>;
   }, [state]);
@@ -99,7 +170,10 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
   return {
     state,
     setObjective,
-    setCreative,
+    setCreatives,
+    addCreative,
+    updateCreative,
+    removeCreative,
     setAudience,
     setBudget,
     setWhatsapp,
@@ -110,6 +184,8 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
     isStepValid,
     canGoNext,
     totalSteps: TOTAL_STEPS,
+    hasAudienceData,
+    audienceLoaded,
   };
 }
 

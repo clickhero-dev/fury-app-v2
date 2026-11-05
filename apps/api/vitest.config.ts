@@ -4,37 +4,36 @@ import path from 'path';
 export default defineConfig({
   test: {
     environment: 'node',
+    root: process.cwd(),
     globals: true,
-    setupFiles: [],
+    testTimeout: 30000,
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
+    fileParallelism: false,
     env: {
-      META_USE_MOCK: 'true',
-      NODE_ENV: 'test',
-      TEST_DATABASE_URL: process.env.DATABASE_URL || 'postgresql://fury:fury_local@localhost:5432/fury_test',
-      DATABASE_URL: process.env.DATABASE_URL || 'postgresql://fury:fury_local@localhost:5432/fury_test',
+      JWT_SECRET: 'test-jwt-secret-not-for-production',
+      JWT_REFRESH_SECRET: 'test-jwt-refresh-secret-not-for-production',
+      TOKEN_ENCRYPTION_KEY: 'test-token-encryption-key-32chars',
     },
+    setupFiles: ['./src/__tests__/setup.env.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      reportOnFailure: true,
+      all: true,
       exclude: [
         'node_modules/',
         'dist/',
+        '.next/',
         'coverage/',
         '**/*.d.ts',
         '**/*.config.*',
         '**/__tests__/**',
+        '**/setup.env.ts',
       ],
     },
   },
   resolve: {
     alias: {
-      '@fury/db': path.resolve(__dirname, '../../packages/db/src'),
-      '@fury/shared': path.resolve(__dirname, '../../packages/shared/src'),
       '@': path.resolve(__dirname, './src'),
     },
   },

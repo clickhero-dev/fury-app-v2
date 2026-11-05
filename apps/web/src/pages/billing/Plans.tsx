@@ -15,6 +15,7 @@ import {
 import { usePlans, useSubscription, useSubscribe } from '@/hooks/useBilling';
 import { useAuth } from '@/hooks/useAuth';
 import type { Plan } from '@/types/billing';
+import { getStoredPlatformRole } from '@/lib/platform-role';
 
 const PLAN_DISPLAY: Record<string, {
   icon: React.ReactNode;
@@ -25,10 +26,10 @@ const PLAN_DISPLAY: Record<string, {
   features: string[];
 }> = {
   starter: {
-    icon: <Zap className="w-6 h-6" />,
+    icon: <Zap className="w-5 h-5" />,
     highlight: false,
-    accentColor: '#6366f1',
-    ringColor: 'ring-indigo-400/30',
+    accentColor: '#1E88A8',
+    ringColor: 'ring-[#1E88A8]/30',
     features: [
       'Até 5 campanhas ativas',
       'Dashboard de métricas básico',
@@ -38,11 +39,11 @@ const PLAN_DISPLAY: Record<string, {
     ],
   },
   pro: {
-    icon: <Star className="w-6 h-6" />,
+    icon: <Star className="w-5 h-5" />,
     highlight: true,
     badge: 'Mais popular',
-    accentColor: '#EA580C',
-    ringColor: 'ring-[#EA580C]/50',
+    accentColor: '#1E88A8',
+    ringColor: 'ring-[#1E88A8]/50',
     features: [
       'Campanhas ilimitadas',
       'Automação com regras de IA',
@@ -53,9 +54,9 @@ const PLAN_DISPLAY: Record<string, {
     ],
   },
   enterprise: {
-    icon: <Shield className="w-6 h-6" />,
+    icon: <Shield className="w-5 h-5" />,
     highlight: false,
-    accentColor: '#10b981',
+    accentColor: '#10B981',
     ringColor: 'ring-emerald-400/30',
     features: [
       'Tudo do plano Pro',
@@ -131,19 +132,19 @@ function SubscribeDialog({ plan, open, onOpenChange, defaultName, defaultEmail }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="bg-[#161814] border-white/10 text-text-primary">
         <DialogHeader>
           <DialogTitle>Assinar plano {plan.name}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-text-secondary">
             {formatCurrency(plan.priceCents)}/mês — escolha a forma de pagamento
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="space-y-1">
-            <label className="text-sm font-medium text-text-primary">Nome completo</label>
+            <label className="text-xs font-medium text-text-secondary">Nome completo</label>
             <input
-              className="w-full rounded-lg border border-border bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-[#EA580C]"
+              className="w-full rounded-xl border border-white/10 bg-[#1A1B17] px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-[#1E88A8]/50 focus:border-[#1E88A8]"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -152,10 +153,10 @@ function SubscribeDialog({ plan, open, onOpenChange, defaultName, defaultEmail }
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-text-primary">Email</label>
+            <label className="text-xs font-medium text-text-secondary">Email</label>
             <input
               type="email"
-              className="w-full rounded-lg border border-border bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-[#EA580C]"
+              className="w-full rounded-xl border border-white/10 bg-[#1A1B17] px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-[#1E88A8]/50 focus:border-[#1E88A8]"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -163,9 +164,9 @@ function SubscribeDialog({ plan, open, onOpenChange, defaultName, defaultEmail }
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-text-primary">CPF / CNPJ</label>
+            <label className="text-xs font-medium text-text-secondary">CPF / CNPJ</label>
             <input
-              className="w-full rounded-lg border border-border bg-surface-secondary px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-[#EA580C]"
+              className="w-full rounded-xl border border-white/10 bg-[#1A1B17] px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-[#1E88A8]/50 focus:border-[#1E88A8]"
               placeholder="000.000.000-00"
               value={cpfCnpj}
               onChange={(e) => setCpfCnpj(e.target.value)}
@@ -175,17 +176,17 @@ function SubscribeDialog({ plan, open, onOpenChange, defaultName, defaultEmail }
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-text-primary">Forma de pagamento</label>
+            <label className="text-xs font-medium text-text-secondary">Forma de pagamento</label>
             <div className="grid grid-cols-3 gap-2">
               {(['PIX', 'BOLETO', 'CREDIT_CARD'] as const).map((type) => (
                 <button
                   key={type}
                   type="button"
                   onClick={() => setBillingType(type)}
-                  className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                  className={`rounded-xl border px-3 py-2.5 text-xs font-medium transition-all duration-200 cursor-pointer ${
                     billingType === type
-                      ? 'border-[#EA580C] bg-[#EA580C]/10 text-[#EA580C]'
-                      : 'border-border text-text-secondary hover:border-[#EA580C]/50'
+                      ? 'border-[#1E88A8] bg-[#1E88A8]/10 text-[#1E88A8]'
+                      : 'border-white/10 bg-[#1A1B17] text-text-secondary hover:border-white/20 hover:text-text-primary'
                   }`}
                 >
                   {BILLING_TYPE_LABELS[type]}
@@ -195,14 +196,14 @@ function SubscribeDialog({ plan, open, onOpenChange, defaultName, defaultEmail }
           </div>
 
           {error && (
-            <p className="text-sm text-error bg-error/10 rounded-lg px-3 py-2">{error}</p>
+            <p className="text-sm text-error bg-error/10 border border-error/20 rounded-lg px-3 py-2">{error}</p>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
+              className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
             >
               Cancelar
             </button>
@@ -211,6 +212,7 @@ function SubscribeDialog({ plan, open, onOpenChange, defaultName, defaultEmail }
               variant="primary"
               size="sm"
               disabled={subscribe.isPending}
+              className="bg-[#17708A] hover:bg-[#17708A]/80 text-white cursor-pointer"
             >
               {subscribe.isPending ? (
                 <span className="flex items-center gap-2">
@@ -232,26 +234,27 @@ interface PlanCardProps {
   plan: Plan;
   isCurrentPlan: boolean;
   onSubscribe: () => void;
+  // cliente de parceiro: quem assina é o parceiro
+  managedByPartner?: boolean;
 }
 
-function PlanCard({ plan, isCurrentPlan, onSubscribe }: PlanCardProps) {
+function PlanCard({ plan, isCurrentPlan, onSubscribe, managedByPartner = false }: PlanCardProps) {
   const key = getPlanKey(plan.name);
   const display = PLAN_DISPLAY[key] ?? PLAN_DISPLAY.starter;
   const features = (plan.features && plan.features.length > 0) ? plan.features : display.features;
 
   return (
     <div
-      className={`relative flex flex-col rounded-2xl border bg-surface p-7 transition-shadow hover:shadow-lg ${
+      className={`relative flex flex-col rounded-2xl border bg-[#161814] p-6 sm:p-7 transition-all duration-200 hover:border-white/20 ${
         display.highlight
-          ? `ring-2 ${display.ringColor} border-[#EA580C]/30 shadow-[0_0_40px_-8px_rgba(234,88,12,0.2)]`
-          : 'border-border'
+          ? `ring-2 ${display.ringColor} border-[#1E88A8]/50 shadow-[0_0_30px_-5px_rgba(30,136,168,0.15)]`
+          : 'border-white/10'
       }`}
     >
       {display.badge && (
         <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
           <span
-            className="inline-flex items-center gap-1.5 rounded-full px-4 py-1 text-xs font-bold text-white shadow-lg"
-            style={{ backgroundColor: display.accentColor }}
+            className="inline-flex items-center gap-1 rounded-full px-3.5 py-1 text-xs font-bold text-white shadow-md bg-[#17708A]"
           >
             <Star className="w-3 h-3 fill-current" />
             {display.badge}
@@ -261,15 +264,14 @@ function PlanCard({ plan, isCurrentPlan, onSubscribe }: PlanCardProps) {
 
       <div className="flex items-center gap-3 mb-5">
         <div
-          className="flex items-center justify-center w-10 h-10 rounded-xl text-white"
-          style={{ backgroundColor: display.accentColor }}
+          className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#1E88A8]/10 text-[#1E88A8]"
         >
           {display.icon}
         </div>
         <div>
           <h3 className="text-lg font-bold text-text-primary">{plan.name}</h3>
           {isCurrentPlan && (
-            <span className="inline-flex items-center rounded-full bg-[#EA580C]/10 px-2 py-0.5 text-[10px] font-semibold text-[#EA580C]">
+            <span className="inline-flex items-center rounded-full bg-[#1E88A8]/10 px-2 py-0.5 text-[10px] font-semibold text-[#2A9BC0]">
               Seu plano atual
             </span>
           )}
@@ -287,8 +289,7 @@ function PlanCard({ plan, isCurrentPlan, onSubscribe }: PlanCardProps) {
         {features.map((feature) => (
           <li key={feature} className="flex items-start gap-2.5 text-sm text-text-secondary">
             <Check
-              className="w-4 h-4 flex-shrink-0 mt-0.5"
-              style={{ color: display.accentColor }}
+              className="w-4 h-4 flex-shrink-0 mt-0.5 text-[#1E88A8]"
             />
             <span>{feature}</span>
           </li>
@@ -298,16 +299,15 @@ function PlanCard({ plan, isCurrentPlan, onSubscribe }: PlanCardProps) {
       <Button
         variant={display.highlight ? 'primary' : 'outline'}
         size="md"
-        className="w-full"
-        disabled={isCurrentPlan}
+        className={`w-full cursor-pointer ${
+          display.highlight
+            ? 'bg-[#17708A] hover:bg-[#17708A]/80 text-white border-transparent'
+            : 'border-white/10 text-text-primary hover:bg-white/5'
+        }`}
+        disabled={isCurrentPlan || managedByPartner}
         onClick={onSubscribe}
-        style={
-          !display.highlight
-            ? { borderColor: `${display.accentColor}60`, color: display.accentColor }
-            : undefined
-        }
       >
-        {isCurrentPlan ? 'Plano atual' : 'Assinar agora'}
+        {isCurrentPlan ? 'Plano atual' : managedByPartner ? 'Fale com seu parceiro' : 'Assinar agora'}
       </Button>
     </div>
   );
@@ -318,65 +318,74 @@ export function Plans() {
   const { data: subscription } = useSubscription();
   const { user } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const managedByPartner = getStoredPlatformRole() === 'user_partner';
 
-  const staticPlans: Plan[] = plans.length > 0 ? plans : [
+  // planos de exemplo só para cliente ady
+  const staticPlans: Plan[] = plans.length > 0 || managedByPartner ? plans : [
     { id: '', name: 'Starter', priceCents: 29700, interval: 'monthly', features: null, isActive: true, createdAt: '' },
     { id: '', name: 'Pro', priceCents: 59700, interval: 'monthly', features: null, isActive: true, createdAt: '' },
     { id: '', name: 'Enterprise', priceCents: 149700, interval: 'monthly', features: null, isActive: true, createdAt: '' },
   ];
 
   return (
-    <AppLayout
-      header={
-        <div className="px-6 py-4">
-          <PageHeader
-            title="Planos FURY"
-            description="Escolha o plano ideal para escalar suas campanhas"
-          />
-        </div>
-      }
-    >
-      {plansLoading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="w-8 h-8 animate-spin text-[#EA580C]" />
-        </div>
-      ) : (
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl font-bold text-text-primary mb-2">
-              Turbine seus resultados com o plano certo
-            </h2>
-            <p className="text-text-secondary">
-              Todos os planos incluem 7 dias de trial gratuito. Cancele quando quiser.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-            {staticPlans.map((plan) => (
-              <PlanCard
-                key={plan.id || plan.name}
-                plan={plan}
-                isCurrentPlan={subscription?.planId === plan.id && plan.id !== '' && subscription?.status !== 'cancelled'}
-                onSubscribe={() => setSelectedPlan(plan)}
-              />
-            ))}
-          </div>
-
-          <p className="text-center text-xs text-text-tertiary mt-8">
-            Pagamento processado com segurança via Asaas. Aceita PIX, Boleto e Cartão de Crédito.
-          </p>
-        </div>
-      )}
-
-      {selectedPlan && (
-        <SubscribeDialog
-          plan={selectedPlan}
-          open={!!selectedPlan}
-          onOpenChange={(open) => !open && setSelectedPlan(null)}
-          defaultName={user?.name ?? ''}
-          defaultEmail={user?.email ?? ''}
+    <AppLayout>
+      <div className="max-w-5xl mx-auto space-y-8">
+        <PageHeader
+          title="Planos ady"
+          description="Escolha o plano ideal para escalar suas campanhas"
         />
-      )}
+
+        {plansLoading ? (
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="w-8 h-8 animate-spin text-[#1E88A8]" />
+          </div>
+        ) : (
+          <div className="space-y-8">
+            <div className="text-center max-w-xl mx-auto">
+              <h2 className="text-xl font-bold text-text-primary mb-2">
+                Turbine seus resultados com o plano certo
+              </h2>
+              <p className="text-text-secondary text-sm">
+                {managedByPartner
+                  ? 'Seu plano é contratado e alterado pelo seu parceiro.'
+                  : 'Todos os planos incluem 7 dias de trial gratuito. Cancele quando quiser.'}
+              </p>
+            </div>
+
+            {staticPlans.length === 0 && (
+              <p className="text-center text-sm text-text-secondary">Seu parceiro ainda não publicou planos.</p>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+              {staticPlans.map((plan) => (
+                <PlanCard
+                  key={plan.id || plan.name}
+                  plan={plan}
+                  isCurrentPlan={subscription?.planId === plan.id && plan.id !== '' && subscription?.status !== 'cancelled'}
+                  onSubscribe={() => setSelectedPlan(plan)}
+                  managedByPartner={managedByPartner}
+                />
+              ))}
+            </div>
+
+            {!managedByPartner && (
+              <p className="text-center text-xs text-text-secondary pt-2">
+                Pagamento processado com segurança via Asaas. Aceita PIX, Boleto e Cartão de Crédito.
+              </p>
+            )}
+          </div>
+        )}
+
+        {selectedPlan && (
+          <SubscribeDialog
+            plan={selectedPlan}
+            open={!!selectedPlan}
+            onOpenChange={(open) => !open && setSelectedPlan(null)}
+            defaultName={user?.name ?? ''}
+            defaultEmail={user?.email ?? ''}
+          />
+        )}
+      </div>
     </AppLayout>
   );
 }

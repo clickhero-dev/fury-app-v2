@@ -1,0 +1,71 @@
+# Spec-Kit Extensions
+# Hooks that run before/after each spec-kit command.
+# Command names use dots (speckit.specify) which the engine converts
+# to hyphens for invocation (/speckit-specify).
+
+hooks:
+  # ── before_specify ─────────────────────────────────────────────
+  before_specify:
+    - name: "speckit.git.check"
+      description: "Ensure working tree is clean before creating a new feature spec"
+      enabled: true
+      optional: false
+      command: "speckit.git.check"
+      prompt: |
+        Verify git working tree is clean (no uncommitted changes).
+        If dirty, warn and abort.
+
+    - name: "speckit.git.branch"
+      description: "Create a feature branch off dev before specifying"
+      enabled: true
+      optional: false
+      command: "speckit.git.branch"
+      prompt: |
+        Create a new git branch from dev for the feature.
+        Branch name format: NNN-short-name (e.g. 002-user-dashboard).
+        Switch to the new branch after creation.
+
+  # ── after_specify ──────────────────────────────────────────────
+  after_specify:
+    - name: "speckit.git.commit"
+      description: "Auto-commit the spec after creation"
+      enabled: true
+      optional: false
+      command: "speckit.git.commit"
+      prompt: |
+        Stage and commit the new spec file with message:
+        "docs(spec): add feature spec for <feature-name>"
+
+  # ── after_plan ─────────────────────────────────────────────────
+  after_plan:
+    - name: "speckit.git.commit"
+      description: "Auto-commit plan artifacts after generation"
+      enabled: true
+      optional: false
+      command: "speckit.git.commit"
+      prompt: |
+        Stage and commit the plan artifacts (plan.md, research.md,
+        data-model.md, contracts/, quickstart.md) with message:
+        "docs(plan): add implementation plan for <feature-name>"
+
+  # ── after_tasks ────────────────────────────────────────────────
+  after_tasks:
+    - name: "speckit.git.commit"
+      description: "Auto-commit task list after generation"
+      enabled: true
+      optional: false
+      command: "speckit.git.commit"
+      prompt: |
+        Stage and commit tasks.md with message:
+        "docs(tasks): add task breakdown for <feature-name>"
+
+  # ── after_implement ────────────────────────────────────────────
+  after_implement:
+    - name: "speckit.git.commit"
+      description: "Auto-commit implementation changes"
+      enabled: true
+      optional: true
+      command: "speckit.git.commit"
+      prompt: |
+        Stage and commit implementation changes with message:
+        "feat(<feature>): implement <feature-name>"

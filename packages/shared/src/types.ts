@@ -93,7 +93,16 @@ export interface UserDTO {
   name: string | null;
   email: string;
   role: UserRole;
+  platformRole: string;
   notificationPrefs: NotificationPrefs;
+  audienceDefaults?: {
+    city?: string;
+    cityKey?: string;
+    ageMin?: number;
+    ageMax?: number;
+    gender?: 'all' | 'male' | 'female';
+    audienceInterests?: { id: string; name: string }[];
+  };
   createdAt: Date;
 }
 

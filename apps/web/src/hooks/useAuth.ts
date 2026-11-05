@@ -1,25 +1,17 @@
-import { useEffect, useState } from 'react';
-import type { User } from '../types/auth';
+import { useAppSelector } from '../store/hooks';
+import { selectIsAuthenticated, selectUser, selectToken } from '../store/slices/authSlice';
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const token = useAppSelector(selectToken);
+  const user = useAppSelector(selectUser);
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userData = localStorage.getItem('user');
-
-    if (token && userData) {
-      setUser(JSON.parse(userData));
-    }
-    setIsLoading(false);
-  }, []);
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
+  return {
+    user: token ? user : null,
+    isLoading: false,
+    logout: () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    },
   };
-
-  return { user, isLoading, logout };
 }

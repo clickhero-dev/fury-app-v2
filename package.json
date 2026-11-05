@@ -10,20 +10,40 @@
   ],
   "scripts": {
     "dev": "npm run --workspaces --if-present dev",
-    "build": "npm run --workspaces --if-present build",
+    "build": "npm run build --workspace=@fury/shared && npm run build --workspace=@fury/db && npm run --workspaces --if-present build",
     "lint": "npm run --workspaces --if-present lint",
     "db:migrate": "npm run --workspace @fury/db migrate",
     "db:studio": "npm run --workspace @fury/db studio",
     "db:seed": "npm run db:seed --workspace=@fury/db",
+    "db:backfill-calendar-date": "npm run --workspace @fury/db backfill:calendar-date",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:dev": "vitest run apps/api",
+    "test:prod": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:coverage:ci": "vitest run --coverage --exclude \"**/auth.test.ts\" --exclude \"**/automation.test.ts\" --exclude \"**/campaigns.test.ts\" --exclude \"**/metrics.test.ts\" --exclude \"**/multitenancy.test.ts\" --exclude \"**/request-logger.test.ts\" --exclude \"**/seed-login.test.ts\" --exclude \"**/studio-assets.test.ts\" --exclude \"**/studio.test.ts\" --exclude \"**/studio-copy.test.ts\" --exclude \"**/landing-page.test.ts\" --exclude \"apps/web/**\"",
+    "coverage:badge": "node scripts/coverage-badge.mjs",
+    "test:unit": "vitest run apps/api/src/__tests__/billing-subscription.test.ts apps/api/src/__tests__/campaigns-create.unit.test.ts apps/api/src/__tests__/campaigns-service.test.ts apps/api/src/__tests__/date-sao-paulo.test.ts apps/api/src/__tests__/jwt.test.ts apps/api/src/__tests__/meta-conversion-events.test.ts apps/api/src/__tests__/meta-insights-parser.test.ts apps/api/src/__tests__/metrics-formatter.test.ts apps/api/src/__tests__/rate-limit.test.ts apps/api/src/__tests__/sanitize-log-data.test.ts apps/api/src/__tests__/sse.test.ts apps/api/src/__tests__/studio-copy-simple.test.ts apps/api/src/__tests__/studio-copy-validate.test.ts apps/api/src/__tests__/planner-create-post.test.ts apps/api/src/__tests__/planner-get-calendar.test.ts apps/api/src/__tests__/planner-move-post.test.ts apps/api/src/__tests__/planner-calendar-integration.test.ts",
+    "qa:audit": "bash scripts/coverage-audit.sh",
+    "security:audit": "bash scripts/security-audit.sh",
+    "security:audit:json": "bash scripts/security-audit.sh --json",
+    "swagger:generate": "npm run --workspace=@fury/api swagger:generate",
+    "swagger:validate": "npm run --workspace=@fury/api swagger:validate",
+    "setup:hooks": "cp apps/api/scripts/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push && echo '✅ Git hooks installed'"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.1",
+    "@vitest/coverage-v8": "^4.1.9",
+    "eslint": "^10.3.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.1.9"
   },
   "dependencies": {
-    "esbuild": "0.28.0"
+    "@types/bcrypt": "^6.0.0",
+    "bcrypt": "^6.0.0",
+    "esbuild": "0.28.0",
+    "nodemailer": "^9.0.3"
   },
   "optionalDependencies": {
     "@rolldown/binding-win32-x64-msvc": "^1.0.2",

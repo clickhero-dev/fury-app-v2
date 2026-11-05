@@ -1,49 +1,47 @@
-import { Component } from 'react';
-import type { ReactNode, ErrorInfo } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { captureException } from '@/lib/posthog';
 
 interface Props {
   children: ReactNode;
-  fallback?: ReactNode;
 }
 
 interface State {
   hasError: boolean;
-  error: Error | null;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, error: null };
+  state: State = { hasError: false };
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  static getDerivedStateFromError(): State {
+    return { hasError: true };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[ErrorBoundary]', error, info.componentStack);
+    captureException(error, {
+      component_stack: info.componentStack,
+      url: window.location.pathname,
+    });
   }
 
   render() {
     if (this.state.hasError) {
-      if (this.props.fallback) return this.props.fallback;
-
       return (
-        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-          <p className="text-lg font-semibold text-text-primary">
-            Ocorreu um erro ao carregar esta página
-          </p>
-          <p className="text-sm text-text-secondary max-w-sm">
-            {this.state.error?.message ?? 'Erro desconhecido'}
-          </p>
-          <button
-            onClick={() => this.setState({ hasError: false, error: null })}
-            className="mt-2 px-4 py-2 text-sm font-medium rounded-lg border border-border text-text-primary hover:bg-surface-secondary transition-colors"
-          >
-            Tentar novamente
-          </button>
+        <div className="flex min-h-screen items-center justify-center bg-background p-6">
+          <div className="max-w-md text-center">
+            <h1 className="text-2xl font-bold text-text-primary">Algo deu errado</h1>
+            <p className="mt-3 text-text-secondary">
+              Ocorreu um erro inesperado. Recarregue a página para continuar.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-6 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white"
+            >
+              Recarregar
+            </button>
+          </div>
         </div>
       );
     }
-
     return this.props.children;
   }
 }

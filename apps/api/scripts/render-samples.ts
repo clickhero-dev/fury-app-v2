@@ -9,8 +9,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createCanvas } from '@napi-rs/canvas';
-import { convertHTMLToPNG, type BrandColors } from '../src/services/html-to-png.service.js';
-import type { CreativeData } from '../src/services/creative-data.js';
+import { convertHTMLToPNG, type BrandColors } from '../src/services/studio/html-to-png.service.js';
+import type { CreativeData } from '../src/services/studio/creative-data.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // apps/api/_samples/<timestamp>/

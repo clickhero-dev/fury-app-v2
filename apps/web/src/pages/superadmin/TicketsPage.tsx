@@ -1,0 +1,482 @@
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
+import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, ExternalLink, Paperclip, Plus, RefreshCw, Send, Trash2, Users, X } from 'lucide-react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import api from '@/lib/api';
+import { showSnack } from '@/lib/snack';
+
+const PAGE_SIZE = 10;
+const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
+const acceptedAttachmentTypes = ['image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'video/quicktime'];
+const scopeLabels = [
+  ['app', 'App'], ['ux', 'UX'], ['infra', 'Infra'], ['api', 'API'], ['dados', 'Dados'], ['integracoes', 'Integrações'], ['seguranca', 'Segurança'],
+] as const;
+const areaLabels = [
+  ['meta', 'Meta'], ['sincronizacao-dados', 'Sincronização de dados'], ['dados-usuario', 'Dados do usuário'], ['google', 'Google'],
+] as const;
+const allLabels = [...scopeLabels, ...areaLabels];
+type TicketLabel = (typeof allLabels)[number][0];
+
+const ticketSchema = z.object({
+  email: z.string().trim().email('Informe um e-mail válido.'),
+  subject: z.string().trim().min(3, 'Informe um assunto com pelo menos 3 caracteres.').max(160),
+  description: z.string().trim().min(10, 'Descreva o chamado com pelo menos 10 caracteres.').max(5_000),
+  priority: z.enum(['low', 'normal', 'high', 'urgent']),
+  level: z.enum(['N1', 'N2', 'N3', 'N4', 'N5']),
+  assigneeId: z.preprocess((value) => value === '' ? undefined : Number(value), z.number().int().positive().optional()),
+  labels: z.array(z.enum(allLabels.map(([value]) => value) as [TicketLabel, ...TicketLabel[]])).max(4, 'Selecione no máximo quatro etiquetas.').default([]),
+});
+
+type TicketForm = z.infer<typeof ticketSchema>;
+type CreatedTicket = { clickupTaskId: string; clickupTaskUrl: string };
+type TicketApiResponse = { data?: CreatedTicket; error?: { message?: string; details?: { clickupTaskUrl?: string } } };
+type Ticket = { id: string; name: string; status: string; priority: string | null; url: string; createdAt: string; labels?: TicketLabel[] };
+type TicketLists = { open: Ticket[]; resolved: Ticket[] };
+type Assignee = { id: number; name: string; email: string | null };
+type Queue = 'open' | 'resolved';
+
+const levelHelp = [
+  ['N1 — Orientação simples', 'Dúvida de uso ou ajuste simples, sem bloquear o trabalho.'],
+  ['N2 — Problema pontual', 'Algo não funciona para um usuário, mas existe alternativa.'],
+  ['N3 — Bloqueio importante', 'Uma função essencial está indisponível ou vários usuários foram afetados.'],
+  ['N4 — Crítico', 'A plataforma está indisponível ou há risco de dados e segurança.'],
+  ['N5 — Solicitação de feature', 'Pedido de criação ou evolução de funcionalidade para avaliação do produto.'],
+] as const;
+
+const fieldErrors: Record<keyof TicketForm, { link: string; field: string }> = {
+  email: { link: 'E-mail do usuário', field: 'ticket-email' },
+  subject: { link: 'Assunto', field: 'ticket-subject' },
+  description: { link: 'Descrição', field: 'ticket-description' },
+  priority: { link: 'Prioridade', field: 'ticket-priority' },
+  level: { link: 'Nível', field: 'ticket-level' },
+  assigneeId: { link: 'Responsável', field: 'ticket-assignee' },
+  labels: { link: 'Etiquetas', field: 'ticket-labels' },
+};
+
+const statusLabels: Record<string, string> = {
+  'aberto': 'Aberto', 'em progresso': 'Em progresso', 'concluído': 'Concluído', 'fechado': 'Fechado', 'pendente': 'Pendente',
+};
+const priorityStyles: Record<string, { label: string; chip: string }> = {
+  low: { label: 'Baixa', chip: 'text-text-secondary bg-surface-secondary' },
+  normal: { label: 'Normal', chip: 'text-[#17708A] dark:text-[#5cc5e4] bg-brand/10' },
+  high: { label: 'Alta', chip: 'text-[#B45309] dark:text-[#FBBF24] bg-warning/10' },
+  urgent: { label: 'Urgente', chip: 'text-[#DC2626] dark:text-[#F87171] bg-error/10' },
+};
+
+/** Idade relativa em pt-BR ("há 3 dias", "agora"). Fallback vazio quando a data é inválida. */
+function formatRelativeDate(isoDate: string, now = new Date()): string {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return '';
+  const diffMs = date.getTime() - now.getTime();
+  const absSeconds = Math.abs(diffMs) / 1000;
+  const rtf = new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' });
+  if (absSeconds < 60) return 'agora';
+  if (absSeconds < 3600) return rtf.format(Math.round(diffMs / 60_000), 'minute');
+  if (absSeconds < 86_400) return rtf.format(Math.round(diffMs / 3_600_000), 'hour');
+  if (absSeconds < 30 * 86_400) return rtf.format(Math.round(diffMs / 86_400_000), 'day');
+  if (absSeconds < 365 * 86_400) return rtf.format(Math.round(diffMs / (30 * 86_400_000)), 'month');
+  return rtf.format(Math.round(diffMs / (365 * 86_400_000)), 'year');
+}
+
+function statusLabel(status: string): string {
+  const key = status.trim().toLowerCase();
+  return statusLabels[key] ?? (status.trim() ? status.trim().charAt(0).toUpperCase() + status.trim().slice(1) : 'Sem status');
+}
+
+function Chip({ children, className }: { children: ReactNode; className?: string }) {
+  return <b className={`inline-flex max-w-full shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${className ?? 'bg-brand/10 text-[#17708A] dark:text-[#5cc5e4]'}`}>{children}</b>;
+}
+
+function TicketRow({ ticket }: { ticket: Ticket }) {
+  const priority = ticket.priority ? priorityStyles[ticket.priority.toLowerCase()] : undefined;
+  const age = ticket.createdAt ? formatRelativeDate(ticket.createdAt) : '';
+  return <li className="rounded-lg bg-admin-bg px-3 py-2.5 transition-colors hover:bg-surface-secondary">
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0 break-words text-sm font-medium text-text-primary">{ticket.name}</div>
+      <a aria-label={`Ver no ClickUp: ${ticket.name}`} href={ticket.url} target="_blank" rel="noreferrer" className="shrink-0 rounded p-1.5 text-[#17708A] dark:text-[#5cc5e4] transition-colors hover:bg-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]"><ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
+    </div>
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-text-secondary">
+      <Chip>{statusLabel(ticket.status)}</Chip>
+      {priority && <Chip className={priority.chip}>{priority.label}</Chip>}
+      {ticket.labels?.map((label) => <Chip key={label}>{allLabels.find(([value]) => value === label)?.[1] ?? label}</Chip>)}
+      {age && <span>{age}</span>}
+    </div>
+  </li>;
+}
+
+const queueLabels: Record<Queue, string> = { open: 'Abertos', resolved: 'Resolvidos' };
+const queueEmpty: Record<Queue, string> = {
+  open: 'Nenhum chamado em aberto no momento.',
+  resolved: 'Nenhum chamado resolvido registrado ainda.',
+};
+
+/** Lista única com abas por fila, altura limitada com scroll e paginação local. */
+const EMPTY_STATUS = '__empty_status__';
+
+function normalizeStatus(status: string): string {
+  return status.trim().toLocaleLowerCase() || EMPTY_STATUS;
+}
+
+function TicketsTabs({ lists, loading }: { lists: TicketLists; loading: boolean }) {
+  const [queue, setQueue] = useState<Queue>('open');
+  const [page, setPage] = useState(0);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const statusOptions = Array.from(new Map(
+    [...lists.open, ...lists.resolved].map((ticket) => {
+      const value = normalizeStatus(ticket.status);
+      return [value, { value, label: value === EMPTY_STATUS ? 'Sem status' : statusLabel(ticket.status) }] as const;
+    }),
+  ).values());
+  if (statusFilter && !statusOptions.some((option) => option.value === statusFilter)) {
+    statusOptions.push({ value: statusFilter, label: statusFilter === EMPTY_STATUS ? 'Sem status' : statusLabel(statusFilter) });
+  }
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const filteredLists = (Object.keys(queueLabels) as Queue[]).reduce((result, key) => {
+    result[key] = lists[key].filter((ticket) => {
+      const matchesSearch = !normalizedSearch || ticket.name.toLocaleLowerCase().includes(normalizedSearch);
+      const matchesStatus = !statusFilter || normalizeStatus(ticket.status) === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+    return result;
+  }, { open: [], resolved: [] } as TicketLists);
+  const tickets = filteredLists[queue];
+  const pageCount = Math.max(1, Math.ceil(tickets.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const visible = tickets.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+  const selectQueue = (next: Queue) => { setQueue(next); setPage(0); };
+  const updateSearch = (value: string) => { setSearch(value); setPage(0); };
+  const updateStatus = (value: string) => { setStatusFilter(value); setPage(0); };
+
+  return <section className="rounded-xl border border-border bg-surface">
+    <div role="tablist" aria-label="Filas de chamados" className="flex gap-1 border-b border-border p-2">
+      {(Object.keys(queueLabels) as Queue[]).map((key) => {
+        const selected = queue === key;
+        return <button
+          key={key}
+          type="button"
+          role="tab"
+          id={`tab-${key}`}
+          aria-selected={selected}
+          aria-controls={`panel-${key}`}
+          onClick={() => selectQueue(key)}
+          className={`ady-btn inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] ${
+            selected ? 'bg-brand/15 text-[#17708A] dark:text-[#5cc5e4]' : 'text-text-secondary hover:bg-surface-secondary hover:text-text-primary'
+          }`}
+        >
+          {queueLabels[key]}
+          <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${selected ? 'bg-brand/25 text-[#17708A] dark:text-[#5cc5e4]' : 'bg-admin-bg text-text-secondary'}`}>{loading ? '…' : filteredLists[key].length}</span>
+        </button>;
+      })}
+    </div>
+    <div role="tabpanel" id={`panel-${queue}`} aria-labelledby={`tab-${queue}`} className="p-5 pt-4">
+      <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.6fr)_auto] sm:items-end">
+        <label className="block text-sm text-text-secondary">
+          Pesquisar por assunto
+          <input type="search" aria-label="Pesquisar por assunto" value={search} onChange={(event) => updateSearch(event.target.value)} placeholder="Digite parte do assunto" className="mt-1 w-full rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30" />
+        </label>
+        <label className="block text-sm text-text-secondary">
+          Status
+          <select aria-label="Status" value={statusFilter} onChange={(event) => updateStatus(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30">
+            <option value="">Todos os status</option>
+            {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={() => { updateSearch(''); updateStatus(''); }} disabled={!search && !statusFilter} className="ady-btn rounded-lg border border-border px-3 py-2.5 text-sm text-text-primary transition-colors hover:border-border-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Limpar filtros</button>
+      </div>
+      {loading ? <p className="text-sm text-text-secondary" aria-busy="true">Carregando chamados…</p> : tickets.length === 0 ? (
+        <div className="flex items-start gap-2 rounded-lg bg-admin-bg px-3 py-2.5">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-text-secondary" aria-hidden="true" />
+          <p className="text-sm text-text-secondary">{search || statusFilter ? 'Nenhum chamado encontrado para os filtros selecionados.' : queueEmpty[queue]}</p>
+        </div>
+      ) : (
+        <>
+          <ul className="max-h-[480px] space-y-2 overflow-y-auto pr-1">
+            {visible.map((ticket) => <TicketRow key={ticket.id} ticket={ticket} />)}
+          </ul>
+          <nav aria-label="Paginação de chamados" className="mt-4 flex items-center justify-between gap-2 text-sm text-text-secondary">
+            <span role="status">Página {safePage + 1} de {pageCount}</span>
+            <span className="flex gap-2">
+              <button type="button" aria-label="Página anterior" disabled={safePage === 0} onClick={() => setPage(safePage - 1)} className="ady-btn inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 transition-colors hover:border-border-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft className="h-4 w-4" aria-hidden="true" /> Anterior</button>
+              <button type="button" aria-label="Próxima página" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} className="ady-btn inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 transition-colors hover:border-border-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:cursor-not-allowed disabled:opacity-40">Próxima <ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
+            </span>
+          </nav>
+        </>
+      )}
+    </div>
+  </section>;
+}
+
+/** Modal de abertura de chamado (Radix Dialog: focus trap, Esc e lock de scroll de graça). */
+function NewTicketDialog({ open, onOpenChange, assignees, onCreated }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  assignees: Assignee[];
+  onCreated: () => void;
+}) {
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const { register, handleSubmit, formState: { errors, isSubmitting }, reset, watch } = useForm<TicketForm>({
+    resolver: zodResolver(ticketSchema), defaultValues: { priority: 'normal', level: 'N1', email: '', subject: '', description: '', assigneeId: undefined, labels: [] },
+  });
+  const descriptionValue = watch('description') ?? '';
+  const selectedLabels = watch('labels') ?? [];
+
+  const handleOpenChange = (next: boolean) => {
+    if (next) { setAttachments([]); setAttachmentError(null); reset(); }
+    onOpenChange(next);
+  };
+
+  const closeAndReset = () => {
+    setAttachments([]);
+    setAttachmentError(null);
+    reset();
+    onOpenChange(false);
+  };
+
+  const onSubmit = async (values: TicketForm) => {
+    const payload = attachments.length === 0 ? values : (() => {
+      const formData = new FormData();
+      formData.append('email', values.email);
+      formData.append('subject', values.subject);
+      formData.append('description', values.description);
+      formData.append('priority', values.priority);
+      formData.append('level', values.level);
+      if (values.assigneeId) formData.append('assigneeId', String(values.assigneeId));
+      if (values.labels.length > 0) formData.append('labels', JSON.stringify(values.labels));
+      attachments.forEach((file) => formData.append('attachments', file));
+      return formData;
+    })();
+
+    try {
+      const response = await api.post<TicketApiResponse>('/admin/tickets', payload);
+      const ticket = response.data?.data;
+      if (!ticket?.clickupTaskId || !ticket?.clickupTaskUrl) throw new Error(response.data?.error?.message ?? 'Não foi possível abrir o ticket agora. Tente novamente.');
+      closeAndReset();
+      showSnack('Ticket aberto com sucesso.', 'success');
+      onCreated();
+    } catch (error) {
+      const responseError = (error as { response?: { data?: TicketApiResponse } })?.response?.data?.error;
+      const message = responseError?.message ?? (error instanceof Error ? error.message : 'Não foi possível abrir o ticket agora. Tente novamente.');
+      closeAndReset();
+      if (responseError?.details?.clickupTaskUrl) {
+        showSnack(message, 'error', { label: 'Abrir tarefa', href: responseError.details.clickupTaskUrl });
+      } else {
+        showSnack(message, 'error');
+      }
+    }
+  };
+
+  const addAttachments = (files: FileList | null) => {
+    const nextFiles = Array.from(files ?? []);
+    if (nextFiles.length === 0) return;
+    if (nextFiles.some((file) => !acceptedAttachmentTypes.includes(file.type))) {
+      setAttachmentError('Envie imagens PNG, JPG ou WebP, ou vídeos MP4 ou MOV.');
+      return;
+    }
+    if (nextFiles.some((file) => file.size > MAX_ATTACHMENT_SIZE)) {
+      setAttachmentError('Cada anexo pode ter no máximo 50 MB.');
+      return;
+    }
+    if (attachments.length + nextFiles.length > MAX_ATTACHMENTS) {
+      setAttachmentError('Envie no máximo cinco anexos por ticket.');
+      return;
+    }
+    setAttachmentError(null);
+    setAttachments((current) => [...current, ...nextFiles]);
+  };
+
+  const fieldClass = 'mt-1 w-full rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none transition focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30';
+  const summaryEntries = (Object.keys(fieldErrors) as Array<keyof TicketForm>)
+    .filter((name) => Boolean(errors[name]?.message))
+    .map((name) => ({ name, message: errors[name]?.message as string }));
+
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
+      <DialogPrimitive.Portal>
+        {/* conteúdo dentro do overlay: o CSS do tema claro não pinta o fundo */}
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50" style={{ background: "rgba(0,0,0,0.6)" }}>
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100vw-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-border bg-surface p-5 shadow-xl sm:p-6"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <DialogPrimitive.Title className="text-lg font-semibold">Abrir novo chamado</DialogPrimitive.Title>
+            <DialogPrimitive.Close className="ady-btn rounded-lg p-1.5 text-text-secondary transition-colors hover:bg-surface-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
+              <X className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only">Fechar</span>
+            </DialogPrimitive.Close>
+          </div>
+          <form className="ady-form-plain mt-5 space-y-5" onSubmit={handleSubmit(onSubmit)} noValidate>
+            {summaryEntries.length > 0 && (
+              <div role="alert" tabIndex={-1} aria-labelledby="ticket-error-title" className="rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm text-[#B91C1C] dark:text-red-100">
+                <h3 id="ticket-error-title" className="font-medium text-[#B91C1C] dark:text-red-100">Revise os campos destacados</h3>
+                <ul className="mt-2 list-inside space-y-1">
+                  {summaryEntries.map((entry) => (
+                    <li key={entry.name}><a href={`#${fieldErrors[entry.name].field}`} className="underline">{fieldErrors[entry.name].link}: {entry.message}</a></li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium" htmlFor="ticket-email">E-mail do usuário</label>
+              <p className="mt-0.5 text-xs text-text-secondary">Conta do usuário afetado pelo chamado.</p>
+              <input id="ticket-email" type="email" autoComplete="email" aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'ticket-email-error' : 'ticket-email-hint'} className={fieldClass} {...register('email')} />
+              {errors.email ? <div id="ticket-email-error" className="mt-1 text-xs text-[#DC2626] dark:text-red-300">{errors.email?.message}</div> : <p id="ticket-email-hint" className="sr-only">Informe o e-mail da conta do usuário afetado.</p>}
+            </div>
+            <div>
+              <label className="text-sm font-medium" htmlFor="ticket-subject">Assunto</label>
+              <p className="mt-0.5 text-xs text-text-secondary">Resumo curto do problema em uma linha (até 160 caracteres).</p>
+              <input id="ticket-subject" aria-invalid={Boolean(errors.subject)} aria-describedby={errors.subject ? 'ticket-subject-error' : undefined} className={fieldClass} maxLength={160} {...register('subject')} />
+              {errors.subject && <div id="ticket-subject-error" className="mt-1 text-xs text-[#DC2626] dark:text-red-300">{errors.subject?.message}</div>}
+            </div>
+            <div>
+              <label className="text-sm font-medium" htmlFor="ticket-description">Descrição</label>
+              <textarea id="ticket-description" aria-invalid={Boolean(errors.description)} aria-describedby={errors.description ? 'ticket-description-error' : 'ticket-description-counter'} className={`${fieldClass} min-h-36 resize-y`} maxLength={5_000} {...register('description')} />
+              {errors.description ? <div id="ticket-description-error" className="mt-1 text-xs text-[#DC2626] dark:text-red-300">{errors.description?.message}</div> : <p id="ticket-description-counter" className="mt-1 text-xs text-text-secondary"><span aria-live="polite">{descriptionValue.length}/5000</span></p>}
+            </div>
+            <div className="grid gap-5 sm:grid-cols-3">
+              <div>
+                <label className="text-sm font-medium" htmlFor="ticket-priority">Prioridade</label>
+                <select id="ticket-priority" className={fieldClass} {...register('priority')}>
+                  <option value="low">Baixa</option><option value="normal">Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium" htmlFor="ticket-level">Nível</label>
+                <select id="ticket-level" className={fieldClass} {...register('level')}>
+                  <option value="N1">N1</option><option value="N2">N2</option><option value="N3">N3</option><option value="N4">N4</option><option value="N5">N5 — Solicitação de feature</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium" htmlFor="ticket-assignee">Responsável</label>
+                <select id="ticket-assignee" className={fieldClass} {...register('assigneeId')}>
+                  <option value="">Sem responsável</option>
+                  {assignees.map((assignee) => <option key={assignee.id} value={assignee.id}>{assignee.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <fieldset id="ticket-labels">
+              <legend className="text-sm font-medium">Etiquetas <span className="text-xs font-normal text-text-secondary">(opcional)</span></legend>
+              <p className="mt-0.5 text-xs text-text-secondary">Classifique o chamado, se fizer sentido. Você pode deixar tudo sem seleção.</p>
+              <div className="mt-3 space-y-3">
+                <LabelGroup title="Escopo" labels={scopeLabels} selected={selectedLabels} register={register} />
+                <LabelGroup title="Área do playbook" labels={areaLabels} selected={selectedLabels} register={register} />
+              </div>
+              {errors.labels && <div className="mt-2 text-xs text-[#DC2626] dark:text-red-300">{errors.labels.message}</div>}
+            </fieldset>
+            <fieldset>
+              <legend className="text-sm font-medium">Anexos (imagens ou vídeos)</legend>
+              <p className="mt-0.5 text-xs text-text-secondary">Até 5 arquivos: PNG, JPG, WebP, MP4 ou MOV, com até 50 MB cada.</p>
+              <input
+                id="ticket-attachments"
+                aria-label="Anexos (imagens ou vídeos)"
+                type="file"
+                multiple
+                accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
+                className="mt-2 block w-full text-sm text-text-secondary file:mr-3 file:rounded-lg file:border-0 file:bg-brand/15 file:px-3 file:py-2 file:text-sm file:font-medium file:text-[#17708A] dark:text-[#5cc5e4] hover:file:bg-brand/25"
+                onChange={(event) => { addAttachments(event.target.files); event.target.value = ''; }}
+              />
+              {attachmentError && <div role="alert" className="mt-2 text-xs text-[#DC2626] dark:text-red-300">{attachmentError}</div>}
+              {attachments.length > 0 && <ul className="mt-3 space-y-2" aria-label="Anexos selecionados">
+                {attachments.map((file, index) => <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 rounded-lg bg-admin-bg px-3 py-2 text-sm">
+                  <span className="flex min-w-0 items-center gap-2"><Paperclip className="h-4 w-4 shrink-0 text-[#17708A] dark:text-[#5cc5e4]" aria-hidden="true" /><span className="truncate">{file.name}</span></span>
+                  <button type="button" onClick={() => setAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index))} aria-label={`Remover ${file.name}`} className="ady-btn rounded p-1 text-text-secondary hover:bg-surface-secondary hover:text-text-primary"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
+                </li>)}
+              </ul>}
+            </fieldset>
+            <button type="submit" disabled={isSubmitting} className="ady-btn inline-flex items-center gap-2 rounded-lg bg-[#17708A] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#17708A]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60">
+              <Send className="h-4 w-4" aria-hidden="true" />
+              {isSubmitting ? 'Abrindo ticket…' : 'Abrir ticket'}
+            </button>
+          </form>
+        </DialogPrimitive.Content>
+        </DialogPrimitive.Overlay>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}
+
+function LabelGroup({ title, labels, selected, register }: { title: string; labels: readonly (readonly [TicketLabel, string])[]; selected: TicketLabel[]; register: ReturnType<typeof useForm<TicketForm>>['register'] }) {
+  return <div><p className="text-xs font-medium text-text-secondary">{title}</p><div className="mt-1.5 flex flex-wrap gap-2">
+    {labels.map(([value, label]) => <label key={value} className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs ${selected.includes(value) ? 'border-brand bg-brand/15' : 'border-border'}`}>
+      <input className="sr-only" type="checkbox" value={value} {...register('labels')} /><b className={`font-normal ${selected.includes(value) ? 'text-[#17708A] dark:text-[#5cc5e4]' : 'text-text-primary'}`}>{label}</b>
+    </label>)}
+  </div></div>;
+}
+
+export function TicketsPage() {
+  const [lists, setLists] = useState<TicketLists>({ open: [], resolved: [] });
+  const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [listWarning, setListWarning] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [ticketsResponse, assigneesResponse] = await Promise.all([api.get('/admin/tickets'), api.get('/admin/tickets/assignees')]);
+      setLists(ticketsResponse.data.data ?? { open: [], resolved: [] });
+      setAssignees(assigneesResponse.data.data ?? []);
+      if (ticketsResponse.data.partial_failures?.length) setListWarning('Não foi possível atualizar os chamados agora. Tente novamente.');
+    } catch {
+      setListWarning('Não foi possível atualizar os chamados agora. Tente novamente.');
+    } finally { setLoading(false); }
+  }, []);
+
+  const refresh = useCallback(() => {
+    setListWarning(null);
+    setLists({ open: [], resolved: [] });
+    setAssignees([]);
+    void load();
+    setLoading(true);
+  }, [load]);
+
+  // Carregamento inicial assíncrono: o setState acontece apenas no retorno da promise
+  // (não sincronamente no corpo do efeito) — padrão fetch-on-mount do repo.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void load(); }, [load]);
+
+  return <div className="max-w-5xl space-y-6">
+    <header className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 className="text-2xl font-bold">Chamados</h1>
+        <p className="mt-1 text-sm text-text-secondary">Acompanhe e abra chamados na fila de suporte da Ady.</p>
+      </div>
+      <div className="flex gap-2">
+        <button type="button" onClick={refresh} disabled={loading} className="ady-btn inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:border-border-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] disabled:opacity-60">
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+          {loading ? 'Atualizando…' : 'Atualizar'}
+        </button>
+        <button type="button" onClick={() => setModalOpen(true)} className="ady-btn inline-flex items-center gap-2 rounded-lg bg-[#17708A] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#17708A]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8] focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Abrir chamado
+        </button>
+      </div>
+    </header>
+    <p role="status" aria-busy={loading} className={loading ? 'text-sm text-text-secondary' : 'sr-only'}>
+      {loading ? 'Carregando chamados…' : 'Chamados carregados.'}
+    </p>
+    {listWarning && <div role="alert" className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-[#92400E] dark:text-amber-100">{listWarning}</div>}
+    <TicketsTabs lists={lists} loading={loading} />
+    <details className="group rounded-xl border border-border bg-surface">
+      <summary className="flex cursor-pointer select-none items-center gap-2 p-5 text-sm font-semibold transition-colors hover:text-[#17708A] dark:hover:text-[#5cc5e4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
+        <Users className="h-4 w-4 text-[#17708A] dark:text-[#5cc5e4]" aria-hidden="true" />
+        Como escolher o nível
+        <ChevronDown className="ml-auto h-4 w-4 text-text-secondary transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <div className="grid gap-3 px-5 pb-5 sm:grid-cols-2">
+        {levelHelp.map(([title, description]) => (
+          <div key={title} className="rounded-lg bg-admin-bg px-3 py-2.5">
+            <div className="text-sm font-medium text-text-primary">{title}</div>
+            <p className="mt-0.5 text-xs text-text-secondary">{description}</p>
+          </div>
+        ))}
+      </div>
+    </details>
+    <NewTicketDialog open={modalOpen} onOpenChange={setModalOpen} assignees={assignees} onCreated={() => void load()} />
+  </div>;
+}

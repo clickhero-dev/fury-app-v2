@@ -1,0 +1,218 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+const { getPlatformRole } = vi.hoisted(() => ({ getPlatformRole: vi.fn(async (_id: string): Promise<string | null> => 'user') }));
+vi.mock('../services/core/rbac.service.js', () => ({ rbacService: { getPlatformRole } }));
+import type { Request, Response, NextFunction } from 'express';
+
+const { mockFindFirst } = vi.hoisted(() => ({
+  mockFindFirst: vi.fn(),
+}));
+
+vi.mock('@fury/db', () => ({
+  db: { query: { subscriptions: { findFirst: mockFindFirst } } },
+  subscriptions: { tenantId: 'tenant_id' },
+}));
+
+import { checkSubscriptionActive } from '../middleware/checkSubscriptionActive.js';
+
+function createMockRequest(overrides: Partial<Request> = {}): Request {
+  return {
+    user: { userId: 'user-1', tenantId: 'tenant-1', email: 'test@fury.test', role: 'owner' },
+    tenant: { tenantId: 'tenant-1' },
+    ...overrides,
+  } as Request;
+}
+
+function createNext(): NextFunction {
+  return vi.fn() as unknown as NextFunction;
+}
+
+describe('checkSubscriptionActive middleware', () => {
+  /* Funcionalidade: bloqueio de assinatura vencida
+   * Cenário: assinatura marcada não expirável com período encerrado
+   * Dado que o prazo da assinatura terminou
+   * Quando a pessoa tenta acessar um recurso protegido
+   * Então o acesso é bloqueado mesmo com a marcação antiga.
+   */
+  it('bloqueia período vencido apesar da marcação não expirável', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'active', isNonExpirable: true, trialEndsAt: null, currentPeriodEnd: new Date('2020-01-01T00:00:00Z') });
+    const next = createNext();
+    await checkSubscriptionActive(createMockRequest(), {} as Response, next);
+    expect((next as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ statusCode: 403, code: 'SUBSCRIPTION_EXPIRED' });
+  });
+
+  it('bloqueia trial vencido apesar da marcação não expirável', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'trial', isNonExpirable: true, trialEndsAt: new Date('2020-01-01T00:00:00Z'), currentPeriodEnd: null });
+    const next = createNext();
+    await checkSubscriptionActive(createMockRequest(), {} as Response, next);
+    expect((next as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ statusCode: 403, code: 'TRIAL_EXPIRED' });
+  });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('passa quando não existe subscription', async () => {
+    mockFindFirst.mockResolvedValue(null);
+    const req = createMockRequest();
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    const err = (next as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(err.statusCode).toBe(403);
+    expect(err.code).toBe('NO_SUBSCRIPTION');
+  });
+
+  it('retorna 401 quando não há tenantId', async () => {
+    const req = createMockRequest({ user: undefined, tenant: undefined });
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    const err = (next as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(err.statusCode).toBe(401);
+    expect(err.code).toBe('UNAUTHORIZED');
+  });
+
+  it('bloqueia subscription cancelled (403)', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'cancelled', trialEndsAt: null, currentPeriodEnd: null });
+    const req = createMockRequest();
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    const err = (next as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(err.statusCode).toBe(403);
+    expect(err.code).toBe('SUBSCRIPTION_EXPIRED');
+  });
+
+  it('bloqueia subscription inactive (403)', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'inactive', trialEndsAt: null, currentPeriodEnd: null });
+    const req = createMockRequest();
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    const err = (next as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(err.statusCode).toBe(403);
+    expect(err.code).toBe('SUBSCRIPTION_EXPIRED');
+  });
+
+  it('bloqueia subscription past_due (403)', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'past_due', trialEndsAt: null, currentPeriodEnd: null });
+    const req = createMockRequest();
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    const err = (next as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(err.statusCode).toBe(403);
+    expect(err.code).toBe('SUBSCRIPTION_EXPIRED');
+  });
+
+  it('bloqueia trial expirado (403 TRIAL_EXPIRED)', async () => {
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - 1);
+    mockFindFirst.mockResolvedValue({ status: 'trial', trialEndsAt: pastDate, currentPeriodEnd: null });
+    const req = createMockRequest();
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    const err = (next as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(err.statusCode).toBe(403);
+    expect(err.code).toBe('TRIAL_EXPIRED');
+  });
+
+  it('passa quando trial ainda válido', async () => {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 10);
+    mockFindFirst.mockResolvedValue({ status: 'trial', trialEndsAt: futureDate, currentPeriodEnd: null });
+    const req = createMockRequest();
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('bloqueia active com período vencido (403)', async () => {
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - 1);
+    mockFindFirst.mockResolvedValue({ status: 'active', trialEndsAt: null, currentPeriodEnd: pastDate });
+    const req = createMockRequest();
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    const err = (next as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(err.statusCode).toBe(403);
+    expect(err.code).toBe('SUBSCRIPTION_EXPIRED');
+  });
+
+  it('passa quando active com período vigente', async () => {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 10);
+    mockFindFirst.mockResolvedValue({ status: 'active', trialEndsAt: null, currentPeriodEnd: futureDate });
+    const req = createMockRequest();
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('superadmin passa mesmo com subscription cancelled (isento de verificação)', async () => {
+    getPlatformRole.mockResolvedValueOnce('super_admin');
+    mockFindFirst.mockResolvedValue({ status: 'cancelled', trialEndsAt: null, currentPeriodEnd: null });
+    const req = createMockRequest({ user: { userId: 'user-1', tenantId: 'tenant-1', email: 'test@fury.test', role: 'superadmin' } });
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(mockFindFirst).not.toHaveBeenCalled(); // Não faz query, passa direto
+  });
+
+  it('admin_partner passa mesmo com subscription cancelled (isento)', async () => {
+    getPlatformRole.mockResolvedValueOnce('admin_partner');
+    mockFindFirst.mockResolvedValue({ status: 'cancelled', trialEndsAt: null, currentPeriodEnd: null });
+    const req = createMockRequest({ user: { userId: 'user-1', tenantId: 'tenant-1', email: 'test@fury.test', role: 'owner' } });
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(mockFindFirst).not.toHaveBeenCalled(); // Não faz query, passa direto
+  });
+
+  it('admin passa mesmo com subscription cancelled (isento de verificação)', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'cancelled', trialEndsAt: null, currentPeriodEnd: null });
+    const req = createMockRequest({ user: { userId: 'user-1', tenantId: 'tenant-1', email: 'test@fury.test', role: 'admin' } });
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(mockFindFirst).not.toHaveBeenCalled(); // Não faz query, passa direto
+  });
+
+  it('member é bloqueado com subscription cancelled', async () => {
+    mockFindFirst.mockResolvedValue({ status: 'cancelled', trialEndsAt: null, currentPeriodEnd: null });
+    const req = createMockRequest({ user: { userId: 'user-1', tenantId: 'tenant-1', email: 'test@fury.test', role: 'member' } });
+    const next = createNext();
+
+    await checkSubscriptionActive(req, {} as Response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    const err = (next as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(err.statusCode).toBe(403);
+    expect(err.code).toBe('SUBSCRIPTION_EXPIRED');
+  });
+});

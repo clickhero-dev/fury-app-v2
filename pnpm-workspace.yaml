@@ -1,0 +1,24 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+linkWorkspacePackages: true
+preferWorkspacePackages: true
+# Build scripts (native) — allowlist explícita.
+# FORMATOS COEXISTEM: pnpm 10/11 lê `allowBuilds`; pnpm 12+ lê
+# `onlyBuiltDependencies`/`ignoredBuiltDependencies` (ERR_PNPM_IGNORED_BUILDS
+# se ausente). Dockerfiles com versão PINADA do pnpm (11.21.0).
+allowBuilds:
+  '@scarf/scarf': false
+  bcrypt: true
+  core-js: false
+  esbuild: true
+  msgpackr-extract: true
+  sharp: true
+onlyBuiltDependencies:
+  - bcrypt
+  - esbuild
+  - msgpackr-extract
+  - sharp
+ignoredBuiltDependencies:
+  - '@scarf/scarf'
+  - core-js

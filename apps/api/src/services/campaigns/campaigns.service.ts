@@ -1,0 +1,1692 @@
+import { randomUUID } from 'node:crypto';
+import { decryptMetaToken } from '../../utils/crypto.js';
+import { normalizePhoneToMetaE164 } from '../../utils/phone-normalize.js';
+import { normalizeMetaLeadFields } from '../../utils/meta-lead-normalizer.js';
+import {
+  parseConversionsFromActions,
+  parseRoasFromPurchaseRoas,
+  parseCpaFromCostPerAction,
+} from '../../utils/meta-insights-parser.js';
+import { isLeadObjective } from '../../utils/meta-conversion-events.js';
+import { roundToDecimals } from '../../utils/metrics-formatter.js';
+import { AppError } from '../../middleware/errorHandler.js';
+import { CampaignRepository } from '../../repository/campaign.repository.js';
+import { MetaSyncRepository, type CampaignSnapshotUpsert } from '../../repository/meta-sync.repository.js';
+import { invalidateCampaignsCache } from '../../lib/campaigns-cache.js';
+import { getMetaLocationsCache, setMetaLocationsCache } from '../../lib/locations-cache.js';
+import { getResolvedTenantAssetSelection } from '../meta/meta.service.js';
+import { slugify } from '../../lib/slug.js';
+import { privacyPolicyUrl } from '../../lib/privacy-policy.js';
+import { isMetaPermissionDenied, sanitizeMetaReason } from '../../lib/meta-error.js';
+import { getCampaignAds, getCampaignAdCreatives, getVideoSourceUrl, searchMetaInterests as searchMetaInterestsLib, searchMetaGeoLocations, findMetaCityByCoords, type MetaGeoSearchType } from '../../lib/meta-api.js';
+import { type AudienceGeo, hasGeoLocations, buildGeoLocations } from '../../lib/audience-geo.js';
+import type { IMetaCampaignProvider } from '../../lib/providers/meta-campaign.provider.js';
+import type {
+  ICampaignRepository,
+  CampaignRecord,
+} from '../../lib/providers/campaign.repository.js';
+import { DefaultMetaCampaignProvider } from '../../lib/providers/default-meta-campaign.provider.js';
+import { DefaultCampaignRepository } from '../../lib/providers/default-campaign.repository.js';
+import { captureServerEvent } from '../../lib/analytics.js';
+
+// ── Shared types ────────────────────────────────────────────────────────────
+
+const DEV_MOCK_LOCATIONS = [
+  { key: '2421217', name: 'São Paulo', region: 'São Paulo (state)', country_code: 'BR', type: 'city' },
+  { key: '2406246', name: 'Rio de Janeiro', region: 'Rio de Janeiro (state)', country_code: 'BR', type: 'city' },
+  { key: '2348479', name: 'Belo Horizonte', region: 'Minas Gerais (state)', country_code: 'BR', type: 'city' },
+  { key: '2402120', name: 'Brasília', region: 'Distrito Federal (state)', country_code: 'BR', type: 'city' },
+  { key: '2350381', name: 'Fortaleza', region: 'Ceará (state)', country_code: 'BR', type: 'city' },
+  { key: '2360389', name: 'Salvador', region: 'Bahia (state)', country_code: 'BR', type: 'city' },
+  { key: '2371405', name: 'Manaus', region: 'Amazonas (state)', country_code: 'BR', type: 'city' },
+  { key: '2426123', name: 'Maricá', region: 'Rio de Janeiro (state)', country_code: 'BR', type: 'city' },
+  { key: '2319036', name: 'Curitiba', region: 'Paraná (state)', country_code: 'BR', type: 'city' },
+  { key: '2371328', name: 'Recife', region: 'Pernambuco (state)', country_code: 'BR', type: 'city' },
+];
+
+export interface CampaignPanelMetrics {
+  spend: number; roas: number; cpa: number; ctr: number; cpm: number;
+  conversions: number; impressions: number;
+}
+
+export interface TakedownItem {
+  id: string; campaignId: string; suggestionType: string;
+  suggestionData: Record<string, unknown>; appliedAt: string | null; createdAt: string;
+}
+
+export interface AutomationRuleItem {
+  id: string; tenantId: string; name: string; description: string | null;
+  trigger: string; enabled: boolean; createdAt: string; updatedAt: string;
+  ruleType: string; isActive: boolean; threshold: number; action: string;
+}
+
+export interface CampaignListItem {
+  id: string; name: string; status: string; objective: string | null;
+  budget: unknown; spend: number; impressions: number; clicks: number;
+  ctr: number; cpc: number; roas: number; cpa: number; conversions: number;
+}
+
+export type WizardObjective = 'visits' | 'whatsapp_conv' | 'engagement' | 'messages' | 'whatsapp' | 'leads';
+export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'messenger';
+
+export interface CreateWizardCampaignArgs {
+  tenantId: string; objective: WizardObjective; creativeAssetId?: string;
+  creativeUploadUrl?: string; creativeInstagramMediaId?: string;
+  creativeMediaUrl?: string; headline?: string; primaryText?: string;
+  destinationUrl?: string; locationCity: string; locationCityKey?: string;
+  creatives?: WizardCreativeInput[];
+  locationRadiusKm: number; ageMin: number; ageMax: number;
+  gender: 'all' | 'male' | 'female'; dailyBudgetBrl: number; durationDays?: number;
+  whatsappPageId?: string; whatsappPageName?: string;
+  whatsappPhoneNumberId?: string; whatsappPhoneNumber?: string;
+  destinations?: WizardMessagingDestination[]; instagramUserId?: string;
+  instagramUsername?: string;
+  audienceInterests?: { id: string; name: string }[];
+  geo?: AudienceGeo;
+}
+
+export interface CreateWizardCampaignResult {
+  success: true; campaign_id: string; meta_campaign_id: string; campaign_name: string;
+}
+
+// ── Multi-criativo ────────────────────────────────────────────────────────────
+
+export interface WizardCreativeInput {
+  creativeAssetId?: string;
+  creativeUploadUrl?: string;
+  creativeInstagramMediaId?: string;
+  creativeMediaUrl?: string;
+  headline: string;
+  primaryText: string;
+  destinationUrl?: string;
+}
+
+// Exportada para testes — legado vira array de 1; se `creatives` veio, ele vence.
+export function normalizeWizardCreatives(args: {
+  creatives?: WizardCreativeInput[];
+  creativeAssetId?: string;
+  creativeUploadUrl?: string;
+  creativeInstagramMediaId?: string;
+  creativeMediaUrl?: string;
+  headline?: string;
+  primaryText?: string;
+  destinationUrl?: string;
+}): WizardCreativeInput[] {
+  if (args.creatives && args.creatives.length > 0) return args.creatives;
+  return [{
+    creativeAssetId: args.creativeAssetId,
+    creativeUploadUrl: args.creativeUploadUrl,
+    creativeInstagramMediaId: args.creativeInstagramMediaId,
+    creativeMediaUrl: args.creativeMediaUrl,
+    headline: args.headline ?? '',
+    primaryText: args.primaryText ?? '',
+    destinationUrl: args.destinationUrl,
+  }];
+}
+
+// Espera do processamento do vídeo na Meta (cabe no timeout de 120s do wizard)
+const VIDEO_PROCESSING_TIMEOUT_MS = 60_000;
+const VIDEO_POLL_INTERVAL_MS = 3_000;
+
+// Capa do vídeo do Estúdio = 1ª foto de referência (hospedada por nós)
+export function videoThumbFromNotes(notes: string | null | undefined): string | undefined {
+  try {
+    const url = JSON.parse(notes ?? '')?.photos?.[0]?.url;
+    return typeof url === 'string' && /^https?:\/\//.test(url) ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A Meta varia o texto da colisão entre idiomas e versões da Graph API. */
+function isLeadFormNameConflict(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const metaError = err as { metaCode?: unknown; metaUserMsg?: unknown; metaUserTitle?: unknown; message?: unknown };
+  // Só recuperamos respostas estruturadas da Meta; erros internos nunca devem ser repetidos.
+  if (metaError.metaCode === undefined && !metaError.metaUserMsg && !metaError.metaUserTitle) return false;
+
+  const normalized = [metaError.metaUserTitle, metaError.metaUserMsg, metaError.message]
+    .filter((part): part is string => typeof part === 'string')
+    .join(' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  return /nome (?:do |de )?formulario ja existe|form name already exists|lead form name already exists/.test(normalized);
+}
+
+function uniqueLeadFormName(baseName: string): string {
+  const isoNow = new Date().toISOString();
+  const timestamp = `${isoNow.slice(0, 10).replace(/-/g, '')}-${isoNow.slice(11, 19).replace(/:/g, '')}`;
+  const shortId = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase();
+  return `${baseName} — ${timestamp}-${shortId}`;
+}
+
+// ── Wizard constants ────────────────────────────────────────────────────────
+
+const WIZARD_OBJECTIVE_MAP: Record<WizardObjective, {
+  metaObjective: string; optimizationGoal: string; cta: string;
+  destinationType?: string; label: string;
+}> = {
+  visits: { metaObjective: 'OUTCOME_TRAFFIC', optimizationGoal: 'LINK_CLICKS', cta: 'LEARN_MORE', label: 'Visitas' },
+  whatsapp_conv: { metaObjective: 'OUTCOME_TRAFFIC', optimizationGoal: 'LINK_CLICKS', cta: 'LEARN_MORE', label: 'Conversas WhatsApp' },
+  engagement: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'POST_ENGAGEMENT', cta: 'LIKE_PAGE', destinationType: 'ON_POST', label: 'Engajamento' },
+  messages: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'CONVERSATIONS', cta: 'MESSAGE_PAGE', destinationType: 'MESSENGER', label: 'Atração de Clientes' },
+  whatsapp: { metaObjective: 'OUTCOME_ENGAGEMENT', optimizationGoal: 'CONVERSATIONS', cta: 'WHATSAPP_MESSAGE', destinationType: 'WHATSAPP', label: 'Gerar Conversas' },
+  leads: { metaObjective: 'OUTCOME_LEADS', optimizationGoal: 'LEAD_GENERATION', cta: 'SIGN_UP', destinationType: 'ON_AD', label: 'Formulário' },
+};
+
+// ── Pure helper functions (exported for testing) ────────────────────────────
+
+export function normalizeCampaignPanelMetrics(raw: unknown): CampaignPanelMetrics {
+  const m = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const num = (v: unknown) => {
+    const n = typeof v === 'number' ? v : parseFloat(String(v ?? '0'));
+    return Number.isFinite(n) ? n : 0;
+  };
+  return {
+    spend: num(m.spend), roas: num(m.roas), cpa: num(m.cpa), ctr: num(m.ctr),
+    cpm: num(m.cpm), conversions: num(m.conversions), impressions: num(m.impressions),
+  };
+}
+
+export function formatCampaignListItem(campaign: CampaignRecord): CampaignListItem {
+  const budgetObj = campaign.budget as Record<string, unknown> | null | undefined;
+  const metricsObj = campaign.metrics as Record<string, unknown> | null | undefined;
+  const objective = budgetObj && typeof budgetObj.objective === 'string' ? budgetObj.objective : null;
+  const getMetric = (key: string): number => {
+    if (!metricsObj) return 0;
+    const val = metricsObj[key];
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') { const n = parseFloat(val); return Number.isFinite(n) ? n : 0; }
+    return 0;
+  };
+  return {
+    id: campaign.id, name: campaign.name, status: campaign.status, objective,
+    budget: campaign.budget ?? {}, spend: getMetric('spend'), impressions: getMetric('impressions'),
+    clicks: getMetric('clicks'), ctr: getMetric('ctr'), cpc: getMetric('cpc'),
+    roas: getMetric('roas'), cpa: getMetric('cpa'), conversions: getMetric('conversions'),
+  };
+}
+
+export function calculateDateRange(
+  dateRange: 'last_7d' | 'last_30d' | 'last_90d' | 'custom',
+  startDate?: string, endDate?: string
+): { startDate: string; endDate: string } {
+  if (dateRange === 'custom' && startDate && endDate) return { startDate, endDate };
+  const today = new Date();
+  const end = new Date(today);
+  const start = new Date(today);
+  const days = dateRange === 'last_7d' ? 7 : dateRange === 'last_30d' ? 30 : 90;
+  start.setDate(start.getDate() - days);
+  return {
+    startDate: start.toISOString().split('T')[0],
+    endDate: end.toISOString().split('T')[0],
+  };
+}
+
+export function mapWizardMetaError(err: unknown, step: string, context?: Record<string, unknown>): never {
+  if (err instanceof AppError) throw err;
+  const metaCode = (err as any).metaCode;
+  const metaSubcode = (err as any).metaSubcode;
+  const metaType = (err as any).metaType;
+  const httpStatus = (err as any).httpStatus;
+  const metaUserMsg = (err as any).metaUserMsg as string | undefined;
+  const metaUserTitle = (err as any).metaUserTitle as string | undefined;
+  const metaBlameField = (err as any).metaBlameField as string | undefined;
+  const message = (err as Error).message || '';
+  const lowerMessage = message.toLowerCase();
+
+  console.error(`[CampaignWizard] Erro Meta API na etapa "${step}":`, {
+    metaCode, metaSubcode, metaType, httpStatus, message, metaUserTitle, metaUserMsg, metaBlameField,
+  });
+
+  if (httpStatus === 504 || message.toLowerCase().includes('timeout')) {
+    throw new AppError(504, 'META_TIMEOUT', 'A conexão com os servidores do Meta está lenta no momento. Por favor, tente novamente mais tarde.');
+  }
+  // Checkpoint de verificação de identidade ("Autentique sua conta") — pode vir
+  // com code 10/200 + OAuthException, então DEVE ser checado antes desses casos.
+  // Sem code/subcode estável (incidente 2026-09-14): match por texto pt/en.
+  // Mensagem ORIGINAL do Meta é repassada (title: msg) — não substituir, o texto
+  // do Meta é atualizado por eles e já instrui o usuário corretamente.
+  const verificationHints = ['autentique sua conta', 'authenticate your account', 'confirm your identity', 'secure your account', 'checkpoint'];
+  const normalizedErrText = `${metaUserTitle ?? ''} ${metaUserMsg ?? ''} ${message}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (verificationHints.some((hint) => normalizedErrText.includes(hint))) {
+    const metaOriginalMessage = `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}`.trim() || message || 'Erro ao publicar no Meta. Tente novamente.';
+    throw new AppError(403, 'META_ACCOUNT_VERIFICATION', metaOriginalMessage, { step, meta_code: metaCode, meta_subcode: metaSubcode, verification_url: 'https://www.facebook.com/accountquality' });
+  }
+  if (metaCode === 190) {
+    throw new AppError(401, 'META_TOKEN_EXPIRED', 'Conexão com Meta expirada. Reconecte em Configurações');
+  }
+  if (metaType === 'OAuthException' && (metaCode === 200 || metaCode === 10)) {
+    if (step === 'lead_form') {
+      // Doc Lead Ads (marketing-api/guides/lead-ads/create/): criar leadgen_forms
+      // exige pages_manage_ads (pages_manage_metadata é só p/ webhooks).
+      // O Meta pode recusar por outra causa que NÃO é o scope (ex.: pessoa sem a
+      // task ADVERTISE na Página selecionada). Quando ele manda metaUserMsg, a
+      // mensagem real chega ao usuário para diagnóstico — sem substituir por genérico.
+      const realMetaMessage = metaUserMsg || metaUserTitle
+        ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}`
+        : '';
+      const hint = 'O Meta recusou a criação do Formulário. Reconecte o Meta em Configurações → Integrações para conceder pages_manage_ads (criação de Formulário de leads) e tente novamente.';
+      const message = realMetaMessage ? `${hint}\n\nDetalhes do Meta: ${realMetaMessage}` : hint;
+      throw new AppError(403, 'META_PERMISSION_DENIED', message, { step, meta_code: metaCode, meta_subcode: metaSubcode });
+    }
+    throw new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para publicar campanhas. Verifique ads_management, pages_show_list e business_management em Configurações → Integrações.');
+  }
+  if (lowerMessage.includes('insufficient') || lowerMessage.includes('saldo') || lowerMessage.includes('fund')) {
+    throw new AppError(402, 'META_INSUFFICIENT_FUNDS', 'Conta de anúncios sem saldo suficiente');
+  }
+  if (metaSubcode === 3858258) {
+    throw new AppError(400, 'META_IMAGE_DOWNLOAD_FAILED', 'O Meta nao conseguiu baixar a imagem do criativo. A URL pode estar bloqueada (robots.txt) ou o formato pode ser invalido. Use uma imagem JPEG ou PNG hospedada em um servidor acessivel.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+  }
+  // "Legal content missing" — Meta exige privacy_policy ou legal_content_id na
+  // criação do leadgen_forms. O wizard já envia a página pública de política de
+  // privacidade; se ainda assim o Meta rejeitar (ex.: URL com problema), orienta.
+  if (metaSubcode === 1892075) {
+    throw new AppError(400, 'META_LEGAL_CONTENT_REQUIRED', 'O Meta exigiu uma política de privacidade na criação do Formulário. Não foi possível validar a URL da política. Tente novamente em instantes.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+  }
+  // Código no texto só no ad set (onde vai a localização)
+  const codeSuffix = step === 'adset' && metaCode ? ` (erro ${metaCode}${metaSubcode ? `/${metaSubcode}` : ''})` : '';
+  if (metaSubcode === 1815946) {
+    const metaOriginal = `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || message}`;
+    throw new AppError(400, 'META_LOCATION_MULTI_RADIUS', `A Meta recusou usar raio com várias localizações${codeSuffix}.\nMensagem da Meta: ${metaOriginal}`, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...context });
+  }
+  if (metaSubcode === 1487110) {
+    throw new AppError(400, 'META_LOCATION_RADIUS', (metaUserMsg || 'O raio geografico selecionado nao esta dentro dos limites. Aumente o raio (ex: Sao Paulo precisa de 15km ou mais).') + codeSuffix, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...context });
+  }
+  // "Required field is missing: the link field is required" — criativo de leads
+  // sem o campo `link` no link_data. O wizard envia https://fb.me/ (doc Lead Ads);
+  // se o Meta ainda rejeitar, orienta sem substituir a mensagem real.
+  if (metaSubcode === 2061015) {
+    throw new AppError(400, 'META_LINK_REQUIRED', metaUserMsg || 'O Meta exigiu um link no criativo do Formulário. Verifique o criativo e tente novamente.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+  }
+  // Código 192 = "Invalid phone number" — hoje só acontece no thank_you_page do
+  // formulário de leads (business_phone_number inválido/sem WhatsApp).
+  if (metaCode === 192) {
+    throw new AppError(400, 'META_INVALID_PHONE_NUMBER', 'O Meta rejeitou o número de WhatsApp informado. Verifique se o número está correto (com DDI e DDD) e se possui WhatsApp ativo, e tente novamente.', { step, meta_code: metaCode, meta_subcode: metaSubcode });
+  }
+  const userMessage = metaUserMsg || metaUserTitle ? `${metaUserTitle ? metaUserTitle + ': ' : ''}${metaUserMsg || ''}` : (message || 'Erro ao publicar no Meta. Tente novamente.');
+  throw new AppError(400, 'META_API_ERROR', userMessage + codeSuffix, { step, meta_code: metaCode, meta_subcode: metaSubcode, ...(metaBlameField ? { blame_field: metaBlameField } : {}), ...context });
+}
+
+// ── Service class ────────────────────────────────────────────────────────────
+
+export class CampaignsService {
+  constructor(
+    private meta: IMetaCampaignProvider,
+    private repo: ICampaignRepository,
+    private deps: {
+      decryptMetaToken: (token: string) => string;
+      invalidateCampaignsCache: (tenantId: string) => Promise<void>;
+      getMetaLocationsCache: (query: string) => Promise<any>;
+      setMetaLocationsCache: (query: string, data: any) => Promise<void>;
+      getResolvedTenantAssetSelection: (tenantId: string) => Promise<{ pages: Array<{ instagramUserId?: string; pageId?: string }> }>;
+      upsertCampaignSnapshot?: (tenantId: string, values: CampaignSnapshotUpsert) => Promise<unknown>;
+      updateCampaignSnapshot?: (tenantId: string, metaCampaignId: string, values: Partial<CampaignSnapshotUpsert>) => Promise<void>;
+      enqueueMetaSync?: (args: { tenantId: string; reason: string }) => Promise<void>;
+    }
+  ) {}
+
+  private async reconcileProjectionFailure(tenantId: string): Promise<void> {
+    console.warn('[Campaigns] projeção v2 não atualizada após ação Meta confirmada; solicitando reconciliação.');
+    try {
+      await this.deps.enqueueMetaSync?.({ tenantId, reason: 'stale-fallback' });
+    } catch {
+      console.warn('[Campaigns] não foi possível enfileirar reconciliação da projeção v2.');
+    }
+  }
+
+  private async updateCampaignProjection(
+    tenantId: string,
+    metaCampaignId: string,
+    values: Partial<CampaignSnapshotUpsert>
+  ): Promise<void> {
+    if (!this.deps.updateCampaignSnapshot) return;
+    try {
+      await this.deps.updateCampaignSnapshot(tenantId, metaCampaignId, values);
+    } catch {
+      await this.reconcileProjectionFailure(tenantId);
+    }
+  }
+
+  private async createCampaignProjection(tenantId: string, values: CampaignSnapshotUpsert): Promise<void> {
+    if (!this.deps.upsertCampaignSnapshot) return;
+    try {
+      await this.deps.upsertCampaignSnapshot(tenantId, values);
+    } catch {
+      await this.reconcileProjectionFailure(tenantId);
+    }
+  }
+
+  private handleMetaError(err: unknown): never {
+    if (err instanceof AppError) throw err;
+    const metaCode = (err as any).metaCode;
+    const metaSubcode = (err as any).metaSubcode;
+    const metaType = (err as any).metaType;
+    const httpStatus = (err as any).httpStatus;
+    const message = (err as Error).message || '';
+
+    // Erro que NÃO veio da Graph API (ex.: falha interna de rede/DB) — propaga como está.
+    if (metaCode === undefined && metaType === undefined && httpStatus === undefined) throw err;
+
+    if (metaCode === 190) {
+      throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
+    }
+    if (metaCode === 100 && metaSubcode === 1487566) {
+      throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser pausada. Se quiser reativar, duplique a campanha.');
+    }
+    // Campanha/objeto não existe mais no Meta (Graph API responde code 100/803
+    // com "does not exist" para GET de node inexistente) → 404 informativo.
+    if (
+      (metaCode === 100 || metaCode === 803) &&
+      /does not exist|doesn't exist|not exist|não existe|no longer/i.test(message)
+    ) {
+      throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campanha não encontrada no Meta.');
+    }
+    if (metaCode === 100) {
+      throw new AppError(400, 'INVALID_PARAMETER', message);
+    }
+    // (#200) OAuthException — erro GENÉRICO do Meta. Só é falta de permissão
+    // quando há EVIDÊNCIA no text/message do Meta (isMetaPermissionDenied).
+    // Caso contrário é erro de integração com a causa real — NÃO inventar
+    // permissão: usuário com acesso legítimo recebia "Reconecte sua conta" (bug 2).
+    if (metaCode === 200 || metaType === 'OAuthException') {
+      if (isMetaPermissionDenied(err)) {
+        throw new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para esta operação. Reconecte sua conta em Configurações > Integrações.');
+      }
+      throw new AppError(
+        502,
+        'META_INTEGRATION_ERROR',
+        sanitizeMetaReason(message, 'Não foi possível sincronizar com a Meta. Tente novamente em instantes.'),
+        { meta_code: metaCode, meta_subcode: metaSubcode }
+      );
+    }
+    // Qualquer outro erro da Graph API → 4xx tratado (nunca 500 silencioso).
+    throw new AppError(400, 'META_API_ERROR', message);
+  }
+
+  async createCampaign(args: {
+    tenantId: string; name: string;
+    objective: 'OUTCOME_SALES' | 'OUTCOME_LEADS' | 'OUTCOME_TRAFFIC' | 'OUTCOME_AWARENESS';
+    dailyBudget: number; adAccountId: string;
+  }) {
+    const metaConn = await this.repo.findMetaConnection(args.tenantId);
+    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
+
+    const adAccounts = (metaConn.adAccounts as { id: string }[]) || [];
+    if (!adAccounts.some((acc) => acc.id === args.adAccountId)) {
+      throw new AppError(403, 'AD_ACCOUNT_NOT_FOUND', 'Ad account does not belong to this tenant');
+    }
+
+    const accessToken = this.deps.decryptMetaToken(metaConn.accessToken);
+
+    try {
+      const response = await this.meta.createCampaign(args.adAccountId, accessToken, {
+        name: args.name, objective: args.objective, status: 'PAUSED',
+        special_ad_categories: [], is_adset_budget_sharing_enabled: false,
+      });
+
+      const campaign = await this.repo.createCampaign({
+        tenantId: args.tenantId,
+        metaCampaignId: response.id,
+        name: args.name,
+        status: 'paused',
+        budget: { daily_budget: args.dailyBudget, objective: args.objective },
+      } as any);
+      await this.createCampaignProjection(args.tenantId, {
+        metaCampaignId: response.id,
+        name: args.name,
+        status: 'PAUSED',
+        objective: args.objective,
+        budget: { daily_budget: args.dailyBudget, objective: args.objective },
+      });
+      return campaign;
+    } catch (err) { this.handleMetaError(err); }
+  }
+
+  private async verifyCampaignOwnership(campaign: CampaignRecord, tenantId: string): Promise<void> {
+    if (campaign.tenantId !== tenantId) {
+      throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');
+    }
+  }
+
+  private async getAccessToken(tenantId: string): Promise<string> {
+    const metaConn = await this.repo.findMetaConnection(tenantId);
+    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found');
+    return this.deps.decryptMetaToken(metaConn.accessToken);
+  }
+
+  private async getAccessTokenWithSystemFallback(tenantId: string): Promise<string> {
+    try {
+      return await this.getAccessToken(tenantId);
+    } catch (err) {
+      const systemToken = process.env.META_SYSTEM_ACCESS_TOKEN;
+      if (err instanceof AppError && err.code === 'META_CONNECTION_NOT_FOUND' && systemToken) {
+        return systemToken;
+      }
+      throw err;
+    }
+  }
+
+  private async findCampaignOrThrow(tenantId: string, campaignId: string): Promise<CampaignRecord> {
+    const campaign = await this.repo.findCampaignById(campaignId);
+    if (!campaign) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
+    await this.verifyCampaignOwnership(campaign, tenantId);
+    return campaign;
+  }
+
+  private async resolveCampaignIds(campaignId: string, tenantId: string): Promise<{ localId: string | null; metaCampaignId: string }> {
+    let byId: CampaignRecord | null = null;
+    // só campanha do próprio tenant
+    try { byId = await this.repo.findCampaignByTenantAndId(tenantId, campaignId); }
+    catch { /* not a UUID — skip local lookup */ }
+    if (byId) return { localId: byId.id, metaCampaignId: byId.metaCampaignId };
+    const byMeta = await this.repo.findCampaignByMetaId(tenantId, campaignId);
+    if (byMeta) return { localId: byMeta.id, metaCampaignId: byMeta.metaCampaignId };
+    return { localId: null, metaCampaignId: campaignId };
+  }
+
+  private async checkDeletedOnMeta(campaignMeta: Record<string, unknown>, localId: string | null): Promise<boolean> {
+    const metaStatus = campaignMeta.status as string | undefined;
+    if (metaStatus === 'DELETED' || metaStatus === 'ARCHIVED') {
+      if (localId) await this.repo.updateCampaign(localId, { status: 'archived' });
+      return true;
+    }
+    return false;
+  }
+
+  async pauseCampaign(args: { tenantId: string; campaignId: string }) {
+    const accessToken = await this.getAccessToken(args.tenantId);
+    const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
+
+    let campaignMeta: Record<string, unknown>;
+    try {
+      campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status,name,objective');
+    } catch (err) {
+      // Campanha inexistente no Meta → 404 CAMPAIGN_NOT_FOUND; 190 → 401; demais Meta → 4xx.
+      this.handleMetaError(err);
+    }
+    if (await this.checkDeletedOnMeta(campaignMeta, localId)) {
+      throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser pausada.');
+    }
+    if (campaignMeta.account_id) {
+      const metaConn = await this.repo.findMetaConnection(args.tenantId);
+      const normalize = (id: string) => id.replace(/^act_/, '');
+      const adAccounts = (metaConn?.adAccounts as { id: string }[]) || [];
+      if (!adAccounts.some((acc) => normalize(acc.id) === normalize(campaignMeta.account_id as string))) {
+        throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');
+      }
+    }
+
+    try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'PAUSED' }); }
+    catch (err) { this.handleMetaError(err); }
+
+    if (localId) {
+      await this.repo.updateCampaign(localId, { status: 'paused' } as any);
+    }
+    await this.updateCampaignProjection(args.tenantId, metaCampaignId, {
+      status: 'PAUSED',
+      ...(typeof campaignMeta.name === 'string' ? { name: campaignMeta.name } : {}),
+      ...(typeof campaignMeta.objective === 'string' ? { objective: campaignMeta.objective } : {}),
+    });
+
+    return { campaignId: args.campaignId, status: 'PAUSED' as const };
+  }
+
+  async resumeCampaign(args: { tenantId: string; campaignId: string }) {
+    const accessToken = await this.getAccessToken(args.tenantId);
+    const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
+
+    let campaignMeta: Record<string, unknown>;
+    try {
+      campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'account_id,status,name,objective');
+    } catch (err) {
+      // Campanha inexistente no Meta → 404 CAMPAIGN_NOT_FOUND; 190 → 401; demais Meta → 4xx.
+      this.handleMetaError(err);
+    }
+    if (await this.checkDeletedOnMeta(campaignMeta, localId)) {
+      throw new AppError(400, 'CAMPAIGN_DELETED', 'Esta campanha foi excluída no Meta e não pode ser reativada.');
+    }
+    if (campaignMeta.account_id) {
+      const metaConn = await this.repo.findMetaConnection(args.tenantId);
+      const normalize = (id: string) => id.replace(/^act_/, '');
+      const adAccounts = (metaConn?.adAccounts as { id: string }[]) || [];
+      if (!adAccounts.some((acc) => normalize(acc.id) === normalize(campaignMeta.account_id as string))) {
+        throw new AppError(403, 'FORBIDDEN', 'You do not have access to this resource');
+      }
+    }
+
+    try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'ACTIVE' }); }
+    catch (err) { this.handleMetaError(err); }
+
+    if (localId) {
+      await this.repo.updateCampaign(localId, { status: 'active' } as any);
+    }
+    await this.updateCampaignProjection(args.tenantId, metaCampaignId, {
+      status: 'ACTIVE',
+      ...(typeof campaignMeta.name === 'string' ? { name: campaignMeta.name } : {}),
+      ...(typeof campaignMeta.objective === 'string' ? { objective: campaignMeta.objective } : {}),
+    });
+
+    return { campaignId: args.campaignId, status: 'ACTIVE' as const };
+  }
+
+  async updateCampaignBudget(args: { tenantId: string; campaignId: string; dailyBudget: number }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const accessToken = await this.getAccessToken(args.tenantId);
+
+    try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, { daily_budget: args.dailyBudget }); }
+    catch (err) { this.handleMetaError(err); }
+
+    const updated = await this.repo.updateCampaign(args.campaignId, {
+      budget: { ...(campaign.budget as Record<string, unknown>), daily_budget: args.dailyBudget },
+    } as any);
+    await this.updateCampaignProjection(args.tenantId, campaign.metaCampaignId, { budget: updated.budget });
+    return updated;
+  }
+
+  async getCampaign(args: { tenantId: string; campaignId: string }) {
+    return this.findCampaignOrThrow(args.tenantId, args.campaignId);
+  }
+
+  async getCampaignPanelDetail(args: { tenantId: string; campaignId: string }): Promise<{
+    campaign: { id: string; name: string; status: string; objective: string | null;
+      budget: unknown; metaCampaignId: string; metrics: CampaignPanelMetrics;
+      lastSyncedAt: string | null; createdAt: string; };
+    recentTakedowns: TakedownItem[]; automationRules: AutomationRuleItem[];
+  } | null> {
+    const campaign = await this.repo.findCampaignByTenantAndId(args.tenantId, args.campaignId);
+    if (!campaign) return null;
+
+    const [recentTakedownsRows, rulesRows] = await Promise.all([
+      this.repo.findRecentTakedowns(args.tenantId, args.campaignId),
+      this.repo.findActiveAutomationRules(args.tenantId),
+    ]);
+
+    const budgetObj = campaign.budget as Record<string, unknown> | null | undefined;
+    const objective = budgetObj && typeof budgetObj.objective === 'string' ? budgetObj.objective : null;
+
+    return {
+      campaign: {
+        id: campaign.id, name: campaign.name, status: campaign.status, objective,
+        budget: campaign.budget ?? {}, metaCampaignId: campaign.metaCampaignId,
+        metrics: normalizeCampaignPanelMetrics(campaign.metrics),
+        lastSyncedAt: campaign.lastSyncedAt?.toISOString() ?? null,
+        createdAt: campaign.createdAt.toISOString(),
+      },
+      recentTakedowns: recentTakedownsRows.map((t: any) => ({
+        id: t.id, campaignId: t.campaignId, suggestionType: t.suggestionType,
+        suggestionData: (t.suggestionData as Record<string, unknown>) ?? {},
+        appliedAt: t.appliedAt?.toISOString() ?? null, createdAt: t.createdAt.toISOString(),
+      })),
+      automationRules: rulesRows.map((r: any) => ({
+        id: r.id, tenantId: r.tenantId, name: r.name, description: r.description,
+        trigger: r.trigger, enabled: r.isActive, createdAt: r.createdAt.toISOString(),
+        updatedAt: r.updatedAt.toISOString(), ruleType: r.ruleType, isActive: r.isActive,
+        threshold: parseFloat(String(r.threshold)) || 0, action: r.action,
+      })),
+    };
+  }
+
+  async getCampaigns(args: { tenantId: string; status?: string; limit: number; offset: number }): Promise<{ items: CampaignListItem[]; total: number }> {
+    const result = await this.repo.findCampaigns(args.tenantId, args.status, args.limit, args.offset);
+    return { items: result.items.map((c) => formatCampaignListItem(c)), total: result.total };
+  }
+
+  async updateCampaign(args: { tenantId: string; campaignId: string; name?: string; budget?: { amount: number; type: 'daily' | 'lifetime'; startDate?: string; endDate?: string } }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const accessToken = await this.getAccessToken(args.tenantId);
+    const updateBody: Record<string, unknown> = {};
+    if (args.name) updateBody.name = args.name;
+    if (args.budget) {
+      updateBody[args.budget.type === 'daily' ? 'daily_budget' : 'lifetime_budget'] = args.budget.amount;
+      if (args.budget.startDate) updateBody.start_date = args.budget.startDate;
+      if (args.budget.endDate) updateBody.end_date = args.budget.endDate;
+    }
+
+    try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, updateBody); }
+    catch (err) { this.handleMetaError(err); }
+
+    if (args.name) {
+      const updated = await this.repo.updateCampaign(args.campaignId, { name: args.name } as any);
+      await this.updateCampaignProjection(args.tenantId, campaign.metaCampaignId, { name: args.name });
+      return updated;
+    }
+    if (args.budget) {
+      const updatedBudget = { ...(campaign.budget as Record<string, unknown>) };
+      if (args.budget.type === 'daily') updatedBudget.daily_budget = args.budget.amount;
+      else updatedBudget.lifetime_budget = args.budget.amount;
+      if (args.budget.startDate) updatedBudget.start_date = args.budget.startDate;
+      if (args.budget.endDate) updatedBudget.end_date = args.budget.endDate;
+      const updated = await this.repo.updateCampaign(args.campaignId, { budget: updatedBudget } as any);
+      await this.updateCampaignProjection(args.tenantId, campaign.metaCampaignId, { budget: updatedBudget });
+      return updated;
+    }
+    return campaign;
+  }
+
+  async updateCampaignStatus(args: { tenantId: string; campaignId: string; status: 'ACTIVE' | 'PAUSED' | 'ARCHIVED'; userId: string }) {
+    const campaign = await this.findCampaignOrThrow(args.tenantId, args.campaignId);
+    const accessToken = await this.getAccessToken(args.tenantId);
+
+    try { await this.meta.updateCampaign(campaign.metaCampaignId, accessToken, { status: args.status }); }
+    catch (err) { this.handleMetaError(err); }
+
+    const localStatus = args.status === 'ACTIVE' ? 'active' : args.status === 'PAUSED' ? 'paused' : 'archived';
+    const updated = await this.repo.updateCampaign(args.campaignId, { status: localStatus } as any);
+    await this.updateCampaignProjection(args.tenantId, campaign.metaCampaignId, { status: args.status });
+
+    await this.repo.insertFuryInsight({
+      tenantId: args.tenantId, campaignId: args.campaignId,
+      suggestionType: `campaign_status_${args.status.toLowerCase()}`,
+      suggestionData: { userId: args.userId, timestamp: new Date().toISOString(), action: 'manual' },
+    } as any);
+
+    return updated;
+  }
+
+  async softDeleteCampaign(args: { tenantId: string; campaignId: string; userId: string }) {
+    const accessToken = await this.getAccessToken(args.tenantId);
+    const { localId, metaCampaignId } = await this.resolveCampaignIds(args.campaignId, args.tenantId);
+    if (!localId) throw new AppError(404, 'CAMPAIGN_NOT_FOUND', 'Campaign not found');
+
+    // Isolamento de tenant: `resolveCampaignIds` pode resolver uma campanha local
+    // de OUTRO tenant (a busca por id não é tenant-filtered) — valida ownership
+    // antes de arquivar no banco.
+    const localCampaign = await this.repo.findCampaignById(localId);
+    if (localCampaign) await this.verifyCampaignOwnership(localCampaign, args.tenantId);
+
+    // Check if already deleted on Meta before calling update.
+    // If this fails (e.g. already removed by Meta), fall through to local archive.
+    let campaignMeta: Record<string, unknown> | undefined;
+    try {
+      campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'status');
+    } catch (err) {
+      const code = (err as AppError)?.code;
+      if (code !== 'CAMPAIGN_DELETED' && code !== 'CAMPAIGN_NOT_FOUND') {
+        throw err;
+      }
+    }
+    const metaStatus = campaignMeta?.status as string | undefined;
+    if (metaStatus !== 'DELETED' && metaStatus !== 'ARCHIVED') {
+      try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'ARCHIVED' }); }
+      catch (err) { this.handleMetaError(err); }
+    }
+
+    const deleted = await this.repo.updateCampaign(localId, { status: 'archived' } as any);
+    await this.updateCampaignProjection(args.tenantId, metaCampaignId, { status: 'ARCHIVED' });
+
+    await this.repo.insertFuryInsight({
+      tenantId: args.tenantId, campaignId: localId,
+      suggestionType: 'campaign_archived',
+      suggestionData: { userId: args.userId, timestamp: new Date().toISOString(), action: 'manual' },
+    } as any);
+
+    return deleted;
+  }
+
+  async getCampaignInsights(args: {
+    tenantId: string; campaignId: string;
+    dateRange: 'last_7d' | 'last_30d' | 'last_90d' | 'custom';
+    startDate?: string; endDate?: string;
+  }) {
+    const accessToken = await this.getAccessToken(args.tenantId);
+
+    const dbCampaign = await this.repo.findCampaignByMetaId(args.tenantId, args.campaignId);
+
+    let campaignBlock: { id: string; name: string; status: string } = {
+      id: args.campaignId, name: `Campaign ${args.campaignId}`, status: 'ACTIVE',
+    };
+    let campaignObjective: string | null = null;
+
+    if (dbCampaign) {
+      const statusMap: Record<string, string> = { ativo: 'ACTIVE', pausado: 'PAUSED', arquivado: 'ARCHIVED' };
+      campaignBlock = { id: dbCampaign.metaCampaignId, name: dbCampaign.name, status: statusMap[dbCampaign.status] ?? dbCampaign.status.toUpperCase() };
+      const budgetObj = dbCampaign.budget as Record<string, unknown> | null | undefined;
+      const wizardObjective = budgetObj && typeof budgetObj.objective === 'string' ? budgetObj.objective : null;
+      campaignObjective = wizardObjective ? (WIZARD_OBJECTIVE_MAP[wizardObjective as WizardObjective]?.metaObjective ?? wizardObjective) : null;
+    } else {
+      try {
+        const meta = await this.meta.getCampaign(args.campaignId, accessToken, 'name,status,objective');
+        campaignBlock = { id: args.campaignId, name: (meta.name as string) || `Campaign ${args.campaignId}`, status: ((meta.status as string) || 'ACTIVE').toUpperCase() };
+        campaignObjective = (meta.objective as string) ?? null;
+      } catch { /* keep defaults */ }
+    }
+
+    const { startDate, endDate } = calculateDateRange(args.dateRange, args.startDate, args.endDate);
+
+    try {
+      const response = await this.meta.getInsights({ accessToken, entityId: args.campaignId, startDate, endDate, timeIncrement: 1 });
+
+      const timeseries = (response.data || []).map((item: any) => {
+        const spend = parseFloat(item.spend || '0');
+        const impressions = parseInt(item.impressions || '0', 10);
+        const clicks = parseInt(item.clicks || '0', 10);
+        const ctr = parseFloat(item.ctr || '0');
+        const cpc = parseFloat(item.cpc || '0');
+        const cpm = parseFloat(item.cpm || '0');
+        const conversions = parseConversionsFromActions(item.actions, campaignObjective, item.unique_actions) ?? 0;
+        const roas = parseRoasFromPurchaseRoas(item.purchase_roas) ?? null;
+        const cpa = (conversions > 0 ? roundToDecimals(spend / conversions, 2) : null) ?? parseCpaFromCostPerAction(item.cost_per_action_type);
+        return { date: item.date_start || item.date_stop || '', spend, impressions, clicks, ctr, cpc, cpm, roas, cpa, conversions };
+      });
+
+      // ponytail: busca criativos da campanha; falha silenciosa se API não retornar dados
+      let creatives: { id: string; name: string; status: string; thumbnailUrl?: string; imageUrl?: string; videoUrl?: string; videoId?: string; headline?: string; primaryText?: string; isVideo: boolean }[] = [];
+      try {
+        const ads = await getCampaignAds(args.campaignId, accessToken);
+        creatives = ads.map((ad) => {
+          const c = ad.creative;
+          const linkData = c?.object_story_spec?.link_data;
+          const videoData = c?.object_story_spec?.video_data;
+          const photoData = c?.object_story_spec?.photo_data;
+          // ponytail: Dynamic Creative (asset_feed_spec) não tem object_story_spec — fallback para bodies/titles
+          const assetFeed = c?.asset_feed_spec;
+          const isVideoFromAssetFeed = assetFeed?.ad_formats?.some((f) => f.includes('VIDEO')) || (assetFeed?.videos?.length ?? 0) > 0;
+          return {
+            id: ad.id,
+            name: ad.name,
+            status: ad.status,
+            thumbnailUrl: c?.thumbnail_url,
+            imageUrl: linkData?.picture ?? videoData?.image_url ?? photoData?.url ?? c?.image_url ?? c?.thumbnail_url,
+            videoId: videoData?.video_id ?? assetFeed?.videos?.[0]?.video_id,
+            headline: linkData?.name ?? assetFeed?.titles?.[0]?.text,
+            primaryText: linkData?.message ?? photoData?.caption ?? assetFeed?.bodies?.[0]?.text,
+            isVideo: !!videoData?.video_id || isVideoFromAssetFeed,
+          };
+        });
+      } catch {
+        console.warn('[getCampaignInsights] Failed to fetch creatives for campaign', args.campaignId);
+      }
+
+      // ponytail: verifica se algum criativo da camada 1 tem imagem real
+      let hasUsableCreative = creatives.some((c) => c.imageUrl || c.thumbnailUrl);
+
+      // fallback: se Meta não retornou criativos utilizáveis, busca do banco local
+      if (!hasUsableCreative && dbCampaign) {
+        const budget = dbCampaign.budget as Record<string, unknown> | null | undefined;
+        const localImageUrl = budget?.creative_image_url as string | undefined;
+        const localAssetId = budget?.creative_asset_id as string | undefined;
+
+        let resolvedUrl = localImageUrl;
+        if (localAssetId && !resolvedUrl) {
+          try {
+            const asset = await this.repo.findCreativeAsset(localAssetId, args.tenantId);
+            if (asset) resolvedUrl = asset.url;
+          } catch { /* silêncio */ }
+        }
+
+        if (resolvedUrl) {
+          creatives.push({
+            id: `local-${dbCampaign.id}`,
+            name: dbCampaign.name,
+            status: campaignBlock.status,
+            imageUrl: resolvedUrl,
+            headline: budget?.creative_headline as string | undefined,
+            primaryText: budget?.creative_primary_text as string | undefined,
+            isVideo: false,
+          });
+          hasUsableCreative = true;
+        }
+      }
+
+      // ponytail: fallback para campanhas sem criativos utilizáveis (criadas pela UI do Meta)
+      // — busca adcreatives do ad account, que retorna thumbnail_url mesmo quando /ads não retorna
+      if (!hasUsableCreative) {
+        try {
+          const metaConn = await this.repo.findMetaConnection(args.tenantId);
+          const adAccountId = metaConn?.selectedAdAccountId;
+          if (adAccountId) {
+            const adCreatives = await getCampaignAdCreatives(adAccountId, args.campaignId, accessToken);
+            // ponytail: se adcreatives retornou dados com imagem, substitui os criativos vazios da camada 1
+            const fallbackCreatives = adCreatives
+              .map((ac) => {
+                const assetFeed = ac.asset_feed_spec;
+                return {
+                  id: ac.id,
+                  name: ac.name || `Creative ${ac.id}`,
+                  status: 'ACTIVE',
+                  thumbnailUrl: ac.thumbnail_url,
+                  imageUrl: ac.image_url ?? ac.thumbnail_url ?? ac.object_story_spec?.link_data?.picture ?? ac.object_story_spec?.video_data?.image_url,
+                  videoId: ac.object_story_spec?.video_data?.video_id ?? assetFeed?.videos?.[0]?.video_id,
+                  headline: assetFeed?.titles?.[0]?.text ?? ac.object_story_spec?.link_data?.name,
+                  primaryText: assetFeed?.bodies?.[0]?.text ?? ac.object_story_spec?.link_data?.message,
+                  isVideo: (assetFeed?.ad_formats?.some((f: string) => f.includes('VIDEO')) ?? false) || (assetFeed?.videos?.length ?? 0) > 0,
+                };
+              })
+              .filter((c) => c.imageUrl || c.thumbnailUrl);
+            if (fallbackCreatives.length > 0) creatives = fallbackCreatives;
+          }
+        } catch {
+          console.warn('[getCampaignInsights] Failed to fetch adcreatives for campaign', args.campaignId);
+        }
+      }
+
+      // ponytail: busca URL real do vídeo via Graph API para criativos que têm videoId
+      const videoCreatives = creatives.filter((c) => c.videoId && !c.videoUrl);
+      if (videoCreatives.length > 0) {
+        await Promise.all(videoCreatives.map(async (c) => {
+          try {
+            c.videoUrl = await getVideoSourceUrl(c.videoId!, accessToken);
+          } catch {
+            console.warn('[getCampaignInsights] Failed to fetch video source for', c.videoId);
+          }
+        }));
+      }
+
+      // Pessoas ("PESSOAS") — fonte da verdade: nº de pessoas que preencheram o
+      // formulário. Insights contam `lead` por atribuição/evento e a soma diária
+      // de únicos diverge do total de preenchimentos distintos (ex.: 6 ≠ 4).
+      // Campanha Formulário (OUTCOME_LEADS) → conta os envios PERSISTIDOS
+      // (`meta_leads`, mesma origem da lista de Campanhas e da página Clientes),
+      // para as duas telas mostrarem o MESMO número; demais objetivos mantêm a
+      // soma das conversões dos insights.
+      let conversions: number = timeseries.reduce((s, d) => s + d.conversions, 0);
+      if (isLeadObjective(campaignObjective)) {
+        try {
+          conversions = await this.repo.countLeadFormSubmissions(args.tenantId, args.campaignId);
+        } catch (err) {
+          console.warn('[getCampaignInsights] falha ao contar envios de formulário:', (err as Error).message);
+        }
+      }
+
+      return { campaign: campaignBlock, timeseries, creatives, totals: { conversions } };
+    } catch (err) {
+      console.error('[getCampaignInsights] Meta API error:', err);
+      const metaCode = (err as any).metaCode;
+      if (metaCode === 190) throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações');
+      throw err;
+    }
+  }
+
+  /** Sobe o vídeo na conta, espera a Meta processar e define a capa. */
+  private async prepareAdVideo(
+    adAccountId: string,
+    accessToken: string,
+    video: { url: string; thumbUrl?: string },
+  ): Promise<{ videoId: string; thumbUrl: string }> {
+    const file = await this.meta.downloadImage(video.url, AbortSignal.timeout(90_000));
+    if (!file) throw new AppError(400, 'CREATIVE_VIDEO_DOWNLOAD_FAILED', 'Não foi possível acessar o vídeo do Estúdio. Tente novamente.');
+    const contentType = file.contentType.startsWith('video/') ? file.contentType.split(';')[0] : 'video/mp4';
+
+    const videoId = await this.meta.uploadAdVideo({
+      adAccountId,
+      buffer: file.buffer,
+      filename: `fury_video_${Date.now()}.mp4`,
+      contentType,
+      accessToken,
+    });
+
+    const deadline = Date.now() + VIDEO_PROCESSING_TIMEOUT_MS;
+    for (;;) {
+      const { status, picture } = await this.meta.getAdVideoStatus(videoId, accessToken);
+      if (status === 'ready') {
+        const thumbUrl = video.thumbUrl || picture;
+        if (!thumbUrl) throw new AppError(502, 'META_VIDEO_THUMBNAIL_MISSING', 'Não foi possível definir a capa do vídeo. Tente novamente.');
+        return { videoId, thumbUrl };
+      }
+      if (status === 'error' || status === 'expired') {
+        throw new AppError(400, 'META_VIDEO_PROCESSING_FAILED', 'A Meta não conseguiu processar este vídeo. Tente outro vídeo.');
+      }
+      if (Date.now() >= deadline) {
+        throw new AppError(504, 'META_VIDEO_PROCESSING_TIMEOUT', 'A Meta ainda está processando o vídeo. Tente publicar novamente em alguns minutos.');
+      }
+      await new Promise((r) => setTimeout(r, VIDEO_POLL_INTERVAL_MS));
+    }
+  }
+
+  async createCampaignFromWizard(args: CreateWizardCampaignArgs): Promise<CreateWizardCampaignResult> {
+    const metaConn = await this.repo.findMetaConnection(args.tenantId);
+    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'No Meta connection found for this tenant');
+
+    let adAccountId = metaConn.selectedAdAccountId;
+    // ponytail: fallback para primeira conta disponível se ainda não foi
+    // selecionada explicitamente — evita bloqueio após reconexão Meta.
+    if (!adAccountId) {
+      const accounts = (metaConn.adAccounts as Array<{ id: string }> | null) ?? [];
+      if (accounts.length > 0) adAccountId = accounts[0].id;
+    }
+    if (!adAccountId) throw new AppError(400, 'AD_ACCOUNT_NOT_SELECTED', 'Nenhuma conta de anúncios selecionada. Configure em Configurações → Integrações.');
+
+    const accessToken = this.deps.decryptMetaToken(metaConn.accessToken);
+    const objectiveConfig = WIZARD_OBJECTIVE_MAP[args.objective];
+
+    let messagingDestinations: WizardMessagingDestination[] = [];
+    if (args.objective === 'whatsapp') {
+      if (!args.whatsappPageId) throw new AppError(400, 'WHATSAPP_PAGE_REQUIRED', 'Selecione a Página do Facebook para receber as mensagens.');
+      messagingDestinations = args.destinations && args.destinations.length > 0 ? args.destinations : ['whatsapp'];
+      if (messagingDestinations.includes('whatsapp') && !args.whatsappPhoneNumber) throw new AppError(400, 'WHATSAPP_NUMBER_REQUIRED', 'Selecione o número de WhatsApp que receberá as mensagens.');
+      if (messagingDestinations.includes('instagram_direct') && !args.instagramUserId) throw new AppError(400, 'INSTAGRAM_USER_ID_REQUIRED', 'Conecte uma conta do Instagram à Página no Meta Business para usar Instagram Direct.');
+    }
+    // Objetivo 'leads': o formulário instantâneo (nome/email/telefone) é criado na
+    // Página e o botão da tela de agradecimento abre o WhatsApp do anunciante.
+    if (args.objective === 'leads') {
+      if (!args.whatsappPageId) throw new AppError(400, 'LEADS_PAGE_REQUIRED', 'Selecione a Página do Facebook que receberá o formulário.');
+      if (!args.whatsappPhoneNumber) throw new AppError(400, 'LEADS_WHATSAPP_REQUIRED', 'Informe o número de WhatsApp que receberá os clientes após o formulário.');
+    }
+
+    const creatives = normalizeWizardCreatives(args);
+    const createdAdCreativeIds: string[] = [];
+    const createdAdIds: string[] = [];
+    const creativeImageUrls: string[] = [];
+    const creativeAssetIds: string[] = [];
+    const imageHashByUrl = new Map<string, string | undefined>();
+
+    // 1) Mídia de todos os criativos em paralelo (galeria / upload / Instagram)
+    const resolved = await Promise.all(
+      creatives.map(async (c) => {
+        let imageUrl = c.creativeInstagramMediaId ? c.creativeMediaUrl : c.creativeUploadUrl;
+        let video: { url: string; thumbUrl?: string } | undefined;
+        if (!imageUrl && c.creativeAssetId) {
+          const asset = await this.repo.findCreativeAsset(c.creativeAssetId, args.tenantId);
+          if (!asset) throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', `Asset criativo ${c.creativeAssetId} não encontrado.`);
+          if (asset.type === 'video') video = { url: asset.url, thumbUrl: videoThumbFromNotes(asset.complianceNotes) };
+          else imageUrl = asset.url;
+        }
+        return { imageUrl, video };
+      })
+    );
+    if (resolved.every((r, i) => !r.imageUrl && !r.video && !creatives[i].creativeInstagramMediaId)) {
+      throw new AppError(400, 'CREATIVE_IMAGE_MISSING', 'Selecione uma imagem da galeria ou envie um arquivo.');
+    }
+
+    // 2) Download + upload do hash por URL — deduplicado via Map (URLs repetidas baixam 1× só)
+    const getAdImageHash = async (imageUrl: string | undefined): Promise<string | undefined> => {
+      if (!imageUrl) return undefined;
+      if (imageHashByUrl.has(imageUrl)) return imageHashByUrl.get(imageUrl);
+      const downloadPromise = (async () => {
+        const result = await this.meta.downloadImage(imageUrl, AbortSignal.timeout(90_000));
+        if (!result) throw new Error(`Falha ao baixar imagem (HTTP). Verifique se a URL está acessível.`);
+        if (!result.contentType.includes('jpeg') && !result.contentType.includes('png') && !result.contentType.includes('image/')) {
+          throw new Error(`Formato de imagem nao suportado: ${result.contentType || 'desconhecido'}. Use uma imagem JPEG ou PNG acessivel publicamente.`);
+        }
+        const ext = result.contentType.includes('png') ? 'png' : 'jpg';
+        return this.meta.uploadAdImage({
+          adAccountId,
+          base64: result.buffer.toString('base64'),
+          filename: `fury_creative_${Date.now()}_${imageHashByUrl.size}.${ext}`,
+          accessToken,
+        });
+      })();
+      imageHashByUrl.set(imageUrl, undefined); // trava a URL p/ não baixar 2×
+      const hash = await downloadPromise;
+      imageHashByUrl.set(imageUrl, hash);
+      return hash;
+    }
+
+    let instagramCreativeActorId: string | undefined;
+    let instagramCreativePageId: string | undefined;
+    if (args.creativeInstagramMediaId || creatives.some((c) => c.creativeInstagramMediaId)) {
+      const assetSelection = await this.deps.getResolvedTenantAssetSelection(args.tenantId);
+      const igPage = assetSelection.pages.find((page) => page.instagramUserId);
+      if (!igPage?.instagramUserId) throw new AppError(400, 'INSTAGRAM_ACCOUNT_NOT_FOUND', 'Nenhuma conta do Instagram conectada para usar este post como criativo.');
+      instagramCreativeActorId = igPage.instagramUserId;
+      instagramCreativePageId = igPage.pageId;
+    }
+
+    const useGeo = hasGeoLocations(args.geo);
+    let cityKey = args.locationCityKey;
+    // Com geo não precisa buscar a cidade
+    if (!cityKey && !useGeo) {
+      let locations: any[];
+      try { locations = await this.meta.searchLocations(args.locationCity, accessToken); }
+      catch (err) { mapWizardMetaError(err, 'location_search'); }
+      const match = locations[0];
+      if (!match) throw new AppError(400, 'LOCATION_NOT_FOUND', 'Cidade não encontrada. Tente outro nome.');
+      cityKey = match.key;
+    }
+
+    const today = new Date();
+    const dataLabel = today.toLocaleDateString('pt-BR');
+    // o nome da campanha reflete a headline do 1º criativo definido no wizard
+    const campaignName = creatives[0].headline;
+
+    const selectedPageIds = (metaConn.selectedPageIds as string[] | null) ?? [];
+    let pageId = args.objective === 'whatsapp' || args.objective === 'leads'
+      ? args.whatsappPageId!
+      : selectedPageIds[0] || process.env.META_PAGE_ID || '';
+    // ponytail: fallback para primeira página disponível se selectedPageIds vazio
+    if (!pageId && args.objective !== 'whatsapp') {
+      try {
+        const fallbackPages = await this.deps.getResolvedTenantAssetSelection(args.tenantId);
+        if (fallbackPages.pages.length > 0) pageId = fallbackPages.pages[0]!.pageId ?? '';
+      } catch { /* mantém pageId vazio, erro abaixo */ }
+    }
+    if (!pageId) throw new AppError(400, 'PAGE_NOT_FOUND', 'Nenhuma Página do Facebook configurada. Selecione uma página em Configurações → Integrações.');
+
+    // Vídeos: upload + processamento ANTES de criar objetos no Meta (falha sem rollback)
+    const videoAdData = new Map<number, { videoId: string; thumbUrl: string }>();
+    for (let i = 0; i < resolved.length; i++) {
+      const video = resolved[i].video;
+      if (!video) continue;
+      try {
+        videoAdData.set(i, await this.prepareAdVideo(adAccountId, accessToken, video));
+      } catch (err) {
+        mapWizardMetaError(err, 'video');
+      }
+    }
+
+    let messagingDestinationType: string | undefined;
+    let promotedObject: Record<string, unknown> | undefined;
+
+    if (args.objective === 'whatsapp') {
+      promotedObject = { page_id: args.whatsappPageId };
+      if (messagingDestinations.includes('whatsapp')) promotedObject.whatsapp_phone_number = args.whatsappPhoneNumber;
+      messagingDestinationType = messagingDestinations.length > 1 ? 'MESSAGING_APPS'
+        : messagingDestinations[0] === 'whatsapp' ? 'WHATSAPP'
+        : messagingDestinations[0] === 'instagram_direct' ? 'INSTAGRAM_DIRECT' : 'MESSENGER';
+    } else if (args.objective === 'visits' || args.objective === 'whatsapp_conv' || args.objective === 'engagement' || args.objective === 'messages' || args.objective === 'leads') {
+      promotedObject = { page_id: pageId };
+    }
+
+    const destinationType = messagingDestinationType || objectiveConfig.destinationType;
+
+    let metaCampaignId: string | undefined;
+    let adSetId: string | undefined;
+    let dbCampaignId: string | undefined;
+    let leadFormId: string | undefined;
+    /** Page access token usado na criação do leadgen_forms (null = user token fallback). */
+    let leadFormToken: string | undefined;
+
+    // Rollback de "limpeza total": se a criação falhar em qualquer etapa, remove
+    // do Meta os objetos já criados (ads → adcreatives → adset → campaign, todos
+    // em ordem reversa) e, se houver, o registro local no banco. Falhas no próprio
+    // cleanup só são logadas.
+    const rollback = async (step: string): Promise<void> => {
+      const pendingDeletes: Array<{ id: string; label: string; del: () => Promise<void> }> = [];
+      if (leadFormId) {
+        // Formulário leadgen não suporta DELETE — melhor esforço: arquivar.
+        // Usa o MESMO token da criação (Page token) — user token como fallback.
+        pendingDeletes.push({ id: leadFormId, label: 'lead_form', del: () => this.meta.archiveLeadForm(leadFormId!, leadFormToken ?? accessToken) });
+      }
+      for (const id of [...createdAdIds].reverse()) {
+        pendingDeletes.push({ id, label: 'ad', del: () => this.meta.deleteAd(id, accessToken) });
+      }
+      for (const id of [...createdAdCreativeIds].reverse()) {
+        pendingDeletes.push({ id, label: 'adcreative', del: () => this.meta.deleteAdCreative(id, accessToken) });
+      }
+      if (adSetId) pendingDeletes.push({ id: adSetId, label: 'adset', del: () => this.meta.deleteAdSet(adSetId!, accessToken) });
+      if (metaCampaignId) pendingDeletes.push({ id: metaCampaignId, label: 'campaign', del: () => this.meta.deleteCampaign(metaCampaignId!, accessToken) });
+
+      for (const { id, label, del } of pendingDeletes) {
+        try {
+          await del();
+          console.warn(`[CampaignWizard] ${label} ${id} deletado no Meta após falha na etapa "${step}"`);
+        } catch (cleanupErr) {
+          console.error(`[CampaignWizard] Falha ao deletar ${label} ${id} no Meta após falha na etapa "${step}":`, cleanupErr);
+        }
+      }
+
+      if (dbCampaignId) {
+        try {
+          await this.repo.deleteCampaign(dbCampaignId);
+          console.warn(`[CampaignWizard] Registro local ${dbCampaignId} removido após falha na etapa "${step}"`);
+        } catch (cleanupErr) {
+          console.error(`[CampaignWizard] Falha ao remover registro local ${dbCampaignId} após falha na etapa "${step}":`, cleanupErr);
+        }
+      }
+    };
+
+    try {
+      // Objetivo 'leads': cria o formulário instantâneo na Página ANTES da campanha —
+      // falha rápido (ex.: token sem pages_manage_ads) sem criar objetos no Meta.
+      // Try PRÓPRIO: o erro precisa ser reportado como step 'lead_form' — dentro do
+      // try abaixo o catch computaria 'campaign'/'adset' e o branch lead_form do
+      // mapeador (mensagem com a permissão exata) seria código morto.
+      if (args.objective === 'leads') {
+        // Doc Lead Ads (marketing-api/guides/lead-ads/create/): criar leadgen_forms
+        // exige um Page access token de quem pode performar a task ADVERTISE na Página.
+        // /me/accounts devolve token + tasks tanto para páginas de admin direto quanto
+        // para as acessadas via Business Manager (permissão business_management no OAuth).
+        const pageAccess = await this.meta.getPageAccessToken(pageId, accessToken);
+        if (!pageAccess || !pageAccess.accessToken) {
+          throw new AppError(403, 'META_PAGE_NOT_MANAGED',
+            'Você não tem acesso para anunciar nesta Página (é preciso ter papel de administrador ou acesso via Business Manager). Selecione outra Página ou solicite acesso ao dono da página.', { step: 'lead_form' });
+        }
+        if (!pageAccess.tasks.includes('ADVERTISE')) {
+          throw new AppError(403, 'META_PAGE_ADVERTISE_TASK_REQUIRED',
+            'Você tem acesso à Página, mas sem a permissão de anunciar (task ADVERTISE). Peça ao administrador da Página que conceda o papel de Anunciante ou Administrador.', { step: 'lead_form' });
+        }
+        leadFormToken = pageAccess.accessToken;
+
+        // A Meta exige privacy_policy (url pública + link_text) ou legal_content_id
+        // na criação do leadgen_forms (code 100 / subcode 1892075). Usamos a página
+        // pública de política de privacidade com o slug da organização (mesmo padrão
+        // da LP de WhatsApp): slugify(name) → fallback tenants.slug → tenantId.
+        let privacySlug = args.tenantId;
+        try {
+          const t = await new CampaignRepository(args.tenantId).findTenant();
+          if (t?.name) privacySlug = slugify(t.name);
+          else if (t?.slug) privacySlug = t.slug;
+        } catch { /* fallback ao tenantId */ }
+
+        const leadFormBody = {
+          name: `Formulário — ${campaignName}`,
+          locale: 'PT_BR',
+          questions: [
+            { type: 'FULL_NAME', key: 'question1' },
+            { type: 'EMAIL', key: 'question2' },
+            { type: 'PHONE', key: 'question3' },
+          ],
+          privacy_policy: {
+            url: privacyPolicyUrl(privacySlug),
+            link_text: 'Política de Privacidade',
+          },
+          thank_you_page: {
+            title: 'Obrigado!',
+            body: 'Agora é só falar com a gente no WhatsApp.',
+            button_type: 'WHATSAPP',
+            button_text: 'Falar no WhatsApp',
+            business_phone_number: normalizePhoneToMetaE164(args.whatsappPhoneNumber!),
+          },
+        };
+        let leadFormResponse: { id: string };
+        try {
+          leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, leadFormBody);
+        } catch (err) {
+          if (!isLeadFormNameConflict(err)) throw err;
+
+          // Não reutilizamos o formulário existente: cada campanha precisa manter
+          // as próprias perguntas, política e destino. A segunda chamada é o único
+          // retry e usa um nome único, legível e gerado no servidor.
+          captureServerEvent('meta_lead_form_name_collision', {
+            tenantId: args.tenantId,
+            step: 'lead_form',
+            recovery: 'retry_once',
+          });
+          console.warn('[CampaignWizard] colisão de nome do formulário; repetindo uma única vez.', {
+            tenantId: args.tenantId,
+            step: 'lead_form',
+            recovery: 'retry_once',
+          });
+          leadFormResponse = await this.meta.createLeadForm(pageId, leadFormToken, {
+            ...leadFormBody,
+            name: uniqueLeadFormName(leadFormBody.name),
+          });
+        }
+        leadFormId = leadFormResponse.id;
+      }
+    } catch (err) {
+      await rollback('lead_form');
+      mapWizardMetaError(err, 'lead_form');
+    }
+
+    let sentGeoLocations: Record<string, unknown> | undefined;
+    try {
+      const campaignBody = {
+        name: campaignName, objective: objectiveConfig.metaObjective, status: 'ACTIVE',
+        special_ad_categories: [], is_adset_budget_sharing_enabled: false,
+      };
+
+      const campaignResponse = await this.meta.createCampaign(adAccountId, accessToken, campaignBody);
+      metaCampaignId = campaignResponse.id;
+
+      sentGeoLocations = useGeo
+        ? buildGeoLocations(args.geo!)
+        : { cities: [{ key: parseInt(cityKey!, 10), radius: args.locationRadiusKm || 30, distance_unit: 'kilometer' }] };
+
+      const targeting: Record<string, unknown> = {
+        geo_locations: sentGeoLocations,
+        age_min: args.ageMin, age_max: args.ageMax,
+        genders: args.gender === 'all' ? [1, 2] : args.gender === 'male' ? [1] : [2],
+        targeting_automation: { advantage_audience: 0 },
+      };
+
+      if (args.audienceInterests && args.audienceInterests.length > 0) {
+        targeting.flexible_spec = [{ interests: args.audienceInterests }];
+      }
+
+      const adSetBody: Record<string, unknown> = {
+        name: `AdSet — ${args.locationCity} — ady`, campaign_id: metaCampaignId,
+        daily_budget: Math.round(args.dailyBudgetBrl * 100),
+        billing_event: 'IMPRESSIONS', optimization_goal: objectiveConfig.optimizationGoal,
+        bid_strategy: 'LOWEST_COST_WITHOUT_CAP', targeting, status: 'ACTIVE',
+      };
+      if (destinationType) adSetBody.destination_type = destinationType;
+      if (promotedObject) adSetBody.promoted_object = promotedObject;
+      if (args.durationDays) {
+        const endTime = new Date(today.getTime() + args.durationDays * 24 * 60 * 60 * 1000);
+        adSetBody.end_time = endTime.toISOString();
+      }
+
+      const adSetResponse = await this.meta.createAdSet(adAccountId, accessToken, adSetBody);
+      adSetId = adSetResponse.id;
+
+      // O link do anúncio (whatsapp_conv) aponta para a LP pública do app web:
+      // https://app.useady.com.br/l/<slug>. URL fixa de produção, pois o anúncio
+      // é servido ao público e não pode depender do host/ambiente da API.
+      const LP_BASE_URL = 'https://app.useady.com.br';
+
+      // Busca o slug da LP (whatsapp_conv) — derivado do NOME DA ORGANIZAÇÃO
+      // (t.name), não do tenants.slug (pode estar desatualizado ou arbitrário).
+      // Fallback: slug do tenant e, por último, o tenantId.
+      let lpSlug = args.tenantId;
+      if (args.objective === 'whatsapp_conv') {
+        try {
+          const t = await new CampaignRepository(args.tenantId).findTenant();
+          if (t?.name) lpSlug = slugify(t.name);
+          else if (t?.slug) lpSlug = t.slug;
+        } catch { /* fallback ao tenantId */ }
+      }
+
+      // O link de cada anúncio usa o destinationUrl PRÓPRIO do criativo
+      // (whatsapp_conv sempre aponta para a LP pública do app web).
+      const creativeLinkFor = (c: WizardCreativeInput): string | undefined =>
+        args.objective === 'visits'
+          ? c.destinationUrl
+          : args.objective === 'whatsapp_conv'
+            ? `${LP_BASE_URL}/l/${lpSlug}`
+            : `https://www.facebook.com/${pageId}`;
+
+      // Objetivo 'leads': o call_to_action aponta pro formulário instantâneo
+      // (lead_gen_form_id) em vez de link externo.
+      const leadsCtaFor = () => ({
+        type: 'SIGN_UP',
+        value: { lead_gen_form_id: leadFormId! },
+      });
+
+      // video_data não tem link próprio: o link vai no call_to_action
+      const videoDataFor = (c: WizardCreativeInput, v: { videoId: string; thumbUrl: string }) => {
+        const callToAction: { type: string; value?: Record<string, unknown> } = args.objective === 'leads'
+          ? { type: 'SIGN_UP', value: { ...leadsCtaFor().value, link: 'https://fb.me/' } }
+          : messagingDestinationType
+            ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' }
+            : { type: objectiveConfig.cta, value: { link: creativeLinkFor(c) } };
+        return {
+          video_id: v.videoId,
+          image_url: v.thumbUrl,
+          message: c.primaryText,
+          // title não é aceito com LIKE_PAGE
+          ...(callToAction.type === 'LIKE_PAGE' ? {} : { title: c.headline }),
+          call_to_action: callToAction,
+        };
+      };
+
+      for (let i = 0; i < creatives.length; i++) {
+        const c = creatives[i];
+        const { imageUrl } = resolved[i];
+        const video = videoAdData.get(i);
+        // vídeo: a capa serve de prévia
+        const previewUrl = video?.thumbUrl ?? imageUrl;
+        if (previewUrl) creativeImageUrls.push(previewUrl);
+        if (c.creativeAssetId) creativeAssetIds.push(c.creativeAssetId);
+
+        const isInstagramCreative = Boolean(c.creativeInstagramMediaId);
+        const adImageHash = !isInstagramCreative && !video ? await getAdImageHash(imageUrl) : undefined;
+
+        const creativeBody: Record<string, unknown> = video
+          ? { name: `Creative — ady #${i + 1}`, object_story_spec: { page_id: pageId, video_data: videoDataFor(c, video) } }
+          : isInstagramCreative
+          ?{ object_id: instagramCreativePageId, instagram_user_id: instagramCreativeActorId, source_instagram_media_id: c.creativeInstagramMediaId, call_to_action: JSON.stringify(args.objective === 'leads' ? { ...leadsCtaFor(), value: { ...leadsCtaFor().value, link: 'https://fb.me/' } } : { type: objectiveConfig.cta === 'MESSAGE_PAGE' ? 'MESSAGE_PAGE' : 'LEARN_MORE', value: { link: c.destinationUrl || `https://www.facebook.com/${instagramCreativePageId}` } }) }
+          : { name: `Creative — ady #${i + 1}`, object_story_spec: { page_id: pageId, link_data: { picture: adImageHash || imageUrl, message: c.primaryText, name: c.headline, call_to_action: args.objective === 'leads' ? leadsCtaFor() : messagingDestinationType ? { type: messagingDestinations.includes('whatsapp') ? 'WHATSAPP_MESSAGE' : 'MESSAGE_PAGE' } : { type: objectiveConfig.cta }, ...(args.objective === 'leads'
+            // Doc Lead Ads: o campo link no link_data é OBRIGATÓRIO mesmo para
+            // formulários instantâneos, e o valor deve ser https://fb.me/ (o
+            // clique real abre o form via call_to_action.lead_gen_form_id). Sem
+            // ele o Meta rejeita com subcode 2061015 ("link field is required");
+            // com URL externa rejeita com 1815316.
+            ? { link: 'https://fb.me/' }
+            : { link: creativeLinkFor(c) }) } } };
+
+        const adCreativeResponse = await this.meta.createAdCreative(adAccountId, accessToken, creativeBody);
+        createdAdCreativeIds.push(adCreativeResponse.id);
+
+        const adResponse = await this.meta.createAd(adAccountId, accessToken, {
+          name: `Ad — ady — ${dataLabel} #${i + 1}`,
+          adset_id: adSetId,
+          creative: { creative_id: adCreativeResponse.id },
+          status: 'ACTIVE',
+        });
+        createdAdIds.push(adResponse.id);
+      }
+    } catch (err) {
+      const step = !metaCampaignId ? 'campaign' : !adSetId ? 'adset' : 'creative';
+      await rollback(step);
+      mapWizardMetaError(err, step, step === 'adset' ? { geo_locations: sentGeoLocations } : undefined);
+    }
+
+    let campaign: { id: string };
+    try {
+      campaign = await this.repo.createCampaign({
+        tenantId: args.tenantId, metaCampaignId, name: campaignName, status: 'active',
+        budget: {
+          daily_budget: Math.round(args.dailyBudgetBrl * 100), objective: objectiveConfig.metaObjective,
+          created_via: 'wizard', ad_set_id: adSetId,
+          duration_days: args.durationDays ?? null,
+          ad_creative_ids: createdAdCreativeIds,
+          ad_ids: createdAdIds,
+          creative_image_urls: creativeImageUrls,
+          creative_asset_ids: creativeAssetIds,
+          // legado = 1º criativo (consumers antigos: fallback de getCampaignInsights)
+          ad_creative_id: createdAdCreativeIds[0] ?? null,
+          ad_id: createdAdIds[0] ?? null,
+          creative_asset_id: creativeAssetIds[0] ?? null,
+          creative_image_url: creativeImageUrls[0] ?? null,
+          creative_headline: creatives[0].headline,
+          creative_primary_text: creatives[0].primaryText,
+          ...(args.objective === 'whatsapp' ? {
+            destinations: messagingDestinations, destination_type: messagingDestinationType,
+            whatsapp_page_id: args.whatsappPageId, whatsapp_page_name: args.whatsappPageName ?? null,
+            whatsapp_phone_number_id: messagingDestinations.includes('whatsapp') ? args.whatsappPhoneNumberId ?? null : null,
+            whatsapp_phone_number: messagingDestinations.includes('whatsapp') ? args.whatsappPhoneNumber ?? null : null,
+            instagram_user_id: messagingDestinations.includes('instagram_direct') ? args.instagramUserId ?? null : null,
+            instagram_username: messagingDestinations.includes('instagram_direct') ? args.instagramUsername ?? null : null,
+          } : {}),
+          ...(args.objective === 'leads' ? {
+            lead_form_id: leadFormId ?? null,
+            lead_page_id: args.whatsappPageId ?? null,
+            whatsapp_page_id: args.whatsappPageId ?? null,
+            whatsapp_phone_number: args.whatsappPhoneNumber ?? null,
+          } : {}),
+        },
+      } as any);
+      dbCampaignId = campaign.id;
+      await this.deps.invalidateCampaignsCache(args.tenantId);
+      await this.createCampaignProjection(args.tenantId, {
+        metaCampaignId: metaCampaignId!,
+        name: campaignName,
+        status: 'ACTIVE',
+        objective: objectiveConfig.metaObjective,
+        budget: { daily_budget: Math.round(args.dailyBudgetBrl * 100), objective: objectiveConfig.metaObjective },
+      });
+    } catch (err) {
+      // Falhou após a criação no Meta (DB ou invalidação de cache) — reverte tudo.
+      await rollback('db');
+      throw err;
+    }
+
+    return { success: true, campaign_id: dbCampaignId, meta_campaign_id: metaCampaignId, campaign_name: campaignName };
+  }
+
+  /**
+   * Campanhas de Formulário (OUTCOME_LEADS) — FONTE DA VERDADE: Meta.
+   * Lista as campanhas da conta de anúncios direto na Meta (inclui as criadas
+   * fora do Fury). Usado pelo filtro da página de Leads.
+   */
+  async getLeadCampaigns(args: { tenantId: string }): Promise<Array<{ id: string; name: string }>> {
+    const metaConn = await this.repo.findMetaConnection(args.tenantId);
+    if (!metaConn) throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Conexão Meta não encontrada.');
+    const adAccountId = metaConn.selectedAdAccountId;
+    if (!adAccountId) throw new AppError(400, 'AD_ACCOUNT_NOT_SELECTED', 'Nenhuma conta de anúncios selecionada.');
+
+    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+    let campaigns: Array<{ id: string; name: string; objective: string | null; status: string | null }>;
+    try {
+      campaigns = await this.meta.listCampaigns(adAccountId, accessToken);
+    } catch (err) {
+      // metaCode 190 → 401 META_TOKEN_EXPIRED; 100 → 400; 200/OAuth → 403;
+      // campanha inexistente → 404; demais erros Meta → 4xx (nunca 500).
+      this.handleMetaError(err);
+    }
+
+    // Filtra por objetivo AND por presença de formulário: uma campanha pode ter
+    // objetivo de leads mas nenhum ad vinculado a um form (criada fora do Fury
+    // ou com form removido). O form NÃO é campo top-level do Ad — checamos via
+    // ads → criativo (lead_gen_form_id), por campanha.
+    const leadCampaigns = campaigns.filter((c) => c.objective === 'OUTCOME_LEADS');
+    const withForm: Array<{ id: string; name: string; objective: string | null; status: string | null }> = [];
+    for (const c of leadCampaigns) {
+      // Detecção de form é BEST-EFFORT: se a chamada à Meta falhar (token sem
+      // acesso ao ad/creativo, erro de Graph, etc.), NÃO derrubamos a listagem
+      // nem escondemos a campanha — incluímos e seguimos. Só excluímos quando
+      // a resposta CONFIRMA que o ad não referencia formulário.
+      try {
+        if (await this.meta.campaignHasLeadForm(c.id, accessToken)) withForm.push(c);
+      } catch (err) {
+        console.warn(`[getLeadCampaigns] falha ao detectar formulário da campanha ${c.id}:`, (err as Error).message);
+        withForm.push(c);
+      }
+    }
+    return withForm.map((c) => ({ id: c.id, name: c.name }));
+  }
+
+  /**
+   * Leads coletados pelo formulário instantâneo de uma campanha.
+   *
+   * FONTE DA VERDADE: Meta. Para campanha local (Fury) com `budget.lead_form_id`,
+   * busca direto no form; caso contrário (campanha criada FORA do Fury, ou sem
+   * form gravado), resolve via os ads da campanha (`/{campaign_id}/ads` →
+   * `/{ad_id}/leads`; o lead pertence ao ad, então a atribuição à campanha fica
+   * correta mesmo com forms compartilhados).
+   *
+   * Parsing robusto: o wizard cria perguntas com `key` customizado (`question1/2/3`)
+   * e a Meta retorna ESSES keys como `name` no field_data. Resolvemos o mapeamento
+   * real via `GET /{form_id}?fields=questions` (type → key); sem questions
+   * disponíveis, cai para os nomes fixos conhecidos (degradação graciosa).
+   */
+  async getCampaignLeads(args: { tenantId: string; campaignId: string }): Promise<{
+    leads: Array<{ name: string | null; email: string | null; phone: string | null; createdAt: string | null }>;
+  }> {
+    // leads são dados pessoais: só com o token do próprio tenant
+    const accessToken = await this.getAccessToken(args.tenantId);
+
+    // 1) Campanha local com lead_form_id → caminho direto pelo form.
+    // O `campaignId` pode ser um META id (campanha criada fora do Fury) — a
+    // coluna local `campaigns.id` é UUID, então a query local falha para ids
+    // não-UUID. Degradação graciosa: sem registro local, segue para a Meta.
+    let local: CampaignRecord | null;
+    try {
+      local = await this.repo.findCampaignByTenantAndId(args.tenantId, args.campaignId);
+    } catch {
+      // Não é um UUID local (ex.: META campaign id de campanha externa) — segue via Meta.
+      local = null;
+    }
+    const budget = (local?.budget ?? {}) as Record<string, unknown>;
+    const leadFormId = typeof budget.lead_form_id === 'string' ? budget.lead_form_id : null;
+
+    if (leadFormId) {
+      try {
+        const [response, questions] = await Promise.all([
+          this.meta.getLeadFormData(leadFormId, accessToken),
+          this.safeGetFormQuestions(leadFormId, accessToken),
+        ]);
+        // Dedup por id do lead (mesmo form entre criativos não pode contar 2x).
+        const seenFormIds = new Set<string>();
+        const leads = (response.data || [])
+          .filter((lead) => {
+            const id = typeof lead.id === 'string' && lead.id ? lead.id : null;
+            if (!id) return true;
+            if (seenFormIds.has(id)) return false;
+            seenFormIds.add(id);
+            return true;
+          })
+          .map((lead) => normalizeMetaLeadFields(lead, questions));
+        return { leads };
+      } catch (err) {
+        this.handleMetaError(err);
+      }
+    }
+
+    // 2) Campanha externa (ou local sem form): via ads da campanha.
+    const metaCampaignId = local?.metaCampaignId || args.campaignId;
+    let ads: Array<{ id: string }>;
+    try {
+      ads = await this.meta.getCampaignAds(metaCampaignId, accessToken);
+    } catch (err) {
+      this.handleMetaError(err);
+    }
+
+    const formQuestions: Map<string, Array<{ key: string; type: string }>> = new Map();
+    const leads: Array<{ name: string | null; email: string | null; phone: string | null; createdAt: string | null }> = [];
+    // Dedup por id do lead: uma mesma submissão pode aparecer sob múltiplos ads
+    // da campanha (mesmo form compartilhado entre criativos) — não pode contar 2x.
+    // Emails iguais com ids diferentes = submissões diferentes (cada uma conta).
+    const seenLeadIds = new Set<string>();
+
+    for (const ad of ads) {
+      let adLeads: Array<Record<string, unknown>>;
+      try {
+        adLeads = await this.meta.getAdLeads(ad.id, accessToken);
+      } catch (err) {
+        this.handleMetaError(err);
+      }
+      for (const lead of adLeads) {
+        const leadId = typeof lead.id === 'string' && lead.id ? lead.id : null;
+        if (leadId) {
+          if (seenLeadIds.has(leadId)) continue;
+          seenLeadIds.add(leadId);
+        }
+        const formId = typeof lead.form_id === 'string' ? lead.form_id : null;
+        if (formId && !formQuestions.has(formId)) {
+          formQuestions.set(formId, await this.safeGetFormQuestions(formId, accessToken));
+        }
+        leads.push(normalizeMetaLeadFields(lead, formId ? (formQuestions.get(formId) ?? []) : []));
+      }
+    }
+
+    return { leads };
+  }
+
+  /** Busca questions do form SEM quebrar a listagem (degradação graciosa → []). */
+  private async safeGetFormQuestions(
+    formId: string,
+    accessToken: string,
+  ): Promise<Array<{ key: string; type: string }>> {
+    try {
+      const questions = await this.meta.getLeadFormQuestions(formId, accessToken);
+      return Array.isArray(questions) ? questions : [];
+    } catch (err) {
+      console.warn(`[CampaignLeads] falha ao buscar questions do form ${formId}:`, (err as Error).message);
+      return [];
+    }
+  }
+
+  /**
+   * Leads agregados de TODAS as campanhas de Formulário (OUTCOME_LEADS) do tenant.
+   * FONTE DA VERDADE: Meta — itera `getLeadCampaigns` (inclui campanhas criadas
+   * fora do Fury). Cada lead carrega campaignId/campaignName para o frontend.
+   */
+  async getAllCampaignLeads(args: { tenantId: string }): Promise<{
+    leads: Array<{
+      name: string | null;
+      email: string | null;
+      phone: string | null;
+      createdAt: string | null;
+      campaignId: string;
+      campaignName: string;
+    }>;
+  }> {
+    const campaigns = await this.getLeadCampaigns(args);
+
+    const leads: Array<{
+      name: string | null; email: string | null; phone: string | null; createdAt: string | null;
+      campaignId: string; campaignName: string;
+    }> = [];
+
+    for (const campaign of campaigns) {
+      try {
+        const { leads: campaignLeads } = await this.getCampaignLeads({
+          tenantId: args.tenantId,
+          campaignId: campaign.id,
+        });
+        for (const lead of campaignLeads) {
+          leads.push({ ...lead, campaignId: campaign.id, campaignName: campaign.name });
+        }
+      } catch (err) {
+        // Falha em uma campanha não derruba a listagem das demais.
+        console.error(`[CampaignLeads] falha ao buscar leads da campanha ${campaign.id}:`, (err as Error).message);
+      }
+    }
+
+    return { leads };
+  }
+
+  async searchMetaLocations(args: { tenantId: string; query: string; types?: MetaGeoSearchType[] }): Promise<any[]> {
+    // Sem types: busca de cidades de sempre (mesma chave de cache)
+    const withTypes = Boolean(args.types?.length);
+    const cacheKey = withTypes ? `${args.types!.join(',')}|${args.query}` : args.query;
+    const cached = await this.deps.getMetaLocationsCache(cacheKey);
+    if (cached) return cached;
+
+    let results: any[];
+
+    try {
+      // 1. A busca de token AGORA fica dentro do try
+      const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+      results = withTypes
+        ? await searchMetaGeoLocations(args.query, accessToken, args.types!)
+        : await this.meta.searchLocations(args.query, accessToken);
+    } catch (err) {
+      // 2. Se falhar na busca de token OU no envio pra Meta (401, 403 ou qualquer erro em dev)
+      console.warn(`[searchMetaLocations] Falha na Meta ou Token ausente/expirado localmente. Retornando mock data para query: "${args.query}"`);
+  
+      const query = args.query.toLowerCase();
+      results = DEV_MOCK_LOCATIONS.filter(
+        (loc) => loc.name.toLowerCase().includes(query) || (loc.region && loc.region.toLowerCase().includes(query))
+      );
+  
+      // Se nenhuma correspondência exata, retorna os 5 primeiros mocks pra nunca quebrar a interface local
+      if (results.length === 0) {
+        results = DEV_MOCK_LOCATIONS.slice(0, 5);
+      }
+    }
+  
+    await this.deps.setMetaLocationsCache(cacheKey, results);
+    return results;
+  }
+
+  // "Usar minha localização": coordenadas → cidade da Meta
+  async findMetaCityByCoords(args: { tenantId: string; lat: number; lng: number }): Promise<any> {
+    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+    let city;
+    try { city = await findMetaCityByCoords(args.lat, args.lng, accessToken); }
+    catch (err) {
+      const e = err as { metaCode?: number; metaSubcode?: number; message?: string };
+      throw new AppError(502, 'META_CITY_LOOKUP_FAILED', 'Não foi possível descobrir a cidade pela Meta.', { meta_code: e.metaCode, meta_subcode: e.metaSubcode, meta_message: e.message });
+    }
+    if (!city) throw new AppError(404, 'CITY_NOT_FOUND', 'A Meta não encontrou uma cidade para a sua localização. Digite o nome da cidade.');
+    return city;
+  }
+
+  async searchMetaInterests(args: { tenantId: string; query: string }): Promise<any[]> {
+    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+    let results: any[];
+    try { results = await searchMetaInterestsLib(args.query, accessToken); }
+    catch (err) { return []; }
+    return results;
+  }
+}
+
+// ── Default instance + backward-compatible wrappers ─────────────────────────
+
+const defaultService = new CampaignsService(
+  new DefaultMetaCampaignProvider(),
+  new DefaultCampaignRepository(),
+  {
+    decryptMetaToken,
+    invalidateCampaignsCache,
+    getMetaLocationsCache,
+    setMetaLocationsCache,
+    getResolvedTenantAssetSelection: ((tenantId: string) =>
+      getResolvedTenantAssetSelection(tenantId).then((r) => ({
+        pages: r.pages.map((p) => ({ ...p, instagramUserId: p.instagramUserId ?? undefined })),
+      }))) as (tenantId: string) => Promise<{ pages: Array<{ instagramUserId?: string; pageId?: string }> }>,
+    upsertCampaignSnapshot: (tenantId, values) => new MetaSyncRepository(tenantId).upsertCampaignSnapshot(values),
+    updateCampaignSnapshot: (tenantId, metaCampaignId, values) =>
+      new MetaSyncRepository(tenantId).updateCampaignSnapshot(metaCampaignId, values),
+    enqueueMetaSync: async (args) => {
+      const { enqueueMetaSyncTenantRun } = await import('../../workers/meta-sync.worker.js');
+      return enqueueMetaSyncTenantRun(args);
+    },
+  }
+);
+
+/** Singleton do service (composition root). Controllers/DI importam este, não `new CampaignsService()` direto. */
+export const campaignsService = defaultService;
+
+export const createCampaign = (args: Parameters<CampaignsService['createCampaign']>[0]) => defaultService.createCampaign(args);
+export const pauseCampaign = (args: Parameters<CampaignsService['pauseCampaign']>[0]) => defaultService.pauseCampaign(args);
+export const resumeCampaign = (args: Parameters<CampaignsService['resumeCampaign']>[0]) => defaultService.resumeCampaign(args);
+export const updateCampaignBudget = (args: Parameters<CampaignsService['updateCampaignBudget']>[0]) => defaultService.updateCampaignBudget(args);
+export const getCampaign = (args: Parameters<CampaignsService['getCampaign']>[0]) => defaultService.getCampaign(args);
+export const getCampaignPanelDetail = (args: Parameters<CampaignsService['getCampaignPanelDetail']>[0]) => defaultService.getCampaignPanelDetail(args);
+export const getCampaigns = (args: Parameters<CampaignsService['getCampaigns']>[0]) => defaultService.getCampaigns(args);
+export const updateCampaign = (args: Parameters<CampaignsService['updateCampaign']>[0]) => defaultService.updateCampaign(args);
+export const updateCampaignStatus = (args: Parameters<CampaignsService['updateCampaignStatus']>[0]) => defaultService.updateCampaignStatus(args);
+export const softDeleteCampaign = (args: Parameters<CampaignsService['softDeleteCampaign']>[0]) => defaultService.softDeleteCampaign(args);
+export const getCampaignInsights = (args: Parameters<CampaignsService['getCampaignInsights']>[0]) => defaultService.getCampaignInsights(args);
+export const createCampaignFromWizard = (args: Parameters<CampaignsService['createCampaignFromWizard']>[0]) => defaultService.createCampaignFromWizard(args);
+export const getCampaignLeads = (args: Parameters<CampaignsService['getCampaignLeads']>[0]) => defaultService.getCampaignLeads(args);
+export const getLeadCampaigns = (args: Parameters<CampaignsService['getLeadCampaigns']>[0]) => defaultService.getLeadCampaigns(args);
+export const searchMetaLocations = (args: Parameters<CampaignsService['searchMetaLocations']>[0]) => defaultService.searchMetaLocations(args);
+export const searchMetaInterests = (args: Parameters<CampaignsService['searchMetaInterests']>[0]) => defaultService.searchMetaInterests(args);

@@ -4,6 +4,13 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, CheckCircle2, XCircle, ArrowLeft, Upload, ImageIcon, Save } from 'lucide-react';
 import { AppLayout, PageHeader, Button, Card } from '@/components';
 import api from '@/lib/api';
+import {
+  COMPLIANCE_APPROVED_HINT,
+  COMPLIANCE_REJECTED_HINT,
+  COMPLIANCE_PENDING_HINT,
+} from '@/lib/compliance.utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useBrandKit } from '@/hooks/useBrandKit';
 import type {
   RenderCreativePayload,
   RenderCreativeResponse,
@@ -15,25 +22,52 @@ type WizardStep = 'form' | 'preview' | 'compliance';
 function ComplianceBadge({ status, approved }: { status: string; approved: boolean | null }) {
   if (status === 'pending_compliance') {
     return (
-      <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
-        <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-        Verificando compliance...
-      </div>
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg cursor-help">
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+              Verificando compliance...
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-56 bg-amber-600 text-white border-amber-600">
+            {COMPLIANCE_PENDING_HINT}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
   if (approved === true || status === 'approved') {
     return (
-      <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
-        <CheckCircle2 className="w-4 h-4 shrink-0" />
-        Aprovado para publicação
-      </div>
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg cursor-help">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              Aprovado para publicação
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-56 bg-green-700 text-white border-green-700">
+            {COMPLIANCE_APPROVED_HINT}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
   return (
-    <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">
-      <XCircle className="w-4 h-4 shrink-0" />
-      Reprovado pela política de anúncios
-    </div>
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded-lg cursor-help">
+            <XCircle className="w-4 h-4 shrink-0" />
+            Reprovado pela política de anúncios
+          </div>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-56 bg-red-700 text-white border-red-700">
+          {COMPLIANCE_REJECTED_HINT}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -46,7 +80,7 @@ function StepIndicator({ step }: { step: WizardStep }) {
   const idx = steps.findIndex((s) => s.key === step);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="ady-decor flex items-center gap-2">
       {steps.map((s, i) => (
         <div key={s.key} className="flex items-center gap-2">
           <div
@@ -64,7 +98,7 @@ function StepIndicator({ step }: { step: WizardStep }) {
             {s.label}
           </span>
           {i < steps.length - 1 && (
-            <div className={`w-8 h-px ${i < idx ? 'bg-[#E8631A]' : 'bg-gray-200'}`} />
+            <div className={`w-8 h-px ${i < idx ? 'bg-[#E8631A]' : 'bg-slate-300 dark:bg-gray-200'}`} />
           )}
         </div>
       ))}
@@ -87,7 +121,7 @@ function CreativePreview({
 }) {
   return (
     <div className="relative" style={{ aspectRatio: '1/1' }}>
-      <img src={imageUrl} alt="Criativo gerado" className="w-full h-full block object-cover" />
+      <img src={imageUrl} alt="Anúncio gerado" className="w-full h-full block object-cover" />
       {/* Headline — vertically centered in the brand strip above the CTA pill */}
       <div
         className="absolute inset-x-0 flex items-center justify-center px-8 pointer-events-none"
@@ -132,6 +166,9 @@ export function GeradorImagem() {
   const [headline, setHeadline] = useState('');
   const [cta, setCta] = useState('Saiba mais');
   const [brandColor, setBrandColor] = useState('#E8631A');
+  const [includeLogo, setIncludeLogo] = useState(true);
+
+  const { brandKit, isLoading: brandKitLoading } = useBrandKit();
 
   // Result state
   const [creativeAssetId, setCreativeAssetId] = useState<string | null>(null);
@@ -176,19 +213,20 @@ export function GeradorImagem() {
     },
   });
 
-  const { data: compliance } = useQuery<StudioComplianceStatusResponse>({
-    queryKey: ['studio-asset', creativeAssetId],
-    queryFn: async () => {
-      const res = await api.get<StudioComplianceStatusResponse>(`/studio/assets/${creativeAssetId}`);
-      return res.data;
-    },
-    enabled: !!creativeAssetId && step === 'compliance',
-    refetchInterval: (query) => {
-      const d = query.state.data;
-      if (!d) return 2000;
-      return d.complianceStatus === 'pending_compliance' ? 2000 : false;
-    },
-  });
+  // Consulta de compliance desativada
+  // const { data: compliance } = useQuery<StudioComplianceStatusResponse>({
+  //   queryKey: ['studio-asset', creativeAssetId],
+  //   queryFn: async () => {
+  //     const res = await api.get<StudioComplianceStatusResponse>(`/studio/assets/${creativeAssetId}`);
+  //     return res.data;
+  //   },
+  //   enabled: !!creativeAssetId && step === 'compliance',
+  //   refetchInterval: (query) => {
+  //     const d = query.state.data;
+  //     if (!d) return 2000;
+  //     return d.complianceStatus === 'pending_compliance' ? 2000 : false;
+  //   },
+  // });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
@@ -217,6 +255,7 @@ export function GeradorImagem() {
       cta: cta.trim(),
       brandColor,
       imageUrl: productImageDataUrl!,
+      includeLogo,
     });
   }
 
@@ -229,8 +268,10 @@ export function GeradorImagem() {
     publishMutation.reset();
   }
 
-  const complianceStatus = compliance?.complianceStatus ?? (creativeAssetId ? 'pending_compliance' : null);
-  const isApproved = compliance?.approved === true || complianceStatus === 'approved';
+  // Compliance desativado: sempre liberado para salvar
+  // const complianceStatus = compliance?.complianceStatus ?? (creativeAssetId ? 'pending_compliance' : null);
+  // const isApproved = compliance?.approved === true || complianceStatus === 'approved';
+  const isApproved = true;
 
   return (
     <AppLayout
@@ -245,14 +286,14 @@ export function GeradorImagem() {
             Voltar
           </button>
           <span className="text-border">·</span>
-          <h2 className="text-lg font-bold text-text-primary">Gerar Novo Criativo</h2>
+          <h2 className="text-lg font-bold text-text-primary">Gerar Novo Anúncio</h2>
         </div>
       }
     >
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <PageHeader
-            title="Gerador de Criativos com IA"
+            title="Gerador de Anúncios com IA"
             description="Monte seu anúncio em 3 passos: foto, texto e publicação"
           />
           <StepIndicator step={step} />
@@ -265,7 +306,7 @@ export function GeradorImagem() {
             <div className="lg:col-span-1 space-y-4">
               <Card>
                 <div className="p-6 space-y-5">
-                  <p className="text-sm font-semibold text-text-primary">
+                  <p className="ady-decor text-sm font-semibold text-text-primary">
                     Foto do Produto <span className="text-red-500">*</span>
                   </p>
 
@@ -323,7 +364,7 @@ export function GeradorImagem() {
               <Card>
                 <div className="p-6 space-y-5">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="ady-decor text-sm font-medium text-text-primary">
                       Headline <span className="text-red-500">*</span>
                     </label>
                     <textarea
@@ -351,7 +392,7 @@ export function GeradorImagem() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-text-primary">
+                    <label className="ady-decor text-sm font-medium text-text-primary">
                       CTA (botão de chamada) <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -395,17 +436,31 @@ export function GeradorImagem() {
                     </div>
                   </div>
 
+                  {brandKit?.logo_url && (
+                    <label className="flex items-center gap-3 pt-1 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={includeLogo}
+                        onChange={(e) => setIncludeLogo(e.target.checked)}
+                        className="w-4 h-4 rounded border-border text-[#E8631A] focus:ring-[#E8631A]/30 accent-[#E8631A]"
+                      />
+                      <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">
+                        Incluir logo da empresa no anúncio
+                      </span>
+                    </label>
+                  )}
+
                   <div className="pt-2">
                     <Button
                       type="button"
                       onClick={handleGenerate}
                       disabled={renderMutation.isPending}
-                      className="w-full bg-[#E8631A] hover:bg-[#D45714] disabled:opacity-50"
+                      className="ady-decor w-full bg-[#E8631A] text-white hover:bg-[#D45714] disabled:opacity-50"
                     >
                       {renderMutation.isPending ? (
                         <span className="inline-flex items-center gap-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          Montando criativo...
+                          Montando anúncio...
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-2">
@@ -416,7 +471,7 @@ export function GeradorImagem() {
                     </Button>
                     {renderMutation.isError && (
                       <p className="text-xs text-red-500 mt-2 text-center">
-                        Erro ao montar criativo. Verifique a imagem e tente novamente.
+                        Erro ao montar anúncio. Verifique a imagem e tente novamente.
                       </p>
                     )}
                   </div>
@@ -435,10 +490,11 @@ export function GeradorImagem() {
               </div>
               <div className="p-6 space-y-4">
                 <div>
-                  <p className="text-sm font-semibold text-text-primary mb-1">Preview do seu criativo</p>
+                  <p className="text-sm font-semibold text-text-primary mb-1">Preview do seu anúncio</p>
+                  {/* Aviso de compliance desativado
                   <p className="text-xs text-text-secondary">
                     Antes de salvar, verificamos o compliance com as políticas do Meta.
-                  </p>
+                  </p> */}
                 </div>
                 <div className="flex gap-3">
                   <Button
@@ -470,6 +526,7 @@ export function GeradorImagem() {
                 </div>
               )}
               <div className="p-6 space-y-4">
+                {/* Selo e motivos de compliance desativados
                 {complianceStatus && (
                   <ComplianceBadge status={complianceStatus} approved={compliance?.approved ?? null} />
                 )}
@@ -481,19 +538,20 @@ export function GeradorImagem() {
                     ))}
                   </ul>
                 )}
+                */}
 
                 {publishedUrl ? (
                   <div className="space-y-4">
                     <div className="flex items-start gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-3 rounded-lg">
                       <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                      <span>Criativo salvo na biblioteca! Você pode usá-lo ao criar uma campanha.</span>
+                      <span>Anúncio salvo na biblioteca! Você pode usá-lo ao criar uma campanha.</span>
                     </div>
                     <div className="flex gap-3">
                       <Button type="button" variant="outline" onClick={() => navigate('/estudio')} className="flex-1">
                         Ver biblioteca
                       </Button>
                       <Button type="button" variant="outline" onClick={handleReset} className="flex-1">
-                        Criar novo criativo
+                        Criar novo anúncio
                       </Button>
                     </div>
                   </div>

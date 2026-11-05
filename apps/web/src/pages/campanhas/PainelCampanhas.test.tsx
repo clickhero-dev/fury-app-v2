@@ -1,0 +1,162 @@
+/*
+# Language: pt-BR
+
+Funcionalidade: manter totais de Campanhas sincronizados com o período selecionado
+
+  Cenário: esconder os totais anteriores enquanto a nova consulta está carregando
+    Dado que a lista e os totais do período atual foram carregados
+    Quando o usuário seleciona outro período e a consulta ainda está pendente
+    Então a lista e os totais anteriores são substituídos por skeletons
+    E os totais do novo período aparecem quando a consulta termina
+*/
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+import { PainelCampanhas } from './PainelCampanhas';
+import { CampaignWizardProvider } from '@/contexts/CampaignWizardContext';
+
+const mockApiGet = vi.hoisted(() => vi.fn());
+
+vi.mock('@/lib/api', () => ({
+  default: {
+    get: mockApiGet,
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}));
+
+vi.mock('@/components/campaign-wizard/CampaignWizard', () => ({
+  CampaignWizard: () => null,
+}));
+vi.mock('@/hooks/usePauseCampaign', () => ({ usePauseCampaign: () => ({ isPending: false, mutate: vi.fn() }) }));
+vi.mock('@/hooks/useDeleteCampaign', () => ({ useDeleteCampaign: () => ({ isPending: false, mutate: vi.fn() }) }));
+
+function makeWrapper() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return ({ children }: { children: ReactNode }) => (
+    <CampaignWizardProvider>
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/campanhas']}>{children}</MemoryRouter>
+      </QueryClientProvider>
+    </CampaignWizardProvider>
+  );
+}
+
+function mockCampaigns(rows: Record<string, unknown>[]) {
+  mockApiGet.mockImplementation((url: string) => {
+    if (url === '/v2/campaigns') {
+      return Promise.resolve({ data: { success: true, data: rows } });
+    }
+    return Promise.resolve({ data: { success: true, data: [] } });
+  });
+}
+
+describe('PainelCampanhas — Total Clientes = soma das linhas de campanha', () => {
+  // data fixa: "Este mês" e "7 dias" coincidem no dia 8 e o teste perde o sentido
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-15T15:00:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  beforeEach(() => {
+    mockApiGet.mockReset();
+  });
+
+  it('o "Total Clientes" é a soma das conversões das linhas exibidas (ativas + pausadas, padrão)', async () => {
+    mockCampaigns([
+      { id: 'a', name: 'Camp Ativa', status: 'ACTIVE', conversions: 80, spend: 100 },
+      { id: 'b', name: 'Camp Pausada', status: 'PAUSED', conversions: 1154, spend: 4900 },
+      { id: 'c', name: 'Camp Finalizada', status: 'ARCHIVED', conversions: 5000, spend: 9000 },
+    ]);
+
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+
+    // Total = 80 + 1154 = 1.234 (finalizada fica fora do padrão).
+    expect(await screen.findByText('1.234')).toBeInTheDocument();
+    expect(screen.getByText('Total Clientes')).toBeInTheDocument();
+    expect(screen.queryByText('6.234')).not.toBeInTheDocument();
+    // Total investido = 100 + 4900 = 5.000 (finalizada fica fora).
+    expect(screen.getByText('R$ 5.000,00')).toBeInTheDocument();
+  });
+
+  it('não exibe totais quando não há campanhas', async () => {
+    mockApiGet.mockImplementation(() =>
+      Promise.resolve({ data: { success: true, data: [] } })
+    );
+
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText('Nenhuma campanha por aqui ainda')).toBeInTheDocument();
+    expect(screen.queryByText('Total Clientes')).not.toBeInTheDocument();
+  });
+
+  it('mostra skeleton ao trocar o período até os novos dados carregarem', async () => {
+    let resolveNext!: (value: { data: { success: boolean; data: unknown[] } }) => void;
+    mockApiGet.mockImplementationOnce(() => Promise.resolve({
+      data: { success: true, data: [{ id: 'a', name: 'Camp Ativa', status: 'ACTIVE', conversions: 80, spend: 100 }] },
+    }));
+    mockApiGet.mockImplementationOnce(() => new Promise((resolve) => { resolveNext = resolve; }));
+
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+    expect(await screen.findByText('Camp Ativa')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '7 dias' }));
+    expect(screen.getByRole('status', { name: /carregando campanhas/i })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: /carregando totais/i })).toBeInTheDocument();
+    expect(screen.queryByText('Total investido')).not.toBeInTheDocument();
+    expect(screen.queryByText('Total Clientes')).not.toBeInTheDocument();
+    expect(screen.queryByText('Camp Ativa')).not.toBeInTheDocument();
+
+    resolveNext({ data: { success: true, data: [{ id: 'b', name: 'Nova campanha', status: 'ACTIVE', conversions: 10, spend: 20 }] } });
+    expect(await screen.findByText('Nova campanha')).toBeInTheDocument();
+    expect((await screen.findAllByText('R$ 20,00')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Total Clientes')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('status', { name: /carregando campanhas/i })).not.toBeInTheDocument());
+  });
+
+  it('informa falha de carregamento e permite tentar novamente', async () => {
+    mockApiGet
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ data: { success: true, data: [] } });
+
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+    expect(await screen.findByText(/não foi possível carregar as campanhas/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /tentar novamente/i }));
+    expect(await screen.findByText('Nenhuma campanha por aqui ainda')).toBeInTheDocument();
+  });
+
+  it('não apresenta falha de carregamento como uma lista vazia', async () => {
+    mockApiGet.mockRejectedValueOnce(new Error('offline'));
+
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText(/não foi possível carregar as campanhas/i)).toBeInTheDocument();
+    expect(screen.queryByText('Nenhum dado disponível')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nenhuma campanha por aqui ainda')).not.toBeInTheDocument();
+  });
+
+  it('informa discretamente a última atualização enquanto consulta novos dados da Meta', async () => {
+    mockApiGet.mockResolvedValue({
+      data: {
+        success: true,
+        data: [{ id: 'a', name: 'Camp Ativa', status: 'ACTIVE', conversions: 80, spend: 100 }],
+        degraded: true,
+        syncedAt: '2026-09-28T17:30:00.000Z',
+      },
+    });
+
+    render(<PainelCampanhas />, { wrapper: makeWrapper() });
+
+    expect(await screen.findByText('Camp Ativa')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Estamos consultando seus dados na Meta');
+    expect(screen.getByRole('status')).toHaveTextContent('Última atualização: 28/09 às 14:30');
+  });
+});

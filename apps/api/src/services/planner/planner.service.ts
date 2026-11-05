@@ -1,0 +1,900 @@
+import { generateId } from '../../agents/utils.js';
+import { openrouterService } from '../llms/openrouter.service.js';
+import type { JobStatus } from '../../agents/types.js';
+import { parseAgentJSON } from '../../agents/utils.js';
+import { AppError } from '../../middleware/errorHandler.js';
+import { createInstagramMedia, getMediaContainerStatus, publishInstagramMedia, getUserFacebookPages } from '../../lib/meta-api.js';
+import { decryptMetaToken } from '../../utils/crypto.js';
+import { saoPauloYMD, todaySaoPauloYMD } from '../../utils/date-sao-paulo.js';
+import { plannerStore } from '../../planner-store.js';
+import { enqueuePlanGeneration } from '../../workers/planner.worker.js';
+import { snapshotToJobStatus } from '../../agents/job-status-adapter.js';
+import { PlannerRepository } from '../../repository/planner.repository.js';
+import { fitImageToStory } from './story-image.js';
+
+// Job de planejamento em andamento com mais de 15min é considerado "stale":
+// o fluxo limpa os dados do banco e permite gerar novamente.
+const PLANNER_JOB_STALE_MS = 15 * 60 * 1000;
+
+export type AssetComplianceSummary = {
+  url: string;
+  complianceStatus: string | null;
+  complianceNotes: string | null;
+};
+
+export type PlanPostWithCompliance = {
+  compliance: { status: string | null; notes: string | null } | null;
+};
+
+/** Anexa o compliance do creative_asset ao post, casando pela URL da imagem. */
+export function decoratePostsWithCompliance(
+  posts: Array<Record<string, any>>,
+  assets: AssetComplianceSummary[]
+): Array<Record<string, unknown> & PlanPostWithCompliance> {
+  const byUrl = new Map(assets.map((a) => [a.url, a]));
+  return posts.map((post) => {
+    const urls = Array.isArray(post.imageUrls) ? (post.imageUrls as Array<string | null>) : [];
+    const url = post.imageUrl ?? urls[0] ?? null;
+    const asset = url ? byUrl.get(url) : undefined;
+    return {
+      ...post,
+      compliance: asset
+        ? { status: asset.complianceStatus, notes: asset.complianceNotes }
+        : null,
+    };
+  });
+}
+
+// ── helpers puros (sem dependência de repo/service) ──────────────────────────
+
+function formatWaitSeconds(seconds: number): string {
+  if (seconds >= 60) {
+    const min = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return s > 0 ? `${min}min e ${s}s` : `${min}min`;
+  }
+  return `${seconds}s`;
+}
+
+const RETRY_BACKOFF_MINUTES = [1, 5, 15];
+
+/** Post publicado (ou publicando) não muda de dia. */
+function assertMovable(status: string | null | undefined): void {
+  if (status === 'published' || status === 'publishing') {
+    throw new AppError(409, 'POST_LOCKED', 'Post já publicado não pode mudar de dia.');
+  }
+}
+
+const isVideoUrl = (url: string) => /\.(mp4|mov)(\?|$)/i.test(url);
+/** Carrossel não mistura imagem e vídeo (regra do produto). */
+const isMixedMedia = (urls: string[]) => new Set(urls.map(isVideoUrl)).size > 1;
+
+/** Lease do claim de publicação (publish-now) — espelha PUBLISH_LEASE_MINUTES do repository. */
+const PUBLISH_LEASE_MINUTES = 5;
+
+interface InstagramAccount {
+  igUserId: string;
+  accessToken: string;
+  pageName: string;
+  instagramUsername: string | null;
+}
+
+export interface AgentLabel {
+  id: string;
+  label: string;
+}
+
+export interface AgentLabelsResponse {
+  order: string[];
+  labels: Record<string, string>;
+}
+
+/**
+ * PlannerService — classe de domínio com DI no construtor (repoFactory + deps).
+ *
+ * Métodos usam `this.repo(tenantId)` para acessar o PlannerRepository do tenant
+ * e `this.deps.*` para os serviços externos (LLM/openrouter). Nenhum repo é
+ * instanciado inline: tudo passa pelas factories injetadas.
+ *
+ * O singleton (plannerService) é usado pelo controller via composition root.
+ * As funções de módulo (abaixo) foram preservadas como aliases que delegam ao
+ * singleton — necessárias para o worker (publish-due.worker) e testes que
+ * importam `publishDuePosts`, `startPlanGeneration`, `publishSinglePost`.
+ */
+export class PlannerService {
+  constructor(
+    private readonly repoFactory: (tenantId: string) => PlannerRepository = (t) => new PlannerRepository(t),
+    private readonly deps: {
+      openrouter: typeof openrouterService;
+      createInstagramMedia: typeof createInstagramMedia;
+      getMediaContainerStatus: typeof getMediaContainerStatus;
+      publishInstagramMedia: typeof publishInstagramMedia;
+      getUserFacebookPages: typeof getUserFacebookPages;
+      fitImageToStory?: typeof fitImageToStory;
+    } = {
+      openrouter: openrouterService,
+      createInstagramMedia,
+      getMediaContainerStatus,
+      publishInstagramMedia,
+      getUserFacebookPages,
+      fitImageToStory,
+    },
+  ) {}
+
+  private repo(t: string): PlannerRepository {
+    return this.repoFactory(t);
+  }
+
+  /** Remove os dados de planejamento (posts e planos) do tenant — usado no reset de job stale. */
+  private async clearTenantPlannerData(tenantId: string): Promise<void> {
+    await this.repo(tenantId).clearPlannerData();
+  }
+
+  async startPlanGeneration(tenantId: string, postsCount: number = 8): Promise<JobStatus> {
+    // Gate de créditos ANTES de qualquer etapa do pipeline: se não há saldo,
+    // para por aqui e devolve 402 ao front — sem criar job, sem enfileirar,
+    // sem queimar créditos nas chamadas de LLM dos agentes iniciais.
+    await this.deps.openrouter.assertCreditsAvailable();
+
+    // Lock: rejeita se tenant já tiver um job ativo (running/pending)
+    const existing = await plannerStore.findActiveByLockKey(tenantId, 'planner-generate');
+    if (existing) {
+      const elapsed = Date.now() - new Date(existing.updatedAt).getTime();
+      if (elapsed < PLANNER_JOB_STALE_MS) {
+        const waitSec = Math.max(1, Math.ceil((PLANNER_JOB_STALE_MS - elapsed) / 1000));
+        throw new AppError(
+          409,
+          'PLANNER_JOB_IN_PROGRESS',
+          `Já existe um planejamento em andamento. Aguarde ${formatWaitSeconds(waitSec)} antes de tentar novamente.`,
+        );
+      }
+      // Job stale (> 15min): limpa os dados do tenant e libera o lock para regerar.
+      await this.clearTenantPlannerData(tenantId);
+      await plannerStore.save(existing.id, { status: 'error' });
+    }
+
+    const id = generateId();
+    await plannerStore.create({
+      id,
+      tenantId,
+      workflow: 'planner-generate',
+      lockKey: tenantId,
+      metadata: { postsCount }, // Store postsCount in job metadata
+    });
+
+    try {
+      await enqueuePlanGeneration(id, tenantId, postsCount);
+    } catch (err) {
+      console.warn('[planner] falha ao enfileirar no BullMQ, executando inline:', err);
+      const { runPlannerWorkflow } = await import('../../planner-workflow-runner.js');
+      void runPlannerWorkflow(id, tenantId, postsCount).catch((pipelineErr) => {
+        console.error('[planner] pipeline inline falhou:', pipelineErr);
+      });
+    }
+
+    const snapshot = await plannerStore.load(id);
+    if (!snapshot) throw new AppError(500, 'INTERNAL', 'Falha ao criar job de planejamento');
+    return snapshotToJobStatus(snapshot);
+  }
+
+  async getJobProgress(jobId: string): Promise<JobStatus | null> {
+    const snapshot = await plannerStore.load(jobId);
+    if (!snapshot) return null;
+    return snapshotToJobStatus(snapshot);
+  }
+
+  async getPlanById(planId: string, tenantId: string) {
+    const repo = this.repo(tenantId);
+    const plan = await repo.getPlanById(planId);
+    if (!plan) return null;
+    await this.attachComplianceToPosts(repo, plan.posts ?? [], (posts) => {
+      plan.posts = posts as any;
+    });
+    return plan;
+  }
+
+  /** Anexa o compliance (do creative_asset) aos posts, casando pela URL da imagem. */
+  private async attachComplianceToPosts(
+    repo: PlannerRepository,
+    posts: Array<Record<string, any>>,
+    apply: (decorated: Array<Record<string, unknown> & PlanPostWithCompliance>) => void,
+  ): Promise<void> {
+    const urls = posts
+      .map((p) => {
+        const urls = Array.isArray(p.imageUrls) ? (p.imageUrls as Array<string | null>) : [];
+        return p.imageUrl ?? urls[0] ?? null;
+      })
+      .filter((u): u is string => !!u);
+    if (urls.length === 0) return;
+    const assets = await repo.findAssetsByUrls(urls);
+    apply(decoratePostsWithCompliance(posts, assets));
+  }
+
+  async getLatestPlanByTenant(tenantId: string) {
+    return this.repo(tenantId).getLatestPlan();
+  }
+
+  async listPlansByTenant(tenantId: string, limit = 10) {
+    return this.repo(tenantId).listPlans(limit);
+  }
+
+  async getPrerequisites(tenantId: string) {
+    const repo = this.repo(tenantId);
+    const meta = await repo.findActiveMetaConnection();
+    const goals = await repo.findClientGoal();
+    const brand = await repo.findBrandKit();
+
+    return {
+      metaConnected: !!meta,
+      hasProduct: !!(goals?.mainProduct),
+      hasObjective: !!(goals?.objective),
+      hasVoiceTone: !!(brand?.voiceTone),
+    };
+  }
+
+  async confirmPlan(planId: string, tenantId: string) {
+    const plan = await this.repo(tenantId).confirmPlan(planId);
+    if (!plan) throw new AppError(404, 'NOT_FOUND', 'Plano não encontrado');
+    return plan;
+  }
+
+  async revalidatePlan(planId: string, tenantId: string, updates: Record<string, any>) {
+    const repo = this.repo(tenantId);
+    const plan = await repo.getPlanById(planId);
+    if (!plan) throw new AppError(404, 'NOT_FOUND', 'Plano não encontrado');
+    const currentMeta = (plan.metadata || {}) as Record<string, any>;
+    const newMeta = { ...currentMeta, ...updates, revalidatedAt: new Date().toISOString() };
+    const updated = await repo.revalidatePlan(planId, newMeta);
+    return updated;
+  }
+
+  async editPostWithAI(postId: string, tenantId: string, prompt: string) {
+    const repo = this.repo(tenantId);
+    const post = await repo.findPostById(postId);
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+
+    const systemPrompt = `Você é um copywriter sênior de redes sociais. Edite o post abaixo seguindo EXATAMENTE a instrução do usuário. Mantenha o tom de voz profissional e adequado para negócios locais.
+
+Post atual:
+Título: ${post.title ?? '—'}
+Legenda: ${post.caption ?? '—'}
+CTA: ${post.cta ?? '—'}
+Hashtags: ${JSON.stringify(post.hashtags ?? [])}
+
+Instrução do usuário: ${prompt}
+
+Retorne APENAS JSON neste formato exato (sem markdown, sem comentários):
+{"caption": "...nova legenda...", "cta": "...novo cta...", "hashtags": ["#tag1", "#tag2"]}`;
+
+    const raw = await this.deps.openrouter.chat(
+      [{ role: 'system', content: systemPrompt }],
+      { temperature: 0.7, max_tokens: 1500, response_format: { type: 'json_object' } },
+    );
+
+    let updates: Record<string, any>;
+    try {
+      updates = parseAgentJSON(raw);
+    } catch {
+      throw new AppError(502, 'AI_PARSE_ERROR', 'Resposta da IA inválida ao editar post');
+    }
+
+    const updated = await repo.patchPost(postId, {
+      caption: typeof updates.caption === 'string' ? updates.caption : post.caption,
+      cta: typeof updates.cta === 'string' ? updates.cta : post.cta,
+      hashtags: Array.isArray(updates.hashtags) ? updates.hashtags : post.hashtags,
+      updatedAt: new Date(),
+    });
+
+    if (!updated) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado ao atualizar');
+    return updated;
+  }
+
+  async updatePostFields(
+    postId: string,
+    tenantId: string,
+    fields: {
+      caption?: string;
+      cta?: string;
+      hashtags?: string[];
+      postType?: 'image' | 'carousel' | 'reel' | 'stories';
+      imageUrl?: string | null;
+      imageUrls?: string[];
+      scheduledAt?: string | null;
+    },
+  ) {
+    const repo = this.repo(tenantId);
+    const current = await repo.findPostById(postId);
+    // rejected = excluído (delete lógico)
+    if (!current || current.status === 'rejected') throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    if (current.status === 'published' || current.status === 'publishing') {
+      throw new AppError(409, 'POST_LOCKED', 'Post já publicado ou em publicação não pode ser editado.');
+    }
+
+    const setData: Record<string, any> = { updatedAt: new Date() };
+    if (fields.caption !== undefined) setData.caption = fields.caption;
+    if (fields.cta !== undefined) setData.cta = fields.cta;
+    if (fields.hashtags !== undefined) setData.hashtags = fields.hashtags;
+    if (fields.postType !== undefined) setData.postType = fields.postType;
+    if (fields.imageUrl !== undefined) setData.imageUrl = fields.imageUrl;
+    if (fields.imageUrls !== undefined) setData.imageUrls = fields.imageUrls;
+
+    // Mídia final precisa casar com o tipo final
+    const postType = fields.postType ?? current.postType;
+    const imageUrl = fields.imageUrl !== undefined ? fields.imageUrl : current.imageUrl;
+    const imageUrls = (fields.imageUrls ?? (Array.isArray(current.imageUrls) ? current.imageUrls : [])) as string[];
+    const touchesMedia = fields.postType !== undefined || fields.imageUrl !== undefined || fields.imageUrls !== undefined;
+    if (touchesMedia || fields.scheduledAt) {
+      if (postType !== 'carousel' && !imageUrl) {
+        throw new AppError(400, 'MEDIA_REQUIRED', 'Post precisa de mídia para ser agendado.');
+      }
+      if (postType === 'carousel' && (imageUrls.length < 2 || imageUrls.length > 10)) {
+        throw new AppError(400, 'CAROUSEL_TOO_FEW_ITEMS', 'Carrossel precisa de 2 a 10 mídias.');
+      }
+      if (postType === 'carousel' && isMixedMedia(imageUrls)) {
+        throw new AppError(400, 'CAROUSEL_MIXED_MEDIA', 'Carrossel aceita só imagens ou só vídeos, sem misturar.');
+      }
+      if (postType === 'reel' && !isVideoUrl(imageUrl ?? '')) {
+        throw new AppError(400, 'REEL_REQUIRES_VIDEO', 'Reels precisa de um vídeo (MP4 ou MOV).');
+      }
+    }
+
+    if (fields.scheduledAt !== undefined) {
+      if (fields.scheduledAt) {
+        // Agendar: dia do calendário segue o horário (Brasília) e libera para o job
+        const at = new Date(fields.scheduledAt);
+        const calendarDate = saoPauloYMD(at);
+        Object.assign(setData, {
+          scheduledAt: at,
+          calendarDate,
+          dayIndex: Number(calendarDate.slice(8, 10)),
+          status: 'approved',
+          publishAttempts: 0,
+          nextRetryAt: null,
+          lastPublishError: null,
+        });
+      } else {
+        Object.assign(setData, { scheduledAt: null, status: 'draft' });
+      }
+    }
+
+    // Condição de status no próprio UPDATE: se o job pegou o post no meio, não sobrescreve
+    const updated = await repo.patchPostIfEditable(postId, setData);
+    if (!updated) {
+      throw new AppError(409, 'POST_LOCKED', 'Post entrou em publicação ou foi alterado. Atualize e tente de novo.');
+    }
+    return updated;
+  }
+
+  // ===== Calendário Editorial =====
+
+  /**
+   * Retorna posts de um range de datas usando calendar_date direto.
+   *
+   * - Filtra posts onde calendar_date >= startDate AND calendar_date < endDate
+   * - Exclui posts com status 'rejected' ou 'failed'
+   * - Carrega dados do plano pai (se houver) para preencher _source/_planTitle
+   */
+  async getCalendarPostsByDateRange(
+    tenantId: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<Array<Record<string, any>>> {
+    const repo = this.repo(tenantId);
+    const allPosts = await repo.listPostsByDateRange(startDate, endDate);
+    const urls = allPosts
+      .map((p: any) => p.imageUrl ?? p.imageUrls?.[0] ?? null)
+      .filter((u: unknown): u is string => !!u);
+    const assets = urls.length > 0 ? await repo.findAssetsByUrls(urls) : [];
+    const decorated = decoratePostsWithCompliance(allPosts, assets) as any[];
+
+    // Enriquece com metadados
+    return decorated.map(post => ({
+      ...post,
+      _source: post.planId ? 'plan' : 'manual',
+      _planTitle: post.plan?.title ?? null,
+    }));
+  }
+
+  /** Função antiga (backwards compatibility com queries year/month). Internamente converte para range de datas. */
+  async getCalendarPosts(tenantId: string, year: number, month: number) {
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 1);
+
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+
+    return this.getCalendarPostsByDateRange(tenantId, startDateStr, endDateStr);
+  }
+
+  /** Upload do post também vai para a biblioteca; falha aqui não bloqueia o upload. */
+  async saveUploadToLibrary(tenantId: string, url: string, mimeType: string): Promise<void> {
+    try {
+      await this.repo(tenantId).createLibraryAsset(mimeType.startsWith('video/') ? 'video' : 'image', url);
+    } catch (err) {
+      console.error(`[saveUploadToLibrary] tenant ${tenantId}:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  async bulkSchedulePosts(tenantId: string, postIds: string[], scheduledAt: string | null) {
+    return this.repo(tenantId).bulkSchedulePosts(postIds, scheduledAt);
+  }
+
+  async bulkDeletePosts(tenantId: string, postIds: string[]) {
+    console.log(`[bulkDelete] tenant ${tenantId}: ${postIds.length} posts`, postIds);
+
+    try {
+      const result = await this.repo(tenantId).bulkRejectPosts(postIds);
+      console.log(`[bulkDelete] tenant ${tenantId}: ${result.length} deletados`);
+      return result;
+    } catch (err) {
+      console.error(`[bulkDelete] tenant ${tenantId} ERROR:`, err);
+      if (err instanceof Error) {
+        console.error(`[bulkDelete] message:`, err.message);
+        console.error(`[bulkDelete] stack:`, err.stack?.split('\n').slice(0, 5).join('\n'));
+      }
+      throw err;
+    }
+  }
+
+  async createManualPost(tenantId: string, data: {
+    caption?: string;
+    postType: string;
+    dayIndex?: number;
+    date?: string; // ISO date: "2026-08-19" (novo formato, Fase 1)
+    platform?: string;
+    scheduledAt?: string;
+    title?: string;
+    imageUrl?: string;
+    imageUrls?: string[];
+  }) {
+    // Dual-format: calcula dayIndex e calendarDate a partir de date ou dayIndex
+    let dayIndex = data.dayIndex;
+    let calendarDate: string | null;
+
+    if (data.date) {
+      // Novo formato: date completa
+      const dateObj = new Date(data.date);
+      dayIndex = dateObj.getUTCDate();
+      calendarDate = data.date;
+    } else if (dayIndex) {
+      // Formato antigo: dayIndex — calendarDate usa mês corrente (fallback Fase 2, seção 4, passo 2/3)
+      const now = new Date();
+      const year = now.getUTCFullYear();
+      const month = now.getUTCMonth();
+      const lastDayOfMonth = new Date(year, month + 1, 0).getUTCDate();
+      const clampedDay = Math.min(dayIndex, lastDayOfMonth);
+      const date = new Date(Date.UTC(year, month, clampedDay));
+      calendarDate = date.toISOString().split('T')[0];
+    } else {
+      // Fallback: dia 1 de mês corrente
+      const now = new Date();
+      dayIndex = 1;
+      const year = now.getUTCFullYear();
+      const month = now.getUTCMonth();
+      const date = new Date(Date.UTC(year, month, 1));
+      calendarDate = date.toISOString().split('T')[0];
+    }
+
+    return this.repo(tenantId).createPost({
+      tenantId,
+      planId: null,
+      caption: data.caption || '',
+      postType: data.postType as any,
+      dayIndex: dayIndex || 1,
+      calendarDate: calendarDate!,
+      platform: data.platform || 'instagram',
+      scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
+      title: data.title || null,
+      imageUrl: data.imageUrl || null,
+      imageUrls: data.imageUrls ?? null,
+      status: 'approved',
+    });
+  }
+
+  /** Move post por dayIndex (formato legado da Fase 1). Mantém o mês vigente. */
+  async movePostDay(tenantId: string, postId: string, dayIndex: number) {
+    const repo = this.repo(tenantId);
+    const post = await repo.findPostById(postId);
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    assertMovable(post.status);
+
+    // Se o post tem calendar_date, extrai mês/ano e aplica novo dayIndex
+    let newCalendarDate: string | null;
+    if (post.calendarDate) {
+      const currentDate = new Date(post.calendarDate);
+      const year = currentDate.getUTCFullYear();
+      const month = currentDate.getUTCMonth();
+      const lastDayOfMonth = new Date(year, month + 1, 0).getUTCDate();
+      const clampedDay = Math.min(dayIndex, lastDayOfMonth);
+      const newDate = new Date(Date.UTC(year, month, clampedDay));
+      newCalendarDate = newDate.toISOString().split('T')[0];
+    } else {
+      // Fallback: nenhuma calendar_date, usar mês corrente
+      const now = new Date();
+      const year = now.getUTCFullYear();
+      const month = now.getUTCMonth();
+      const lastDayOfMonth = new Date(year, month + 1, 0).getUTCDate();
+      const clampedDay = Math.min(dayIndex, lastDayOfMonth);
+      const newDate = new Date(Date.UTC(year, month, clampedDay));
+      newCalendarDate = newDate.toISOString().split('T')[0];
+    }
+
+    const updated = await repo.patchPostIfEditable(postId, { dayIndex, calendarDate: newCalendarDate, updatedAt: new Date() });
+    if (!updated) throw new AppError(409, 'POST_LOCKED', 'Post já publicado não pode mudar de dia.');
+    return updated;
+  }
+
+  /** Move post por data completa (novo formato, Fase 1). Extrai o dayIndex da data e grava ambos. */
+  async movePostDate(
+    tenantId: string,
+    postId: string,
+    date: string,
+    scheduledAt?: string,
+  ) {
+    const dateObj = new Date(date);
+    const dayIndex = dateObj.getUTCDate();
+    const calendarDate = date;
+
+    // Monta o objeto de atualização
+    const updateData: Record<string, any> = {
+      dayIndex,
+      calendarDate,
+      updatedAt: new Date(),
+    };
+
+    // Se um novo scheduledAt (data + hora) foi informado, converte e adiciona
+    if (scheduledAt) {
+      updateData.scheduledAt = new Date(scheduledAt);
+    }
+
+    const repo = this.repo(tenantId);
+    const current = await repo.findPostById(postId);
+    if (!current) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    assertMovable(current.status);
+    // condição de status no UPDATE (corrida com a publicação)
+    const updated = await repo.patchPostIfEditable(postId, updateData);
+    if (!updated) throw new AppError(409, 'POST_LOCKED', 'Post já publicado não pode mudar de dia.');
+    return updated;
+  }
+
+  // ===== Calendário Editorial: Publicação Automática =====
+
+  /**
+   * Resolve a conta Instagram do tenant para publicação no calendário.
+   *
+   * GARANTIA DE CONTA: publica SOMENTE no perfil vinculado explicitamente
+   * (meta_connections.selected_instagram_user_id, gravado server-side no
+   * save-selection). Sem vinculação, vinculação revogada ou página sem IG ⇒
+   * null (não publica — falha segura). O antigo fallback `pagesWithIg[0]`
+   * publicava em contas erradas (bug: velora_studio → jeanvdentz, 2026-09).
+   */
+  async resolveInstagramAccount(tenantId: string): Promise<InstagramAccount | null> {
+    const conn = await this.repo(tenantId).findLatestMetaConnection();
+
+    if (!conn) {
+      console.log(`[resolveInstagram] tenant ${tenantId}: sem conexão Meta`);
+      return null;
+    }
+    if (!conn.accessToken) {
+      console.log(`[resolveInstagram] tenant ${tenantId}: conexão Meta sem token`);
+      return null;
+    }
+
+    // Fonte de verdade da autorização: vinculação explícita gravada no
+    // save-selection. Sem ela, NÃO publica — nem com outras contas à mão.
+    const authorizedIgUserId: string | null = (conn as any).selectedInstagramUserId ?? null;
+    if (!authorizedIgUserId) {
+      console.warn(`[resolveInstagram] tenant ${tenantId}: Instagram NÃO vinculado — publicação do calendário desativada. Vincule o perfil em Configurações > Integrações (ou refaça o onboarding).`);
+      return null;
+    }
+
+    const accessToken = decryptMetaToken(conn.accessToken);
+    const pages = await this.deps.getUserFacebookPages(accessToken);
+
+    console.log(`[resolveInstagram] tenant ${tenantId}: Facebook retornou ${pages.length} páginas:`,
+      JSON.stringify(pages.map(p => ({ pageId: p.pageId, name: p.name, hasInstagram: p.hasInstagram, instagramUserId: p.instagramUserId }))));
+
+    // A conta vinculada precisa continuar acessível pelo token (presente em
+    // /me/accounts com IG). Revogada/removida ⇒ não publica.
+    const authorized = pages.find(
+      (p) => p.instagramUserId && p.instagramUserId === authorizedIgUserId,
+    );
+    if (!authorized) {
+      console.warn(`[resolveInstagram] tenant ${tenantId}: perfil vinculado (${authorizedIgUserId}) não está acessível/sem Instagram — NÃO publicando (falha segura). Páginas com IG disponíveis: ${JSON.stringify(pages.filter(p => p.instagramUserId).map(p => p.instagramUsername ?? p.pageId))}`);
+      return null;
+    }
+
+    console.log(`[resolveInstagram] tenant ${tenantId}: publicando no perfil AUTORIZADO — "${authorized.name}" IG=${authorized.instagramUserId} (@${authorized.instagramUsername || 'sem @'})`);
+    return {
+      igUserId: authorized.instagramUserId!,
+      accessToken,
+      pageName: authorized.name,
+      instagramUsername: authorized.instagramUsername,
+    };
+  }
+
+  /**
+   * Publica um post no Instagram. Função pura — recebe tudo por parâmetro.
+   * Testável isoladamente com mock de metaApiCall.
+   */
+  async publishSinglePost(
+    post: { id: string; postType: string; caption?: string | null; imageUrl?: string | null; imageUrls?: unknown },
+    igUserId: string,
+    accessToken: string,
+  ): Promise<{ mediaId: string }> {
+    if (post.postType === 'carousel') {
+      return this.publishCarousel(post, igUserId, accessToken);
+    }
+    const isReel = post.postType === 'reel';
+    const isStory = post.postType === 'stories';
+    const mediaUrl = post.imageUrl;
+    if (!mediaUrl) {
+      throw new Error(`Post ${post.id} não tem imageUrl para publicar`);
+    }
+    // Story aceita imagem ou vídeo (mp4/mov)
+    if (isReel && !isVideoUrl(mediaUrl)) {
+      throw new Error(`Reels ${post.id} precisa de vídeo (MP4 ou MOV)`);
+    }
+    const isVideo = isReel || (isStory && isVideoUrl(mediaUrl));
+    // Imagem de story ajustada para 9:16 sem corte
+    const publishUrl = isStory && !isVideo && this.deps.fitImageToStory
+      ? await this.deps.fitImageToStory(mediaUrl)
+      : mediaUrl;
+
+    // 1. Criar media container
+    const containerId = await this.deps.createInstagramMedia(igUserId, accessToken, {
+      [isVideo ? 'videoUrl' : 'imageUrl']: publishUrl,
+      // Story não tem legenda na API
+      caption: isStory ? undefined : post.caption || undefined,
+      mediaType: isReel ? 'REELS' : isStory ? 'STORIES' : undefined,
+    });
+
+    // 2. Espera FINISHED (evita 9007)
+    await this.waitForContainer(containerId, accessToken, isVideo);
+
+    // 3. Publicar
+    const mediaId = await this.deps.publishInstagramMedia(igUserId, accessToken, containerId);
+    return { mediaId };
+  }
+
+  /** Carrossel: containers dos itens → container CAROUSEL → publish. */
+  private async publishCarousel(
+    post: { id: string; caption?: string | null; imageUrl?: string | null; imageUrls?: unknown },
+    igUserId: string,
+    accessToken: string,
+  ): Promise<{ mediaId: string }> {
+    const urls = (Array.isArray(post.imageUrls) ? post.imageUrls : [])
+      .filter((u): u is string => typeof u === 'string' && !!u);
+    if (urls.length < 2 || urls.length > 10) {
+      throw new Error(`Carrossel precisa de 2 a 10 mídias (post ${post.id} tem ${urls.length})`);
+    }
+    if (isMixedMedia(urls)) {
+      throw new Error(`Carrossel ${post.id} mistura imagem e vídeo`);
+    }
+
+    // 1. Containers dos itens (sem legenda)
+    const children: string[] = [];
+    for (const url of urls) {
+      const isVideo = isVideoUrl(url);
+      children.push(await this.deps.createInstagramMedia(igUserId, accessToken, {
+        [isVideo ? 'videoUrl' : 'imageUrl']: url,
+        isCarouselItem: true,
+      }));
+    }
+    const videoItems = isVideoUrl(urls[0]);
+    for (const childId of children) {
+      await this.waitForContainer(childId, accessToken, videoItems);
+    }
+
+    // 2. Container do carrossel (legenda aqui)
+    const carouselId = await this.deps.createInstagramMedia(igUserId, accessToken, {
+      mediaType: 'CAROUSEL',
+      children,
+      caption: post.caption || undefined,
+    });
+    await this.waitForContainer(carouselId, accessToken);
+
+    // 3. Publicar
+    const mediaId = await this.deps.publishInstagramMedia(igUserId, accessToken, carouselId);
+    return { mediaId };
+  }
+
+  /** Polling até FINISHED — a Meta responde 9007 se publicar antes. Vídeo: ~85s (cabe no timeout HTTP de 120s). */
+  private async waitForContainer(containerId: string, accessToken: string, isVideo = false): Promise<void> {
+    const pollDelays = isVideo
+      ? [5_000, 5_000, 10_000, 10_000, 15_000, 20_000, 20_000]
+      : [3_000, 3_000, 12_000];
+    for (let i = 0; i < pollDelays.length; i++) {
+      await new Promise((r) => setTimeout(r, pollDelays[i]));
+      const status = await this.deps.getMediaContainerStatus(containerId, accessToken);
+      if (status === 'FINISHED') return;
+    }
+    throw new Error(`Media container ${containerId} still IN_PROGRESS after ${pollDelays.length} polls`);
+  }
+
+  async publishDuePosts(tenantId: string) {
+    const now = new Date();
+    const repo = this.repo(tenantId);
+    console.log(`[publishDuePosts] tenant ${tenantId}: verificando se há posts agendados...`);
+    const due = await repo.listDuePosts(now);
+
+    if (due.length === 0) {
+      console.log(`[publishDuePosts] tenant ${tenantId}: nenhum post agendado para publicar`);
+      return { published: 0, posts: [], reason: 'no_due_posts' as const };
+    }
+
+    const account = await this.resolveInstagramAccount(tenantId);
+
+    // Tenant sem Instagram: sai silenciosamente
+    if (!account) {
+      console.log(`[publishDuePosts] tenant ${tenantId}: sem conta Instagram — retornando published: 0`);
+      return { published: 0, posts: [], reason: 'no_instagram_account' as const };
+    }
+
+    console.log(`[publishDuePosts] tenant ${tenantId}: ${due.length} posts agendados, iniciando publicação...`);
+    let published = 0;
+
+    for (const post of due) {
+      if (!['image', 'reel', 'stories', 'carousel'].includes(post.postType)) continue;
+
+      // Claim atômico ANTES de publicar: disputa com o trigger manual
+      // (publish-now). Quem perde pula o post sem marcar nada — o dono
+      // do claim é o único responsável pelo resultado.
+      const claimed = await repo.claimPostForPublish(post.id);
+      if (!claimed) continue;
+
+      const attempts = (post.publishAttempts ?? 0) + 1;
+
+      try {
+        const { mediaId } = await this.publishSinglePost(
+          { id: post.id, postType: post.postType, caption: post.caption, imageUrl: post.imageUrl, imageUrls: post.imageUrls },
+          account.igUserId,
+          account.accessToken,
+        );
+
+        await repo.markPostPublished(post.id, now, mediaId, attempts);
+        published++;
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[publishDuePosts] Post ${post.id} falhou (tentativa ${attempts}):`, errorMsg);
+
+        if (attempts >= 3) {
+          await repo.markPostFailed(post.id, attempts, errorMsg, now);
+        } else {
+          const backoffMin = RETRY_BACKOFF_MINUTES[attempts - 1] ?? 15;
+          const nextRetryAt = new Date(now.getTime() + backoffMin * 60_000);
+          await repo.setPostRetry(post.id, attempts, errorMsg, nextRetryAt, now);
+        }
+      }
+    }
+
+    return { published, posts: due.map(p => ({ id: p.id, caption: p.caption?.slice(0, 80) })), pageName: account.pageName, instagramUsername: account.instagramUsername };
+  }
+
+  /**
+   * "Postar agora" (publish-now): cria o post JÁ com claim de publicação
+   * (status 'publishing' + lease nextRetryAt +5min) e publica no mesmo
+   * request. Falha de publicação = markPostFailed NA HORA (sem retry
+   * automático — o retry é o clique do usuário com key idempotência nova).
+   * Carrossel recusado até a Fase 2 (containers filhos na Graph API).
+   */
+  async publishNow(
+    tenantId: string,
+    payload: { postType: string; caption?: string; imageUrl?: string; imageUrls?: string[] | null; title?: string; platform?: string },
+  ) {
+    if (payload.postType === 'carousel' && (payload.imageUrls?.length ?? 0) < 2) {
+      throw new AppError(400, 'CAROUSEL_TOO_FEW_ITEMS', 'Carrossel precisa de pelo menos 2 imagens.');
+    }
+    if (payload.postType === 'reel' && !isVideoUrl(payload.imageUrl ?? '')) {
+      throw new AppError(400, 'REEL_REQUIRES_VIDEO', 'Reels precisa de um vídeo (MP4 ou MOV).');
+    }
+    if (payload.postType === 'carousel' && isMixedMedia(payload.imageUrls ?? [])) {
+      throw new AppError(400, 'CAROUSEL_MIXED_MEDIA', 'Carrossel aceita só imagens ou só vídeos, sem misturar.');
+    }
+    const repo = this.repo(tenantId);
+    const now = new Date();
+    const leaseUntil = new Date(now.getTime() + PUBLISH_LEASE_MINUTES * 60_000);
+    // "Postar agora" cai no calendário do dia de São Paulo (não UTC): entre
+    // 21h–23h59 BRT o UTC já virou o dia seguinte. dayIndex deriva da mesma
+    // data para manter calendarDate e dayIndex sempre consistentes.
+    const calendarDate = todaySaoPauloYMD();
+    const post = await repo.createPost({
+      tenantId,
+      planId: null,
+      caption: payload.caption || '',
+      postType: payload.postType as any,
+      dayIndex: Number(calendarDate.slice(8, 10)),
+      calendarDate,
+      platform: payload.platform || 'instagram',
+      scheduledAt: now,
+      title: payload.title || null,
+      imageUrl: payload.imageUrl || null,
+      imageUrls: payload.imageUrls ?? null,
+      status: 'publishing',
+      nextRetryAt: leaseUntil,
+    } as any);
+    return this.attemptPublish(repo, post, tenantId);
+  }
+
+  /**
+   * "Tentar novamente" (retry do publish-now): republica o post EXISTENTE via
+   * claim atômico — nunca cria outro. Perdeu o claim (published / publishing
+   * com lease fresco) ⇒ 409 POST_CLAIMED.
+   */
+  async publishRetry(tenantId: string, postId: string) {
+    const repo = this.repo(tenantId);
+    // 404 primeiro: post inexistente não deve passar pelo claim (que é UPDATE
+    // condicional e devolveria 409 POST_CLAIMED enganoso para 0 linhas).
+    const post = await repo.findPostById(postId);
+    if (!post) throw new AppError(404, 'NOT_FOUND', 'Post não encontrado');
+    const claimed = await repo.claimPostForPublish(postId);
+    if (!claimed) {
+      throw new AppError(409, 'POST_CLAIMED', 'Post não pode ser republicado agora (já publicado ou publicação em andamento).');
+    }
+    return this.attemptPublish(repo, post, tenantId);
+  }
+
+  /** Resolve conta, publica, marca resultado e devolve o estado final do post. */
+  private async attemptPublish(
+    repo: PlannerRepository,
+    post: { id: string; postType: string; caption?: string | null; imageUrl?: string | null; imageUrls?: unknown; publishAttempts?: number | null },
+    tenantId: string,
+  ) {
+    const account = await this.resolveInstagramAccount(tenantId);
+    const attempts = (post.publishAttempts ?? 0) + 1;
+
+    if (!account) {
+      const msg = 'no_instagram_account: Instagram não vinculado/revogado — publicação desativada. Vincule o perfil em Configurações > Integrações.';
+      await repo.markPostFailed(post.id, attempts, msg, new Date());
+      return { id: post.id, status: 'failed' as const, lastPublishError: msg };
+    }
+
+    try {
+      const { mediaId } = await this.publishSinglePost(
+        { id: post.id, postType: post.postType, caption: post.caption, imageUrl: post.imageUrl, imageUrls: post.imageUrls },
+        account.igUserId,
+        account.accessToken,
+      );
+      await repo.markPostPublished(post.id, new Date(), mediaId, attempts);
+      return { id: post.id, status: 'published' as const, platformPostId: mediaId, instagramUsername: account.instagramUsername ?? null };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await repo.markPostFailed(post.id, attempts, msg, new Date());
+      return { id: post.id, status: 'failed' as const, lastPublishError: msg };
+    }
+  }
+
+  getAgentLabels(): AgentLabelsResponse {
+    const order = [
+      'prerequisites',
+      'context',
+      'planner',
+      'image-generation',
+      'save',
+    ];
+
+    const labels: Record<string, string> = {
+      prerequisites: 'Checando pré-requisitos e disponibilidade do gerador',
+      context: 'Coletando contexto da sua empresa',
+      planner: 'Criando os posts do calendário',
+      'image-generation': 'Gerando as imagens dos posts',
+      save: 'Salvando no calendário',
+    };
+
+    return { order, labels };
+  }
+}
+
+export const plannerService = new PlannerService();
+
+// ── Aliases de módulo que delegam ao singleton ──────────────────────────────
+// Preservados para o worker (publish-due.worker) e testes que importam as
+// funções como exports de módulo (publish-due.test, planner-lock.test).
+export const startPlanGeneration = (tenantId: string): ReturnType<PlannerService['startPlanGeneration']> =>
+  plannerService.startPlanGeneration(tenantId);
+
+export const publishSinglePost: PlannerService['publishSinglePost'] = (post, igUserId, accessToken) =>
+  plannerService.publishSinglePost(post, igUserId, accessToken);
+
+export const publishDuePosts: PlannerService['publishDuePosts'] = (tenantId) =>
+  plannerService.publishDuePosts(tenantId);

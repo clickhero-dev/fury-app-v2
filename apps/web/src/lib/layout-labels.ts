@@ -1,7 +1,12 @@
-// Dicionário central de linguagem de produto para os 5 arquétipos.
-// REGRA: o código usa os nomes técnicos; a UI usa SEMPRE os nomes amigáveis
-// daqui. Nenhum nome técnico (offer_burst, etc.) deve aparecer na tela.
+/**
+ * Dicionário central de linguagem de produto para os 5 arquétipos de layout criativo.
+ *
+ * REGRA DE USO: o código usa os nomes técnicos (ex: 'offer_burst') internamente,
+ * mas a UI exibe SEMPRE os nomes amigáveis definidos aqui.
+ * Nenhum nome técnico deve aparecer na tela para o usuário.
+ */
 
+/** Identificadores técnicos dos layouts criativos disponíveis no Estúdio. */
 export type CreativeLayout =
   | 'editorial_headline'
   | 'offer_burst'
@@ -9,6 +14,7 @@ export type CreativeLayout =
   | 'photo_immersive'
   | 'split_horizontal_photo';
 
+/** Lista ordenada de todos os layouts disponíveis. */
 export const CREATIVE_LAYOUTS: CreativeLayout[] = [
   'editorial_headline',
   'offer_burst',
@@ -17,15 +23,20 @@ export const CREATIVE_LAYOUTS: CreativeLayout[] = [
   'split_horizontal_photo',
 ];
 
+/** Estágio do funil de marketing. */
 export type FunnelStage = 'TOFU' | 'MOFU' | 'BOFU';
 
-// Estágio do funil em linguagem de produto (nunca "TOFU/BOFU" na tela).
+/**
+ * Labels amigáveis para os estágios do funil.
+ * Nunca exibir os termos técnicos (TOFU/MOFU/BOFU) na interface.
+ */
 export const FUNNEL_LABEL: Record<FunnelStage, string> = {
   TOFU: 'Atração de clientes',
   MOFU: 'Consideração',
   BOFU: 'Conversão',
 };
 
+/** Chaves dos campos editáveis nos layouts criativos. */
 export type FieldKey =
   | 'headline'
   | 'subheadline'
@@ -38,9 +49,11 @@ export type FieldKey =
   | 'price_text'
   | 'tone';
 
+/** Especificação de um campo editável em um layout criativo. */
 export interface LayoutFieldSpec {
   key: FieldKey;
   label: string;
+  /** Tipo do campo: texto simples, área de texto, lista de itens ou seletor de tom. */
   kind: 'text' | 'textarea' | 'list' | 'tone';
   maxLength?: number;
   itemMaxLength?: number;
@@ -50,15 +63,26 @@ export interface LayoutFieldSpec {
   hint?: string;
 }
 
+/** Metadados completos de um layout criativo. */
 export interface LayoutMeta {
+  /** Nome amigável exibido na UI. */
   label: string;
+  /** Estágio do funil para o qual o layout é mais adequado. */
   funnelStage: FunnelStage;
+  /** Orientação sobre quando usar este layout. */
   whenToUse: string;
+  /** Se o layout requer uma imagem de produto/background. */
   needsImage: boolean;
+  /** Se o layout requer o logo da marca. */
   needsLogo: boolean;
+  /** Campos editáveis do layout em ordem de exibição. */
   fields: LayoutFieldSpec[];
 }
 
+/**
+ * Mapa completo de metadados para cada layout criativo.
+ * Fonte única de verdade para configuração dos layouts no Estúdio Criativo.
+ */
 export const LAYOUT_META: Record<CreativeLayout, LayoutMeta> = {
   editorial_headline: {
     label: 'Manchete editorial',
@@ -125,16 +149,49 @@ export const LAYOUT_META: Record<CreativeLayout, LayoutMeta> = {
   },
 };
 
+/**
+ * Retorna o label amigável de um layout a partir do seu identificador técnico.
+ * Retorna 'Modelo descontinuado' para layouts não reconhecidos.
+ *
+ * @param layout - Identificador técnico do layout
+ * @returns Nome amigável do layout
+ *
+ * @example
+ * layoutLabel('offer_burst')    // → 'Oferta de alto impacto'
+ * layoutLabel('layout_antigo')  // → 'Modelo descontinuado'
+ */
 export function layoutLabel(layout: string): string {
   return (LAYOUT_META as Record<string, LayoutMeta>)[layout]?.label ?? 'Modelo descontinuado';
 }
 
+/**
+ * Verifica se uma string é um identificador válido de layout criativo.
+ * Útil para type narrowing em código que recebe layouts como string genérica.
+ *
+ * @param layout - String a verificar
+ * @returns `true` se o layout existe em `LAYOUT_META`
+ *
+ * @example
+ * if (isKnownLayout(layout)) {
+ *   // layout é do tipo CreativeLayout aqui
+ * }
+ */
 export function isKnownLayout(layout: string): layout is CreativeLayout {
   return layout in LAYOUT_META;
 }
 
-// Defesa em profundidade: mesmo que o LLM escape a instrução do prompt, a UI
-// nunca exibe o nome técnico do arquétipo — troca por nome de produto.
+/**
+ * Substitui nomes técnicos de layouts por seus labels amigáveis em um texto.
+ * Usada como defesa em profundidade: mesmo que o LLM ignore a instrução do prompt,
+ * nenhum nome técnico aparece na interface.
+ *
+ * @param text - Texto gerado pelo LLM que pode conter nomes técnicos
+ * @returns Texto com nomes técnicos substituídos por labels de produto
+ *
+ * @example
+ * sanitizeJustification('Use offer_burst para promoções')
+ * // → 'Use Oferta de alto impacto para promoções'
+ */
 export function sanitizeJustification(text: string): string {
   let out = text;
   for (const layout of CREATIVE_LAYOUTS) {

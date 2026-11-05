@@ -1,0 +1,315 @@
+import { useState, useEffect } from 'react';
+import { Loader2, X } from 'lucide-react';
+import { Select } from '@/components/ui/select';
+import { useMetaInterests } from '@/components/campaign-wizard/hooks/useMetaInterests';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components';
+import type { AudienceGeo, WizardGender } from '@/components/campaign-wizard/types';
+import { AGE_OPTIONS, isValidGeo, legacyFromGeo, EMPTY_GEO } from '@/components/campaign-wizard/types';
+import { LocationEditor } from './LocationEditor';
+import { cn } from '@/lib/utils';
+import api from '@/lib/api';
+import { BusinessContextImprover } from './BusinessContextImprover';
+
+interface AudienceDefaults {
+  city?: string;
+  cityKey?: string;
+  ageMin?: number;
+  ageMax?: number;
+  gender?: WizardGender;
+  audienceInterests?: { id: string; name: string }[];
+  geo?: unknown;
+}
+
+const apiErrorMessage = (err: unknown, fallback: string) =>
+  (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message || fallback;
+
+interface MeResponse {
+  audienceDefaults?: AudienceDefaults;
+  businessContext?: string | null;
+}
+
+const GENDER_OPTIONS: { value: WizardGender; label: string }[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'male', label: 'Homens' },
+  { value: 'female', label: 'Mulheres' },
+];
+
+export function PublicoContent() {
+  const [city, setCity] = useState('');
+  const [cityKey, setCityKey] = useState('');
+  const [geo, setGeo] = useState<AudienceGeo>(EMPTY_GEO);
+  // Remonta o editor quando o salvo termina de carregar
+  const [geoLoadKey, setGeoLoadKey] = useState(0);
+  // Padrão antigo (só city/cityKey) só vira geo quando o usuário mexe
+  const [geoTouched, setGeoTouched] = useState(false);
+  const [hasSavedGeo, setHasSavedGeo] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [ageMin, setAgeMin] = useState(18);
+  const [ageMax, setAgeMax] = useState(65);
+  const [gender, setGender] = useState<WizardGender>('all');
+  const [businessContext, setBusinessContext] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [audienceInterests, setAudienceInterests] = useState<{ id: string; name: string }[]>([]);
+  const [interestQuery, setInterestQuery] = useState('');
+  const [showInterestDropdown, setShowInterestDropdown] = useState(false);
+  const { interests, isLoading: loadingInterests } = useMetaInterests(interestQuery);
+
+  // Load saved defaults
+  useEffect(() => {
+    api.get<{ success: boolean; data: MeResponse }>('/auth/me').then((res) => {
+      const data = res.data.data;
+      const defaults = data.audienceDefaults;
+      if (defaults) {
+        if (defaults.city) setCity(defaults.city);
+        if (defaults.cityKey) setCityKey(defaults.cityKey);
+        // geo antigo/inválido é ignorado (usa o padrão normal)
+        if (isValidGeo(defaults.geo)) {
+          const g = defaults.geo;
+          setHasSavedGeo(true);
+          setGeo({ ...g, regionType: g.regions.length ? g.regionType : undefined });
+        } else if (defaults.city && defaults.cityKey) {
+          setGeo({ ...EMPTY_GEO, regionType: 'city', regions: [{ key: defaults.cityKey, name: defaults.city }] });
+        }
+        setGeoLoadKey((k) => k + 1);
+        if (defaults.ageMin) setAgeMin(defaults.ageMin);
+        if (defaults.ageMax) setAgeMax(defaults.ageMax);
+        if (defaults.gender) setGender(defaults.gender);
+        if (defaults.audienceInterests) setAudienceInterests(defaults.audienceInterests);
+      }
+      if (data.businessContext) setBusinessContext(data.businessContext);
+    }).catch(() => {
+      // silently ignore fetch errors — defaults remain empty
+    });
+  }, []);
+
+  const saveGeo = hasSavedGeo || geoTouched;
+
+  function handleGeoChange(update: (prev: AudienceGeo) => AudienceGeo) {
+    setGeo(update);
+    setGeoTouched(true);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSaved(false);
+    setSaveError('');
+    // Campos antigos seguem preenchidos (wizard, revisão e planner leem city)
+    const legacy = saveGeo ? legacyFromGeo(geo) : { city, cityKey };
+    const legacyCity = legacy.city;
+    const legacyKey = legacy.cityKey;
+    try {
+      await api.patch('/auth/me', {
+        audienceDefaults: {
+          city: legacyCity, cityKey: legacyKey, ageMin, ageMax, gender, audienceInterests,
+          ...(saveGeo ? { geo } : {}),
+        },
+        businessContext: businessContext || undefined,
+      });
+      setCity(legacyCity);
+      setCityKey(legacyKey);
+      if (saveGeo) setHasSavedGeo(true);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setSaveError(apiErrorMessage(err, 'Não foi possível salvar.'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Contexto do Negócio */}
+      <Card>
+        <div className="p-6 space-y-6">
+          <div>
+            <h3 className="text-lg font-bold text-text-primary mb-1">Contexto do Negócio</h3>
+            <p className="text-sm text-text-secondary">
+              Descreva o nicho, os clientes e o contexto da empresa. Esse texto é usado como contexto
+              pela IA ao gerar criativos e recomendações.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-sm font-bold text-gray-900 mb-2 block">
+              O que sua empresa faz, nicho de mercado e perfil dos clientes
+            </label>
+            <textarea
+              value={businessContext}
+              onChange={(e) => setBusinessContext(e.target.value)}
+              placeholder="Ex: Somos uma clínica de estética em São Paulo especializada em tratamentos faciais. Nosso público são mulheres de 25 a 50 anos, classes A e B, que buscam procedimentos não-invasivos como toxina botulínica e preenchimento."
+              rows={6}
+              className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/20 resize-y min-h-[120px]"            />
+            <p className="text-xs text-gray-500 mt-1">
+              Seja detalhado: quanto mais informações, melhor a IA entenderá seu negócio.
+              Ex: nicho, porte, região, ticket médio, diferencial competitivo, público-alvo.
+            </p>
+            <BusinessContextImprover value={businessContext} onChange={setBusinessContext} />
+          </div>
+        </div>
+      </Card>
+
+      {/* Público padrão */}
+      <Card>
+        <div className="p-6 space-y-6">
+          <div>
+            <h3 className="text-lg font-bold text-text-primary mb-1">Público padrão</h3>
+            <p className="text-sm text-text-secondary">
+              Esses dados serão usados como padrão ao criar novas campanhas.
+            </p>
+          </div>
+
+          <div className="space-y-5">
+            {/* Localização */}
+            <LocationEditor
+              key={geoLoadKey}
+              value={geo}
+              onChange={handleGeoChange}
+              legacyCity={!saveGeo && cityKey ? city : undefined}
+            />
+
+            {/* Faixa etária */}
+<div>
+  <label className="text-sm font-bold text-foreground mb-1 block">Faixa etária</label>
+  <div className="flex items-center gap-3">
+    <span className="text-sm text-muted-foreground">De</span>
+    <Select
+      value={ageMin}
+      onChange={(e) => {
+        const val = Number(e.target.value);
+        setAgeMin(val);
+        setAgeMax(Math.max(val, ageMax));
+      }}
+      className="flex-1 cursor-pointer"
+    >
+      {AGE_OPTIONS.map((age) => (
+        <option key={age} value={age}>{age}</option>
+      ))}
+    </Select>
+    <span className="text-sm text-muted-foreground">até</span>
+    <Select
+      value={ageMax}
+      onChange={(e) => setAgeMax(Number(e.target.value))}
+      className="flex-1 cursor-pointer"
+    >
+      {AGE_OPTIONS.filter((age) => age >= ageMin).map((age) => (
+        <option key={age} value={age}>{age}</option>
+      ))}
+    </Select>
+  </div>
+</div>
+
+{/* Gênero */}
+<div>
+  <label className="text-sm font-bold text-foreground mb-1 block">Gênero</label>
+  <div className="grid grid-cols-3 gap-2">
+    {GENDER_OPTIONS.map((option) => (
+      <button
+        key={option.value}
+        type="button"
+        onClick={() => setGender(option.value)}
+        className={cn(
+          'py-3 rounded-lg border-2 text-sm font-bold transition-all duration-200 cursor-pointer',
+          gender === option.value
+            ? 'border-admin-petrol bg-admin-petrol/10 text-admin-petrol'
+            : 'border-border text-muted-foreground bg-background hover:border-admin-petrol/40'
+        )}
+      >
+        {option.label}
+      </button>
+    ))}
+  </div>
+</div>
+
+{/* Interesses */}
+<div>
+  <label className="text-sm font-bold text-foreground mb-1 block">Interesses</label>
+  <p className="text-xs text-gray-500 mb-2">Adicione interesses para segmentar o público (máximo 4)</p>
+
+  {audienceInterests.length > 0 && (
+    <div className="flex flex-wrap gap-2 mb-3">
+      {audienceInterests.map((interest) => (
+        <span
+          key={interest.id}
+          className="inline-flex items-center gap-1 px-3 py-1.5 bg-orange-50 text-[#E8631A] text-sm rounded-full border border-[#E8631A]/20"
+        >
+          {interest.name}
+          <button
+            type="button"
+            onClick={() => setAudienceInterests(audienceInterests.filter((i) => i.id !== interest.id))}
+            className="hover:text-red-600"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </span>
+      ))}
+    </div>
+  )}
+
+  {audienceInterests.length >= 4 && (
+    <p className="text-xs text-amber-700 mb-2">Máximo de 4 interesses atingido.</p>
+  )}
+
+  <div className="relative">
+    <input
+      type="text"
+      value={interestQuery}
+      onChange={(e) => {
+        setInterestQuery(e.target.value);
+        setShowInterestDropdown(true);
+      }}
+      onFocus={() => setShowInterestDropdown(true)}
+      onBlur={() => setTimeout(() => setShowInterestDropdown(false), 150)}
+      placeholder="Digite para buscar interesses..."
+      disabled={audienceInterests.length >= 4}
+      className="w-full px-4 py-3 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/20 disabled:opacity-50 disabled:cursor-not-allowed"
+    />
+    {loadingInterests && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
+
+    {showInterestDropdown && interests.length > 0 && (
+      <div className="absolute z-10 mt-1 left-0 right-0 top-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+        {interests.map((interest) => {
+          const alreadySelected = audienceInterests.some((i) => i.id === interest.id);
+          return (
+            <button
+              key={interest.id}
+              type="button"
+              disabled={alreadySelected || audienceInterests.length >= 4}
+              onMouseDown={() => {
+                if (!alreadySelected && audienceInterests.length < 4) {
+                  setAudienceInterests([...audienceInterests, { id: interest.id, name: interest.name }]);
+                  setInterestQuery('');
+                }
+              }}
+              className={`w-full text-left px-4 py-2 hover:bg-orange-50 text-sm ${
+                alreadySelected || audienceInterests.length >= 4
+                  ? 'text-gray-300 cursor-not-allowed'
+                  : 'text-gray-900'
+              }`}
+            >
+              {interest.name}
+              {interest.path?.length ? <span className="text-gray-400 ml-1">— {interest.path.slice(-2).join(' > ')}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+    )}
+  </div>
+</div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Botão salvar */}
+      <div className="flex items-center gap-3 pt-4 border-t border-border">
+        <Button variant="primary" size="md" disabled={saving} onClick={handleSave}>
+          {saving ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar'}
+        </Button>
+        {saved && <span className="text-sm text-green-600">Configurações salvas.</span>}
+        {saveError && <span className="text-sm text-red-600">{saveError}</span>}
+      </div>
+    </div>
+  );
+}

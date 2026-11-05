@@ -1,107 +1,11 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import api from '@/lib/api';
-
-// ─── Progress steps (etapa do onboarding) ──────────────────────────────────────
-
-const onboardingSteps = [
-  { label: 'Conectar Meta' },
-  { label: 'Selecionar Conta' },
-  { label: 'Definir Meta' },
-  { label: 'Pronto' },
-];
-
-function ProgressSteps({ current }: { current: number }) {
-  return (
-    <div className="flex items-center justify-center gap-0">
-      {onboardingSteps.map((step, i) => {
-        const done = i < current;
-        const active = i === current;
-        return (
-          <div key={step.label} className="flex items-center">
-            <div className="flex flex-col items-center gap-1.5">
-              <div
-                className={[
-                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors',
-                  done || active ? 'bg-[#EA580C] text-white' : 'bg-[#E5E7EB] text-[#9CA3AF]',
-                ].join(' ')}
-              >
-                {done ? (
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                ) : (
-                  i + 1
-                )}
-              </div>
-              <span
-                className={[
-                  'text-xs font-semibold whitespace-nowrap',
-                  active || done ? 'text-[#EA580C]' : 'text-[#9CA3AF]',
-                ].join(' ')}
-              >
-                {step.label}
-              </span>
-            </div>
-            {i < onboardingSteps.length - 1 && (
-              <div
-                className={[
-                  'w-12 h-0.5 mb-5 mx-2',
-                  i < current ? 'bg-[#EA580C]' : 'bg-[#E5E7EB]',
-                ].join(' ')}
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── Sub-steps do fluxo cascateado ─────────────────────────────────────────────
-
-const SUB_STEPS = [
-  { label: 'Business Managers' },
-  { label: 'Páginas' },
-  { label: 'Contas de Anúncio' },
-  { label: 'WhatsApp' },
-  { label: 'Resumo' },
-];
-
-function SubStepIndicator({ current }: { current: number }) {
-  return (
-    <div className="flex items-center justify-center gap-2 flex-wrap">
-      {SUB_STEPS.map((step, i) => {
-        const stepNumber = i + 1;
-        const isActive = stepNumber === current;
-        const isDone = stepNumber < current;
-        return (
-          <span
-            key={step.label}
-            className={cn(
-              'text-xs font-semibold px-2.5 py-1 rounded-full transition-colors',
-              isActive
-                ? 'bg-[#EA580C] text-white'
-                : isDone
-                  ? 'bg-orange-50 text-[#EA580C]'
-                  : 'bg-[#F3F4F6] text-[#9CA3AF]'
-            )}
-          >
-            {stepNumber}. {step.label}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
+import { useState, useTransition, useId } from "react";
+import axios from 'axios';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { AdySymbol } from "@/components/AdySymbol";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import api from "@/lib/api";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────────
 
@@ -115,6 +19,10 @@ interface MetaPageOption {
   name: string;
   businessId: string;
   hasInstagram: boolean;
+  /** Instagram Business vinculado à página (o calendário publica NELE). */
+  instagramUserId?: string | null;
+  /** @username do Instagram vinculado (exibido no badge/resumo). */
+  instagramUsername?: string | null;
 }
 
 interface MetaAdAccountOption {
@@ -124,17 +32,125 @@ interface MetaAdAccountOption {
   businessId: string;
 }
 
-interface MetaWhatsappOption {
-  phoneNumberId: string;
-  displayPhoneNumber: string;
-  pageId: string;
-}
-
 interface ApiListResponse<T> {
   data: T[];
 }
 
-// ─── Checkbox card ──────────────────────────────────────────────────────────────
+export function isConfirmedMetaSelection(
+  saved: any,
+  expected: { businessIds: string[]; pageIds: string[]; adAccountIds: string[]; instagramUserId: string },
+) {
+  return Boolean(saved) && saved.instagramUserId === expected.instagramUserId &&
+    expected.businessIds.every((id) => saved.businessIds?.includes(id)) &&
+    expected.pageIds.every((id) => saved.pageIds?.includes(id)) &&
+    expected.adAccountIds.every((id) => saved.adAccountIds?.includes(id));
+}
+
+// ─── Constantes de Configuração ─────────────────────────────────────────────────
+
+const ONBOARDING_STEPS = [
+  { label: "Conectar Meta" },
+  { label: "Selecionar Conta" },
+  { label: "Definir Meta" },
+  { label: "Pronto" },
+] as const;
+
+const SUB_STEPS = [
+  { label: "Business Managers" },
+  { label: "Contas de Anúncio" },
+  { label: "Páginas" },
+  { label: "Resumo" },
+] as const;
+
+const ITEMS_PER_PAGE = 10;
+
+// ─── Subcomponentes Utilitários ─────────────────────────────────────────────────
+
+function ProgressSteps({ current }: { current: number }) {
+  return (
+    <nav aria-label="Progresso do Onboarding" className="flex items-center justify-center gap-0">
+      <ol className="flex items-center">
+        {ONBOARDING_STEPS.map((step, i) => {
+          const done = i < current;
+          const active = i === current;
+          return (
+            <li key={step.label} className="flex items-center">
+              <div className="flex flex-col items-center gap-1.5">
+                <div
+                  className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors",
+                    done || active
+                      ? "bg-admin-petrol text-white"
+                      : "bg-admin-surface-2 text-admin-text-faint"
+                  )}
+                  aria-current={active ? "step" : undefined}
+                >
+                  {done ? (
+                    <Check className="w-4 h-4 text-white" aria-hidden="true" />
+                  ) : (
+                    i + 1
+                  )}
+                </div>
+                <span
+                  className={cn(
+                    "text-xs font-semibold whitespace-nowrap",
+                    active || done ? "text-admin-petrol" : "text-admin-text-faint"
+                  )}
+                >
+                  {step.label}
+                </span>
+              </div>
+              {i < ONBOARDING_STEPS.length - 1 && (
+                <div
+                  className={cn(
+                    "w-12 h-0.5 mb-5 mx-2 transition-colors",
+                    i < current ? "bg-admin-petrol" : "bg-admin-surface-2"
+                  )}
+                  aria-hidden="true"
+                />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+function SubStepIndicator({ current }: { current: number }) {
+  return (
+    <div className="flex items-center justify-center gap-2 flex-wrap" role="tablist">
+      {SUB_STEPS.map((step, i) => {
+        const stepNumber = i + 1;
+        const isActive = stepNumber === current;
+        const isDone = stepNumber < current;
+        return (
+          <span
+            key={step.label}
+            className={cn(
+              "text-xs font-semibold px-2.5 py-1 rounded-full transition-colors",
+              isActive
+                ? "bg-admin-petrol text-white"
+                : isDone
+                  ? "bg-admin-surface-2 text-admin-petrol"
+                  : "bg-admin-surface-2 text-admin-text-faint"
+            )}
+          >
+            {stepNumber}. {step.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+interface CheckboxCardProps {
+  checked: boolean;
+  title: string;
+  subtitle?: string;
+  badge?: { label: string; tone: "green" | "gray" };
+  onClick: () => void;
+}
 
 function CheckboxCard({
   checked,
@@ -142,43 +158,48 @@ function CheckboxCard({
   subtitle,
   badge,
   onClick,
-}: {
-  checked: boolean;
-  title: string;
-  subtitle?: string;
-  badge?: { label: string; tone: 'green' | 'gray' };
-  onClick: () => void;
-}) {
+}: CheckboxCardProps) {
+  const cardId = useId();
+
   return (
     <button
       type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-labelledby={cardId}
       onClick={onClick}
       className={cn(
-        'w-full text-left p-4 rounded-2xl border-2 transition-all duration-150 flex items-center gap-4',
+        "w-full text-left p-4 rounded-2xl border-2 transition-all duration-150 flex items-center gap-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-petrol focus-visible:ring-offset-2",
         checked
-          ? 'border-[#EA580C] bg-[#FFF7F4]'
-          : 'border-[#E5E7EB] bg-white hover:border-[#EA580C]/40 hover:bg-[#FFF7F4]/50'
+          ? "border-admin-petrol bg-admin-surface-2"
+          : "border-admin-border bg-admin-surface hover:border-admin-petrol/40 hover:bg-admin-surface-2"
       )}
     >
       <div
         className={cn(
-          'w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-colors',
-          checked ? 'border-[#EA580C] bg-[#EA580C]' : 'border-[#D1D5DB]'
+          "w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-colors",
+          checked ? "border-admin-petrol bg-admin-petrol" : "border-admin-border"
         )}
       >
-        {checked && <Check className="w-3.5 h-3.5 text-white" />}
+        {checked && <Check className="w-3.5 h-3.5 text-white" aria-hidden="true" />}
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="font-semibold text-[#1C1C1E] truncate">{title}</p>
-        {subtitle && <p className="text-xs text-[#6E7681] mt-0.5">{subtitle}</p>}
+        <p id={cardId} className="font-semibold text-admin-text truncate">
+          {title}
+        </p>
+        {subtitle && (
+          <p className="text-xs text-admin-text-muted mt-0.5 font-mono">{subtitle}</p>
+        )}
       </div>
 
       {badge && (
         <span
           className={cn(
-            'flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full',
-            badge.tone === 'green' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
+            "flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full",
+            badge.tone === "green"
+              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-admin-surface-2 text-admin-text-faint"
           )}
         >
           {badge.label}
@@ -188,160 +209,197 @@ function CheckboxCard({
   );
 }
 
-function EmptyState({ title, description }: { title: string; description: string }) {
+function EmptyState({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
   return (
-    <div className="bg-[#FFF7F4] border border-[#FDDCCC] rounded-2xl p-6 text-center">
-      <p className="text-[#1C1C1E] font-semibold">{title}</p>
-      <p className="text-sm text-[#6E7681] mt-1">{description}</p>
+    <div className="bg-admin-surface-2 border border-admin-border rounded-2xl p-6 text-center">
+      <p className="text-admin-text font-semibold">{title}</p>
+      <p className="text-sm text-admin-text-muted mt-1">{description}</p>
     </div>
   );
 }
 
 function LoadingSpinner() {
   return (
-    <div className="flex justify-center py-12">
-      <span className="w-8 h-8 border-2 border-[#EA580C]/30 border-t-[#EA580C] rounded-full animate-spin" />
+    <div className="flex justify-center py-12" aria-label="Carregando dados">
+      <Loader2 className="w-8 h-8 text-admin-petrol animate-spin" />
     </div>
   );
 }
 
-// ─── Componente principal ────────────────────────────────────────────────────────
+// ─── Componente Principal ────────────────────────────────────────────────────────
 
 export function SelecionarAtivosPage() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [, startTransition] = useTransition();
 
   const [subStep, setSubStep] = useState(1);
   const [businessIds, setBusinessIds] = useState<string[]>([]);
   const [pageIds, setPageIds] = useState<string[]>([]);
   const [adAccountIds, setAdAccountIds] = useState<string[]>([]);
-  const [whatsappNumberIds, setWhatsappNumberIds] = useState<string[]>([]);
+  const [businessPage, setBusinessPage] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
 
-  function toggle(list: string[], id: string, setter: (value: string[]) => void) {
-    setter(list.includes(id) ? list.filter((item) => item !== id) : [...list, id]);
+  function showError(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 10_000);
   }
 
-  // ── Step 1: Business Managers ─────────────────────────────────────────────────
+  // ── Queries ──────────────────────────────────────────────────────────────────
   const businessesQuery = useQuery({
-    queryKey: ['meta-businesses'],
+    queryKey: ["meta-businesses"],
     queryFn: async () => {
-      const res = await api.get<ApiListResponse<MetaBusinessOption>>('/meta/businesses');
+      const res = await api.get<ApiListResponse<MetaBusinessOption>>("/meta/businesses");
       return res.data.data;
     },
-    staleTime: 0,
+    staleTime: 1000 * 60 * 5,
     retry: false,
   });
-  const businesses = businessesQuery.data ?? [];
 
-  // ── Step 2: Páginas (filtradas pelas BMs selecionadas) ──────────────────────────
-  const pagesQuery = useQuery({
-    queryKey: ['meta-pages-by-business', businessIds],
+  const adAccountsQuery = useQuery({
+    queryKey: ["meta-adaccounts-by-business", businessIds],
     queryFn: async () => {
-      const res = await api.post<ApiListResponse<MetaPageOption>>('/meta/pages-by-business', { businessIds });
+      const res = await api.post<ApiListResponse<MetaAdAccountOption>>(
+        "/meta/adaccounts-by-business",
+        { businessIds }
+      );
       return res.data.data;
     },
     enabled: subStep >= 2 && businessIds.length > 0,
-    staleTime: 0,
+    staleTime: 1000 * 60 * 5,
     retry: false,
   });
-  const pages = pagesQuery.data ?? [];
 
-  // ── Step 3: Contas de Anúncio (filtradas pelas BMs selecionadas) ────────────────
-  const adAccountsQuery = useQuery({
-    queryKey: ['meta-adaccounts-by-business', businessIds],
+  const pagesQuery = useQuery({
+    queryKey: ["meta-pages-by-business", businessIds],
     queryFn: async () => {
-      const res = await api.post<ApiListResponse<MetaAdAccountOption>>('/meta/adaccounts-by-business', {
-        businessIds,
-      });
+      const res = await api.post<ApiListResponse<MetaPageOption>>(
+        "/meta/pages-by-business",
+        { businessIds }
+      );
       return res.data.data;
     },
     enabled: subStep >= 3 && businessIds.length > 0,
-    staleTime: 0,
+    staleTime: 1000 * 60 * 5,
     retry: false,
   });
-  const adAccounts = adAccountsQuery.data ?? [];
 
-  // ── Step 4: WhatsApp (filtrado pelas BMs e Páginas selecionadas) ─────────────
-  const whatsappQuery = useQuery({
-    queryKey: ['meta-whatsapp-by-assets', businessIds, pageIds],
-    queryFn: async () => {
-      const res = await api.post<ApiListResponse<MetaWhatsappOption>>('/meta/whatsapp-by-pages', {
-        businessIds,
-        pageIds,
-      });
-      return res.data.data;
-    },
-    enabled: subStep >= 4 && businessIds.length > 0,
-    staleTime: 0,
-    retry: false,
-  });
-  const whatsappNumbers = whatsappQuery.data ?? [];
-
-  // ── Salvar seleção ───────────────────────────────────────────────────────────
+  // ── Mutations ────────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: async () => {
-      await api.post('/meta/save-selection', {
+      const selectedPage = pages.find((page) => pageIds.includes(page.pageId));
+      if (!selectedPage?.instagramUserId || businessIds.length === 0 || adAccountIds.length === 0) {
+        throw new Error('Selecione uma Business Manager, conta de anúncio e Página com Instagram Business.');
+      }
+      const response = await api.post("/meta/save-selection", {
         businessIds,
         pageIds,
         adAccountIds,
-        whatsappNumberIds,
+        instagramUserId: selectedPage.instagramUserId,
       });
+      const saved = response.data.data;
+      if (!isConfirmedMetaSelection(saved, { businessIds, pageIds, adAccountIds, instagramUserId: selectedPage.instagramUserId })) {
+        throw new Error('A Meta não confirmou todos os ativos selecionados. Revise e tente novamente.');
+      }
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['meta-connections'] });
-      // A query 'meta-connections' fica `enabled: false` enquanto estamos em /onboarding,
-      // entao invalidateQueries (refetchType padrao 'active') nao a refaz. Forca o refetch
-      // com type 'all' para garantir que o cache ja tenha selectedAdAccountId antes do
-      // AuthenticatedShell decidir se redireciona de volta para o onboarding.
-      await queryClient.refetchQueries({ queryKey: ['meta-connections'], type: 'all' });
-      navigate('/dashboard');
+      await queryClient.refetchQueries({
+        queryKey: ["meta-connections"],
+        type: "all",
+      });
+      // Soft navigation garantindo atualização transicionada
+      startTransition(() => {
+        window.location.assign("/dashboard");
+      });
+    },
+    onError: (error: unknown) => {
+      const apiMessage = axios.isAxiosError(error) ? error.response?.data?.error?.message : undefined;
+      showError(apiMessage ?? (error instanceof Error ? error.message : 'Erro ao salvar a seleção. Tente novamente.'));
     },
   });
 
-  const selectedBusinessNames = businesses.filter((b) => businessIds.includes(b.id)).map((b) => b.name);
-  const selectedPageNames = pages.filter((p) => pageIds.includes(p.pageId)).map((p) => p.name);
+  // ── Mapeamento dos Itens Selecionados ─────────────────────────────────────────
+  const businesses = businessesQuery.data ?? [];
+  const adAccounts = adAccountsQuery.data ?? [];
+  const pages = pagesQuery.data ?? [];
+  const selectedPage = pages.find((page) => pageIds.includes(page.pageId));
+  const hasSelectedInstagram = Boolean(selectedPage?.instagramUserId);
+
+  const selectedBusinessNames = businesses
+    .filter((b) => businessIds.includes(b.id))
+    .map((b) => b.name);
+
+  const selectedPageNames = pages
+    .filter((p) => pageIds.includes(p.pageId))
+    .map((p) => p.name);
+
   const selectedAdAccountNames = adAccounts
     .filter((a) => adAccountIds.includes(a.adAccountId))
     .map((a) => a.name);
-  const selectedWhatsappNumbers = whatsappNumbers.filter((n) => whatsappNumberIds.includes(n.phoneNumberId));
 
+  // ── Handlers de Ação ──────────────────────────────────────────────────────────
   function handleContinue() {
-    setSubStep((current) => Math.min(current + 1, 5));
+    setSubStep((current) => Math.min(current + 1, 4));
   }
 
   function handleBack() {
     setSubStep((current) => Math.max(current - 1, 1));
+    setBusinessPage(0);
+  }
+
+  function toggleSelection(
+    id: string,
+    getter: string[],
+    setter: React.Dispatch<React.SetStateAction<string[]>>
+  ) {
+    setter(getter.includes(id) ? [] : [id]);
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      {/* Header */}
-      <header className="border-b border-[#F3F4F6] px-6 py-4 flex items-center justify-center">
-        <span className="text-xl font-black text-[#1C1C1E] tracking-tight">FURY</span>
+    <div className="relative flex min-h-screen flex-col bg-admin-bg text-admin-text">
+      {toast && (
+        <div role="alert" className="fixed top-6 left-1/2 z-50 -translate-x-1/2 rounded-2xl bg-red-500 px-5 py-3 text-sm font-semibold text-white shadow-lg">
+          {toast}
+        </div>
+      )}
+      {/* Fundo Iluminado — bem mais discreto no claro */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(150%_120%_at_50%_-10%,rgba(23,112,138,0.07),transparent_100%)] dark:bg-[radial-gradient(120%_90%_at_50%_-10%,rgba(30,136,168,0.16),transparent_70%)]"
+      />
+
+      <header className="relative z-10 flex items-center justify-center border-b border-white/10 py-5">
+        <div className="flex items-center gap-2">
+          <AdySymbol size={28} />
+          <span className="text-xl font-medium text-admin-text">ady</span>
+        </div>
       </header>
 
-      {/* Progress */}
-      <div className="pt-10 pb-6 flex justify-center">
+      <div className="ady-decor relative z-10 pt-10 pb-6 flex justify-center">
         <ProgressSteps current={1} />
       </div>
 
-      <div className="pb-4">
+      <div className="ady-decor relative z-10 pb-4">
         <SubStepIndicator current={subStep} />
       </div>
 
-      {/* Content */}
-      <main className="flex-1 flex items-start justify-center px-6 pt-4 pb-16">
+      <main className="ady-decor relative z-10 flex-1 flex items-start justify-center px-6 pt-4 pb-16">
         <div className="w-full max-w-lg space-y-8">
-          {/* ── Step 1: Business Managers ─────────────────────────────────── */}
+          {/* Step 1: Business Managers */}
           {subStep === 1 && (
-            <>
+            <section className="space-y-6">
               <div className="text-center space-y-3">
-                <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
-                  Quais Business Managers você quer gerenciar?
+                <h1 className="text-3xl font-black text-admin-text leading-tight">
+                  Qual Business Manager você quer gerenciar?
                 </h1>
-                <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Selecione uma ou mais. As Páginas, contas de anúncio e números de WhatsApp das próximas etapas
-                  serão filtrados por essas Business Managers.
+                <p className="text-admin-text-muted text-lg leading-relaxed">
+                  Selecione uma. As Páginas e contas de anúncio das próximas
+                  etapas serão filtradas por essa Business Manager.
                 </p>
               </div>
 
@@ -353,17 +411,62 @@ export function SelecionarAtivosPage() {
                   description="Sua conta Meta conectada não tem acesso a nenhuma Business Manager."
                 />
               ) : (
-                <div className="space-y-3">
-                  {businesses.map((business) => (
-                    <CheckboxCard
-                      key={business.id}
-                      checked={businessIds.includes(business.id)}
-                      title={business.name}
-                      subtitle={business.id}
-                      onClick={() => toggle(businessIds, business.id, setBusinessIds)}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="space-y-3">
+                    {businesses
+                      .slice(
+                        businessPage * ITEMS_PER_PAGE,
+                        businessPage * ITEMS_PER_PAGE + ITEMS_PER_PAGE
+                      )
+                      .map((business) => (
+                        <CheckboxCard
+                          key={business.id}
+                          checked={businessIds.includes(business.id)}
+                          title={business.name}
+                          subtitle={business.id}
+                          onClick={() =>
+                            toggleSelection(business.id, businessIds, setBusinessIds)
+                          }
+                        />
+                      ))}
+                  </div>
+
+                  {businesses.length > ITEMS_PER_PAGE && (
+                    <div className="flex items-center justify-center gap-3 text-sm">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setBusinessPage((p) => Math.max(0, p - 1))
+                        }
+                        disabled={businessPage === 0}
+                        className="inline-flex items-center text-admin-petrol font-medium disabled:text-admin-text-faint disabled:cursor-not-allowed hover:underline focus-visible:outline-none"
+                      >
+                        <ChevronLeft className="w-4 h-4 mr-1" />
+                        Anterior
+                      </button>
+                      <span className="text-admin-text-muted">
+                        {businessPage * ITEMS_PER_PAGE + 1}–
+                        {Math.min(
+                          (businessPage + 1) * ITEMS_PER_PAGE,
+                          businesses.length
+                        )}{" "}
+                        de {businesses.length}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setBusinessPage((p) => p + 1)}
+                        disabled={
+                          (businessPage + 1) * ITEMS_PER_PAGE >=
+                          businesses.length
+                        }
+                        className="inline-flex items-center text-admin-petrol font-medium disabled:text-admin-text-faint disabled:cursor-not-allowed hover:underline focus-visible:outline-none"
+                      >
+                        Próxima
+                        <ChevronRight className="w-4 h-4 ml-1" />
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
 
               <Button
@@ -375,64 +478,18 @@ export function SelecionarAtivosPage() {
               >
                 Continuar
               </Button>
-            </>
+            </section>
           )}
 
-          {/* ── Step 2: Páginas ────────────────────────────────────────────── */}
+          {/* Step 2: Contas de Anúncio */}
           {subStep === 2 && (
-            <>
+            <section className="space-y-6">
               <div className="text-center space-y-3">
-                <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
-                  Quais Páginas você vai usar?
+                <h1 className="text-3xl font-black text-admin-text leading-tight">
+                  Qual conta de anúncio você quer gerenciar?
                 </h1>
-                <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Apenas Páginas das Business Managers selecionadas aparecem aqui. Se você não usa Páginas,
-                  pode continuar sem marcar nenhuma.
-                </p>
-              </div>
-
-              {pagesQuery.isLoading ? (
-                <LoadingSpinner />
-              ) : pages.length === 0 ? (
-                <EmptyState
-                  title="Nenhuma Página nestas Business Managers"
-                  description="As Business Managers selecionadas não têm Páginas vinculadas. Você pode continuar sem selecionar nenhuma."
-                />
-              ) : (
-                <div className="space-y-3">
-                  {pages.map((page) => (
-                    <CheckboxCard
-                      key={page.pageId}
-                      checked={pageIds.includes(page.pageId)}
-                      title={page.name}
-                      subtitle={page.pageId}
-                      badge={page.hasInstagram ? { label: 'Instagram vinculado', tone: 'green' } : undefined}
-                      onClick={() => toggle(pageIds, page.pageId, setPageIds)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <Button onClick={handleBack} variant="outline" size="md" className="flex-1">
-                  Voltar
-                </Button>
-                <Button onClick={handleContinue} variant="primary" size="md" className="flex-1">
-                  Continuar
-                </Button>
-              </div>
-            </>
-          )}
-
-          {/* ── Step 3: Contas de Anúncio ──────────────────────────────────── */}
-          {subStep === 3 && (
-            <>
-              <div className="text-center space-y-3">
-                <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
-                  Quais contas de anúncio você quer gerenciar?
-                </h1>
-                <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Apenas contas das Business Managers selecionadas aparecem aqui.
+                <p className="text-admin-text-muted text-lg leading-relaxed">
+                  Apenas contas da Business Manager selecionada aparecem aqui.
                 </p>
               </div>
 
@@ -441,7 +498,7 @@ export function SelecionarAtivosPage() {
               ) : adAccounts.length === 0 ? (
                 <EmptyState
                   title="Nenhuma conta de anúncio encontrada"
-                  description="As Business Managers selecionadas não têm contas de anúncio vinculadas."
+                  description="A Business Manager selecionada não tem contas de anúncio vinculadas."
                 />
               ) : (
                 <div className="space-y-3">
@@ -453,8 +510,17 @@ export function SelecionarAtivosPage() {
                         checked={adAccountIds.includes(account.adAccountId)}
                         title={account.name}
                         subtitle={account.adAccountId}
-                        badge={{ label: isActive ? 'Ativa' : 'Inativa', tone: isActive ? 'green' : 'gray' }}
-                        onClick={() => toggle(adAccountIds, account.adAccountId, setAdAccountIds)}
+                        badge={{
+                          label: isActive ? "Ativa" : "Inativa",
+                          tone: isActive ? "green" : "gray",
+                        }}
+                        onClick={() =>
+                          toggleSelection(
+                            account.adAccountId,
+                            adAccountIds,
+                            setAdAccountIds
+                          )
+                        }
                       />
                     );
                   })}
@@ -462,7 +528,12 @@ export function SelecionarAtivosPage() {
               )}
 
               <div className="flex gap-3">
-                <Button onClick={handleBack} variant="outline" size="md" className="flex-1">
+                <Button
+                  onClick={handleBack}
+                  variant="outline"
+                  size="md"
+                  className="flex-1"
+                >
                   Voltar
                 </Button>
                 <Button
@@ -475,112 +546,143 @@ export function SelecionarAtivosPage() {
                   Continuar
                 </Button>
               </div>
-            </>
+            </section>
           )}
 
-          {/* ── Step 4: WhatsApp ───────────────────────────────────────────── */}
-          {subStep === 4 && (
-            <>
+          {/* Step 3: Páginas */}
+          {subStep === 3 && (
+            <section className="space-y-6">
               <div className="text-center space-y-3">
-                <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">
-                  Quais números de WhatsApp você vai usar?
+                <h1 className="text-3xl font-black text-admin-text leading-tight">
+                  Qual Página você vai usar?
                 </h1>
-                <p className="text-[#6E7681] text-lg leading-relaxed">
-                  Números das Business Managers selecionadas e das Páginas vinculadas. Se você não usa WhatsApp,
-                  pode continuar sem marcar nenhum.
+                <p className="text-admin-text-muted text-lg leading-relaxed">
+                  Apenas Páginas da Business Manager selecionada aparecem aqui.
+                  Se você não usa Páginas, pode continuar sem marcar nenhuma.
                 </p>
               </div>
 
-              {whatsappQuery.isLoading ? (
+              {pagesQuery.isLoading ? (
                 <LoadingSpinner />
-              ) : whatsappNumbers.length === 0 ? (
+              ) : pages.length === 0 ? (
                 <EmptyState
-                  title="Nenhum número de WhatsApp encontrado"
-                  description="As Business Managers selecionadas não têm números de WhatsApp Business vinculados. Você pode continuar sem selecionar nenhum."
+                  title="Nenhuma Página nesta Business Manager"
+                  description="A Business Manager selecionada não tem Páginas vinculadas. Você pode continuar sem selecionar nenhuma."
                 />
               ) : (
                 <div className="space-y-3">
-                  {whatsappNumbers.map((number) => (
+                  {pages.map((page) => (
                     <CheckboxCard
-                      key={number.phoneNumberId}
-                      checked={whatsappNumberIds.includes(number.phoneNumberId)}
-                      title={number.displayPhoneNumber}
-                      subtitle={number.phoneNumberId}
-                      onClick={() => toggle(whatsappNumberIds, number.phoneNumberId, setWhatsappNumberIds)}
+                      key={page.pageId}
+                      checked={pageIds.includes(page.pageId)}
+                      title={page.name}
+                      subtitle={page.pageId}
+                      badge={
+                        page.hasInstagram
+                          ? { label: `Instagram: @${page.instagramUsername || "vinculado"}`, tone: "green" }
+                          : undefined
+                      }
+                      onClick={() =>
+                        toggleSelection(page.pageId, pageIds, setPageIds)
+                      }
                     />
                   ))}
                 </div>
               )}
 
               <div className="flex gap-3">
-                <Button onClick={handleBack} variant="outline" size="md" className="flex-1">
+                <Button
+                  onClick={handleBack}
+                  variant="outline"
+                  size="md"
+                  className="flex-1"
+                >
                   Voltar
                 </Button>
-                <Button onClick={handleContinue} variant="primary" size="md" className="flex-1">
+                <Button
+                  onClick={handleContinue}
+                  variant="primary"
+                  size="md"
+                  className="flex-1"
+                >
                   Continuar
                 </Button>
               </div>
-            </>
+            </section>
           )}
 
-          {/* ── Step 5: Resumo ─────────────────────────────────────────────── */}
-          {subStep === 5 && (
-            <>
+          {/* Step 4: Resumo */}
+          {subStep === 4 && (
+            <section className="space-y-6">
               <div className="text-center space-y-3">
-                <h1 className="text-3xl font-black text-[#1C1C1E] leading-tight">Confira sua seleção</h1>
-                <p className="text-[#6E7681] text-lg leading-relaxed">
-                  A partir de agora, apenas estes ativos aparecerão no FURY.
+                <h1 className="text-3xl font-black text-admin-text leading-tight">
+                  Confira sua seleção
+                </h1>
+                <p className="text-admin-text-muted text-lg leading-relaxed">
+                  A partir de agora, apenas estes ativos aparecerão no ady.
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-[#E5E7EB] divide-y divide-[#F3F4F6]">
+              <div className="rounded-2xl border border-admin-border divide-y divide-admin-border">
                 <div className="p-4">
-                  <div className="text-xs font-bold text-[#9CA3AF] uppercase tracking-wide mb-1">
-                    Business Managers ({selectedBusinessNames.length})
+                  <div className="text-xs font-bold text-admin-text-faint uppercase tracking-wide mb-1">
+                    Business Manager ({selectedBusinessNames.length})
                   </div>
-                  <div className="text-sm font-medium text-[#1C1C1E]">
-                    {selectedBusinessNames.join(', ')}
+                  <div className="text-sm font-medium text-admin-text">
+                    {selectedBusinessNames.join(", ") || "Nenhuma"}
                   </div>
                 </div>
 
                 <div className="p-4">
-                  <div className="text-xs font-bold text-[#9CA3AF] uppercase tracking-wide mb-1">
-                    Páginas ({selectedPageNames.length})
+                  <div className="text-xs font-bold text-admin-text-faint uppercase tracking-wide mb-1">
+                    Conta de Anúncio ({selectedAdAccountNames.length})
                   </div>
-                  <div className="text-sm font-medium text-[#1C1C1E]">
-                    {selectedPageNames.length > 0 ? selectedPageNames.join(', ') : 'Nenhuma'}
-                  </div>
-                </div>
-
-                <div className="p-4">
-                  <div className="text-xs font-bold text-[#9CA3AF] uppercase tracking-wide mb-1">
-                    Contas de Anúncio ({selectedAdAccountNames.length})
-                  </div>
-                  <div className="text-sm font-medium text-[#1C1C1E]">
-                    {selectedAdAccountNames.join(', ')}
+                  <div className="text-sm font-medium text-admin-text">
+                    {selectedAdAccountNames.join(", ") || "Nenhuma"}
                   </div>
                 </div>
 
                 <div className="p-4">
-                  <div className="text-xs font-bold text-[#9CA3AF] uppercase tracking-wide mb-1">
-                    Números de WhatsApp ({selectedWhatsappNumbers.length})
+                  <div className="text-xs font-bold text-admin-text-faint uppercase tracking-wide mb-1">
+                    Página ({selectedPageNames.length})
                   </div>
-                  <div className="text-sm font-medium text-[#1C1C1E]">
-                    {selectedWhatsappNumbers.length > 0
-                      ? selectedWhatsappNumbers.map((n) => n.displayPhoneNumber).join(', ')
-                      : 'Nenhum'}
+                  <div className="text-sm font-medium text-admin-text">
+                    {selectedPageNames.length > 0
+                      ? selectedPageNames.join(", ")
+                      : "Nenhuma"}
+                  </div>
+                </div>
+
+                <div className="p-4">
+                  <div className="text-xs font-bold text-admin-text-faint uppercase tracking-wide mb-1">
+                    Página do instagram
+                  </div>
+                  <div className="text-sm font-medium text-admin-text">
+                    {(() => {
+                      const selectedPage = pages.find((p) => pageIds.includes(p.pageId));
+                      if (selectedPage?.hasInstagram && selectedPage.instagramUsername) {
+                        return `@${selectedPage.instagramUsername}`;
+                      }
+                      return "Nenhum — a publicação automática do calendário ficará desativada";
+                    })()}
                   </div>
                 </div>
               </div>
 
               {saveMutation.isError && (
-                <p className="text-center text-sm text-red-500">
+                <p className="text-center text-sm text-admin-danger font-medium" role="alert">
                   Erro ao salvar a seleção. Tente novamente.
                 </p>
               )}
 
               <div className="flex gap-3">
-                <Button onClick={handleBack} variant="outline" size="md" className="flex-1" disabled={saveMutation.isPending}>
+                <Button
+                  onClick={handleBack}
+                  variant="outline"
+                  size="md"
+                  className="flex-1"
+                  disabled={saveMutation.isPending || businessIds.length === 0 || adAccountIds.length === 0 || !hasSelectedInstagram}
+                >
                   Voltar
                 </Button>
                 <Button
@@ -596,11 +698,11 @@ export function SelecionarAtivosPage() {
                       Salvando...
                     </span>
                   ) : (
-                    'Concluir'
+                    "Concluir"
                   )}
                 </Button>
               </div>
-            </>
+            </section>
           )}
         </div>
       </main>

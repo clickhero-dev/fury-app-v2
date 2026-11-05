@@ -1,0 +1,512 @@
+// =============================================================================
+// BDD — T004: MetaSyncManager + MetaSyncWorker (BullMQ cron, bootstrap, dedupe, email)
+//
+/*
+# Language: pt-BR
+
+Funcionalidade: Agendamento e processamento do sync assíncrono Meta
+
+  Cenário: manager agenda o cron a cada 15min + bootstrap
+    Dado startMetaSyncManager
+    Quando registra o job scheduler
+    Então o padrão é 'a cada 15 minutos' (cron *&#47;15 * * * *)
+    E enfileira um job 'worker-meta-sync-all-connected-ad-accounts' no startup
+    E troca o repeatable legado sem manter ticks duplicados
+
+  Cenário: manager registra um Job Scheduler estável sem duplicar em novo startup
+    Dado dois startups do manager
+    Quando o scheduler é registrado
+    Então usa upsertJobScheduler com id 'cron-meta-sync-ad-account-data-every-15m'
+    E o bootstrap mantém jobId fixo
+
+  Cenário: nome worker da migração anterior continua processável
+    Dado um job de sync por conta enfileirado com o nome anterior
+    Quando o worker recebe o job
+    Então o tenant ainda é sincronizado
+
+  Cenário: job de tick processa um run por tenant
+    Dado job 'cron-meta-sync-ad-account-data'
+    Quando o worker processa
+    Então enfileira jobs 'worker-meta-sync-ad-account-data' para cada tenant com conexão Meta
+
+  Cenário: jobId é determinístico por tenant + ciclo (dedupe multi-pod)
+    Dado dois pods processando o mesmo tick no mesmo ciclo
+    Quando cada um enfileira o run do tenant T
+    Então ambos usam o MESMO jobId (BullMQ deduplica)
+
+  Cenário: tick deduplica tenants que compartilham a mesma conta de anúncios
+    Dado duas conexões com a mesma ad account
+    Quando o tick enfileira runs
+    Então existe um único job por ad account e ciclo
+
+  Cenário: run de sucesso não dispara email
+    Dado syncTenant retorna status 'success'
+    Quando processMetaSyncRun
+    Então notifyMetaSyncFailure NÃO é chamado
+
+  Cenário: run failed dispara email de alerta
+    Dado syncTenant retorna status 'failed' com errorCode
+    Quando processMetaSyncRun
+    Então notifyMetaSyncFailure é chamado com tenantId + errorCode
+
+  Cenário: stop encerra o worker
+    Dado worker iniciado
+    Quando stopMetaSyncWorker
+    Então o worker é fechado
+
+  Cenário: worker reporta erro e falha de job sem expor payload
+    Dado um erro emitido pelo worker e um job que falhou
+    Quando os eventos são processados
+    Então captureServerException recebe somente tenantId e adAccountId do job
+
+  Cenário: job novo por adAccountId sincroniza a conta sem alertar em sucesso
+    Dado um job 'worker-meta-sync-ad-account-data' com adAccountId e resultado success
+    Quando o worker processa
+    Então syncAdAccount é chamado com a conta
+    E notifyMetaSyncFailure NÃO é chamado
+
+  Cenário: run failed no sync por conta dispara alerta e telemetria
+    Dado syncAdAccount retorna runs com status 'failed' e 'success' para tenants distintos
+    Quando o worker processa
+    Então notifyMetaSyncFailure é chamado só para o tenant com status 'failed'
+    E captureServerEvent registra meta_sync_run_failed sem dados sensíveis
+
+  Cenário: exceção no sync por conta alerta e propaga
+    Dado syncAdAccount lança erro inesperado
+    Quando o worker processa
+    Então notifyMetaSyncFailure é chamado com META_SYNC_UNEXPECTED_ERROR
+    E o erro propaga para o evento 'failed' do worker
+*/
+// =============================================================================
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const {
+  dbMock,
+  joinRows,
+  workerInstances,
+  queueAddSpy,
+  queueUpsertJobSchedulerSpy,
+  mockSyncTenant,
+  mockSyncAdAccount,
+  mockRunHealthcheck,
+  mockNotifyFailure,
+  mockCaptureServerException,
+  mockCaptureServerEvent,
+} = vi.hoisted(() => {
+  // select().from().innerJoin(tenants).where(não excluído)
+  const joinRows = (rows: unknown[]) => ({ innerJoin: () => ({ where: async () => rows }) });
+  const dbMock = {
+    select: vi.fn(() => ({
+      from: vi.fn(() => joinRows([
+        { tenantId: 't1', adAccountId: 'act_1' },
+        { tenantId: 't2', adAccountId: 'act_2' },
+      ])),
+    })),
+    query: { metaConnections: { findFirst: vi.fn(async () => ({ selectedAdAccountId: 'act_1' })) } },
+  } as any;
+  const workerInstances: Array<{ name: string; processor: (job: any) => Promise<any>; emit: (event: string, ...args: any[]) => void }> = [];
+  const queueAddSpy = vi.fn();
+  const queueUpsertJobSchedulerSpy = vi.fn();
+  const mockSyncTenant = vi.fn();
+  const mockSyncAdAccount = vi.fn();
+  const mockRunHealthcheck = vi.fn();
+  const mockNotifyFailure = vi.fn();
+  const mockCaptureServerException = vi.fn();
+  const mockCaptureServerEvent = vi.fn();
+  return { dbMock, joinRows, workerInstances, queueAddSpy, queueUpsertJobSchedulerSpy, mockSyncTenant, mockSyncAdAccount, mockRunHealthcheck, mockNotifyFailure, mockCaptureServerException, mockCaptureServerEvent };
+});
+
+vi.mock('bullmq', () => {
+  class WorkerMock {
+    name: string;
+    processor: (job: any) => Promise<any>;
+    closed = false;
+    private listeners = new Map<string, (...args: any[]) => void>();
+    constructor(name: string, processor: (job: any) => Promise<any>) {
+      this.name = name;
+      this.processor = processor;
+      workerInstances.push(this);
+    }
+    on(event: string, listener: (...args: any[]) => void) {
+      this.listeners.set(event, listener);
+      return this;
+    }
+    emit(event: string, ...args: any[]) {
+      this.listeners.get(event)?.(...args);
+    }
+    async close() {
+      this.closed = true;
+    }
+  }
+  class QueueMock {
+    name: string;
+    constructor(name: string) {
+      this.name = name;
+    }
+    async add(...args: unknown[]) {
+      queueAddSpy(...args);
+      return { id: 'mock-job' };
+    }
+    async upsertJobScheduler(...args: unknown[]) {
+      queueUpsertJobSchedulerSpy(...args);
+      return { id: 'mock-scheduler' };
+    }
+    async removeRepeatable() {
+      return true;
+    }
+    async getRepeatableJobs() {
+      return [];
+    }
+    async removeRepeatableByKey() {
+      return true;
+    }
+    async getJobSchedulers() {
+      return [{ key: 'meta-sync-tick' }, { key: 'meta-healthcheck-every-12h' }];
+    }
+    async removeJobScheduler() {
+      return true;
+    }
+    async close() {
+      return undefined;
+    }
+  }
+  return { Worker: WorkerMock, Queue: QueueMock, MetricsTime: { ONE_WEEK: 7 * 24 * 60 * 60 * 1000 } };
+});
+
+vi.mock('../lib/queue.js', () => ({
+  getRedisConnection: vi.fn(async () => ({})),
+  getMetaSyncQueue: vi.fn(async () => ({ add: queueAddSpy })),
+}));
+
+vi.mock('../lib/db.js', () => ({
+  db: dbMock,
+  metaConnections: { tenantId: 'tenant_id' },
+  tenants: { id: 'id', deletedAt: 'deleted_at' },
+}));
+
+vi.mock('../services/meta/meta-sync.service.js', () => ({
+  metaSyncService: { syncTenant: mockSyncTenant, syncAdAccount: mockSyncAdAccount },
+}));
+
+vi.mock('../services/meta/meta-healthcheck.service.js', () => ({
+  metaHealthcheckService: { runForTenant: mockRunHealthcheck },
+}));
+
+vi.mock('../lib/meta-sync-alerts.js', () => ({
+  notifyMetaSyncFailure: mockNotifyFailure,
+}));
+
+vi.mock('../lib/analytics.js', () => ({
+  captureServerException: mockCaptureServerException,
+  captureServerEvent: mockCaptureServerEvent,
+}));
+
+import {
+  startMetaSyncManager,
+  stopMetaSyncManager,
+} from '../lib/meta-sync-manager.js';
+import {
+  startMetaSyncWorker,
+  stopMetaSyncWorker,
+  enqueueMetaSyncRuns,
+  enqueueMetaSyncTenantRun,
+  processMetaSyncRun,
+  getMetaSyncTenantIds,
+  getMetaSyncAdAccountIds,
+  windowKeyFor,
+  META_SYNC_QUEUE_NAME,
+} from '../workers/meta-sync.worker.js';
+
+describe('BDD: MetaSyncManager (agendamento)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    workerInstances.length = 0;
+  });
+
+  it('Cenário: agenda Job Scheduler */15 * * * * + bootstrap no startup', async () => {
+    await startMetaSyncManager();
+
+    expect(queueUpsertJobSchedulerSpy).toHaveBeenCalledWith(
+      'cron-meta-sync-ad-account-data-every-15m',
+      { pattern: '*/15 * * * *' },
+      { name: 'cron-meta-sync-ad-account-data', data: {} },
+    );
+
+    const bootstrapCall = queueAddSpy.mock.calls.find((args) => args[0] === 'worker-meta-sync-all-connected-ad-accounts');
+    expect(bootstrapCall).toBeTruthy();
+    expect(bootstrapCall![2].jobId).toBe('meta-sync-bootstrap');
+
+    await stopMetaSyncManager();
+  });
+
+  it('Cenário: segundo startup reaproveita o scheduler estável sem criar tick repetível', async () => {
+    await startMetaSyncManager();
+    await startMetaSyncManager();
+
+    expect(queueUpsertJobSchedulerSpy).toHaveBeenCalledTimes(4);
+    expect(queueUpsertJobSchedulerSpy).toHaveBeenCalledWith(
+      'cron-meta-check-connection-health-every-12h',
+      { pattern: '0 */12 * * *' },
+      { name: 'cron-meta-check-connection-health', data: {} },
+    );
+    expect(queueAddSpy.mock.calls.filter((args) => args[0] === 'cron-meta-sync-ad-account-data')).toHaveLength(0);
+    expect(queueAddSpy.mock.calls.filter((args) => args[0] === 'worker-meta-sync-all-connected-ad-accounts')).toHaveLength(2);
+
+    await stopMetaSyncManager();
+  });
+});
+
+describe('BDD: MetaHealthcheck worker', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    workerInstances.length = 0;
+    mockRunHealthcheck.mockResolvedValue({ status: 'success' });
+  });
+
+  it('Cenário: job valida todas as conexões Meta', async () => {
+    await startMetaSyncWorker();
+    const worker = workerInstances.at(-1)!;
+
+    await worker.processor({ name: 'cron-meta-check-connection-health', data: {} });
+
+    expect(mockRunHealthcheck).toHaveBeenCalledWith('t1');
+    expect(mockRunHealthcheck).toHaveBeenCalledWith('t2');
+    expect(mockRunHealthcheck).toHaveBeenCalledTimes(2);
+    await stopMetaSyncWorker();
+  });
+
+  it('Cenário: falha em um tenant não interrompe os demais', async () => {
+    mockRunHealthcheck.mockRejectedValueOnce(new Error('provider secret must not be logged'));
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await startMetaSyncWorker();
+    const worker = workerInstances.at(-1)!;
+
+    await worker.processor({ name: 'cron-meta-check-connection-health', data: {} });
+
+    expect(mockRunHealthcheck).toHaveBeenCalledTimes(2);
+    expect(mockCaptureServerException).toHaveBeenCalledWith(expect.any(Error), { path: 'meta-healthcheck:worker', tenantId: 't1' });
+    expect(mockRunHealthcheck).toHaveBeenLastCalledWith('t2');
+    expect(errorLog).toHaveBeenCalledWith('[meta-healthcheck] erro ao validar tenant', { tenantId: 't1', code: 'META_HEALTHCHECK_UNEXPECTED_ERROR' });
+    errorLog.mockRestore();
+    await stopMetaSyncWorker();
+  });
+});
+
+describe('BDD: MetaSyncWorker', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    workerInstances.length = 0;
+  });
+
+  it('Cenário: getMetaSyncTenantIds lista tenants com conexão Meta', async () => {
+    const ids = await getMetaSyncTenantIds();
+    expect(ids).toEqual(['t1', 't2']);
+  });
+
+  it('Cenário: enqueueMetaSyncRuns enfileira um run por conta com jobId determinístico', async () => {
+    const ts = '2026-09-25T21:30:00.000Z';
+    await enqueueMetaSyncRuns(ts, { add: queueAddSpy });
+
+    const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'worker-meta-sync-ad-account-data');
+    expect(runCalls.length).toBe(2);
+    expect(runCalls[0][1].adAccountId).toBe('act_1');
+    expect(runCalls[0][2].jobId).toBe('meta-sync-acc-act_1-' + windowKeyFor(ts).replace(/[:.]/g, '-'));
+    expect(runCalls[0][2].jobId).not.toContain(':');
+  });
+
+  it('Cenário: enqueueMetaSyncRuns deduplica por ad account', async () => {
+    dbMock.select.mockReturnValueOnce({
+      from: vi.fn(() => joinRows([
+        { adAccountId: 'act_1' },
+        { adAccountId: 'act_1' },
+        { adAccountId: 'act_2' },
+      ])),
+    });
+    const ts = '2026-09-25T21:30:00.000Z';
+
+    await enqueueMetaSyncRuns(ts, { add: queueAddSpy });
+
+    const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'worker-meta-sync-ad-account-data');
+    expect(runCalls).toHaveLength(2);
+    expect(runCalls.map((args) => args[1])).toEqual([
+      { adAccountId: 'act_1', reason: 'scheduled' },
+      { adAccountId: 'act_2', reason: 'scheduled' },
+    ]);
+    expect(runCalls[0][2].jobId).toBe(`meta-sync-acc-act_1-${windowKeyFor(ts).replace(/:/g, '-')}`);
+  });
+
+  it('Cenário: getMetaSyncAdAccountIds retorna somente contas distintas', async () => {
+    dbMock.select.mockReturnValueOnce({
+      from: vi.fn(() => joinRows([
+        { adAccountId: 'act_1' }, { adAccountId: 'act_1' }, { adAccountId: 'act_2' },
+      ])),
+    });
+    await expect(getMetaSyncAdAccountIds()).resolves.toEqual(['act_1', 'act_2']);
+  });
+
+  it('Cenário: jobId é determinístico no mesmo ciclo (dedupe multi-pod)', async () => {
+    const ts = '2026-09-25T21:30:00.000Z';
+    await enqueueMetaSyncRuns(ts, { add: queueAddSpy });
+    await enqueueMetaSyncRuns('2026-09-25T21:35:00.000Z', { add: queueAddSpy });
+
+    const runCalls = queueAddSpy.mock.calls.filter((args) => args[0] === 'worker-meta-sync-ad-account-data');
+    const accountJobs = runCalls.filter((args) => args[1].adAccountId === 'act_1');
+    expect(new Set(accountJobs.map((args) => args[2].jobId)).size).toBe(1);
+  });
+
+  it('Cenário: refresh stale usa uma chave por tenant para evitar jobs por request', async () => {
+    await enqueueMetaSyncTenantRun({ tenantId: 't1', reason: 'stale-fallback', timestamp: '2026-09-25T21:30:00.000Z', queue: { add: queueAddSpy } });
+    const [call] = queueAddSpy.mock.calls.filter((args) => args[0] === 'worker-meta-sync-ad-account-data');
+    expect(call[2].jobId).toBe('meta-sync-stale-t1');
+    expect(call[2].removeOnComplete).toMatchObject({ age: 300 });
+  });
+
+  it('Cenário: processMetaSyncRun chama syncTenant', async () => {
+    mockSyncTenant.mockResolvedValue({
+      status: 'success',
+      partialFailures: [],
+      campaignsCount: 1,
+      leadsCount: 0,
+      insightsCount: 0,
+    });
+    await processMetaSyncRun('t1', 'tick');
+    expect(mockSyncTenant).toHaveBeenCalledWith({ tenantId: 't1', reason: 'tick' });
+    expect(mockNotifyFailure).not.toHaveBeenCalled();
+  });
+
+  it('Cenário: run failed dispara email de alerta', async () => {
+    mockSyncTenant.mockResolvedValue({
+      status: 'failed',
+      errorCode: 'META_TIMEOUT',
+      errorMessage: 'timeout',
+      partialFailures: [],
+      campaignsCount: 0,
+      leadsCount: 0,
+      insightsCount: 0,
+    });
+    await processMetaSyncRun('t1', 'tick');
+    expect(mockNotifyFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 't1', errorCode: 'META_TIMEOUT' })
+    );
+  });
+
+  it('Cenário: exceção inesperada no sync alerta e mantém o job como falha', async () => {
+    mockSyncTenant.mockRejectedValue(new Error('detalhe interno sensível'));
+
+    await expect(processMetaSyncRun('t1', 'tick')).rejects.toThrow('detalhe interno sensível');
+    expect(mockNotifyFailure).toHaveBeenCalledWith({
+      tenantId: 't1',
+      errorCode: 'META_SYNC_UNEXPECTED_ERROR',
+      message: 'Falha inesperada na sincronização Meta.',
+    });
+  });
+
+  it('Cenário: start/stop do worker', async () => {
+    const worker = await startMetaSyncWorker();
+    expect(worker).toBeTruthy();
+    expect(workerInstances.length).toBe(1);
+    await stopMetaSyncWorker();
+    expect(workerInstances[0].closed).toBe(true);
+  });
+
+  it('Cenário: worker captura error e failed com contexto seguro', async () => {
+    const worker = await startMetaSyncWorker() as any;
+    const error = new Error('falha interna');
+
+    worker.emit('error', error);
+    worker.emit('failed', {
+      data: { tenantId: 't1', adAccountId: 'act_1', accessToken: 'não-pode-vazar' },
+    }, error);
+
+    expect(mockCaptureServerException).toHaveBeenCalledWith(error, { path: 'meta-sync:worker' });
+    expect(mockCaptureServerException).toHaveBeenCalledWith(error, {
+      path: 'meta-sync:worker', tenantId: 't1', adAccountId: 'act_1',
+    });
+    expect(mockCaptureServerException.mock.calls[1][1]).not.toHaveProperty('accessToken');
+    await stopMetaSyncWorker();
+  });
+
+  it('Cenário: worker processa job de run e job de tick', async () => {
+    const worker = await startMetaSyncWorker();
+    mockSyncTenant.mockResolvedValue({ status: 'success', partialFailures: [], campaignsCount: 0, leadsCount: 0, insightsCount: 0 });
+    await worker.processor({ name: 'worker-meta-sync-ad-account-data', data: { tenantId: 't1', reason: 'tick' } });
+    expect(mockSyncTenant).toHaveBeenCalledWith({ tenantId: 't1', reason: 'tick' });
+    await stopMetaSyncWorker();
+  });
+
+  it('Cenário: job Meta antigo ainda pendente é processado durante a drenagem', async () => {
+    const worker = await startMetaSyncWorker();
+    mockSyncTenant.mockResolvedValue({ status: 'success', partialFailures: [], campaignsCount: 0, leadsCount: 0, insightsCount: 0 });
+    await worker.processor({ name: 'meta-sync:run', data: { tenantId: 't1', reason: 'tick' } });
+    expect(mockSyncTenant).toHaveBeenCalledWith({ tenantId: 't1', reason: 'tick' });
+    await stopMetaSyncWorker();
+  });
+
+  it('Cenário: nome worker da migração anterior continua processável', async () => {
+    const worker = await startMetaSyncWorker();
+    mockSyncTenant.mockResolvedValue({ status: 'success', partialFailures: [], campaignsCount: 0, leadsCount: 0, insightsCount: 0 });
+
+    await worker.processor({ name: 'worker:meta:sync_account', data: { tenantId: 't1', reason: 'scheduled' } });
+
+    expect(mockSyncTenant).toHaveBeenCalledWith({ tenantId: 't1', reason: 'scheduled' });
+    await stopMetaSyncWorker();
+  });
+
+  it('Cenário: job novo por adAccountId sincroniza a conta e não alerta em sucesso', async () => {
+    const worker = await startMetaSyncWorker() as any;
+    mockSyncAdAccount.mockResolvedValue([
+      { tenantId: 't1', status: 'success', partialFailures: [], campaignsCount: 5, leadsCount: 0, insightsCount: 0 },
+    ]);
+    await worker.processor({ name: 'worker-meta-sync-ad-account-data', data: { tenantId: 't1', adAccountId: 'act_1', reason: 'tick' } });
+
+    expect(mockSyncAdAccount).toHaveBeenCalledWith({ adAccountId: 'act_1', reason: 'tick' });
+    expect(mockNotifyFailure).not.toHaveBeenCalled();
+    expect(mockCaptureServerEvent).not.toHaveBeenCalledWith('meta_sync_run_failed', expect.anything());
+    await stopMetaSyncWorker();
+  });
+
+  it('Cenário: exceção no sync por conta alerta META_SYNC_UNEXPECTED_ERROR e propaga para o worker', async () => {
+    const worker = await startMetaSyncWorker() as any;
+    mockSyncAdAccount.mockRejectedValue(new Error('token expirado'));
+
+    await expect(
+      worker.processor({ name: 'worker-meta-sync-ad-account-data', data: { tenantId: 't1', adAccountId: 'act_1', reason: 'tick' } })
+    ).rejects.toThrow('token expirado');
+
+    expect(mockNotifyFailure).toHaveBeenCalledWith({
+      tenantId: 't1',
+      errorCode: 'META_SYNC_UNEXPECTED_ERROR',
+      message: 'Falha inesperada na sincronização Meta.',
+    });
+    await stopMetaSyncWorker();
+  });
+
+  it('Cenário: run failed no sync por conta dispara email de alerta e telemetria sem dados sensíveis', async () => {
+    const worker = await startMetaSyncWorker() as any;
+    mockSyncAdAccount.mockResolvedValue([
+      { tenantId: 't1', status: 'failed', errorCode: 'META_RATE_LIMIT', errorMessage: 'limite excedido', partialFailures: [] },
+      { tenantId: 't2', status: 'success', partialFailures: [], campaignsCount: 1, leadsCount: 0, insightsCount: 0 },
+    ]);
+    await worker.processor({ name: 'worker-meta-sync-ad-account-data', data: { tenantId: 't1', adAccountId: 'act_1', reason: 'tick' } });
+
+    expect(mockNotifyFailure).toHaveBeenCalledTimes(1);
+    expect(mockNotifyFailure).toHaveBeenCalledWith({
+      tenantId: 't1',
+      errorCode: 'META_RATE_LIMIT',
+      message: 'limite excedido',
+    });
+    expect(mockCaptureServerEvent).toHaveBeenCalledWith(
+      'meta_sync_run_failed',
+      expect.objectContaining({
+        adAccountId: 'act_1',
+        failed: expect.arrayContaining([
+          expect.objectContaining({ tenantId: 't1', errorCode: 'META_RATE_LIMIT' }),
+        ]),
+      }),
+    );
+    const eventPayload = mockCaptureServerEvent.mock.calls[0][1];
+    expect(JSON.stringify(eventPayload)).not.toContain('accessToken');
+    await stopMetaSyncWorker();
+  });
+});

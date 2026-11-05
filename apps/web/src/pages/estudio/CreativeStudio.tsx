@@ -1,14 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle2, Copy, Loader2, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { AppLayout, Button, Card, CardContent, PageHeader, StatusBadge } from '@/components';
+import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
+import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
+import { COMPLIANCE_APPROVED_HINT, COMPLIANCE_REJECTED_HINT, COMPLIANCE_PENDING_HINT } from '@/lib/compliance.utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type {
   StudioComplianceStatusResponse,
-  StudioImageGenerationResponse,
-  StudioPublishResponse,
   StudioTemplate,
 } from '@/types/studio';
+
+interface GenerateImageResponse {
+  creativeAssetId: string;
+  imageUrl: string;
+  model?: string;
+}
 
 const TEMPLATES: StudioTemplate[] = [
   {
@@ -21,7 +30,7 @@ const TEMPLATES: StudioTemplate[] = [
     id: 'ecommerce',
     label: 'E-commerce',
     niche: 'ecommerce',
-    prompt: 'Criativo para loja online de produto em destaque, composição limpa, foco no benefício principal e call-to-action visual.',
+    prompt: 'Anúncio para loja online de produto em destaque, composição limpa, foco no benefício principal e call-to-action visual.',
   },
   {
     id: 'saas',
@@ -50,13 +59,30 @@ function getComplianceTone(status?: StudioComplianceStatusResponse['complianceSt
 }
 
 export function CreativeStudio() {
+  const navigate = useNavigate();
+  const { setPreSelectedAsset } = useCampaignWizardContext();
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState(TEMPLATES[0]?.prompt ?? '');
   const [selectedTemplateId, setSelectedTemplateId] = useState(TEMPLATES[0]?.id ?? 'fashion');
   const [currentAssetId, setCurrentAssetId] = useState<string | null>(null);
   const [pollStartedAt, setPollStartedAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
-  const [publishFeedback, setPublishFeedback] = useState<{ hash: string; imageUrl: string; adsManagerUrl: string } | null>(null);
+  const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
+
+  // ─── OpenRouter state ──────────────────────────────────────
+  const [creativeType, setCreativeType] = useState<'image' | 'video'>('image');
+  const [selectedImageModel, setSelectedImageModel] = useState('black-forest-labs/flux.2-klein-4b');
+  const [selectedVideoModel, setSelectedVideoModel] = useState('google/veo-3.1-lite');
+  const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+
+  const modelsQuery = useQuery({
+    queryKey: ['studio-ai', 'models'],
+    queryFn: async () => {
+      const res = await api.get('/studio/ai/models');
+      return res.data as { image: StudioModelOption[]; video: StudioModelOption[] };
+    },
+    staleTime: 1000 * 60 * 60, // 1h
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -73,19 +99,38 @@ export function CreativeStudio() {
     [selectedTemplateId]
   );
 
-  const generateMutation = useMutation({
-    mutationFn: async (payload: { prompt: string }) => {
-      const response = await api.post<StudioImageGenerationResponse>('/studio/generate-image', {
-        prompt: payload.prompt,
-      });
+  const generateImageMutation = useMutation({
+    mutationFn: async (payload: { model: string; prompt: string; aspect_ratio?: string }) => {
+      const response = await api.post('/studio/ai/generate-image', payload);
       return response.data;
     },
-    onSuccess: (data) => {
+    onMutate: () => {
+      setGenerationStartedAt(Date.now());
+    },
+    onSuccess: (data: GenerateImageResponse) => {
       setCurrentAssetId(data.creativeAssetId);
       setPollStartedAt(Date.now());
-      setPublishFeedback(null);
+      setGeneratedUrl(data.imageUrl);
+      setGenerationStartedAt(null);
       queryClient.setQueryData(['studio', 'asset', data.creativeAssetId], data);
     },
+    onError: () => setGenerationStartedAt(null),
+  });
+
+  const generateVideoMutation = useMutation({
+    mutationFn: async (payload: { model: string; prompt: string; duration?: number }) => {
+      const response = await api.post('/studio/ai/generate-video', payload);
+      return response.data;
+    },
+    onMutate: () => {
+      setGenerationStartedAt(Date.now());
+    },
+    onSuccess: (data: { creativeAssetId: string; videoUrl: string }) => {
+      setCurrentAssetId(data.creativeAssetId);
+      setGeneratedUrl(data.videoUrl);
+      setGenerationStartedAt(null);
+    },
+    onError: () => setGenerationStartedAt(null),
   });
 
   const complianceQuery = useQuery<StudioComplianceStatusResponse>({
@@ -107,40 +152,28 @@ export function CreativeStudio() {
     staleTime: 0,
   });
 
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      if (!currentAssetId) {
-        throw new Error('Asset nao encontrado.');
-      }
-
-      const response = await api.post<StudioPublishResponse>(`/studio/publish/${currentAssetId}`, {});
-      return response.data;
-    },
-    onSuccess: (data) => {
-      setPublishFeedback({ hash: data.hash, imageUrl: data.imageUrl, adsManagerUrl: data.adsManagerUrl });
-      if (currentAssetId) {
-        void queryClient.invalidateQueries({ queryKey: ['studio', 'compliance', currentAssetId] });
-      }
-    },
-  });
-
   const currentCompliance = complianceQuery.data;
   const complianceStatus = getComplianceTone(currentCompliance?.complianceStatus);
   const isPollingActive = Boolean(currentAssetId && pollStartedAt && !currentCompliance);
   const isWithinPollingWindow = Boolean(pollStartedAt && nowMs - pollStartedAt < 30_000);
   const canPublish = currentCompliance?.complianceStatus === 'approved';
 
+  const isGenerating = generateImageMutation.isPending || generateVideoMutation.isPending;
+
+  const elapsedSeconds = generationStartedAt ? Math.max(0, Math.round((nowMs - generationStartedAt) / 1000)) : 0;
+
   const handleGenerate = () => {
     const finalPrompt = prompt.trim();
-    if (finalPrompt.length < 10) {
-      return;
-    }
+    if (finalPrompt.length < 10) return;
 
-    generateMutation.mutate({ prompt: finalPrompt });
+    if (creativeType === 'image') {
+      generateImageMutation.mutate({ model: selectedImageModel, prompt: finalPrompt });
+    } else {
+      generateVideoMutation.mutate({ model: selectedVideoModel, prompt: finalPrompt, duration: 4 });
+    }
   };
 
   const handleRegenerate = () => {
-    setPublishFeedback(null);
     const basePrompt = prompt.trim();
     const hasIssues = currentCompliance?.complianceStatus === 'rejected' && currentCompliance.issues.length > 0;
 
@@ -152,30 +185,74 @@ export function CreativeStudio() {
     const adjustmentHint = `\n\nAjustes obrigatorios de compliance Meta:\n- ${currentCompliance.issues.join('\n- ')}\n\nRegere mantendo o conceito principal, removendo qualquer violacao e reduzindo texto para menos de 20%.`;
     const adjustedPrompt = `${basePrompt}${adjustmentHint}`.slice(0, 1000);
     setPrompt(adjustedPrompt);
-    generateMutation.mutate({ prompt: adjustedPrompt });
+    if (creativeType === 'image') {
+      generateImageMutation.mutate({ model: selectedImageModel, prompt: adjustedPrompt });
+    } else {
+      generateVideoMutation.mutate({ model: selectedVideoModel, prompt: adjustedPrompt });
+    }
   };
 
-  const handlePublish = async () => {
+  const handlePublish = () => {
     if (!canPublish) return;
-
-    const confirmed = window.confirm('Publicar este asset no Meta?');
-    if (!confirmed) return;
-
-    publishMutation.mutate();
+    setPreSelectedAsset({ id: currentAssetId ?? undefined, url: generatedUrl ?? undefined });
+    navigate('/criar-campanha');
   };
+
+  const currentModels = creativeType === 'image'
+    ? (modelsQuery.data?.image ?? [])
+    : (modelsQuery.data?.video ?? []);
+
+  const selectedModel = creativeType === 'image' ? selectedImageModel : selectedVideoModel;
+  const setSelectedModel = creativeType === 'image' ? setSelectedImageModel : setSelectedVideoModel;
 
   return (
     <AppLayout header={<div className="flex items-center justify-between" />}>
       <div className="space-y-8 bg-[radial-gradient(circle_at_top_right,_rgba(232,99,26,0.08),_transparent_30%),radial-gradient(circle_at_bottom_left,_rgba(0,0,0,0.04),_transparent_25%)]">
         <PageHeader
           title="Creative Studio"
-          description="FURY está criando seu anúncio com DALL-E 3, compliance automático e publish direto no Meta."
+          description="O ady gera anúncios com IA via OpenRouter"
           actions={<StatusBadge status={complianceStatus} />}
         />
 
         <div className="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-6">
           <Card className="overflow-hidden border-[#E6E8EC] shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
             <CardContent className="space-y-6">
+              {/* Seletor de tipo de anúncio */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Tipo de anúncio</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCreativeType('image')}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
+                      creativeType === 'image'
+                        ? 'border-[#E8631A] bg-[#FFF4ED] text-[#E8631A]'
+                        : 'border-[#E6E8EC] bg-white text-[#667085]'
+                    }`}
+                  >
+                    🖼️ Imagem
+                  </button>
+                  <button
+                    onClick={() => setCreativeType('video')}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
+                      creativeType === 'video'
+                        ? 'border-[#E8631A] bg-[#FFF4ED] text-[#E8631A]'
+                        : 'border-[#E6E8EC] bg-white text-[#667085]'
+                    }`}
+                  >
+                    🎬 Vídeo
+                  </button>
+                </div>
+              </div>
+
+              {/* Seletor de modelo (compacto) */}
+              <ModelSelect
+                models={currentModels}
+                selectedModel={selectedModel}
+                onSelect={setSelectedModel}
+                typeLabel={creativeType === 'image' ? 'imagem' : 'vídeo'}
+                id="creative-studio-model-select"
+              />
+
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Templates por nicho</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -215,18 +292,18 @@ export function CreativeStudio() {
               <div className="rounded-2xl bg-[#FFF7F2] p-4 text-sm text-[#7A4A27]">
                 <div className="flex items-start gap-3">
                   <Sparkles className="mt-0.5 h-4 w-4 text-[#E8631A]" />
-                  <p>Use um prompt específico com produto, cenário e objetivo. Quanto mais detalhado, melhor o resultado e a análise de compliance.</p>
+                  <p>Descreva detalhadamente seu produto, cenário e objetivo. Quanto mais específico, melhor o resultado.</p>
                 </div>
               </div>
 
               <div className="flex gap-3">
                 <Button
                   onClick={handleGenerate}
-                  disabled={generateMutation.isPending}
+                  disabled={isGenerating}
                   className="flex-1 bg-[#E8631A] hover:bg-[#D45714]"
                 >
-                  {generateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                  Gerar anúncio
+                  {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                  Gerar {creativeType === 'image' ? 'imagem' : 'vídeo'}
                 </Button>
                 <Button
                   variant="outline"
@@ -241,11 +318,14 @@ export function CreativeStudio() {
                 </Button>
               </div>
 
-              {generateMutation.isPending && (
+              {isGenerating && (
                 <div className="rounded-2xl border border-[#FFE3D4] bg-[#FFF7F2] p-4 text-sm text-[#7A4A27]">
                   <div className="flex items-center gap-3">
                     <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
-                    <span>FURY está criando seu anúncio...</span>
+                    <span>
+                      O ady está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...
+                      {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
+                    </span>
                   </div>
                 </div>
               )}
@@ -274,7 +354,7 @@ export function CreativeStudio() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#E8631A]">Preview</p>
-                  <h2 className="text-2xl font-bold text-[#101828]">Criativo gerado</h2>
+                  <h2 className="text-2xl font-bold text-[#101828]">Anúncio gerado</h2>
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={complianceStatus} />
@@ -284,31 +364,34 @@ export function CreativeStudio() {
                 </div>
               </div>
 
-              {!currentAssetId && !generateMutation.isPending && (
+              {!currentAssetId && !isGenerating && (
                 <div className="flex min-h-[520px] flex-col items-center justify-center rounded-[28px] border border-dashed border-[#E6E8EC] bg-[#FCFCFD] text-center">
                   <div className="rounded-full bg-[#FFF4ED] p-4 text-[#E8631A]">
                     <Sparkles className="h-7 w-7" />
                   </div>
                   <h3 className="mt-4 text-xl font-semibold text-[#101828]">Pronto para gerar</h3>
-                  <p className="mt-2 max-w-md text-sm text-[#667085]">Escolha um template ou escreva um prompt detalhado. O preview, o status de compliance e a publicação aparecem aqui.</p>
+                   <p className="mt-2 max-w-md text-sm text-[#667085]">Escolha um modelo, um template ou escreva uma explicação detalhada. O preview, o status de compliance e a publicação aparecem aqui.</p>
                 </div>
               )}
 
-              {generateMutation.isPending && (
+              {isGenerating && (
                 <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[#E6E8EC] bg-gradient-to-br from-[#FFF7F2] to-white">
                   <div className="space-y-4 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
-                    <p className="text-base font-semibold text-[#101828]">FURY está criando seu anúncio...</p>
-                    <p className="text-sm text-[#667085]">A geração via DALL-E 3 e a checagem de compliance são processadas em sequência.</p>
+                    <p className="text-base font-semibold text-[#101828]">
+                      O ady está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...
+                      {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
+                    </p>
+                    <p className="text-sm text-[#667085]">A geração via OpenRouter e a checagem de compliance são processadas em sequência.</p>
                   </div>
                 </div>
               )}
 
-              {currentAssetId && !generateMutation.isPending && !currentCompliance && (
+              {currentAssetId && !isGenerating && !currentCompliance && (
                 <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[#E6E8EC] bg-gradient-to-br from-[#FFF7F2] to-white">
                   <div className="space-y-4 text-center">
                     <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
-                    <p className="text-base font-semibold text-[#101828]">FURY está criando seu anúncio...</p>
+                    <p className="text-base font-semibold text-[#101828]">O ady está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...</p>
                     <p className="text-sm text-[#667085]">
                       {isWithinPollingWindow ? 'Análise de compliance em andamento.' : 'A janela de polling terminou. Atualize ou gere novamente.'}
                     </p>
@@ -316,25 +399,58 @@ export function CreativeStudio() {
                 </div>
               )}
 
-              {currentAssetId && currentCompliance && !generateMutation.isPending && (
+              {currentAssetId && currentCompliance && !isGenerating && (
                 <div className="space-y-6">
                   <div className="overflow-hidden rounded-[28px] border border-[#E6E8EC] bg-[#101828]">
                     <div className="relative aspect-square md:aspect-[16/11]">
-                      <img
-                        src={currentCompliance.imageUrl}
-                        alt="Preview do criativo"
-                        className="h-full w-full object-cover"
-                      />
-                      <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
-                        <CheckCircle2 className="h-4 w-4" />
-                        {currentCompliance.complianceStatus === 'approved' ? 'Aprovado' : currentCompliance.complianceStatus === 'rejected' ? 'Reprovado' : 'Em análise'}
-                      </div>
+                      {creativeType === 'video' && generatedUrl ? (
+                        <video
+                          src={generatedUrl}
+                          controls
+                          className="h-full w-full object-cover"
+                        />
+                      ) : generatedUrl ? (
+                        <img
+                          src={generatedUrl}
+                          alt="Preview do anúncio"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <img
+                          src={currentCompliance.imageUrl}
+                          alt="Preview do anúncio"
+                          className="h-full w-full object-cover"
+                        />
+                      )}
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur cursor-help">
+                              <CheckCircle2 className="h-4 w-4" />
+                              {currentCompliance.complianceStatus === 'approved' ? 'Aprovado' : currentCompliance.complianceStatus === 'rejected' ? 'Reprovado' : 'Em análise'}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent className={
+                            currentCompliance.complianceStatus === 'approved'
+                              ? 'max-w-56 bg-green-700 text-white border-green-700'
+                              : currentCompliance.complianceStatus === 'rejected'
+                                ? 'max-w-56 bg-red-700 text-white border-red-700'
+                                : 'max-w-56 bg-amber-600 text-white border-amber-600'
+                          }>
+                            {currentCompliance.complianceStatus === 'approved'
+                              ? COMPLIANCE_APPROVED_HINT
+                              : currentCompliance.complianceStatus === 'rejected'
+                                ? COMPLIANCE_REJECTED_HINT
+                                : COMPLIANCE_PENDING_HINT}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </div>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-3">
                     <div className="rounded-2xl bg-[#FCFCFD] p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-[#667085]">Prompt</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[#667085]">Explicação detalhada sobre seu anúncio</p>
                       <p className="mt-2 text-sm text-[#101828]">{prompt}</p>
                     </div>
                     <div className="rounded-2xl bg-[#FCFCFD] p-4">
@@ -353,7 +469,7 @@ export function CreativeStudio() {
                     <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
                       <div className="flex items-center gap-2 text-sm font-semibold text-red-700">
                         <AlertCircle className="h-4 w-4" />
-                        Por que o criativo foi reprovado
+                        Por que o anúncio foi reprovado
                       </div>
                       <ul className="mt-3 space-y-2 text-sm text-red-700">
                         {currentCompliance.issues.map((issue) => (
@@ -366,24 +482,6 @@ export function CreativeStudio() {
                     </div>
                   )}
 
-                  {publishFeedback && (
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
-                        <CheckCircle2 className="h-4 w-4" />
-                        Publicado no Meta
-                      </div>
-                      <p className="mt-2 text-sm text-emerald-700">Hash: {publishFeedback.hash}</p>
-                      <a
-                        href={publishFeedback.adsManagerUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 underline"
-                      >
-                        Abrir no Meta Ads Manager
-                      </a>
-                    </div>
-                  )}
-
                   <div className="flex flex-wrap gap-3">
                     <Button onClick={handleRegenerate} variant="outline" className="min-w-36">
                       <Wand2 className="mr-2 h-4 w-4" />
@@ -391,10 +489,10 @@ export function CreativeStudio() {
                     </Button>
                     <Button
                       onClick={handlePublish}
-                      disabled={!canPublish || publishMutation.isPending}
+                      disabled={!canPublish}
                       className="min-w-44 bg-[#E8631A] hover:bg-[#D45714]"
                     >
-                      {publishMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                      <Upload className="mr-2 h-4 w-4" />
                       Publicar no Meta
                     </Button>
                   </div>

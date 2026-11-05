@@ -10,7 +10,27 @@ import {
   type CreateFuryRulePayload,
 } from '@/hooks/useFuryRules';
 
-export function MinhasRegras() {
+/**
+ * Página de gerenciamento de regras de automação do usuário.
+ *
+ * Lista todas as regras FURY cadastradas, permitindo criar, editar,
+ * ativar/desativar e deletar regras que disparam ações automáticas
+ * sobre campanhas com base em métricas de performance.
+ *
+ * @remarks
+ * - Utiliza `useGetFuryRules` para buscar as regras via React Query
+ * - Criação e edição são feitas via `FuryRuleDialog`
+ * - Deleção exige confirmação em um `Dialog` secundário
+ * - O toggle de status (ativa/inativa) é feito inline na tabela,
+ *   sem abrir o dialog de edição
+ *
+ * @example
+ * // Registrada na rota protegida `/automacao`
+ * <Route path="/automacao" element={<MinhasRegras />} />
+ */
+
+// ponytail: conteúdo extraído para ser reutilizado na tab Configurações > Automação
+export function MinhasRegrasContent() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedRule, setSelectedRule] = useState<FuryRule | undefined>();
   const [deleteRuleId, setDeleteRuleId] = useState<string | null>(null);
@@ -22,16 +42,29 @@ export function MinhasRegras() {
 
   const rules = data?.data || [];
 
+  /**
+   * Abre o dialog de criação ou edição de regra.
+   * Se `rule` for fornecida, o dialog entra em modo de edição.
+   *
+   * @param rule - Regra existente para edição, ou `undefined` para criação
+   */
   const handleOpenDialog = (rule?: FuryRule) => {
     setSelectedRule(rule);
     setIsDialogOpen(true);
   };
 
+  /** Fecha o dialog e limpa a regra selecionada do estado local. */
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
     setSelectedRule(undefined);
   };
 
+  /**
+   * Persiste a regra no backend — cria ou atualiza dependendo
+   * se `selectedRule` está definida.
+   *
+   * @param payload - Dados do formulário validados pelo `FuryRuleDialog`
+   */
   const handleSave = async (payload: CreateFuryRulePayload) => {
     try {
       if (selectedRule) {
@@ -48,6 +81,11 @@ export function MinhasRegras() {
     }
   };
 
+  /**
+   * Alterna o status `isActive` de uma regra entre ativa e inativa.
+   *
+   * @param rule - Regra cujo status será invertido
+   */
   const handleToggleActive = async (rule: FuryRule) => {
     try {
       await updateMutation.mutateAsync({
@@ -59,10 +97,16 @@ export function MinhasRegras() {
     }
   };
 
+  /**
+   * Abre o dialog de confirmação de deleção para a regra informada.
+   *
+   * @param id - ID da regra a ser deletada
+   */
   const handleDelete = (id: string) => {
     setDeleteRuleId(id);
   };
 
+  /** Executa a deleção da regra após confirmação do usuário. */
   const handleConfirmDelete = async () => {
     if (!deleteRuleId) return;
     try {
@@ -74,6 +118,12 @@ export function MinhasRegras() {
     }
   };
 
+  /**
+   * Retorna o label legível de uma métrica pelo seu campo interno.
+   *
+   * @param field - Campo da métrica (ex: `'cpc'`, `'roas'`)
+   * @returns Label formatado (ex: `'CPC'`, `'ROAS'`) ou o próprio campo como fallback
+   */
   const getMetricLabel = (field: string) => {
     const metrics: Record<string, string> = {
       cpc: 'CPC',
@@ -85,6 +135,12 @@ export function MinhasRegras() {
     return metrics[field] || field;
   };
 
+  /**
+   * Retorna o símbolo do operador de comparação.
+   *
+   * @param op - Operador interno (ex: `'gt'`, `'lt'`, `'eq'`)
+   * @returns Símbolo correspondente (`'>'`, `'<'`, `'='`) ou o próprio operador como fallback
+   */
   const getOperatorLabel = (op: string) => {
     const operators: Record<string, string> = {
       gt: '>',
@@ -94,6 +150,12 @@ export function MinhasRegras() {
     return operators[op] || op;
   };
 
+  /**
+   * Retorna o label legível de uma ação de automação.
+   *
+   * @param action - Ação interna (ex: `'pause_campaign'`, `'notify'`)
+   * @returns Label formatado (ex: `'Pausar Campanha'`, `'Notificar'`) ou fallback
+   */
   const getActionLabel = (action: string) => {
     const actions: Record<string, string> = {
       pause_campaign: 'Pausar Campanha',
@@ -181,21 +243,17 @@ export function MinhasRegras() {
   ];
 
   return (
-    <AppLayout
-      header={
+    <>
+      <div className="space-y-6">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h2 className="text-lg font-bold text-text-primary">Minhas Regras</h2>
-          <Button variant="primary" size="md" onClick={() => handleOpenDialog()}>
+          <PageHeader
+            title="Minhas Regras"
+            description="Crie e gerencie regras automáticas para otimizar suas campanhas"
+          />
+          <Button variant="primary" size="md" className="ady-decor" onClick={() => handleOpenDialog()}>
             +<span className="hidden sm:inline"> Nova Regra</span>
           </Button>
         </div>
-      }
-    >
-      <div className="space-y-6">
-        <PageHeader
-          title="Minhas Regras"
-          description="Crie e gerencie regras automáticas para otimizar suas campanhas"
-        />
 
         <DataTable
           columns={columns}
@@ -237,6 +295,22 @@ export function MinhasRegras() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
+}
+
+// ponytail: wrapper com AppLayout para rota standalone (backward compat)
+// MinhasRegrasContent tem seu próprio estado interno de diálogo
+export function MinhasRegras() {
+  return (
+    <AppLayout
+      header={
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h2 className="text-lg font-bold text-text-primary">Minhas Regras</h2>
+        </div>
+      }
+    >
+      <MinhasRegrasContent />
     </AppLayout>
   );
 }

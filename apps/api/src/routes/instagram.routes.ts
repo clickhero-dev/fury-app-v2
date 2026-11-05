@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { getPostsRankedHandler, mediaProxyHandler } from '../controllers/instagram.controller.js';
+import { controllers } from '../di.js';
 
 const router = Router();
 
-router.get('/posts-ranked', getPostsRankedHandler);
-router.get('/media-proxy', mediaProxyHandler);
+router.get('/posts-ranked', controllers.instagram.getPostsRanked);
+router.get('/media-proxy', controllers.instagram.mediaProxy);
 
 export default router;

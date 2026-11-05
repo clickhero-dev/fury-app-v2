@@ -1,27 +1,66 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { RegisterFormPage } from './pages/auth/RegisterFormPage';
+import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
+import { ResetPasswordSuccessPage } from './pages/auth/ResetPasswordSuccessPage';
+import { LandingPage } from './pages/landing/LandingPage';
 import { ConectarMetaPage } from './pages/onboarding/ConectarMetaPage';
 import { MetaAuthorizePage } from './pages/onboarding/MetaAuthorizePage';
 import { MetasPage } from './pages/onboarding/MetasPage';
 import { SelecionarAtivosPage } from './pages/onboarding/SelecionarAtivosPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { RequireSuperadmin } from './components/auth/RequireSuperadmin';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { AuthenticatedShell } from './components/layout/AuthenticatedShell';
+import { AdminShell } from './components/layout/AdminShell';
+import { CampaignWizardProvider } from '@/contexts/CampaignWizardContext';
 import { Dashboard } from './pages/dashboard/Dashboard';
 import { Metas } from './pages/dashboard/Metas';
 import { PainelCampanhas } from './pages/campanhas/PainelCampanhas';
+import { LeadsPage } from './pages/leads/LeadsPage';
 import { RegrasCampanhas } from './pages/campanhas/RegrasCampanhas';
 import { InsightsCampanha } from './pages/campanhas/InsightsCampanha';
-import { CreativeStudio } from './pages/estudio/CreativeStudio';
+import { CriarCampanhaPage } from './pages/campanhas/CriarCampanhaPage';
+// CreativeStudio (rota órfã duplicada do Estúdio) — import removido após canonicalização para /estudio
 import { EstudioHome } from './pages/estudio/EstudioHome';
 import { GeradorImagem } from './pages/estudio/GeradorImagem';
+import { PlanejadorPage } from './pages/planejador/PlanejadorPage';
+import { CalendarioPage } from './pages/planejador/CalendarioPage';
 import { Configuracoes } from './pages/configuracoes/Configuracoes';
 import { Integracoes } from './pages/configuracoes/Integracoes';
-import { BrandKitPage } from './pages/configuracoes/BrandKitPage';
+// Google Meu Negócio oculto (feature incompleta) — 2026-09
+// import { GoogleMeuNegocioPage } from './pages/configuracoes/google-meu-negocio/GoogleMeuNegocioPage';
 import { MinhasRegras } from './pages/automacao/MinhasRegras';
 import { ComponentsDemo } from './pages/ComponentsDemo';
 import { Plans } from './pages/billing/Plans';
 import { Subscription } from './pages/billing/Subscription';
+import { AssinaturaVencida } from './pages/billing/AssinaturaVencida';
+import { OrcamentoSmart } from './pages/orcamento/OrcamentoSmart';
+import { RoadmapPage } from './pages/roadmap/RoadmapPage';
+import { PoliticaDeUsoPage } from './pages/politica/PoliticaDeUsoPage';
+import { AdminLogin } from './pages/superadmin/AdminLogin';
+import { NotFoundPage } from './pages/NotFoundPage';
+import { TenantsPage } from './pages/superadmin/TenantsPage';
+import { TenantDetailPage } from './pages/superadmin/TenantDetailPage';
+import { PlansPage } from './pages/superadmin/PlansPage';
+import { PartnersPage } from './pages/superadmin/PartnersPage';
+import { PartnerConfigPage } from './pages/superadmin/PartnerConfigPage';
+import { DefaultPermissionsPage } from './pages/superadmin/DefaultPermissionsPage';
+import { ClientesPage } from './pages/superadmin/ClientesPage';
+import { MyIntegrationsPage } from './pages/superadmin/IntegrationsPanel';
+import { UsersPage } from './pages/superadmin/UsersPage';
+import { TenantCampaignsPage } from './pages/superadmin/TenantCampaignsPage';
+import { DashboardAdminPage } from './pages/superadmin/AdminDashboard';
+import { TicketsPage } from './pages/superadmin/TicketsPage';
+import { HealthchecksPage } from './pages/superadmin/HealthchecksPage';
+import { FaqsPage } from './pages/superadmin/FaqsPage';
+import { AnnouncementsPage } from './pages/superadmin/AnnouncementsPage';
+import { HelpCenterPage } from './pages/help/HelpCenterPage';
+import { FaqPublicPage } from './pages/help/FaqPublicPage';
+
+// 1. IMPORTAR O FORCE DARK MODE QUE VOCÊ CRIOU
 
 export const router = createBrowserRouter([
   {
@@ -35,6 +74,22 @@ export const router = createBrowserRouter([
   {
     path: '/cadastro',
     element: <RegisterPage />,
+  },
+  {
+    path: '/cadastro/formulario',
+    element: <RegisterFormPage />,
+  },
+  {
+    path: '/forgot-password',
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
+  },
+  {
+    path: '/reset-password/success',
+    element: <ResetPasswordSuccessPage />,
   },
   {
     path: '/onboarding/conectar-meta',
@@ -53,25 +108,132 @@ export const router = createBrowserRouter([
     ),
   },
   {
-    element: <AuthenticatedShell />,
+    path: '/l/:codigo',
+    element: <LandingPage />,
+  },
+  {
+    path: '/roadmap',
+    element: <RoadmapPage />,
+  },
+  { path: '/ajuda', element: <HelpCenterPage /> },
+  { path: '/ajuda/:slug', element: <FaqPublicPage /> },
+  {
+    element: (
+      <CampaignWizardProvider>
+        <AuthenticatedShell />
+      </CampaignWizardProvider>
+    ),
     children: [
       { path: '/dashboard', element: <Dashboard /> },
-      { path: '/onboarding/metas', element: <MetasPage /> },
+      { path: '/onboarding/metas', element: <AppLayout><MetasPage /></AppLayout> },
       { path: '/dashboard/metas', element: <Metas /> },
-      { path: '/campanhas', element: <PainelCampanhas /> },
-      { path: '/campanhas/regras', element: <RegrasCampanhas /> },
-      { path: '/campanhas/:id/insights', element: <InsightsCampanha /> },
-      { path: '/automacao', element: <MinhasRegras /> },
+      {
+        path: '/campanhas',
+        element: (
+          <AppLayout>
+            <PainelCampanhas />
+          </AppLayout>
+        )
+      },
+      {
+        path: '/leads',
+        element: (
+          <AppLayout>
+            <LeadsPage />
+          </AppLayout>
+        )
+      },
+      {
+        path: '/criar-campanha',
+        element: <CriarCampanhaPage />,
+      },
+      {
+        path: '/campanhas/regras',
+        element: (
+          <AppLayout>
+            <RegrasCampanhas />
+          </AppLayout>
+        )
+      },
+      {
+        path: '/campanhas/:id/insights',
+        element: (
+          <AppLayout>
+            <InsightsCampanha />
+          </AppLayout>
+        )
+      },
+      // /automacao é o atalho legado; a rota canônica é /automacao/minhas-regras
+      { path: '/automacao', element: <Navigate to="/automacao/minhas-regras" replace /> },
       { path: '/automacao/minhas-regras', element: <MinhasRegras /> },
-      { path: '/estudio-criativo', element: <CreativeStudio /> },
+      // /estudio-criativo é rota órfã (tela duplicada do Estúdio) — canonicaliza p/ /estudio
+      { path: '/estudio-criativo', element: <Navigate to="/estudio" replace /> },
       { path: '/estudio', element: <EstudioHome /> },
       { path: '/estudio/imagem', element: <GeradorImagem /> },
+      { path: '/planejador', element: <PlanejadorPage /> },
+      { path: '/calendario', element: <CalendarioPage /> },
       { path: '/configuracoes', element: <Configuracoes /> },
       { path: '/configuracoes/integracoes', element: <Integracoes /> },
-      { path: '/configuracoes/brand-kit', element: <BrandKitPage /> },
+      // Google Meu Negócio oculto (feature incompleta) — 2026-09
+      // { path: '/configuracoes/google-meu-negocio', element: <GoogleMeuNegocioPage /> },
+      { path: '/configuracoes/brand-kit', element: <Navigate to="/configuracoes?tab=publico" replace /> },
       { path: '/planos', element: <Plans /> },
       { path: '/assinatura', element: <Subscription /> },
+      { path: '/orcamento-smart', element: <OrcamentoSmart /> },
       { path: '/components-demo', element: <ComponentsDemo /> },
     ],
+  },
+  {
+    path: '/assinatura-vencida',
+    element: <AssinaturaVencida />,
+  },
+
+  // Política de uso: autenticada, mas FORA do AuthenticatedShell (sem gate
+  // recursivo) — é o destino do redirect quando o aceite está pendente.
+  {
+    path: '/politica',
+    element: <PoliticaDeUsoPage />,
+  },
+
+  /* =========================================================
+     ÁREA DE LOGIN DO ADMIN (segue o tema do cliente)
+     ========================================================= */
+  {
+    path: '/admin/login',
+    element: <AdminLogin />,
+  },
+
+  /* =========================================================
+     ÁREA RESTRITA DO SUPERADMIN (segue o tema do cliente)
+     ========================================================= */
+  {
+    path: '/admin',
+    element: (
+      <RequireSuperadmin>
+        <AdminShell />
+      </RequireSuperadmin>
+    ),
+    children: [
+      { index: true, element: <Navigate to="dashboard" replace /> },
+      { path: 'dashboard', element: <DashboardAdminPage /> },
+      { path: 'users', element: <UsersPage /> },
+      { path: 'tenants/:id', element: <TenantDetailPage /> },
+      { path: 'tenants/:id/campaigns', element: <TenantCampaignsPage /> },
+      { path: 'planos', element: <PlansPage /> },
+      { path: 'parceiros', element: <PartnersPage /> },
+      { path: 'parceiros/padrao', element: <DefaultPermissionsPage /> },
+      { path: 'parceiros/:id', element: <PartnerConfigPage /> },
+      { path: 'clientes', element: <ClientesPage /> },
+      { path: 'integracoes', element: <MyIntegrationsPage /> },
+      { path: 'tenants', element: <TenantsPage /> },
+      { path: 'tickets', element: <TicketsPage /> },
+      { path: 'healthchecks', element: <HealthchecksPage /> },
+      { path: 'faqs', element: <FaqsPage /> },
+      { path: 'avisos', element: <AnnouncementsPage /> },
+    ],
+  },
+  {
+    path: '*',
+    element: <NotFoundPage />,
   },
 ]);

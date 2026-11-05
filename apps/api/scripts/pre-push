@@ -1,0 +1,44 @@
+#!/bin/bash
+# ═══════════════════════════════════════════════════════════════════════
+# Pre-push hook — Fury App
+# Verifica se o swagger.json está atualizado antes de permitir o push.
+# Se desatualizado, bloqueia e instrui como regenerar.
+# ═══════════════════════════════════════════════════════════════════════
+set -euo pipefail
+
+API_DIR="$(git rev-parse --show-toplevel)/apps/api"
+SWAGGER_JSON="$API_DIR/swagger.json"
+
+# Skip if no swagger setup (new clone, etc.)
+if [ ! -f "$SWAGGER_JSON" ]; then
+  echo "⚠️  swagger.json not found — generating..."
+  cd "$API_DIR" && npx tsx scripts/generate-swagger.ts
+  git add "$SWAGGER_JSON"
+  echo "✅ swagger.json generated and staged"
+  exit 0
+fi
+
+# Check if routes-metadata.ts was changed
+CHANGED_META=$(git diff --cached --name-only | grep 'routes-metadata.ts' || true)
+CHANGED_GENERATOR=$(git diff --cached --name-only | grep 'generate-swagger.ts' || true)
+CHANGED_ROUTES=$(git diff --cached --name-only | grep 'apps/api/src/routes/' || true)
+
+if [ -n "$CHANGED_META" ] || [ -n "$CHANGED_GENERATOR" ] || [ -n "$CHANGED_ROUTES" ]; then
+  echo ""
+  echo "🔍 Routes/metadata changed — checking swagger.json is up-to-date..."
+  echo ""
+
+  # Run validator with --fix to auto-update
+  cd "$API_DIR" && npx tsx scripts/validate-swagger.ts --fix
+
+  # Check if swagger.json changed
+  if ! git diff --quiet "$SWAGGER_JSON"; then
+    # Auto-stage the updated swagger.json
+    git add "$SWAGGER_JSON"
+    echo "✅ swagger.json auto-updated and staged for commit"
+  else
+    echo "✅ swagger.json is up-to-date"
+  fi
+fi
+
+exit 0

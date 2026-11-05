@@ -26,7 +26,7 @@ type JwtExpiry = jwt.SignOptions['expiresIn'];
 
 export function generateAccessToken(payload: AccessTokenPayload): string {
   return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: (process.env.JWT_EXPIRES_IN ?? '15m') as unknown as JwtExpiry,
+    expiresIn: (process.env.JWT_EXPIRES_IN ?? '30d') as unknown as JwtExpiry,
   });
 }
 

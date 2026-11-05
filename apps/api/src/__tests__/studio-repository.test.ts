@@ -1,0 +1,131 @@
+import { describe, it, expect, vi } from 'vitest';
+import { StudioRepository } from '../repository/studio.repository.js';
+
+/**
+ * Testes unitários do StudioRepository.
+ * Injeta um `db` mockado pelo 2º argumento do construtor (design), sem tocar no banco real.
+ */
+
+function mockRow(overrides: Record<string, any> = {}) {
+  return { id: 'asset-1', tenantId: 'tenant-1', type: 'image', complianceStatus: 'pending_compliance', createdAt: new Date(), ...overrides };
+}
+
+function makeDb(rootRow?: any) {
+  const updateSetResult = { rootAssetId: null };
+  const update = vi.fn(() => ({
+    set: (setData: any) => ({
+      where: (where: any) => {
+        Object.assign(updateSetResult, setData);
+        const result: any = Promise.resolve();
+        result.returning = async () => [mockRow({ ...setData })];
+        return result;
+      },
+    }),
+  }));
+  const insert = vi.fn(() => ({
+    values: (values: any) => ({ returning: async () => [mockRow({ ...values })] }),
+  }));
+  const del = vi.fn(() => ({ where: async () => {} }));
+  const select = vi.fn(() => ({ from: () => ({ where: async () => [{ total: 3 }] }) }));
+  const db: any = {
+    query: {
+      creativeAssets: {
+        findFirst: vi.fn(async () => rootRow ?? null),
+        findMany: vi.fn(async () => [rootRow ?? mockRow()]),
+      },
+    },
+    select,
+    update,
+    insert,
+    delete: del,
+  };
+  return { db, update, insert, del, select, updateSetResult };
+}
+
+const tenantId = '9e9d3a10-0000-4000-8000-00000000000a';
+
+describe('StudioRepository', () => {
+  it('createAsset insere e retorna o asset criado', async () => {
+    const { db, insert } = makeDb();
+    const repo = new StudioRepository(tenantId, db);
+    const asset = await repo.createAsset({ tenantId, type: 'image', url: 'https://cdn/x.png', complianceStatus: 'pending_compliance' });
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(asset.tenantId).toBe(tenantId);
+    expect(asset.type).toBe('image');
+  });
+
+  it('createAsset persiste costUsd e processingTimeMs', async () => {
+    const { db, insert } = makeDb();
+    const repo = new StudioRepository(tenantId, db);
+    const asset = await repo.createAsset({
+      tenantId,
+      type: 'image',
+      url: 'https://cdn/x.png',
+      complianceStatus: 'pending_compliance',
+      costUsd: 0.04,
+      processingTimeMs: 1234,
+    });
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(asset.costUsd).toBe(0.04);
+    expect(asset.processingTimeMs).toBe(1234);
+  });
+
+  it('deleteAsset usa operation delete', async () => {
+    const { db, del } = makeDb();
+    const repo = new StudioRepository(tenantId, db);
+    await repo.deleteAsset('asset-1');
+    expect(del).toHaveBeenCalledTimes(1);
+  });
+
+  it('patchAsset usa operation update e retorna o asset atualizado', async () => {
+    const { db, update } = makeDb();
+    const repo = new StudioRepository(tenantId, db);
+    const updated = await repo.patchAsset('asset-1', { metaAssetId: 'meta-1' });
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(updated?.metaAssetId).toBe('meta-1');
+  });
+
+  it('findAssetById consulta query.creativeAssets.findFirst', async () => {
+    const { db } = makeDb(mockRow({ id: 'asset-9' }));
+    const repo = new StudioRepository(tenantId, db);
+    const asset = await repo.findAssetById('asset-9');
+    expect(db.query.creativeAssets.findFirst).toHaveBeenCalledTimes(1);
+    expect(asset?.id).toBe('asset-9');
+  });
+
+  it('findAssetByUrl consulta query.creativeAssets.findFirst', async () => {
+    const { db } = makeDb(mockRow({ url: 'https://cdn/x.png' }));
+    const repo = new StudioRepository(tenantId, db);
+    const asset = await repo.findAssetByUrl('https://cdn/x.png');
+    expect(db.query.creativeAssets.findFirst).toHaveBeenCalledTimes(1);
+    expect(asset?.url).toBe('https://cdn/x.png');
+  });
+
+  // `listAssets` agora faz um self-join real (agrupamento por linhagem +
+  // resolução da versão em evidência) — cobertura de verdade fica em
+  // studio-assets.test.ts (integração, banco real), não aqui: mockar a
+  // cadeia .select().from().innerJoin().where() só validaria que o código
+  // CHAMA esses métodos, não que a lógica de agrupamento/filtro está certa.
+
+  it('deleteAssetAndChildren faz UPDATE set rootAssetId=null nos filhos antes do DELETE', async () => {
+    const { db, del, update } = makeDb();
+    const repo = new StudioRepository(tenantId, db);
+    await repo.deleteAssetAndChildren('root-1');
+
+    // Primeiro: UPDATE para desvincular filhos (evita violação de FK)
+    expect(update).toHaveBeenCalledTimes(1);
+    // Depois: DELETE do próprio asset
+    expect(del).toHaveBeenCalledTimes(1);
+  });
+
+  it('deleteAssetAndChildren sem filhos: UPDATE com where vazio + DELETE', async () => {
+    const { db, del, update } = makeDb();
+    const repo = new StudioRepository(tenantId, db);
+    await repo.deleteAssetAndChildren('asset-1');
+
+    // UPDATE é chamado (mesmo sem filhos, o where não encontra nada)
+    expect(update).toHaveBeenCalledTimes(1);
+    // DELETE do próprio asset
+    expect(del).toHaveBeenCalledTimes(1);
+  });
+});

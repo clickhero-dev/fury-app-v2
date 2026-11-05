@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AppLayout, Button, Card } from '@/components';
-import { FuryConfig } from './FuryConfig';
-import { IntegracoesContent } from './IntegracoesContent';
+import { AppLayout, PageHeader } from '@/components'; // IMPORTANTE: Importar PageHeader
 import { useSubscription, useCancelSubscription } from '@/hooks/useBilling';
 import { useTheme } from '@/hooks/useTheme';
+import { Sun, Moon, Copy, ExternalLink, Megaphone } from 'lucide-react';
 import api from '@/lib/api';
+import { MetasPage } from '../onboarding/MetasPage';
+import { PublicoContent } from './PublicoContent';
+import { BrandKitContent } from './BrandKitPage';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { ConfiguracoesTabsNav } from './ConfiguracoesTabsNav';
 import {
@@ -16,25 +18,27 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
+import { hasLifetimeAccess } from '@/lib/platform-role';
 
-type TabType = 'geral' | 'notificacoes' | 'seguranca' | 'equipe' | 'faturamento' | 'integracoes' | 'fury';
+type TabType = 'geral' | 'seguranca' | 'faturamento' | 'metas' | 'publico';
+const VALID_TABS: TabType[] = ['geral', 'seguranca', 'faturamento', 'metas', 'publico'];
 
-const VALID_TABS: TabType[] = ['geral', 'notificacoes', 'seguranca', 'equipe', 'faturamento', 'integracoes', 'fury'];
-
-interface NotificationPrefs {
-  campanhas: boolean;
-  performance: boolean;
-  equipe: boolean;
-}
+/* ── Estilos Globais de Elementos ── */
+const SURFACE_CARD = 'rounded-2xl border border-border bg-surface p-6 sm:p-8 shadow-sm hover:border-border-light transition-all duration-300';
+const INPUT_STYLE = 'w-full rounded-xl border border-border bg-surface-secondary px-4 py-2.5 text-sm text-text-primary outline-none transition focus:border-brand';
+const BUTTON_HOVER = 'transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]';
 
 interface MeResponse {
   id: string;
   name: string | null;
   email: string;
   tenantName: string;
+  tenantSlug: string;
+  tenantCodigo: string;
   role: string;
   tenantId: string;
-  notificationPrefs: NotificationPrefs;
+  hasPassword: boolean;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -42,19 +46,15 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function formatCents(cents: number): string {
-  return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
 function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
   return (
     <div
-      className={[
-        'fixed bottom-6 right-6 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-semibold text-white',
-        type === 'success' ? 'bg-green-600' : 'bg-red-600',
-      ].join(' ')}
+      className={cn(
+        'fixed bottom-6 right-6 z-50 px-5 py-3 rounded-2xl shadow-lg text-xs font-semibold text-white',
+        type === 'success' ? 'bg-brand' : 'bg-error'
+      )}
     >
-      {message}
+      {type === 'success' ? '✅' : '⚠️'} {message}
     </div>
   );
 }
@@ -65,9 +65,16 @@ export function Configuracoes() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const rawTab = searchParams.get('tab') as TabType | null;
-  const activeTab: TabType = rawTab && VALID_TABS.includes(rawTab) ? rawTab : 'geral';
+  // conta vitalícia (parceiro) não tem a aba Faturamento
+  const allowed = rawTab && VALID_TABS.includes(rawTab) && !(rawTab === 'faturamento' && hasLifetimeAccess());
+  const activeTab: TabType = allowed ? rawTab : 'geral';
 
   function setTab(tab: string) {
     setSearchParams({ tab }, { replace: true });
@@ -105,34 +112,12 @@ export function Configuracoes() {
       queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       showToast('Alterações salvas com sucesso!', 'success');
     },
-    onError: () => {
-      showToast('Erro ao salvar. Tente novamente.', 'error');
-    },
-  });
-
-  // ── Aba Notificações ─────────────────────────────────────────────────────────
-  const [notifPrefs, setNotifPrefs] = useState<NotificationPrefs>({
-    campanhas: true,
-    performance: true,
-    equipe: false,
-  });
-
-  useEffect(() => {
-    if (meData?.notificationPrefs) {
-      setNotifPrefs(meData.notificationPrefs);
-    }
-  }, [meData]);
-
-  const saveNotifMutation = useMutation({
-    mutationFn: async (prefs: NotificationPrefs) => {
-      await api.patch('/auth/me', { notificationPrefs: prefs });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
-      showToast('Preferências salvas com sucesso!', 'success');
-    },
-    onError: () => {
-      showToast('Erro ao salvar. Tente novamente.', 'error');
+    onError: (error: unknown) => {
+      const apiMessage =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
+          : undefined;
+      showToast(apiMessage || 'Erro ao salvar. Tente novamente.', 'error');
     },
   });
 
@@ -150,61 +135,121 @@ export function Configuracoes() {
     }
   }, [cancelMutation.isSuccess, cancelMutation.isError]);
 
+  const isSettingInitialPassword = meData?.hasPassword === false;
+
+  const changePasswordMutation = useMutation({
+    mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
+      await api.post('/auth/change-password', data);
+    },
+    onSuccess: () => {
+      setPasswordOpen(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      showToast('Senha alterada com sucesso!', 'success');
+    },
+    onError: () => {
+      showToast('Erro ao alterar senha. Verifique a senha atual e tente novamente.', 'error');
+    },
+  });
+
+  const setPasswordMutation = useMutation({
+    mutationFn: async (data: { newPassword: string }) => {
+      await api.post('/auth/set-password', data);
+    },
+    onSuccess: () => {
+      setPasswordOpen(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      showToast('Senha definida com sucesso!', 'success');
+    },
+    onError: () => {
+      showToast('Erro ao definir senha. Tente novamente.', 'error');
+    },
+  });
+
   function showToast(message: string, type: 'success' | 'error') {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   }
 
+  const landingPath = meData
+    ? `/l/${meData.tenantSlug || meData.tenantCodigo || meData.tenantId}`
+    : '';
+  const destinationUrl = meData ? `${window.location.origin}${landingPath}` : '';
+
+  const handleCopyLink = () => {
+    if (!destinationUrl) return;
+    navigator.clipboard.writeText(destinationUrl);
+    setCopiedLink(true);
+    showToast('Link copiado!', 'success');
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
   return (
-    <AppLayout
-      header={
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-text-primary">Configurações</h2>
-        </div>
-      }
-    >
-      {toast && <Toast message={toast.message} type={toast.type} />}
+    <AppLayout>
+      {/* Container externo exatamente padronizado com Campanhas e Dashboard */}
+      <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-2 pb-8 sm:px-10">
+        {toast && <Toast message={toast.message} type={toast.type} />}
 
-      <ConfiguracoesTabsNav activeTab={activeTab} />
+        {/* Header Reutilizável Padronizado */}
+        <PageHeader
+          title="Configurações"
+          description="Sua conta, do jeito que faz sentido"
+        />
 
-      <Tabs value={activeTab} onValueChange={setTab}>
-          {/* Geral */}
+        {/* Navegação por abas */}
+        <ConfiguracoesTabsNav activeTab={activeTab} />
+
+        <Tabs value={activeTab} onValueChange={setTab} className="w-full">
+          
+          {/* ── Aba Geral ── */}
           <TabsContent value="geral">
-            <Card>
-              <div className="p-6 space-y-6">
-                <div>
-                  <h3 className="text-lg font-bold text-text-primary mb-4">Informações da Conta</h3>
+            <div className="w-full">
+              <div className={`${SURFACE_CARD} space-y-8`}>
+                
+                {/* Seção 1: Informações da conta */}
+                <div className="space-y-4">
+                  <h3 className="text-base font-semibold text-text-primary">Informações da conta</h3>
+                  
                   {meLoading ? (
                     <div className="flex justify-center py-8">
-                      <span className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+                      <span className="w-6 h-6 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-text-secondary mb-2">
-                          Nome Completo
-                        </label>
-                        <input
-                          type="text"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          placeholder="Seu nome"
-                          className="w-full px-4 py-2 border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
-                        />
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-text-tertiary mb-2">
+                            Nome completo
+                          </label>
+                          <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Seu nome"
+                            className={INPUT_STYLE}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-text-tertiary mb-2">
+                            E-mail
+                          </label>
+                          <input
+                            type="email"
+                            value={meData?.email ?? ''}
+                            readOnly
+                            disabled
+                            className={`${INPUT_STYLE} opacity-50 cursor-not-allowed`}
+                          />
+                        </div>
                       </div>
+
                       <div>
-                        <label className="block text-sm font-semibold text-text-secondary mb-2">
-                          Email
-                        </label>
-                        <input
-                          type="email"
-                          value={meData?.email ?? ''}
-                          readOnly
-                          className="w-full px-4 py-2 border border-border rounded-lg text-text-secondary bg-surface-secondary cursor-not-allowed"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-text-secondary mb-2">
+                        <label className="block text-xs font-semibold text-text-tertiary mb-2">
                           Organização
                         </label>
                         <input
@@ -212,312 +257,413 @@ export function Configuracoes() {
                           value={tenantName}
                           onChange={(e) => setTenantName(e.target.value)}
                           placeholder="Nome da organização"
-                          className="w-full px-4 py-2 border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
+                          className={INPUT_STYLE}
                         />
                       </div>
-                    </div>
+                    </>
                   )}
                 </div>
 
-                <div className="border-t border-border pt-6">
-                  <h3 className="text-lg font-bold text-text-primary mb-4">Preferências</h3>
-                  <div className="space-y-4">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isDark}
-                        onChange={(e) => setDark(e.target.checked)}
-                        className="w-4 h-4"
-                      />
-                      <span className="text-sm font-semibold text-text-primary">Modo Escuro</span>
-                    </label>
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input type="checkbox" defaultChecked className="w-4 h-4" />
-                      <span className="text-sm font-semibold text-text-primary">Modo Compacto</span>
-                    </label>
+                <hr className="border-border" />
+
+                {/* Seção 2: Aparência */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-semibold text-text-primary">
+                    Aparência
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setDark(false)}
+                      className={cn(
+                        'flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-medium transition-all duration-200 cursor-pointer',
+                        !isDark
+                          ? 'border-brand bg-brand/10 text-brand'
+                          : 'border-[#4A4E47] bg-[#3A3D37] text-[#E0E3DC] hover:text-text-primary'
+                      )}
+                    >
+                      <Sun size={16} />
+                      Claro
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDark(true)}
+                      className={cn(
+                        'ady-btn flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-medium transition-all duration-200 cursor-pointer',
+                        isDark
+                          ? 'border-brand bg-brand/10 text-brand'
+                          : 'border-[#94A3B8] bg-[#CBD5E1] text-[#1E293B] hover:text-[#0F172A]'
+                      )}
+                    >
+                      <Moon size={16} />
+                      Escuro
+                    </button>
                   </div>
                 </div>
 
+                {/* Seção 3: Página de Destino */}
+                {meData?.tenantId && (
+                  <>
+                    <hr className="border-border" />
+                    <div className="space-y-3">
+                      <div>
+                        <h3 className="text-base font-semibold text-text-primary">Página de destino</h3>
+                        <p className="text-xs text-text-tertiary mt-0.5">
+                          Compartilhe este link para seus clientes falarem com você no WhatsApp.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                        <input
+                          type="text"
+                          readOnly
+                          value={window.location.host + landingPath}
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
+                          className={`${INPUT_STYLE} flex-1 select-all`}
+                        />
+                        
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCopyLink}
+                            className={`inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-xs font-semibold text-white ${BUTTON_HOVER} cursor-pointer`}
+                          >
+                            <Copy size={14} />
+                            {copiedLink ? 'Copiado!' : 'Copiar'}
+                          </button>
+
+                          <a
+                            href={destinationUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface-secondary px-4 py-2.5 text-xs font-semibold text-text-primary transition-all hover:bg-border cursor-pointer`}
+                          >
+                            <ExternalLink size={14} />
+                            Visualizar
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Seção 4: Integrações disponíveis */}
+                <hr className="border-border" />
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-text-primary">Integrações</h3>
+                    <p className="text-xs text-text-tertiary mt-0.5">
+                      Conecte e gerencie suas contas e perfis externos.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Link
+                      to="/configuracoes/integracoes"
+                      className={`${SURFACE_CARD} group flex items-center justify-between gap-4`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand/10 text-brand">
+                          <Megaphone className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-text-primary">Meta Ads</p>
+                          <p className="text-xs text-text-tertiary">Contas de anúncios conectadas</p>
+                        </div>
+                      </div>
+                      <span className="text-text-tertiary transition group-hover:text-brand">→</span>
+                    </Link>
+
+                    {/* Google Meu Negócio oculto (feature incompleta) — 2026-09 */}
+                    {/* <Link
+                      to="/configuracoes/google-meu-negocio"
+                      className={`${SURFACE_CARD} group flex items-center justify-between gap-4`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand/10 text-brand">
+                          <Building2 className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-text-primary">Google Meu Negócio</p>
+                          <p className="text-xs text-text-tertiary">Perfil da sua empresa no Google</p>
+                        </div>
+                      </div>
+                      <span className="text-text-tertiary transition group-hover:text-brand">→</span>
+                    </Link> */}
+                  </div>
+                </div>
+
+                {/* Rodapé de Ações */}
                 <div className="flex justify-end gap-3 pt-4 border-t border-border">
-                  <Button
-                    variant="outline"
-                    size="md"
+                  <button
+                    type="button"
                     onClick={() => {
                       setName(meData?.name ?? '');
                       setTenantName(meData?.tenantName ?? '');
                     }}
+                    className="rounded-full border border-border bg-surface-secondary px-5 py-2 text-xs font-semibold text-text-primary transition-all hover:bg-border cursor-pointer"
                   >
                     Cancelar
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="md"
+                  </button>
+                  
+                  <button
+                    type="button"
                     disabled={updateMeMutation.isPending}
                     onClick={() => updateMeMutation.mutate({ name, tenantName })}
+                    className={`rounded-full bg-[#17708A] px-5 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} disabled:opacity-50 cursor-pointer`}
                   >
-                    {updateMeMutation.isPending ? 'Salvando...' : 'Salvar Alterações'}
-                  </Button>
+                    {updateMeMutation.isPending ? 'Salvando...' : 'Salvar alterações'}
+                  </button>
                 </div>
+
               </div>
-            </Card>
+            </div>
           </TabsContent>
 
-          {/* Notificações */}
-          <TabsContent value="notificacoes">
-            <Card>
-              <div className="p-6 space-y-6">
-                <div>
-                  <h3 className="text-lg font-bold text-text-primary mb-4">Preferências de Notificação</h3>
-                  {meLoading ? (
-                    <div className="flex justify-center py-8">
-                      <span className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {(
-                        [
-                          { key: 'campanhas', label: 'Campanhas', desc: 'Notificações sobre campanhas ativas' },
-                          { key: 'performance', label: 'Performance', desc: 'Alertas de performance e relatórios' },
-                          { key: 'equipe', label: 'Equipe', desc: 'Notificações da atividade da equipe' },
-                        ] as const
-                      ).map(({ key, label, desc }) => (
-                        <label
-                          key={key}
-                          className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-surface-secondary transition-colors cursor-pointer"
-                        >
-                          <div>
-                            <p className="font-semibold text-text-primary">{label}</p>
-                            <p className="text-sm text-text-secondary">{desc}</p>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={notifPrefs[key]}
-                            onChange={(e) =>
-                              setNotifPrefs((prev) => ({ ...prev, [key]: e.target.checked }))
-                            }
-                            className="w-5 h-5"
-                          />
-                        </label>
-                      ))}
+          {/* ── Aba Segurança ── */}
+          <TabsContent value="seguranca">
+            <div className={`${SURFACE_CARD} space-y-6 w-full`}>
+              <div>
+                <h3 className="text-base font-semibold text-text-primary mb-4">Segurança da Conta</h3>
+                <div className="p-4 border border-border rounded-xl bg-surface-secondary flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">
+                      {isSettingInitialPassword ? 'Definir Senha' : 'Alterar Senha'}
+                    </p>
+                    <p className="text-xs text-text-tertiary">
+                      {isSettingInitialPassword
+                        ? 'Sua conta usa login social. Defina uma senha para também entrar com e-mail.'
+                        : 'Atualize sua senha regularmente'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPasswordOpen(true)}
+                    className="rounded-full border border-border px-4 py-1.5 text-xs font-medium text-text-primary hover:bg-border cursor-pointer"
+                  >
+                    {isSettingInitialPassword ? 'Definir' : 'Alterar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <Dialog open={passwordOpen} onOpenChange={setPasswordOpen}>
+              <DialogContent className="max-w-md border-border bg-surface text-text-primary">
+                <DialogHeader>
+                  <DialogTitle className="text-base font-semibold text-text-primary">
+                    {isSettingInitialPassword ? 'Definir Senha' : 'Alterar Senha'}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 my-2">
+                  {!isSettingInitialPassword && (
+                    <div>
+                      <label className="block text-xs font-semibold text-text-tertiary mb-2">Senha Atual</label>
+                      <input
+                        type="password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        className={INPUT_STYLE}
+                      />
                     </div>
                   )}
+                  <div>
+                    <label className="block text-xs font-semibold text-text-tertiary mb-2">Nova Senha</label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Mínimo 8 caracteres"
+                      className={INPUT_STYLE}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-text-tertiary mb-2">Confirmar Nova Senha</label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Repita a nova senha"
+                      className={INPUT_STYLE}
+                    />
+                  </div>
+                  {newPassword && confirmPassword && newPassword !== confirmPassword && (
+                    <p className="text-xs text-error">As senhas não conferem</p>
+                  )}
                 </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-border">
-                  <Button
-                    variant="primary"
-                    size="md"
-                    disabled={saveNotifMutation.isPending}
-                    onClick={() => saveNotifMutation.mutate(notifPrefs)}
+                <DialogFooter className="gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPasswordOpen(false);
+                      setCurrentPassword('');
+                      setNewPassword('');
+                      setConfirmPassword('');
+                    }}
+                    className="rounded-full border border-border px-4 py-2 text-xs font-medium text-text-primary hover:bg-border cursor-pointer"
                   >
-                    {saveNotifMutation.isPending ? 'Salvando...' : 'Salvar Preferências'}
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* Segurança */}
-          <TabsContent value="seguranca">
-            <Card>
-              <div className="p-6 space-y-6">
-                <div>
-                  <h3 className="text-lg font-bold text-text-primary mb-4">Segurança da Conta</h3>
-                  <div className="space-y-4">
-                    <div className="p-4 border border-border rounded-lg flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-text-primary">Alterar Senha</p>
-                        <p className="text-sm text-text-secondary">Atualize sua senha regularmente</p>
-                      </div>
-                      <Button variant="outline" size="sm">Alterar</Button>
-                    </div>
-                    <div className="p-4 border border-border rounded-lg flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-text-primary">Autenticação de Dois Fatores</p>
-                        <p className="text-sm text-text-secondary">Ative para maior segurança</p>
-                      </div>
-                      <Button variant="outline" size="sm">Configurar</Button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t border-border pt-6">
-                  <h3 className="text-lg font-bold text-text-primary mb-4">Sessões Ativas</h3>
-                  <div className="p-4 border border-border rounded-lg flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-text-primary">Sessão Atual</p>
-                      <p className="text-sm text-text-secondary">Windows Chrome - Último acesso: agora</p>
-                    </div>
-                    <span className="text-xs font-bold text-success">Ativa</span>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* Equipe */}
-          <TabsContent value="equipe">
-            <Card>
-              <div className="p-6 space-y-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-text-primary">Membros da Equipe</h3>
-                  <Button variant="primary" size="sm">+ Convidar Membro</Button>
-                </div>
-
-                <div className="space-y-3">
-                  {[
-                    { name: 'Mallyssa Silva', email: 'mallyssa@example.com', role: 'Proprietário', color: 'text-accent' },
-                    { name: 'Ricardo Silva', email: 'ricardo@example.com', role: 'Admin', color: 'text-success' },
-                    { name: 'Gabrielle Silva', email: 'gabrielle@example.com', role: 'Membro', color: 'text-text-secondary' },
-                  ].map(({ name: n, email, role, color }) => (
-                    <div key={email} className="p-4 border border-border rounded-lg flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-text-primary">{n}</p>
-                        <p className="text-sm text-text-secondary">{email}</p>
-                      </div>
-                      <span className={`text-xs font-bold ${color}`}>{role}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* Faturamento */}
-          <TabsContent value="faturamento">
-            <Card>
-              <div className="p-6 space-y-6">
-                {subLoading ? (
-                  <div className="flex justify-center py-8">
-                    <span className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-                  </div>
-                ) : !subscription ? (
-                  <div className="text-center py-8 space-y-4">
-                    <p className="text-lg font-semibold text-text-primary">Nenhuma assinatura ativa</p>
-                    <p className="text-sm text-text-secondary">
-                      Assine um plano para acessar todos os recursos da FURY.
-                    </p>
-                    <Button variant="primary" size="md" onClick={() => navigate('/assinatura')}>
-                      Ver Planos
-                    </Button>
-                  </div>
-                ) : subscription.status === 'trial' ? (
-                  <>
-                    <div>
-                      <h3 className="text-lg font-bold text-text-primary mb-4">Plano Atual</h3>
-                      <div className="p-4 border border-amber-200 rounded-lg bg-amber-50 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold text-text-secondary">Plano</span>
-                          <span className="text-sm font-bold text-amber-700">Trial</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold text-text-secondary">Trial expira em</span>
-                          <span className="text-sm font-bold text-text-primary">
-                            {formatDate(subscription.trialEndsAt)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-3 pt-4 border-t border-border">
-                      <Button variant="primary" size="md" onClick={() => navigate('/assinatura')}>
-                        Assinar um Plano
-                      </Button>
-                    </div>
-                  </>
-                ) : subscription.status === 'cancelled' ? (
-                  <div className="text-center py-8 space-y-4">
-                    <p className="text-lg font-semibold text-text-primary">Assinatura cancelada</p>
-                    <p className="text-sm text-text-secondary">
-                      Sua assinatura foi cancelada. Reative para continuar usando a FURY.
-                    </p>
-                    <Button variant="primary" size="md" onClick={() => navigate('/assinatura')}>
-                      Ver Planos
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <h3 className="text-lg font-bold text-text-primary mb-4">Plano Atual</h3>
-                      <div className="p-4 border border-border rounded-lg bg-surface-secondary space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold text-text-secondary">Plano</span>
-                          <span className="text-sm font-bold text-text-primary">
-                            {subscription.plan?.name ?? '—'}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold text-text-secondary">Próxima Cobrança</span>
-                          <span className="text-sm font-bold text-text-primary">
-                            {formatDate(subscription.currentPeriodEnd)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold text-text-secondary">Valor Mensal</span>
-                          <span className="text-sm font-bold text-text-primary">
-                            {subscription.plan ? formatCents(subscription.plan.priceCents) : '—'}
-                          </span>
-                        </div>
-                        {subscription.status === 'past_due' && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-red-600">Status</span>
-                            <span className="text-sm font-bold text-red-600">Pagamento em atraso</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-3 pt-4 border-t border-border">
-                      <Button variant="outline" size="md" onClick={() => setCancelOpen(true)}>
-                        Cancelar Plano
-                      </Button>
-                      <Button variant="primary" size="md" onClick={() => navigate('/assinatura')}>
-                        Atualizar para Plano Pro
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </Card>
-
-            <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Cancelar assinatura?</DialogTitle>
-                </DialogHeader>
-                <p className="text-sm text-text-secondary">
-                  Ao cancelar, você perderá acesso aos recursos premium ao final do período atual. Esta ação não pode ser desfeita.
-                </p>
-                <DialogFooter>
-                  <Button variant="outline" size="md" onClick={() => setCancelOpen(false)}>
-                    Manter Assinatura
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    className="bg-red-600 hover:bg-red-700 border-red-600"
-                    disabled={cancelMutation.isPending}
-                    onClick={() => cancelMutation.mutate()}
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      changePasswordMutation.isPending ||
+                      setPasswordMutation.isPending ||
+                      (!isSettingInitialPassword && !currentPassword) ||
+                      !newPassword ||
+                      newPassword.length < 8 ||
+                      newPassword !== confirmPassword
+                    }
+                    onClick={() =>
+                      isSettingInitialPassword
+                        ? setPasswordMutation.mutate({ newPassword })
+                        : changePasswordMutation.mutate({ currentPassword, newPassword })
+                    }
+                    className="rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-50 cursor-pointer"
                   >
-                    {cancelMutation.isPending ? 'Cancelando...' : 'Confirmar Cancelamento'}
-                  </Button>
+                    {changePasswordMutation.isPending || setPasswordMutation.isPending
+                      ? 'Salvando...'
+                      : isSettingInitialPassword
+                        ? 'Definir Senha'
+                        : 'Alterar Senha'}
+                  </button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
           </TabsContent>
 
-          {/* Integrações */}
-          <TabsContent value="integracoes">
-            <Card>
-              <div className="p-6">
-                <IntegracoesContent />
-              </div>
-            </Card>
+          {/* ── Aba Faturamento ── */}
+          <TabsContent value="faturamento">
+            <div className={`${SURFACE_CARD} space-y-6 w-full`}>
+              {subLoading ? (
+                <div className="flex justify-center py-8">
+                  <span className="w-6 h-6 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
+                </div>
+              ) : !subscription ? (
+                <div className="text-center py-8 space-y-4">
+                  <p className="text-base font-semibold text-text-primary">Nenhuma assinatura ativa</p>
+                  <p className="text-xs text-text-tertiary">
+                    Assine um plano para acessar todos os recursos do ady.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/assinatura')}
+                    className={`rounded-full bg-brand px-5 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} cursor-pointer`}
+                  >
+                    Ver Planos
+                  </button>
+                </div>
+              ) : subscription.status === 'trial' ? (
+                <>
+                  <div>
+                    <h3 className="text-base font-semibold text-text-primary mb-4">Plano Atual</h3>
+                    <div className="p-4 border border-warning/30 rounded-xl bg-warning/10 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-text-tertiary">Plano</span>
+                        <span className="text-xs font-bold text-warning">Trial</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-text-tertiary">Trial expira em</span>
+                        <span className="text-xs font-bold text-text-primary">
+                          {formatDate(subscription.trialEndsAt)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-4 border-t border-border">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/assinatura')}
+                      className={`rounded-full bg-brand px-5 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} cursor-pointer`}
+                    >
+                      Assinar um Plano
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <h3 className="text-base font-semibold text-text-primary mb-4">Plano Atual</h3>
+                    <div className="p-4 border border-border rounded-xl bg-surface-secondary space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-text-tertiary">Plano</span>
+                        <span className="text-xs font-bold text-text-primary">
+                          {subscription.plan?.name ?? '—'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-text-tertiary">Vencimento do Plano</span>
+                        <span className="text-xs font-bold text-text-primary">
+                          {formatDate(subscription.currentPeriodEnd)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-4 border-t border-border">
+                    <button
+                      type="button"
+                      onClick={() => setCancelOpen(true)}
+                      className="ady-btn rounded-full border border-error/40 px-4 py-2 text-xs font-semibold text-error hover:bg-error/10 hover:border-error cursor-pointer"
+                    >
+                      Cancelar Plano
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/assinatura')}
+                      className={`rounded-full bg-brand px-5 py-2 text-xs font-semibold text-white ${BUTTON_HOVER} cursor-pointer`}
+                    >
+                      Atualizar para Plano Pro
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+              <DialogContent className="max-w-md border-border bg-surface text-text-primary">
+                <DialogHeader>
+                  <DialogTitle className="text-base font-semibold text-text-primary">Cancelar assinatura?</DialogTitle>
+                </DialogHeader>
+                <p className="text-xs text-text-tertiary my-2">
+                  Ao cancelar, você perderá acesso aos recursos premium ao final do período atual. Esta ação não pode ser desfeita.
+                </p>
+                <DialogFooter className="gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCancelOpen(false)}
+                    className="rounded-full border border-border px-4 py-2 text-xs font-medium text-text-primary hover:bg-border cursor-pointer"
+                  >
+                    Manter Assinatura
+                  </button>
+                  <button
+                    type="button"
+                    disabled={cancelMutation.isPending}
+                    onClick={() => cancelMutation.mutate()}
+                    className="rounded-full bg-error px-4 py-2 text-xs font-semibold text-white hover:bg-error/90 disabled:opacity-50 cursor-pointer"
+                  >
+                    {cancelMutation.isPending ? 'Cancelando...' : 'Confirmar Cancelamento'}
+                  </button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
-          {/* FURY Engine */}
-          <TabsContent value="fury">
-            <FuryConfig />
+          {/* ── Dados da Marca e Público ── */}
+          <TabsContent value="publico">
+            <div className="space-y-6 w-full">
+              <BrandKitContent />
+              <PublicoContent />
+            </div>
+          </TabsContent>
+
+          {/* ── Metas ── */}
+          <TabsContent value="metas">
+            <div className="w-full">
+              <MetasPage />
+            </div>
           </TabsContent>
         </Tabs>
+      </div>
     </AppLayout>
   );
 }

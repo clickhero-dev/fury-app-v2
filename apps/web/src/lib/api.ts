@@ -1,7 +1,9 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
-import { queryClient } from './query-client';
+import { clearSession } from './clear-session';
+import { refreshSession } from './session-refresh';
+import { captureException } from './posthog';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'https://fury-app-v2-production.up.railway.app/api';
+const BASE_URL = import.meta.env.VITE_API_URL;
 
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
@@ -15,22 +17,18 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-let isRefreshing = false;
-let refreshQueue: ((token: string) => void)[] = [];
-
-function processQueue(newToken: string) {
-  refreshQueue.forEach((resolve) => resolve(newToken));
-  refreshQueue = [];
-}
-
-function forceLogout() {
-  localStorage.removeItem('token');
-  localStorage.removeItem('refreshToken');
-  localStorage.removeItem('user');
-  queryClient.clear();
-  window.location.href = '/login';
-}
-
+/**
+ * Interceptor de resposta com lógica de refresh automático de token.
+ *
+ * Comportamento:
+ * - Respostas bem-sucedidas passam direto sem modificação.
+ * - Em caso de erro 401 com código `TOKEN_EXPIRED`:
+ *   1. Tenta renovar o token via `POST /auth/refresh`.
+ *   2. Se o refresh estiver em andamento, enfileira a requisição original.
+ *   3. Após o refresh, reprocessa a fila com o novo token.
+ *   4. Se o refresh falhar, força logout.
+ * - Em caso de 401 em rotas de auth (`/auth/me`, `/auth/refresh`), força logout.
+ */
 api.interceptors.response.use(
   (response) => response,
   async (error: unknown) => {
@@ -47,61 +45,40 @@ api.interceptors.response.use(
     const code = err.response?.data?.error?.code;
     const originalConfig = err.config;
 
-    // Only attempt refresh on 401 TOKEN_EXPIRED, and only once per request
+    // Error tracking: reporta falhas de API (exceto 401 de refresh que já é fluxo normal)
+    const isAuthRefresh = (originalConfig?.url ?? '').includes('/auth/refresh');
+    if (!(status === 401 && (code === 'TOKEN_EXPIRED' || isAuthRefresh))) {
+      captureException(err, {
+        method: originalConfig?.method,
+        url: originalConfig?.url,
+        status,
+        code,
+      });
+    }
+
+    // Tenta refresh apenas em 401 TOKEN_EXPIRED e apenas uma vez por requisição
     if (status === 401 && code === 'TOKEN_EXPIRED' && originalConfig && !originalConfig._retry) {
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) {
-        forceLogout();
-        return Promise.reject(error);
-      }
-
-      if (isRefreshing) {
-        // Queue this request until refresh completes
-        return new Promise((resolve, reject) => {
-          refreshQueue.push((newToken: string) => {
-            if (originalConfig.headers) {
-              originalConfig.headers.Authorization = `Bearer ${newToken}`;
-            }
-            resolve(api(originalConfig));
-          });
-          // Add rejection handler in case refresh fails
-          setTimeout(() => reject(error), 30_000);
-        });
-      }
-
       originalConfig._retry = true;
-      isRefreshing = true;
-
       try {
-        const res = await axios.post<{
-          data: { tokens: { accessToken: string; refreshToken: string } };
-        }>(`${BASE_URL}/auth/refresh`, { refreshToken });
-
-        const { accessToken, refreshToken: newRefreshToken } = res.data.data.tokens;
-        localStorage.setItem('token', accessToken);
-        localStorage.setItem('refreshToken', newRefreshToken);
-
-        processQueue(accessToken);
+        const accessToken = await refreshSession();
 
         if (originalConfig.headers) {
           originalConfig.headers.Authorization = `Bearer ${accessToken}`;
         }
         return api(originalConfig);
       } catch {
-        refreshQueue = [];
-        forceLogout();
         return Promise.reject(error);
-      } finally {
-        isRefreshing = false;
       }
     }
 
-    // For any other 401 on auth endpoints, force logout
+    // Para qualquer outro 401 em rotas de autenticação, força logout
     const isAuthPath = ['/auth/me', '/auth/refresh'].some((p) =>
       (originalConfig?.url ?? '').includes(p)
     );
     if (status === 401 && isAuthPath) {
-      forceLogout();
+      // refreshSession já encerra a sessão quando a rotação falha. Para /me,
+      // a ausência do token será tratada pelo shell autenticado.
+      clearSession();
     }
 
     return Promise.reject(error);

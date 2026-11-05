@@ -1,0 +1,115 @@
+import { IMetricsProvider } from '../../lib/providers/metrics.provider.js';
+import { todaySaoPauloYMD, daysAgoSaoPauloYMD } from '../../utils/date-sao-paulo.js';
+import type {
+  MetricsSummaryResponse,
+  CampaignResponse,
+  DailyMetricsResponse,
+  CampaignInsightsResponse,
+  AdsetResponse,
+  GoalsProgressResponse,
+  PartialFailure,
+} from '../../types/metrics.types.js';
+
+export class MetricsService {
+  constructor(private provider: IMetricsProvider) {}
+
+  private getDefaultDateRange(): { startDate: string; endDate: string } {
+    return {
+      startDate: daysAgoSaoPauloYMD(30),
+      endDate: todaySaoPauloYMD(),
+    };
+  }
+
+  async getSummary(
+    tenantId: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<MetricsSummaryResponse | null> {
+    const { startDate: defaultStart, endDate: defaultEnd } =
+      this.getDefaultDateRange();
+
+    const finalStartDate = startDate || defaultStart;
+    const finalEndDate = endDate || defaultEnd;
+
+    return this.provider.getSummary(tenantId, finalStartDate, finalEndDate);
+  }
+
+  async getCampaigns(
+    tenantId: string,
+    startDate?: string,
+    endDate?: string,
+    status?: 'ACTIVE' | 'PAUSED' | 'ARCHIVED',
+    page: number = 1,
+    limit: number = 10,
+    includeOnlyLeadForm = false
+  ): Promise<{
+    data: CampaignResponse[];
+    pagination: { page: number; limit: number; total: number };
+    partial_failures: PartialFailure[];
+  }> {
+    const { startDate: defaultStart, endDate: defaultEnd } =
+      this.getDefaultDateRange();
+
+    const finalStartDate = startDate || defaultStart;
+    const finalEndDate = endDate || defaultEnd;
+
+    const result = await this.provider.getCampaigns(
+      tenantId,
+      finalStartDate,
+      finalEndDate,
+      status,
+      page,
+      limit,
+      includeOnlyLeadForm
+    );
+
+    return {
+      data: result.data,
+      pagination: {
+        page: result.pagination.page,
+        limit: result.pagination.limit,
+        total: result.pagination.total,
+      },
+      partial_failures: result.partial_failures,
+    };
+  }
+
+  async getCampaignInsights(
+    tenantId: string,
+    campaignId: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<CampaignInsightsResponse> {
+    const { startDate: defaultStart, endDate: defaultEnd } =
+      this.getDefaultDateRange();
+
+    const finalStartDate = startDate || defaultStart;
+    const finalEndDate = endDate || defaultEnd;
+
+    return this.provider.getCampaignInsights(
+      tenantId,
+      campaignId,
+      finalStartDate,
+      finalEndDate
+    );
+  }
+
+  async getCampaignAdsets(
+    tenantId: string,
+    campaignId: string
+  ): Promise<AdsetResponse[]> {
+    return this.provider.getCampaignAdsets(tenantId, campaignId);
+  }
+
+  async getDailyMetrics(
+    tenantId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<DailyMetricsResponse[]> {
+    return this.provider.getDailyMetrics(tenantId, startDate, endDate);
+  }
+
+  async getGoalsProgress(tenantId: string): Promise<GoalsProgressResponse> {
+    return this.provider.getGoalsProgress(tenantId);
+  }
+}

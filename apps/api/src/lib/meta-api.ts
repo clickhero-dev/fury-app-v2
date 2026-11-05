@@ -1,7 +1,9 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
 import { AppError } from '../middleware/errorHandler.js';
+import { isMetaPermissionDenied, sanitizeMetaReason } from './meta-error.js';
+import { externalFetch } from './http-client.js';
 
-const META_API_VERSION = 'v20.0';
+const META_API_VERSION = 'v25.0';
 const META_GRAPH_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
 function requireEnv(name: string): string {
@@ -85,25 +87,14 @@ export interface MetaBusiness {
 
 interface MetaBusinessesResponse {
   data: MetaBusiness[];
+  paging?: {
+    cursors: { before: string; after: string };
+    next?: string;
+  };
 }
 
 interface MetaUserProfileResponse {
   id: string;
-}
-
-function mapMetaErrorMessage(payload: MetaApiErrorPayload, fallback: string): string {
-  const code = payload.error?.code;
-  const message = payload.error?.message;
-
-  if (code === 190) {
-    return 'Meta token invalido ou expirado.';
-  }
-
-  if (code === 200 || code === 10) {
-    return 'Permissao negada no app Meta. Verifique ads_read, ads_management e business_management.';
-  }
-
-  return message || fallback;
 }
 
 async function parseMetaResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
@@ -112,14 +103,36 @@ async function parseMetaResponse<T>(response: Response, fallbackMessage: string)
   const payload = isJson ? ((await response.json()) as unknown) : null;
 
   if (!response.ok) {
-    const message = mapMetaErrorMessage((payload || {}) as MetaApiErrorPayload, fallbackMessage);
-    throw new AppError(response.status, 'META_API_ERROR', message, {
-      status: response.status,
-      metaError: payload,
-    });
+    throw buildMetaError(response.status, (payload || {}) as MetaApiErrorPayload, fallbackMessage);
   }
 
   return (payload || {}) as T;
+}
+
+/**
+ * Constrói o AppError a partir da resposta de erro da Meta Graph.
+ * - code 190 (token) → 401 META_TOKEN_EXPIRED;
+ * - permissão REAL evidenciada (`isMetaPermissionDenied`) → 403 META_PERMISSION_DENIED;
+ * - demais (inclui o genérico `#200/OAuthException` sem evidência de permissão) →
+ *   erro de integração com a MENSAGEM REAL sanitizada (bug 2: não inventar permissão).
+ */
+function buildMetaError(
+  status: number,
+  payload: MetaApiErrorPayload,
+  fallbackMessage: string
+): AppError {
+  const code = payload?.error?.code;
+  if (code === 190) {
+    return new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta inválido ou expirado.');
+  }
+  if (isMetaPermissionDenied(payload)) {
+    return new AppError(403, 'META_PERMISSION_DENIED', 'Permissão do Meta ausente para esta operação. Reconecte sua conta ou peça acesso ao administrador.');
+  }
+  const message = sanitizeMetaReason(payload?.error?.message || fallbackMessage, fallbackMessage);
+  return new AppError(status, 'META_API_ERROR', message, {
+    status,
+    metaError: payload,
+  });
 }
 
 export async function exchangeCodeForToken(params: {
@@ -134,7 +147,7 @@ export async function exchangeCodeForToken(params: {
   url.searchParams.set('redirect_uri', params.redirectUri);
   url.searchParams.set('code', params.code);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   return parseMetaResponse<MetaTokenResponse>(response, 'Falha ao trocar o code por access token no Meta.');
 }
 
@@ -149,7 +162,7 @@ export async function exchangeForLongLivedToken(params: {
   url.searchParams.set('client_secret', params.clientSecret);
   url.searchParams.set('fb_exchange_token', params.shortLivedToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   return parseMetaResponse<MetaTokenResponse>(
     response,
     'Falha ao obter token de longa duracao (60 dias) no Meta.'
@@ -157,17 +170,27 @@ export async function exchangeForLongLivedToken(params: {
 }
 
 export async function getUserBusinesses(accessToken: string): Promise<MetaBusiness[]> {
-  const url = new URL(`${META_GRAPH_BASE_URL}/me/businesses`);
-  url.searchParams.set('fields', 'id,name');
-  url.searchParams.set('access_token', accessToken);
+  const all: MetaBusiness[] = [];
+  let after: string | undefined;
 
-  const response = await fetch(url, { method: 'GET' });
-  const payload = await parseMetaResponse<MetaBusinessesResponse>(
-    response,
-    'Falha ao buscar Business Managers no Meta.'
-  );
+  do {
+    const url = new URL(`${META_GRAPH_BASE_URL}/me/businesses`);
+    url.searchParams.set('fields', 'id,name');
+    url.searchParams.set('limit', '100');
+    url.searchParams.set('access_token', accessToken);
+    if (after) url.searchParams.set('after', after);
 
-  return payload.data || [];
+    const response = await externalFetch(url, { method: 'GET' });
+    const payload = await parseMetaResponse<MetaBusinessesResponse>(
+      response,
+      'Falha ao buscar Business Managers no Meta.'
+    );
+
+    all.push(...(payload.data || []));
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return all;
 }
 
 export async function getBusinessAdAccounts(businessId: string, accessToken: string): Promise<MetaAdAccount[]> {
@@ -175,7 +198,7 @@ export async function getBusinessAdAccounts(businessId: string, accessToken: str
   url.searchParams.set('fields', 'id,name,account_status,currency,timezone_name');
   url.searchParams.set('access_token', accessToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   const payload = await parseMetaResponse<MetaAdAccountsResponse>(
     response,
     'Falha ao buscar contas de anuncios da Business Manager no Meta.'
@@ -189,19 +212,23 @@ export interface MetaOwnedPage {
   name: string;
   businessId: string;
   hasInstagram: boolean;
+  /** Instagram Business vinculado à página (id) — base da vinculação do calendário. */
+  instagramUserId: string | null;
+  /** @username do Instagram Business (quando a Meta o retorna em owned_pages). */
+  instagramUsername: string | null;
 }
 
 interface MetaOwnedPagesResponse {
-  data: Array<{ id: string; name?: string; instagram_business_account?: { id: string } }>;
+  data: Array<{ id: string; name?: string; instagram_business_account?: { id: string; username?: string } }>;
 }
 
 /** Lista as Paginas pertencentes a uma Business Manager (/{business_id}/owned_pages). */
 export async function getBusinessOwnedPages(businessId: string, accessToken: string): Promise<MetaOwnedPage[]> {
   const url = new URL(`${META_GRAPH_BASE_URL}/${businessId}/owned_pages`);
-  url.searchParams.set('fields', 'id,name,instagram_business_account');
+  url.searchParams.set('fields', 'id,name,instagram_business_account{id,username}');
   url.searchParams.set('access_token', accessToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10_000) });
   const payload = await parseMetaResponse<MetaOwnedPagesResponse>(
     response,
     'Falha ao buscar Paginas da Business Manager no Meta.'
@@ -212,6 +239,8 @@ export async function getBusinessOwnedPages(businessId: string, accessToken: str
     name: page.name ?? page.id,
     businessId,
     hasInstagram: Boolean(page.instagram_business_account?.id),
+    instagramUserId: page.instagram_business_account?.id ?? null,
+    instagramUsername: page.instagram_business_account?.username ?? null,
   }));
 }
 
@@ -344,10 +373,8 @@ export interface InstagramMediaInsights {
   replies: number;
 }
 
-// Metrica usada como "alcance": Reels nao expoe `reach`, mas expoe `plays`.
 const METRIC_FIELD_MAP: Record<string, keyof InstagramMediaInsights> = {
   reach: 'reach',
-  plays: 'reach',
   saved: 'saved',
   shares: 'shares',
   replies: 'replies',
@@ -355,8 +382,9 @@ const METRIC_FIELD_MAP: Record<string, keyof InstagramMediaInsights> = {
 
 /**
  * Busca metricas de um post do Instagram, uma de cada vez, para isolar
- * metricas indisponiveis para o tipo de midia (ex.: `reach` nao existe em
- * Reels, `replies` so existe em stories). Metricas que falharem ficam em 0.
+ * metricas indisponiveis para o tipo de midia. `replies` so existe em stories;
+ * `plays` nao representa alcance e nao e aceito pela API atual.
+ * Metricas que falharem ficam em 0.
  */
 export async function getInstagramMediaInsights(
   mediaId: string,
@@ -365,8 +393,8 @@ export async function getInstagramMediaInsights(
 ): Promise<InstagramMediaInsights> {
   const insights: InstagramMediaInsights = { reach: 0, saved: 0, shares: 0, replies: 0 };
 
-  const reachMetric = mediaProductType === 'REELS' ? 'plays' : 'reach';
-  const metricsToFetch = [reachMetric, 'saved', 'shares', 'replies'];
+  const metricsToFetch = ['reach', 'saved', 'shares'];
+  if (mediaProductType === 'STORY') metricsToFetch.push('replies');
 
   for (const metric of metricsToFetch) {
     try {
@@ -415,6 +443,7 @@ export async function getInstagramAccountInsights(
 ): Promise<InstagramAccountInsights> {
   const insights: InstagramAccountInsights = { comments: 0, saves: 0, followerChange: 0 };
 
+  // ou resposta não está vindo correta, ou o endpoint tá errado.
   try {
     const totals = await metaApiCall<InstagramTotalValueInsightsResponse>(
       `/${igUserId}/insights?metric=comments,saves&metric_type=total_value&period=day&since=${since}&until=${until}`,
@@ -455,6 +484,7 @@ export interface MetaFacebookPage {
   hasInstagram: boolean;
   instagramUserId: string | null;
   instagramUsername: string | null;
+  accessToken: string;
 }
 
 interface MetaPagesResponse {
@@ -466,10 +496,16 @@ interface MetaPagesResponse {
   }>;
 }
 
-/** Lista as Paginas do Facebook do usuario (/me/accounts), marcando WABA e Instagram Business vinculados. */
-export async function getUserFacebookPages(accessToken: string): Promise<MetaFacebookPage[]> {
+/** Lista as Paginas do Facebook do usuario (/me/accounts), com Instagram Business.
+ *  Nao consulta whatsapp_business_account para evitar erro 400 em paginas sem WhatsApp.
+ *  Use getUserFacebookPages com includeWhatsApp=true quando precisar de hasWhatsApp. */
+export async function getUserFacebookPages(
+  accessToken: string,
+  opts?: { includeWhatsApp?: boolean }
+): Promise<MetaFacebookPage[]> {
+  const whatsappField = opts?.includeWhatsApp ? ',whatsapp_business_account' : '';
   const response = await metaApiCall<MetaPagesResponse>(
-    '/me/accounts?fields=id,name,whatsapp_business_account,instagram_business_account{id,username}&limit=100',
+    `/me/accounts?fields=id,name,access_token${whatsappField},instagram_business_account{id,username}&limit=100`,
     accessToken
   );
 
@@ -480,7 +516,75 @@ export async function getUserFacebookPages(accessToken: string): Promise<MetaFac
     hasInstagram: Boolean(page.instagram_business_account?.id),
     instagramUserId: page.instagram_business_account?.id ?? null,
     instagramUsername: page.instagram_business_account?.username ?? null,
+    accessToken: (page as any).access_token ?? '',
   }));
+}
+
+export interface MetaPageAccess {
+  pageId: string;
+  name: string;
+  accessToken: string;
+  /** Tasks do usuário na Página (ex.: ADVERTISE, MANAGE, ANALYZE). */
+  tasks: string[];
+}
+
+interface MetaPagesAccessResponse {
+  data: Array<{
+    id: string;
+    name?: string;
+    access_token?: string;
+    tasks?: string[];
+  }>;
+  paging?: {
+    cursors?: { before: string; after: string };
+    next?: string;
+  };
+}
+
+/**
+ * Busca o Page access token de uma Página via /me/accounts — fonte única que
+ * devolve token por Página (cobre páginas onde o usuário é admin direto E as
+ * concedidas via Business Manager, desde que o OAuth tenha business_management).
+ *
+ * Usado na criação de leadgen_forms (doc Lead Ads exige Page access token de
+ * alguém com a task ADVERTISE na Página). Retorna null quando o usuário não tem
+ * papel na Página.
+ */
+export async function getPageAccessToken(
+  accessToken: string,
+  pageId: string
+): Promise<MetaPageAccess | null> {
+  let after: string | undefined;
+  const target = String(pageId);
+
+  do {
+    const url = new URL(`${META_GRAPH_BASE_URL}/me/accounts`);
+    url.searchParams.set('fields', 'id,name,access_token,tasks');
+    url.searchParams.set('limit', '100');
+    url.searchParams.set('access_token', accessToken);
+    if (after) url.searchParams.set('after', after);
+
+    const response = await externalFetch(url, { method: 'GET' });
+    const payload = await parseMetaResponse<MetaPagesAccessResponse>(
+      response,
+      'Falha ao buscar as Paginas do usuario no Meta.'
+    );
+
+    for (const page of payload.data || []) {
+      if (String(page.id) === target) {
+        return {
+          pageId: page.id,
+          name: page.name ?? page.id,
+          accessToken: page.access_token ?? '',
+          tasks: page.tasks ?? [],
+        };
+      }
+    }
+
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return null;
 }
 
 export interface MetaWhatsappNumber {
@@ -914,7 +1018,7 @@ export async function getMetaUserId(accessToken: string): Promise<string> {
   url.searchParams.set('fields', 'id');
   url.searchParams.set('access_token', accessToken);
 
-  const response = await fetch(url, { method: 'GET' });
+  const response = await externalFetch(url, { method: 'GET' });
   const payload = await parseMetaResponse<MetaUserProfileResponse>(
     response,
     'Falha ao buscar o id do usuario Meta.'
@@ -953,9 +1057,9 @@ export interface MetaInsightsData {
 export interface MetaInsightsResponse {
   data: MetaInsightsData[];
   paging?: {
-    cursors: {
-      before: string;
-      after: string;
+    cursors?: {
+      before?: string;
+      after?: string;
     };
     next?: string;
   };
@@ -967,6 +1071,9 @@ type MetaApiErrorPayload2 = {
     message?: string;
     type?: string;
     error_subcode?: number;
+    error_user_msg?: string;
+    error_user_title?: string;
+    error_data?: string;
   };
 };
 
@@ -975,7 +1082,41 @@ type MetaApiError = Error & {
   metaSubcode?: number;
   metaType?: string;
   httpStatus?: number;
+  metaUserMsg?: string;
+  metaUserTitle?: string;
+  metaBlameField?: string;
+  rateLimitUsage?: MetaUsageHeaders;
 };
+
+export interface MetaUsageHeaders {
+  app?: Record<string, unknown>;
+  adAccount?: Record<string, unknown>;
+  businessUseCase?: Record<string, unknown>;
+}
+
+/** Decodifica somente os headers de quota documentados pela Meta. */
+export function parseMetaUsageHeaders(headers: Pick<Headers, 'get'>): MetaUsageHeaders {
+  const parse = (name: string): Record<string, unknown> | undefined => {
+    const value = headers.get(name);
+    if (!value || value.length > 10_000) return undefined;
+    try {
+      const result: unknown = JSON.parse(value);
+      return result && typeof result === 'object' && !Array.isArray(result)
+        ? result as Record<string, unknown>
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const app = parse('X-App-Usage');
+  const adAccount = parse('X-Ad-Account-Usage');
+  const businessUseCase = parse('X-Business-Use-Case-Usage');
+  return {
+    ...(app ? { app } : {}),
+    ...(adAccount ? { adAccount } : {}),
+    ...(businessUseCase ? { businessUseCase } : {}),
+  };
+}
 
 export async function metaApiCall<T>(
   path: string,
@@ -983,11 +1124,13 @@ export async function metaApiCall<T>(
   options?: {
     method?: string;
     body?: Record<string, unknown>;
+    // multipart (upload de vídeo)
+    formData?: FormData;
   }
 ): Promise<T> {
-  const isMocked = (accessToken.toLowerCase().includes('mock') ||
-                   process.env.META_API_MOCK === 'true') &&
-                   !accessToken.startsWith('EAAC');
+  // Só ativa mock quando META_API_MOCK=true E o token NÃO é um token real do Meta (EAAC*).
+  // Tokens reais SEMPRE começam com EAAC e nunca devem passar pelo mock.
+  const isMocked = process.env.META_API_MOCK === 'true' && !accessToken.startsWith('EAAC');
 
   if (isMocked) {
     const method = options?.method || 'GET';
@@ -996,9 +1139,29 @@ export async function metaApiCall<T>(
       return { images: { 'fury_upload': { hash: `mock_hash_${Date.now()}` } } } as T;
     }
 
+    if (method === 'POST' && path.includes('/advideos')) {
+      return { id: `mock_video_${Date.now()}` } as T;
+    }
+
+    if (method === 'GET' && path.includes('fields=status,picture')) {
+      return { status: { video_status: 'ready' }, picture: 'https://placehold.co/600x600?text=Video' } as T;
+    }
+
     if (method === 'POST' && path.includes('/campaigns')) {
       return {
         id: `meta_campaign_${Date.now()}`,
+      } as T;
+    }
+
+    if (method === 'POST' && path.includes('/adsets')) {
+      return {
+        id: `meta_adset_${Date.now()}`,
+      } as T;
+    }
+
+    if (method === 'POST' && path.includes('/ads')) {
+      return {
+        id: `meta_ad_${Date.now()}`,
       } as T;
     }
 
@@ -1009,6 +1172,11 @@ export async function metaApiCall<T>(
     }
 
     if (method === 'POST' && path.match(/^\/[a-zA-Z0-9_-]+$/)) {
+      return { success: true } as T;
+    }
+
+    // DELETE: rollback de objetos mock — retorna success sem chamar API real
+    if (method === 'DELETE') {
       return { success: true } as T;
     }
 
@@ -1024,6 +1192,7 @@ export async function metaApiCall<T>(
             { permission: 'pages_read_engagement', status: 'granted' },
             { permission: 'instagram_basic', status: 'granted' },
             { permission: 'instagram_manage_insights', status: 'granted' },
+            { permission: 'instagram_content_publish', status: 'granted' },
           ],
         } as T;
       }
@@ -1032,7 +1201,7 @@ export async function metaApiCall<T>(
           data: [
             {
               id: 'mock_page_id',
-              name: 'Página Demo FURY',
+              name: 'Página Demo Ady',
               instagram_business_account: { id: 'mock_ig_user_id' },
               whatsapp_business_account: { id: 'mock_waba_id' },
             },
@@ -1045,7 +1214,7 @@ export async function metaApiCall<T>(
             {
               id: 'mock_phone_number_id',
               display_phone_number: '+55 11 99999-0000',
-              verified_name: 'FURY Demo',
+              verified_name: 'Ady Demo',
             },
           ],
         } as T;
@@ -1082,7 +1251,6 @@ export async function metaApiCall<T>(
         const metric = path.split('metric=')[1]?.split('&')[0];
         const mockValues: Record<string, number> = {
           reach: 1500,
-          plays: 2200,
           saved: 45,
           shares: 22,
           replies: 6,
@@ -1184,35 +1352,67 @@ export async function metaApiCall<T>(
   const fetchOptions: RequestInit = {
     method: options?.method || 'GET',
     headers: { Accept: 'application/json' },
+    // Timeout de 90s para chamadas Meta (upload/download de imagem pode ser lento)
+    signal: AbortSignal.timeout(90_000),
   };
 
-  if (options?.body) {
+  if (options?.formData) {
+    // fetch define o boundary do multipart
+    fetchOptions.body = options.formData;
+  } else if (options?.body) {
     fetchOptions.headers = { ...fetchOptions.headers, 'Content-Type': 'application/json' };
     fetchOptions.body = JSON.stringify(options.body);
   }
 
-  const res = await fetch(url.toString(), fetchOptions);
-  const json = (await res.json()) as unknown;
+  let res: Response;
+  let json: unknown;
+  try {
+    res = await externalFetch(url.toString(), fetchOptions);
+    json = (await res.json()) as unknown;
+  } catch (fetchErr: any) {
+    if (fetchErr.code === 'TIMEOUT' || fetchErr.name === 'TimeoutError' || fetchErr.name === 'AbortError') {
+      console.error(`[Meta API] Timeout (90s) ao chamar: ${path}`);
+      const err = new Error(`[Meta API] Timeout ao chamar ${path} (>90s)`);
+      (err as MetaApiError).httpStatus = 504;
+      throw err;
+    }
+    throw fetchErr;
+  }
+
+  const usage = parseMetaUsageHeaders(res.headers ?? new Headers());
+  if (Object.keys(usage).length > 0) {
+    console.info('[Meta API] Rate-limit usage headers received', usage);
+  }
 
   const maybeErr = json as MetaApiErrorPayload2;
   if (!res.ok || maybeErr?.error) {
     const code = maybeErr?.error?.code;
     const subcode = maybeErr?.error?.error_subcode;
     const type = maybeErr?.error?.type;
-    const message = maybeErr?.error?.message || (typeof json === 'object' ? JSON.stringify(json) : String(json));
+    const message = maybeErr?.error?.message || 'Falha na chamada à API da Meta.';
     console.error('[Meta API] Error response:', {
       path,
       status: res.status,
       code,
       subcode,
       type,
-      message,
     });
     const err = new Error(`[Meta API] ${code ?? res.status}: ${message}`);
     (err as MetaApiError).metaCode = code;
     (err as MetaApiError).metaSubcode = subcode;
     (err as MetaApiError).metaType = type;
     (err as MetaApiError).httpStatus = res.status;
+    (err as MetaApiError).rateLimitUsage = usage;
+    (err as MetaApiError).metaUserMsg = maybeErr?.error?.error_user_msg;
+    (err as MetaApiError).metaUserTitle = maybeErr?.error?.error_user_title;
+    // Extrai blame_field do error_data (JSON string como "{\"blame_field\":\"targeting\"}")
+    try {
+      const ed = maybeErr?.error?.error_data;
+      if (ed) {
+        const parsed = JSON.parse(ed);
+        (err as MetaApiError).metaBlameField = parsed.blame_field || parsed.blame_field_specs?.[0]?.[0];
+      }
+    } catch { /* error_data pode nao ser JSON */ }
     throw err;
   }
 
@@ -1278,7 +1478,110 @@ export async function getMetaInsights(params: {
     fullPath += `&time_increment=${params.timeIncrement}`;
   }
 
-  return metaApiCall<MetaInsightsResponse>(fullPath, params.accessToken);
+  const data: MetaInsightsData[] = [];
+  const seenCursors = new Set<string>();
+  let response: MetaInsightsResponse = { data: [] };
+  let after: string | undefined;
+  do {
+    const pagePath = after ? `${fullPath}&after=${encodeURIComponent(after)}` : fullPath;
+    response = await metaApiCall<MetaInsightsResponse>(pagePath, params.accessToken);
+    data.push(...(response.data ?? []));
+    after = response.paging?.cursors?.after;
+    if (after && seenCursors.has(after)) break;
+    if (after) seenCursors.add(after);
+  } while (after);
+  return { ...response, data };
+}
+
+export interface CampaignAdCreative {
+  id: string;
+  image_url?: string;
+  thumbnail_url?: string;
+  object_story_spec?: {
+    link_data?: {
+      picture?: string;
+      message?: string;
+      name?: string;
+    };
+    video_data?: {
+      image_url?: string;
+      video_id?: string;
+    };
+    photo_data?: {
+      url?: string;
+      caption?: string;
+    };
+  };
+  // ponytail: Dynamic Creative / Advantage+ usa asset_feed_spec em vez de object_story_spec
+  asset_feed_spec?: {
+    bodies?: Array<{ text?: string }>;
+    images?: Array<{ hash?: string }>;
+    titles?: Array<{ text?: string }>;
+    videos?: Array<{ video_id?: string; thumbnail_url?: string; thumbnail_hash?: string }>;
+    ad_formats?: string[];
+  };
+}
+
+export interface CampaignAdItem {
+  id: string;
+  name: string;
+  status: string;
+  creative?: CampaignAdCreative;
+}
+
+interface CampaignAdsResponse {
+  data: CampaignAdItem[];
+}
+
+/** Resposta do endpoint /{ad_account_id}/adcreatives com filtro por campanha. */
+interface AdCreativeResponse {
+  data: Array<{
+    id: string;
+    name?: string;
+    thumbnail_url?: string;
+    object_story_spec?: CampaignAdCreative['object_story_spec'];
+    asset_feed_spec?: CampaignAdCreative['asset_feed_spec'];
+  }>;
+}
+
+/** Busca os anúncios (ads) de uma campanha com dados do criativo (thumbnail, texto, mídia). */
+export async function getCampaignAds(campaignId: string, accessToken: string): Promise<CampaignAdItem[]> {
+  const fields = 'name,status,creative{image_url,thumbnail_url,object_story_spec{link_data{picture,message,name},video_data{image_url,video_id},photo_data{url,caption}},asset_feed_spec{bodies,images,titles,videos,ad_formats}}';
+  const response = await metaApiCall<CampaignAdsResponse>(
+    `/${campaignId}/ads?fields=${fields}&limit=25`,
+    accessToken
+  );
+  return response.data || [];
+}
+
+// ponytail: fallback para campanhas sem ads (criadas pela UI do Meta) — busca adcreatives do ad account filtrados por campaign_id
+export interface AdCreativeItem {
+  id: string;
+  name?: string;
+  image_url?: string;
+  thumbnail_url?: string;
+  object_story_spec?: CampaignAdCreative['object_story_spec'];
+  asset_feed_spec?: CampaignAdCreative['asset_feed_spec'];
+}
+
+export async function getCampaignAdCreatives(
+  adAccountId: string,
+  campaignId: string,
+  accessToken: string
+): Promise<AdCreativeItem[]> {
+  const fields = 'name,thumbnail_url,image_url,object_story_spec{link_data{picture,message,name},video_data{image_url,video_id},photo_data{url,caption}},asset_feed_spec{bodies,images,titles,videos,ad_formats}';
+  const filtering = encodeURIComponent(JSON.stringify([{ field: 'campaign_id', operator: 'EQUAL', value: campaignId }]));
+  const response = await metaApiCall<{ data: AdCreativeItem[] }>(
+    `/${adAccountId}/adcreatives?fields=${fields}&filtering=${filtering}&limit=25`,
+    accessToken
+  );
+  return response.data || [];
+}
+
+/** Busca a URL fonte de um vídeo do Meta via Graph API. */
+export async function getVideoSourceUrl(videoId: string, accessToken: string): Promise<string> {
+  const res = await metaApiCall<{ source?: string }>(`/${videoId}?fields=source`, accessToken);
+  return res.source || '';
 }
 
 export interface MetaAdImageUploadResponse {
@@ -1312,7 +1615,7 @@ export async function createAdCreativeFromCopy(params: {
   const callToActionType = mapCtaToMetaType(params.cta);
 
   const body: Record<string, unknown> = {
-    name: `FURY Copy Creative ${new Date().toISOString()}`,
+    name: `Ady Copy Creative ${new Date().toISOString()}`,
     object_story_spec: {
       page_id: params.pageId,
       link_data: {
@@ -1378,6 +1681,73 @@ export async function searchMetaCityLocations(query: string, accessToken: string
     .map((item) => ({ ...item, region: cleanRegionLabel(item.region) }));
 }
 
+export type MetaGeoSearchType = 'country' | 'region' | 'city';
+
+/** Busca país, estado e/ou cidade do Brasil (mesmo filtro client-side da busca de cidades). */
+export async function searchMetaGeoLocations(query: string, accessToken: string, types: MetaGeoSearchType[]): Promise<MetaLocationResult[]> {
+  const path = `/search?type=adgeolocation&location_types=${encodeURIComponent(JSON.stringify(types))}&q=${encodeURIComponent(query)}`;
+  const response = await metaApiCall<MetaLocationSearchResponse>(path, accessToken);
+  const items = (response.data || [])
+    .filter((item) => types.includes(item.type as MetaGeoSearchType) && item.country_code === 'BR')
+    .map((item) => ({ ...item, region: cleanRegionLabel(item.region) }));
+  return rankGeoResults(query, items);
+}
+
+const normalizeGeoText = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const GEO_TYPE_ORDER: Record<string, number> = { country: 0, region: 1, city: 2 };
+
+/** Exato primeiro, depois "começa com", depois o resto; empate: país, estado, cidade. */
+export function rankGeoResults(query: string, items: MetaLocationResult[]): MetaLocationResult[] {
+  const q = normalizeGeoText(query);
+  const score = (name: string) => {
+    const n = normalizeGeoText(name);
+    return n === q ? 0 : n.startsWith(q) ? 1 : 2;
+  };
+  return items
+    .map((item, i) => ({ item, i, s: score(item.name), t: GEO_TYPE_ORDER[item.type ?? ''] ?? 3 }))
+    .sort((a, b) => a.s - b.s || a.t - b.t || a.i - b.i)
+    .map(({ item }) => item);
+}
+
+/** Cidade da Meta a partir de coordenadas: adradiussuggestion → city_id → adgeolocationmeta. */
+export async function findMetaCityByCoords(lat: number, lng: number, accessToken: string): Promise<MetaLocationResult | null> {
+  // Formato não documentado: aceita objeto solto ou dentro de data
+  const suggestion = await metaApiCall<Record<string, any>>(
+    `/search?type=adradiussuggestion&latitude=${lat}&longitude=${lng}`,
+    accessToken
+  );
+  const s = Array.isArray(suggestion?.data) ? suggestion.data[0] : (suggestion?.data ?? suggestion);
+  const cityId = s?.city_id ? String(s.city_id) : '';
+  if (!/^\d+$/.test(cityId)) return null;
+
+  const meta = await metaApiCall<Record<string, any>>(
+    `/search?type=adgeolocationmeta&cities=${encodeURIComponent(JSON.stringify([cityId]))}`,
+    accessToken
+  );
+  const cities = meta?.data?.cities ?? meta?.cities ?? (Array.isArray(meta?.data) ? meta.data[0]?.cities : undefined);
+  const city = cities?.[cityId];
+  if (!city?.name) return null;
+
+  // O nome pode vir com bairro ("Zona 21, Maringá"): pega o nome oficial da mesma chave
+  const cityName = cityNameFromMeta(city.name);
+  const found = await searchMetaCityLocations(cityName, accessToken)
+    .then((list) => list.find((c) => String(c.key) === cityId))
+    .catch(() => undefined);
+  return {
+    key: cityId,
+    name: found?.name ?? cityName,
+    region: found?.region ?? cleanRegionLabel(city.region),
+    country_code: found?.country_code ?? city.country_code,
+    type: 'city',
+  };
+}
+
+/** Último trecho do nome ("Zona 21, Maringá" → "Maringá"). */
+export function cityNameFromMeta(name: string): string {
+  const parts = name.split(',').map((p) => p.trim()).filter(Boolean);
+  return parts[parts.length - 1] || name;
+}
+
 export async function uploadAdImage(params: {
   adAccountId: string;
   base64: string;
@@ -1398,5 +1768,336 @@ export async function uploadAdImage(params: {
     throw new AppError(502, 'META_IMAGE_UPLOAD_FAILED', 'Meta nao retornou hash da imagem enviada.');
   }
 
-  return imageData.hash;
+  // A Meta devolve uma URL CDN no campo `url`. O campo `picture` do criativo
+  // exige uma URL valida — hash puro causa erro 100 "picture should represent a valid URL".
+  return imageData.url || imageData.hash;
+}
+
+/** Envia o vídeo (multipart `source`) para a biblioteca da conta de anúncios. */
+export async function uploadAdVideo(params: {
+  adAccountId: string;
+  buffer: Buffer;
+  filename: string;
+  contentType: string;
+  accessToken: string;
+}): Promise<string> {
+  const form = new FormData();
+  form.append('name', params.filename);
+  form.append('source', new Blob([new Uint8Array(params.buffer)], { type: params.contentType }), params.filename);
+
+  const response = await metaApiCall<{ id?: string }>(
+    `/${encodeURIComponent(params.adAccountId)}/advideos`,
+    params.accessToken,
+    { method: 'POST', formData: form }
+  );
+  if (!response?.id) {
+    throw new AppError(502, 'META_VIDEO_UPLOAD_FAILED', 'Meta nao retornou o id do video enviado.');
+  }
+  return response.id;
+}
+
+/** Status de processamento (ready/processing/error) e capa gerada pela Meta. */
+export async function getAdVideoStatus(
+  videoId: string,
+  accessToken: string
+): Promise<{ status?: string; picture?: string }> {
+  const response = await metaApiCall<{ status?: { video_status?: string }; picture?: string }>(
+    `/${encodeURIComponent(videoId)}?fields=status,picture`,
+    accessToken
+  );
+  return { status: response.status?.video_status, picture: response.picture };
+}
+
+export interface MetaInterestResult {
+  id: string;
+  name: string;
+  audience_size?: number;
+  path?: string[];
+}
+
+interface MetaInterestSearchResponse {
+  data: MetaInterestResult[];
+}
+
+/** Busca interesses do Meta via /search?type=adinterest para detalhamento de público-alvo. */
+export async function searchMetaInterests(query: string, accessToken: string): Promise<MetaInterestResult[]> {
+  const path = `/search?type=adinterest&q=${encodeURIComponent(query)}&limit=10`;
+  const response = await metaApiCall<MetaInterestSearchResponse>(path, accessToken);
+  return (response.data || []).filter((item) => item.id && item.name);
+}
+
+// ===== Instagram Content Publishing =====
+
+interface InstagramMediaContainerResponse {
+  id: string;
+}
+
+interface InstagramMediaStatusResponse {
+  status_code: 'FINISHED' | 'IN_PROGRESS' | 'ERROR' | 'EXPIRED';
+  error_message?: string;
+}
+
+interface InstagramPublishResponse {
+  id: string;
+}
+
+/** Cria container de mídia no Instagram (imagem ou vídeo). POST /{ig-user-id}/media */
+export async function createInstagramMedia(
+  igUserId: string,
+  accessToken: string,
+  params: {
+    imageUrl?: string;
+    videoUrl?: string;
+    caption?: string;
+    mediaType?: 'REELS' | 'STORIES' | 'CAROUSEL';
+    isCarouselItem?: boolean;
+    children?: string[];
+  },
+): Promise<string> {
+  const body: Record<string, unknown> = {};
+
+  if (params.imageUrl) {
+    body.image_url = params.imageUrl;
+  } else if (params.videoUrl) {
+    body.video_url = params.videoUrl;
+  }
+
+  // Stories (imagem ou vídeo) exige media_type=STORIES; vídeo sem tipo vira REELS
+  if (params.mediaType) {
+    body.media_type = params.mediaType;
+  } else if (params.videoUrl) {
+    // item de carrossel em vídeo usa VIDEO
+    body.media_type = params.isCarouselItem ? 'VIDEO' : 'REELS';
+  }
+
+  if (params.isCarouselItem) {
+    body.is_carousel_item = true;
+  }
+  if (params.children?.length) {
+    body.children = params.children;
+  }
+
+  if (params.caption) {
+    body.caption = params.caption;
+  }
+
+  const response = await metaApiCall<InstagramMediaContainerResponse>(
+    `/${igUserId}/media`,
+    accessToken,
+    { method: 'POST', body },
+  );
+
+  return response.id;
+}
+
+/** Verifica status do container de mídia. GET /{containerId}?fields=status_code */
+export async function getMediaContainerStatus(
+  containerId: string,
+  accessToken: string,
+): Promise<'FINISHED' | 'IN_PROGRESS' | 'ERROR'> {
+  const response = await metaApiCall<InstagramMediaStatusResponse>(
+    `/${containerId}?fields=status_code`,
+    accessToken,
+  );
+
+  if (response.status_code === 'ERROR') {
+    throw new Error(`Instagram media container error: ${response.error_message || 'unknown'}`);
+  }
+
+  return response.status_code === 'FINISHED' ? 'FINISHED' : 'IN_PROGRESS';
+}
+
+/** Publica container de mídia no Instagram. POST /{ig-user-id}/media_publish */
+export async function publishInstagramMedia(
+  igUserId: string,
+  accessToken: string,
+  creationId: string,
+): Promise<string> {
+  const response = await metaApiCall<InstagramPublishResponse>(
+    `/${igUserId}/media_publish`,
+    accessToken,
+    { method: 'POST', body: { creation_id: creationId } },
+  );
+
+  return response.id;
+}
+
+// ── Leads: fonte da verdade Meta (campanhas da conta + ads + forms) ─────────
+
+export interface MetaCampaignSummary {
+  id: string;
+  name: string;
+  objective: string | null;
+  status: string | null;
+}
+
+interface MetaCampaignsResponse {
+  data: MetaCampaignSummary[];
+  paging?: { cursors?: { after?: string } };
+}
+
+/**
+ * Lista TODAS as campanhas de uma conta de anúncios (paginação completa).
+ * Fonte da verdade do filtro de leads: inclui campanhas criadas fora do Fury.
+ * GET /act_{id}/campaigns?fields=id,name,objective,status
+ */
+export async function listAccountCampaigns(
+  adAccountId: string,
+  accessToken: string,
+): Promise<MetaCampaignSummary[]> {
+  const all: MetaCampaignSummary[] = [];
+  let after: string | undefined;
+
+  do {
+    const query = `fields=id,name,objective,status&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const payload = await metaApiCall<MetaCampaignsResponse>(
+      `/${encodeURIComponent(adAccountId)}/campaigns?${query}`,
+      accessToken,
+    );
+    all.push(...(payload.data || []));
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return all;
+}
+
+interface MetaCampaignAdsResponse {
+  data: Array<{ id: string; name?: string }>;
+  paging?: { cursors?: { after?: string } };
+}
+
+/** Lista os ads de uma campanha (id + name), com paginação completa. */
+export async function listCampaignAds(
+  campaignId: string,
+  accessToken: string,
+): Promise<Array<{ id: string; name?: string }>> {
+  const all: Array<{ id: string; name?: string }> = [];
+  let after: string | undefined;
+
+  do {
+    const query = `fields=id,name&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const payload = await metaApiCall<MetaCampaignAdsResponse>(
+      `/${encodeURIComponent(campaignId)}/ads?${query}`,
+      accessToken,
+    );
+    all.push(...(payload.data || []));
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return all;
+}
+
+interface MetaAdLeadsResponse {
+  data: Array<Record<string, unknown>>;
+  paging?: { cursors?: { after?: string } };
+}
+
+/**
+ * Lista os leads de um AD (paginação completa).
+ * O lead pertence ao ad — atribuição correta de campanha mesmo com forms
+ * compartilhados. Campos: field_data, created_time, form_id.
+ */
+export async function listAdLeads(
+  adId: string,
+  accessToken: string,
+): Promise<Array<Record<string, unknown>>> {
+  const all: Array<Record<string, unknown>> = [];
+  let after: string | undefined;
+
+  do {
+    const query = `fields=id,field_data,created_time,form_id&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const payload = await metaApiCall<MetaAdLeadsResponse>(
+      `/${encodeURIComponent(adId)}/leads?${query}`,
+      accessToken,
+    );
+    all.push(...(payload.data || []));
+    after = payload.paging?.cursors?.after;
+  } while (after);
+
+  return all;
+}
+
+/** Um ad com o criativo que referencia (ou não) um formulário de leads. */
+interface MetaAdWithCreativeResponse {
+  data: Array<{
+    id: string;
+    creative?: {
+      link_data?: MetaCreativeLinkData;
+      object_story_spec?: { link_data?: MetaCreativeLinkData };
+    };
+  }>;
+  paging?: { cursors?: { after?: string } };
+}
+
+interface MetaCreativeLinkData {
+  call_to_action?: { value?: { lead_gen_form_id?: string } };
+}
+
+/**
+ * True se a campanha tem ao menos um ad vinculado a um formulário de leads.
+ * O form NÃO é um campo top-level do Ad: vive no criativo via
+ * `link_data` (ou `object_story_spec.link_data`) → `call_to_action.value.lead_gen_form_id`.
+ * Buscamos `link_data`/`object_story_spec` COMPLETOS (não sub_campos aninhados,
+ * que a Graph API pode rejeitar) e extraímos o id do form de forma tolerante.
+ * GET /{campaign_id}/ads?fields=id,creative{object_story_spec}
+ */
+export async function campaignHasLeadForm(campaignId: string, accessToken: string): Promise<boolean> {
+  let after: string | undefined;
+  do {
+    const query =
+      `fields=id,creative{object_story_spec}&limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+    const payload = await metaApiCall<MetaAdWithCreativeResponse>(
+      `/${encodeURIComponent(campaignId)}/ads?${query}`,
+      accessToken,
+    );
+    for (const ad of payload.data || []) {
+      if (extractLeadFormIdFromCreative(ad.creative)) return true;
+    }
+    after = payload.paging?.cursors?.after;
+  } while (after);
+  return false;
+}
+
+function extractLeadFormIdFromCreative(creative?: MetaAdWithCreativeResponse['data'][number]['creative']): string | null {
+  const linkData = creative?.link_data ?? creative?.object_story_spec?.link_data;
+  const value = linkData?.call_to_action?.value;
+  const formId = value?.lead_gen_form_id;
+  return typeof formId === 'string' && formId ? formId : null;
+}
+
+export interface MetaLeadFormQuestion {
+  key: string;
+  type: string;
+  label?: string;
+}
+
+/**
+ * Envios de um leadgen form (leads de formulário instantâneo).
+ * GET /{form_id}/leads — MESMA fonte que o detalhe da campanha usa para
+ * contar "Pessoas"; o worker/lista precisam ler daqui para não divergirem.
+ */
+export async function getLeadFormData(
+  formId: string,
+  accessToken: string,
+): Promise<{ data: Array<Record<string, unknown>> }> {
+  return metaApiCall<{ data: Array<Record<string, unknown>> }>(
+    `/${encodeURIComponent(formId)}/leads?fields=id,field_data,created_time,form_id`,
+    accessToken,
+  );
+}
+
+/**
+ * Perguntas de um leadgen form: mapeia o `key` tokenizado para o `type`.
+ * GET /{form_id}?fields=questions — usado para traduzir field_data com keys
+ * customizados (ex.: question1/2/3 criados pelo wizard) em nome/email/telefone.
+ */
+export async function getLeadFormQuestions(
+  formId: string,
+  accessToken: string,
+): Promise<MetaLeadFormQuestion[]> {
+  const payload = await metaApiCall<{ questions?: MetaLeadFormQuestion[] }>(
+    `/${encodeURIComponent(formId)}?fields=questions`,
+    accessToken,
+  );
+  return payload.questions || [];
 }

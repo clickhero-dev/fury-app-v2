@@ -1,15 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { clearSession } from '../lib/clear-session';
 
-export function useLogout() {
+export function useLogout(to = '/login') {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   return () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    queryClient.clear();
-    navigate('/login', { replace: true });
+    clearSession();
+    navigate(to, { replace: true });
   };
 }

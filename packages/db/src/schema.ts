@@ -11,11 +11,19 @@ import {
   numeric,
   integer,
   unique,
+  uniqueIndex,
+  inet,
+  bigint,
+  bigserial,
+  smallint,
+  date,
+  primaryKey,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // Enums
-export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member']);
+export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member', 'superadmin']);
 export const conditionFieldEnum = pgEnum('condition_field', ['cpc', 'ctr', 'roas', 'cpa', 'spend']);
 export const conditionOperatorEnum = pgEnum('condition_operator', ['gt', 'lt', 'eq']);
 export const ruleActionEnum = pgEnum('rule_action', ['pause_campaign', 'reduce_budget', 'notify', 'increase_budget']);
@@ -44,6 +52,65 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', [
 ]);
 export const invoiceStatusEnum = pgEnum('invoice_status', ['pending', 'paid', 'overdue', 'cancelled']);
 export const voiceToneEnum = pgEnum('voice_tone', ['professional', 'casual', 'urgent', 'premium']);
+export const formSubmissionStatusEnum = pgEnum('form_submission_status', ['PENDING', 'COMPLETED', 'ERROR', 'ABANDONED']);
+export const googleVerificationStateEnum = pgEnum('google_verification_state', ['UNVERIFIED', 'VERIFIED']);
+
+export const googleSyncStatusEnum = pgEnum('google_sync_status', [
+  'not_connected',
+  'connected',
+  'no_profile',
+  'awaiting_verification',
+  'verified',
+  'syncing',
+  'synced',
+  'error',
+]);
+
+export const googleSyncOperationEnum = pgEnum('google_sync_operation', [
+  'oauth_connect',
+  'lookup',
+  'create',
+  'update',
+  'verify',
+  'sync',
+  'error',
+]);
+
+export const googleSyncLogStatusEnum = pgEnum('google_sync_log_status', ['pending', 'in_progress', 'success', 'failed']);
+export const leadStatusEnum = pgEnum('lead_status', [
+  'novo',
+  'não contatado',
+  'tentativa de contato',
+  'negociando',
+  'comprou',
+  'não comprou',
+]);
+export const faqStatusEnum = pgEnum('faq_status', ['draft', 'published']);
+
+// ==================== RBAC / Parceiros ====================
+
+// Papéis da plataforma (key fixa usada no código)
+export const adyRbacRoles = pgTable('ady_rbac_roles', {
+  key: varchar('key', { length: 50 }).primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  description: text('description'),
+  isSystem: boolean('is_system').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Empresas parceiras
+export const adyPartners = pgTable('ady_partners', {
+  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar('name', { length: 255 }).notNull(),
+  maxTenants: integer('max_tenants').notNull().default(0),
+  status: varchar('status', { length: 20 }).notNull().default('active'),
+  openrouterKeyEncrypted: text('openrouter_key_encrypted'),
+  openrouterKeyLast4: varchar('openrouter_key_last4', { length: 4 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});
 
 // Tenants table
 export const tenants = pgTable(
@@ -52,10 +119,17 @@ export const tenants = pgTable(
     id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
     name: varchar('name', { length: 255 }).notNull(),
     slug: varchar('slug', { length: 255 }).notNull().unique(),
+    codigo: varchar('codigo', { length: 20 }).unique(),
+    businessContext: text('business_context'),
+    partnerId: uuid('partner_id').references(() => adyPartners.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    // soft-delete: excluído some do admin e perde o acesso
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => ({
     slugIdx: index('tenants_slug_idx').on(table.slug),
+    codigoIdx: index('tenants_codigo_idx').on(table.codigo),
+    partnerIdIdx: index('tenants_partner_id_idx').on(table.partnerId),
   })
 );
 
@@ -68,15 +142,32 @@ export const users = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 255 }),
-    email: varchar('email', { length: 255 }).notNull(),
-    passwordHash: text('password_hash').notNull(),
+    email: varchar('email', { length: 255 }).notNull().unique(),
+    passwordHash: text('password_hash'),
+    googleId: varchar('google_id', { length: 255 }),
+    facebookId: varchar('facebook_id', { length: 255 }),
     role: userRoleEnum('role').notNull().default('member'),
+    platformRole: varchar('platform_role', { length: 50 })
+      .notNull()
+      .default('user')
+      .references(() => adyRbacRoles.key),
+    partnerId: uuid('partner_id').references(() => adyPartners.id, { onDelete: 'set null' }),
     notificationPrefs: jsonb('notification_prefs').default(sql`'{"campanhas":true,"performance":true,"equipe":false}'::jsonb`),
+    audienceDefaults: jsonb('audience_defaults').default(sql`'{"city":"","ageMin":18,"ageMax":65,"gender":"all"}'::jsonb`),
+    otpCode: varchar('otp_code', { length: 6 }),
+    otpExpiresAt: timestamp('otp_expires_at', { withTimezone: true }),
+    emailVerified: boolean('email_verified').notNull().default(false),
+    resetToken: varchar('reset_token', { length: 255 }),
+    resetTokenExpiresAt: timestamp('reset_token_expires_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    // soft-delete: e-mail continua preso (unique) para permitir restaurar
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => ({
     tenantIdIdx: index('users_tenant_id_idx').on(table.tenantId),
     emailTenantIdx: index('users_email_tenant_idx').on(table.email, table.tenantId),
+    facebookIdIdx: index('users_facebook_id_idx').on(table.facebookId),
+    partnerIdIdx: index('users_partner_id_idx').on(table.partnerId),
   })
 );
 
@@ -93,6 +184,8 @@ export const metaConnections = pgTable(
     tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
     adAccounts: jsonb('ad_accounts').default(sql`'[]'::jsonb`),
     selectedAdAccountId: varchar('selected_ad_account_id', { length: 255 }),
+    selectedInstagramUserId: varchar('selected_instagram_user_id', { length: 255 }),
+    selectedInstagramUsername: varchar('selected_instagram_username', { length: 255 }),
     selectedBusinessIds: jsonb('selected_business_ids').default(sql`'[]'::jsonb`),
     selectedPageIds: jsonb('selected_page_ids').default(sql`'[]'::jsonb`),
     selectedAdAccountIds: jsonb('selected_ad_account_ids').default(sql`'[]'::jsonb`),
@@ -142,11 +235,22 @@ export const creativeAssets = pgTable(
     metaAssetId: varchar('meta_asset_id', { length: 255 }),
     complianceStatus: complianceStatusEnum('compliance_status').notNull().default('pending_compliance'),
     complianceNotes: text('compliance_notes'),
+    complianceAttempts: integer('compliance_attempts').notNull().default(0),
+    costUsd: numeric('cost_usd', { precision: 10, scale: 6, mode: 'number' }),
+    processingTimeMs: integer('processing_time_ms'),
+    rootAssetId: uuid('root_asset_id').references((): AnyPgColumn => creativeAssets.id),
+    modificationsRemaining: integer('modifications_remaining'),
+    // Só significativos na linha raiz do grupo (rootAssetId IS NULL) — mesmo
+    // padrão de "campo vive na raiz" que modificationsRemaining já usa.
+    activeAssetId: uuid('active_asset_id').references((): AnyPgColumn => creativeAssets.id, { onDelete: 'set null' }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
     tenantIdIdx: index('creative_assets_tenant_id_idx').on(table.tenantId),
     metaAssetIdIdx: index('creative_assets_meta_asset_id_idx').on(table.metaAssetId),
+    rootAssetIdIdx: index('creative_assets_root_asset_id_idx').on(table.rootAssetId),
+    activeAssetIdIdx: index('creative_assets_active_asset_id_idx').on(table.activeAssetId),
   })
 );
 
@@ -326,18 +430,56 @@ export const furyConfig = pgTable(
   })
 );
 
+// Form submissions table
+export const formSubmissions = pgTable(
+  'form_submissions',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    formType: varchar('form_type', { length: 255 }).notNull(),
+    status: formSubmissionStatusEnum('status').notNull().default('PENDING'),
+    abandonedAt: timestamp('abandoned_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('form_submissions_tenant_id_idx').on(table.tenantId),
+    userIdIdx: index('form_submissions_user_id_idx').on(table.userId),
+    formTypeIdx: index('form_submissions_form_type_idx').on(table.formType),
+    statusIdx: index('form_submissions_status_idx').on(table.status),
+    tenantFormTypeIdx: index('form_submissions_tenant_form_type_idx').on(table.tenantId, table.formType),
+  })
+);
+
 // ==================== Billing ====================
 
-// Plans table (global — not per-tenant)
-export const plans = pgTable('plans', {
-  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  name: varchar('name', { length: 100 }).notNull(),
-  priceCents: integer('price_cents').notNull(),
-  interval: planIntervalEnum('interval').notNull().default('monthly'),
-  features: jsonb('features').notNull().default(sql`'{}'::jsonb`),
-  isActive: boolean('is_active').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+// Plans table (global — not per-tenant; partner_id = plano do parceiro)
+export const plans = pgTable(
+  'plans',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    name: varchar('name', { length: 100 }).notNull(),
+    technicalKey: varchar('technical_key', { length: 100 }),
+    priceCents: integer('price_cents').notNull(),
+    interval: planIntervalEnum('interval').notNull().default('monthly'),
+    features: jsonb('features').notNull().default(sql`'{}'::jsonb`),
+    limits: jsonb('limits').notNull().default(sql`'{}'::jsonb`),
+    isActive: boolean('is_active').notNull().default(true),
+    partnerId: uuid('partner_id').references(() => adyPartners.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    partnerIdIdx: index('plans_partner_id_idx').on(table.partnerId),
+    technicalKeyUnique: uniqueIndex('plans_technical_key_unique')
+      .on(table.technicalKey)
+      .where(sql`${table.technicalKey} IS NOT NULL`),
+  })
+);
 
 // Subscriptions table
 export const subscriptions = pgTable(
@@ -355,13 +497,47 @@ export const subscriptions = pgTable(
     status: subscriptionStatusEnum('status').notNull().default('trial'),
     trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
     currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+    creativesRemaining: integer('creatives_remaining'),
+    isNonExpirable: boolean('is_non_expirable').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
     tenantIdIdx: index('subscriptions_tenant_id_idx').on(table.tenantId),
     statusIdx: index('subscriptions_status_idx').on(table.status),
-  })
+  }),
+);
+
+export const renewalEvents = pgTable(
+  'subscription_renewal_events',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    subscriptionId: uuid('subscription_id').notNull().references(() => subscriptions.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    previousPeriodEnd: timestamp('previous_period_end', { withTimezone: true }).notNull(),
+    renewedAt: timestamp('renewed_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    subscriptionPeriodUnique: unique('subscription_renewal_events_subscription_period_unique').on(table.subscriptionId, table.previousPeriodEnd),
+    renewedAtIdx: index('subscription_renewal_events_renewed_at_idx').on(table.renewedAt),
+  }),
+);
+
+// Renewal events are the auditable source for dashboard activity. They do not
+// represent payment confirmation; they only record a conditional period advance.
+export const subscriptionRenewalEvents = pgTable(
+  'subscription_renewal_events',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    subscriptionId: uuid('subscription_id').notNull().references(() => subscriptions.id, { onDelete: 'cascade' }),
+    previousPeriodEnd: timestamp('previous_period_end', { withTimezone: true }).notNull(),
+    renewedAt: timestamp('renewed_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    subscriptionPreviousPeriodUnique: uniqueIndex('subscription_renewal_events_subscription_period_idx').on(table.subscriptionId, table.previousPeriodEnd),
+    renewedAtIdx: index('subscription_renewal_events_renewed_at_idx').on(table.renewedAt),
+  }),
 );
 
 // Invoices table
@@ -402,6 +578,7 @@ export const brandKits = pgTable(
     secondaryColor: varchar('secondary_color', { length: 7 }),
     voiceTone: voiceToneEnum('voice_tone'),
     photoUrls: jsonb('photo_urls').default(sql`'[]'::jsonb`),
+    whatsappNumber: text('whatsapp_number'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -410,7 +587,811 @@ export const brandKits = pgTable(
   })
 );
 
+// Biblioteca de imagens do Estúdio, cada uma com tipo
+export const brandKitPhotoKindEnum = pgEnum('brand_kit_photo_kind', ['modelo', 'produto', 'equipe']);
+
+export const brandKitPhotos = pgTable(
+  'brand_kit_photos',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    brandKitId: uuid('brand_kit_id')
+      .notNull()
+      .references(() => brandKits.id, { onDelete: 'cascade' }),
+    kind: brandKitPhotoKindEnum('kind').notNull(),
+    url: text('url').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    /** Soft delete: preenchido = removida (some da biblioteca e da geração). */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    hiddenFromReferencePanel: boolean('hidden_from_reference_panel').notNull().default(false),
+  },
+  (table) => ({
+    tenantKindIdx: index('brand_kit_photos_tenant_kind_idx').on(table.tenantId, table.kind),
+    brandKitIdIdx: index('brand_kit_photos_brand_kit_id_idx').on(table.brandKitId),
+  })
+);
+
+export const brandKitsRelations = relations(brandKits, ({ many }) => ({
+  photos: many(brandKitPhotos),
+}));
+
+export const brandKitPhotosRelations = relations(brandKitPhotos, ({ one }) => ({
+  tenant: one(tenants, { fields: [brandKitPhotos.tenantId], references: [tenants.id] }),
+  brandKit: one(brandKits, { fields: [brandKitPhotos.brandKitId], references: [brandKits.id] }),
+}));
+
+// Request logs table (audit / debug)
+// Partitioned by RANGE (created_at) — PK is (id, created_at) at DB level.
+// Drizzle schema mirrors the production columns for type-safe queries.
+export const requestLogs = pgTable(
+  'request_logs',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    requestId: uuid('request_id'),
+    tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    method: varchar('method', { length: 10 }).notNull(),
+    path: text('path').notNull(),
+    queryString: text('query_string'),
+    statusCode: smallint('status_code').notNull(),
+    responseTimeMs: integer('response_time_ms').notNull(),
+    ipAddress: inet('ip_address'),
+    userAgent: text('user_agent'),
+    referer: text('referer'),
+    requestHeaders: jsonb('request_headers'),
+    requestBody: jsonb('request_body'),
+    responseBody: jsonb('response_body'),
+    errorMessage: text('error_message'),
+  },
+  (table) => ({
+    tenantCreatedIdx: index('idx_request_logs_tenant_created').on(table.tenantId, table.createdAt),
+    statusCreatedIdx: index('idx_request_logs_status_created').on(table.statusCode, table.createdAt),
+    requestIdIdx: index('idx_request_logs_request_id').on(table.requestId),
+  })
+);
+
+// ===== Planejador IA tables =====
+
+export const postTypeEnum = pgEnum('post_type', ['reel', 'carousel', 'image', 'stories']);
+export const postStatusEnum = pgEnum('post_status', ['draft', 'approved', 'scheduled', 'rejected', 'published', 'confirmed', 'failed', 'publishing']);
+export const planStatusEnum = pgEnum('plan_status', ['draft', 'active', 'completed', 'cancelled']);
+
+export const campaignPlans = pgTable(
+  'campaign_plans',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }),
+    type: varchar('type', { length: 20 }).notNull().default('monthly'),
+    periodStart: timestamp('period_start', { withTimezone: true }),
+    periodEnd: timestamp('period_end', { withTimezone: true }),
+    objective: text('objective'),
+    status: planStatusEnum('status').notNull().default('draft'),
+    totalPosts: integer('total_posts').default(0),
+    metadata: jsonb('metadata').default(sql`'{}'::jsonb`),
+    strategy: jsonb('strategy').default(sql`'{}'::jsonb`),
+    researchData: jsonb('research_data').default(sql`'{}'::jsonb`),
+    analyticsData: jsonb('analytics_data').default(sql`'{}'::jsonb`),
+    brandingChecked: boolean('branding_checked').default(false),
+    brandingNotes: text('branding_notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('campaign_plans_tenant_id_idx').on(table.tenantId),
+  })
+);
+
+export const socialPosts = pgTable(
+  'social_posts',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    planId: uuid('plan_id').references(() => campaignPlans.id, { onDelete: 'set null' }),
+    platform: varchar('platform', { length: 50 }).notNull().default('instagram'),
+    postType: postTypeEnum('post_type').notNull().default('image'),
+    title: varchar('title', { length: 255 }),
+    caption: text('caption'),
+    cta: varchar('cta', { length: 255 }),
+    hashtags: jsonb('hashtags').default(sql`'[]'::jsonb`),
+    imagePrompt: text('image_prompt'),
+    imageUrl: text('image_url'),
+    imageUrls: jsonb('image_urls').default(sql`'[]'::jsonb`),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    status: postStatusEnum('status').notNull().default('draft'),
+    platformPostId: varchar('platform_post_id', { length: 255 }),
+    metrics: jsonb('metrics').default(sql`'{}'::jsonb`),
+    dayIndex: integer('day_index'), // dia do mês (1-31) para ordenação no calendário
+    calendarDate: date('calendar_date').notNull(), // ISO date string 'YYYY-MM-DD' para FullCalendar range queries (Fase 3 — NOT NULL após Fase 1-2 writepoints garantido)
+    publishAttempts: integer('publish_attempts').default(0).notNull(),
+    lastPublishError: text('last_publish_error'),
+    nextRetryAt: timestamp('next_retry_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('social_posts_tenant_id_idx').on(table.tenantId),
+    planIdIdx: index('social_posts_plan_id_idx').on(table.planId),
+    tenantCalendarDateIdx: index('social_posts_tenant_calendar_date_idx').on(table.tenantId, table.calendarDate), // Fase 3: índice composto para queries de range
+  })
+);
+
+export const campaignPlansRelations = relations(campaignPlans, ({ many }) => ({
+  posts: many(socialPosts),
+}));
+
+export const socialPostsRelations = relations(socialPosts, ({ one }) => ({
+  plan: one(campaignPlans, {
+    fields: [socialPosts.planId],
+    references: [campaignPlans.id],
+  }),
+}));
+
+// ===== State machine / Workflow jobs =====
+
+export const workflowStatusEnum = pgEnum('workflow_status', ['pending', 'running', 'awaiting_images', 'done', 'error']);
+
+export const workflowJobs = pgTable(
+  'workflow_jobs',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    workflow: varchar('workflow', { length: 100 }).notNull(),
+    status: workflowStatusEnum('status').notNull().default('pending'),
+    lockKey: varchar('lock_key', { length: 255 }).notNull(),
+    currentStage: varchar('current_stage', { length: 100 }),
+    stages: jsonb('stages').notNull().default(sql`'[]'::jsonb`),
+    artifacts: jsonb('artifacts').notNull().default(sql`'{}'::jsonb`),
+    metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
+    error: text('error'),
+    planId: uuid('plan_id').references(() => campaignPlans.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('workflow_jobs_tenant_id_idx').on(table.tenantId, table.createdAt),
+    workflowIdx: index('workflow_jobs_workflow_idx').on(table.workflow),
+    lockKeyIdx: index('workflow_jobs_lock_key_idx').on(table.lockKey),
+    statusIdx: index('workflow_jobs_status_idx').on(table.status),
+  })
+);
+
+export const workflowJobsRelations = relations(workflowJobs, ({ one }) => ({
+  plan: one(campaignPlans, {
+    fields: [workflowJobs.planId],
+    references: [campaignPlans.id],
+  }),
+}));
+
+// ===== Meta async sync (fluxo de dados v2) tables =====
+
+export const metaSyncRunStatusEnum = pgEnum('meta_sync_run_status', ['running', 'success', 'partial', 'failed']);
+
+/** Último healthcheck da integração Meta por tenant (sem histórico de execuções). */
+export const metaHealthchecks = pgTable(
+  'meta_healthchecks',
+  {
+    tenantId: uuid('tenant_id').primaryKey().references(() => tenants.id, { onDelete: 'cascade' }),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).notNull(),
+    status: varchar('status', { length: 16 }).notNull(),
+    checks: jsonb('checks').notNull().default(sql`'{}'::jsonb`),
+    lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+    lastSyncStatus: varchar('last_sync_status', { length: 16 }),
+  },
+  (table) => ({ checkedAtIdx: index('meta_healthchecks_checked_at_idx').on(table.checkedAt) })
+);
+
+export const metaSyncScopes = pgTable(
+  'meta_sync_scopes',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id').notNull().references(() => metaConnections.id, { onDelete: 'cascade' }),
+    metaUserId: varchar('meta_user_id', { length: 255 }).notNull(),
+    adAccountId: varchar('ad_account_id', { length: 255 }).notNull(),
+    instagramUserId: varchar('instagram_user_id', { length: 255 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantUnique: unique('meta_sync_scopes_tenant_unique').on(table.tenantId),
+    connectionIdIdx: index('meta_sync_scopes_connection_id_idx').on(table.connectionId),
+  })
+);
+
+/** Snapshot das campanhas da conta Meta (todas, inclusive criadas fora do Fury). */
+export const metaCampaignSnapshots = pgTable(
+  'meta_campaign_snapshots',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    metaCampaignId: varchar('meta_campaign_id', { length: 255 }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    status: varchar('status', { length: 50 }),
+    objective: varchar('objective', { length: 50 }),
+    budget: jsonb('budget').default(sql`'{}'::jsonb`),
+    metrics: jsonb('metrics').default(sql`'{}'::jsonb`),
+    scopeId: uuid('scope_id').notNull().references(() => metaSyncScopes.id, { onDelete: 'cascade' }),
+    hasLeadForm: boolean('has_lead_form'),
+    lastInsightsAt: timestamp('last_insights_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('meta_campaign_snapshots_tenant_id_idx').on(table.tenantId),
+    statusIdx: index('meta_campaign_snapshots_status_idx').on(table.status),
+    tenantCampaignUnique: unique('meta_campaign_snapshots_tenant_campaign_unique').on(
+      table.tenantId,
+      table.metaCampaignId
+    ),
+  })
+);
+
+/** Métricas diárias Meta por campanha, preservadas para filtros de período. */
+export const metaCampaignDailyInsights = pgTable(
+  'meta_campaign_daily_insights',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    metaCampaignId: varchar('meta_campaign_id', { length: 255 }).notNull(),
+    date: date('date').notNull(),
+    metrics: jsonb('metrics').default(sql`'{}'::jsonb`).notNull(),
+    scopeId: uuid('scope_id').notNull().references(() => metaSyncScopes.id, { onDelete: 'cascade' }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantDateIdx: index('meta_campaign_daily_insights_tenant_date_idx').on(table.tenantId, table.date),
+    tenantCampaignDateUnique: unique('meta_campaign_daily_insights_tenant_campaign_date_unique').on(
+      table.tenantId,
+      table.metaCampaignId,
+      table.date,
+    ),
+  }),
+);
+
+/** Leads coletados dos formulários Meta (dedupe por meta_lead_id por tenant). */
+export const metaLeads = pgTable(
+  'meta_leads',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    metaLeadId: varchar('meta_lead_id', { length: 255 }).notNull(),
+    snapshotId: uuid('snapshot_id').references(() => metaCampaignSnapshots.id, { onDelete: 'cascade' }),
+    metaCampaignId: varchar('meta_campaign_id', { length: 255 }),
+    name: text('name'),
+    email: text('email'),
+    phone: text('phone'),
+    createdTime: timestamp('created_time', { withTimezone: true }),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).defaultNow().notNull(),
+    status: leadStatusEnum('status').notNull().default('novo'),
+    statusUpdatedAt: timestamp('status_updated_at', { withTimezone: true }),
+    scopeId: uuid('scope_id').notNull().references(() => metaSyncScopes.id, { onDelete: 'cascade' }),
+  },
+  (table) => ({
+    tenantIdIdx: index('meta_leads_tenant_id_idx').on(table.tenantId),
+    snapshotIdIdx: index('meta_leads_snapshot_id_idx').on(table.snapshotId),
+    tenantLeadUnique: unique('meta_leads_tenant_lead_unique').on(table.tenantId, table.metaLeadId),
+    statusIdx: index('meta_leads_status_idx').on(table.status),
+    statusCreatedIdx: index('meta_leads_status_created_idx').on(table.status, table.createdTime),
+  })
+);
+
+/** Mídia Instagram (orgânica) com insights por media. */
+export const metaInstagramMedia = pgTable(
+  'meta_instagram_media',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    mediaId: varchar('media_id', { length: 255 }).notNull(),
+    caption: text('caption'),
+    mediaUrl: text('media_url'),
+    thumbnailUrl: text('thumbnail_url'),
+    mediaType: varchar('media_type', { length: 32 }),
+    mediaProductType: varchar('media_product_type', { length: 32 }),
+    timestamp: timestamp('timestamp', { withTimezone: true }),
+    likeCount: integer('like_count'),
+    commentsCount: integer('comments_count'),
+    insights: jsonb('insights').default(sql`'{}'::jsonb`),
+    scopeId: uuid('scope_id').notNull().references(() => metaSyncScopes.id, { onDelete: 'cascade' }),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('meta_instagram_media_tenant_id_idx').on(table.tenantId),
+    tenantMediaUnique: unique('meta_instagram_media_tenant_media_unique').on(
+      table.tenantId,
+      table.mediaId
+    ),
+  })
+);
+
+/** Runs de sincronização: status, erro client-safe e contagens. */
+export const metaSyncRuns = pgTable(
+  'meta_sync_runs',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    status: metaSyncRunStatusEnum('status').notNull().default('running'),
+    errorCode: varchar('error_code', { length: 64 }),
+    errorMessage: text('error_message'),
+    partialFailures: jsonb('partial_failures').default(sql`'[]'::jsonb`),
+    campaignsCount: integer('campaigns_count').notNull().default(0),
+    leadsCount: integer('leads_count').notNull().default(0),
+    insightsCount: integer('insights_count').notNull().default(0),
+    scopeId: uuid('scope_id'),
+  },
+  (table) => ({
+    tenantIdIdx: index('meta_sync_runs_tenant_id_idx').on(table.tenantId),
+    tenantStartedIdx: index('meta_sync_runs_tenant_started_idx').on(table.tenantId, table.startedAt),
+  })
+);
+
+export const metaCampaignSnapshotsRelations = relations(metaCampaignSnapshots, ({ many }) => ({
+  leads: many(metaLeads),
+}));
+
+export const metaLeadsRelations = relations(metaLeads, ({ one }) => ({
+  snapshot: one(metaCampaignSnapshots, {
+    fields: [metaLeads.snapshotId],
+    references: [metaCampaignSnapshots.id],
+  }),
+}));
+
+// ===== Google Meu Negócio (Google Business Profile) tables =====
+
+export const googleConnections = pgTable(
+  'google_connections',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    googleUserId: varchar('google_user_id', { length: 255 }).notNull(),
+    accessToken: text('access_token').notNull(),
+    refreshToken: text('refresh_token').notNull(),
+    tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }).notNull(),
+    accountId: varchar('account_id', { length: 255 }),
+    accountName: varchar('account_name', { length: 255 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('google_connections_tenant_id_idx').on(table.tenantId),
+    googleUserIdIdx: index('google_connections_google_user_id_idx').on(table.googleUserId),
+    tenantIdUnique: unique('google_connections_tenant_id_unique').on(table.tenantId),
+  })
+);
+
+export const googleBusinessProfiles = pgTable(
+  'google_business_profiles',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => googleConnections.id, { onDelete: 'cascade' }),
+    gbpLocationId: varchar('gbp_location_id', { length: 255 }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    address: jsonb('address').notNull(),
+    phone: varchar('phone', { length: 40 }),
+    email: varchar('email', { length: 255 }),
+    website: varchar('website', { length: 2048 }),
+    categoryId: varchar('category_id', { length: 255 }),
+    categoryDisplayName: varchar('category_display_name', { length: 255 }),
+    hours: jsonb('hours'),
+    photos: jsonb('photos').default(sql`'[]'::jsonb`),
+    verificationState: googleVerificationStateEnum('verification_state').notNull().default('UNVERIFIED'),
+    syncStatus: googleSyncStatusEnum('sync_status').notNull().default('no_profile'),
+    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('google_business_profiles_tenant_id_idx').on(table.tenantId),
+    gbpLocationIdIdx: index('google_business_profiles_gbp_location_id_idx').on(table.gbpLocationId),
+    syncStatusIdx: index('google_business_profiles_sync_status_idx').on(table.syncStatus),
+    tenantIdUnique: unique('google_business_profiles_tenant_id_unique').on(table.tenantId),
+  })
+);
+
+export const businessProfileSettings = pgTable(
+  'business_profile_settings',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    address: jsonb('address').notNull(),
+    phone: varchar('phone', { length: 40 }).notNull(),
+    email: varchar('email', { length: 255 }),
+    website: varchar('website', { length: 2048 }),
+    categoryId: varchar('category_id', { length: 255 }).notNull(),
+    hours: jsonb('hours'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('business_profile_settings_tenant_id_idx').on(table.tenantId),
+    tenantIdUnique: unique('business_profile_settings_tenant_id_unique').on(table.tenantId),
+  })
+);
+
+export const googleSyncLogs = pgTable(
+  'google_sync_logs',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id').references(() => googleConnections.id, { onDelete: 'set null' }),
+    profileId: uuid('profile_id').references(() => googleBusinessProfiles.id, { onDelete: 'set null' }),
+    operation: googleSyncOperationEnum('operation').notNull(),
+    status: googleSyncLogStatusEnum('status').notNull().default('in_progress'),
+    message: text('message'),
+    details: jsonb('details'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('google_sync_logs_tenant_id_idx').on(table.tenantId),
+    profileIdx: index('google_sync_logs_profile_id_idx').on(table.profileId),
+    createdAtIdx: index('google_sync_logs_created_at_idx').on(table.createdAt),
+  })
+);
+
+export const googleConnectionsRelations = relations(googleConnections, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [googleConnections.tenantId],
+    references: [tenants.id],
+  }),
+  profile: one(googleBusinessProfiles),
+  syncLogs: many(googleSyncLogs),
+}));
+
+export const googleBusinessProfilesRelations = relations(googleBusinessProfiles, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [googleBusinessProfiles.tenantId],
+    references: [tenants.id],
+  }),
+  connection: one(googleConnections, {
+    fields: [googleBusinessProfiles.connectionId],
+    references: [googleConnections.id],
+  }),
+  syncLogs: many(googleSyncLogs),
+}));
+
+export const businessProfileSettingsRelations = relations(businessProfileSettings, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [businessProfileSettings.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const googleSyncLogsRelations = relations(googleSyncLogs, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [googleSyncLogs.tenantId],
+    references: [tenants.id],
+  }),
+  connection: one(googleConnections, {
+    fields: [googleSyncLogs.connectionId],
+    references: [googleConnections.id],
+  }),
+  profile: one(googleBusinessProfiles, {
+    fields: [googleSyncLogs.profileId],
+    references: [googleBusinessProfiles.id],
+  }),
+}));
+
+// ===== Política de uso tables =====
+
+export const policyVersions = pgTable(
+  'policy_versions',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    version: varchar('version', { length: 50 }).notNull(),
+    content: text('content').notNull(),
+    effectiveFrom: timestamp('effective_from', { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    versionIdx: index('policy_versions_version_idx').on(table.version),
+    createdAtIdx: index('policy_versions_created_at_idx').on(table.createdAt),
+  })
+);
+
+export const policyAcceptances = pgTable(
+  'policy_acceptances',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    policyVersionId: uuid('policy_version_id')
+      .notNull()
+      .references(() => policyVersions.id, { onDelete: 'restrict' }),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('policy_acceptances_tenant_id_idx').on(table.tenantId),
+    userIdIdx: index('policy_acceptances_user_id_idx').on(table.userId),
+    userVersionUnique: unique('policy_acceptances_user_version_unique').on(
+      table.userId,
+      table.policyVersionId
+    ),
+  })
+);
+
+export const policyVersionsRelations = relations(policyVersions, ({ many }) => ({
+  acceptances: many(policyAcceptances),
+}));
+
+export const policyAcceptancesRelations = relations(policyAcceptances, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [policyAcceptances.tenantId],
+    references: [tenants.id],
+  }),
+  user: one(users, {
+    fields: [policyAcceptances.userId],
+    references: [users.id],
+  }),
+  version: one(policyVersions, {
+    fields: [policyAcceptances.policyVersionId],
+    references: [policyVersions.id],
+  }),
+}));
+
+// ===== WhatsApp (uazapi) — verificação de número + inbox de webhooks =====
+
+export const wppVerificationStatusEnum = pgEnum('wpp_verification_status', [
+  'pending',
+  'verified',
+  'failed',
+  'expired',
+]);
+
+export const wppVerifications = pgTable(
+  'wpp_verifications',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    /** Número com DDI (ex.: 5511999999999) — dígitos apenas. */
+    phone: varchar('phone', { length: 40 }).notNull(),
+    status: wppVerificationStatusEnum('status').notNull().default('pending'),
+    /** sha256(code + tenantId) — código nunca armazenado em texto puro. */
+    codeHash: varchar('code_hash', { length: 128 }).notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    sentCount: integer('sent_count').notNull().default(1),
+    lastSentAt: timestamp('last_sent_at', { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdIdx: index('wpp_verifications_tenant_id_idx').on(table.tenantId),
+    phoneStatusIdx: index('wpp_verifications_phone_status_idx').on(table.phone, table.status),
+  })
+);
+
+export const wppVerificationsRelations = relations(wppVerifications, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [wppVerifications.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+/**
+ * Inbox durável de eventos do webhook uazapi. GLOBAL (sem tenant): o evento
+ * chega antes de qualquer sessão; roteamento para tenant acontece no
+ * processamento (worker futuro). Payload cru preservado para auditoria.
+ */
+export const wppWebhookEvents = pgTable(
+  'wpp_webhook_events',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    eventType: varchar('event_type', { length: 64 }),
+    instanceName: varchar('instance_name', { length: 255 }),
+    owner: varchar('owner', { length: 32 }),
+    payload: jsonb('payload').notNull(),
+    status: varchar('status', { length: 32 }).notNull().default('received'),
+    receivedAt: timestamp('received_at', { withTimezone: true }).defaultNow().notNull(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+  },
+  (table) => ({
+    receivedAtIdx: index('wpp_webhook_events_received_at_idx').on(table.receivedAt),
+    eventTypeIdx: index('wpp_webhook_events_event_type_idx').on(table.eventType),
+    statusIdx: index('wpp_webhook_events_status_idx').on(table.status),
+  })
+);
+
+// Public help-center content. It is global to the product, never tenant-scoped.
+export const faqs = pgTable(
+  'faqs',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    title: varchar('title', { length: 255 }).notNull(),
+    slug: varchar('slug', { length: 255 }).notNull().unique(),
+    markdown: text('markdown').notNull(),
+    status: faqStatusEnum('status').notNull().default('draft'),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({ slugIdx: index('faqs_slug_idx').on(table.slug), statusIdx: index('faqs_status_idx').on(table.status) }),
+);
+
+export const faqSlugRedirects = pgTable(
+  'faq_slug_redirects',
+  {
+    slug: varchar('slug', { length: 255 }).primaryKey(),
+    faqId: uuid('faq_id').notNull().references(() => faqs.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({ faqIdIdx: index('faq_slug_redirects_faq_id_idx').on(table.faqId) }),
+);
+
+export const faqsRelations = relations(faqs, ({ many }) => ({ slugRedirects: many(faqSlugRedirects) }));
+export const faqSlugRedirectsRelations = relations(faqSlugRedirects, ({ one }) => ({ faq: one(faqs, { fields: [faqSlugRedirects.faqId], references: [faqs.id] }) }));
+
+// Avisos globais do produto; cada usuário vê cada um uma única vez.
+export const announcements = pgTable(
+  'announcements',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    title: varchar('title', { length: 255 }).notNull(),
+    markdown: text('markdown').notNull(),
+    isActive: boolean('is_active').notNull().default(false),
+    // 'Manter ativo': todos os usuários, sem encerramento
+    showToNewUsers: boolean('show_to_new_users').notNull().default(false),
+    endsAt: timestamp('ends_at', { withTimezone: true }),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => ({ activeIdx: index('announcements_active_idx').on(table.isActive, table.publishedAt) }),
+);
+
+export const announcementViews = pgTable(
+  'announcement_views',
+  {
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    announcementId: uuid('announcement_id').notNull().references(() => announcements.id, { onDelete: 'cascade' }),
+    seenAt: timestamp('seen_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.announcementId] }),
+    announcementIdIdx: index('announcement_views_announcement_id_idx').on(table.announcementId),
+  }),
+);
+
+// Notificações persistentes por usuário, sempre filtradas por tenant na API.
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    recipientUserId: uuid('recipient_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    type: varchar('type', { length: 32 }).notNull().default('general'),
+    title: varchar('title', { length: 120 }).notNull(),
+    body: varchar('body', { length: 500 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    idempotencyKey: varchar('idempotency_key', { length: 128 }),
+    payloadHash: varchar('payload_hash', { length: 64 }),
+  },
+  (table) => ({
+    recipientCreatedIdx: index('notifications_recipient_created_idx').on(table.tenantId, table.recipientUserId, table.createdAt, table.id),
+    unreadIdx: index('notifications_recipient_unread_idx').on(table.tenantId, table.recipientUserId, table.readAt, table.createdAt),
+  }),
+);
+
 // Export all tables
+// Catálogo de serviços do backend ('all' = todos)
+export const adyRbacServices = pgTable('ady_rbac_services', {
+  key: varchar('key', { length: 100 }).primaryKey(),
+  method: varchar('method', { length: 10 }),
+  route: text('route'),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Catálogo de telas do frontend ('all' = todas)
+export const adyRbacViews = pgTable('ady_rbac_views', {
+  key: varchar('key', { length: 100 }).primaryKey(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Serviços bloqueados por papel (partner_id nulo = todos os parceiros)
+export const adyRbacServicesBlocked = pgTable(
+  'ady_rbac_services_blocked',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    roleKey: varchar('role_key', { length: 50 }).notNull().references(() => adyRbacRoles.key, { onDelete: 'cascade' }),
+    partnerId: uuid('partner_id').references(() => adyPartners.id, { onDelete: 'cascade' }),
+    serviceKey: varchar('service_key', { length: 100 }).notNull().references(() => adyRbacServices.key, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    globalUniq: uniqueIndex('ady_rbac_services_blocked_global_uniq')
+      .on(table.roleKey, table.serviceKey)
+      .where(sql`${table.partnerId} IS NULL`),
+    partnerUniq: uniqueIndex('ady_rbac_services_blocked_partner_uniq')
+      .on(table.roleKey, table.partnerId, table.serviceKey)
+      .where(sql`${table.partnerId} IS NOT NULL`),
+  }),
+);
+
+// Telas bloqueadas por papel (partner_id nulo = todos os parceiros)
+export const adyRbacViewsBlocked = pgTable(
+  'ady_rbac_views_blocked',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    roleKey: varchar('role_key', { length: 50 }).notNull().references(() => adyRbacRoles.key, { onDelete: 'cascade' }),
+    partnerId: uuid('partner_id').references(() => adyPartners.id, { onDelete: 'cascade' }),
+    viewKey: varchar('view_key', { length: 100 }).notNull().references(() => adyRbacViews.key, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    globalUniq: uniqueIndex('ady_rbac_views_blocked_global_uniq')
+      .on(table.roleKey, table.viewKey)
+      .where(sql`${table.partnerId} IS NULL`),
+    partnerUniq: uniqueIndex('ady_rbac_views_blocked_partner_uniq')
+      .on(table.roleKey, table.partnerId, table.viewKey)
+      .where(sql`${table.partnerId} IS NOT NULL`),
+  }),
+);
+
+// Histórico de alterações de RBAC e parceiros
+export const adyRbacAuditLog = pgTable(
+  'ady_rbac_audit_log',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    action: varchar('action', { length: 50 }).notNull(),
+    entityType: varchar('entity_type', { length: 50 }).notNull(),
+    entityKey: text('entity_key'),
+    roleKey: varchar('role_key', { length: 50 }),
+    partnerId: uuid('partner_id'),
+    details: jsonb('details').notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    createdAtIdx: index('ady_rbac_audit_log_created_at_idx').on(table.createdAt),
+    partnerIdIdx: index('ady_rbac_audit_log_partner_id_idx').on(table.partnerId),
+  }),
+);
+
 export const allTables = {
   tenants,
   users,
@@ -425,8 +1406,39 @@ export const allTables = {
   performanceScores,
   ruleExecutions,
   furyConfig,
+  formSubmissions,
   plans,
   subscriptions,
   invoices,
   brandKits,
+  brandKitPhotos,
+  requestLogs,
+  campaignPlans,
+  socialPosts,
+  workflowJobs,
+  googleConnections,
+  googleBusinessProfiles,
+  businessProfileSettings,
+  googleSyncLogs,
+  policyVersions,
+  policyAcceptances,
+  wppVerifications,
+  wppWebhookEvents,
+  metaCampaignSnapshots,
+  metaCampaignDailyInsights,
+  metaLeads,
+  metaInstagramMedia,
+  metaSyncRuns,
+  faqs,
+  faqSlugRedirects,
+  announcements,
+  announcementViews,
+  notifications,
+  adyRbacRoles,
+  adyPartners,
+  adyRbacServices,
+  adyRbacViews,
+  adyRbacServicesBlocked,
+  adyRbacViewsBlocked,
+  adyRbacAuditLog,
 };

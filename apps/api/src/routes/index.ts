@@ -1,40 +1,93 @@
-import { Router } from 'express';
-import healthRoutes from './health.js';
-import authRoutes from './auth.routes.js';
-import metaRoutes from './meta.routes.js';
-import metricsRoutes from './metrics.routes.js';
-import automationRoutes from './automation.routes.js';
-import studioRoutes from './studio.routes.js';
-import campaignRoutes from './campaigns.routes.js';
-import budgetRoutes from './budget.routes.js';
-import instagramRoutes from './instagram.routes.js';
-import dashboardRoutes from './dashboard.routes.js';
+import { Router } from "express";
+import healthRoutes from "./health.js";
+import authRoutes from "./auth.routes.js";
+import metaRoutes from "./meta.routes.js";
+import googleRoutes from "./google.routes.js";
+import metricsRoutes from "./metrics.routes.js";
+import automationRoutes from "./automation.routes.js";
+import studioRoutes from "./studio.routes.js";
+import campaignRoutes from "./campaigns.routes.js";
+import budgetRoutes from "./budget.routes.js";
+import instagramRoutes from "./instagram.routes.js";
+import dashboardRoutes from "./dashboard.routes.js";
+import formsRoutes from "./forms.routes.js";
+import studioAiRoutes from "./studio-ai.routes.js";
+import studioVideoRoutes from "./studio-video.routes.js";
+import observabilityRoutes from "./observability.routes.js";
+import bullBoardRoutes from "./bull-board.routes.js";
 
+import furyRoutes from "./fury.routes.js";
+import goalsRoutes from "./goals.routes.js";
+import billingRoutes from "./billing.routes.js";
+import brandKitRoutes from "./brand-kit.routes.js";
+import superadminRoutes from "./superadmin.routes.js";
+import policyRoutes from "./policy.routes.js";
+import plannerRoutes from "./planner.routes.js"; // NOVO
+import wppRoutes from "./wpp.routes.js";
+import faqRoutes from './faq.routes.js';
+import announcementRoutes from './announcement.routes.js';
+import notificationRoutes from './notification.routes.js';
+import rbacRoutes from "./rbac.routes.js";
 
-import furyRoutes from './fury.routes.js';
-import goalsRoutes from './goals.routes.js';
-import billingRoutes from './billing.routes.js';
-import brandKitRoutes from './brand-kit.routes.js';
+import { authMiddleware } from "../middleware/auth.middleware.js";
+import { tenantMiddleware } from "../middleware/tenant.middleware.js";
+import { tenantOrSuperadminMiddleware } from "../middleware/tenantOrSuperadmin.middleware.js";
+import { checkSubscriptionActive } from "../middleware/checkSubscriptionActive.js";
+import { rbacMiddleware } from "../middleware/rbac.middleware.js";
+import { searchMetaLocationsHandler, searchMetaInterestsHandler, findMetaCityByCoordsHandler } from "../controllers/campaigns.controller.js";
+import { createV2Router } from "./v2.routes.js";
+import { controllers } from "../di.js";
 
-import { authMiddleware } from '../middleware/auth.middleware.js';
-import { tenantMiddleware } from '../middleware/tenant.middleware.js';
+const AUTH_TENANT_SUB = [authMiddleware, tenantMiddleware, checkSubscriptionActive];
 
 const router = Router();
 
-router.use('/health', healthRoutes);
-router.use('/auth', authRoutes);
-router.use('/meta', metaRoutes);
+// RBAC global: bloqueia serviços por papel/parceiro (catálogo em lib/rbac-services.ts)
+router.use(rbacMiddleware);
 
-router.use('/metrics', authMiddleware, tenantMiddleware, metricsRoutes);
-router.use('/automation', automationRoutes);
-router.use('/studio', studioRoutes);
-router.use('/campaigns', authMiddleware, tenantMiddleware, campaignRoutes);
-router.use('/budget', budgetRoutes);
-router.use('/instagram', authMiddleware, tenantMiddleware, instagramRoutes);
-router.use('/dashboard', authMiddleware, tenantMiddleware, dashboardRoutes);
-router.use('/fury', furyRoutes);
-router.use('/goals', goalsRoutes);
-router.use('/billing', billingRoutes);
-router.use('/brand-kit', authMiddleware, tenantMiddleware, brandKitRoutes);
+router.use("/health", healthRoutes);
+router.use("/auth", authRoutes);
+router.use('/faqs', faqRoutes);
+router.use('/announcements', announcementRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/rbac', rbacRoutes);
+router.use("/meta", metaRoutes);
+router.use("/google", googleRoutes);
+
+router.use("/metrics", ...AUTH_TENANT_SUB, metricsRoutes);
+router.use("/automation", automationRoutes);
+router.use("/studio/video", ...AUTH_TENANT_SUB, studioVideoRoutes);
+router.use("/studio", studioRoutes);
+
+// Allow superadmin to access meta-locations with explicit tenantId (query param or header)
+router.get("/campaigns/meta-locations", authMiddleware, checkSubscriptionActive, tenantOrSuperadminMiddleware, searchMetaLocationsHandler);
+router.get("/campaigns/meta-interests", authMiddleware, checkSubscriptionActive, tenantOrSuperadminMiddleware, searchMetaInterestsHandler);
+router.get("/campaigns/meta-city-by-coords", authMiddleware, checkSubscriptionActive, tenantOrSuperadminMiddleware, findMetaCityByCoordsHandler);
+
+router.use("/campaigns", ...AUTH_TENANT_SUB, campaignRoutes);
+router.use("/budget", budgetRoutes);
+router.use("/instagram", ...AUTH_TENANT_SUB, instagramRoutes);
+router.use("/dashboard", ...AUTH_TENANT_SUB, dashboardRoutes);
+router.use("/forms", ...AUTH_TENANT_SUB, formsRoutes);
+router.use("/fury", furyRoutes);
+router.use("/goals", goalsRoutes);
+router.use("/billing", billingRoutes);
+// Política de uso: auth+tenant (sem checkSubscriptionActive) — o aceite vem
+// ANTES do onboarding/planos, e usuário novo ainda não tem assinatura.
+router.use("/policy", authMiddleware, tenantMiddleware, policyRoutes);
+router.use("/brand-kit", ...AUTH_TENANT_SUB, brandKitRoutes);
+router.use("/studio/ai", studioAiRoutes);
+router.use(
+  "/observability",
+  ...AUTH_TENANT_SUB,
+  observabilityRoutes,
+);
+router.use("/admin", superadminRoutes);
+router.use("/admin/queues", bullBoardRoutes);
+router.use("/planner", ...AUTH_TENANT_SUB, plannerRoutes); // NOVO
+router.use("/wpp", wppRoutes);
+
+// Endpoints v2 (dados Meta direto do banco + fallback stale) — reversão = só não usar o path.
+router.use("/v2", authMiddleware, tenantMiddleware, createV2Router(controllers.metaSyncV2));
 
 export default router;

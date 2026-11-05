@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -6,7 +6,12 @@ import { z } from 'zod';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { useLogin } from '@/hooks/useLogin';
-import { DEMO_CREDENTIALS } from '@/lib/constants';
+import { AdySymbol } from '@/components/AdySymbol';
+import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton';
+import { FacebookLoginButton } from '@/components/auth/FacebookLoginButton';
+import { consumeFacebookHandoff, readSocialError, stripSocialParams } from '@/lib/social-login';
+import { login as authLogin } from '@/store/slices/authSlice';
+import { store } from '@/store';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -30,16 +35,61 @@ function getFriendlyError(err: unknown): string {
 export function LoginPage() {
   const navigate = useNavigate();
   const loginMutation = useLogin();
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    // Handle social login redirect
+    const params = new URLSearchParams(window.location.search);
+    const socialData = params.get('social_login');
+    if (socialData) {
+      try {
+        const data = JSON.parse(decodeURIComponent(socialData));
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        store.dispatch(authLogin({
+          token: data.token,
+          refreshToken: data.refreshToken,
+          name: data.user.name,
+          email: data.user.email,
+          role: data.user.role ?? null,
+          tenantId: data.user.tenantId,
+          policy: data.policy ?? null,
+        }));
+        navigate('/dashboard');
+        return;
+      } catch {
+        setError('Erro ao fazer login com Google');
+      }
+    }
+
+    const socialErr = readSocialError(window.location.search);
+    if (socialErr) {
+      setError(socialErr);
+      stripSocialParams();
+      return;
+    }
+
+    // Retorno do login com Facebook: troca o handoff id pela sessão (sem token na URL)
+    consumeFacebookHandoff(window.location.search)
+      .then((session) => {
+        if (!session) return;
+        stripSocialParams();
+        navigate(session.isNewUser ? '/onboarding/conectar-meta' : '/dashboard');
+      })
+      .catch(() => {
+        setError('Não foi possível concluir o login com Facebook. Tente novamente.');
+        stripSocialParams();
+      });
+    }, [navigate]);
 
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors },
   } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
+    resolver: zodResolver(loginSchema as any),
     defaultValues: { email: '', password: '' },
   });
 
@@ -53,143 +103,133 @@ export function LoginPage() {
     }
   };
 
-  const fillDemo = () => {
-    setValue('email', DEMO_CREDENTIALS.email, { shouldValidate: false });
-    setValue('password', DEMO_CREDENTIALS.password, { shouldValidate: false });
-    setError('');
-  };
+  // Classe dos inputs atualizada com HOVER
+  const inputClass =
+  'w-full rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/80 dark:bg-[#12130F] px-4 py-3 text-sm text-slate-900 dark:text-white outline-none transition-all duration-200 placeholder:text-slate-400 dark:placeholder:text-zinc-500 hover:border-[#1E88A8] hover:ring-2 hover:ring-[#1E88A8]/20 hover:bg-white dark:hover:bg-[#12130F] focus:border-[#1E88A8] focus:bg-white dark:focus:bg-[#12130F] focus:ring-2 focus:ring-[#1E88A8]/20';
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center px-4">
-      <div className="w-full max-w-[400px]">
+    <div className="relative flex min-h-screen items-center justify-center bg-[#f3f6f8] dark:bg-[#0c0d0a] px-5 py-16 text-slate-900 dark:text-white transition-colors duration-300 overflow-hidden">
+      
+      {/* 🌌 GRID DE FUNDO */}
+      <div 
+        aria-hidden 
+        className="pointer-events-none absolute inset-0 opacity-[0.08] dark:opacity-[0.05]"
+        style={{
+          backgroundImage: `radial-gradient(#1E88A8 1px, transparent 1px)`,
+          backgroundSize: '24px 24px'
+        }}
+      />
 
-        {/* Logo + tagline */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#EA580C] mb-4">
-            <span className="text-white font-black text-xl">F</span>
+      {/* 🌟 GLOW APENAS AZUL */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `radial-gradient(circle at 50% -10%, rgba(30, 136, 168, 0.22) 0%, transparent 60%)`,
+        }}
+      />
+
+      <div className="relative z-10 w-full max-w-[400px]">
+        {/* Cabeçalho */}
+        <div className="flex flex-col items-center text-center">
+          <div className="p-2">
+            <AdySymbol size={52} />
           </div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">FURY</h1>
-          <p className="text-sm text-gray-400 mt-1">Automação de tráfego pago com IA</p>
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900 dark:text-white">ady</h1>
+          <p className="!mt-1.5 text-sm font-medium text-slate-500 dark:text-zinc-400">Seu gestor de tráfego com IA</p>
         </div>
 
-        {/* Form card */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-          <form onSubmit={handleSubmit(onSubmit)} noValidate>
-            <div className="space-y-4">
-
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  E-mail
-                </label>
-                <input
-                  type="email"
-                  placeholder="seu@email.com"
-                  autoComplete="email"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors"
-                  {...register('email')}
-                />
-                {errors.email?.message && (
-                  <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>
-                )}
-              </div>
-
-              {/* Password */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Senha
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 pr-11 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#EA580C]/30 focus:border-[#EA580C] transition-colors"
-                    {...register('password')}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                    aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                  >
-                    {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
-                  </button>
-                </div>
-                {errors.password?.message && (
-                  <p className="text-xs text-red-500 mt-1">{errors.password.message}</p>
-                )}
-              </div>
-
-            </div>
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loginMutation.isPending}
-              className="w-full mt-6 bg-[#EA580C] hover:bg-[#D4520B] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
-            >
-              {loginMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Entrando...
-                </>
-              ) : (
-                'Entrar'
-              )}
-            </button>
-
-            {/* Error */}
-            {error && (
-              <p className="text-sm text-red-500 text-center mt-3">{error}</p>
+        {/* Card do Formulário */}
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="mt-8 space-y-5 rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white/95 dark:bg-[#181915] p-7 shadow-[0_12px_32px_-8px_rgba(15,23,42,0.08)] dark:shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)] backdrop-blur-md transition-all"
+        >
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-slate-700 dark:text-zinc-300">E-mail</span>
+            <input
+              type="email"
+              placeholder="seu@email.com"
+              autoComplete="email"
+              className={inputClass}
+              {...register('email')}
+            />
+            {errors.email?.message && (
+              <span className="mt-2 block text-xs font-medium text-red-500">{errors.email.message}</span>
             )}
-          </form>
+          </label>
 
-          {/* Sign up link */}
-          <p className="text-sm text-gray-500 text-center mt-4">
+          <label className="block">
+            <span className="mb-2 flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-slate-700 dark:text-zinc-300">Senha</span>
+              <Link
+                to="/forgot-password"
+                className="text-xs font-medium text-[#17708A] dark:text-[#1E88A8] dark:hover:text-[#17708A] hover:underline transition-colors"
+              >
+                Esqueci a senha
+              </Link>
+            </span>
+            <span className="relative block">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                className={`${inputClass} pr-11`}
+                {...register('password')}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-white transition-colors"
+              >
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </span>
+            {errors.password?.message && (
+              <span className="mt-2 block text-xs font-medium text-red-500">{errors.password.message}</span>
+            )}
+          </label>
+
+          <button
+            type="submit"
+            disabled={loginMutation.isPending}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#17708A] py-3 text-sm font-semibold text-white shadow-md shadow-[#17708A]/20 transition-all duration-200 [&:hover:not(:disabled)]:!bg-[#145E74] [&:hover:not(:disabled)]:shadow-lg [&:hover:not(:disabled)]:-translate-y-0.5 active:scale-[0.99] disabled:opacity-60"
+          >
+            {loginMutation.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Entrando...
+              </>
+            ) : (
+              'Entrar'
+            )}
+          </button>
+
+          <div className="relative flex items-center justify-center">
+            <div className="w-full border-t border-slate-200 dark:border-white/10" />
+            <span className="absolute px-3 text-xs text-slate-400 dark:text-zinc-500 bg-white dark:bg-[#181915]">ou</span>
+          </div>
+
+          <GoogleLoginButton label="Entrar com Google" />
+
+          <FacebookLoginButton />
+
+          {error && (
+            <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-center text-xs font-medium text-red-600 dark:text-red-400">
+              {error}
+            </p>
+          )}
+
+          <p className="text-center text-sm text-slate-600 dark:text-zinc-400">
             Não tem conta?{' '}
-            <Link
-              to="/cadastro"
-              className="text-[#EA580C] font-semibold hover:underline"
-            >
+            <Link to="/cadastro" className="font-semibold text-[#17708A] dark:text-[#1E88A8] underline underline-offset-2 transition-colors">
               Criar conta gratuita
             </Link>
           </p>
-        </div>
-
-        {/* Demo credentials */}
-        <div className="mt-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-              Credenciais Demo
-            </span>
-            <span className="bg-[#EA580C] text-white text-xs px-2 py-0.5 rounded-full font-semibold">
-              DEMO
-            </span>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-gray-500 shrink-0">Email:</span>
-              <code className="font-mono text-xs bg-white border border-gray-200 rounded px-2 py-1 text-gray-700 truncate">
-                {DEMO_CREDENTIALS.email}
-              </code>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-gray-500 shrink-0">Senha:</span>
-              <code className="font-mono text-xs bg-white border border-gray-200 rounded px-2 py-1 text-gray-700">
-                {DEMO_CREDENTIALS.password}
-              </code>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={fillDemo}
-            className="mt-3 text-xs text-[#EA580C] underline cursor-pointer hover:text-[#D4520B] transition-colors"
-          >
-            Preencher automaticamente
-          </button>
-        </div>
-
+          <p className="text-center text-xs text-slate-500 dark:text-zinc-500">
+            Precisa de ajuda? <Link to="/ajuda" className="underline hover:text-[#17708A]">Acesse a Central de ajuda</Link>
+          </p>
+        </form>
       </div>
     </div>
   );

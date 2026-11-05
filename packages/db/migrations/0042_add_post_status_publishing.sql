@@ -1,0 +1,3 @@
+-- Migração: adiciona 'publishing' ao enum post_status (claim de publicação)
+-- ALTER TYPE ... ADD VALUE é feito via afterHook em migrate.ts
+-- Ver plan: .hermes/plans/2026-09-23_135445-publish-now-endpoint.md

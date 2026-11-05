@@ -38,7 +38,9 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  grafana_data:
 
 networks:
   fury-network:
     driver: bridge
+    

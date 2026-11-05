@@ -55,9 +55,176 @@ const STEPS: MigrationStep[] = [
   { tag: '0012_add_brand_kits' },
   { tag: '0013_meta_connections_dedupe_unique' },
   { tag: '0014_add_asset_selection' },
+  { tag: '0015_form_submissions' },
+  { tag: '0015_add_request_logs' },
+  { tag: '0016_fix_request_logs_user_id' },
+  { tag: '0018_add_audience_defaults' },
+  { tag: '0020_add_referer_to_request_logs' },
+  { tag: '0021_add_auth_fields_to_users' },
+  {
+    tag: '0019_add_superadmin_role',
+    afterHook: async (client) => {
+      // Seed superadmin user if env vars are set
+      const email = process.env.SUPERADMIN_EMAIL;
+      const password = process.env.SUPERADMIN_PASSWORD;
+      if (email && password) {
+        const existing = await client`SELECT id FROM "users" WHERE email = ${email}`;
+        if (existing.length === 0) {
+          const bcrypt = await import('bcrypt');
+          const hash = await bcrypt.hash(password, 10);
+          // Create a tenant for the superadmin
+          const [tenant] = await client`
+            INSERT INTO "tenants" (name, slug)
+            VALUES ('FURY Superadmin', 'fury-superadmin')
+            RETURNING id
+          `;
+          await client`
+            INSERT INTO "users" (tenant_id, email, password_hash, role, name)
+            VALUES (${tenant.id}, ${email}, ${hash}, 'superadmin', 'FURY Admin')
+          `;
+          console.log('    + superadmin user created');
+        } else {
+          console.log('    + superadmin user already exists');
+        }
+      } else {
+        console.log('    - SUPERADMIN_EMAIL/PASSWORD not set, skipping superadmin seed');
+      }
+    },
+  },
+  { tag: '0021_add_tenant_codigo' },
+  { tag: '0022_add_tenant_business_context' },
+  { tag: '0023_planner_tables' },
+  { tag: '0024_add_reel_post_type' },
+  { tag: '0025_add_is_non_expirable_to_subscriptions' },
+  { tag: '0026_add_creative_quota_limits' },
+  { tag: '0027_add_missing_planner_columns' },
+  { tag: '0028_google_meu_negocio' },
+  { tag: '0028_add_missing_post_status_values' },
+  { tag: '0029_google_social_login' },
+  { tag: '0030_add_calendar_date_to_social_posts' },
+  {
+    tag: '0031_add_post_status_rejected_confirmed',
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "post_status" ADD VALUE IF NOT EXISTS 'rejected'`);
+      await client.unsafe(`ALTER TYPE "post_status" ADD VALUE IF NOT EXISTS 'confirmed'`);
+      console.log('    + added rejected, confirmed to post_status');
+    },
+  },
+  { tag: '0031_migrate_carousel_images' },
+  {
+    tag: '0030_workflow_jobs',
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "workflow_status" ADD VALUE IF NOT EXISTS 'awaiting_images'`);
+      console.log('    + added awaiting_images to workflow_status');
+    },
+  },
+  { tag: '0011_fr8_publish_retry',
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "post_status" ADD VALUE IF NOT EXISTS 'failed'`);
+      console.log('    + added failed to post_status');
+    },
+  },
+  { tag: '0032_add_budget_optimizations' },
+  { tag: '0033_add_workflow_jobs_metadata',
+    // Safety: garante o valor 'awaiting_images' no enum workflow_status mesmo
+    // quando a tabela/enum vieram de snapshot sem rodar o afterHook da 0030
+    // (banco sem o valor quebra toda geração do planner na stage image-generation).
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "workflow_status" ADD VALUE IF NOT EXISTS 'awaiting_images'`);
+      console.log('    + ensured awaiting_images on workflow_status');
+    },
+  },
+{ tag: '0034_add_compliance_attempts' },
+  { tag: '0035_add_creative_asset_cost_time' },
+  { tag: '0036_facebook_social_login' },
+  { tag: '0037_policy_tables' },
+  { tag: '0038_creative_asset_versioning_archive' },
+  { tag: '0039_add_selected_instagram_binding' },
+  { tag: '0040_policy_reorder_reembolso' },
+  { tag: '0041_wpp_verification' },
+  {
+    tag: '0042_add_post_status_publishing',
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "post_status" ADD VALUE IF NOT EXISTS 'publishing'`);
+      console.log('    + added publishing to post_status');
+    },
+  },
+  { tag: '0043_meta_sync_tables' },
+  { tag: '0044_meta_lead_form_unknown' },
+  { tag: '0045_meta_campaign_daily_insights' },
+  { tag: '0046_meta_sync_scopes' },
+  { tag: '0046_lead_status' },
+  { tag: '0047_faqs' },
+  { tag: '0048_meta_healthchecks' },
+  { tag: '0049_brand_kit_photos' },
+  { tag: '0050_announcements' },
+  { tag: '0051_brand_kit_photo_panel_visibility' },
+  { tag: '0051_ady_rbac_partners' },
+  { tag: '0052_soft_delete_tenants_users' },
+  { tag: '0053_notifications' },
+  { tag: '0054_subscription_renewal_events' },
+  { tag: '0055_trial_plan_technical_key' },
 ];
 
-async function runMigrate() {
+/** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
+export const REQUIRED_TABLES = [
+  'tenants',
+  'users',
+  'meta_connections',
+  'campaigns',
+  'creative_assets',
+  'client_goals',
+  'fury_insights',
+  'automation_rules',
+  'budget_optimizations',
+  'performance_rules',
+  'performance_scores',
+  'rule_executions',
+  'fury_config',
+  'form_submissions',
+  'plans',
+  'subscriptions',
+  'subscription_renewal_events',
+  'invoices',
+  'brand_kits',
+  'brand_kit_photos',
+  'request_logs',
+  'campaign_plans',
+  'social_posts',
+  'workflow_jobs',
+  'google_connections',
+  'google_business_profiles',
+  'business_profile_settings',
+  'google_sync_logs',
+  'policy_versions',
+  'policy_acceptances',
+  'wpp_verifications',
+  'wpp_webhook_events',
+  'meta_campaign_snapshots',
+  'meta_campaign_daily_insights',
+  'meta_leads',
+  'meta_instagram_media',
+  'meta_sync_runs',
+  'meta_healthchecks',
+  'faqs',
+  'faq_slug_redirects',
+  'announcements',
+  'announcement_views',
+  'ady_rbac_roles',
+  'ady_partners',
+  'ady_rbac_services',
+  'ady_rbac_views',
+  'ady_rbac_services_blocked',
+  'ady_rbac_views_blocked',
+  'ady_rbac_audit_log',
+  'notifications',
+];
+
+/**
+ * Executa todas as migrations pendentes.
+ * Idempotente: pode ser chamado múltiplas vezes.
+ */
+export async function runMigrations(): Promise<void> {
   const client = postgres(connectionString, { max: 1 });
 
   try {
@@ -119,7 +286,54 @@ async function runMigrate() {
   }
 }
 
-runMigrate().catch((err) => {
-  console.error('Migration failed:', err);
-  process.exit(1);
-});
+/**
+ * Valida se todas as tabelas obrigatórias existem no banco.
+ * Retorna { ok: true, missing: [] } se todas existirem,
+ * ou { ok: false, missing: string[] } com as tabelas faltantes.
+ */
+export async function validateRequiredTables(): Promise<{ ok: boolean; missing: string[] }> {
+  const client = postgres(connectionString, { max: 1 });
+
+  try {
+    const rows = await client<{ table_name: string }[]>`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+    `;
+    const existingTables = new Set(rows.map((r) => r.table_name));
+    const missing = REQUIRED_TABLES.filter((t) => !existingTables.has(t));
+
+    if (missing.length === 0) {
+      console.log('[validateRequiredTables] All required tables exist');
+      return { ok: true, missing: [] };
+    }
+
+    console.error('[validateRequiredTables] Missing tables:', missing);
+    return { ok: false, missing };
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Executa migrations e valida tabelas — uso principal no boot da API.
+ */
+export async function runMigrationsAndValidate(): Promise<void> {
+  await runMigrations();
+  const validation = await validateRequiredTables();
+  if (!validation.ok) {
+    throw new Error(`Migration validation failed: missing tables ${validation.missing.join(', ')}`);
+  }
+}
+
+// CLI entry point — only runs when file is executed directly
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
+  runMigrations().catch((err) => {
+    console.error('Migration failed:', err);
+    console.error('Stack:', err?.stack);
+    console.error('Error details:', JSON.stringify(err, null, 2));
+    process.exit(1);
+  });
+}

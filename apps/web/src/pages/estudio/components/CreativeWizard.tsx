@@ -187,13 +187,17 @@ export function CreativeWizard({ onGenerate, onSaveToLibrary, submitting, onBack
   };
 
   // Handlers totalmente independentes — não compartilham mutation nem side effect.
-  const handleCreate = (copy: CreativeCopyFields) => {
+  const handleCreate = async (copy: CreativeCopyFields) => {
     const payload = buildPayload(copy);
-    if (payload) onGenerate(payload);
+    if (payload) {
+      onGenerate(payload);
+    }
   };
   const handleSaveToLibrary = async (copy: CreativeCopyFields) => {
     const payload = buildPayload(copy);
-    if (payload) await onSaveToLibrary(payload);
+    if (payload) {
+      await onSaveToLibrary(payload);
+    }
   };
 
   // ── Sub-telas do fluxo de layout ──────────────────────────────────────────

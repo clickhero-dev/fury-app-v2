@@ -1,0 +1,198 @@
+import { DatabaseMetricsProvider } from './lib/providers/db-metrics.provider.js';
+import { MockMetricsProvider } from './lib/providers/mock-metrics.provider.js';
+import type { IMetricsProvider } from './lib/providers/metrics.provider.js';
+import { GoalService } from './services/goals/goal.service.js';
+import { GoalController } from './controllers/goal.controller.js';
+import { BrandKitService } from './services/brand-kit/brand-kit.service.js';
+import { BrandKitController } from './controllers/brand-kit.controller.js';
+import { BrandKitPhotoService } from './services/brand-kit/brand-kit-photo.service.js';
+import { BrandKitPhotoController } from './controllers/brand-kit-photo.controller.js';
+import { FuryEngineService } from './services/fury/fury-engine.service.js';
+import { FuryController } from './controllers/fury.controller.js';
+import { StudioAiService } from './services/studio/studio-ai.service.js';
+import { StudioAiController } from './controllers/studio-ai.controller.js';
+import { StudioVideoService } from './services/studio/studio-video.service.js';
+import { StudioVideoController } from './controllers/studio-video.controller.js';
+import { enqueueStudioVideo } from './workers/studio-video.worker.js';
+import { StudioService } from './services/studio/creative-studio.service.js';
+import { StudioPublishingService } from './services/studio/studio-publishing.service.js';
+import { CreativeStudioController } from './controllers/creative-studio.controller.js';
+import { StudioPublishingController } from './controllers/studio-publishing.controller.js';
+import { BillingService } from './services/billing/billing.service.js';
+import { BillingController } from './controllers/billing.controller.js';
+import { PolicyService } from './services/policy/policy.service.js';
+import { PolicyController } from './controllers/policy.controller.js';
+import { ObservabilityService } from './services/observability/observability.service.js';
+import { ObservabilityController } from './controllers/observability.controller.js';
+import { FormsService } from './services/forms/forms.service.js';
+import { FormsController } from './controllers/forms.controller.js';
+import { AutomationService } from './services/automation/automation.service.js';
+import { AutomationController } from './controllers/automation.controller.js';
+import { AuthService } from './services/core/auth.service.js';
+import { SocialAuthService } from './services/core/social-auth.service.js';
+import { AuthController } from './controllers/auth.controller.js';
+import { UazapiClient } from './lib/uazapi-client.js';
+import { WppWebhookRepository } from './repository/wpp-webhook.repository.js';
+import { WppVerificationRepository } from './repository/wpp-verification.repository.js';
+import { WppWebhookService } from './services/wpp/wpp-webhook.service.js';
+import { WppVerificationService } from './services/wpp/wpp-verification.service.js';
+import { WppWebhookController } from './controllers/wpp-webhook.controller.js';
+import { WppVerificationController } from './controllers/wpp-verification.controller.js';
+import { MetricsService } from './services/campaigns/metrics.service.js';
+import { MetricsController } from './controllers/metrics.controller.js';
+import { GoogleService, googleService } from './services/google/google.service.js';
+import { GoogleController } from './controllers/google.controller.js';
+import { MetaService, metaService } from './services/meta/meta.service.js';
+import { MetaController } from './controllers/meta.controller.js';
+import { instagramService } from './services/meta/instagram.service.js';
+import { InstagramController } from './controllers/instagram.controller.js';
+import { getInstagramDashboardInsights } from './services/meta/instagram.service.js';
+import { plannerService } from './services/planner/planner.service.js';
+import { PlannerController } from './controllers/planner.controller.js';
+import { DashboardController } from './controllers/dashboard.controller.js';
+import { BudgetOptimizerService } from './services/campaigns/budget-optimizer.service.js';
+import { BudgetController } from './controllers/budget.controller.js';
+import { campaignsService } from './services/campaigns/campaigns.service.js';
+import { CampaignRepository } from './repository/campaign.repository.js';
+import { CampaignsController } from './controllers/campaigns.controller.js';
+import { metaSyncService } from './services/meta/meta-sync.service.js';
+import { MetaSyncV2Controller } from './controllers/meta-sync.controller.js';
+import { MetaSyncRepository } from './repository/meta-sync.repository.js';
+import { enqueueMetaSyncTenantRun } from './workers/meta-sync.worker.js';
+import { SuperAdminRepository } from './repository/superadmin.repository.js';
+import { SuperAdminController } from './controllers/superadmin.controller.js';
+import { PartnerRepository } from './repository/partner.repository.js';
+import { PartnerController } from './controllers/partner.controller.js';
+import { PermissionsController } from './controllers/permissions.controller.js';
+import { RbacRepository } from './repository/rbac.repository.js';
+import { ClickUpTicketsClient } from './lib/clickup-tickets.client.js';
+import { TicketService } from './services/tickets/ticket.service.js';
+import { TicketsController } from './controllers/tickets.controller.js';
+import { FaqRepository } from './repository/faq.repository.js';
+import { FaqController } from './controllers/faq.controller.js';
+import { AnnouncementRepository } from './repository/announcement.repository.js';
+import { AnnouncementController } from './controllers/announcement.controller.js';
+import { MetaHealthcheckRepository } from './repository/meta-healthcheck.repository.js';
+import { metaHealthcheckService } from './services/meta/meta-healthcheck.service.js';
+import { MetaHealthcheckController } from './controllers/meta-healthcheck.controller.js';
+import { PlannerCaptionSuggestionService } from './services/planner/planner-caption-suggestion.service.js';
+import { StudioRepository } from './repository/studio.repository.js';
+import { openrouterService } from './services/llms/openrouter.service.js';
+import { NotificationRepository } from './repository/notification.repository.js';
+import { NotificationService } from './services/notifications/notification.service.js';
+import { NotificationController } from './controllers/notification.controller.js';
+import { emitToUser } from './lib/sse.js';
+import { BusinessContextService } from './services/core/business-context.service.js';
+import { BusinessContextController } from './controllers/business-context.controller.js';
+
+/**
+ * Composition root (DI) da API.
+ *
+ * Instancia uma vez: repositórios, serviços externos, services-classe e controllers.
+ * As rotas/controllers importam os singletons daqui — nunca fazem `new <Service>()`
+ * dentro de handlers. Novos domínios adicionam suas instâncias aqui (Fase 0 — ADR-0001).
+ */
+const metricsProvider: IMetricsProvider =
+  process.env.META_USE_MOCK === 'true' && process.env.NODE_ENV !== 'production'
+    ? new MockMetricsProvider()
+    : new DatabaseMetricsProvider();
+
+export const goalService = new GoalService(metricsProvider);
+export const brandKitService = new BrandKitService();
+export const brandKitPhotoService = new BrandKitPhotoService();
+export const furyEngineService = new FuryEngineService();
+export const studioAiService = new StudioAiService();
+export const studioVideoService = new StudioVideoService({
+  enqueue: enqueueStudioVideo,
+  brand: (tenantId) => studioAiService.getBrandContext(tenantId),
+});
+export const studioService = new StudioService();
+export const studioPublishingService = new StudioPublishingService();
+export const billingService = new BillingService();
+export const policyService = new PolicyService();
+export const observabilityService = new ObservabilityService();
+export const formsService = new FormsService();
+export const automationService = new AutomationService();
+export const authService = new AuthService();
+export const businessContextService = new BusinessContextService();
+export const businessContextController = new BusinessContextController(businessContextService);
+export const socialAuthService = new SocialAuthService();
+export const metricsService = new MetricsService(metricsProvider);
+export const budgetOptimizerService = new BudgetOptimizerService();
+export { metaSyncService };
+
+// SuperAdmin (GLOBAL) — único repositório/controller não escopado por tenant.
+export const superAdminRepository = new SuperAdminRepository("");
+export const clickUpTicketsClient = new ClickUpTicketsClient();
+export const ticketService = new TicketService(clickUpTicketsClient);
+export const faqRepository = new FaqRepository();
+export const announcementRepository = new AnnouncementRepository();
+export const metaHealthcheckRepository = new MetaHealthcheckRepository();
+export const plannerCaptionSuggestionService = new PlannerCaptionSuggestionService(
+  openrouterService,
+  (tenantId) => new StudioRepository(tenantId),
+);
+export const notificationRepository = new NotificationRepository();
+export const notificationService = new NotificationService(notificationRepository, (tenantId, userId) => emitToUser(tenantId, userId, 'notifications.changed', { version: 1 }));
+
+// WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
+// verificação tenant-bound via factory (padrão CampaignRepository).
+export const uazapiClient = new UazapiClient();
+export const wppWebhookRepository = new WppWebhookRepository();
+export const wppWebhookService = new WppWebhookService(
+  wppWebhookRepository,
+  (tenantId: string) => new WppVerificationRepository(tenantId),
+);
+export const wppVerificationService = new WppVerificationService(
+  uazapiClient,
+  (tenantId: string) => new WppVerificationRepository(tenantId),
+);
+
+export const controllers = {
+  tickets: new TicketsController(ticketService),
+  faq: new FaqController(faqRepository),
+  announcement: new AnnouncementController(announcementRepository),
+  metaHealthchecks: new MetaHealthcheckController(metaHealthcheckRepository, metaHealthcheckService),
+  notification: new NotificationController(notificationService),
+  goal: new GoalController(goalService),
+  brandKit: new BrandKitController(brandKitService),
+  brandKitPhotos: new BrandKitPhotoController(brandKitPhotoService),
+  fury: new FuryController(furyEngineService),
+  studioAi: new StudioAiController(studioAiService),
+  studioVideo: new StudioVideoController(studioVideoService),
+  studio: new CreativeStudioController(studioService),
+  studioPublishing: new StudioPublishingController(studioPublishingService),
+  billing: new BillingController(billingService),
+  policy: new PolicyController(policyService),
+  observability: new ObservabilityController(observabilityService),
+  forms: new FormsController(formsService),
+  metrics: new MetricsController(metricsService),
+  auth: new AuthController(authService, socialAuthService, policyService),
+  businessContext: businessContextController,
+  automation: new AutomationController(automationService),
+  google: new GoogleController(googleService),
+  meta: new MetaController(metaService),
+  instagram: new InstagramController(instagramService, metaService),
+  planner: new PlannerController(
+    plannerService,
+    plannerCaptionSuggestionService,
+  ),
+  dashboard: new DashboardController(getInstagramDashboardInsights),
+  budget: new BudgetController(budgetOptimizerService),
+  superadmin: new SuperAdminController(superAdminRepository),
+  partners: new PartnerController(new PartnerRepository(), superAdminRepository),
+  permissions: new PermissionsController(new RbacRepository(), new PartnerRepository()),
+  campaigns: new CampaignsController(
+    campaignsService,
+    (tenantId: string) => new CampaignRepository(tenantId),
+  ),
+  metaSyncV2: new MetaSyncV2Controller(
+    metaSyncService,
+    (tenantId: string) => new MetaSyncRepository(tenantId),
+    enqueueMetaSyncTenantRun,
+  ),
+  wppWebhook: new WppWebhookController(wppWebhookService),
+  wppVerify: new WppVerificationController(wppVerificationService),
+};
+
+export { metricsProvider };

@@ -7,6 +7,7 @@ export interface MetaLocationOption {
   name: string;
   region?: string;
   country_code?: string;
+  type?: string;
 }
 
 interface MetaLocationsResponse {
@@ -14,7 +15,8 @@ interface MetaLocationsResponse {
   data: MetaLocationOption[];
 }
 
-export function useMetaLocations(query: string) {
+// types omitido = só cidades (Passo 3)
+export function useMetaLocations(query: string, tenantId?: string, types?: string[]) {
   const [debouncedQuery, setDebouncedQuery] = useState(query);
 
   useEffect(() => {
@@ -25,10 +27,15 @@ export function useMetaLocations(query: string) {
   const enabled = debouncedQuery.trim().length >= 2;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['campaigns/meta-locations', debouncedQuery],
+    queryKey: ['campaigns/meta-locations', debouncedQuery, tenantId, types?.join(',')],
     queryFn: async () => {
+      const params: { q: string; tenantId?: string; types?: string } = { q: debouncedQuery };
+      if (tenantId) {
+        params.tenantId = tenantId;
+      }
+      if (types?.length) params.types = types.join(',');
       const response = await api.get<MetaLocationsResponse>('/campaigns/meta-locations', {
-        params: { q: debouncedQuery },
+        params,
       });
       return response.data.data;
     },

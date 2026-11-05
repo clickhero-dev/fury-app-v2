@@ -1,41 +1,37 @@
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { hasLifetimeAccess } from '@/lib/platform-role';
 
 export type ConfiguracoesTab =
   | 'geral'
-  | 'notificacoes'
   | 'seguranca'
-  | 'equipe'
   | 'faturamento'
-  | 'integracoes'
-  | 'fury'
-  | 'brand-kit';
+  | 'publico'
+  | 'metas';
 
 const TAB_LABELS: { value: ConfiguracoesTab; label: string; to: string }[] = [
   { value: 'geral', label: 'Geral', to: '/configuracoes?tab=geral' },
-  { value: 'notificacoes', label: 'Notificações', to: '/configuracoes?tab=notificacoes' },
   { value: 'seguranca', label: 'Segurança', to: '/configuracoes?tab=seguranca' },
-  { value: 'equipe', label: 'Equipe', to: '/configuracoes?tab=equipe' },
   { value: 'faturamento', label: 'Faturamento', to: '/configuracoes?tab=faturamento' },
-  { value: 'integracoes', label: 'Integrações', to: '/configuracoes?tab=integracoes' },
-  { value: 'fury', label: 'FURY Engine', to: '/configuracoes?tab=fury' },
-  { value: 'brand-kit', label: 'Dados da Marca', to: '/configuracoes/brand-kit' },
+  { value: 'publico', label: 'Dados da Marca e Público', to: '/configuracoes?tab=publico' },
+  { value: 'metas', label: 'Metas', to: '/configuracoes?tab=metas' },
 ];
 
 export function ConfiguracoesTabsNav({ activeTab }: { activeTab: ConfiguracoesTab }) {
   return (
-    <div className="flex overflow-x-auto scrollbar-none border-b border-border gap-0">
-      {TAB_LABELS.map(({ value, label, to }) => {
+    <div className="flex w-full justify-center items-center overflow-x-auto border-b border-slate-200 dark:border-[#262824] gap-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      {/* conta vitalícia (parceiro) não tem faturamento */}
+      {TAB_LABELS.filter((t) => !(t.value === 'faturamento' && hasLifetimeAccess())).map(({ value, label, to }) => {
         const isActive = activeTab === value;
         return (
           <Link
             key={value}
             to={to}
             className={cn(
-              'flex items-center gap-2 px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors',
+              'flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors duration-200',
               isActive
-                ? 'border-accent text-accent'
-                : 'border-transparent text-text-secondary hover:text-text-primary hover:border-border'
+                ? 'border-[#1E88A8] !text-[#17708A] dark:!text-[#1E88A8] font-semibold'
+                : 'border-transparent text-slate-600 hover:!text-[#17708A] dark:text-[#9BA1A6] dark:hover:!text-[#1E88A8] hover:border-[#1E88A8]/30'
             )}
           >
             {label}

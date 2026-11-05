@@ -1,7 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
-import * as metaService from '../services/meta.service.js';
+import { verifyOAuthState, type MetaService } from '../services/meta/meta.service.js';
+import { emailService } from '../services/email/email.service.js';
+import { sendToTenant } from '../services/email/notify.js';
+import { invalidateHttpCache } from '../lib/http-cache.js';
+import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
 
 const callbackQuerySchema = z.object({
   code: z.string().min(1, 'Code OAuth ausente'),
@@ -10,6 +14,10 @@ const callbackQuerySchema = z.object({
 
 const authUrlQuerySchema = z.object({
   context: z.enum(['onboarding', 'settings']).default('onboarding'),
+  frontendUrl: z.string().url('frontendUrl invalida').optional(),
+  // Reconexão explícita (botão "Reconectar Meta"): auth_type=rerequest na URL de
+  // OAuth — re-exibe permissões já declinadas, que sem a flag são omitidas.
+  rerequest: z.union([z.literal('true'), z.literal('1')]).optional(),
 });
 
 const connectionIdSchema = z.object({
@@ -20,267 +28,318 @@ const selectAdAccountBodySchema = z.object({
   adAccountId: z.string().min(1, 'adAccountId obrigatorio'),
 });
 
-export async function getAuthUrl(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.user?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no token JWT.');
+/** Controller Meta — glue HTTP fino. Recebe o service no construtor (injeção). */
+export class MetaController {
+  constructor(private metaService: MetaService) {}
+
+  getAuthUrl = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no token JWT.');
+      }
+      const { context, frontendUrl, rerequest } = authUrlQuerySchema.parse(req.query);
+      // Origin do frontend que iniciou o fluxo: query explícita OU header Origin
+      // do browser (fallback). O redirect pós-OAuth volta ao MESMO ambiente
+      // (app.useady.com.br / HMG / localhost), sem depender de FRONTEND_URL.
+      const origin = frontendUrl ?? (req.headers.origin as string | undefined);
+      const authUrl = this.metaService.generateMetaAuthUrl(req.user.tenantId, context, origin, {
+        rerequest: rerequest === 'true' || rerequest === '1',
+      });
+      res.status(200).json({
+        success: true,
+        data: { authUrl },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
     }
-    const { context } = authUrlQuerySchema.parse(req.query);
-    const authUrl = metaService.generateMetaAuthUrl(req.user.tenantId, context);
-    res.status(200).json({
-      success: true,
-      data: { authUrl },
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
+  };
 
-export async function authCallback(req: Request, res: Response, next: NextFunction) {
-  const frontendUrl = process.env.FRONTEND_URL ?? 'https://fury-app-v2-web.vercel.app';
+  authCallback = async (req: Request, res: Response, next: NextFunction) => {
+    const frontendUrl = process.env.FRONTEND_URL;
 
-  try {
-    const query = callbackQuerySchema.parse(req.query);
-
-    const { returnUrl } = await metaService.handleMetaOAuthCallback(query.code, query.state);
-
-    res.redirect(`${frontendUrl}${returnUrl}`);
-  } catch (error) {
-    // Erros de token/state OAuth redirecionam para integracoes; falhas na busca de
-    // ativos sao tratadas no service e nao chegam aqui (conexao ja persistida).
-    console.error('[OAuth Callback] ERRO:', error);
-    res.redirect(`${frontendUrl}/configuracoes/integracoes?error=oauth_cancelled`);
-  }
-}
-
-export async function getScopes(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+    if (!frontendUrl) {
+      throw new AppError(500, 'SERVER_ERROR', 'URL do frontend nao encontrada');
     }
-    const scopes = await metaService.getTenantMetaScopes(req.tenant.tenantId);
-    res.status(200).json({
-      success: true,
-      data: { scopes },
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
+
+    try {
+      const query = callbackQuerySchema.parse(req.query);
+
+      const { tenantId, returnUrl, frontendUrl: originFrontendUrl } =
+        await this.metaService.handleMetaOAuthCallback(query.code, query.state);
+
+      await invalidateHttpCache(tenantId, ['/api/meta']);
+
+      // Email transacional: conta Meta conectada (fire-and-forget, não bloqueia o redirect)
+      await sendToTenant(tenantId, undefined, (to) => emailService.sendAccountConnected(to, 'Meta'));
+
+      // Redireciona para o MESMO domínio que iniciou o fluxo (embutido no state
+      // OAuth pelo getAuthUrl), não para o FRONTEND_URL fixo do ambiente.
+      const target = originFrontendUrl ?? frontendUrl;
+      res.redirect(`${target}${returnUrl}`);
+    } catch (error) {
+      // Erros de token/state OAuth redirecionam para integracoes; falhas na busca de
+      // ativos sao tratadas no service e nao chegam aqui (conexao ja persistida).
+      const err = error as any;
+      console.error(`[OAuth Callback] ERRO — code=${err?.code || '?'} message=${err?.message || err}`, {
+        stack: err?.stack?.split('\n').slice(0, 3).join(' | '),
+        metaError: err?.metaError ? JSON.stringify(err.metaError).slice(0, 300) : undefined,
+      });
+      // Só AppError preserva o código (ex.: AD_ACCOUNT_IN_USE) no redirect;
+      // demais falhas (incl. erros de sistema com .code, ex.: ECONNRESET) seguem
+      // o fallback legado oauth_cancelled.
+      const errorCode =
+        error instanceof AppError ? encodeURIComponent(error.code.toLowerCase()) : 'oauth_cancelled';
+      let target = frontendUrl;
+      let path = '/configuracoes/integracoes';
+      if (typeof req.query.state === 'string') {
+        try {
+          const state = verifyOAuthState(req.query.state);
+          target = state.frontendUrl ?? frontendUrl;
+          if (state.context === 'onboarding') path = '/onboarding/conectar-meta';
+        } catch {
+          // State inválido mantém o fallback seguro para Integrações.
+        }
+      }
+      res.redirect(`${target}${path}?error=${errorCode}`);
+    }
+  };
+
+  getScopes = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const scopes = await this.metaService.getTenantMetaScopes(req.tenant.tenantId);
+      res.status(200).json({
+        success: true,
+        data: { scopes },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getPages = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const pages = await this.metaService.getTenantFacebookPages(req.tenant.tenantId);
+      res.status(200).json({
+        success: true,
+        data: pages,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getPageWhatsappNumbers = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const { pageId } = pageIdParamsSchema.parse(req.params);
+      const numbers = await this.metaService.getTenantPageWhatsappNumbers(req.tenant.tenantId, pageId);
+      res.status(200).json({
+        success: true,
+        data: numbers,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getBusinesses = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const businesses = await this.metaService.getTenantBusinesses(req.tenant.tenantId);
+      res.status(200).json({
+        success: true,
+        data: businesses,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getPagesByBusiness = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const { businessIds } = businessIdsBodySchema.parse(req.body);
+      const pages = await this.metaService.getTenantPagesByBusiness(req.tenant.tenantId, businessIds);
+      res.status(200).json({
+        success: true,
+        data: pages,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getAdAccountsByBusiness = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const { businessIds } = businessIdsBodySchema.parse(req.body);
+      const adAccounts = await this.metaService.getTenantAdAccountsByBusiness(req.tenant.tenantId, businessIds);
+      res.status(200).json({
+        success: true,
+        data: adAccounts,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getWhatsappByPages = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const { businessIds, pageIds } = whatsappByAssetsBodySchema.parse(req.body);
+      const numbers =
+        businessIds.length > 0 || pageIds.length > 0
+          ? await this.metaService.getTenantWhatsappNumbers(req.tenant.tenantId, { businessIds, pageIds })
+          : [];
+      res.status(200).json({
+        success: true,
+        data: numbers,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  saveSelection = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const selection = saveSelectionBodySchema.parse(req.body);
+      const savedSelection = await this.metaService.saveTenantAssetSelection(req.tenant.tenantId, selection);
+      await invalidateHttpCache(req.tenant.tenantId, ['/api/meta']);
+      res.status(200).json({
+        success: true,
+        data: savedSelection,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getAssetSelection = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const selection = await this.metaService.getResolvedTenantAssetSelection(req.tenant.tenantId);
+      res.status(200).json({
+        success: true,
+        data: selection,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getConnections = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const connections = await this.metaService.getTenantMetaConnections(req.tenant.tenantId);
+      res.status(200).json({
+        success: true,
+        data: connections,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  selectAdAccount = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const params = connectionIdSchema.parse(req.params);
+      const body = selectAdAccountBodySchema.parse(req.body);
+      const selectedAdAccountId = await this.metaService.selectAdAccount(
+        req.tenant.tenantId,
+        params.id,
+        body.adAccountId
+      );
+      await invalidateHttpCache(req.tenant.tenantId, ['/api/meta']);
+      res.status(200).json({
+        success: true,
+        data: { selectedAdAccountId },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteConnection = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.tenant?.tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+      const params = connectionIdSchema.parse(req.params);
+      await this.metaService.deleteTenantMetaConnection(req.tenant.tenantId, params.id);
+      await invalidateCampaignsCache(req.tenant.tenantId);
+      await invalidateHttpCache(req.tenant.tenantId, ['/api/meta', '/api/metrics', '/api/goals']);
+
+      // Email transacional: conta Meta desconectada (fire-and-forget)
+      await sendToTenant(req.tenant.tenantId, req.user?.email, (to) =>
+        emailService.sendAccountDisconnected(to, 'Meta'),
+      );
+
+      res.status(200).json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 const pageIdParamsSchema = z.object({
   pageId: z.string().min(1, 'pageId obrigatorio'),
 });
 
-export async function getPages(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
-    }
-    const pages = await metaService.getTenantFacebookPages(req.tenant.tenantId);
-    res.status(200).json({
-      success: true,
-      data: pages,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function getPageWhatsappNumbers(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
-    }
-    const { pageId } = pageIdParamsSchema.parse(req.params);
-    const numbers = await metaService.getTenantPageWhatsappNumbers(req.tenant.tenantId, pageId);
-    res.status(200).json({
-      success: true,
-      data: numbers,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
 const businessIdsBodySchema = z.object({
   businessIds: z.array(z.string().min(1)).min(1, 'Informe ao menos uma Business Manager'),
 });
-
-const pageIdsBodySchema = z.object({
-  pageIds: z.array(z.string().min(1)),
-});
-
-const saveSelectionBodySchema = z.object({
-  businessIds: z.array(z.string().min(1)).default([]),
-  pageIds: z.array(z.string().min(1)).default([]),
-  adAccountIds: z.array(z.string().min(1)).default([]),
-  whatsappNumberIds: z.array(z.string().min(1)).default([]),
-});
-
-export async function getBusinesses(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
-    }
-    const businesses = await metaService.getTenantBusinesses(req.tenant.tenantId);
-    res.status(200).json({
-      success: true,
-      data: businesses,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function getPagesByBusiness(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
-    }
-    const { businessIds } = businessIdsBodySchema.parse(req.body);
-    const pages = await metaService.getTenantPagesByBusiness(req.tenant.tenantId, businessIds);
-    res.status(200).json({
-      success: true,
-      data: pages,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function getAdAccountsByBusiness(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
-    }
-    const { businessIds } = businessIdsBodySchema.parse(req.body);
-    const adAccounts = await metaService.getTenantAdAccountsByBusiness(req.tenant.tenantId, businessIds);
-    res.status(200).json({
-      success: true,
-      data: adAccounts,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
 
 const whatsappByAssetsBodySchema = z.object({
   businessIds: z.array(z.string().min(1)).default([]),
   pageIds: z.array(z.string().min(1)).default([]),
 });
 
-export async function getWhatsappByPages(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
-    }
-    const { businessIds, pageIds } = whatsappByAssetsBodySchema.parse(req.body);
-    const numbers =
-      businessIds.length > 0 || pageIds.length > 0
-        ? await metaService.getTenantWhatsappNumbers(req.tenant.tenantId, { businessIds, pageIds })
-        : [];
-    res.status(200).json({
-      success: true,
-      data: numbers,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function saveSelection(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
-    }
-    const selection = saveSelectionBodySchema.parse(req.body);
-    await metaService.saveTenantAssetSelection(req.tenant.tenantId, selection);
-    res.status(200).json({
-      success: true,
-      data: selection,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function getAssetSelection(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
-    }
-    const selection = await metaService.getResolvedTenantAssetSelection(req.tenant.tenantId);
-    res.status(200).json({
-      success: true,
-      data: selection,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function getConnections(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
-    }
-    const connections = await metaService.getTenantMetaConnections(req.tenant.tenantId);
-    res.status(200).json({
-      success: true,
-      data: connections,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function selectAdAccount(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
-    }
-    const params = connectionIdSchema.parse(req.params);
-    const body = selectAdAccountBodySchema.parse(req.body);
-    const selectedAdAccountId = await metaService.selectAdAccount(
-      req.tenant.tenantId,
-      params.id,
-      body.adAccountId,
-    );
-    res.status(200).json({
-      success: true,
-      data: { selectedAdAccountId },
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function deleteConnection(req: Request, res: Response, next: NextFunction) {
-  try {
-    if (!req.tenant?.tenantId) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
-    }
-    const params = connectionIdSchema.parse(req.params);
-    await metaService.deleteTenantMetaConnection(req.tenant.tenantId, params.id);
-    res.status(200).json({
-      success: true,
-      data: null,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
+const saveSelectionBodySchema = z.object({
+  businessIds: z.array(z.string().min(1)).min(1, 'Informe uma Business Manager'),
+  pageIds: z.array(z.string().min(1)).min(1, 'Informe uma Página'),
+  adAccountIds: z.array(z.string().min(1)).min(1, 'Informe uma conta de anúncio'),
+  instagramUserId: z.string().min(1, 'Informe um Instagram Business'),
+  whatsappNumberIds: z.array(z.string().min(1)).default([]),
+});

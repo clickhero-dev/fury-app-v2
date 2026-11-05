@@ -7,6 +7,7 @@ import type {
   CampaignInsightsResponse,
   AdsetResponse,
   GoalsProgressResponse,
+  PartialFailure,
 } from '../../types/metrics.types.js';
 import {
   centavosToReais,
@@ -68,7 +69,8 @@ export class MockMetricsProvider implements IMetricsProvider {
     endDate: string,
     status?: 'ACTIVE' | 'PAUSED' | 'ARCHIVED',
     page: number = 1,
-    limit: number = 10
+    limit: number = 10,
+    includeOnlyLeadForm = false
   ): Promise<{
     data: CampaignResponse[];
     pagination: {
@@ -76,11 +78,15 @@ export class MockMetricsProvider implements IMetricsProvider {
       limit: number;
       total: number;
     };
+    partial_failures: PartialFailure[];
   }> {
     let filtered = mockMetrics.campaigns;
 
     if (status) {
       filtered = filtered.filter(c => c.status === status);
+    }
+    if (includeOnlyLeadForm) {
+      filtered = filtered.filter(c => (c as any).objective === 'OUTCOME_LEADS');
     }
 
     const startDateObj = this.parseDate(startDate);
@@ -126,6 +132,7 @@ export class MockMetricsProvider implements IMetricsProvider {
         limit,
         total,
       },
+      partial_failures: [],
     };
   }
 

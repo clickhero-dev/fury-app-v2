@@ -1,0 +1,940 @@
+import { Request, Response, NextFunction } from "express";
+import { z } from "zod";
+import bcrypt from "bcrypt";
+import { db, tenants, users, clientGoals } from "@fury/db";
+import { AppError } from "../middleware/errorHandler.js";
+import { PARTNER_REACHABLE_ROLES, SuperAdminRepository } from "../repository/superadmin.repository.js";
+import { audienceGeoSchema } from "../lib/audience-geo.js";
+import { rbacService } from "../services/core/rbac.service.js";
+import { slugify } from "./partner.controller.js";
+
+const createUserSchema = z.object({
+  tenantId: z.string().uuid(),
+  name: z.string().min(1).max(255),
+  email: z.string().email(),
+  password: z.string().min(8).max(255),
+  role: z.enum(["owner", "admin", "member"]).default("member"),
+});
+
+const setupTenantSchema = z.object({
+  name: z.string().min(1).max(255),
+  slug: z.string().min(1).max(255).optional(),
+  userName: z.string().min(1).max(255),
+  userEmail: z.string().email(),
+  userPassword: z.string().min(8).max(255),
+  userRole: z.enum(["owner", "admin", "member"]).default("owner"),
+});
+
+// parceiro cria cliente: cargo, parceiro e slug nunca vêm do body
+const partnerClientSchema = z.object({
+  name: z.string().trim().min(1).max(255),
+  userName: z.string().trim().min(1).max(255),
+  userEmail: z.string().trim().email(),
+  userPassword: z.string().min(8).max(255),
+  planId: z.string().uuid().optional(),
+});
+
+const updateUserSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  email: z.string().email().optional(),
+  role: z.enum(["owner", "admin", "member"]).optional(),
+  audienceDefaults: z
+    .object({
+      city: z.string().optional(),
+      cityKey: z.string().optional(),
+      ageMin: z.number().int().min(18).max(65).optional(),
+      ageMax: z.number().int().min(18).max(65).optional(),
+      gender: z.enum(["all", "male", "female"]).optional(),
+      audienceInterests: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+      })).optional(),
+      geo: audienceGeoSchema.optional(),
+    })
+    .optional(),
+});
+
+const updateSubscriptionSchema = z.object({
+  planId: z.string().uuid().optional(),
+  status: z
+    .enum(["trial", "active", "past_due", "cancelled", "inactive"])
+    .optional(),
+  trialEndsAt: z.string().datetime().optional(),
+  currentPeriodEnd: z.string().datetime().optional(),
+  isNonExpirable: z.boolean().optional(),
+  billingType: z.enum(["BOLETO", "PIX", "CREDIT_CARD"]).optional(),
+});
+
+const updateFuryConfigSchema = z.object({
+  targetRoas: z.string().optional(),
+  targetCpa: z.string().optional(),
+  targetCtr: z.string().optional(),
+  targetBudgetUtilization: z.string().optional(),
+});
+
+const updateBrandKitSchema = z.object({
+  logo_url: z.string().url().nullable().optional(),
+  primary_color: z.string().optional(),
+  secondary_color: z.string().optional(),
+  voice_tone: z
+    .enum(["professional", "casual", "urgent", "premium"])
+    .optional(),
+  photo_urls: z.array(z.string()).optional(),
+});
+
+const upsertGoalsSchema = z.object({
+  objective: z.string().min(1),
+  niche: z.string().min(1),
+  mainProduct: z.string().min(1),
+  monthlyBudget: z.number().positive(),
+  targetCpa: z.number().positive(),
+});
+
+const planLimitsSchema = z.object({
+  creativesPerMonth: z.number().int().min(0).nullable().optional(),
+  modificationsPerCreative: z.number().int().positive().nullable().optional(),
+  // vídeo: 0 desliga a criação de vídeo no plano
+  videosPerMonth: z.number().int().min(0).nullable().optional(),
+  modificationsPerVideo: z.number().int().min(0).nullable().optional(),
+});
+
+const createPlanSchema = z.object({
+  name: z.string().min(1).max(100),
+  technicalKey: z.string().max(100).nullable().optional(),
+  priceCents: z.number().int().min(0),
+  interval: z.enum(["monthly", "yearly"]).default("monthly"),
+  features: z.record(z.boolean()).default({}),
+  limits: planLimitsSchema.default({}),
+  isActive: z.boolean().default(true),
+}).superRefine((value, ctx) => {
+  if (value.priceCents === 0 && value.technicalKey !== 'trial_new_signup') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['priceCents'], message: 'Preço zero é reservado ao plano Trial.' });
+  }
+});
+
+const updatePlanSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  technicalKey: z.string().max(100).nullable().optional(),
+  priceCents: z.number().int().min(0).optional(),
+  interval: z.enum(["monthly", "yearly"]).optional(),
+  features: z.record(z.boolean()).optional(),
+  limits: planLimitsSchema.optional(),
+  isActive: z.boolean().optional(),
+}).superRefine((value, ctx) => {
+  if (value.priceCents === 0 && value.technicalKey !== 'trial_new_signup') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['priceCents'], message: 'Preço zero é reservado ao plano Trial.' });
+  }
+});
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function toMoney(v: number) {
+  return { amount: Math.round(v * 100) };
+}
+
+const dashboardPeriodSchema = z.object({
+  period: z.enum(['7d', '30d', '90d']).default('30d'),
+});
+
+function fromMoney(json: unknown): number {
+  const obj = json as { amount?: unknown } | null;
+  const raw = Number(obj?.amount ?? 0);
+  return Number.isNaN(raw) ? 0 : raw / 100;
+}
+
+// null = super_admin (todos os clientes); sem escopo = rota mal montada → nega
+function partnerOf(req: Request): string | null {
+  if (!req.adminScope) throw new AppError(403, "FORBIDDEN", "Acesso negado");
+  return req.adminScope.partnerId;
+}
+
+// cargo Admin (libera sem assinatura): só o super_admin dá ou tira
+function assertRoleAllowed(req: Request, newRole?: string, currentRole?: string) {
+  if (!partnerOf(req) || newRole === undefined || newRole === currentRole) return;
+  if (newRole === "admin" || currentRole === "admin")
+    throw new AppError(403, "ROLE_FORBIDDEN", "Só o super admin altera o cargo Admin");
+}
+
+// só o que a tela usa: nunca senha, token de reset, OTP ou ids sociais
+function safeUser(u: typeof users.$inferSelect) {
+  return { id: u.id, name: u.name, email: u.email, role: u.role, platformRole: u.platformRole, createdAt: u.createdAt };
+}
+
+// dono do cliente: quem a aba Público lê e grava
+function audienceOwner<T extends { role: string }>(list: T[]): T | undefined {
+  return list.find((u) => u.role === "owner") ?? list[0];
+}
+
+function serializeGoal(row: typeof clientGoals.$inferSelect) {
+  return {
+    ...row,
+    monthlyBudget: fromMoney(row.monthlyBudget),
+    targetCpa: fromMoney(row.targetCpa),
+  };
+}
+
+/**
+ * Controller SuperAdmin (GLOBAL) — operações administrativas que cruzam todos
+ * os tenants. Instanciado uma vez no composition root (di.ts) com o
+ * SuperAdminRepository global injetado. ADR-0001.
+ */
+export class SuperAdminController {
+  constructor(private repo: SuperAdminRepository) {}
+
+  // cliente fora do escopo do parceiro = 404 (não revela que existe)
+  private async tenantInScope(req: Request, tenantId: string) {
+    const tenant = await this.repo.getTenantById(tenantId, partnerOf(req));
+    if (!tenant)
+      throw new AppError(404, "TENANT_NOT_FOUND", "Tenant não encontrado");
+    return tenant;
+  }
+
+  // plano do escopo (parceiro: os dele; super: os da ady); outro dono = 404
+  private async planInScope(id: string, partnerId: string | null, code = "PLAN_NOT_FOUND") {
+    const plan = UUID_RE.test(id) ? await this.repo.findPlanInScope(id, partnerId) : undefined;
+    if (!plan) throw new AppError(404, code, "Plano não encontrado");
+    return plan;
+  }
+
+  private async userInScope(req: Request, userId: string) {
+    const user = await this.repo.findUserById(userId);
+    const partnerId = partnerOf(req);
+    const outOfScope = partnerId
+      && (!PARTNER_REACHABLE_ROLES.includes(user?.platformRole ?? "")
+        || !(await this.repo.getTenantById(user!.tenantId, partnerId)));
+    if (!user || outOfScope)
+      throw new AppError(404, "USER_NOT_FOUND", "Usuário não encontrado");
+    return user;
+  }
+
+  // usuários do cliente; parceiro não vê contas de admin
+  private async visibleUsers(req: Request, tenantId: string) {
+    const list = await this.repo.listUsersByTenant(tenantId);
+    return partnerOf(req) ? list.filter((u) => PARTNER_REACHABLE_ROLES.includes(u.platformRole)) : list;
+  }
+
+  // router.param das rotas /tenants/:tenantId liberadas ao parceiro
+  tenantParam = async (req: Request, _res: Response, next: NextFunction, tenantId: string) => {
+    try {
+      if (partnerOf(req)) await this.tenantInScope(req, tenantId);
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── Dashboard ─────────────────────────────────────────────
+  getDashboard = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { period } = dashboardPeriodSchema.parse(req.query);
+      const stats = await this.repo.getDashboardStats(period, partnerOf(req));
+      res.json({ success: true, data: stats, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── Tenants ───────────────────────────────────────────
+
+  listTenants = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const allTenants = await repo.listTenants(partnerOf(req));
+
+      const data = await Promise.all(
+        allTenants.map(async (t) => {
+          const userCount = await repo.countUsersByTenant(t.id);
+
+          const sub = await repo.findLatestSubscriptionByTenant(t.id);
+
+          let plan = null;
+          if (sub) {
+            plan = await repo.findPlanById(sub.planId);
+          }
+
+          return {
+            ...t,
+            userCount,
+            subscription: sub ? { ...sub, plan } : null,
+          };
+        }),
+      );
+
+      res.json({ success: true, data, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getTenant = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const tenant = await this.tenantInScope(req, req.params.id);
+
+      const tenantUsers = await this.visibleUsers(req, tenant.id);
+
+      const sub = await repo.findLatestSubscriptionByTenant(tenant.id);
+
+      let plan = null;
+      if (sub) {
+        plan = await repo.findPlanById(sub.planId);
+      }
+
+      const config = await repo.findFuryConfig(tenant.id);
+
+      const brandKit = await repo.findBrandKitByTenant(tenant.id);
+
+      const goals = await repo.findClientGoalByTenant(tenant.id);
+
+      const owner = audienceOwner(tenantUsers);
+
+      res.json({
+        success: true,
+        data: {
+          ...tenant,
+          users: tenantUsers.map(safeUser),
+          subscription: sub ? { ...sub, plan } : null,
+          furyConfig: config,
+          brandKit,
+          goals: goals ? serializeGoal(goals) : null,
+          audienceDefaults: owner?.audienceDefaults ?? null,
+          ownerUserId: owner?.id ?? null,
+          businessContext: tenant.businessContext ?? null,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('❌ ERROR in getTenant:', {
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : 'no stack',
+        tenantId: req.params.id,
+      });
+      next(err);
+    }
+  };
+
+  deleteTenant = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      await this.tenantInScope(req, req.params.id);
+
+      await repo.deleteTenant(req.params.id);
+      // derruba o cache do RBAC: acesso cai na hora
+      await rbacService.bumpVersion();
+
+      res.json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── Users ─────────────────────────────────────────────
+
+  createUser = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const body = createUserSchema.parse(req.body);
+      const tenant = await this.tenantInScope(req, body.tenantId);
+      assertRoleAllowed(req, body.role);
+
+      const existing = await repo.findUserByEmail(body.email);
+      if (existing)
+        throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
+
+      const passwordHash = await bcrypt.hash(body.password, 10);
+      const user = await repo.createUser({
+        tenantId: body.tenantId,
+        name: body.name,
+        email: body.email,
+        passwordHash,
+        role: body.role,
+        // cliente de parceiro → usuário do parceiro
+        ...(tenant.partnerId ? { platformRole: "user_partner" } : {}),
+      });
+
+      res
+        .status(201)
+        .json({ success: true, data: safeUser(user), timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  setupTenant = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = setupTenantSchema.parse(req.body);
+      const slug =
+        body.slug ??
+        body.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)/g, "");
+
+      const repo = this.repo;
+      const existingSlug = await repo.findTenantBySlug(slug);
+      if (existingSlug) throw new AppError(409, "SLUG_EXISTS", "Slug já existe");
+
+      const existingEmail = await repo.findUserByEmail(body.userEmail);
+      if (existingEmail)
+        throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
+
+      const passwordHash = await bcrypt.hash(body.userPassword, 10);
+
+      const result = await db.transaction(async (tx) => {
+        const [tenant] = await tx
+          .insert(tenants)
+          .values({ name: body.name, slug })
+          .returning();
+        const [user] = await tx
+          .insert(users)
+          .values({
+            tenantId: tenant.id,
+            name: body.userName,
+            email: body.userEmail,
+            passwordHash,
+            role: body.userRole,
+          })
+          .returning();
+        return { tenant, user };
+      });
+
+      const { passwordHash: _, ...safeUser } = result.user;
+
+      res.status(201).json({
+        success: true,
+        data: { tenant: result.tenant, user: safeUser },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // vagas do parceiro logado; super_admin não tem
+  mySlots = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const partnerId = partnerOf(req);
+      const slots = partnerId ? await this.repo.partnerSlots(partnerId) : null;
+      if (!slots) throw new AppError(404, "PARTNER_NOT_FOUND", "Parceiro não encontrado");
+      res.json({ success: true, data: slots, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // "Novo Cliente" do parceiro, sempre dentro do limite de vagas
+  createPartnerClient = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const partnerId = partnerOf(req);
+      if (!partnerId) throw new AppError(404, "PARTNER_NOT_FOUND", "Parceiro não encontrado");
+      const body = partnerClientSchema.parse(req.body);
+
+      // e-mail preso mesmo de conta excluída
+      if (await this.repo.findUserByEmail(body.userEmail))
+        throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
+
+      const base = slugify(body.name) || "cliente";
+      const slug = (await this.repo.findTenantBySlug(base)) ? `${base}-${Date.now().toString(36)}` : base;
+      const passwordHash = await bcrypt.hash(body.userPassword, 10);
+
+      const result = await this.repo.createPartnerClient(partnerId, { name: body.name, slug, userName: body.userName, userEmail: body.userEmail, passwordHash, planId: body.planId });
+      if (result.status === "plan_not_found") throw new AppError(404, "PLAN_NOT_FOUND", "Plano não encontrado");
+      if (result.status === "not_found") throw new AppError(404, "PARTNER_NOT_FOUND", "Parceiro não encontrado");
+      if (result.status === "limit")
+        throw new AppError(409, "PARTNER_LIMIT", `Limite de clientes atingido (${result.maxTenants} de ${result.maxTenants}).`);
+
+      const { id, name } = result.tenant;
+      res.status(201).json({ success: true, data: { tenant: { id, name, slug: result.tenant.slug }, user: safeUser(result.user) }, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  checkEmail = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = await this.repo.findUserByEmail(req.params.email);
+      res.json({ success: true, data: { exists: !!user } });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updateUser = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const body = updateUserSchema.parse(req.body);
+
+      const existing = await this.userInScope(req, req.params.id);
+      assertRoleAllowed(req, body.role, existing.role);
+      // e-mail não é editável, nem pelo super_admin
+      if (body.email !== undefined && body.email !== existing.email)
+        throw new AppError(400, "EMAIL_NOT_EDITABLE", "O e-mail não pode ser alterado");
+
+      const updates: Record<string, unknown> = {};
+      if (body.name !== undefined) updates.name = body.name;
+      if (body.role !== undefined) updates.role = body.role;
+      if (body.audienceDefaults !== undefined)
+        updates.audienceDefaults = body.audienceDefaults;
+
+      if (Object.keys(updates).length > 0) {
+        await repo.updateUser(req.params.id, updates);
+      }
+
+      res.json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  deleteUser = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const user = await this.userInScope(req, req.params.id);
+
+      if (await repo.countUsersByTenant(user.tenantId) <= 1 && await repo.hasAccessibleSubscription(user.tenantId)) {
+        throw new AppError(
+          409,
+          "LAST_SUBSCRIBER_USER",
+          "Não é possível remover o último usuário de uma conta com assinatura ativa. Crie ou associe outro usuário antes.",
+        );
+      }
+
+      await repo.deleteUser(req.params.id);
+      await rbacService.bumpVersion();
+
+      res.json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── Subscription ──────────────────────────────────────
+
+  resetQuota = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const tenantId = req.params.tenantId;
+
+      const { SubscriptionRepository } = await import('../repository/subscription.repository.js');
+      const subRepo = new SubscriptionRepository(tenantId);
+      
+      await subRepo.resetCreativeQuota();
+
+      res.json({
+        success: true,
+        data: { message: 'Cota resetada com sucesso' },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updateSubscription = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const body = updateSubscriptionSchema.parse(req.body);
+      // forma de pagamento (Asaas) é só da ady
+      if (partnerOf(req)) delete body.billingType;
+
+      // plano precisa ser do mesmo dono do cliente (ady ou o parceiro dele)
+      const tenant = await this.tenantInScope(req, req.params.tenantId);
+      const owner = tenant.partnerId ?? null;
+      if (body.planId !== undefined) await this.planInScope(body.planId, owner);
+
+      const sub = await repo.findLatestSubscriptionByTenant(req.params.tenantId);
+
+      const now = new Date();
+
+      if (!sub) {
+        // Create subscription if none exists
+        const planId =
+          body.planId ??
+          (await repo.getFirstPlan(owner))?.id;
+        if (!planId)
+          throw new AppError(400, "PLAN_REQUIRED", "Informe um plano ou crie um antes");
+
+        const trialEndsAt =
+          body.trialEndsAt !== undefined
+            ? new Date(body.trialEndsAt)
+            : undefined;
+        const currentPeriodEnd =
+          body.currentPeriodEnd !== undefined
+            ? new Date(body.currentPeriodEnd)
+            : undefined;
+
+        const chosenPlan = await repo.findPlanById(planId);
+        const creativesRemaining =
+          (chosenPlan?.limits as { creativesPerMonth?: number | null } | null)?.creativesPerMonth ?? null;
+
+        await repo.createSubscription({
+          tenantId: req.params.tenantId,
+          planId,
+          status: body.status ?? "trial",
+          trialEndsAt,
+          currentPeriodEnd,
+          isNonExpirable: body.isNonExpirable ?? false,
+          creativesRemaining,
+          asaasSubscriptionId: body.billingType,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } else {
+        const updates: Record<string, unknown> = {};
+        if (body.planId !== undefined) updates.planId = body.planId;
+        if (body.status !== undefined) updates.status = body.status;
+        if (body.trialEndsAt !== undefined)
+          updates.trialEndsAt = new Date(body.trialEndsAt);
+        if (body.currentPeriodEnd !== undefined)
+          updates.currentPeriodEnd = new Date(body.currentPeriodEnd);
+        if (body.isNonExpirable !== undefined)
+          updates.isNonExpirable = body.isNonExpirable;
+
+        if (body.status === "active" && !body.currentPeriodEnd) {
+          const future = new Date(now);
+          future.setDate(future.getDate() + 30);
+          updates.currentPeriodEnd = future;
+        }
+
+        if (body.billingType !== undefined) {
+          updates.asaasSubscriptionId = body.billingType;
+        }
+
+        const effectivePlanId = (updates.planId as string | undefined) ?? sub.planId;
+        const effectivePlan = await repo.findPlanById(effectivePlanId);
+        updates.creativesRemaining =
+          (effectivePlan?.limits as { creativesPerMonth?: number | null } | null)?.creativesPerMonth ?? null;
+
+        updates.updatedAt = now;
+
+        if (Object.keys(updates).length >= 1) {
+          await repo.updateSubscription(sub.id, updates);
+        }
+      }
+
+      res.json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── Fury Config ───────────────────────────────────────
+
+  updateFuryConfig = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const body = updateFuryConfigSchema.parse(req.body);
+
+      const existing = await repo.findFuryConfig(req.params.tenantId);
+
+      const values: Record<string, unknown> = { updatedAt: new Date() };
+      if (body.targetRoas !== undefined) values.targetRoas = body.targetRoas;
+      if (body.targetCpa !== undefined) values.targetCpa = body.targetCpa;
+      if (body.targetCtr !== undefined) values.targetCtr = body.targetCtr;
+      if (body.targetBudgetUtilization !== undefined)
+        values.targetBudgetUtilization = body.targetBudgetUtilization;
+
+      if (existing) {
+        await repo.updateFuryConfig(req.params.tenantId, values);
+      } else {
+        await repo.createFuryConfig({
+          tenantId: req.params.tenantId,
+          ...values,
+        });
+      }
+
+      res.json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── Brand Kit ─────────────────────────────────────────
+
+  getBrandKit = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const bk = await this.repo.findBrandKitByTenant(req.params.tenantId);
+
+      res.json({ success: true, data: bk, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  upsertBrandKit = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const body = updateBrandKitSchema.parse(req.body);
+      const existing = await repo.findBrandKitByTenant(req.params.tenantId);
+
+      const values: Record<string, unknown> = { updatedAt: new Date() };
+      if (body.logo_url !== undefined) values.logoUrl = body.logo_url;
+      if (body.primary_color !== undefined)
+        values.primaryColor = body.primary_color;
+      if (body.secondary_color !== undefined)
+        values.secondaryColor = body.secondary_color;
+      if (body.voice_tone !== undefined) values.voiceTone = body.voice_tone;
+      if (body.photo_urls !== undefined) values.photoUrls = body.photo_urls;
+
+      if (existing) {
+        await repo.updateBrandKit(req.params.tenantId, values);
+      } else {
+        await repo.createBrandKit({
+          tenantId: req.params.tenantId,
+          ...values,
+        });
+      }
+
+      res.json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── Goals ─────────────────────────────────────────────
+
+  upsertGoals = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const body = upsertGoalsSchema.parse(req.body);
+      const tenantId = req.params.tenantId;
+
+      const existing = await repo.findClientGoalByTenant(tenantId);
+
+      const values = {
+        objective: body.objective,
+        niche: body.niche,
+        mainProduct: body.mainProduct,
+        monthlyBudget: toMoney(body.monthlyBudget),
+        targetCpa: toMoney(body.targetCpa),
+        updatedAt: new Date(),
+      };
+
+      if (existing) {
+        await repo.updateClientGoal(tenantId, values);
+      } else {
+        await repo.createClientGoal({
+          tenantId,
+          ...values,
+        });
+      }
+
+      res.json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── Audience ──────────────────────────────────────────
+
+  updateAudience = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tenantId = req.params.tenantId;
+
+      const repo = this.repo;
+
+      // mesmo usuário que o getTenant lê
+      const owner = audienceOwner(await this.visibleUsers(req, tenantId));
+      if (!owner)
+        throw new AppError(
+          404,
+          "NO_OWNER",
+          "Nenhum usuário encontrado neste tenant",
+        );
+
+      const { businessContext, ...audienceOnly } = req.body;
+      const body = updateUserSchema.shape.audienceDefaults.parse(audienceOnly);
+
+      await repo.updateUserAudienceDefaults(owner.id, body);
+
+      if (businessContext !== undefined) {
+        await repo.updateTenant(tenantId, { businessContext });
+      }
+
+      res.json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── Plans ─────────────────────────────────────────────
+
+  // planos que dá para pôr neste cliente: os do dono dele
+  assignablePlans = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tenant = await this.tenantInScope(req, req.params.tenantId);
+      const data = await this.repo.listPlans(tenant.partnerId ?? null);
+      res.json({ success: true, data, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  listPlans = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const allPlans = await repo.listPlans(partnerOf(req));
+
+      const counts = await repo.listSubscriberCountsByPlan();
+
+      const countMap = new Map(counts.map((c) => [c.planId, c.count]));
+
+      const data = allPlans.map((p) => ({
+        ...p,
+        subscriberCount: countMap.get(p.id) ?? 0,
+      }));
+
+      res.json({
+        success: true,
+        data,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  createPlan = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = createPlanSchema.parse(req.body);
+      // dono vem do escopo, nunca do body
+      const plan = await this.repo.createPlan({ ...body, partnerId: partnerOf(req) });
+      res
+        .status(201)
+        .json({ success: true, data: plan, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updatePlan = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const body = updatePlanSchema.parse(req.body);
+      await this.planInScope(req.params.id, partnerOf(req));
+
+      await repo.updatePlan(req.params.id, body);
+      res.json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  deletePlan = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const repo = this.repo;
+      const { id } = req.params;
+      const migrateTo = typeof req.query.migrateTo === "string" ? req.query.migrateTo : undefined;
+
+      await this.planInScope(id, partnerOf(req));
+
+      // Count subscribers
+      const subscriberCount = await repo.countSubscriptionsByPlan(id);
+
+      if (subscriberCount > 0) {
+        if (!migrateTo) {
+          throw new AppError(
+            409,
+            "PLAN_HAS_SUBSCRIBERS",
+            `Este plano possui ${subscriberCount} assinante(s). Migre-os antes de deletar.`,
+            { subscriberCount },
+          );
+        }
+
+        // destino só do mesmo dono
+        await this.planInScope(migrateTo, partnerOf(req), "TARGET_PLAN_NOT_FOUND");
+
+        await repo.migratePlanSubscriptions(id, migrateTo);
+      }
+
+      await repo.deletePlan(id);
+
+      res.json({
+        success: true,
+        data: null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── Users (admin list) ────────────────────────────────
+
+  listUsers = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
+      const offset = (page - 1) * limit;
+      const search = (req.query.search as string)?.trim() || null;
+
+      const { rows, total } = await this.repo.paginateUsersAdmin(search ?? '', limit, offset, partnerOf(req));
+      const pages = Math.ceil(total / limit);
+
+      res.json({
+        success: true,
+        data: { users: rows, total, page, pages, limit },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ─── Campaigns ─────────────────────────────────────────
+
+  listTenantCampaigns = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { tenantId } = req.params;
+      const repo = this.repo;
+
+      const campaigns = await repo.findCampaignsByTenant(tenantId);
+
+      const creativeAssetsList = await repo.findCreativeAssetsByTenant(tenantId);
+
+      res.json({
+        success: true,
+        data: { campaigns, creativeAssets: creativeAssetsList },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+}

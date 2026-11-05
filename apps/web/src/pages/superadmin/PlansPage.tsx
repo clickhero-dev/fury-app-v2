@@ -1,0 +1,383 @@
+import { useEffect, useState } from 'react';
+import { Plus, Save, Trash2 } from 'lucide-react';
+import api from '@/lib/api';
+
+interface PlanLimits {
+  creativesPerMonth: number | null;
+  modificationsPerCreative: number | null;
+  // vídeo: chave ausente vale 0 (vídeo desligado no plano)
+  videosPerMonth?: number | null;
+  modificationsPerVideo?: number | null;
+}
+
+const INPUT_CLASS = 'w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint';
+const EMPTY_LIMITS: PlanLimits = { creativesPerMonth: null, modificationsPerCreative: null, videosPerMonth: 0, modificationsPerVideo: 0 };
+
+function parseLimit(raw: string): number | null {
+  return raw === '' ? null : Math.max(0, parseInt(raw, 10) || 0);
+}
+
+function videoLimit(v: number | null | undefined): number | '' {
+  return v === undefined ? 0 : v ?? '';
+}
+
+interface Plan {
+  id: string;
+  name: string;
+  priceCents: number;
+  interval: string;
+  features: Record<string, boolean>;
+  limits: PlanLimits;
+  isActive: boolean;
+  subscriberCount: number;
+}
+
+export function PlansPage() {
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [newPlan, setNewPlan] = useState({
+    name: '',
+    priceCents: 0,
+    interval: 'monthly',
+    isActive: true,
+    limits: EMPTY_LIMITS,
+  });
+  const [editing, setEditing] = useState<Record<string, Partial<Plan>>>({});
+
+  const [deleteTarget, setDeleteTarget] = useState<Plan | null>(null);
+  const [migrateTo, setMigrateTo] = useState('');
+
+  useEffect(() => {
+    api.get('/admin/plans').then((r) => {
+      setPlans(r.data.data);
+      const eds: Record<string, Partial<Plan>> = {};
+      for (const p of r.data.data) {
+        eds[p.id] = {};
+      }
+      setEditing(eds);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const createPlan = async () => {
+    if (!newPlan.name || newPlan.priceCents <= 0) return;
+    setSaving(true);
+    try {
+      await api.post('/admin/plans', { ...newPlan, priceCents: Math.round(newPlan.priceCents * 100) });
+      setMsg('Plano criado');
+      setShowNew(false);
+      setNewPlan({ name: '', priceCents: 0, interval: 'monthly', isActive: true, limits: EMPTY_LIMITS });
+      const r = await api.get('/admin/plans');
+      setPlans(r.data.data);
+    } catch { setMsg('Erro ao criar'); }
+    finally { setSaving(false); }
+  };
+
+  const savePlan = async (planId: string) => {
+    const updates = editing[planId];
+    const keys = Object.keys(updates);
+    if (keys.length === 0) return;
+    setSaving(true);
+    try {
+      await api.patch(`/admin/plans/${planId}`, updates);
+      setMsg('Plano atualizado');
+      setEditing({ ...editing, [planId]: {} });
+      const r = await api.get('/admin/plans');
+      setPlans(r.data.data);
+    } catch { setMsg('Erro ao salvar'); }
+    finally { setSaving(false); }
+  };
+
+  const setEdit = (planId: string, field: string, value: unknown) => {
+    setEditing((prev) => ({
+      ...prev,
+      [planId]: { ...(prev[planId] || {}), [field]: value },
+    }));
+  };
+
+  const setLimitEdit = (plan: Plan, field: keyof PlanLimits, raw: string) => {
+    const value = parseLimit(raw);
+    const base = editing[plan.id]?.limits ?? plan.limits ?? { creativesPerMonth: null, modificationsPerCreative: null };
+    setEdit(plan.id, 'limits', { ...base, [field]: value });
+  };
+
+  const handleDeleteClick = (plan: Plan) => {
+    setDeleteTarget(plan);
+    setMigrateTo('');
+  };
+
+  const executeDelete = async (withMigration: boolean) => {
+    if (!deleteTarget) return;
+    setSaving(true);
+    try {
+      const params = withMigration && migrateTo ? `?migrateTo=${migrateTo}` : '';
+      await api.delete(`/admin/plans/${deleteTarget.id}${params}`);
+      setMsg(withMigration ? 'Assinantes migrados e plano deletado' : 'Plano deletado');
+      setDeleteTarget(null);
+      const r = await api.get('/admin/plans');
+      setPlans(r.data.data);
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: { error?: { code?: string; message?: string; details?: { subscriberCount?: number } } } } })?.response?.data;
+      if (data?.error?.code === 'PLAN_HAS_SUBSCRIBERS') {
+        setMsg(`Não é possível deletar: ${data.error.message}`);
+      } else {
+        setMsg('Erro ao deletar plano');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div className="text-text-tertiary text-sm py-12 text-center">Carregando...</div>;
+
+  const otherPlans = deleteTarget ? plans.filter((p) => p.id !== deleteTarget.id) : [];
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div style={{
+            width: 38, height: 38, borderRadius: 10,
+            background: 'rgba(30,136,168,0.1)',
+            border: '1px solid rgba(30,136,168,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }} className="text-[#17708A] dark:text-[#1E88A8]">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+            </svg>
+          </div>
+          <div className="flex items-baseline gap-2">
+          <h1 className="text-2xl font-bold text-text-primary">Planos</h1>
+            <span className="text-sm text-text-tertiary">{plans.length} planos cadastrados</span>
+          </div>
+        </div>
+        <button onClick={() => setShowNew(!showNew)}
+          className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors px-5 py-2.5 flex items-center gap-2">
+          <Plus className="w-4 h-4" strokeWidth={2.5} /> Novo Plano
+        </button>
+      </div>
+
+      {msg && (
+        <div className="mb-4 px-4 py-3 bg-surface border border-border rounded-2xl text-sm text-text-primary flex items-center justify-between">
+          {msg} <button onClick={() => setMsg('')} className="ady-btn text-text-tertiary hover:text-text-primary">✕</button>
+        </div>
+      )}
+
+      {showNew && (
+        <div className="mb-4 bg-surface border border-border rounded-2xl p-5 space-y-3">
+          <div className="grid grid-cols-5 gap-3">
+            <input value={newPlan.name} onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })}
+              placeholder="Nome do plano" className="bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
+            <input type="number" step="0.01" value={newPlan.priceCents || ''} onChange={(e) => setNewPlan({ ...newPlan, priceCents: parseFloat(e.target.value) || 0 })}
+              placeholder="Preço (R$)" className="bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
+            <select value={newPlan.interval} onChange={(e) => setNewPlan({ ...newPlan, interval: e.target.value })}
+              className="bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors">
+              <option value="monthly">Mensal</option>
+              <option value="yearly">Anual</option>
+            </select>
+            <button onClick={createPlan} disabled={saving}
+              className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors">
+              Criar
+            </button>
+            <button onClick={() => setShowNew(false)}
+              className="ady-btn bg-surface-secondary text-text-primary border border-border-light hover:border-brand/50 rounded-full text-sm font-semibold transition-colors">
+              Cancelar
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-admin-text-muted mb-1 block">Criativos por mês (vazio = sem limite)</label>
+              <input type="number" min={0} value={newPlan.limits.creativesPerMonth ?? ''}
+                onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, creativesPerMonth: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) } })}
+                placeholder="Sem limite" className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
+            </div>
+            <div>
+              <label className="text-xs text-admin-text-muted mb-1 block">Modificações por criativo (vazio = sem limite)</label>
+              <input type="number" min={0} value={newPlan.limits.modificationsPerCreative ?? ''}
+                onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, modificationsPerCreative: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) } })}
+                placeholder="Sem limite" className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
+            </div>
+            <div>
+              <label className="text-xs text-admin-text-muted mb-1 block">Vídeos por mês (0 = sem vídeo, vazio = sem limite)</label>
+              <input type="number" min={0} value={videoLimit(newPlan.limits.videosPerMonth)}
+                onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, videosPerMonth: parseLimit(e.target.value) } })}
+                placeholder="Sem limite" className={INPUT_CLASS} />
+            </div>
+            <div>
+              <label className="text-xs text-admin-text-muted mb-1 block">Modificações por vídeo (vazio = sem limite)</label>
+              <input type="number" min={0} value={videoLimit(newPlan.limits.modificationsPerVideo)}
+                onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, modificationsPerVideo: parseLimit(e.target.value) } })}
+                placeholder="Sem limite" className={INPUT_CLASS} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {plans.map((plan) => {
+          const edit = editing[plan.id] || {};
+          const hasChanges = Object.keys(edit).length > 0;
+          const effectiveLimits = edit.limits ?? plan.limits ?? { creativesPerMonth: null, modificationsPerCreative: null };
+          return (
+            <div key={plan.id} className="bg-surface border border-border rounded-2xl p-5 space-y-3 hover:border-brand/30 transition-colors">
+              <div className={`inline-block px-3 py-1 rounded-full text-xs font-semibold mb-3 ${
+                plan.name.toUpperCase() === 'STARTER'
+                  ? 'bg-surface-secondary text-text-secondary'
+                  : plan.name.toUpperCase() === 'PRO'
+                    ? 'bg-brand/15 text-[#17708A] dark:text-[#1E88A8]'
+                    : plan.name.toUpperCase() === 'ENTERPRISE'
+                      ? 'bg-spark/15 text-[#B55F02] dark:text-spark'
+                      : 'bg-surface-secondary text-text-secondary'
+              }`}>
+                {plan.name.toUpperCase() === 'STARTER' ? 'BÁSICO' : plan.name.toUpperCase() === 'PRO' ? 'INTERMEDIÁRIO' : plan.name.toUpperCase() === 'ENTERPRISE' ? 'EMPRESARIAL' : plan.name}
+              </div>
+              <div className="grid grid-cols-5 gap-3 items-end">
+                <div>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Nome</label>
+                  <input value={edit.name ?? plan.name} onChange={(e) => setEdit(plan.id, 'name', e.target.value)}
+                    className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors" />
+                </div>
+                <div>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Preço</label>
+                  <input type="number" step="0.01" value={edit.priceCents !== undefined ? edit.priceCents / 100 : (plan.priceCents / 100)}
+                    onChange={(e) => setEdit(plan.id, 'priceCents', Math.round(parseFloat(e.target.value || '0') * 100))}
+                    className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors" />
+                </div>
+                <div>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Intervalo</label>
+                  <select value={edit.interval ?? plan.interval} onChange={(e) => setEdit(plan.id, 'interval', e.target.value)}
+                    className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors">
+                    <option value="monthly">Mensal</option>
+                    <option value="yearly">Anual</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Ativo</label>
+                  <select value={String(edit.isActive ?? plan.isActive)} onChange={(e) => setEdit(plan.id, 'isActive', e.target.value === 'true')}
+                    className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors">
+                    <option value="true">Sim</option>
+                    <option value="false">Não</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => savePlan(plan.id)} disabled={!hasChanges || saving}
+                    className="ady-btn bg-brand/10 hover:bg-brand/20 border border-brand/20 text-[#17708A] dark:text-[#1E88A8] disabled:opacity-30 disabled:cursor-not-allowed rounded-full text-sm font-semibold transition-colors px-4 py-2.5 flex items-center justify-center gap-2">
+                    <Save className="w-4 h-4" /> Salvar
+                  </button>
+                  <button onClick={() => handleDeleteClick(plan)} disabled={saving}
+                    className="ady-btn bg-error/15 hover:bg-error/25 disabled:opacity-30 text-error px-3 py-2.5 rounded-full text-sm transition-colors"
+                    title="Deletar plano">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Criativos por mês (vazio = sem limite)</label>
+                  <input type="number" min={0} value={effectiveLimits.creativesPerMonth ?? ''}
+                    onChange={(e) => setLimitEdit(plan, 'creativesPerMonth', e.target.value)}
+                    placeholder="Sem limite" className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
+                </div>
+                <div>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Modificações por criativo (vazio = sem limite)</label>
+                  <input type="number" min={0} value={effectiveLimits.modificationsPerCreative ?? ''}
+                    onChange={(e) => setLimitEdit(plan, 'modificationsPerCreative', e.target.value)}
+                    placeholder="Sem limite" className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
+                </div>
+                <div>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Vídeos por mês (0 = sem vídeo, vazio = sem limite)</label>
+                  <input type="number" min={0} value={videoLimit(effectiveLimits.videosPerMonth)}
+                    onChange={(e) => setLimitEdit(plan, 'videosPerMonth', e.target.value)}
+                    placeholder="Sem limite" className={INPUT_CLASS} />
+                </div>
+                <div>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Modificações por vídeo (vazio = sem limite)</label>
+                  <input type="number" min={0} value={videoLimit(effectiveLimits.modificationsPerVideo)}
+                    onChange={(e) => setLimitEdit(plan, 'modificationsPerVideo', e.target.value)}
+                    placeholder="Sem limite" className={INPUT_CLASS} />
+                </div>
+              </div>
+              <div className="text-xs text-text-tertiary">
+                ID: {plan.id} · Features: {Object.keys(plan.features).length}
+                {' · '}
+                <strong className={`font-normal ${plan.subscriberCount > 0 ? 'text-[#B55F02] dark:text-spark' : 'text-text-tertiary'}`}>
+                  {plan.subscriberCount} assinante{plan.subscriberCount !== 1 ? 's' : ''}
+                </strong>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Delete/Migration Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm" style={{ background: "rgba(0,0,0,0.6)" }}>
+          <div className="bg-surface border border-border rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h2 className="text-lg font-bold text-text-primary mb-2">Deletar plano</h2>
+            <p className="text-sm text-text-secondary mb-4">
+              Plano <strong className="text-text-primary font-medium">{deleteTarget.name}</strong>
+              {deleteTarget.subscriberCount > 0 ? (
+                <> possui <strong className="text-[#B55F02] dark:text-spark font-bold">{deleteTarget.subscriberCount} assinante{deleteTarget.subscriberCount !== 1 ? 's' : ''}</strong>.</>
+              ) : (
+                <> não possui assinantes.</>
+              )}
+            </p>
+
+            {deleteTarget.subscriberCount > 0 ? (
+              <>
+                <p className="text-sm text-text-secondary mb-3">
+                  Para deletar, migre os assinantes para outro plano:
+                </p>
+                <select
+                  value={migrateTo}
+                  onChange={(e) => setMigrateTo(e.target.value)}
+                  className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors mb-4 placeholder:text-admin-text-faint"
+                >
+                  <option value="">Selecione um plano...</option>
+                  {otherPlans.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} (R$ {(p.priceCents / 100).toFixed(2)})</option>
+                  ))}
+                </select>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => executeDelete(true)}
+                    disabled={!migrateTo || saving}
+                    className="ady-btn bg-brand/10 hover:bg-brand/20 border border-brand/20 text-[#17708A] dark:text-[#1E88A8] disabled:opacity-30 disabled:cursor-not-allowed rounded-full text-sm font-semibold transition-colors flex-1 px-4 py-2.5"
+                  >
+                    Migrar e deletar
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(null)}
+                    className="ady-btn bg-surface-secondary text-text-primary border border-border-light hover:border-brand/50 rounded-full text-sm font-semibold transition-colors flex-1 py-2.5"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => executeDelete(false)}
+                  disabled={saving}
+                  className="ady-btn flex-1 bg-[#E5534B] hover:bg-[#E5534B]/90 disabled:opacity-50 text-white px-4 py-2.5 rounded-full text-sm font-semibold transition-colors"
+                >
+                  Deletar
+                </button>
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  className="ady-btn bg-surface-secondary text-text-primary border border-border-light hover:border-brand/50 rounded-full text-sm font-semibold transition-colors flex-1 py-2.5"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

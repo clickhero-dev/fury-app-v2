@@ -1,8 +1,8 @@
-import { db, metaConnections } from '../db.js';
-import { eq } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler.js';
-import { getMetaInsights, metaApiCall, type MetaInsightsData } from '../meta-api.js';
+import { MetaRepository } from '../../repository/meta.repository.js';
+import { getMetaInsights, metaApiCall, campaignHasLeadForm as metaCampaignHasLeadForm, type MetaInsightsData } from '../meta-api.js';
 import { decryptMetaToken } from '../../utils/crypto.js';
+import { sanitizeMetaReason, metaErrorCode } from '../meta-error.js';
 import { IMetricsProvider } from './metrics.provider.js';
 import {
   centavosToReais,
@@ -17,7 +17,6 @@ import {
   parseCpaFromCostPerAction,
   parseRoasFromPurchaseRoas,
 } from '../../utils/meta-insights-parser.js';
-import { getConversionsFromActions } from '../../utils/meta-conversion-events.js';
 import type {
   MetricsSummaryResponse,
   CampaignResponse,
@@ -25,8 +24,9 @@ import type {
   CampaignInsightsResponse,
   AdsetResponse,
   GoalsProgressResponse,
+  PartialFailure,
 } from '../../types/metrics.types.js';
-import { getClientGoals } from '../../services/goal-service.js';
+import { getClientGoals } from '../../services/campaigns/goal.service.js';
 
 export class DatabaseMetricsProvider implements IMetricsProvider {
   private async fetchMetaInsights(params: {
@@ -36,10 +36,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     adAccountId?: string;
     timeIncrement?: number;
   }): Promise<MetaInsightsData[]> {
-    const connection = await db.query.metaConnections.findFirst({
-      where: eq(metaConnections.tenantId, params.tenantId),
-      orderBy: (table, { desc }) => [desc(table.createdAt)],
-    });
+    const connection = await new MetaRepository(params.tenantId).findLatestMetaConnection();
 
     if (!connection) {
       throw new AppError(
@@ -73,10 +70,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
   }
 
   private async getConnectionAndAccount(tenantId: string): Promise<{ accessToken: string; adAccountId: string }> {
-    const connection = await db.query.metaConnections.findFirst({
-      where: eq(metaConnections.tenantId, tenantId),
-      orderBy: (table, { desc }) => [desc(table.createdAt)],
-    });
+    const connection = await new MetaRepository(tenantId).findLatestMetaConnection();
 
     if (!connection) {
       throw new AppError(
@@ -100,14 +94,47 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     return { accessToken, adAccountId };
   }
 
-  private normalizeInsights(insights: MetaInsightsData[], objective?: string | null): MetricsSummaryResponse {
+  /**
+   * Mapa campanha → objetivo (Meta), restrito a campanhas ATIVAS/PAUSADAS.
+   * Necessário para aplicar a regra de contagem correta por objetivo em
+   * qualquer agregação de insights (resumo, séries diárias).
+   */
+  private async fetchCampaignObjectives(tenantId: string): Promise<Map<string, string | null>> {
+    const { accessToken, adAccountId } = await this.getConnectionAndAccount(tenantId);
+
+    type MetaCampaignRow = { id: string; status?: string; objective?: string };
+    const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
+      `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,status,objective')}`,
+      accessToken
+    );
+
+    const includedStatuses = new Set(['ACTIVE', 'PAUSED']);
+    return new Map<string, string | null>(
+      (campaignsResp.data || [])
+        .filter((c) => includedStatuses.has((c.status || '').toUpperCase()))
+        .map((c) => [c.id, c.objective ?? null])
+    );
+  }
+
+  private normalizeInsights(
+    insights: MetaInsightsData[],
+    objective?: string | null | ((campaignId: string) => string | null)
+  ): MetricsSummaryResponse {
     const summary = insights.reduce(
       (acc, item) => {
         const spend = parseFloat(item.spend || '0');
         const impressions = parseInt(item.impressions || '0', 10);
         const clicks = parseInt(item.clicks || '0', 10);
 
-        const conversions = parseConversionsFromActions(item.actions, objective, item.unique_actions) ?? 0;
+        // Objective-aware: cada campanha usa seu própio objetivo, para que uma
+        // campanha de Formulário conte LEADS (quem preencheu), não cliques.
+        const obj =
+          typeof objective === 'function'
+            ? item.campaign_id
+              ? objective(item.campaign_id)
+              : null
+            : objective;
+        const conversions = parseConversionsFromActions(item.actions, obj, item.unique_actions) ?? 0;
 
         const revenue = (item.action_values || [])
           .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')
@@ -183,18 +210,8 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     try {
       const { accessToken, adAccountId } = await this.getConnectionAndAccount(tenantId);
 
-      type MetaCampaignRow = { id: string; status?: string };
-      const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
-        `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,status')}`,
-        accessToken
-      );
-
-      const includedStatuses = new Set(['ACTIVE', 'PAUSED']);
-      const includedCampaignIds = new Set(
-        (campaignsResp.data || [])
-          .filter((c) => includedStatuses.has((c.status || '').toUpperCase()))
-          .map((c) => c.id)
-      );
+      const campaignObjective = await this.fetchCampaignObjectives(tenantId);
+      const includedCampaignIds = new Set(campaignObjective.keys());
 
       const response = await getMetaInsights({
         accessToken,
@@ -212,7 +229,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         return null;
       }
 
-      return this.normalizeInsights(insights);
+      return this.normalizeInsights(insights, (campaignId) => campaignObjective.get(campaignId) ?? null);
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError(500, 'META_API_ERROR', 'Erro ao buscar resumo de metricas');
@@ -230,7 +247,8 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     endDate: string,
     status?: 'ACTIVE' | 'PAUSED' | 'ARCHIVED',
     page: number = 1,
-    limit: number = 10
+    limit: number = 10,
+    includeOnlyLeadForm = false
   ): Promise<{
     data: CampaignResponse[];
     pagination: {
@@ -238,138 +256,210 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
       limit: number;
       total: number;
     };
+    partial_failures: PartialFailure[];
   }> {
+    const partialFailures: PartialFailure[] = [];
+    const emptyEnvelope = () => ({
+      data: [] as CampaignResponse[],
+      pagination: { page, limit, total: 0 },
+      partial_failures: partialFailures,
+    });
+
+    let accessToken: string;
+    let adAccountId: string;
     try {
-      const connection = await db.query.metaConnections.findFirst({
-        where: eq(metaConnections.tenantId, tenantId),
-        orderBy: (table, { desc }) => [desc(table.createdAt)],
-      });
+      const connection = await new MetaRepository(tenantId).findLatestMetaConnection();
 
       if (!connection) {
-        throw new AppError(
-          401,
-          'META_NOT_CONNECTED',
-          'Conta Meta nao conectada. Acesse Configuracoes > Integracoes.'
-        );
+        partialFailures.push({
+          provider: 'meta',
+          code: 'META_NOT_CONNECTED',
+          reason: 'Conta Meta não conectada. Acesse Configurações → Integrações.',
+        });
+        return emptyEnvelope();
       }
 
-      const accessToken = decryptMetaToken(connection.accessToken);
+      accessToken = decryptMetaToken(connection.accessToken);
       const adAccounts = (connection.adAccounts as any[]) || [];
-      const adAccountId =
+      adAccountId =
         (connection as any).selectedAdAccountId ||
         adAccounts.find((a: any) => a.account_status === 1)?.id ||
         adAccounts[0]?.id;
 
       if (!adAccountId) {
-        throw new AppError(400, 'NO_AD_ACCOUNT', 'Nenhuma conta de anuncios encontrada');
+        partialFailures.push({
+          provider: 'meta',
+          code: 'NO_AD_ACCOUNT',
+          reason: 'Nenhuma conta de anúncios encontrada.',
+        });
+        return emptyEnvelope();
+      }
+    } catch (err) {
+      partialFailures.push({
+        provider: 'meta',
+        code: metaErrorCode(err),
+        reason: sanitizeMetaReason(err, 'Falha ao acessar a conta Meta.'),
+      });
+      return emptyEnvelope();
+    }
+
+    type MetaCampaignRow = { id: string; name?: string; status?: string; objective?: string };
+
+    // 1) Lista de campanhas da conta (fonte de verdade). Falha aqui → não há o que
+    //    listar, mas NÃO engolimos: o erro vem descrito em partial_failures.
+    const campaignsRespData: MetaCampaignRow[] | null = await (async (): Promise<MetaCampaignRow[] | null> => {
+      try {
+        const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
+          `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,name,status,objective')}`,
+          accessToken
+        );
+        return campaignsResp.data || [];
+      } catch (err) {
+        partialFailures.push({
+          provider: 'meta',
+          code: metaErrorCode(err),
+          reason: sanitizeMetaReason(err, 'Não foi possível listar as campanhas da Meta.'),
+        });
+        return null;
+      }
+    })();
+    if (campaignsRespData === null) {
+      return emptyEnvelope();
+    }
+
+    // 2) Insights das campanhas. Falha aqui → listamos as campanhas mesmo assim
+    //    (com métricas zeradas) + anotamos a falha. Não derruba a lista.
+    const insights: MetaInsightsData[] = await (async (): Promise<MetaInsightsData[]> => {
+      try {
+        const response = await getMetaInsights({
+          accessToken,
+          adAccountId,
+          startDate,
+          endDate,
+          level: 'campaign',
+        });
+        return response.data || [];
+      } catch (err) {
+        partialFailures.push({
+          provider: 'meta',
+          code: metaErrorCode(err),
+          reason: sanitizeMetaReason(err, 'Não foi possível sincronizar as métricas com a Meta.'),
+        });
+        return [];
+      }
+    })();
+
+    const campaignMeta = new Map(
+      campaignsRespData.map((c) => [c.id, c])
+    );
+    const insightByCampaignId = new Map(
+      insights
+        .filter((row) => row.campaign_id)
+        .map((row) => [row.campaign_id as string, row])
+    );
+
+    const campaignIds = new Set([
+      ...campaignMeta.keys(),
+      ...insightByCampaignId.keys(),
+    ]);
+
+    const campaigns: CampaignResponse[] = [];
+
+    for (const campaignId of campaignIds) {
+      const meta = campaignMeta.get(campaignId);
+      const normalizedStatus = (meta?.status || 'ARCHIVED').toUpperCase() as
+        | 'ACTIVE'
+        | 'PAUSED'
+        | 'ARCHIVED';
+
+      if (status && normalizedStatus !== status) {
+        continue;
       }
 
-      type MetaCampaignRow = { id: string; name?: string; status?: string; objective?: string };
-
-      const campaignsResp = await metaApiCall<{ data: MetaCampaignRow[] }>(
-        `/${encodeURIComponent(adAccountId)}/campaigns?fields=${encodeURIComponent('id,name,status,objective')}`,
-        accessToken
-      );
-
-      const response = await getMetaInsights({
-        accessToken,
-        adAccountId,
-        startDate,
-        endDate,
-        level: 'campaign',
-      });
-
-      const insights = response.data || [];
-      const campaignMeta = new Map(
-        (campaignsResp.data || []).map((c) => [c.id, c])
-      );
-      const insightByCampaignId = new Map(
-        insights
-          .filter((row) => row.campaign_id)
-          .map((row) => [row.campaign_id as string, row])
-      );
-
-      const campaignIds = new Set([
-        ...campaignMeta.keys(),
-        ...insightByCampaignId.keys(),
-      ]);
-
-      const campaigns: CampaignResponse[] = [];
-
-      for (const campaignId of campaignIds) {
-        const meta = campaignMeta.get(campaignId);
-        const normalizedStatus = (meta?.status || 'ACTIVE').toUpperCase() as
-          | 'ACTIVE'
-          | 'PAUSED'
-          | 'ARCHIVED';
-
-        if (status && normalizedStatus !== status) {
-          continue;
-        }
-
-        const insight = insightByCampaignId.get(campaignId);
-        if (!insight) {
-          campaigns.push({
-            id: campaignId,
-            name: meta?.name || `Campaign ${campaignId}`,
-            status: normalizedStatus,
-            metrics: {
-              spend: 0,
-              clicks: 0,
-              impressions: 0,
-              conversions: null,
-              roas: null,
-              cpa: null,
-            },
+      // Filtro "só formulário" (bug 3): só campanhas OUTCOME_LEADS que têm um ad
+      // vinculado a lead form. Mesma fonte de verdade da página de Leads
+      // (getLeadCampaigns → campaignHasLeadForm). Best-effort: se a detecção de
+      // form falhar, mantemos a campanha (não derruba nem esconde).
+      if (includeOnlyLeadForm) {
+        if (meta?.objective !== 'OUTCOME_LEADS') continue;
+        try {
+          const hasForm = await metaCampaignHasLeadForm(campaignId, accessToken);
+          if (!hasForm) continue;
+        } catch (err) {
+          partialFailures.push({
+            item_id: campaignId,
+            provider: 'meta',
+            code: metaErrorCode(err),
+            reason: sanitizeMetaReason(err, 'Não foi possível confirmar o formulário desta campanha.'),
           });
-          continue;
         }
+      }
 
-        const spend = parseFloat(insight.spend || '0');
-        const spendReais = centavosToReais(Math.round(spend * 100));
-        const impressions = parseInt(insight.impressions || '0', 10);
-        const clicks = parseInt(insight.clicks || '0', 10);
-        const objective = meta?.objective ?? null;
-
-        const { roas, cpa, conversions } = extractCampaignMetricsFromInsight(
-          insight,
-          spendReais,
-          objective
-        );
-
+      const insight = insightByCampaignId.get(campaignId);
+      if (!insight) {
         campaigns.push({
           id: campaignId,
-          name: insight.campaign_name || meta?.name || `Campaign ${campaignId}`,
+          name: meta?.name || `Campaign ${campaignId}`,
           status: normalizedStatus,
+          objective: meta?.objective,
           metrics: {
-            spend: spendReais,
-            clicks,
-            impressions,
-            conversions,
-            roas,
-            cpa,
+            spend: 0,
+            clicks: 0,
+            impressions: 0,
+            conversions: null,
+            roas: null,
+            cpa: null,
           },
         });
+        continue;
       }
 
-      campaigns.sort((a, b) => b.metrics.spend - a.metrics.spend);
+      const spend = parseFloat(insight.spend || '0');
+      const spendReais = centavosToReais(Math.round(spend * 100));
+      const impressions = parseInt(insight.impressions || '0', 10);
+      const clicks = parseInt(insight.clicks || '0', 10);
 
-      const total = campaigns.length;
-      const start = (page - 1) * limit;
-      const paginated = campaigns.slice(start, start + limit);
+      // Conversões objective-aware: cada campanha usa o SEU objetivo. Sem isso,
+      // uma campanha de Formulário (OUTCOME_LEADS) caía no fallback genérico de
+      // tráfego (link_click/landing_page_view) e exibia CLIQUES como "Clientes" —
+      // divergindo da página de Leads (que conta quem preencheu o form).
+      const { roas, cpa, conversions } = extractCampaignMetricsFromInsight(
+        insight,
+        spendReais,
+        meta?.objective
+      );
 
-      return {
-        data: paginated,
-        pagination: {
-          page,
-          limit,
-          total,
+      campaigns.push({
+        id: campaignId,
+        name: insight.campaign_name || meta?.name || `Campaign ${campaignId}`,
+        status: normalizedStatus,
+        objective: meta?.objective,
+        metrics: {
+          spend: spendReais,
+          clicks,
+          impressions,
+          conversions,
+          roas,
+          cpa,
         },
-      };
-    } catch (error) {
-      if (error instanceof AppError) throw error;
-      throw new AppError(500, 'META_API_ERROR', 'Erro ao buscar campanhas');
+      });
     }
+
+    campaigns.sort((a, b) => b.metrics.spend - a.metrics.spend);
+
+    const total = campaigns.length;
+    const start = (page - 1) * limit;
+    const paginated = campaigns.slice(start, start + limit);
+
+    return {
+      data: paginated,
+      pagination: {
+        page,
+        limit,
+        total,
+      },
+      partial_failures: partialFailures,
+    };
   }
 
   async getCampaignInsights(
@@ -379,10 +469,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
     endDate: string
   ): Promise<CampaignInsightsResponse> {
     try {
-      const connection = await db.query.metaConnections.findFirst({
-        where: eq(metaConnections.tenantId, tenantId),
-        orderBy: (table, { desc }) => [desc(table.createdAt)],
-      });
+      const connection = await new MetaRepository(tenantId).findLatestMetaConnection();
 
       if (!connection) {
         throw new AppError(
@@ -460,10 +547,7 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
 
   async getCampaignAdsets(tenantId: string, campaignId: string): Promise<AdsetResponse[]> {
     try {
-      const connection = await db.query.metaConnections.findFirst({
-        where: eq(metaConnections.tenantId, tenantId),
-        orderBy: (table, { desc }) => [desc(table.createdAt)],
-      });
+      const connection = await new MetaRepository(tenantId).findLatestMetaConnection();
 
       if (!connection) {
         throw new AppError(
@@ -526,6 +610,11 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
         timeIncrement: 1,
       });
 
+      // Mapa campanha → objetivo: cada objetivo tem SUA regra de contagem
+      // (formulário = envios, mensagem = conversas, etc.). Sem isso o fallback
+      // genérico contaria clique como "cliente" nas séries diárias do dashboard.
+      const campaignObjective = await this.fetchCampaignObjectives(tenantId);
+
       return insights
         .filter((item) => item.date_start && item.date_stop)
         .map((item) => {
@@ -533,7 +622,8 @@ export class DatabaseMetricsProvider implements IMetricsProvider {
           const impressions = parseInt(item.impressions || '0', 10);
           const clicks = parseInt(item.clicks || '0', 10);
 
-          const conversions = getConversionsFromActions(item.actions) ?? 0;
+          const obj = item.campaign_id ? campaignObjective.get(item.campaign_id) ?? null : null;
+          const conversions = parseConversionsFromActions(item.actions, obj, item.unique_actions) ?? 0;
 
           const revenue = (item.action_values || [])
             .filter((a) => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.value')

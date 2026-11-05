@@ -5,9 +5,11 @@ import type { CampaignApiStatus } from '../types/campaigns';
 
 interface PauseCampaignRequest {
   id: string;
+  /** Ação a executar: pausar ou retomar a campanha. */
   action: 'pause' | 'resume';
 }
 
+/** Resposta da API ao atualizar o status de uma campanha. */
 export interface CampaignStatusUpdateResponse {
   success: boolean;
   data: {
@@ -16,6 +18,20 @@ export interface CampaignStatusUpdateResponse {
   timestamp: string;
 }
 
+/**
+ * Converte erros da API de pausa/retomada de campanha em mensagens amigáveis para o usuário.
+ * Trata códigos de erro específicos do backend e casos de falha de rede.
+ *
+ * @param err - Erro capturado na chamada da API
+ * @returns Mensagem de erro legível em português
+ *
+ * @example
+ * try {
+ *   await pauseCampaign({ id, action: 'pause' });
+ * } catch (err) {
+ *   toast.error(getFriendlyPauseError(err));
+ * }
+ */
 export function getFriendlyPauseError(err: unknown): string {
   if (isAxiosError(err)) {
     const code = err.response?.data?.error?.code as string | undefined;
@@ -23,6 +39,9 @@ export function getFriendlyPauseError(err: unknown): string {
 
     if (code === 'META_TOKEN_EXPIRED') {
       return 'Token Meta expirado. Reconecte sua conta em Configurações > Integrações.';
+    }
+    if (code === 'CAMPAIGN_DELETED') {
+      return message || 'Esta campanha foi excluída no Meta. Atualize a página para ver o status correto.';
     }
     if (code === 'META_CONNECTION_NOT_FOUND') {
       return 'Conta Meta não conectada. Acesse Configurações > Integrações.';
@@ -44,6 +63,21 @@ export function getFriendlyPauseError(err: unknown): string {
   return 'Não foi possível alterar o status da campanha. Tente novamente.';
 }
 
+/**
+ * Hook para pausar ou retomar uma campanha Meta Ads.
+ * Invalida o cache de campanhas automaticamente após sucesso.
+ *
+ * @returns Mutation do React Query para pausa/retomada de campanha
+ *
+ * @example
+ * const { mutate: toggleCampaign } = usePauseCampaign();
+ *
+ * // Pausar
+ * toggleCampaign({ id: 'uuid', action: 'pause' });
+ *
+ * // Retomar
+ * toggleCampaign({ id: 'uuid', action: 'resume' });
+ */
 export function usePauseCampaign() {
   const queryClient = useQueryClient();
 
@@ -55,6 +89,7 @@ export function usePauseCampaign() {
       return response.data;
     },
     onSuccess: () => {
+      // Recarrega a lista de campanhas para refletir o novo status
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
     },
   });

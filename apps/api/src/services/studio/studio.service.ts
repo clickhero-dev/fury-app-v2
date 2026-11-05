@@ -1,0 +1,528 @@
+import { AppError } from '../../middleware/errorHandler.js';
+import { getComplianceQueue } from '../../lib/queue.js';
+import { uploadAdImage } from '../../lib/meta-api.js';
+import { decryptMetaToken } from '../../utils/crypto.js';
+import { saveTemporaryStudioImage } from '../../lib/temp-storage.js';
+import { uploadAsset } from '../storage/storage.service.js';
+import { openrouterService } from '../llms/openrouter.service.js';
+import { enhancePromptForImage } from '../llms/prompt-enhancer.js';
+import { sanitizeImagePromptForBusiness } from '../llms/image-prompt-guardrail.js';
+import { generateId } from '../../agents/utils.js';
+import type { PlannerPrompt } from '../../agents/types.js';
+import { checkAndCompletePlannerJob } from '../planner/planner-studio.service.js';
+import { consumeCreativeQuota } from './creative-quota.service.js';
+import { StudioRepository } from '../../repository/studio.repository.js';
+import { PlannerRepository } from '../../repository/planner.repository.js';
+
+const CHAR_LIMITS = {
+  headline: 40,
+  descricao: 125,
+  cta: 20,
+  completo: 300,
+} as const;
+export type StudioGenerationJobData = {
+  tenantId: string;
+  briefing?: string;
+  format?: 'feed' | 'stories' | 'banner';
+  style?: 'fotografico' | 'ilustracao' | 'minimalista';
+  adAccountId?: string;
+  publicBaseUrl?: string;
+  // Modo planner (fluxo do planejador de conteúdo) — quando presente, o worker
+  // gera a imagem real e grava o social_post no calendário.
+  mode?: 'planner';
+  planId?: string;
+  post?: PlannerPrompt;
+  logoUrl?: string;
+};
+
+export type GenerateStudioImageResult = {
+  creativeAssetId: string;
+  imageUrl: string;
+  status: 'pending_compliance';
+};
+const STUDIO_PLACEHOLDER_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9mH9kAAAAASUVORK5CYII=';
+
+function normalizePublicBaseUrl(publicBaseUrl: string) {
+  return publicBaseUrl.replace(/\/+$/, '');
+}
+
+async function persistStudioImage(input: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
+  const { fileName } = await saveTemporaryStudioImage(STUDIO_PLACEHOLDER_PNG);
+  const imageUrl = `${normalizePublicBaseUrl(input.publicBaseUrl ?? '')}/studio-assets/${fileName}`;
+
+  const repo = new StudioRepository(input.tenantId);
+  const asset = await repo.createAsset({
+    tenantId: input.tenantId,
+    type: 'image',
+    url: imageUrl,
+    complianceStatus: 'pending_compliance',
+  });
+
+  // Compliance de imagem desativado
+  // // Enfileira compliance check com retry
+  // const complianceQueue = await getComplianceQueue();
+  // let complianceEnqueued = false;
+  // let retries = 3;
+  // while (!complianceEnqueued && retries > 0) {
+  //   try {
+  //     await complianceQueue.add('worker-studio-compliance-check', { creativeAssetId: asset.id, tenantId: input.tenantId }, {
+  //       removeOnComplete: 1000,
+  //       removeOnFail: 5000,
+  //       attempts: 4,
+  //       backoff: { type: 'exponential', delay: 10_000 },
+  //     });
+  //     complianceEnqueued = true;
+  //   } catch (err) {
+  //     retries--;
+  //     if (retries === 0) {
+  //       // Rollback: deletar creativeAsset criado se compliance queue falhar definitivamente
+  //       await repo.deleteAsset(asset.id);
+  //       throw err;
+  //     }
+  //     await new Promise(r => setTimeout(r, 1000 * (4 - retries))); // backoff: 1s, 2s, 3s
+  //   }
+  // }
+
+  return {
+    creativeAssetId: asset.id,
+    imageUrl,
+    status: 'pending_compliance',
+  };
+}
+
+function calcularPontuacao(texto: string, type: keyof typeof CHAR_LIMITS) {
+  let pontuacao = 3;
+  if (texto.length <= CHAR_LIMITS[type]) {
+    pontuacao += 3;
+  }
+
+  const ctaKeywords = ['compre', 'acesse', 'saiba', 'clique', 'garanta'];
+  if (ctaKeywords.some((keyword) => texto.toLowerCase().includes(keyword))) {
+    pontuacao += 2;
+  }
+
+  const forbiddenKeywords = ['grátis', 'garantido 100%', 'melhor do mundo'];
+  if (!forbiddenKeywords.some((keyword) => texto.toLowerCase().includes(keyword))) {
+    pontuacao += 2;
+  }
+
+  return Math.min(Math.max(pontuacao, 0), 10);
+}
+
+export async function requestStudioImageGeneration(input: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
+  if (!input) {
+    return { message: 'Rota de imagem ativa' } as any;
+  }
+  const result = await persistStudioImage(input);
+  return {
+    message: 'Imagem gerada e enviada para compliance',
+    ...result,
+  } as any;
+}
+
+// ─── Modo planner (planejador de conteúdo) ─────────────────────────────────────
+const PLANNER_IMAGE_MODEL = process.env.PLANNER_IMAGE_MODEL ?? 'black-forest-labs/flux.2-pro';
+
+/** Aspect ratio (FLUX-compatível) por tipo de post do planner. */
+export function aspectForPlannerPostType(postType: PlannerPrompt['postType']): string {
+  return postType === 'reel' || postType === 'stories' ? '9:16' : '1:1';
+}
+
+const VALID_POST_TYPES = ['image', 'carousel', 'reel', 'stories'] as const;
+const VALID_PLATFORMS = ['instagram', 'facebook', 'both'] as const;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Normaliza um post do planner antes do insert no calendário.
+ * Garante data YYYY-MM-DD válida (fallback: amanhã UTC), enums válidos e
+ * arrays/hashes corretos — o insert em socialPosts NUNCA quebra por shape.
+ */
+export function normalizePlannerPost(post: PlannerPrompt): PlannerPrompt {
+  const date =
+    ISO_DATE_RE.test(post.date) && !Number.isNaN(new Date(`${post.date}T00:00:00Z`).getTime())
+      ? post.date
+      : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const postType = VALID_POST_TYPES.includes(post.postType as (typeof VALID_POST_TYPES)[number])
+    ? post.postType
+    : 'image';
+
+  const platform = VALID_PLATFORMS.includes(post.platform as (typeof VALID_PLATFORMS)[number])
+    ? post.platform
+    : 'instagram';
+
+  const hashtags = Array.isArray(post.hashtags) ? post.hashtags.filter((h): h is string => typeof h === 'string') : [];
+
+  return {
+    date,
+    title: typeof post.title === 'string' ? post.title : '',
+    caption: typeof post.caption === 'string' ? post.caption : '',
+    cta: typeof post.cta === 'string' ? post.cta : '',
+    hashtags,
+    imagePrompt: typeof post.imagePrompt === 'string' ? post.imagePrompt : '',
+    postType,
+    platform,
+  };
+}
+
+/**
+ * Etapa 2.5 do fluxo: gera a imagem real via OpenRouter/FLUX, persiste no R2 e
+ * grava o social_post no calendário. Chamado pelo worker studio (modo planner)
+ * quando a imagem é concluída.
+ * IDEMPOTENTE: verifica se socialPost já existe para (planId, date, postType) antes de criar.
+ */
+export async function processPlannerImageJob(input: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
+  const rawPost = input.post;
+  const planId = input.planId;
+  if (!rawPost || !planId) {
+    throw new AppError(400, 'PLANNER_IMAGE_MISSING_DATA', 'Job de imagem do planner sem post/planId.');
+  }
+
+  // Normaliza data/enums antes de qualquer query/insert (defensivo).
+  const post = normalizePlannerPost(rawPost);
+  const repo = new StudioRepository(input.tenantId);
+  const plannerRepo = new PlannerRepository(input.tenantId);
+
+  // IDEMPOTÊNCIA: Verificar se socialPost já foi criado para este post
+  const existingPost = await plannerRepo.findPostByPlanDateType(planId, post.date, post.postType);
+
+  if (existingPost) {
+    // Job já processado com sucesso - retornar resultado existente.
+    // Ainda assim completa o job: cobre retries que chegam após todos os
+    // posts existirem (ex.: recuperação pós-crash) — nunca deixa o job preso.
+    await checkAndCompletePlannerJob(planId, input.tenantId);
+    const existingAsset = await repo.findAssetByUrl(existingPost.imageUrl ?? '');
+    return {
+      creativeAssetId: existingAsset?.id ?? '',
+      imageUrl: existingPost.imageUrl ?? '',
+      status: 'pending_compliance' as const,
+    };
+  }
+
+  // 1) Gera a imagem, persiste e enfileira compliance.
+  //    Falhas AQUI (timeout, quota, erro do modelo, upload) NÃO podem travar o
+  //    job do planner: o post é criado mesmo assim (sem imagem) e o job conclui.
+  //    O usuário regenera a imagem depois pelo painel do post.
+  let imageUrl: string | undefined;
+  let creativeAssetId = '';
+  try {
+    // Enhance do prompt de imagem: enriquece com cena/iluminação/composição SEM
+    // mudar o assunto (padaria → pães, não software). Fallback seguro: prompt original.
+    const enhancedPrompt = await enhancePromptForImage(post.imagePrompt);
+    // Guardrail pré-geração: remove menções a software/digital (nicho não-tech)
+    // e garante o produto real no prompt (impede "pão digital" / imagens fora de contexto).
+    const goals = await plannerRepo.findClientGoal();
+    const guardedPrompt = sanitizeImagePromptForBusiness(enhancedPrompt, {
+      niche: goals?.niche,
+      mainProduct: goals?.mainProduct,
+    });
+    const base64 = await openrouterService.generateImage({
+      model: PLANNER_IMAGE_MODEL,
+      prompt: guardedPrompt,
+      aspect_ratio: aspectForPlannerPostType(post.postType),
+      logoUrl: input.logoUrl,
+    });
+
+    const buffer = Buffer.from(base64.split(',')[1] ?? base64, 'base64');
+    const fileName = `planner/${input.tenantId}/${planId}/${post.date}-${generateId()}.png`;
+    imageUrl = await uploadAsset(buffer, fileName, 'image/png');
+
+    // Desconta a cota de criativos APÓS a imagem existir (idempotente: o retry
+    // cai no early-return de existingPost e não desconta de novo). Se a cota
+    // estourou, o catch abaixo cria o post sem imagem (o usuário ajusta depois).
+    await consumeCreativeQuota(input.tenantId);
+
+    const creativeAsset = await repo.createAsset({
+      tenantId: input.tenantId,
+      type: 'image',
+      url: imageUrl,
+      complianceStatus: 'pending_compliance',
+    });
+    creativeAssetId = String(creativeAsset.id);
+
+    // Compliance de imagem desativado
+    // // Enfileira compliance check com retry
+    // const complianceQueue = await getComplianceQueue();
+    // let complianceEnqueued = false;
+    // let retries = 3;
+    // while (!complianceEnqueued && retries > 0) {
+    //   try {
+    //     await complianceQueue.add('worker-studio-compliance-check', { creativeAssetId: creativeAsset.id, tenantId: input.tenantId }, {
+    //       removeOnComplete: 1000,
+    //       removeOnFail: 5000,
+    //       attempts: 4,
+    //       backoff: { type: 'exponential', delay: 10_000 },
+    //     });
+    //     complianceEnqueued = true;
+    //   } catch (err) {
+    //     retries--;
+    //     if (retries === 0) {
+    //       // Rollback: deletar creativeAsset criado se compliance queue falhar definitivamente
+    //       await repo.deleteAsset(creativeAsset.id);
+    //       throw err;
+    //     }
+    //     await new Promise(r => setTimeout(r, 1000 * (4 - retries))); // backoff: 1s, 2s, 3s
+    //   }
+    // }
+  } catch (err) {
+    // Não propaga: o post (rascunho, sem imagem) será criado logo abaixo.
+    console.warn(
+      `[planner-image] falha ao gerar imagem do post "${post.title}" (${post.date}):`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // 2) Grava o social_post no calendário — SEMPRE (com imagem se houve sucesso;
+  //    sem imagem se a geração falhou), para o job do planner concluir.
+  await plannerRepo.createPost({
+    tenantId: input.tenantId,
+    planId,
+    platform: post.platform === 'both' ? 'instagram' : post.platform,
+    postType: post.postType,
+    title: post.title,
+    caption: post.caption,
+    cta: post.cta,
+    hashtags: post.hashtags,
+    imagePrompt: post.imagePrompt,
+    imageUrl,
+    dayIndex: new Date(`${post.date}T00:00:00Z`).getUTCDate(),
+    calendarDate: post.date,
+    scheduledAt: new Date(`${post.date}T12:00:00Z`),
+    status: 'draft',
+  });
+
+  // Verificar se todos os posts do plano foram criados e completar o job do planner
+  await checkAndCompletePlannerJob(planId, input.tenantId);
+
+  return {
+    creativeAssetId,
+    imageUrl: imageUrl ?? '',
+    status: 'pending_compliance' as const,
+  };
+}
+
+export async function processStudioGenerationJob(input: StudioGenerationJobData): Promise<GenerateStudioImageResult> {
+  if (input?.mode === 'planner') {
+    return processPlannerImageJob(input);
+  }
+  if (!input) {
+    return { message: 'Job de imagem processado' } as any;
+  }
+  const result = await persistStudioImage(input);
+  return {
+    message: 'Job de imagem processado',
+    ...result,
+  } as any;
+}
+
+export const studioService = {
+  requestStudioImageGeneration,
+  processStudioGenerationJob,
+  processPlannerImageJob,
+};
+
+const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const IMAGE_FETCH_TIMEOUT_MS = 90000;
+
+export async function uploadCreativeAssetToMeta(params: {
+  tenantId: string;
+  creativeAssetId: string;
+  adAccountId: string;
+}): Promise<{ metaAssetId: string }> {
+  const repo = new StudioRepository(params.tenantId);
+  const asset = await repo.findAssetById(params.creativeAssetId);
+
+  if (!asset) {
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+  }
+
+  const metaConn = await repo.findLatestMetaConnection();
+
+  if (!metaConn) {
+    throw new AppError(403, 'META_CONNECTION_NOT_FOUND', 'Nenhuma conexao Meta encontrada para este tenant.');
+  }
+
+  const adAccounts = (metaConn.adAccounts || []) as Array<{ id: string }>;
+  const accountExists = adAccounts.some((account) => account.id === params.adAccountId);
+
+  if (!accountExists) {
+    throw new AppError(403, 'AD_ACCOUNT_NOT_FOUND', 'Conta de anuncio nao pertence ao seu tenant.');
+  }
+
+  const accessToken = decryptMetaToken(metaConn.accessToken);
+
+  let imageResponse: Response | undefined;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
+    try {
+      imageResponse = await fetch((asset as any).url, { signal: controller.signal } as any);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch (err: any) {
+    const isTimeoutError = err instanceof DOMException && err.name === 'AbortError';
+    const message = isTimeoutError
+      ? 'Timeout ao baixar a imagem do asset (limite: 30s).'
+      : 'Nao foi possivel baixar a imagem do asset.';
+    throw new AppError(502, 'IMAGE_DOWNLOAD_FAILED', message);
+  }
+
+  if (!imageResponse || !imageResponse.ok) {
+    throw new AppError(502, 'IMAGE_DOWNLOAD_FAILED', 'Nao foi possivel baixar a imagem do asset.');
+  }
+
+  const contentType = imageResponse.headers.get('content-type') || '';
+  const mimeType = contentType.split(';')[0]?.trim() ?? '';
+
+  if (!VALID_IMAGE_TYPES.includes(mimeType)) {
+    throw new AppError(400, 'INVALID_IMAGE_FORMAT', `Formato de imagem invalido: ${mimeType || 'desconhecido'}.`);
+  }
+
+  const arrayBuffer = await imageResponse.arrayBuffer();
+  if (arrayBuffer.byteLength > MAX_IMAGE_BYTES) {
+    throw new AppError(400, 'IMAGE_TOO_LARGE', 'Imagem excede o tamanho maximo de 4MB.');
+  }
+
+  const base64 = Buffer.from(arrayBuffer).toString('base64');
+  const urlObj = new URL((asset as any).url);
+  const filename = urlObj.pathname.split('/').pop() || 'image.jpg';
+
+  let metaAssetId: string;
+  try {
+    metaAssetId = await uploadAdImage({
+      adAccountId: params.adAccountId,
+      base64,
+      filename,
+      accessToken,
+    });
+  } catch (err: any) {
+    const metaCode = err.metaCode;
+    if (metaCode === 190) {
+      throw new AppError(401, 'META_TOKEN_EXPIRED', 'Token Meta expirado. Reconecte sua conta em Configuracoes > Integracoes.');
+    }
+    throw err;
+  }
+
+  await repo.patchAsset(params.creativeAssetId, { metaAssetId, complianceStatus: 'approved' });
+
+  return { metaAssetId };
+}
+
+/**
+ * "Excluir" um criativo não apaga mais nada — arquiva o grupo inteiro
+ * (raiz + todas as modificações). `assetId` pode ser qualquer versão do
+ * grupo, resolve a raiz internamente. Idempotente: arquivar de novo um
+ * grupo já arquivado não é erro.
+ */
+export async function deleteStudioAsset(params: { tenantId: string; assetId: string }): Promise<void> {
+  const repo = new StudioRepository(params.tenantId);
+  const asset = await repo.findAssetById(params.assetId);
+
+  if (!asset) {
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+  }
+
+  const rootId = asset.rootAssetId ?? asset.id;
+  await repo.archiveGroup(rootId);
+}
+
+/**
+ * Restaura um grupo arquivado — devolve pra listagem principal, preservando
+ * a versão em evidência de antes do arquivamento. Erro se o grupo não
+ * estiver arquivado (chamada inválida, não sucesso silencioso).
+ */
+export async function restoreStudioAsset(params: { tenantId: string; assetId: string }): Promise<void> {
+  const repo = new StudioRepository(params.tenantId);
+  const asset = await repo.findAssetById(params.assetId);
+
+  if (!asset) {
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+  }
+
+  const rootId = asset.rootAssetId ?? asset.id;
+  const root = await repo.findAssetById(rootId);
+  if (!root?.archivedAt) {
+    throw new AppError(400, 'CREATIVE_GROUP_NOT_ARCHIVED', 'Este criativo nao esta arquivado.');
+  }
+
+  await repo.restoreGroup(rootId);
+}
+
+export type StudioAssetListItem = {
+  id: string;
+  type: 'image' | 'video' | 'copy';
+  url: string;
+  complianceStatus: string;
+  metaAssetId: string | null;
+  createdAt: string;
+  headline?: string;
+  primaryText?: string;
+  modificationsRemaining: number | null;
+};
+
+/**
+ * Extrai headline/primary_text salvos no momento da geracao do criativo.
+ * complianceNotes guarda metadados de geracao (ex: { headline, cta }) ate o
+ * worker de compliance sobrescrever com o resultado da checagem
+ * (ex: { approved, issues, text_percentage }) — nesse caso nao ha texto a extrair.
+ */
+function extractCreativeCopyFromComplianceNotes(complianceNotes: string | null): {
+  headline?: string;
+  primaryText?: string;
+} {
+  if (!complianceNotes) return {};
+
+  try {
+    const parsed = JSON.parse(complianceNotes) as Record<string, unknown>;
+
+    const isComplianceResult =
+      'approved' in parsed || 'issues' in parsed || 'text_percentage' in parsed;
+    if (isComplianceResult) return {};
+
+    const headline = typeof parsed.headline === 'string' ? parsed.headline : undefined;
+    const primaryText = typeof parsed.primary_text === 'string' ? parsed.primary_text : undefined;
+
+    return { headline, primaryText };
+  } catch {
+    return {};
+  }
+}
+
+export async function listStudioAssetsForTenant(params: {
+  tenantId: string;
+  type?: 'image' | 'video' | 'copy';
+  status?: 'pending' | 'approved' | 'rejected';
+  archived?: boolean;
+  page: number;
+  limit: number;
+}): Promise<{
+  assets: StudioAssetListItem[];
+  total: number;
+  page: number;
+  totalPages: number;
+}> {
+  const { type, status, archived, page, limit } = params;
+  const repo = new StudioRepository(params.tenantId);
+  const { rows, total } = await repo.listAssets({ type, status, archived, page, limit });
+
+  const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+  return {
+    assets: rows.map((r: any) => ({
+      id: r.id,
+      type: r.type,
+      url: r.url,
+      complianceStatus: r.complianceStatus,
+      complianceNotes: r.complianceNotes ?? null,
+      metaAssetId: r.metaAssetId ?? null,
+      createdAt: r.createdAt.toISOString(),
+      modificationsRemaining: r.modificationsRemaining ?? null,
+      ...extractCreativeCopyFromComplianceNotes(r.complianceNotes ?? null),
+    })),
+    total,
+    page,
+    totalPages,
+  };
+}

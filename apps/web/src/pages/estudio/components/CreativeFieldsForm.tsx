@@ -124,7 +124,7 @@ export function CreativeFieldsForm({ layout, initial, imageUrl, submitting, onCr
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E8631A] mb-2">Preview ao vivo</p>
         <div className="relative aspect-square rounded-2xl border border-[#E6E8EC] bg-[#101828] overflow-hidden">
           {previewUrl && !previewError && (
-            <img src={previewUrl} alt="Preview do criativo" className="w-full h-full object-cover" />
+            <img src={previewUrl} alt="Preview do anúncio" className="w-full h-full object-cover" />
           )}
           {(previewLoading || (!previewUrl && !previewError)) && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/30">

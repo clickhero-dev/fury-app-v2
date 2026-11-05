@@ -10,15 +10,14 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+assets
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# QA jornada real (Playwright)
+test-results-qa
+playwright-report-qa

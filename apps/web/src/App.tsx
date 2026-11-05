@@ -1,14 +1,47 @@
+import { Provider } from 'react-redux';
 import { RouterProvider } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider } from './components/providers/ThemeProvider';
 import { router } from './router';
 import { queryClient } from './lib/query-client';
+import { store } from './store';
+import { identifyUser, resetUser, startReplay, stopReplay } from './lib/posthog';
+import { CookieConsentBanner } from './components/CookieConsentBanner';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { startSessionRefresh } from './lib/session-refresh';
 import './App.css';
+
+function bindPostHogIdentity() {
+  const handleChange = () => {
+    const state = store.getState();
+    const { token, email, name, tenantId, plan } = state.auth;
+    if (token && email) {
+      identifyUser({ email, name, tenantId, plan });
+      startReplay();
+    } else {
+      stopReplay();
+      resetUser();
+    }
+  };
+  store.subscribe(handleChange);
+  handleChange();
+}
+
+bindPostHogIdentity();
+startSessionRefresh();
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
+    <Provider store={store}>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <ErrorBoundary>
+            <RouterProvider router={router} />
+            <CookieConsentBanner />
+          </ErrorBoundary>
+        </QueryClientProvider>
+      </ThemeProvider>
+    </Provider>
   );
 }
 

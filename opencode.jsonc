@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "code-review-graph": {
+      "type": "local",
+      "command": [
+        "/home/diogo/fury-app-v2/.venv/bin/python3",
+        "-m",
+        "code_review_graph",
+        "serve",
+        "--repo",
+        "/home/diogo/fury-app-v2"
+      ]
+    }
+  }
+}

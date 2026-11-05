@@ -1,0 +1,504 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Request, Response, NextFunction } from 'express';
+import { CampaignsController } from '../controllers/campaigns.controller.js';
+import type { CampaignsService } from '../services/campaigns/campaigns.service.js';
+
+vi.mock('../services/email/notify.js', () => ({
+  sendToTenant: vi.fn().mockResolvedValue(undefined),
+}));
+
+const { mockChat } = vi.hoisted(() => ({ mockChat: vi.fn() }));
+vi.mock('../services/llms/openrouter.service.js', () => ({
+  openrouterService: { chat: mockChat },
+}));
+
+function makeReq(overrides: Partial<Request> = {}): Request {
+  return {
+    body: {},
+    query: {},
+    params: {},
+    tenant: { tenantId: 'tenant-foo' },
+    setTimeout: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+    ...overrides,
+  } as unknown as Request;
+}
+
+function makeRes() {
+  const res: any = {};
+  res.status = vi.fn(() => res);
+  res.json = vi.fn(() => res);
+  res.setTimeout = vi.fn(() => res);
+  res.on = vi.fn(() => res);
+  res.off = vi.fn(() => res);
+  res.headersSent = false;
+  return res;
+}
+
+function makeController(service: Partial<CampaignsService> = {}) {
+  const svc = service as CampaignsService;
+  const repoFactory = vi.fn();
+  return new CampaignsController(svc, repoFactory as any);
+}
+
+describe('CampaignsController', () => {
+  const next: NextFunction = vi.fn() as unknown as NextFunction;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('createCampaign', () => {
+    it('returna 201 com a campanha criada (happy path)', async () => {
+      const campaign = { id: 'c1', name: 'Minha Campanha', objective: 'OUTCOME_SALES', dailyBudget: 1000, adAccountId: 'act_1' };
+      const ctrl = makeController({ createCampaign: vi.fn().mockResolvedValue(campaign) });
+      const req = makeReq({ body: { name: 'Minha Campanha', objective: 'OUTCOME_SALES', dailyBudget: 1000, adAccountId: 'act_1' } });
+      const res = makeRes();
+
+      await ctrl.createCampaign(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, data: campaign }));
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('retorna 400/validação quando body é inválido', async () => {
+      const ctrl = makeController();
+      const req = makeReq({ body: { name: 'X', objective: 'INVALIDO', dailyBudget: 1 } });
+      const res = makeRes();
+
+      await ctrl.createCampaign(req, res, next);
+
+      expect(res.status).not.toHaveBeenCalledWith(201);
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('getCampaign', () => {
+    it('retorna o detail da campanha (happy path)', async () => {
+      const detail = { id: 'c1', name: 'Minha Campanha' };
+      const ctrl = makeController({ getCampaignPanelDetail: vi.fn().mockResolvedValue(detail) });
+      const req = makeReq({ params: { id: 'c1' } });
+      const res = makeRes();
+
+      await ctrl.getCampaign(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(detail);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('retorna 404 quando a campanha não existe', async () => {
+      const ctrl = makeController({ getCampaignPanelDetail: vi.fn().mockResolvedValue(null) });
+      const req = makeReq({ params: { id: 'nao-existe' } });
+      const res = makeRes();
+
+      await ctrl.getCampaign(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Campanha não encontrada' });
+    });
+  });
+
+  describe('getCampaigns', () => {
+    it('retorna campanhas com paginação (happy path, sem cache)', async () => {
+      const result = { items: [{ id: 'c1' }], total: 1 };
+      const ctrl = makeController({ getCampaigns: vi.fn().mockResolvedValue(result) });
+      const req = makeReq({ query: { limit: '10', offset: '0' } });
+      const res = makeRes();
+
+      await ctrl.getCampaigns(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: result.items,
+          pagination: { total: 1, limit: 10, offset: 0 },
+        })
+      );
+      expect(next).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createWizardCampaign multi-criativo', () => {
+    const baseBody = {
+      objective: 'engagement',
+      location_city: 'São Paulo',
+      age_min: 18,
+      age_max: 45,
+      gender: 'all',
+      daily_budget_brl: 30,
+    };
+
+    const lastNextError = () =>
+      (next as unknown as { mock: { calls: Array<[unknown]> } }).mock.calls[0]?.[0] as
+        | { name?: string; issues?: Array<{ message: string }> }
+        | undefined;
+
+    it('201 com creatives[] de 2 itens → service recebe creatives mapeado e status 201', async () => {
+      const createCampaignFromWizard = vi.fn().mockResolvedValue({ success: true });
+      const ctrl = makeController({ createCampaignFromWizard });
+      const req = makeReq({
+        body: {
+          ...baseBody,
+          creatives: [
+            { creative_upload_url: 'https://example.com/a.jpg', headline: 'T1', primary_text: 'P1' },
+            { creative_upload_url: 'https://example.com/b.jpg', headline: 'T2', primary_text: 'P2' },
+          ],
+        },
+      });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(createCampaignFromWizard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          creatives: [
+            {
+              creativeAssetId: undefined,
+              creativeUploadUrl: 'https://example.com/a.jpg',
+              creativeInstagramMediaId: undefined,
+              creativeMediaUrl: undefined,
+              headline: 'T1',
+              primaryText: 'P1',
+              destinationUrl: undefined,
+            },
+            {
+              creativeAssetId: undefined,
+              creativeUploadUrl: 'https://example.com/b.jpg',
+              creativeInstagramMediaId: undefined,
+              creativeMediaUrl: undefined,
+              headline: 'T2',
+              primaryText: 'P2',
+              destinationUrl: undefined,
+            },
+          ],
+        })
+      );
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('400 quando um item de creatives não tem imagem → ZodError', async () => {
+      const ctrl = makeController();
+      const req = makeReq({
+        body: {
+          ...baseBody,
+          creatives: [
+            { creative_upload_url: 'https://example.com/a.jpg', headline: 'T1', primary_text: 'P1' },
+            { headline: 'T2', primary_text: 'P2' },
+          ],
+        },
+      });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(res.status).not.toHaveBeenCalledWith(201);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+      expect(JSON.stringify(lastNextError()?.issues)).toContain(
+        'Cada criativo deve ter imagem da galeria, upload ou post do Instagram.'
+      );
+    });
+
+    it('400 quando creatives tem 5 itens (cap 4) → ZodError', async () => {
+      const ctrl = makeController();
+      const req = makeReq({
+        body: {
+          ...baseBody,
+          creatives: Array.from({ length: 5 }, (_, i) => ({
+            creative_upload_url: `https://example.com/${i}.jpg`,
+            headline: `T${i}`,
+            primary_text: `P${i}`,
+          })),
+        },
+      });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(res.status).not.toHaveBeenCalledWith(201);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+    });
+
+    it('400 quando creatives ausente e legacy sem imagem → mantém mensagem atual', async () => {
+      const ctrl = makeController();
+      const req = makeReq({ body: { ...baseBody, headline: 'T1', primary_text: 'P1' } });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(res.status).not.toHaveBeenCalledWith(201);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+      expect(JSON.stringify(lastNextError()?.issues)).toContain(
+        'Selecione uma imagem da galeria, envie um arquivo ou escolha um post do Instagram.'
+      );
+    });
+
+    it('400 quando creatives ausente e legacy sem headline/primary_text → ZodError (refine legado)', async () => {
+      const ctrl = makeController();
+      const req = makeReq({
+        body: { ...baseBody, creative_upload_url: 'https://example.com/a.jpg' },
+      });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(res.status).not.toHaveBeenCalledWith(201);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+      expect(JSON.stringify(lastNextError()?.issues)).toContain(
+        'Informe o título (headline) e o texto principal (primary text).'
+      );
+    });
+
+    it('aceita criativo com destination_url "" (sem URL) — payload real do curl pós-feat multi-imagem', async () => {
+      const createCampaignFromWizard = vi.fn().mockResolvedValue({ success: true });
+      const ctrl = makeController({ createCampaignFromWizard });
+      const req = makeReq({
+        body: {
+          ...baseBody,
+          objective: 'whatsapp_conv',
+          creatives: [
+            {
+              creative_asset_id: '9edd8e0f-b782-4bab-98e6-eab2612d5241',
+              headline: 'teste',
+              primary_text: 'tete',
+              destination_url: '', // ← o campo que a feat multi-imagem passou a enviar sempre
+            },
+          ],
+        },
+      });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(createCampaignFromWizard).toHaveBeenCalledTimes(1);
+      expect((createCampaignFromWizard.mock.calls[0][0] as any).creatives[0]).toMatchObject({
+        destinationUrl: '',
+        headline: 'teste',
+        primaryText: 'tete',
+      });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('continua barrando URL não-http (não vazia) com a mensagem atual', async () => {
+      const ctrl = makeController();
+      const req = makeReq({
+        body: {
+          ...baseBody,
+          creatives: [
+            {
+              creative_upload_url: 'https://example.com/a.jpg',
+              headline: 'T1',
+              primary_text: 'P1',
+              destination_url: 'google.com', // inválida de verdade
+            },
+          ],
+        },
+      });
+      const res = makeRes();
+
+      await ctrl.createWizardCampaign(req, res, next);
+
+      expect(res.status).not.toHaveBeenCalledWith(201);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+      expect(JSON.stringify(lastNextError()?.issues)).toContain('URL inválida. Use http:// ou https://');
+    });
+  });
+
+  describe('getLeadCampaigns (filtro da página de Leads — fonte Meta)', () => {
+    it('retorna campanhas OUTCOME_LEADS da Meta (happy path)', async () => {
+      const leadCampaigns = [{ id: 'meta_1', name: 'Camp Formulário' }];
+      const ctrl = makeController({ getLeadCampaigns: vi.fn().mockResolvedValue(leadCampaigns) });
+      const req = makeReq();
+      const res = makeRes();
+
+      await ctrl.getLeadCampaigns(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, data: leadCampaigns }));
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('retorna 401 sem tenant', async () => {
+      const ctrl = makeController({ getLeadCampaigns: vi.fn() });
+      const req = makeReq({ tenant: undefined } as any);
+      const res = makeRes();
+
+      await ctrl.getLeadCampaigns(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'UNAUTHORIZED' }));
+      expect(ctrl['campaignsService']['getLeadCampaigns']).not.toHaveBeenCalled();
+    });
+
+    it('propaga erro mapeado do service (META_TOKEN_EXPIRED 401)', async () => {
+      const ctrl = makeController({
+        getLeadCampaigns: vi.fn().mockRejectedValue(
+          Object.assign(new Error('expired'), { code: 'META_TOKEN_EXPIRED', statusCode: 401 })
+        ),
+      });
+      const req = makeReq();
+      const res = makeRes();
+
+      await ctrl.getLeadCampaigns(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'META_TOKEN_EXPIRED', statusCode: 401 }));
+    });
+
+    it('propaga 403 do service (sem conexão Meta)', async () => {
+      const ctrl = makeController({
+        getLeadCampaigns: vi.fn().mockRejectedValue(
+          Object.assign(new Error('conn'), { code: 'META_CONNECTION_NOT_FOUND', statusCode: 403 })
+        ),
+      });
+      const req = makeReq();
+      const res = makeRes();
+
+      await ctrl.getLeadCampaigns(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'META_CONNECTION_NOT_FOUND', statusCode: 403 }));
+    });
+  });
+
+  describe('getCampaignLeads / getAllCampaignLeads', () => {
+    it('retorna leads de uma campanha (happy path)', async () => {
+      const leads = [{ name: 'Maria Souza', email: 'maria@exemplo.com', phone: '11999999999', createdAt: null }];
+      const ctrl = makeController({ getCampaignLeads: vi.fn().mockResolvedValue({ leads }) });
+      const req = makeReq({ params: { id: 'meta_1' } });
+      const res = makeRes();
+
+      await ctrl.getCampaignLeads(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, data: leads }));
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('retorna 401 sem tenant', async () => {
+      const ctrl = makeController({ getCampaignLeads: vi.fn() });
+      const req = makeReq({ params: { id: 'meta_1' }, tenant: undefined } as any);
+      const res = makeRes();
+
+      await ctrl.getCampaignLeads(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'UNAUTHORIZED' }));
+    });
+
+    it('retorna leads agregados de todas as campanhas (happy path)', async () => {
+      const leads = [{ name: 'João', campaignId: 'meta_1', campaignName: 'Camp' }];
+      const ctrl = makeController({ getAllCampaignLeads: vi.fn().mockResolvedValue({ leads }) });
+      const req = makeReq();
+      const res = makeRes();
+
+      await ctrl.getAllCampaignLeads(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, data: leads }));
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('agregado retorna 401 sem tenant', async () => {
+      const ctrl = makeController({ getAllCampaignLeads: vi.fn() });
+      const req = makeReq({ tenant: undefined } as any);
+      const res = makeRes();
+
+      await ctrl.getAllCampaignLeads(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'UNAUTHORIZED' }));
+    });
+
+    it('retorna 400 quando id ausente em /:id/leads', async () => {
+      const ctrl = makeController({ getCampaignLeads: vi.fn() });
+      const req = makeReq({ params: {} });
+      const res = makeRes();
+
+      await ctrl.getCampaignLeads(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'MISSING_CAMPAIGN_ID', statusCode: 400 }));
+      expect(ctrl['campaignsService']['getCampaignLeads']).not.toHaveBeenCalled();
+    });
+
+    it('propaga 404 do service (campanha inexistente)', async () => {
+      const ctrl = makeController({
+        getCampaignLeads: vi.fn().mockRejectedValue(
+          Object.assign(new Error('nf'), { code: 'CAMPAIGN_NOT_FOUND', statusCode: 404 })
+        ),
+      });
+      const req = makeReq({ params: { id: 'meta_apagada' } });
+      const res = makeRes();
+
+      await ctrl.getCampaignLeads(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'CAMPAIGN_NOT_FOUND', statusCode: 404 }));
+    });
+
+    it('propaga erro mapeado do service (401 META_TOKEN_EXPIRED)', async () => {
+      const ctrl = makeController({
+        getCampaignLeads: vi.fn().mockRejectedValue(
+          Object.assign(new Error('exp'), { code: 'META_TOKEN_EXPIRED', statusCode: 401 })
+        ),
+      });
+      const req = makeReq({ params: { id: 'meta_1' } });
+      const res = makeRes();
+
+      await ctrl.getCampaignLeads(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'META_TOKEN_EXPIRED', statusCode: 401 }));
+    });
+
+    it('propaga 403 do service (sem conexão Meta)', async () => {
+      const ctrl = makeController({
+        getAllCampaignLeads: vi.fn().mockRejectedValue(
+          Object.assign(new Error('conn'), { code: 'META_CONNECTION_NOT_FOUND', statusCode: 403 })
+        ),
+      });
+      const req = makeReq();
+      const res = makeRes();
+
+      await ctrl.getAllCampaignLeads(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'META_CONNECTION_NOT_FOUND', statusCode: 403 }));
+    });
+  });
+
+  describe('suggestText com vídeo do Estúdio', () => {
+    const VIDEO_ID = '11111111-1111-4111-8111-111111111111';
+    function makeVideoController(asset: Record<string, unknown> | null) {
+      const repo = {
+        findCreativeAsset: vi.fn().mockResolvedValue(asset),
+        findBrandKit: vi.fn().mockResolvedValue(null),
+        findTenant: vi.fn().mockResolvedValue({ businessContext: 'Padaria' }),
+      };
+      return new CampaignsController({} as CampaignsService, (() => repo) as any);
+    }
+
+    it('gera a sugestão só com texto a partir do roteiro', async () => {
+      mockChat.mockResolvedValue('{"headline":"Pão quentinho","primaryText":"Venha provar hoje mesmo!"}');
+      const ctrl = makeVideoController({
+        id: VIDEO_ID, type: 'video',
+        complianceNotes: JSON.stringify({ prompt: 'Promo do pão', scenes: [{ visual: 'forno', narration: 'Saindo agora' }] }),
+      });
+      const res = makeRes();
+
+      await ctrl.suggestText(makeReq({ body: { assetId: VIDEO_ID } }), res, next);
+
+      const userMsg = mockChat.mock.calls[0][0][1];
+      expect(typeof userMsg.content).toBe('string');
+      expect(userMsg.content).toContain('Saindo agora');
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        data: { headline: 'Pão quentinho', primaryText: 'Venha provar hoje mesmo!' },
+      }));
+    });
+
+    it('asset que não é vídeo → 404', async () => {
+      const ctrl = makeVideoController({ id: VIDEO_ID, type: 'image', complianceNotes: null });
+
+      await ctrl.suggestText(makeReq({ body: { assetId: VIDEO_ID } }), makeRes(), next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'CREATIVE_ASSET_NOT_FOUND' }));
+      expect(mockChat).not.toHaveBeenCalled();
+    });
+  });
+});

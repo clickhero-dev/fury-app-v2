@@ -1,10 +1,8 @@
 {
-  "id": "410fabe1-0889-4c7d-bb2e-c47cefaedb6a",
-  "prevId": "bd2f389d-130a-43d1-964a-252a4e2aafea",
-  "version": "5",
-  "dialect": "pg",
+  "version": "7",
+  "dialect": "postgresql",
   "tables": {
-    "automation_rules": {
+    "public.automation_rules": {
       "name": "automation_rules",
       "schema": "",
       "columns": {
@@ -57,32 +55,43 @@
       },
       "indexes": {
         "automation_rules_tenant_id_idx": {
-          "name": "automation_rules_tenant_id_idx",
           "columns": [
-            "tenant_id"
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "automation_rules_tenant_id_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "automation_rules_tenant_id_tenants_id_fk": {
           "name": "automation_rules_tenant_id_tenants_id_fk",
           "tableFrom": "automation_rules",
-          "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
           ],
+          "tableTo": "tenants",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "campaigns": {
+    "public.campaigns": {
       "name": "campaigns",
       "schema": "",
       "columns": {
@@ -148,39 +157,58 @@
       },
       "indexes": {
         "campaigns_tenant_id_idx": {
-          "name": "campaigns_tenant_id_idx",
           "columns": [
-            "tenant_id"
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "campaigns_tenant_id_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         },
         "campaigns_meta_campaign_id_idx": {
-          "name": "campaigns_meta_campaign_id_idx",
           "columns": [
-            "meta_campaign_id"
+            {
+              "expression": "meta_campaign_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "campaigns_meta_campaign_id_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "campaigns_tenant_id_tenants_id_fk": {
           "name": "campaigns_tenant_id_tenants_id_fk",
           "tableFrom": "campaigns",
-          "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
           ],
+          "tableTo": "tenants",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "client_goals": {
+    "public.client_goals": {
       "name": "client_goals",
       "schema": "",
       "columns": {
@@ -240,32 +268,43 @@
       },
       "indexes": {
         "client_goals_tenant_id_idx": {
-          "name": "client_goals_tenant_id_idx",
           "columns": [
-            "tenant_id"
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "client_goals_tenant_id_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "client_goals_tenant_id_tenants_id_fk": {
           "name": "client_goals_tenant_id_tenants_id_fk",
           "tableFrom": "client_goals",
-          "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
           ],
+          "tableTo": "tenants",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "creative_assets": {
+    "public.creative_assets": {
       "name": "creative_assets",
       "schema": "",
       "columns": {
@@ -317,39 +356,58 @@
       },
       "indexes": {
         "creative_assets_tenant_id_idx": {
-          "name": "creative_assets_tenant_id_idx",
           "columns": [
-            "tenant_id"
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "creative_assets_tenant_id_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         },
         "creative_assets_meta_asset_id_idx": {
-          "name": "creative_assets_meta_asset_id_idx",
           "columns": [
-            "meta_asset_id"
+            {
+              "expression": "meta_asset_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "creative_assets_meta_asset_id_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "creative_assets_tenant_id_tenants_id_fk": {
           "name": "creative_assets_tenant_id_tenants_id_fk",
           "tableFrom": "creative_assets",
-          "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
           ],
+          "tableTo": "tenants",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "fury_insights": {
+    "public.fury_insights": {
       "name": "fury_insights",
       "schema": "",
       "columns": {
@@ -401,52 +459,71 @@
       },
       "indexes": {
         "fury_insights_tenant_id_idx": {
-          "name": "fury_insights_tenant_id_idx",
           "columns": [
-            "tenant_id"
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "fury_insights_tenant_id_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         },
         "fury_insights_campaign_id_idx": {
-          "name": "fury_insights_campaign_id_idx",
           "columns": [
-            "campaign_id"
+            {
+              "expression": "campaign_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "fury_insights_campaign_id_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "fury_insights_tenant_id_tenants_id_fk": {
           "name": "fury_insights_tenant_id_tenants_id_fk",
           "tableFrom": "fury_insights",
-          "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
           ],
+          "tableTo": "tenants",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "fury_insights_campaign_id_campaigns_id_fk": {
           "name": "fury_insights_campaign_id_campaigns_id_fk",
           "tableFrom": "fury_insights",
-          "tableTo": "campaigns",
           "columnsFrom": [
             "campaign_id"
           ],
+          "tableTo": "campaigns",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "meta_connections": {
+    "public.meta_connections": {
       "name": "meta_connections",
       "schema": "",
       "columns": {
@@ -498,39 +575,58 @@
       },
       "indexes": {
         "meta_connections_tenant_id_idx": {
-          "name": "meta_connections_tenant_id_idx",
           "columns": [
-            "tenant_id"
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "meta_connections_tenant_id_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         },
         "meta_connections_meta_user_id_idx": {
-          "name": "meta_connections_meta_user_id_idx",
           "columns": [
-            "meta_user_id"
+            {
+              "expression": "meta_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "meta_connections_meta_user_id_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "meta_connections_tenant_id_tenants_id_fk": {
           "name": "meta_connections_tenant_id_tenants_id_fk",
           "tableFrom": "meta_connections",
-          "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
           ],
+          "tableTo": "tenants",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "tenants": {
+    "public.tenants": {
       "name": "tenants",
       "schema": "",
       "columns": {
@@ -563,11 +659,19 @@
       },
       "indexes": {
         "tenants_slug_idx": {
-          "name": "tenants_slug_idx",
           "columns": [
-            "slug"
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "tenants_slug_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {},
@@ -575,14 +679,17 @@
       "uniqueConstraints": {
         "tenants_slug_unique": {
           "name": "tenants_slug_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "slug"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
-      }
+      },
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "users": {
+    "public.users": {
       "name": "users",
       "schema": "",
       "columns": {
@@ -628,79 +735,113 @@
       },
       "indexes": {
         "users_tenant_id_idx": {
-          "name": "users_tenant_id_idx",
           "columns": [
-            "tenant_id"
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "users_tenant_id_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         },
         "users_email_tenant_idx": {
-          "name": "users_email_tenant_idx",
           "columns": [
-            "email",
-            "tenant_id"
+            {
+              "expression": "email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
           ],
-          "isUnique": false
+          "with": {},
+          "name": "users_email_tenant_idx",
+          "isUnique": false,
+          "method": "btree",
+          "concurrently": false
         }
       },
       "foreignKeys": {
         "users_tenant_id_tenants_id_fk": {
           "name": "users_tenant_id_tenants_id_fk",
           "tableFrom": "users",
-          "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
           ],
+          "tableTo": "tenants",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     }
   },
   "enums": {
-    "campaign_status": {
+    "public.campaign_status": {
       "name": "campaign_status",
-      "values": {
-        "draft": "draft",
-        "active": "active",
-        "paused": "paused",
-        "archived": "archived"
-      }
+      "schema": "public",
+      "values": [
+        "draft",
+        "active",
+        "paused",
+        "archived"
+      ]
     },
-    "compliance_status": {
+    "public.compliance_status": {
       "name": "compliance_status",
-      "values": {
-        "pending": "pending",
-        "approved": "approved",
-        "rejected": "rejected"
-      }
+      "schema": "public",
+      "values": [
+        "pending",
+        "approved",
+        "rejected"
+      ]
     },
-    "creative_type": {
+    "public.creative_type": {
       "name": "creative_type",
-      "values": {
-        "image": "image",
-        "video": "video",
-        "copy": "copy"
-      }
+      "schema": "public",
+      "values": [
+        "image",
+        "video",
+        "copy"
+      ]
     },
-    "user_role": {
+    "public.user_role": {
       "name": "user_role",
-      "values": {
-        "owner": "owner",
-        "admin": "admin",
-        "member": "member"
-      }
+      "schema": "public",
+      "values": [
+        "owner",
+        "admin",
+        "member"
+      ]
     }
   },
   "schemas": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
-  }
+    "tables": {},
+    "columns": {}
+  },
+  "id": "410fabe1-0889-4c7d-bb2e-c47cefaedb6a",
+  "prevId": "bd2f389d-130a-43d1-964a-252a4e2aafea",
+  "sequences": {},
+  "policies": {},
+  "views": {},
+  "roles": {}
 }
