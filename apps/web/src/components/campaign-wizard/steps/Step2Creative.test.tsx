@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Step2Creative } from './Step2Creative';
 import type { WizardCreativeState, WizardObjective } from '../types';
@@ -64,6 +64,19 @@ beforeEach(() => {
 });
 
 describe('Step2Creative — seleção múltipla de imagens', () => {
+  /*
+   * Funcionalidade: variações visuais no wizard
+   * Cenário: Dado um asset da Galeria selecionado, Quando gero variações, Então o lote é solicitado sem criar campanha.
+   */
+  it('solicita um lote de variações apenas para a imagem selecionada da Galeria', async () => {
+    render(<Harness initial={[]} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Banner A/ }));
+    const button = screen.getByRole('button', { name: /Gerar variações visuais/ });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/studio/ai/visual-variation-batches', { baseAssetId: 'a1' }, expect.any(Object)));
+  });
+
   it('renderiza os campos de texto UMA única vez (headline, texto e contador)', async () => {
     render(<Harness initial={[makeCreative()]} />);
 

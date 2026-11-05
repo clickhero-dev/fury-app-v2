@@ -19,6 +19,7 @@ interface SuggestResponse {
   headline: string;
   primaryText: string;
 }
+interface VariationBatch { batchId: string; status: string; baseAssetId: string; items: Array<{ index: number; status: string; assetId?: string; imageUrl?: string; complianceStatus?: string; error?: string }> }
 
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024;
 
@@ -35,6 +36,8 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
   const [tab, setTab] = useState<'gallery' | 'upload' | 'instagram'>('gallery');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [suggestError, setSuggestError] = useState(false);
+  const [variationBatchId, setVariationBatchId] = useState<string | null>(null);
+  const [variationError, setVariationError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Texto do anúncio é ÚNICO e vale para todas as imagens selecionadas
@@ -72,6 +75,19 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
 
   // Assets reprovados continuam visíveis (com badge + motivo), mas não selecionáveis.
   const galleryAssets = (data?.assets ?? []).filter((asset) => asset.type === 'image');
+
+  const baseVariationAsset = value.length === 1 && value[0].assetId
+    ? galleryAssets.find((asset) => asset.id === value[0].assetId) : undefined;
+  const variations = useQuery<VariationBatch>({
+    queryKey: ['visual-variation-batch', variationBatchId], enabled: Boolean(variationBatchId),
+    queryFn: async () => (await api.get(`/studio/ai/visual-variation-batches/${variationBatchId}`)).data,
+    refetchInterval: (query) => ['queued', 'running'].includes(query.state.data?.status ?? '') ? 2000 : false,
+  });
+  const variationMutation = useMutation({
+    mutationFn: async (baseAssetId: string) => (await api.post('/studio/ai/visual-variation-batches', { baseAssetId }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })).data as VariationBatch,
+    onSuccess: (batch) => { setVariationError(null); setVariationBatchId(batch.batchId); },
+    onError: () => setVariationError('Não foi possível iniciar as variações. Tente novamente.'),
+  });
 
   const selectedImageUrl = value[0]?.assetUrl || value[0]?.uploadUrl || value[0]?.mediaUrl || null;
 
@@ -144,6 +160,11 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
 
   function handleRemove(id: string) {
     onChange(value.filter((c) => c.id !== id));
+  }
+
+  function addVariation(item: NonNullable<VariationBatch['items'][number]>) {
+    if (!item.assetId || !item.imageUrl || value.some((creative) => creative.assetId === item.assetId) || !canAddMore) return;
+    onChange([...value, { id: crypto.randomUUID(), assetId: item.assetId, assetUrl: item.imageUrl, headline: copy.headline, primaryText: copy.primaryText, destinationUrl: copy.destinationUrl }]);
   }
 
   async function handleFiles(files: File[]) {
@@ -308,6 +329,33 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
               })}
             </div>
           )}
+          <div className="mt-4 rounded-xl border border-border bg-surface-secondary/40 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-text-primary">Variações visuais</p>
+                <p className="text-xs text-text-secondary">Até 10 créditos de criação; cada imagem concluída usa 1 crédito.</p>
+              </div>
+              <button type="button" onClick={() => baseVariationAsset && variationMutation.mutate(baseVariationAsset.id)} disabled={!baseVariationAsset || variationMutation.isPending} className="inline-flex items-center gap-1 rounded-md bg-brand px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                <Sparkles className="h-3.5 w-3.5" />{variationMutation.isPending ? 'Iniciando...' : 'Gerar variações visuais'}
+              </button>
+            </div>
+            {!baseVariationAsset && <p className="mt-2 text-xs text-text-tertiary">Selecione somente uma imagem da Galeria para gerar variações.</p>}
+            {variationError && <p role="alert" className="mt-2 text-xs text-error">{variationError}</p>}
+            {variations.data && (
+              <div className="mt-3" aria-live="polite">
+                <p role="status" className="mb-2 text-xs text-text-secondary">{variations.data.items.filter((item) => item.status === 'succeeded').length}/10 variações concluídas — revise formato e texto antes de usar.</p>
+                <div className="grid grid-cols-5 gap-2">
+                  {variations.data.items.map((item) => {
+                    const selected = item.assetId && value.some((creative) => creative.assetId === item.assetId);
+                    return <button key={item.index} type="button" disabled={!item.assetId || Boolean(item.complianceStatus === 'rejected') || (!selected && !canAddMore)} onClick={() => addVariation(item)} aria-label={`Variação ${item.index + 1}: ${item.status}`} className={cn('relative aspect-square overflow-hidden rounded-md border bg-surface', selected ? 'border-brand' : 'border-border')}>
+                      {item.imageUrl ? <img src={item.imageUrl} alt={`Variação ${item.index + 1}`} className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-[10px] text-text-tertiary">{item.status === 'failed' ? 'Falhou' : item.status}</span>}
+                      {selected && <Check className="absolute right-1 top-1 h-4 w-4 rounded-full bg-brand p-0.5 text-white" />}
+                    </button>;
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="upload">
