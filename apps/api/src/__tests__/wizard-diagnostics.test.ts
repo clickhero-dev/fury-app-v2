@@ -110,16 +110,24 @@ describe('Wizard Diagnostics (dados de produção)', () => {
 
   it('DIAG 1: Fluxo feliz completo', async () => {
     setupBasics();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('test image', { status: 200, headers: { 'content-type': 'image/png' } })
+    );
+    mockUploadAdImage.mockResolvedValue('test-image-hash');
     mockMetaApiCall
       .mockResolvedValueOnce({ id: 'c_ok' })
       .mockResolvedValueOnce({ id: 'as_ok' })
       .mockResolvedValueOnce({ id: 'cr_ok' })
       .mockResolvedValueOnce({ id: 'ad_ok' });
 
-    const result = await createCampaignFromWizard(wizardPayload);
-    expect(result.success).toBe(true);
-    expect(result.meta_campaign_id).toBe('c_ok');
-    expect(mockMetaApiCall).toHaveBeenCalledTimes(4); // campaign + adset + creative + ad
+    try {
+      const result = await createCampaignFromWizard(wizardPayload);
+      expect(result.success).toBe(true);
+      expect(result.meta_campaign_id).toBe('c_ok');
+      expect(mockMetaApiCall).toHaveBeenCalledTimes(4); // campaign + adset + creative + ad
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it('DIAG 2: Erro na criação da campaign (sem código Meta)', async () => {

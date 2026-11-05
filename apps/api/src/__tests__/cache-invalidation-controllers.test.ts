@@ -16,6 +16,8 @@ vi.mock('../lib/campaigns-cache.js', () => ({
   invalidateCampaignsCache: mockInvalidateCampaignsCache,
 }));
 
+// compra de plano confere o tipo de conta (parceiro é vitalício); aqui é cliente comum
+vi.mock('../services/core/rbac.service.js', () => ({ rbacService: { getPlatformRole: vi.fn(async () => 'user') } }));
 vi.mock('../lib/http-cache.js', () => ({
   invalidateHttpCache: mockInvalidateHttpCache,
 }));
@@ -144,6 +146,7 @@ describe('invalidação de cache http nos writes', () => {
     it('subscribe invalida /api/billing', async () => {
       const ctrl = makeController({ subscribe: vi.fn().mockResolvedValue({ id: 'sub-1' }) });
       const req = makeReq({
+        user: { userId: 'user-1', tenantId: 'tenant-foo', email: 'diogo@example.com', role: 'owner' },
         body: {
           planId: '11111111-1111-1111-1111-111111111111',
           billingType: 'PIX',

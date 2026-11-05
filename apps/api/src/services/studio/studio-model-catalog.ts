@@ -110,3 +110,15 @@ export const VIDEO_MODELS: StudioModel[] = [
     type: 'video',
   },
 ];
+/**
+ * Vídeo de anúncio (Criação Rápida): aceitam 9:16 e 16:9, fotos de referência
+ * (input_references), 15s e áudio nativo — checado em /api/v1/videos/models (2026-10).
+ */
+export const AD_VIDEO_MODELS: StudioModel[] = [
+  { id: 'alibaba/wan-3.0', label: 'Wan 3.0', description: 'Até 30s', family: 'video', type: 'video' },
+  { id: 'bytedance/seedance-2.5', label: 'Seedance 2.5', description: 'Referências múltiplas', family: 'video', type: 'video' },
+  { id: 'bytedance/seedance-2.0', label: 'Seedance 2.0', description: 'Personagem consistente', family: 'video', type: 'video' },
+  { id: 'bytedance/seedance-2.0-fast', label: 'Seedance 2.0 Fast', description: 'Mais rápido', family: 'video', type: 'video' },
+];
+
+export const DEFAULT_AD_VIDEO_MODEL = AD_VIDEO_MODELS[0].id;

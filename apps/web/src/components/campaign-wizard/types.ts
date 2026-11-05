@@ -58,6 +58,8 @@ export interface WizardCreativeState {
   id: string; // chave estável p/ listas (crypto.randomUUID)
   assetId?: string;
   assetUrl?: string;
+  // asset de vídeo do Estúdio
+  isVideo?: boolean;
   uploadUrl?: string;
   headline: string;
   primaryText: string;

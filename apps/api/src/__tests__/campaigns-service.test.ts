@@ -429,6 +429,71 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     }));
   });
 
+  describe('criativo de vídeo do Estúdio', () => {
+    function setupVideo(complianceNotes: string | null) {
+      const ctx = makeService();
+      ctx.repo.metaConnections.push({
+        tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+        adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'],
+        createdAt: new Date(),
+      } as any);
+      ctx.repo.creativeAssets.push({
+        id: 'vid_1', tenantId: TENANT_ID, url: 'https://cdn.ady/v.mp4', type: 'video',
+        complianceNotes, createdAt: new Date(),
+      });
+      ctx.meta.locationsResult = [{ key: 'city_key_1' }];
+      ctx.meta.downloadImageResult = { buffer: Buffer.from('mp4'), contentType: 'video/mp4' };
+      return ctx;
+    }
+    const videoArgs = {
+      tenantId: TENANT_ID, objective: 'visits' as const,
+      creatives: [{ creativeAssetId: 'vid_1', headline: 'Oferta', primaryText: 'Imperdivel', destinationUrl: 'https://example.com' }],
+      locationCity: 'Sao Paulo', locationRadiusKm: 30,
+      ageMin: 18, ageMax: 65, gender: 'all' as const, dailyBudgetBrl: 100,
+    };
+
+    it('sobe o vídeo e cria o criativo com video_data (capa = foto de referência)', async () => {
+      const { service, meta, repo } = setupVideo(JSON.stringify({ photos: [{ url: 'https://cdn.ady/foto.jpg' }] }));
+      const uploadImage = vi.spyOn(meta, 'uploadAdImage');
+
+      await service.createCampaignFromWizard(videoArgs);
+
+      expect(meta.uploadAdVideoCalls).toHaveLength(1);
+      expect(meta.uploadAdVideoCalls[0]).toMatchObject({ adAccountId: 'act_123', contentType: 'video/mp4' });
+      expect(uploadImage).not.toHaveBeenCalled();
+      const spec = (meta.createdAdCreatives[0] as any).object_story_spec;
+      expect(spec.link_data).toBeUndefined();
+      expect(spec.video_data).toEqual({
+        video_id: 'mock_video_id',
+        image_url: 'https://cdn.ady/foto.jpg',
+        message: 'Imperdivel',
+        title: 'Oferta',
+        call_to_action: { type: 'LEARN_MORE', value: { link: 'https://example.com' } },
+      });
+      expect((repo.campaigns[0] as any).budget.creative_image_urls).toEqual(['https://cdn.ady/foto.jpg']);
+    });
+
+    it('sem foto de referência usa a capa gerada pela Meta; LIKE_PAGE sem title', async () => {
+      const { service, meta } = setupVideo(null);
+
+      await service.createCampaignFromWizard({ ...videoArgs, objective: 'engagement' });
+
+      const videoData = (meta.createdAdCreatives[0] as any).object_story_spec.video_data;
+      expect(videoData.image_url).toBe('https://cdn.meta/thumb.jpg');
+      expect(videoData.call_to_action.type).toBe('LIKE_PAGE');
+      expect(videoData).not.toHaveProperty('title');
+    });
+
+    it('falha no processamento do vídeo não cria nada no Meta', async () => {
+      const { service, meta, repo } = setupVideo(null);
+      meta.videoStatusResult = { status: 'error' };
+
+      await expect(service.createCampaignFromWizard(videoArgs)).rejects.toMatchObject({ code: 'META_VIDEO_PROCESSING_FAILED' });
+      expect(meta.createdCampaigns).toHaveLength(0);
+      expect(repo.campaigns).toHaveLength(0);
+    });
+  });
+
   const wizardArgs = {
     tenantId: TENANT_ID, objective: 'visits' as const,
     headline: 'Oferta', primaryText: 'Imperdivel',

@@ -103,6 +103,7 @@ describe('startPlanGeneration — lock de job por tenant', () => {
 
     expect(dbMock.insert).toHaveBeenCalled();
     expect(queueAdd).toHaveBeenCalled();
+    expect(queueAdd.mock.calls[0][0]).toBe('worker-planner-content-plan-generate');
     const enqueuedPayload = (queueAdd.mock.calls[0] as any)?.[1] as { jobId: string; tenantId: string };
     expect(enqueuedPayload).toMatchObject({ tenantId: 't1', jobId: expect.any(String) });
     expect(status.id).toBe('new-1');

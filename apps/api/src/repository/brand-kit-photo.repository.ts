@@ -47,6 +47,14 @@ export class BrandKitPhotoRepository extends TenantScopedRepository {
     return row;
   }
 
+  async hideFromReferencePanel(id: string): Promise<BrandKitPhoto | undefined> {
+    const [row] = await this.db.update(brandKitPhotos)
+      .set({ hiddenFromReferencePanel: true })
+      .where(and(eq(brandKitPhotos.id, id), this.active()))
+      .returning();
+    return row;
+  }
+
   /** Soft delete; devolve a linha (undefined se não for do tenant ou já removida). */
   async softDeleteById(id: string): Promise<BrandKitPhoto | undefined> {
     const [row] = await this.db

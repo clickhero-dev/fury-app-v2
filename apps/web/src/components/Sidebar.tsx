@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useLogout } from '@/hooks/useLogout';
@@ -19,6 +20,10 @@ import { AdySymbol } from '@/components/AdySymbol';
 import { SidebarUserCard } from './SidebarUserCard';
 import { captureEvent } from '@/lib/posthog';
 import { isNavItemActive, isNavItemCurrent, type NavItemShape } from './sidebarNav';
+import { useBlockedViews } from '@/hooks/useBlockedViews';
+import { viewKeyForPath } from '@/lib/rbac-views';
+import { canAccessAdmin, getStoredPlatformRole, hasLifetimeAccess, isBillingPath } from '@/lib/platform-role';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -147,6 +152,30 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const logout = useLogout();
+  const { isBlocked } = useBlockedViews();
+
+  // RBAC: tira do menu o que está bloqueado; seção vazia some
+  const lifetime = hasLifetimeAccess();
+  const isVisible = (item: NavItem) => {
+    if (lifetime && isBillingPath(item.to)) return false;
+    const key = viewKeyForPath(item.to);
+    return !key || !isBlocked(key);
+  };
+  const visibleSections = sections
+    .map((s) => ({
+      ...s,
+      items: s.items
+        .filter(isVisible)
+        .map((item) => (item.children ? { ...item, children: item.children.filter(isVisible) } : item)),
+    }))
+    .filter((s) => s.items.length > 0);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+  const confirmLogout = () => {
+    captureEvent('logout');
+    logout();
+    onMobileClose?.();
+    setLogoutDialogOpen(false);
+  };
 
   // Seções e submenus recolhíveis — decisão de UX: clique no rótulo da seção
   // alterna o grupo; clique no item pai navega E alterna o submenu. Padrão
@@ -242,7 +271,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
       {/* Navegação agrupada — seções recolhíveis (clique no rótulo) */}
       <nav className="mt-8 flex flex-1 flex-col overflow-y-auto">
-        {sections.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.label} className="mb-1 flex flex-col gap-1">
             {!collapsed && (
               <button
@@ -275,17 +304,36 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         ))}
       </nav>
 
+      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <DialogContent aria-describedby="logout-description" className="z-[70]">
+          <DialogHeader><DialogTitle>Sair da conta?</DialogTitle><DialogDescription id="logout-description">Você realmente deseja sair?</DialogDescription></DialogHeader>
+          <DialogFooter>
+            <button type="button" onClick={() => setLogoutDialogOpen(false)} className="rounded-lg border border-border px-4 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">Cancelar</button>
+            <button type="button" onClick={confirmLogout} className="rounded-lg bg-brand px-4 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">Sim, sair</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Rodapé com Sair e botão de recuar centralizados */}
       <div className="mt-auto space-y-3 pt-4 border-t border-border">
         <SidebarUserCard collapsed={collapsed} />
 
+        {/* Atalho para o admin (super_admin e admin_partner) */}
+        {canAccessAdmin(getStoredPlatformRole()) && (
+          <Link
+            to="/admin/dashboard"
+            onClick={() => onMobileClose?.()}
+            title={collapsed ? 'Ir para o Admin' : undefined}
+            className="flex w-full items-center justify-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-text-secondary hover:bg-sidebar-hover hover:text-text-primary transition-colors"
+          >
+            <ShieldCheck className="size-[18px] shrink-0 text-text-tertiary" />
+            {!collapsed && <span>Ir para o Admin</span>}
+          </Link>
+        )}
+
         {/* Botão Sair */}
         <button
-          onClick={() => {
-            onMobileClose?.();
-            captureEvent('logout');
-            logout();
-          }}
+          onClick={() => setLogoutDialogOpen(true)}
           title={collapsed ? 'Sair' : undefined}
           className="flex w-full items-center justify-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-text-secondary hover:bg-sidebar-hover hover:text-text-primary transition-colors"
         >

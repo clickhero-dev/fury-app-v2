@@ -100,7 +100,7 @@ describe('complianceAdjuster.handleRejected', () => {
       expect.objectContaining({ complianceAttempts: 1, complianceStatus: 'pending_compliance' })
     );
     expect(state.enqueueCompliance).toHaveBeenCalledWith(
-      'compliance-check',
+      'worker-studio-compliance-check',
       expect.objectContaining({ creativeAssetId: 'asset-adj-1', tenantId: 't-1' }),
       expect.anything()
     );

@@ -23,7 +23,8 @@ export function SnackHost() {
         snack.type === 'success' ? 'bg-success text-white' : 'bg-error text-white'
       )}
     >
-      {snack.type === 'success' ? '✅' : '⚠️'} {snack.message}
+      <span>{snack.type === 'success' ? '✅' : '⚠️'} {snack.message}</span>
+      {snack.action && <a href={snack.action.href} target="_blank" rel="noreferrer" className="ml-3 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">{snack.action.label}</a>}
     </div>
   );
 }

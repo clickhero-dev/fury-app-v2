@@ -125,6 +125,22 @@ export interface IMetaCampaignProvider {
     }
   ): Promise<string | undefined>;
 
+  uploadAdVideo(
+    params: {
+      adAccountId: string;
+      buffer: Buffer;
+      filename: string;
+      contentType: string;
+      accessToken: string;
+    }
+  ): Promise<string>;
+
+  getAdVideoStatus(
+    videoId: string,
+    accessToken: string
+  ): Promise<{ status?: string; picture?: string }>;
+
+  // Também baixa vídeo (fetch genérico)
   downloadImage(
     url: string,
     signal: AbortSignal

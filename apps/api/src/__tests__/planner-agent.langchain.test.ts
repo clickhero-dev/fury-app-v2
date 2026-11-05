@@ -1,4 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// regra de chave por cliente tem testes próprios (ai-key-resolution); aqui só o agente
+vi.mock('../lib/ai-key-context.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/ai-key-context.js')>()),
+  resolveAiKey: async () => ({ key: 'test-key', scope: 'ady' }),
+}));
 import {
   buildContentDates,
   generateContentPrompts,
