@@ -492,6 +492,41 @@ describe('BDD: Endpoints v2', () => {
     expect(res.body.data[0].conversions).toBe(3);
   });
 
+  it('Cenário: campanha de leads com pixel externo preserva conversões dos Insights', async () => {
+    const { controller, repo } = makeFakes({
+      repo: {
+        findCampaignSnapshots: vi.fn(async () => ({
+          items: [
+            {
+              id: 's-pixel', tenantId: TENANT, metaCampaignId: 'pixel-camp', name: 'Campanha Pixel Externo',
+              status: 'ACTIVE', objective: 'OUTCOME_LEADS', budget: {}, hasLeadForm: false, lastInsightsAt: new Date(),
+              metrics: { spend: 12.5, impressions: 400, clicks: 24, conversions: 7, cpa: 1.79 },
+            },
+          ],
+          total: 1,
+        })),
+        findCampaignDailyInsights: vi.fn(async () => [
+          { metaCampaignId: 'pixel-camp', date: '2026-09-29', metrics: { spend: 12.5, conversions: 9, clicks: 24, impressions: 400 } },
+        ]),
+        countLeadsByCampaign: vi.fn(async () => new Map<string, number>()),
+      },
+    });
+    const app = buildApp(controller);
+
+    const total = await request(app)
+      .get('/api/v2/campaigns')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`);
+    const period = await request(app)
+      .get('/api/v2/campaigns?startDate=2026-09-29&endDate=2026-09-29')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`);
+
+    expect(total.status).toBe(200);
+    expect(total.body.data[0]).toMatchObject({ conversions: 7, cpa: 1.79 });
+    expect(period.status).toBe(200);
+    expect(period.body.data[0]).toMatchObject({ conversions: 9, cpa: 12.5 / 9 });
+    expect(repo.countLeadsByCampaign).toHaveBeenCalled();
+  });
+
   it('Cenário: alterar status de um lead → 200 + update no repo', async () => {
     const { controller, repo } = makeFakes();
     const app = buildApp(controller);

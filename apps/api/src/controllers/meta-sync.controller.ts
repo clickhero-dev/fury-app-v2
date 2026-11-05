@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler.js';
 import { MetaSyncService, type PartialFailure } from '../services/meta/meta-sync.service.js';
 import { MetaSyncRepository } from '../repository/meta-sync.repository.js';
-import { isLeadObjective } from '../utils/meta-conversion-events.js';
 
 const STALE_MS = 3 * 60 * 60 * 1000;
 
@@ -116,18 +115,21 @@ function toSnapshotView(s: {
 }
 
 /**
- * Campanha de captação (formulário/mensagem): o número exibido como "clientes"
- * E o envio de formulário. Fonte única = `meta_leads` (mesma origem da página
- * Clientes e do card "Pessoas" do detalhe). Insights/`conversions` do cache
- * Meta NÃO entram — o fallback antigo contava clique como cliente.
+ * Campanha de formulário instantâneo: o número exibido como "clientes" é o
+ * total de envios persistidos em `meta_leads` (mesma fonte da página Clientes
+ * e do card "Pessoas" do detalhe).
+ *
+ * Campanhas de leads sem formulário podem usar pixel externo. Nelas, a Meta
+ * reporta `offsite_conversion.fb_pixel_lead` em `metrics.conversions`, então
+ * não podemos substituir os Insights por uma contagem vazia de `meta_leads`.
  */
-function isLeadCampaign(view: Pick<SnapshotView, 'objective' | 'hasLeadForm'>): boolean {
-  return isLeadObjective(view.objective) || view.hasLeadForm === true;
+function usesPersistedLeadCounts(view: Pick<SnapshotView, 'hasLeadForm'>): boolean {
+  return view.hasLeadForm === true;
 }
 
 function withLeadCounts(views: SnapshotView[], leadCounts: Map<string, number>): SnapshotView[] {
   return views.map((view) => {
-    if (!isLeadCampaign(view)) return view;
+    if (!usesPersistedLeadCounts(view)) return view;
     const conversions = leadCounts.get(view.id) ?? 0;
     const spend = view.spend;
     const metrics = { ...view.metrics, conversions };
