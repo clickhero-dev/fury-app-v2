@@ -478,7 +478,8 @@ export class CampaignsService {
 
   private async resolveCampaignIds(campaignId: string, tenantId: string): Promise<{ localId: string | null; metaCampaignId: string }> {
     let byId: CampaignRecord | null = null;
-    try { byId = await this.repo.findCampaignById(campaignId); }
+    // só campanha do próprio tenant
+    try { byId = await this.repo.findCampaignByTenantAndId(tenantId, campaignId); }
     catch { /* not a UUID — skip local lookup */ }
     if (byId) return { localId: byId.id, metaCampaignId: byId.metaCampaignId };
     const byMeta = await this.repo.findCampaignByMetaId(tenantId, campaignId);
@@ -1456,7 +1457,8 @@ export class CampaignsService {
   async getCampaignLeads(args: { tenantId: string; campaignId: string }): Promise<{
     leads: Array<{ name: string | null; email: string | null; phone: string | null; createdAt: string | null }>;
   }> {
-    const accessToken = await this.getAccessTokenWithSystemFallback(args.tenantId);
+    // leads são dados pessoais: só com o token do próprio tenant
+    const accessToken = await this.getAccessToken(args.tenantId);
 
     // 1) Campanha local com lead_form_id → caminho direto pelo form.
     // O `campaignId` pode ser um META id (campanha criada fora do Fury) — a

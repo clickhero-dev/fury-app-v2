@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLogout } from '@/hooks/useLogout';
 import { Users, Clock, Zap, LogOut, LayoutGrid, ArrowLeft, Ticket, CircleHelp, Activity, Megaphone, MonitorSmartphone, Briefcase, Building2, KeyRound } from 'lucide-react';
 import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useFavicon } from '@/hooks/useFavicon';
@@ -67,12 +68,10 @@ export function AdminShell() {
     (viewKey !== null && isBlocked(viewKey));
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
 
+  const logout = useLogout('/admin/login');
   const handleLogout = () => {
     setLogoutDialogOpen(false);
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    navigate('/admin/login');
+    logout();
   };
 
   const handleCampanhasClick = (e: React.MouseEvent) => {

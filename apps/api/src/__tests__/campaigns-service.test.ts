@@ -353,13 +353,13 @@ describe('CampaignsService.updateCampaignStatus & softDeleteCampaign', () => {
     expect(updateCampaignSnapshot).toHaveBeenCalledWith(TENANT_ID, 'mc1', { status: 'ARCHIVED' });
   });
 
-  it('softDelete bloqueia campanha local de outro tenant (403 FORBIDDEN)', async () => {
+  it('softDelete não enxerga campanha local de outro tenant (404)', async () => {
     const { service, repo } = makeService();
     repo.metaConnections.push({ tenantId: TENANT_ID, accessToken: 'tok' } as any);
     const otherCampaign = await repo.createCampaign({ tenantId: 'tenant-2', metaCampaignId: 'mc2', name: 'Other' } as any);
 
     await expect(service.softDeleteCampaign({ tenantId: TENANT_ID, campaignId: otherCampaign.id, userId: 'u1' }))
-      .rejects.toMatchObject({ code: 'FORBIDDEN', statusCode: 403 });
+      .rejects.toMatchObject({ code: 'CAMPAIGN_NOT_FOUND', statusCode: 404 });
     expect(repo.campaigns.find((c) => c.id === otherCampaign.id)?.status).not.toBe('archived');
   });
 });
@@ -1626,16 +1626,17 @@ describe('CampaignsService.getCampaignLeads', () => {
       .rejects.toMatchObject({ code: 'CAMPAIGN_NOT_FOUND', statusCode: 404 });
   });
 
-  it('fallback META_SYSTEM_ACCESS_TOKEN sem leads_retrieval (#200) → META_PERMISSION_DENIED (403)', async () => {
+  it('sem conexão Meta não usa o token de sistema para leads (403, Meta nem é chamada)', async () => {
     const prev = process.env.META_SYSTEM_ACCESS_TOKEN;
     process.env.META_SYSTEM_ACCESS_TOKEN = 'system_token_for_test';
     try {
       const { service, meta } = makeService();
-      // Sem conexão Meta local → usa o token de sistema; o Meta responde #200 (falta leads_retrieval).
-      meta.getCampaignAds = async () => { throw metaError(200, '(#200) Permission error', { metaType: 'OAuthException' }); };
+      let called = false;
+      meta.getCampaignAds = async () => { called = true; return { data: [] } as any; };
 
       await expect(service.getCampaignLeads({ tenantId: TENANT_ID, campaignId: 'meta_externa' }))
-        .rejects.toMatchObject({ code: 'META_PERMISSION_DENIED', statusCode: 403 });
+        .rejects.toMatchObject({ code: 'META_CONNECTION_NOT_FOUND', statusCode: 403 });
+      expect(called).toBe(false);
     } finally {
       if (prev === undefined) delete process.env.META_SYSTEM_ACCESS_TOKEN;
       else process.env.META_SYSTEM_ACCESS_TOKEN = prev;

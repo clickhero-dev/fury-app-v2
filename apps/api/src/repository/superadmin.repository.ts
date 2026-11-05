@@ -455,6 +455,7 @@ export class SuperAdminRepository extends TenantScopedRepository {
       })
       .from(subscriptions)
       .where(and(
+        liveTenant,
         eq(subscriptions.status, 'active'),
         eq(subscriptions.isNonExpirable, false),
         lte(subscriptions.currentPeriodEnd, now),
@@ -471,7 +472,10 @@ export class SuperAdminRepository extends TenantScopedRepository {
       .leftJoin(tenants, eq(renewalEvents.tenantId, tenants.id))
       .leftJoin(subscriptions, eq(renewalEvents.subscriptionId, subscriptions.id))
       .leftJoin(plans, eq(subscriptions.planId, plans.id))
-      .where(gte(renewalEvents.renewedAt, start))
+      .where(and(
+        sql`${renewalEvents.tenantId} IN (SELECT id FROM tenants WHERE deleted_at IS NULL${ofPartner})`,
+        gte(renewalEvents.renewedAt, start),
+      ))
       .orderBy(desc(renewalEvents.renewedAt))
       .limit(10);
 

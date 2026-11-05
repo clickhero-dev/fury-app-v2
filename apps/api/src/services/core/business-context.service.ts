@@ -1,5 +1,6 @@
 import { AppError } from '../../middleware/errorHandler.js';
 import { externalFetch } from '../../lib/http-client.js';
+import { resolveAiKey } from '../../lib/ai-key-context.js';
 
 type StreamChunk = string | { done: true };
 export type BusinessContextStream = (text: string, signal?: AbortSignal) => AsyncIterable<StreamChunk> | Promise<AsyncIterable<StreamChunk>>;
@@ -7,8 +8,8 @@ export type BusinessContextStream = (text: string, signal?: AbortSignal) => Asyn
 const MAX_CONTEXT_LENGTH = 5000;
 
 async function* openRouterStream(text: string, signal?: AbortSignal): AsyncGenerator<StreamChunk> {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) throw new AppError(500, 'OPENROUTER_API_KEY_MISSING', 'Serviço de IA indisponível.');
+  // chave do dono do cliente (ady ou parceiro), nunca a do ambiente direto
+  const { key } = await resolveAiKey();
   const response = await externalFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     signal,

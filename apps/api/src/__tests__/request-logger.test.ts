@@ -245,3 +245,12 @@ describe('Request Logger Middleware', () => {
     expect(body.nested.level1.publicField).toBe('should-be-visible');
   });
 });
+
+describe('redactQuery', () => {
+  it('esconde token do SSE e state/code do OAuth, mantém o resto', async () => {
+    const { redactQuery } = await import('../middleware/request-logger.js');
+    expect(redactQuery('/api/sse?token=eyJabc&x=1')).toBe('/api/sse?token=[REDACTED]&x=1');
+    expect(redactQuery('/api/meta/callback?code=AQ1&state=eyJ2')).toBe('/api/meta/callback?code=[REDACTED]&state=[REDACTED]');
+    expect(redactQuery('/api/campaigns?status=active')).toBe('/api/campaigns?status=active');
+  });
+});

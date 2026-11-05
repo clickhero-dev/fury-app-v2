@@ -957,7 +957,8 @@ export class GoogleService {
     const currentPhotos = (profile.photos as string[]) ?? [];
     const updatedPhotos = currentPhotos.filter((p) => p !== photoUrl);
 
-    await this.deps.storage.deleteAsset(photoUrl);
+    // só apaga do storage foto que é deste perfil
+    if (updatedPhotos.length !== currentPhotos.length) await this.deps.storage.deleteAsset(photoUrl);
 
     await this.repo(tenantId).patchBusinessProfile(profile.id, { photos: updatedPhotos, updatedAt: new Date() });
 

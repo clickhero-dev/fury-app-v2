@@ -91,6 +91,53 @@ describe('Escopo do parceiro no admin — integração', () => {
     expect(all.body.data.map((t: { id: string }) => t.id)).toEqual(expect.arrayContaining([clientA, clientB, clientAdy]));
   });
 
+  it('dashboard: vencidas e renovações de fora não aparecem para o parceiro', async () => {
+    const [plan] = await db.insert(schema.plans).values({ name: `PS plano ${id}`, priceCents: 100 }).returning();
+    try {
+      const past = new Date(Date.now() - 2 * 86400000);
+      const [sub] = await db
+        .insert(schema.subscriptions)
+        .values({ tenantId: clientB, planId: plan!.id, status: 'active', currentPeriodEnd: past })
+        .returning();
+      await db.insert(schema.renewalEvents).values({ subscriptionId: sub!.id, tenantId: clientB, previousPeriodEnd: past });
+
+      const dash = await request(app).get('/api/admin/dashboard').set(asPartner());
+      expect(dash.body.data.expiredAccounts).toBe(0);
+      expect(dash.body.data.recentActivity.filter((a: { tipo: string }) => a.tipo === 'renovacao')).toEqual([]);
+
+      const sup = await request(app).get('/api/admin/dashboard').set(asSuper());
+      expect(sup.body.data.expiredAccounts).toBeGreaterThanOrEqual(1);
+      expect(sup.body.data.recentActivity.some((a: { tipo: string }) => a.tipo === 'renovacao')).toBe(true);
+    } finally {
+      await db.delete(schema.subscriptions).where(eq(schema.subscriptions.planId, plan!.id));
+      await db.delete(schema.plans).where(eq(schema.plans.id, plan!.id));
+    }
+  });
+
+  it('avisos só chegam a clientes do ady (nem parceiro nem cliente dele)', async () => {
+    const [ann] = await db
+      .insert(schema.announcements)
+      .values({ title: `PS aviso ${id}`, markdown: 'x', isActive: true, showToNewUsers: true, publishedAt: new Date() })
+      .returning();
+    try {
+      const has = (body: { data: { id: string }[] }) => body.data.some((a) => a.id === ann!.id);
+      const ady = await request(app).post('/api/auth/login').send({ email: `ps-cli-ady-${id}@test.com`, password });
+      const cliA = await request(app).post('/api/auth/login').send({ email: `ps-cli-a-${id}@test.com`, password });
+      const pending = (token: string) => request(app).get('/api/announcements/pending').set({ Authorization: `Bearer ${token}` });
+
+      expect(has((await pending(ady.body.data.token)).body)).toBe(true);
+      expect(has((await pending(cliA.body.data.token)).body)).toBe(false);
+      expect(has((await pending(partnerToken)).body)).toBe(false);
+    } finally {
+      await db.delete(schema.announcements).where(eq(schema.announcements.id, ann!.id));
+    }
+  });
+
+  it('KPIs da plataforma (observability) só para o super_admin', async () => {
+    expect((await request(app).get('/api/observability/kpis').set(asPartner())).status).not.toBe(200);
+    expect((await request(app).get('/api/observability/kpis').set(asSuper())).status).toBe(200);
+  });
+
   it('cliente de outro parceiro ou da ady → 404', async () => {
     for (const other of [clientB, clientAdy]) {
       expect((await request(app).get(`/api/admin/tenants/${other}`).set(asPartner())).status).toBe(404);

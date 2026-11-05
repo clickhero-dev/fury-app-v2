@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import api from '@/lib/api';
+import { clearSession } from '@/lib/clear-session';
 import { canAccessAdmin, platformRoleOf } from '@/lib/platform-role';
 import { useFavicon } from '@/hooks/useFavicon';
 
@@ -39,6 +40,8 @@ export function AdminLogin() {
         setError('Acesso restrito a administradores');
         return;
       }
+      // nada da conta anterior fica no navegador
+      clearSession();
       localStorage.setItem('token', token);
       localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('user', JSON.stringify(user));
