@@ -25,7 +25,7 @@ function post(overrides: Record<string, unknown> = {}) {
   return { id: 'post-1', caption: 'Post recomendado', timestamp: '2026-10-01T12:00:00.000Z', like_count: 42, comments_count: 7, insights: { reach: 1000, saved: 12, shares: 4, replies: 2 }, score: 0.95, recommended: true, ...overrides };
 }
 function renderTab(onToggle = vi.fn()) {
-  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InstagramPostsTab selected={[]} onToggle={onToggle} canAdd objective="engagement" /></QueryClientProvider>);
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InstagramPostsTab selected={[]} onToggle={onToggle} objective="engagement" /></QueryClientProvider>);
 }
 
 beforeEach(() => mockApiGet.mockReset());

@@ -761,6 +761,30 @@ describe('CampaignsService.createCampaignFromWizard', () => {
     expect(budget.creative_primary_text).toBe('P1');
   });
 
+  it('cria 16 ad creatives e ads em ordem para creatives[]', async () => {
+    const { service, repo, meta } = makeService();
+    repo.metaConnections.push({
+      tenantId: TENANT_ID, id: 'mc1', selectedAdAccountId: 'act_123',
+      adAccounts: [], accessToken: 'tok', selectedPageIds: ['page_1'], createdAt: new Date(),
+    } as any);
+    meta.locationsResult = [{ key: 'city_key_1' }];
+    meta.downloadImageResult = { buffer: Buffer.from('fake'), contentType: 'image/jpeg' };
+    meta.uploadAdImageResult = 'img_hash';
+
+    await service.createCampaignFromWizard({
+      ...wizardArgs,
+      creatives: Array.from({ length: 16 }, (_, index) => ({
+        creativeUploadUrl: `https://example.com/${index}.jpg`, headline: `T${index}`, primaryText: `P${index}`,
+      })),
+    });
+
+    expect(meta.createdAdCreatives).toHaveLength(16);
+    expect(meta.createdAds).toHaveLength(16);
+    expect(meta.createdAdCreatives.map((creative: any) => creative.name)).toEqual(
+      Array.from({ length: 16 }, (_, index) => `Creative — ady #${index + 1}`)
+    );
+  });
+
   it('rollback multi: falha no 2º ad deleta ads/adcreatives criados (reverso), adset e campaign — sem registro local', async () => {
     const { service, meta, repo } = makeService();
     repo.metaConnections.push({

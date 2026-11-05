@@ -149,7 +149,7 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       const gallery = page.locator('[data-testid="wizard-gallery-asset"][data-asset-type="image"]:not([disabled])');
       await expect(gallery.first()).toBeVisible({ timeout: 60_000 });
       await gallery.last().click();
-      await expect(page.getByText(/1\/\d+ selecionadas/).first()).toBeVisible();
+      await expect(page.getByText('1 selecionada').first()).toBeVisible();
       await page.getByPlaceholder('Ex: Promoção imperdível este mês!').fill(label);
       await page.getByPlaceholder('Descreva sua oferta de forma clara e atrativa.').fill(adText);
       await expect(next).toBeEnabled();

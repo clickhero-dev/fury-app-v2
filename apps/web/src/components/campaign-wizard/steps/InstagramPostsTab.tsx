@@ -39,7 +39,6 @@ interface MetaAuthUrlResponse {
 interface InstagramPostsTabProps {
   selected: WizardCreativeState[];
   onToggle: (post: { id: string; mediaUrl?: string; caption?: string }) => void;
-  canAdd: boolean;
   objective: WizardObjective | null;
   instagramUserId?: string;
 }
@@ -97,7 +96,7 @@ function ProxiedImage({ url, alt, className }: { url: string; alt: string; class
   return <img src={objectUrl} alt={alt} className={className} />;
 }
 
-export function InstagramPostsTab({ selected, onToggle, canAdd, objective, instagramUserId }: InstagramPostsTabProps) {
+export function InstagramPostsTab({ selected, onToggle, objective, instagramUserId }: InstagramPostsTabProps) {
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery<InstagramPostsResponse>({
     queryKey: ['instagram/posts-ranked', objective, instagramUserId],
     queryFn: async () => {
@@ -203,11 +202,9 @@ export function InstagramPostsTab({ selected, onToggle, canAdd, objective, insta
             key={post.id}
             type="button"
             onClick={() => handleSelectPost(post)}
-            disabled={!isSelected && !canAdd}
             className={cn(
               'relative rounded-xl overflow-hidden border-2 transition-all bg-surface-secondary text-left',
-              isSelected ? 'border-brand' : 'border-transparent hover:border-brand/40',
-              !isSelected && !canAdd && 'opacity-50 cursor-not-allowed'
+              isSelected ? 'border-brand' : 'border-transparent hover:border-brand/40'
             )}
           >
             {post.media_url ? (

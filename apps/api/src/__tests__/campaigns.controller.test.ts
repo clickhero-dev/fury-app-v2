@@ -3,6 +3,20 @@ import type { Request, Response, NextFunction } from 'express';
 import { CampaignsController } from '../controllers/campaigns.controller.js';
 import type { CampaignsService } from '../services/campaigns/campaigns.service.js';
 
+/*
+Funcionalidade: criação de campanha do wizard com lote de criativos
+
+Cenário: aceitar mais de quatro criativos
+  Dado um pedido autenticado com dezesseis criativos válidos
+  Quando o endpoint create-wizard valida e encaminha o pedido
+  Então o serviço recebe os dezesseis itens na mesma ordem
+
+Cenário: rejeitar criativo sem mídia
+  Dado um pedido com um item de creatives sem uma mídia válida
+  Quando o endpoint valida o pedido
+  Então responde com erro de validação seguro
+*/
+
 vi.mock('../services/email/notify.js', () => ({
   sendToTenant: vi.fn().mockResolvedValue(undefined),
 }));
@@ -202,12 +216,13 @@ describe('CampaignsController', () => {
       );
     });
 
-    it('400 quando creatives tem 5 itens (cap 4) → ZodError', async () => {
-      const ctrl = makeController();
+    it('201 quando creatives tem 16 itens → service recebe o lote completo em ordem', async () => {
+      const createCampaignFromWizard = vi.fn().mockResolvedValue({ success: true });
+      const ctrl = makeController({ createCampaignFromWizard });
       const req = makeReq({
         body: {
           ...baseBody,
-          creatives: Array.from({ length: 5 }, (_, i) => ({
+          creatives: Array.from({ length: 16 }, (_, i) => ({
             creative_upload_url: `https://example.com/${i}.jpg`,
             headline: `T${i}`,
             primary_text: `P${i}`,
@@ -218,9 +233,12 @@ describe('CampaignsController', () => {
 
       await ctrl.createWizardCampaign(req, res, next);
 
-      expect(res.status).not.toHaveBeenCalledWith(201);
-      expect(next).toHaveBeenCalledTimes(1);
-      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+      expect(createCampaignFromWizard).toHaveBeenCalledWith(expect.objectContaining({
+        creatives: expect.arrayContaining([expect.objectContaining({ creativeUploadUrl: 'https://example.com/15.jpg', headline: 'T15' })]),
+      }));
+      expect((createCampaignFromWizard.mock.calls[0][0] as any).creatives).toHaveLength(16);
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(next).not.toHaveBeenCalled();
     });
 
     it('400 quando creatives ausente e legacy sem imagem → mantém mensagem atual', async () => {

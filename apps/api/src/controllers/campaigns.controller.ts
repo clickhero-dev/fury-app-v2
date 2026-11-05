@@ -76,7 +76,7 @@ const createWizardSchema = z
   .object({
     objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp', 'whatsapp_conv', 'leads']),
 
-    creatives: z.array(wizardCreativeItemSchema).min(1).max(4).optional(),
+    creatives: z.array(wizardCreativeItemSchema).min(1).optional(),
     // campos únicos legados — mantidos para clientes antigos
     creative_asset_id: z.string().min(1).optional(),
     creative_upload_url: z.string().min(1).optional(),
