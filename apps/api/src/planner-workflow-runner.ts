@@ -3,6 +3,7 @@ import { db, campaignPlans, socialPosts } from '@fury/db';
 import { PostgresCheckpointStore } from './services/stateMachine/postgres-checkpoint-store.js';
 import type { StageTrace, WorkflowSnapshot } from './services/stateMachine/types.js';
 import { openrouterService } from './services/llms/openrouter.service.js';
+import { runWithTenant } from './lib/ai-key-context.js';
 import { loadPlannerContext } from './services/planner/planner-context.service.js';
 import { buildContentDates, generateContentPrompts } from './agents/planner.agent.js';
 import { enqueueMissingPlannerPosts, enqueuePlannerImageJobs } from './services/planner/planner-studio.service.js';
@@ -85,7 +86,12 @@ async function countPlannerPosts(planId: string, tenantId: string): Promise<numb
  *  4. enfileira os posts na fila studio-generate-image
  *     (5 — quando cada imagem termina, o worker studio grava o social_post)
  */
-export async function runPlannerWorkflow(jobId: string, tenantId: string, postsCountParam: number = 8): Promise<void> {
+// IA do planejador usa a chave do dono do cliente (vale para fila, recuperação e chamada direta)
+export function runPlannerWorkflow(jobId: string, tenantId: string, postsCountParam: number = 8): Promise<void> {
+  return runWithTenant(tenantId, () => runPlannerWorkflowInContext(jobId, tenantId, postsCountParam));
+}
+
+async function runPlannerWorkflowInContext(jobId: string, tenantId: string, postsCountParam: number): Promise<void> {
   // Prerequisito: gate de créditos antes de gastar qualquer LLM.
   await openrouterService.assertCreditsAvailable();
 

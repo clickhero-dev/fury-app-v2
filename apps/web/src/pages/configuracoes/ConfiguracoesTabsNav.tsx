@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { hasLifetimeAccess } from '@/lib/platform-role';
 
 export type ConfiguracoesTab =
   | 'geral'
@@ -19,7 +20,8 @@ const TAB_LABELS: { value: ConfiguracoesTab; label: string; to: string }[] = [
 export function ConfiguracoesTabsNav({ activeTab }: { activeTab: ConfiguracoesTab }) {
   return (
     <div className="flex w-full justify-center items-center overflow-x-auto border-b border-slate-200 dark:border-[#262824] gap-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-      {TAB_LABELS.map(({ value, label, to }) => {
+      {/* conta vitalícia (parceiro) não tem faturamento */}
+      {TAB_LABELS.filter((t) => !(t.value === 'faturamento' && hasLifetimeAccess())).map(({ value, label, to }) => {
         const isActive = activeTab === value;
         return (
           <Link

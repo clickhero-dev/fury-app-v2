@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import api from '@/lib/api';
+import { canAccessAdmin, platformRoleOf } from '@/lib/platform-role';
 import { useFavicon } from '@/hooks/useFavicon';
 
 function AdyLogo({ size = 28 }: { size?: number }) {
@@ -34,8 +35,8 @@ export function AdminLogin() {
     try {
       const res = await api.post('/auth/login', { email, password });
       const { token, refreshToken, user } = res.data.data;
-      if (user.role !== 'superadmin') {
-        setError('Acesso restrito a superadmins');
+      if (!canAccessAdmin(platformRoleOf(user))) {
+        setError('Acesso restrito a administradores');
         return;
       }
       localStorage.setItem('token', token);
