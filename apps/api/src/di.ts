@@ -75,6 +75,9 @@ import { AnnouncementController } from './controllers/announcement.controller.js
 import { MetaHealthcheckRepository } from './repository/meta-healthcheck.repository.js';
 import { metaHealthcheckService } from './services/meta/meta-healthcheck.service.js';
 import { MetaHealthcheckController } from './controllers/meta-healthcheck.controller.js';
+import { PlannerCaptionSuggestionService } from './services/planner/planner-caption-suggestion.service.js';
+import { StudioRepository } from './repository/studio.repository.js';
+import { openrouterService } from './services/llms/openrouter.service.js';
 import { NotificationRepository } from './repository/notification.repository.js';
 import { NotificationService } from './services/notifications/notification.service.js';
 import { NotificationController } from './controllers/notification.controller.js';
@@ -125,6 +128,10 @@ export const ticketService = new TicketService(clickUpTicketsClient);
 export const faqRepository = new FaqRepository();
 export const announcementRepository = new AnnouncementRepository();
 export const metaHealthcheckRepository = new MetaHealthcheckRepository();
+export const plannerCaptionSuggestionService = new PlannerCaptionSuggestionService(
+  openrouterService,
+  (tenantId) => new StudioRepository(tenantId),
+);
 export const notificationRepository = new NotificationRepository();
 export const notificationService = new NotificationService(notificationRepository, (tenantId, userId) => emitToUser(tenantId, userId, 'notifications.changed', { version: 1 }));
 
@@ -166,7 +173,10 @@ export const controllers = {
   google: new GoogleController(googleService),
   meta: new MetaController(metaService),
   instagram: new InstagramController(instagramService, metaService),
-  planner: new PlannerController(plannerService),
+  planner: new PlannerController(
+    plannerService,
+    plannerCaptionSuggestionService,
+  ),
   dashboard: new DashboardController(getInstagramDashboardInsights),
   budget: new BudgetController(budgetOptimizerService),
   superadmin: new SuperAdminController(superAdminRepository),
