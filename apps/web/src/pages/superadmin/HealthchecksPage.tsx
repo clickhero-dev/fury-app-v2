@@ -51,9 +51,9 @@ function statusLabel(status?: string | null) {
 }
 
 function statusIcon(status?: string | null, className = 'h-5 w-5') {
-  if (status === 'success') return <CheckCircle2 className={`${className} text-emerald-400`} aria-hidden="true" />;
-  if (status === 'failed') return <CircleX className={`${className} text-red-400`} aria-hidden="true" />;
-  if (status === 'partial') return <CircleAlert className={`${className} text-amber-300`} aria-hidden="true" />;
+  if (status === 'success') return <CheckCircle2 className={`${className} text-emerald-600 dark:text-emerald-400`} aria-hidden="true" />;
+  if (status === 'failed') return <CircleX className={`${className} text-red-600 dark:text-red-400`} aria-hidden="true" />;
+  if (status === 'partial') return <CircleAlert className={`${className} text-amber-500 dark:text-amber-300`} aria-hidden="true" />;
   return <Clock3 className={`${className} text-slate-400`} aria-hidden="true" />;
 }
 
@@ -61,7 +61,7 @@ function cardStyle(status?: string | null) {
   if (status === 'success') return 'border-emerald-400/40 bg-emerald-500/[0.06] hover:border-emerald-300/60';
   if (status === 'failed') return 'border-red-400/40 bg-red-500/[0.06] hover:border-red-300/60';
   if (status === 'partial') return 'border-amber-400/40 bg-amber-500/[0.06] hover:border-amber-300/60';
-  return 'border-slate-500/40 bg-slate-500/[0.05] hover:border-slate-400/60';
+  return 'border-border-light bg-surface hover:border-text-tertiary/50';
 }
 
 function dateLabel(value?: string | null) {
@@ -165,25 +165,25 @@ export function HealthchecksPage() {
   return <div className="max-w-6xl space-y-6">
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex items-start gap-3">
-        <span className="mt-1 rounded-lg border border-[#1E88A8]/30 bg-[#1E88A8]/10 p-2 text-[#5cc5e4]"><Activity className="h-5 w-5" /></span>
-        <div><h1 className="text-2xl font-bold">Healthchecks</h1><p className="mt-1 text-sm text-[#8A8F8B]">Diagnóstico das conexões e permissões da Meta.</p></div>
+        <div className="mt-1 rounded-lg border border-brand/30 bg-brand/10 p-2 text-[#17708A] dark:text-[#5cc5e4]"><Activity className="h-5 w-5" /></div>
+        <div><h1 className="text-2xl font-bold text-text-primary">Healthchecks</h1><p className="mt-1 text-sm text-text-secondary">Diagnóstico das conexões e permissões da Meta.</p></div>
       </div>
-      <button type="button" onClick={() => void loadUsers()} disabled={loadingUsers} className="inline-flex items-center gap-2 rounded-lg border border-[#2A2D27] px-3 py-2 text-sm disabled:opacity-60">
+      <button type="button" onClick={() => void loadUsers()} disabled={loadingUsers} className="ady-btn inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-60">
         <RefreshCw className="h-4 w-4" /> Atualizar lista
       </button>
     </header>
 
-    {error && !selectedUser && <div role="alert" className="rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-100">{error}</div>}
+    {error && !selectedUser && <div role="alert" className="rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm text-[#B91C1C] dark:text-red-100">{error}</div>}
 
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A8F8B]" aria-hidden="true" />
-          <input aria-label="Pesquisar usuários" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Pesquisar por usuário, email ou tenant…" className="w-full rounded-lg border border-[#2A2D27] bg-[#161714] py-3 pl-10 pr-4 text-sm text-[#ECEDEF] outline-none placeholder:text-[#777C77] focus:border-[#1E88A8]" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary" aria-hidden="true" />
+          <input aria-label="Pesquisar usuários" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Pesquisar por usuário, email ou tenant…" className="w-full rounded-lg border border-border bg-surface py-3 pl-10 pr-4 text-sm text-text-primary outline-none placeholder:text-text-tertiary focus:border-brand" />
         </div>
-        <label className="flex shrink-0 items-center gap-2 text-sm text-[#A1A6A1]">
+        <label className="flex shrink-0 items-center gap-2 text-sm text-text-secondary">
           <span>Status do healthcheck</span>
-          <select aria-label="Status do healthcheck" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as typeof statusFilter); setPage(1); }} className="rounded-lg border border-[#2A2D27] bg-[#161714] px-3 py-3 text-sm text-[#ECEDEF] outline-none focus:border-[#1E88A8]">
+          <select aria-label="Status do healthcheck" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as typeof statusFilter); setPage(1); }} className="rounded-lg border border-border bg-surface px-3 py-3 text-sm text-text-primary outline-none focus:border-brand">
             <option value="all">Todos os status</option>
             <option value="success">Saudável</option>
             <option value="partial">Parcial</option>
@@ -193,70 +193,70 @@ export function HealthchecksPage() {
         </label>
       </div>
 
-      {loadingUsers ? <div className="rounded-xl border border-[#2A2D27] bg-[#161714] p-8 text-center text-sm text-[#8A8F8B]">Carregando usuários…</div>
-        : pageUsers.length === 0 ? <div className="rounded-xl border border-[#2A2D27] bg-[#161714] p-8 text-center text-sm text-[#8A8F8B]">{users.length === 0 ? 'Nenhum usuário com integração Meta encontrado.' : statusFilter !== 'all' ? 'Nenhum usuário corresponde aos filtros.' : 'Nenhum usuário corresponde à pesquisa.'}</div>
+      {loadingUsers ? <div className="rounded-xl border border-border bg-surface p-8 text-center text-sm text-text-secondary">Carregando usuários…</div>
+        : pageUsers.length === 0 ? <div className="rounded-xl border border-border bg-surface p-8 text-center text-sm text-text-secondary">{users.length === 0 ? 'Nenhum usuário com integração Meta encontrado.' : statusFilter !== 'all' ? 'Nenhum usuário corresponde aos filtros.' : 'Nenhum usuário corresponde à pesquisa.'}</div>
           : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {pageUsers.map((user) => {
               const name = user.name || user.email;
               const tenant = user.tenantName || user.tenantId;
               const health = statusLabel(user.status);
-              return <button key={user.userId} type="button" onClick={() => void openDetails(user)} aria-label={`${name} · ${tenant}, saúde ${health.toLocaleLowerCase('pt-BR')}`} className={`group min-h-36 rounded-xl border p-4 text-left transition hover:-translate-y-0.5 ${cardStyle(user.status)}`}>
+              return <button key={user.userId} type="button" onClick={() => void openDetails(user)} aria-label={`${name} · ${tenant}, saúde ${health.toLocaleLowerCase('pt-BR')}`} className={`ady-btn group min-h-36 rounded-xl border p-4 text-left transition hover:-translate-y-0.5 ${cardStyle(user.status)}`}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0"><p className="truncate font-semibold">{name}</p><p className="mt-1 truncate text-xs text-[#A1A6A1]">{tenant}</p><p className="mt-1 truncate text-xs text-[#777C77]">{user.email}</p></div>
+                  <div className="min-w-0"><div className="truncate font-semibold text-text-primary">{name}</div><p className="mt-1 truncate text-xs text-text-secondary">{tenant}</p><p className="mt-1 truncate text-xs text-text-tertiary">{user.email}</p></div>
                   {statusIcon(user.status, 'h-6 w-6 shrink-0')}
                 </div>
-                <div className="mt-4 flex items-center justify-between gap-2 border-t border-white/[0.06] pt-3">
-                  <span className="text-sm font-medium">{health}</span>
-                  <span className="text-[11px] text-[#8A8F8B]">{user.checkedAt ? dateLabel(user.checkedAt) : 'Sem validação'}</span>
+                <div className="mt-4 flex items-center justify-between gap-2 border-t border-border pt-3">
+                  <strong className="text-sm font-medium text-text-primary">{health}</strong>
+                  <span className="text-[11px] text-text-secondary">{user.checkedAt ? dateLabel(user.checkedAt) : 'Sem validação'}</span>
                 </div>
                 <span className="sr-only">Abrir detalhes</span>
               </button>;
             })}
           </div>}
 
-      {!loadingUsers && filteredUsers.length > 0 && <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[#8A8F8B]">
+      {!loadingUsers && filteredUsers.length > 0 && <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-text-secondary">
         <span>{filteredUsers.length} {filteredUsers.length === 1 ? 'resultado' : 'resultados'}</span>
         <div className="flex items-center gap-3"><span>Página {currentPage} de {totalPages}</span>
-          <button type="button" aria-label="Página anterior" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1} className="rounded-md border border-[#2A2D27] px-3 py-1.5 disabled:opacity-40">Anterior</button>
-          <button type="button" aria-label="Próxima página" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={currentPage === totalPages} className="rounded-md border border-[#2A2D27] px-3 py-1.5 disabled:opacity-40">Próxima página</button>
+          <button type="button" aria-label="Página anterior" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1} className="ady-btn rounded-md border border-border px-3 py-1.5 disabled:opacity-40">Anterior</button>
+          <button type="button" aria-label="Próxima página" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={currentPage === totalPages} className="ady-btn rounded-md border border-border px-3 py-1.5 disabled:opacity-40">Próxima página</button>
         </div>
       </div>}
     </section>
 
-    {selectedUser && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDetails(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="healthcheck-dialog-title" className="my-auto max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[#2A2D27] bg-[#11120E] shadow-2xl">
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[#2A2D27] bg-[#11120E] px-5 py-4">
-          <div className="min-w-0"><h2 id="healthcheck-dialog-title" className="text-lg font-semibold">Healthcheck da Meta · {selectedUser.name || selectedUser.email}</h2><p className="mt-1 truncate text-xs text-[#8A8F8B]">{selectedUser.tenantName || selectedUser.tenantId} · {selectedUser.email}</p></div>
-          <button type="button" aria-label="Fechar detalhes" onClick={closeDetails} disabled={running} className="rounded-md p-1 text-[#8A8F8B] hover:text-white disabled:opacity-50"><X className="h-5 w-5" /></button>
+    {selectedUser && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" style={{ background: "rgba(0,0,0,0.6)" }} onMouseDown={(event) => { if (event.target === event.currentTarget) closeDetails(); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="healthcheck-dialog-title" className="my-auto max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-surface shadow-2xl">
+        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-surface px-5 py-4">
+          <div className="min-w-0"><h2 id="healthcheck-dialog-title" className="text-lg font-semibold">Healthcheck da Meta · {selectedUser.name || selectedUser.email}</h2><p className="mt-1 truncate text-xs text-text-secondary">{selectedUser.tenantName || selectedUser.tenantId} · {selectedUser.email}</p></div>
+          <button type="button" aria-label="Fechar detalhes" onClick={closeDetails} disabled={running} className="ady-btn rounded-md p-1 text-text-secondary hover:text-text-primary disabled:opacity-50"><X className="h-5 w-5" /></button>
         </header>
 
         <div className="space-y-4 p-5">
-          {error && <div role="alert" className="rounded-lg border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-100">{error}</div>}
-          {loadingResult ? <div className="flex items-center justify-center gap-2 py-10 text-sm text-[#8A8F8B]"><LoaderCircle className="h-4 w-4 animate-spin" /> Carregando resultado…</div>
+          {error && <div role="alert" className="rounded-lg border border-red-400/40 bg-red-500/10 p-3 text-sm text-[#B91C1C] dark:text-red-100">{error}</div>}
+          {loadingResult ? <div className="flex items-center justify-center gap-2 py-10 text-sm text-text-secondary"><LoaderCircle className="h-4 w-4 animate-spin" /> Carregando resultado…</div>
             : result ? <>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-[#2A2D27] bg-[#161714] p-4"><p className="text-xs text-[#8A8F8B]">Resultado geral</p><div className="mt-1 flex items-center gap-2">{statusIcon(result.status, 'h-4 w-4')}<p className="text-lg font-semibold">{statusLabel(result.status)}</p></div></div>
-                <div className="rounded-xl border border-[#2A2D27] bg-[#161714] p-4"><p className="text-xs text-[#8A8F8B]">Última validação</p><p className="mt-1 text-sm font-medium">{dateLabel(result.checkedAt)}</p></div>
-                <div className="rounded-xl border border-[#2A2D27] bg-[#161714] p-4"><p className="text-xs text-[#8A8F8B]">Última sincronização</p><p className="mt-1 text-sm font-medium">{lastSyncStatus ? `Sincronização ${lastSyncStatus === 'success' ? 'completa' : lastSyncStatus === 'partial' ? 'parcial' : 'falhou'}` : 'Sem sincronização registrada'}</p><p className="mt-1 text-xs text-[#8A8F8B]">{dateLabel(lastSyncAt)}</p></div>
+                <div className="rounded-xl border border-border bg-surface p-4"><p className="text-xs text-text-secondary">Resultado geral</p><div className="mt-1 flex items-center gap-2">{statusIcon(result.status, 'h-4 w-4')}<div className="text-lg font-semibold text-text-primary">{statusLabel(result.status)}</div></div></div>
+                <div className="rounded-xl border border-border bg-surface p-4"><p className="text-xs text-text-secondary">Última validação</p><p className="mt-1 text-sm font-medium">{dateLabel(result.checkedAt)}</p></div>
+                <div className="rounded-xl border border-border bg-surface p-4"><p className="text-xs text-text-secondary">Última sincronização</p><p className="mt-1 text-sm font-medium">{lastSyncStatus ? `Sincronização ${lastSyncStatus === 'success' ? 'completa' : lastSyncStatus === 'partial' ? 'parcial' : 'falhou'}` : 'Sem sincronização registrada'}</p><p className="mt-1 text-xs text-text-secondary">{dateLabel(lastSyncAt)}</p></div>
               </div>
-              <div className="overflow-hidden rounded-xl border border-[#2A2D27] bg-[#161714]">
-                <div className="border-b border-[#2A2D27] px-5 py-4"><h3 className="font-semibold">Validações da integração Meta</h3><p className="mt-1 text-xs text-[#8A8F8B]">Atualizado em {dateLabel(result.checkedAt)}</p></div>
-                <div className="divide-y divide-[#2A2D27]">
+              <div className="overflow-hidden rounded-xl border border-border bg-surface">
+                <div className="border-b border-border px-5 py-4"><h3 className="font-semibold">Validações da integração Meta</h3><p className="mt-1 text-xs text-text-secondary">Atualizado em {dateLabel(result.checkedAt)}</p></div>
+                <div className="divide-y divide-border">
                   {Object.entries(labels).map(([key, label]) => {
                     const check = result.checks?.[key] ?? { status: 'not_applicable' as const };
                     return <div key={key} className="flex items-start gap-3 px-5 py-4">
                       {statusIcon(check.status, 'h-4 w-4')}
-                      <div className="min-w-0 flex-1"><p className="text-sm font-medium">{label}</p><p className="mt-0.5 text-xs text-[#8A8F8B]">{check.reason ?? statusLabel(check.status)}</p></div>
-                      <span className={`shrink-0 text-xs ${check.status === 'success' ? 'text-emerald-300' : check.status === 'failed' ? 'text-red-300' : 'text-amber-200'}`}>{statusLabel(check.status)}</span>
+                      <div className="min-w-0 flex-1"><div className="text-sm font-medium text-text-primary">{label}</div><p className="mt-0.5 text-xs text-text-secondary">{check.reason ?? statusLabel(check.status)}</p></div>
+                      <b className={`shrink-0 text-xs font-medium ${check.status === 'success' ? 'text-emerald-700 dark:text-emerald-300' : check.status === 'failed' ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-200'}`}>{statusLabel(check.status)}</b>
                     </div>;
                   })}
                 </div>
               </div>
-            </> : !error && <div className="rounded-xl border border-[#2A2D27] bg-[#161714] p-5 text-sm text-[#A1A6A1]">{selectedUser.connectionId ? 'Nenhum healthcheck executado para esta conexão.' : 'Este tenant ainda não tem uma conexão Meta.'}</div>}
+            </> : !error && <div className="rounded-xl border border-border bg-surface p-5 text-sm text-text-secondary">{selectedUser.connectionId ? 'Nenhum healthcheck executado para esta conexão.' : 'Este tenant ainda não tem uma conexão Meta.'}</div>}
 
-          <footer className="flex flex-wrap justify-end gap-2 border-t border-[#2A2D27] pt-4">
-            <button type="button" onClick={closeDetails} disabled={running} className="rounded-lg border border-[#2A2D27] px-4 py-2.5 text-sm disabled:opacity-50">Fechar</button>
-            <button type="button" onClick={() => void runHealthcheck()} disabled={running || loadingResult} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#1E88A8] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <footer className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+            <button type="button" onClick={closeDetails} disabled={running} className="ady-btn rounded-lg border border-border px-4 py-2.5 text-sm disabled:opacity-50">Fechar</button>
+            <button type="button" onClick={() => void runHealthcheck()} disabled={running || loadingResult} className="ady-btn inline-flex items-center justify-center gap-2 ady-btn bg-[#17708A] hover:bg-[#17708A]/90 text-white shadow-sm rounded-full px-4 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50">
               {running ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               {running ? 'Executando…' : 'Executar healthcheck'}
             </button>

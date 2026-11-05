@@ -495,7 +495,7 @@ export function TenantDetailPage() {
     "w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol";
   const labelCls = "block text-xs font-medium text-admin-text-muted mb-1.5";
   const btnCls =
-    "bg-admin-petrol hover:bg-admin-petrol-hover disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors";
+    "ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors px-6 py-2.5 flex items-center gap-2";
 
   return (
     <div>
@@ -513,7 +513,7 @@ export function TenantDetailPage() {
           {msg}
           <button
             onClick={() => setMsg("")}
-            className="text-admin-text-faint hover:text-admin-text"
+            className="ady-btn text-admin-text-faint hover:text-admin-text"
           >
             ✕
           </button>
@@ -525,9 +525,9 @@ export function TenantDetailPage() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium text-center transition-colors ${
+            className={`ady-btn flex-1 px-4 py-2 rounded-lg text-sm font-medium text-center transition-colors ${
               tab === t.key
-                ? "bg-admin-petrol/15 text-admin-petrol"
+                ? "bg-admin-petrol/15 text-[#17708A] dark:text-[#1E88A8] font-semibold"
                 : "text-admin-text-muted hover:text-admin-petrol hover:bg-admin-petrol/10"
             }`}
           >
@@ -619,9 +619,9 @@ export function TenantDetailPage() {
                     <td className="px-5 py-3">{u.name}</td>
                     <td className="px-5 py-3 text-admin-text-faint">{u.email}</td>
                     <td className="px-5 py-3">
-                      <span className="text-xs px-2 py-1 rounded-full bg-admin-spark/15 text-admin-spark">
+                      <div className="inline-block text-xs px-2 py-1 rounded-full bg-spark/15 text-[#B55F02] dark:text-spark">
                         {u.role}
-                      </span>
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-admin-text-faint">
                       {new Date(u.createdAt).toLocaleDateString()}
@@ -637,7 +637,7 @@ export function TenantDetailPage() {
                               role: u.role,
                             })
                           }
-                          className="w-8 h-8 flex items-center justify-center rounded-lg text-admin-text-faint hover:text-admin-petrol hover:bg-admin-surface-2 transition-all"
+                          className="ady-btn w-8 h-8 flex items-center justify-center rounded-lg text-admin-text-faint hover:text-admin-petrol hover:bg-admin-surface-2 transition-all"
                           title="Editar usuário"
                         >
                           <Pencil className="w-4 h-4" />
@@ -649,7 +649,7 @@ export function TenantDetailPage() {
                               name: u.name ?? "sem nome",
                             })
                           }
-                          className="w-8 h-8 flex items-center justify-center rounded-lg text-admin-text-faint hover:text-admin-danger hover:bg-admin-surface-2 transition-all"
+                          className="ady-btn w-8 h-8 flex items-center justify-center rounded-lg text-admin-text-faint hover:text-admin-danger hover:bg-admin-surface-2 transition-all"
                           title="Remover usuário"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -667,7 +667,8 @@ export function TenantDetailPage() {
       {/* ── Edit User Modal ────────────────────────────── */}
       {editUser && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
           onClick={() => setEditUser(null)}
         >
           <div
@@ -680,7 +681,7 @@ export function TenantDetailPage() {
               </h2>
               <button
                 onClick={() => setEditUser(null)}
-                className="text-admin-text-faint hover:text-admin-text transition-colors"
+                className="ady-btn text-admin-text-faint hover:text-admin-text transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -724,14 +725,14 @@ export function TenantDetailPage() {
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setEditUser(null)}
-                  className="flex-1 bg-admin-surface-2 hover:bg-admin-border text-admin-text-muted py-2.5 rounded-xl text-sm font-medium transition-colors"
+                  className="ady-btn flex-1 bg-surface-secondary text-text-primary border border-border-light hover:border-brand/50 py-2.5 rounded-full text-sm font-semibold transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleEditUser}
                   disabled={saving}
-                  className="flex-1 bg-admin-petrol hover:bg-admin-petrol-hover disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                  className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors flex-1 py-2.5 flex items-center justify-center gap-2"
                 >
                   <Save className="w-4 h-4" /> Salvar
                 </button>
@@ -744,7 +745,8 @@ export function TenantDetailPage() {
       {/* ── Delete User Confirmation ───────────────────── */}
       {deleteUserTarget && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.6)' }}
           onClick={() => setDeleteUserTarget(null)}
         >
           <div
@@ -757,7 +759,7 @@ export function TenantDetailPage() {
               </h2>
               <button
                 onClick={() => setDeleteUserTarget(null)}
-                className="text-admin-text-faint hover:text-admin-text transition-colors"
+                className="ady-btn text-admin-text-faint hover:text-admin-text transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -775,14 +777,14 @@ export function TenantDetailPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteUserTarget(null)}
-                className="flex-1 bg-admin-surface-2 hover:bg-admin-border text-admin-text-muted py-2.5 rounded-xl text-sm font-medium transition-colors"
+                className="ady-btn flex-1 bg-surface-secondary text-text-primary border border-border-light hover:border-brand/50 py-2.5 rounded-full text-sm font-semibold transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleDeleteUser}
                 disabled={deletingUser}
-                className="flex-1 bg-admin-danger hover:bg-admin-danger/80 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                className="ady-btn flex-1 bg-[#E5534B] hover:bg-[#E5534B]/90 disabled:opacity-50 text-white py-2.5 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
               >
                 {deletingUser ? (
                   "Removendo..."
@@ -814,8 +816,8 @@ export function TenantDetailPage() {
                       <p className="mt-1 text-sm text-admin-text-faint">Configure uma assinatura para liberar créditos.</p>
                     ) : hasLimitedQuota ? (
                       <p className="mt-1 text-sm text-admin-text-muted">
-                        <span className="font-semibold text-admin-text">{subscription.creativesRemaining ?? 0} de {creativesLimit} disponíveis</span>
-                        <span className="block mt-0.5 text-xs text-admin-text-faint">A renovação restaura o saldo ao limite mensal do plano.</span>
+                        <strong className="block font-semibold text-admin-text">{subscription.creativesRemaining ?? 0} de {creativesLimit} disponíveis</strong>
+                        <small className="block mt-0.5 text-xs text-admin-text-faint">A renovação restaura o saldo ao limite mensal do plano.</small>
                       </p>
                     ) : (
                       <p className="mt-1 text-sm font-semibold text-admin-text">Créditos ilimitados</p>
@@ -825,7 +827,7 @@ export function TenantDetailPage() {
                     <button
                       onClick={renewCreativeQuota}
                       disabled={renewingQuota}
-                      className="shrink-0 bg-admin-petrol hover:bg-admin-petrol-hover disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                      className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors shrink-0 px-4 py-2.5"
                     >
                       {renewingQuota ? "Renovando..." : "Renovar cota"}
                     </button>
@@ -920,7 +922,7 @@ export function TenantDetailPage() {
                   planId: prev.planId || cheapestPlanId || prev.planId,
                 }));
               }}
-              className="bg-admin-success/80 hover:bg-admin-success text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              className="ady-btn bg-success hover:bg-success/90 text-white px-4 py-2.5 rounded-full text-sm font-semibold transition-colors"
             >
               Ativar (30 dias)
             </button>
@@ -1174,9 +1176,9 @@ export function TenantDetailPage() {
                     onClick={() =>
                       setAudienceForm({ ...audienceForm, gender: g.value })
                     }
-                    className={`py-2.5 rounded-lg border-2 text-sm font-bold transition-all ${
+                    className={`ady-btn py-2.5 rounded-lg border-2 text-sm font-bold transition-all ${
                       audienceForm.gender === g.value
-                        ? "border-admin-petrol bg-admin-petrol/10 text-admin-petrol"
+                        ? "border-admin-petrol bg-admin-petrol/10 text-[#17708A] dark:text-[#1E88A8]"
                         : "border-admin-border text-admin-text-muted hover:border-admin-text-faint"
                     }`}
                   >
@@ -1218,7 +1220,7 @@ export function TenantDetailPage() {
                   <button
                     onClick={() => logoInputRef.current?.click()}
                     disabled={saving}
-                    className="text-sm text-admin-petrol hover:text-admin-petrol-hover"
+                    className="ady-btn text-sm text-[#17708A] dark:text-[#1E88A8] hover:underline"
                   >
                     Substituir
                   </button>
@@ -1226,7 +1228,7 @@ export function TenantDetailPage() {
                     onClick={() =>
                       setBrandForm((prev) => ({ ...prev, logoUrl: "" }))
                     }
-                    className="text-sm text-admin-danger hover:text-admin-danger/80"
+                    className="ady-btn text-sm text-admin-danger hover:text-admin-danger/80"
                   >
                     Remover
                   </button>
@@ -1344,7 +1346,8 @@ export function TenantDetailPage() {
                   />
                   <button
                     onClick={() => removePhoto(url)}
-                    className="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+                    className="ady-btn absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-full text-white hover:opacity-80 transition-opacity"
+                    style={{ background: 'rgba(0,0,0,0.6)' }}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>

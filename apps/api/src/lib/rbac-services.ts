@@ -38,6 +38,8 @@ export const RBAC_EXEMPT_PREFIXES: readonly string[] = [
   '/auth',
   '/faqs',
   '/announcements',
+  // sino: isolado por cliente/usuário no próprio controller
+  '/notifications',
   '/billing',
   '/policy',
   '/admin',

@@ -214,7 +214,7 @@ export function UsersPage() {
   }
 
   if (loading)
-    return <div className="text-[#5A605C] text-sm py-12 text-center">Carregando...</div>;
+    return <div className="text-text-tertiary text-sm py-12 text-center">Carregando...</div>;
 
   const users = data?.users ?? [];
 
@@ -223,12 +223,12 @@ export function UsersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#161714] border border-[#2A2D27] flex items-center justify-center">
-            <Users className="w-5 h-5 text-[#1E88A8]" strokeWidth={1.8} />
+          <div className="w-10 h-10 rounded-xl bg-brand/10 border border-brand/20 flex items-center justify-center">
+            <Users className="w-5 h-5 text-[#17708A] dark:text-[#1E88A8]" strokeWidth={1.8} />
           </div>
           <div className="flex items-baseline gap-2">
-          <h1 className="text-2xl font-bold !text-[#ECEDEF]">Usuários</h1>
-            <p className="text-sm text-[#5A605C]">
+          <h1 className="text-2xl font-bold text-text-primary">Usuários</h1>
+            <p className="text-sm text-text-tertiary">
               {data ? `${data.total} usuários` : "—"}
             </p>
           </div>
@@ -251,20 +251,20 @@ export function UsersPage() {
               setError("");
               setShowModal(true);
             }}
-            className="bg-[#1E88A8] hover:bg-[#2299BC] text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+            className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-sm rounded-full text-sm font-semibold transition-colors px-5 py-2.5 flex items-center gap-2"
           >
             <UserPlus className="w-4 h-4" strokeWidth={2.5} /> Novo Cliente
           </button>
           )}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5A605C]" strokeWidth={2} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" strokeWidth={2} />
             <form onSubmit={handleSearch}>
               <input
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Buscar por nome, email ou tenant..."
-                className="w-80 bg-[#161714] border border-[#2A2D27] rounded-lg pl-10 pr-4 py-2.5 text-sm text-[#ECEDEF] placeholder:text-[#5A605C] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors"
+                className="w-80 bg-surface border border-border rounded-full pl-10 pr-4 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 transition-colors"
               />
             </form>
           </div>
@@ -272,15 +272,15 @@ export function UsersPage() {
       </div>
 
       {users.length === 0 ? (
-        <div className="text-center py-12 text-[#5A605C] text-sm">
+        <div className="text-center py-12 text-text-tertiary text-sm">
           Nenhum usuário encontrado
         </div>
       ) : (
         <>
-          <div className="bg-[#161714] border border-[#2A2D27] rounded-lg overflow-hidden">
+          <div className="bg-surface border border-border rounded-2xl overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#1E201C] text-left text-[#3E4440] text-xs uppercase tracking-wider font-medium">
+                <tr className="border-b border-border text-left text-text-tertiary text-xs uppercase tracking-wider font-medium">
                   <th className="px-5 py-4">Tenant</th>
                   <th className="px-5 py-4">Nome</th>
                   <th className="px-5 py-4">Email</th>
@@ -288,27 +288,27 @@ export function UsersPage() {
                   <th className="px-5 py-4">Criado em</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#1A1C18]">
+              <tbody className="divide-y divide-border">
                 {users.map((u) => (
                   <tr
                     key={u.id}
                     onClick={() => navigate(`/admin/tenants/${u.tenantId}`)}
-                    className="hover:bg-[#1A1C18] cursor-pointer transition-colors"
+                    className="hover:bg-surface-secondary cursor-pointer transition-colors"
                   >
-                    <td className="px-5 py-4 text-[#ECEDEF] font-semibold">
+                    <td className="px-5 py-4 text-text-primary font-semibold">
                       {u.tenantName ?? u.tenantId.slice(0, 8)}
                     </td>
-                    <td className="px-5 py-4 text-[#B0B6B2]">{u.name ?? "—"}</td>
-                    <td className="px-5 py-4 text-[#7E8480]">{u.email}</td>
+                    <td className="px-5 py-4 text-text-secondary">{u.name ?? "—"}</td>
+                    <td className="px-5 py-4 text-text-tertiary">{u.email}</td>
                     <td className="px-5 py-4">
-                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                        u.role === "owner" ? "bg-[#CF6F03]/20 text-[#CF6F03]"
-                          : u.role === "admin" ? "bg-[#CF6F03]/15 text-[#CF6F03]"
-                          : u.role === "superadmin" ? "bg-[#1E88A8]/20 text-[#1E88A8]"
-                            : "bg-[#126832]/15 text-[#7E8480]"
-                      }`}>{u.role}</span>
+                      <div className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
+                        u.role === "owner" ? "bg-spark/15 text-[#B55F02] dark:text-spark"
+                          : u.role === "admin" ? "bg-spark/10 text-[#B55F02] dark:text-spark"
+                          : u.role === "superadmin" ? "bg-brand/15 text-[#17708A] dark:text-[#1E88A8]"
+                            : "bg-success/10 text-text-secondary"
+                      }`}>{u.role}</div>
                     </td>
-                    <td className="px-5 py-4 whitespace-nowrap text-xs text-[#5A605C]">
+                    <td className="px-5 py-4 whitespace-nowrap text-xs text-text-tertiary">
                       {new Date(u.createdAt).toLocaleDateString("pt-BR")}
                     </td>
                   </tr>
@@ -319,22 +319,22 @@ export function UsersPage() {
 
           {/* Pagination */}
           {data && data.pages > 1 && (
-            <div className="flex items-center justify-between mt-4 text-sm text-[#5A605C]">
+            <div className="flex items-center justify-between mt-4 text-sm text-text-tertiary">
               <span>
-                Página <strong className="text-[#ECEDEF]">{data.page}</strong> de {data.pages}
+                Página <strong className="text-text-primary">{data.page}</strong> de {data.pages}
               </span>
               <div className="flex gap-2">
                 <button
                   onClick={() => goToPage(data.page - 1)}
                   disabled={data.page <= 1}
-                  className="p-1.5 rounded-lg bg-[#161714] border border-[#2A2D27] hover:bg-[#1A1C18] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="ady-btn p-1.5 rounded-full bg-surface border border-border text-text-secondary hover:bg-surface-secondary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => goToPage(data.page + 1)}
                   disabled={data.page >= data.pages}
-                  className="p-1.5 rounded-lg bg-[#161714] border border-[#2A2D27] hover:bg-[#1A1C18] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="ady-btn p-1.5 rounded-full bg-surface border border-border text-text-secondary hover:bg-surface-secondary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -346,15 +346,15 @@ export function UsersPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-          <div className="bg-[#161714] border border-[#2A2D27] rounded-lg p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
+          <div className="bg-surface border border-border rounded-2xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-[#ECEDEF]">
+              <h2 className="text-lg font-semibold text-text-primary">
                 Novo Cliente
               </h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-[#5A605C] hover:text-[#ECEDEF] transition-colors"
+                className="ady-btn text-text-tertiary hover:text-text-primary transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -363,7 +363,7 @@ export function UsersPage() {
             <div className="space-y-4">
               {/* Tenant Name */}
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                <label className="block text-xs font-medium text-admin-text-muted mb-1.5">
                   Nome do Tenant
                 </label>
                 <input
@@ -376,18 +376,18 @@ export function UsersPage() {
                   placeholder="Ex: João Silva Empreendimentos"
                   className={
                     touched.tenantName && errors.tenantName
-                      ? "w-full bg-zinc-800 border border-red-500/50 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/30"
-                      : "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                      ? "w-full bg-admin-bg border border-error/50 rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-error/30"
+                      : "w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol"
                   }
                 />
                 {touched.tenantName && errors.tenantName && (
-                  <p className="mt-1 text-xs text-red-400">{errors.tenantName}</p>
+                  <div className="mt-1 text-xs text-error">{errors.tenantName}</div>
                 )}
               </div>
 
               {/* User Name */}
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                <label className="block text-xs font-medium text-admin-text-muted mb-1.5">
                   Nome do Usuário
                 </label>
                 <input
@@ -400,18 +400,18 @@ export function UsersPage() {
                   placeholder="Nome do usuário"
                   className={
                     touched.userName && errors.userName
-                      ? "w-full bg-zinc-800 border border-red-500/50 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/30"
-                      : "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                      ? "w-full bg-admin-bg border border-error/50 rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-error/30"
+                      : "w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol"
                   }
                 />
                 {touched.userName && errors.userName && (
-                  <p className="mt-1 text-xs text-red-400">{errors.userName}</p>
+                  <div className="mt-1 text-xs text-error">{errors.userName}</div>
                 )}
               </div>
 
               {/* Email */}
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                <label className="block text-xs font-medium text-admin-text-muted mb-1.5">
                   Email
                 </label>
                 <div className="relative">
@@ -426,24 +426,24 @@ export function UsersPage() {
                     type="email"
                     className={
                       touched.userEmail && errors.userEmail
-                        ? "w-full bg-zinc-800 border border-red-500/50 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/30"
-                        : "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                        ? "w-full bg-admin-bg border border-error/50 rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-error/30"
+                        : "w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol"
                     }
                   />
                   {checkingEmail && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <div className="w-4 h-4 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin" />
+                      <div className="w-4 h-4 border-2 border-admin-text-faint border-t-transparent rounded-full animate-spin" />
                     </div>
                   )}
                 </div>
                 {touched.userEmail && errors.userEmail && (
-                  <p className="mt-1 text-xs text-red-400">{errors.userEmail}</p>
+                  <div className="mt-1 text-xs text-error">{errors.userEmail}</div>
                 )}
               </div>
 
               {/* Password */}
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                <label className="block text-xs font-medium text-admin-text-muted mb-1.5">
                   Senha
                 </label>
                 <input
@@ -457,12 +457,12 @@ export function UsersPage() {
                   type="password"
                   className={
                     touched.userPassword && errors.userPassword
-                      ? "w-full bg-zinc-800 border border-red-500/50 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/30"
-                      : "w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                      ? "w-full bg-admin-bg border border-error/50 rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-error/30"
+                      : "w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol"
                   }
                 />
                 {touched.userPassword && errors.userPassword && (
-                  <p className="mt-1 text-xs text-red-400">{errors.userPassword}</p>
+                  <div className="mt-1 text-xs text-error">{errors.userPassword}</div>
                 )}
                 {passwordChecks && (
                   <div className="mt-1.5 flex items-center gap-1.5">
@@ -470,7 +470,7 @@ export function UsersPage() {
                       <div
                         key={i}
                         className={`h-1 flex-1 rounded-full transition-colors ${
-                          ok ? "bg-amber-500" : "bg-zinc-700"
+                          ok ? "bg-brand" : "bg-admin-border"
                         }`}
                       />
                     ))}
@@ -480,13 +480,13 @@ export function UsersPage() {
 
               {/* Role */}
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                <label className="block text-xs font-medium text-admin-text-muted mb-1.5">
                   Perfil
                 </label>
                 <select
                   value={form.userRole}
                   onChange={(e) => setForm({ ...form, userRole: e.target.value })}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                  className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text placeholder:text-admin-text-faint focus:outline-none focus:ring-2 focus:ring-admin-petrol/30 focus:border-admin-petrol"
                 >
                   <option value="owner">Owner</option>
                   <option value="admin">Admin</option>
@@ -495,22 +495,22 @@ export function UsersPage() {
               </div>
 
               {error && (
-                <p className="text-sm text-red-400 bg-red-900/20 px-3 py-2 rounded-xl">
+                <div className="text-sm text-error bg-error/10 px-3 py-2 rounded-xl">
                   {error}
-                </p>
+                </div>
               )}
 
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setShowModal(false)}
-                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                  className="ady-btn flex-1 bg-surface-secondary text-text-primary border border-border-light hover:border-brand/50 py-2.5 rounded-full text-sm font-semibold transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleCreateTenant}
                   disabled={saving || !isFormValid}
-                  className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                  className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-sm rounded-full text-sm font-semibold transition-colors flex-1 py-2.5 flex items-center justify-center gap-2"
                 >
                   {saving ? (
                     "Criando..."

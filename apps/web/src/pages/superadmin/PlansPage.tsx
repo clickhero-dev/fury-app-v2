@@ -10,7 +10,7 @@ interface PlanLimits {
   modificationsPerVideo?: number | null;
 }
 
-const INPUT_CLASS = 'w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]';
+const INPUT_CLASS = 'w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint';
 const EMPTY_LIMITS: PlanLimits = { creativesPerMonth: null, modificationsPerCreative: null, videosPerMonth: 0, modificationsPerVideo: 0 };
 
 function parseLimit(raw: string): number | null {
@@ -130,7 +130,7 @@ export function PlansPage() {
     }
   };
 
-  if (loading) return <div className="text-[#5A605C] text-sm py-12 text-center">Carregando...</div>;
+  if (loading) return <div className="text-text-tertiary text-sm py-12 text-center">Carregando...</div>;
 
   const otherPlans = deleteTarget ? plans.filter((p) => p.id !== deleteTarget.id) : [];
 
@@ -144,71 +144,71 @@ export function PlansPage() {
             background: 'rgba(30,136,168,0.1)',
             border: '1px solid rgba(30,136,168,0.2)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#1E88A8', flexShrink: 0,
-          }}>
+            flexShrink: 0,
+          }} className="text-[#17708A] dark:text-[#1E88A8]">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
             </svg>
           </div>
           <div className="flex items-baseline gap-2">
-          <h1 className="text-2xl font-bold !text-[#ECEDEF]">Planos</h1>
-            <span className="text-sm text-[#5A605C]">{plans.length} planos cadastrados</span>
+          <h1 className="text-2xl font-bold text-text-primary">Planos</h1>
+            <span className="text-sm text-text-tertiary">{plans.length} planos cadastrados</span>
           </div>
         </div>
         <button onClick={() => setShowNew(!showNew)}
-          className="bg-[#1E88A8] hover:bg-[#2299BC] text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+          className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors px-5 py-2.5 flex items-center gap-2">
           <Plus className="w-4 h-4" strokeWidth={2.5} /> Novo Plano
         </button>
       </div>
 
       {msg && (
-        <div className="mb-4 px-4 py-3 bg-[#161714] border border-[#2A2D27] rounded-lg text-sm text-[#ECEDEF] flex items-center justify-between">
-          {msg} <button onClick={() => setMsg('')} className="text-[#5A605C] hover:text-[#ECEDEF]">✕</button>
+        <div className="mb-4 px-4 py-3 bg-surface border border-border rounded-2xl text-sm text-text-primary flex items-center justify-between">
+          {msg} <button onClick={() => setMsg('')} className="ady-btn text-text-tertiary hover:text-text-primary">✕</button>
         </div>
       )}
 
       {showNew && (
-        <div className="mb-4 bg-[#161714] border border-[#2A2D27] rounded-lg p-5 space-y-3">
+        <div className="mb-4 bg-surface border border-border rounded-2xl p-5 space-y-3">
           <div className="grid grid-cols-5 gap-3">
             <input value={newPlan.name} onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })}
-              placeholder="Nome do plano" className="bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
+              placeholder="Nome do plano" className="bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
             <input type="number" step="0.01" value={newPlan.priceCents || ''} onChange={(e) => setNewPlan({ ...newPlan, priceCents: parseFloat(e.target.value) || 0 })}
-              placeholder="Preço (R$)" className="bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
+              placeholder="Preço (R$)" className="bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
             <select value={newPlan.interval} onChange={(e) => setNewPlan({ ...newPlan, interval: e.target.value })}
-              className="bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors">
+              className="bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors">
               <option value="monthly">Mensal</option>
               <option value="yearly">Anual</option>
             </select>
             <button onClick={createPlan} disabled={saving}
-              className="bg-[#1E88A8] hover:bg-[#2299BC] disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors">
+              className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors">
               Criar
             </button>
             <button onClick={() => setShowNew(false)}
-              className="bg-transparent border border-[#2A2D27] text-[#7E8480] hover:text-[#ECEDEF] hover:border-[#3A3D37] rounded-lg text-sm transition-colors">
+              className="ady-btn bg-surface-secondary text-text-primary border border-border-light hover:border-brand/50 rounded-full text-sm font-semibold transition-colors">
               Cancelar
             </button>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-[#7E8480] mb-1 block">Criativos por mês (vazio = sem limite)</label>
+              <label className="text-xs text-admin-text-muted mb-1 block">Criativos por mês (vazio = sem limite)</label>
               <input type="number" min={0} value={newPlan.limits.creativesPerMonth ?? ''}
                 onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, creativesPerMonth: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) } })}
-                placeholder="Sem limite" className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
+                placeholder="Sem limite" className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
             </div>
             <div>
-              <label className="text-xs text-[#7E8480] mb-1 block">Modificações por criativo (vazio = sem limite)</label>
+              <label className="text-xs text-admin-text-muted mb-1 block">Modificações por criativo (vazio = sem limite)</label>
               <input type="number" min={0} value={newPlan.limits.modificationsPerCreative ?? ''}
                 onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, modificationsPerCreative: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) } })}
-                placeholder="Sem limite" className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
+                placeholder="Sem limite" className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
             </div>
             <div>
-              <label className="text-xs text-[#7E8480] mb-1 block">Vídeos por mês (0 = sem vídeo, vazio = sem limite)</label>
+              <label className="text-xs text-admin-text-muted mb-1 block">Vídeos por mês (0 = sem vídeo, vazio = sem limite)</label>
               <input type="number" min={0} value={videoLimit(newPlan.limits.videosPerMonth)}
                 onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, videosPerMonth: parseLimit(e.target.value) } })}
                 placeholder="Sem limite" className={INPUT_CLASS} />
             </div>
             <div>
-              <label className="text-xs text-[#7E8480] mb-1 block">Modificações por vídeo (vazio = sem limite)</label>
+              <label className="text-xs text-admin-text-muted mb-1 block">Modificações por vídeo (vazio = sem limite)</label>
               <input type="number" min={0} value={videoLimit(newPlan.limits.modificationsPerVideo)}
                 onChange={(e) => setNewPlan({ ...newPlan, limits: { ...newPlan.limits, modificationsPerVideo: parseLimit(e.target.value) } })}
                 placeholder="Sem limite" className={INPUT_CLASS} />
@@ -223,53 +223,53 @@ export function PlansPage() {
           const hasChanges = Object.keys(edit).length > 0;
           const effectiveLimits = edit.limits ?? plan.limits ?? { creativesPerMonth: null, modificationsPerCreative: null };
           return (
-            <div key={plan.id} className="bg-[#161714] border border-[#2A2D27] rounded-lg p-5 space-y-3 hover:border-[#1E88A8]/30 transition-colors">
-              <div className={`inline-block px-3 py-1 rounded-lg text-xs font-semibold mb-3 ${
+            <div key={plan.id} className="bg-surface border border-border rounded-2xl p-5 space-y-3 hover:border-brand/30 transition-colors">
+              <div className={`inline-block px-3 py-1 rounded-full text-xs font-semibold mb-3 ${
                 plan.name.toUpperCase() === 'STARTER'
-                  ? 'bg-[#7E8480]/20 text-[#7E8480]'
+                  ? 'bg-surface-secondary text-text-secondary'
                   : plan.name.toUpperCase() === 'PRO'
-                    ? 'bg-[#1E88A8]/20 text-[#1E88A8]'
+                    ? 'bg-brand/15 text-[#17708A] dark:text-[#1E88A8]'
                     : plan.name.toUpperCase() === 'ENTERPRISE'
-                      ? 'bg-[#CF6F03]/20 text-[#CF6F03]'
-                      : 'bg-[#7E8480]/20 text-[#7E8480]'
+                      ? 'bg-spark/15 text-[#B55F02] dark:text-spark'
+                      : 'bg-surface-secondary text-text-secondary'
               }`}>
                 {plan.name.toUpperCase() === 'STARTER' ? 'BÁSICO' : plan.name.toUpperCase() === 'PRO' ? 'INTERMEDIÁRIO' : plan.name.toUpperCase() === 'ENTERPRISE' ? 'EMPRESARIAL' : plan.name}
               </div>
               <div className="grid grid-cols-5 gap-3 items-end">
                 <div>
-                  <label className="text-xs text-[#7E8480] mb-1 block">Nome</label>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Nome</label>
                   <input value={edit.name ?? plan.name} onChange={(e) => setEdit(plan.id, 'name', e.target.value)}
-                    className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors" />
+                    className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors" />
                 </div>
                 <div>
-                  <label className="text-xs text-[#7E8480] mb-1 block">Preço</label>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Preço</label>
                   <input type="number" step="0.01" value={edit.priceCents !== undefined ? edit.priceCents / 100 : (plan.priceCents / 100)}
                     onChange={(e) => setEdit(plan.id, 'priceCents', Math.round(parseFloat(e.target.value || '0') * 100))}
-                    className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors" />
+                    className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors" />
                 </div>
                 <div>
-                  <label className="text-xs text-[#7E8480] mb-1 block">Intervalo</label>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Intervalo</label>
                   <select value={edit.interval ?? plan.interval} onChange={(e) => setEdit(plan.id, 'interval', e.target.value)}
-                    className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors">
+                    className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors">
                     <option value="monthly">Mensal</option>
                     <option value="yearly">Anual</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-[#7E8480] mb-1 block">Ativo</label>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Ativo</label>
                   <select value={String(edit.isActive ?? plan.isActive)} onChange={(e) => setEdit(plan.id, 'isActive', e.target.value === 'true')}
-                    className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors">
+                    className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors">
                     <option value="true">Sim</option>
                     <option value="false">Não</option>
                   </select>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => savePlan(plan.id)} disabled={!hasChanges || saving}
-                    className="bg-[#1E88A8]/20 hover:bg-[#1E88A8]/35 border border-[#1E88A8]/50 text-[#1E88A8] disabled:opacity-30 disabled:cursor-not-allowed px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors">
+                    className="ady-btn bg-brand/10 hover:bg-brand/20 border border-brand/20 text-[#17708A] dark:text-[#1E88A8] disabled:opacity-30 disabled:cursor-not-allowed rounded-full text-sm font-semibold transition-colors px-4 py-2.5 flex items-center justify-center gap-2">
                     <Save className="w-4 h-4" /> Salvar
                   </button>
                   <button onClick={() => handleDeleteClick(plan)} disabled={saving}
-                    className="bg-[#C0392B]/15 hover:bg-[#C0392B]/25 disabled:opacity-30 text-[#C0392B] px-3 py-2.5 rounded-lg text-sm transition-colors"
+                    className="ady-btn bg-error/15 hover:bg-error/25 disabled:opacity-30 text-error px-3 py-2.5 rounded-full text-sm transition-colors"
                     title="Deletar plano">
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -277,36 +277,36 @@ export function PlansPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-[#7E8480] mb-1 block">Criativos por mês (vazio = sem limite)</label>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Criativos por mês (vazio = sem limite)</label>
                   <input type="number" min={0} value={effectiveLimits.creativesPerMonth ?? ''}
                     onChange={(e) => setLimitEdit(plan, 'creativesPerMonth', e.target.value)}
-                    placeholder="Sem limite" className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
+                    placeholder="Sem limite" className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
                 </div>
                 <div>
-                  <label className="text-xs text-[#7E8480] mb-1 block">Modificações por criativo (vazio = sem limite)</label>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Modificações por criativo (vazio = sem limite)</label>
                   <input type="number" min={0} value={effectiveLimits.modificationsPerCreative ?? ''}
                     onChange={(e) => setLimitEdit(plan, 'modificationsPerCreative', e.target.value)}
-                    placeholder="Sem limite" className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors placeholder:text-[#5A605C]" />
+                    placeholder="Sem limite" className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors placeholder:text-admin-text-faint" />
                 </div>
                 <div>
-                  <label className="text-xs text-[#7E8480] mb-1 block">Vídeos por mês (0 = sem vídeo, vazio = sem limite)</label>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Vídeos por mês (0 = sem vídeo, vazio = sem limite)</label>
                   <input type="number" min={0} value={videoLimit(effectiveLimits.videosPerMonth)}
                     onChange={(e) => setLimitEdit(plan, 'videosPerMonth', e.target.value)}
                     placeholder="Sem limite" className={INPUT_CLASS} />
                 </div>
                 <div>
-                  <label className="text-xs text-[#7E8480] mb-1 block">Modificações por vídeo (vazio = sem limite)</label>
+                  <label className="text-xs text-admin-text-muted mb-1 block">Modificações por vídeo (vazio = sem limite)</label>
                   <input type="number" min={0} value={videoLimit(effectiveLimits.modificationsPerVideo)}
                     onChange={(e) => setLimitEdit(plan, 'modificationsPerVideo', e.target.value)}
                     placeholder="Sem limite" className={INPUT_CLASS} />
                 </div>
               </div>
-              <div className="text-xs text-[#3E4440]">
+              <div className="text-xs text-text-tertiary">
                 ID: {plan.id} · Features: {Object.keys(plan.features).length}
                 {' · '}
-                <span className={plan.subscriberCount > 0 ? 'text-[#CF6F03]' : 'text-[#3E4440]'}>
+                <strong className={`font-normal ${plan.subscriberCount > 0 ? 'text-[#B55F02] dark:text-spark' : 'text-text-tertiary'}`}>
                   {plan.subscriberCount} assinante{plan.subscriberCount !== 1 ? 's' : ''}
-                </span>
+                </strong>
               </div>
             </div>
           );
@@ -315,13 +315,13 @@ export function PlansPage() {
 
       {/* Delete/Migration Modal */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#161714] border border-[#2A2D27] rounded-lg p-6 w-full max-w-md shadow-xl">
-            <h2 className="text-lg font-bold text-[#ECEDEF] mb-2">Deletar plano</h2>
-            <p className="text-sm text-[#5A605C] mb-4">
-              Plano <span className="text-[#ECEDEF] font-medium">{deleteTarget.name}</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm" style={{ background: "rgba(0,0,0,0.6)" }}>
+          <div className="bg-surface border border-border rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h2 className="text-lg font-bold text-text-primary mb-2">Deletar plano</h2>
+            <p className="text-sm text-text-secondary mb-4">
+              Plano <strong className="text-text-primary font-medium">{deleteTarget.name}</strong>
               {deleteTarget.subscriberCount > 0 ? (
-                <> possui <span className="text-[#CF6F03] font-bold">{deleteTarget.subscriberCount} assinante{deleteTarget.subscriberCount !== 1 ? 's' : ''}</span>.</>
+                <> possui <strong className="text-[#B55F02] dark:text-spark font-bold">{deleteTarget.subscriberCount} assinante{deleteTarget.subscriberCount !== 1 ? 's' : ''}</strong>.</>
               ) : (
                 <> não possui assinantes.</>
               )}
@@ -329,13 +329,13 @@ export function PlansPage() {
 
             {deleteTarget.subscriberCount > 0 ? (
               <>
-                <p className="text-sm text-[#5A605C] mb-3">
+                <p className="text-sm text-text-secondary mb-3">
                   Para deletar, migre os assinantes para outro plano:
                 </p>
                 <select
                   value={migrateTo}
                   onChange={(e) => setMigrateTo(e.target.value)}
-                  className="w-full bg-[#0C0D0A] border border-[#2A2D27] rounded-lg px-4 py-2.5 text-sm text-[#ECEDEF] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30 transition-colors mb-4 placeholder:text-[#5A605C]"
+                  className="w-full bg-admin-bg border border-admin-border rounded-xl px-4 py-2.5 text-sm text-admin-text focus:outline-none focus:border-admin-petrol focus:ring-2 focus:ring-admin-petrol/30 transition-colors mb-4 placeholder:text-admin-text-faint"
                 >
                   <option value="">Selecione um plano...</option>
                   {otherPlans.map((p) => (
@@ -346,13 +346,13 @@ export function PlansPage() {
                   <button
                     onClick={() => executeDelete(true)}
                     disabled={!migrateTo || saving}
-                    className="flex-1 bg-[#1E88A8]/20 hover:bg-[#1E88A8]/35 border border-[#1E88A8]/50 text-[#1E88A8] disabled:opacity-30 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                    className="ady-btn bg-brand/10 hover:bg-brand/20 border border-brand/20 text-[#17708A] dark:text-[#1E88A8] disabled:opacity-30 disabled:cursor-not-allowed rounded-full text-sm font-semibold transition-colors flex-1 px-4 py-2.5"
                   >
                     Migrar e deletar
                   </button>
                   <button
                     onClick={() => setDeleteTarget(null)}
-                    className="flex-1 bg-[#161714] hover:bg-[#1A1C18] border border-[#2A2D27] text-[#7E8480] rounded-lg text-sm transition-colors"
+                    className="ady-btn bg-surface-secondary text-text-primary border border-border-light hover:border-brand/50 rounded-full text-sm font-semibold transition-colors flex-1 py-2.5"
                   >
                     Cancelar
                   </button>
@@ -363,13 +363,13 @@ export function PlansPage() {
                 <button
                   onClick={() => executeDelete(false)}
                   disabled={saving}
-                  className="flex-1 bg-[#C0392B] hover:bg-[#A93225] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                  className="ady-btn flex-1 bg-[#E5534B] hover:bg-[#E5534B]/90 disabled:opacity-50 text-white px-4 py-2.5 rounded-full text-sm font-semibold transition-colors"
                 >
                   Deletar
                 </button>
                 <button
                   onClick={() => setDeleteTarget(null)}
-                  className="flex-1 bg-[#161714] hover:bg-[#1A1C18] border border-[#2A2D27] text-[#7E8480] rounded-lg text-sm transition-colors"
+                  className="ady-btn bg-surface-secondary text-text-primary border border-border-light hover:border-brand/50 rounded-full text-sm font-semibold transition-colors flex-1 py-2.5"
                 >
                   Cancelar
                 </button>

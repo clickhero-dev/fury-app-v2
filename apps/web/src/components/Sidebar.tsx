@@ -324,9 +324,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             to="/admin/dashboard"
             onClick={() => onMobileClose?.()}
             title={collapsed ? 'Ir para o Admin' : undefined}
-            className="flex w-full items-center justify-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-text-secondary hover:bg-sidebar-hover hover:text-text-primary transition-colors"
+            className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-brand/30 bg-brand/10 px-3.5 py-2.5 text-sm font-medium text-brand hover:bg-brand/20 transition-colors"
           >
-            <ShieldCheck className="size-[18px] shrink-0 text-text-tertiary" />
+            <ShieldCheck className="size-[18px] shrink-0 text-brand" />
             {!collapsed && <span>Ir para o Admin</span>}
           </Link>
         )}
@@ -335,9 +335,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         <button
           onClick={() => setLogoutDialogOpen(true)}
           title={collapsed ? 'Sair' : undefined}
-          className="flex w-full items-center justify-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-text-secondary hover:bg-sidebar-hover hover:text-text-primary transition-colors"
+          className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-error/20 bg-error/10 px-3.5 py-2.5 text-sm font-medium text-error hover:bg-error/20 transition-colors"
         >
-          <LogOut className="size-[18px] shrink-0 text-text-tertiary" />
+          <LogOut className="size-[18px] shrink-0 text-error" />
           {!collapsed && <span>Sair</span>}
         </button>
 

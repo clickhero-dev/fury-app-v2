@@ -128,12 +128,14 @@ describe('Planos do parceiro — integração', () => {
     const put = (tenantId: string, body: object, token = tokenA) =>
       request(app).patch(`/api/admin/tenants/${tenantId}/subscription`).set(bearer(token)).send(body);
 
+    // cadastro público já cria trial: o que importa é a recusa não alterar nada
+    const before = await subOf(clientA);
     for (const other of [planB, planAdy]) {
       const res = await put(clientA, { planId: other, status: 'active' });
       expect(res.status).toBe(404);
       expect(res.body.error.code).toBe('PLAN_NOT_FOUND');
     }
-    expect(await subOf(clientA)).toBeUndefined();
+    expect(await subOf(clientA)).toEqual(before);
     expect((await put(clientB, { planId: planA, status: 'active' })).status).toBe(404);
     expect((await put(clientAdy, { planId: planA, status: 'active' })).status).toBe(404);
 

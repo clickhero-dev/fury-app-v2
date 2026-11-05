@@ -26,7 +26,7 @@ interface PlanOption {
 const EMPTY_FORM = { name: "", userName: "", userEmail: "", userPassword: "", planId: "" };
 
 const inputCls =
-  "w-full bg-[#1A1C18] border border-[#2A2D27] rounded-lg px-3 py-2.5 text-sm text-[#ECEDEF] placeholder:text-[#5A605C] focus:outline-none focus:border-[#1E88A8] focus:ring-2 focus:ring-[#1E88A8]/30";
+  "w-full bg-admin-bg border border-admin-border rounded-xl px-3 py-2.5 text-sm text-admin-text placeholder:text-text-tertiary focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/30";
 
 // Clientes do parceiro logado: vagas + Novo Cliente
 export function ClientesPage() {
@@ -69,7 +69,7 @@ export function ClientesPage() {
     }
   }
 
-  if (!slots) return error ? <p role="alert" className="text-sm text-[#E05A4B]">{error}</p> : <div className="text-[#5A605C] text-sm">Carregando...</div>;
+  if (!slots) return error ? <div role="alert" className="text-sm text-error">{error}</div> : <div className="text-text-tertiary text-sm">Carregando...</div>;
 
   const full = slots.usedTenants >= slots.maxTenants;
 
@@ -77,12 +77,12 @@ export function ClientesPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-[38px] h-[38px] rounded-[10px] bg-[#1E88A8]/10 border border-[#1E88A8]/20 flex items-center justify-center text-[#1E88A8]">
+          <div className="w-[38px] h-[38px] rounded-[10px] bg-brand/10 border border-brand/20 flex items-center justify-center text-[#17708A] dark:text-[#1E88A8]">
             <Building2 className="w-[18px] h-[18px]" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold !text-[#ECEDEF]">Clientes</h1>
-            <div className="flex items-center gap-3 text-sm text-[#7E8480]">
+            <h1 className="text-2xl font-bold text-text-primary">Clientes</h1>
+            <div className="flex items-center gap-3 text-sm text-text-secondary">
               <SlotsBar used={slots.usedTenants} max={slots.maxTenants} />
               <span>{slots.usedTenants} de {slots.maxTenants} vagas</span>
             </div>
@@ -91,23 +91,23 @@ export function ClientesPage() {
         <button
           disabled={full}
           onClick={() => { setError(""); setForm({ ...EMPTY_FORM, planId: plans[0]?.id ?? "" }); setShowModal(true); }}
-          className="bg-[#1E88A8] hover:bg-[#2299BC] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+          className="ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors px-5 py-2.5 flex items-center gap-2"
         >
           <Plus className="w-4 h-4" strokeWidth={2.5} /> Novo Cliente
         </button>
       </div>
 
       {full && (
-        <p className="mb-4 text-sm text-[#E05A4B]">
+        <div className="mb-4 text-sm text-error">
           Limite de clientes atingido ({slots.usedTenants} de {slots.maxTenants}). Fale com a ady para aumentar.
-        </p>
+        </div>
       )}
-      {error && !showModal && <p role="alert" className="mb-4 text-sm text-[#E05A4B]">{error}</p>}
+      {error && !showModal && <div role="alert" className="mb-4 text-sm text-error">{error}</div>}
 
-      <div className="bg-[#161714] border border-[#2A2D27] rounded-lg overflow-x-auto">
+      <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
         <table className="w-full min-w-[480px] text-sm">
           <thead>
-            <tr className="text-left text-xs text-[#7E8480] border-b border-[#2A2D27]">
+            <tr className="text-left text-xs text-text-secondary border-b border-border">
               <th className="px-4 py-3 font-medium">Cliente</th>
               <th className="px-4 py-3 font-medium">Usuários</th>
               <th className="px-4 py-3 font-medium">Criado em</th>
@@ -115,15 +115,15 @@ export function ClientesPage() {
           </thead>
           <tbody>
             {clients.length === 0 && (
-              <tr><td colSpan={3} className="px-4 py-10 text-center text-[#5A605C]">Nenhum cliente cadastrado</td></tr>
+              <tr><td colSpan={3} className="px-4 py-10 text-center text-text-tertiary">Nenhum cliente cadastrado</td></tr>
             )}
             {clients.map((c) => (
-              <tr key={c.id} className="border-b border-[#1F211C] last:border-0">
+              <tr key={c.id} className="border-b border-border last:border-0">
                 <td className="px-4 py-3">
-                  <Link to={`/admin/tenants/${c.id}`} className="font-semibold text-[#ECEDEF] hover:text-[#1E88A8]">{c.name}</Link>
+                  <Link to={`/admin/tenants/${c.id}`} className="font-semibold text-text-primary hover:text-[#17708A] dark:hover:text-[#1E88A8]">{c.name}</Link>
                 </td>
-                <td className="px-4 py-3 text-[#ECEDEF]">{c.userCount}</td>
-                <td className="px-4 py-3 text-[#7E8480]">{new Date(c.createdAt).toLocaleDateString("pt-BR")}</td>
+                <td className="px-4 py-3 text-text-primary">{c.userCount}</td>
+                <td className="px-4 py-3 text-text-secondary">{new Date(c.createdAt).toLocaleDateString("pt-BR")}</td>
               </tr>
             ))}
           </tbody>
@@ -131,43 +131,43 @@ export function ClientesPage() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-          <form onSubmit={handleCreate} className="bg-[#161714] border border-[#2A2D27] rounded-lg p-6 w-full max-w-md mx-4 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
+          <form onSubmit={handleCreate} className="bg-surface border border-border rounded-2xl p-6 w-full max-w-md mx-4 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-[#ECEDEF]">Novo Cliente</h2>
-              <button type="button" onClick={() => setShowModal(false)} aria-label="Fechar" className="text-[#5A605C] hover:text-[#ECEDEF]">
+              <h2 className="text-lg font-semibold text-text-primary">Novo Cliente</h2>
+              <button type="button" onClick={() => setShowModal(false)} aria-label="Fechar" className="ady-btn text-text-tertiary hover:text-text-primary">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-[#7E8480]">Nome da empresa</span>
+              <span className="text-xs font-medium text-text-secondary">Nome da empresa</span>
               <input required className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </label>
-            <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-[#7E8480]">Dono do cliente</div>
+            <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">Dono do cliente</div>
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-[#7E8480]">Nome</span>
+              <span className="text-xs font-medium text-text-secondary">Nome</span>
               <input required className={inputCls} value={form.userName} onChange={(e) => setForm({ ...form, userName: e.target.value })} />
             </label>
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-[#7E8480]">E-mail</span>
+              <span className="text-xs font-medium text-text-secondary">E-mail</span>
               <input required type="email" className={inputCls} value={form.userEmail} onChange={(e) => setForm({ ...form, userEmail: e.target.value })} />
             </label>
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-[#7E8480]">Senha inicial (mínimo 8 caracteres)</span>
+              <span className="text-xs font-medium text-text-secondary">Senha inicial (mínimo 8 caracteres)</span>
               <input required type="password" minLength={8} className={inputCls} value={form.userPassword}
                 onChange={(e) => setForm({ ...form, userPassword: e.target.value })} />
             </label>
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-[#7E8480]">Plano</span>
+              <span className="text-xs font-medium text-text-secondary">Plano</span>
               <select className={inputCls} value={form.planId} onChange={(e) => setForm({ ...form, planId: e.target.value })}>
                 <option value="">Sem plano (atribuir depois)</option>
                 {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              {!form.planId && <span className="block text-xs text-[#7E8480]">Sem plano, o cliente só entra no app depois que você atribuir um.</span>}
+              {!form.planId && <span className="block text-xs text-text-secondary">Sem plano, o cliente só entra no app depois que você atribuir um.</span>}
             </label>
-            {error && <p role="alert" className="text-sm text-[#E05A4B]">{error}</p>}
+            {error && <div role="alert" className="text-sm text-error">{error}</div>}
             <button type="submit" disabled={saving}
-              className="w-full bg-[#1E88A8] hover:bg-[#2299BC] disabled:opacity-50 text-white py-2.5 rounded-lg text-sm font-medium">
+              className="w-full ady-btn bg-[#17708A] hover:bg-[#17708A]/90 disabled:opacity-50 text-white shadow-sm rounded-full text-sm font-semibold transition-colors py-2.5">
               {saving ? "Criando..." : "Criar cliente"}
             </button>
           </form>
