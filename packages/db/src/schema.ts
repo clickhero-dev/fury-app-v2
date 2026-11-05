@@ -464,6 +464,7 @@ export const plans = pgTable(
   {
     id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
     name: varchar('name', { length: 100 }).notNull(),
+    technicalKey: varchar('technical_key', { length: 100 }),
     priceCents: integer('price_cents').notNull(),
     interval: planIntervalEnum('interval').notNull().default('monthly'),
     features: jsonb('features').notNull().default(sql`'{}'::jsonb`),
@@ -474,6 +475,9 @@ export const plans = pgTable(
   },
   (table) => ({
     partnerIdIdx: index('plans_partner_id_idx').on(table.partnerId),
+    technicalKeyUnique: uniqueIndex('plans_technical_key_unique')
+      .on(table.technicalKey)
+      .where(sql`${table.technicalKey} IS NOT NULL`),
   })
 );
 

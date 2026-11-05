@@ -163,6 +163,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0052_soft_delete_tenants_users' },
   { tag: '0053_notifications' },
   { tag: '0054_subscription_renewal_events' },
+  { tag: '0055_trial_plan_technical_key' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
