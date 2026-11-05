@@ -139,7 +139,7 @@ export class AuthService {
         .returning();
       await provisionTrialSubscription({
         queryPlan: async () => (await tx.query.plans.findFirst({ where: (plans: any, { eq }: any) => eq(plans.technicalKey, TRIAL_PLAN_KEY) })) ?? null,
-        querySubscription: async (tenantId) => (await tx.query.subscriptions.findFirst({ where: (currentSubscriptions: any, { eq }: any) => eq(currentSubscriptions.tenantId, tenantId) })) ?? null,
+        querySubscription: async (tenantId) => (await tx.query.subscriptions.findFirst({ where: (subscriptions: any, { eq }: any) => eq(subscriptions.tenantId, tenantId) })) ?? null,
         insertSubscription: async (values) => {
           const [subscription] = await tx.insert(subscriptions).values(values as any).returning({ id: subscriptions.id });
           return subscription;

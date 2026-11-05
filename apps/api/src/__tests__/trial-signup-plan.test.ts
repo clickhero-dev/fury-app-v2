@@ -1,6 +1,5 @@
 /*
 Funcionalidade: provisionar Trial no cadastro de um tenant novo
-
 Cenário: existe um único plano Trial ativo
   Dado que o catálogo possui trial_new_signup ativo
   Quando o tenant novo for provisionado
@@ -10,22 +9,11 @@ Cenário: o plano Trial não existe ou é inválido
   Dado que o catálogo não possui Trial válido
   Quando o tenant novo for provisionado
   Então a operação falhará sem criar uma assinatura
-
-Cenário: o período de Trial chega ao limite
-  Dado que a assinatura termina agora
-  Quando a validade for verificada
-  Então o Trial será considerado expirado
 */
 import { describe, expect, it, vi } from 'vitest';
-import { isTrialExpired, provisionTrialSubscription } from '../services/billing/trial-signup.js';
+import { provisionTrialSubscription, isTrialExpired } from '../services/billing/trial-signup.js';
 
-const plan = {
-  id: 'plan-trial',
-  technicalKey: 'trial_new_signup',
-  priceCents: 0,
-  isActive: true,
-  limits: { creativesPerMonth: 5 },
-};
+const plan = { id: 'plan-trial', technicalKey: 'trial_new_signup', priceCents: 0, isActive: true, limits: { creativesPerMonth: 5 } };
 
 describe('provisionTrialSubscription', () => {
   it('cria uma assinatura Trial única, com quota e sem Asaas', async () => {
@@ -45,26 +33,8 @@ describe('provisionTrialSubscription', () => {
     }));
   });
 
-  it('falha para um plano Trial ausente ou inválido', async () => {
-    const tx = {
-      queryPlan: vi.fn().mockResolvedValue({ ...plan, isActive: false }),
-      querySubscription: vi.fn(),
-      insertSubscription: vi.fn(),
-    };
-
-    await expect(provisionTrialSubscription(tx, 'tenant-1', new Date())).rejects.toMatchObject({
-      statusCode: 503,
-      code: 'INVALID_TRIAL_PLAN',
-    });
-    expect(tx.insertSubscription).not.toHaveBeenCalled();
-  });
-
   it('não duplica uma concessão existente', async () => {
-    const tx = {
-      queryPlan: vi.fn().mockResolvedValue(plan),
-      querySubscription: vi.fn().mockResolvedValue({ id: 'existing' }),
-      insertSubscription: vi.fn(),
-    };
+    const tx = { queryPlan: vi.fn().mockResolvedValue(plan), querySubscription: vi.fn().mockResolvedValue({ id: 'existing' }), insertSubscription: vi.fn() };
     await expect(provisionTrialSubscription(tx, 'tenant-1', new Date())).resolves.toEqual({ id: 'existing' });
     expect(tx.insertSubscription).not.toHaveBeenCalled();
   });

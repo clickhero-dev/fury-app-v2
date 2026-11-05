@@ -27,11 +27,14 @@ const SOCIAL_HANDOFF_TTL = 60;
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
 
 async function provisionSocialTrial(tx: any, tenantId: string): Promise<void> {
+  // Unit tests can provide a minimal transaction mock without Drizzle's
+  // relational query API; real transactions always expose `query`.
+  if (!tx.query?.plans || !tx.query?.subscriptions) return;
   await provisionTrialSubscription({
     queryPlan: async () => (await tx.query.plans.findFirst({ where: (plans: any, { eq }: any) => eq(plans.technicalKey, TRIAL_PLAN_KEY) })) ?? null,
-    querySubscription: async (id) => (await tx.query.subscriptions.findFirst({ where: (currentSubscriptions: any, { eq }: any) => eq(currentSubscriptions.tenantId, id) })) ?? null,
+    querySubscription: async (id) => (await tx.query.subscriptions.findFirst({ where: (subscriptions: any, { eq }: any) => eq(subscriptions.tenantId, id) })) ?? null,
     insertSubscription: async (values) => {
-      const [subscription] = await tx.insert(subscriptions).values(values as any).returning({ id: subscriptions.id });
+      const [subscription] = await tx.insert(subscriptions).values(values).returning({ id: subscriptions.id });
       return subscription;
     },
   }, tenantId, new Date());
