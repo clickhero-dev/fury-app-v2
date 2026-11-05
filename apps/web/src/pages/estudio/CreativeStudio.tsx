@@ -6,6 +6,10 @@ import { AppLayout, Button, Card, CardContent, PageHeader, StatusBadge } from '@
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
 import api from '@/lib/api';
+import {
+  getMonotonicImageGenerationProgress,
+  IMAGE_GENERATION_PROGRESS_CAP,
+} from './imageGenerationProgress';
 import { COMPLIANCE_APPROVED_HINT, COMPLIANCE_REJECTED_HINT, COMPLIANCE_PENDING_HINT } from '@/lib/compliance.utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type {
@@ -58,6 +62,37 @@ function getComplianceTone(status?: StudioComplianceStatusResponse['complianceSt
   return 'pending_compliance';
 }
 
+function ImageGenerationProgress({ progress }: { progress: number }) {
+  const isWaitingForConfirmation = progress >= IMAGE_GENERATION_PROGRESS_CAP && progress < 100;
+  const isCompleting = progress === 100;
+
+  return (
+    <div className="w-full max-w-sm space-y-3" aria-live="polite">
+      <div
+        className="h-2 overflow-hidden rounded-full bg-[#FDE7DA]"
+        role="progressbar"
+        aria-label="Progresso estimado da geração da imagem"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress)}
+        aria-valuetext={isCompleting ? 'Geração confirmada' : 'Progresso estimado; geração em andamento'}
+      >
+        <div
+          className="h-full rounded-full bg-[#E8631A] transition-[width] duration-300 ease-out motion-reduce:transition-none"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <p className="text-sm text-[#667085]">
+        {isCompleting
+          ? 'Imagem gerada. Preparando o resultado...'
+          : isWaitingForConfirmation
+            ? 'A geração ainda está em andamento. Aguardando a confirmação do resultado.'
+            : 'Estimando o andamento da geração da sua imagem...'}
+      </p>
+    </div>
+  );
+}
+
 export function CreativeStudio() {
   const navigate = useNavigate();
   const { setPreSelectedAsset } = useCampaignWizardContext();
@@ -68,6 +103,11 @@ export function CreativeStudio() {
   const [pollStartedAt, setPollStartedAt] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
+  const [imageGenerationStartedAt, setImageGenerationStartedAt] = useState<number | null>(null);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [isCompletingImageGeneration, setIsCompletingImageGeneration] = useState(false);
+  const [completedImage, setCompletedImage] = useState<GenerateImageResponse | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
 
   // ─── OpenRouter state ──────────────────────────────────────
   const [creativeType, setCreativeType] = useState<'image' | 'video'>('image');
@@ -94,6 +134,38 @@ export function CreativeStudio() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!imageGenerationStartedAt || isCompletingImageGeneration) return;
+
+    const updateEstimatedProgress = () => {
+      setGenerationProgress((previous) => getMonotonicImageGenerationProgress(previous, Date.now() - imageGenerationStartedAt));
+    };
+
+    updateEstimatedProgress();
+    const timer = window.setInterval(updateEstimatedProgress, 250);
+
+    return () => window.clearInterval(timer);
+  }, [imageGenerationStartedAt, isCompletingImageGeneration]);
+
+  useEffect(() => {
+    if (!isCompletingImageGeneration || !completedImage) return;
+
+    const completeProgressTimer = window.setTimeout(() => setGenerationProgress(100), 250);
+    const revealResultTimer = window.setTimeout(() => {
+      setCurrentAssetId(completedImage.creativeAssetId);
+      setPollStartedAt(Date.now());
+      setGeneratedUrl(completedImage.imageUrl);
+      setImageGenerationStartedAt(null);
+      setIsCompletingImageGeneration(false);
+      setCompletedImage(null);
+    }, 650);
+
+    return () => {
+      window.clearTimeout(completeProgressTimer);
+      window.clearTimeout(revealResultTimer);
+    };
+  }, [completedImage, isCompletingImageGeneration]);
+
   const activeTemplate = useMemo(
     () => TEMPLATES.find((template) => template.id === selectedTemplateId) ?? TEMPLATES[0],
     [selectedTemplateId]
@@ -105,16 +177,28 @@ export function CreativeStudio() {
       return response.data;
     },
     onMutate: () => {
-      setGenerationStartedAt(Date.now());
+      const startedAt = Date.now();
+      setGenerationStartedAt(startedAt);
+      setImageGenerationStartedAt(startedAt);
+      setGenerationProgress(0);
+      setIsCompletingImageGeneration(false);
+      setCompletedImage(null);
+      setGenerationError(null);
     },
     onSuccess: (data: GenerateImageResponse) => {
-      setCurrentAssetId(data.creativeAssetId);
-      setPollStartedAt(Date.now());
-      setGeneratedUrl(data.imageUrl);
       setGenerationStartedAt(null);
+      setGenerationProgress((previous) => Math.max(previous, IMAGE_GENERATION_PROGRESS_CAP));
+      setCompletedImage(data);
+      setIsCompletingImageGeneration(true);
       queryClient.setQueryData(['studio', 'asset', data.creativeAssetId], data);
     },
-    onError: () => setGenerationStartedAt(null),
+    onError: () => {
+      setGenerationStartedAt(null);
+      setImageGenerationStartedAt(null);
+      setIsCompletingImageGeneration(false);
+      setCompletedImage(null);
+      setGenerationError('Não foi possível gerar a imagem. Verifique sua conexão e tente novamente.');
+    },
   });
 
   const generateVideoMutation = useMutation({
@@ -158,7 +242,8 @@ export function CreativeStudio() {
   const isWithinPollingWindow = Boolean(pollStartedAt && nowMs - pollStartedAt < 30_000);
   const canPublish = currentCompliance?.complianceStatus === 'approved';
 
-  const isGenerating = generateImageMutation.isPending || generateVideoMutation.isPending;
+  const isImageGenerationInProgress = imageGenerationStartedAt !== null;
+  const isGenerating = generateImageMutation.isPending || generateVideoMutation.isPending || isCompletingImageGeneration;
 
   const elapsedSeconds = generationStartedAt ? Math.max(0, Math.round((nowMs - generationStartedAt) / 1000)) : 0;
 
@@ -223,7 +308,8 @@ export function CreativeStudio() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setCreativeType('image')}
-                    className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
+                    disabled={isGenerating}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
                       creativeType === 'image'
                         ? 'border-[#E8631A] bg-[#FFF4ED] text-[#E8631A]'
                         : 'border-[#E6E8EC] bg-white text-[#667085]'
@@ -233,7 +319,8 @@ export function CreativeStudio() {
                   </button>
                   <button
                     onClick={() => setCreativeType('video')}
-                    className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
+                    disabled={isGenerating}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
                       creativeType === 'video'
                         ? 'border-[#E8631A] bg-[#FFF4ED] text-[#E8631A]'
                         : 'border-[#E6E8EC] bg-white text-[#667085]'
@@ -320,13 +407,26 @@ export function CreativeStudio() {
 
               {isGenerating && (
                 <div className="rounded-2xl border border-[#FFE3D4] bg-[#FFF7F2] p-4 text-sm text-[#7A4A27]">
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
-                    <span>
-                      O ady está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...
-                      {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
-                    </span>
-                  </div>
+                  {isImageGenerationInProgress ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
+                        <span>O ady está criando sua imagem...</span>
+                      </div>
+                      <ImageGenerationProgress progress={generationProgress} />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
+                      <span>O ady está criando seu vídeo...{elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {generationError && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+                  {generationError}
                 </div>
               )}
 
@@ -376,14 +476,19 @@ export function CreativeStudio() {
 
               {isGenerating && (
                 <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[#E6E8EC] bg-gradient-to-br from-[#FFF7F2] to-white">
-                  <div className="space-y-4 text-center">
-                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
-                    <p className="text-base font-semibold text-[#101828]">
-                      O ady está criando seu {creativeType === 'image' ? 'anúncio' : 'vídeo'}...
-                      {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
-                    </p>
-                    <p className="text-sm text-[#667085]">A geração via OpenRouter e a checagem de compliance são processadas em sequência.</p>
-                  </div>
+                  {isImageGenerationInProgress ? (
+                    <div className="flex w-full max-w-md flex-col items-center space-y-4 px-6 text-center">
+                      <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
+                      <p className="text-base font-semibold text-[#101828]">O ady está criando sua imagem...</p>
+                      <ImageGenerationProgress progress={generationProgress} />
+                    </div>
+                  ) : (
+                    <div className="space-y-4 text-center">
+                      <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#E8631A]" />
+                      <p className="text-base font-semibold text-[#101828]">O ady está criando seu vídeo...{elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}</p>
+                      <p className="text-sm text-[#667085]">A geração via OpenRouter e a checagem de compliance são processadas em sequência.</p>
+                    </div>
+                  )}
                 </div>
               )}
 
