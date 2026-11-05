@@ -21,12 +21,6 @@ interface ObjectiveOption {
 
 const OBJECTIVE_OPTIONS: ObjectiveOption[] = [
   {
-    value: 'whatsapp_conv',
-    emoji: '💬',
-    title: 'Conversas WhatsApp',
-    description: 'Direcione clientes para uma página personalizada com botão de WhatsApp.',
-  },
-  {
     value: 'whatsapp',
     emoji: '📲',
     title: 'Gerar Conversas',
