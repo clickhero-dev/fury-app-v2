@@ -20,6 +20,7 @@ export function EstudioHome() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<ViewState>('library');
   const [generationResult, setGenerationResult] = useState<GenerateCreativeResponse | null>(null);
+  const [isNewGeneration, setIsNewGeneration] = useState(false);
   const [filterType, setFilterType] = useState<AssetType>('all');
   const [filterStatus, setFilterStatus] = useState<ComplianceStatus>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -31,6 +32,7 @@ export function EstudioHome() {
     },
     onSuccess: (data) => {
       setGenerationResult(data);
+      setIsNewGeneration(true);
       setView('result');
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
@@ -89,9 +91,11 @@ export function EstudioHome() {
   const handleBackToLibrary = () => {
     setView('library');
     setGenerationResult(null);
+    setIsNewGeneration(false);
   };
   const handleNewCreative = () => {
     setGenerationResult(null);
+    setIsNewGeneration(false);
     setView('wizard');
   };
 
@@ -102,6 +106,7 @@ export function EstudioHome() {
       if (meta.headline) creativeData = { headline: meta.headline, primary_text: meta.primary_text ?? '', cta: meta.cta ?? '', subheadline: meta.subheadline ?? '', layout: meta.layout ?? '', color_scheme: meta.color_scheme ?? '' };
     } catch { /* use empty fallback */ }
     setGenerationResult({ assetId: asset.id, imageUrl: asset.url ?? '', creativeData });
+    setIsNewGeneration(false);
     setView('result');
   };
 
@@ -302,6 +307,7 @@ export function EstudioHome() {
               result={generationResult}
               onBack={handleBackToLibrary}
               onNewCreative={handleNewCreative}
+              showVariationSuggestion={isNewGeneration}
             />
           </>
         )}
