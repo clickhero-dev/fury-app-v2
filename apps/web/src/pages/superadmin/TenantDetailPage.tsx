@@ -539,6 +539,11 @@ export function TenantDetailPage() {
       {/* ── Users ───────────────────────────────────── */}
       {tab === "users" && (
         <div className="space-y-4">
+          {data.users.length === 0 && (
+            <div role="status" className="bg-admin-petrol/10 border border-admin-petrol/30 rounded-2xl px-5 py-4 text-sm text-admin-text-muted">
+              Esta conta não possui usuários ativos. Para recuperar o acesso, crie um novo usuário com perfil Owner.
+            </div>
+          )}
           <div className="bg-admin-surface border border-admin-border rounded-2xl p-5">
             <h3 className="text-sm font-semibold text-admin-text mb-4">
               Criar Usuário

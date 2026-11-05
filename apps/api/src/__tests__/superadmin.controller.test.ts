@@ -1,3 +1,21 @@
+/*
+Funcionalidade: administração segura de contas assinantes
+
+Cenário: impedir conta assinante sem usuário ativo
+  Dado um usuário que é o último acesso ativo de uma conta com assinatura vigente
+  Quando um superadmin tenta removê-lo
+  Então a remoção é recusada e a conta mantém um acesso recuperável
+
+Cenário: remover usuário sem deixar conta assinante órfã
+  Dado uma conta assinante que ainda possui outro usuário ativo
+  Quando um superadmin remove um usuário
+  Então a remoção é concluída
+
+Cenário: localizar conta assinante sem usuários ativos
+  Dado uma conta com assinatura ativa e zero usuários ativos
+  Quando o superadmin lista as contas
+  Então encontra a conta e seus dados de assinatura para recuperar o acesso
+*/
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SuperAdminController } from "../controllers/superadmin.controller.js";
 
@@ -18,6 +36,7 @@ function mockRepo() {
     findUserById: vi.fn(),
     updateUser: vi.fn(),
     deleteUser: vi.fn(),
+    hasAccessibleSubscription: vi.fn(),
     deleteTenant: vi.fn(),
     findTenantBySlug: vi.fn(),
     listPlans: vi.fn(),
@@ -338,5 +357,62 @@ describe("SuperAdminController — usuários do cliente e aba Público", () => {
     );
 
     expect(repo.updateUserAudienceDefaults).toHaveBeenCalledWith("u-member", expect.anything());
+  });
+});
+
+describe("SuperAdminController — proteção de acesso de assinantes", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("recusa remover o último usuário ativo de tenant com assinatura acessível", async () => {
+    const repo = mockRepo();
+    repo.findUserById.mockResolvedValue({ id: "u-1", tenantId: "tenant-1", platformRole: "user" });
+    repo.countUsersByTenant.mockResolvedValue(1);
+    repo.hasAccessibleSubscription.mockResolvedValue(true);
+    const ctrl = new SuperAdminController(repo as any);
+    const next = vi.fn();
+
+    await ctrl.deleteUser({ ...SUPER, params: { id: "u-1" } } as any, mockRes(), next);
+
+    expect(repo.deleteUser).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 409,
+      code: "LAST_SUBSCRIBER_USER",
+    }));
+  });
+
+  it("mantém localizável a conta assinante que já não possui usuários ativos", async () => {
+    const repo = mockRepo();
+    repo.listTenants.mockResolvedValue([{ id: "tenant-1", name: "Jesus Cristo" }]);
+    repo.countUsersByTenant.mockResolvedValue(0);
+    repo.findLatestSubscriptionByTenant.mockResolvedValue({ id: "sub-1", planId: "plan-1", status: "active" });
+    repo.findPlanById.mockResolvedValue({ id: "plan-1", name: "Intermediário" });
+    const res = mockRes();
+
+    await new SuperAdminController(repo as any).listTenants({ ...SUPER } as any, res, vi.fn());
+
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      data: [expect.objectContaining({
+        id: "tenant-1",
+        userCount: 0,
+        subscription: expect.objectContaining({ status: "active", plan: { id: "plan-1", name: "Intermediário" } }),
+      })],
+    }));
+  });
+
+  it("remove usuário quando a conta assinante ainda possui outro acesso ativo", async () => {
+    const repo = mockRepo();
+    repo.findUserById.mockResolvedValue({ id: "u-1", tenantId: "tenant-1", platformRole: "user" });
+    repo.countUsersByTenant.mockResolvedValue(2);
+    const ctrl = new SuperAdminController(repo as any);
+    const res = mockRes();
+    const next = vi.fn();
+
+    await ctrl.deleteUser({ ...SUPER, params: { id: "u-1" } } as any, res, next);
+
+    expect(repo.hasAccessibleSubscription).not.toHaveBeenCalled();
+    expect(repo.deleteUser).toHaveBeenCalledWith("u-1");
+    expect(next).not.toHaveBeenCalled();
   });
 });

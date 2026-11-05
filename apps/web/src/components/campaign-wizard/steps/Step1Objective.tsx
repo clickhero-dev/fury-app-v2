@@ -212,7 +212,9 @@ function MessagingDestinationFields({
         </div>
       )}
 
-      {whatsapp.pageId && (
+      {mode === 'whatsapp_only' ? (
+        <BrandKitPhoneField whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} />
+      ) : whatsapp.pageId && (
         <div>
           {mode === 'destinations' && (
             <label className="text-sm font-bold text-text-primary mb-2 block">Onde quer receber as mensagens?</label>
@@ -222,9 +224,6 @@ function MessagingDestinationFields({
               Este negócio só tem Facebook disponível. Para usar WhatsApp, vincule um número WABA. Para usar Instagram, conecte sua conta Instagram à Página no Meta Business.
             </p>
           )}
-          {mode === 'whatsapp_only' ? (
-            <BrandKitPhoneField whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} />
-          ) : (
           <div className="space-y-3">
             {whatsapp.hasWhatsApp && (
               <div>
@@ -306,7 +305,6 @@ function MessagingDestinationFields({
               <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo Facebook</p>
             </div>
           </div>
-          )}
         </div>
       )}
     </div>

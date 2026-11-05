@@ -120,7 +120,7 @@ function assertCreditsOrThrow(state: CreditState): void {
 export const openrouterService = {
   async chat(
     messages: ChatMessage[],
-    options: { model?: string; temperature?: number; max_tokens?: number; response_format?: { type: 'json_object' } } = {},
+    options: { model?: string; temperature?: number; max_tokens?: number; response_format?: { type: 'json_object' }; timeoutMs?: number } = {},
   ): Promise<string> {
     const apiKey = await getClient();
     const response = await fetchWithTimeout(`${OPENROUTER_BASE}/chat/completions`, {
@@ -133,7 +133,7 @@ export const openrouterService = {
         max_tokens: options.max_tokens ?? 1500,
         ...(options.response_format ? { response_format: options.response_format } : {}),
       }),
-    });
+    }, options.timeoutMs);
     if (!response.ok) {
       const err = await response.text();
       // detalhe do provedor só no log; o cliente recebe mensagem neutra
