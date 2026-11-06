@@ -56,9 +56,9 @@ function GenerationProgressIndicator({ state }: { state: GenerationProgressState
       <div role="progressbar" aria-label="Progresso estimado da geração da imagem" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.progress} className="h-2.5 overflow-hidden rounded-full bg-brand/15">
         <div className="h-full rounded-full bg-brand transition-[width] duration-300 ease-out" style={{ width: `${state.progress}%` }} />
       </div>
-      <p className="text-sm text-text-tertiary">
-        {state.phase === 'completing' ? 'A imagem foi recebida. Preparando o resultado.' : 'O percentual é uma estimativa visual e não representa o processamento real.'}
-      </p>
+      {state.phase === 'completing' && (
+        <p className="text-sm text-text-tertiary">A imagem foi recebida. Preparando o resultado.</p>
+      )}
     </div>
   );
 }
@@ -923,7 +923,6 @@ export function EstudioHome() {
                 {progressMessage || 'O ady está criando sua imagem...'}
               </h2>
               {generationProgress && <GenerationProgressIndicator state={generationProgress} />}
-              <p className="mt-2 text-sm text-text-tertiary">A geração com IA e a renderização podem levar de 1 a 2 minutos</p>
             </div>
             <div className="flex flex-col gap-1.5 text-xs text-text-tertiary">
               {templatePhoto ? (
