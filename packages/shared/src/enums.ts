@@ -2,6 +2,7 @@ export enum UserRole {
   OWNER = 'owner',
   ADMIN = 'admin',
   MEMBER = 'member',
+  DEMO = 'demo',
 }
 
 export enum CreativeType {
