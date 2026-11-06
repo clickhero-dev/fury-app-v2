@@ -36,7 +36,10 @@ function readMetadata(job: Job, fallback: BatchMetadata): BatchMetadata {
   return {
     ...fallback,
     ...value,
-    slots: Array.isArray(value.slots) ? value.slots as Slot[] : fallback.slots,
+    // O job é criado com slots vazios antes de ser reivindicado. Nesse
+    // primeiro processamento, a lista vazia precisa receber os slots padrão;
+    // depois de iniciada, a metadata persistida sempre contém os slots reais.
+    slots: Array.isArray(value.slots) && value.slots.length > 0 ? value.slots as Slot[] : fallback.slots,
   };
 }
 
