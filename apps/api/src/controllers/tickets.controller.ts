@@ -21,10 +21,11 @@ const reviewTicketSchema = z.discriminatedUnion('decision', [
   z.object({ decision: z.literal('approve') }),
   z.object({ decision: z.literal('reject'), reason: z.string().trim().min(1).max(5_000) }),
 ]);
+const updateStatusSchema = z.object({ expectedStatus: z.string().trim().min(1).max(100), status: z.string().trim().min(1).max(100) });
 
 /** Controller fino; valida o input e delega a abertura ao serviço. */
 export class TicketsController {
-  constructor(private readonly ticketService: Pick<TicketService, 'createTicket' | 'listTickets' | 'listAssignees' | 'reviewTicket'>) {}
+  constructor(private readonly ticketService: Pick<TicketService, 'createTicket' | 'listTickets' | 'listAssignees' | 'reviewTicket' | 'listStatuses' | 'updateTicketStatus'>) {}
 
   create = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -65,5 +66,18 @@ export class TicketsController {
     } catch (error) {
       next(error);
     }
+  };
+
+  listStatuses = async (_req: Request, res: Response, next: NextFunction) => {
+    try { res.json({ success: true, data: await this.ticketService.listStatuses(), timestamp: new Date().toISOString() }); }
+    catch (error) { next(error); }
+  };
+
+  updateStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = updateStatusSchema.parse(req.body);
+      const result = await this.ticketService.updateTicketStatus(req.params.ticketId, input);
+      res.json({ success: true, data: result, timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
   };
 }

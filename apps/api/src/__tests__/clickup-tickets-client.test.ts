@@ -295,4 +295,14 @@ describe('ClickUpTicketsClient', () => {
       status: 'Implement',
     });
   });
+
+  it('lista status e altera somente o status após validar o conflito', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ statuses: [{ status: 'triagem', type: 'open' }, { status: 'review_spec', type: 'custom' }] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'task-1', list: { id: '901717485435' }, status: { status: 'triagem', type: 'open' } }) } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'task-1', status: { status: 'review_spec', type: 'custom' } }) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(new ClickUpTicketsClient().updateTicketStatus('task-1', { expectedStatus: 'triagem', status: 'review_spec' })).resolves.toEqual({ id: 'task-1', status: 'review_spec', statusType: 'custom' });
+    expect(JSON.parse((fetchMock.mock.calls[2][1] as RequestInit).body as string)).toEqual({ status: 'review_spec' });
+  });
 });
