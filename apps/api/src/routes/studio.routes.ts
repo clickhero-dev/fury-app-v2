@@ -49,6 +49,9 @@ router.post('/copy/generate', authMiddleware, tenantMiddleware, controllers.stud
 router.post('/creative/validate-context', authMiddleware, tenantMiddleware, controllers.studio.validateContext);
 router.post('/creative/generate', authMiddleware, tenantMiddleware, controllers.studio.generateCreative);
 router.post('/creative/regenerate', authMiddleware, tenantMiddleware, controllers.studio.regenerateCreative);
+router.post('/creative/variations', authMiddleware, tenantMiddleware, controllers.studioVariations.create);
+router.get('/creative/variations/:batchId', authMiddleware, tenantMiddleware, controllers.studioVariations.get);
+router.post('/creative/variations/:batchId/cancel', authMiddleware, tenantMiddleware, controllers.studioVariations.cancel);
 router.post('/select-layout', authMiddleware, tenantMiddleware, controllers.studio.selectLayout);
 router.post('/preview-png', authMiddleware, tenantMiddleware, controllers.studio.previewPng);
 

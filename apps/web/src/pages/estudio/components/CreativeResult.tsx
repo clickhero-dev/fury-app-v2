@@ -7,8 +7,7 @@ import { complianceBadge } from '@/lib/compliance.utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { layoutLabel, isKnownLayout } from '@/lib/layout-labels';
-import { variationDirections } from '@/lib/creative-variations';
-import type { GenerateCreativeResponse, StudioPublishResponse, StudioAssetGroupDetail } from '@/types/studio';
+import type { GenerateCreativeResponse, StudioPublishResponse, StudioAssetGroupDetail, StudioVariationBatchResponse } from '@/types/studio';
 import { VersionCarousel } from './VersionCarousel';
 import { formatDuration, parseVideoMeta, useAdjustStudioVideo } from '@/hooks/useStudioVideo';
 
@@ -47,6 +46,8 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
   const [currentResult, setCurrentResult] = useState(result);
   const [showVariationPrompt, setShowVariationPrompt] = useState(showVariationSuggestion);
   const [variations, setVariations] = useState<GenerateCreativeResponse[]>([]);
+  const [variationWarning, setVariationWarning] = useState<string | null>(null);
+  const variationBatchId = useRef<string | null>(null);
   const [feedback, setFeedback] = useState('');
   const [publishFeedback, setPublishFeedback] = useState<StudioPublishResponse | null>(null);
 
@@ -207,23 +208,31 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
 
   const variationsMutation = useMutation({
     mutationFn: async (assetId: string) => {
-      const responses = await Promise.allSettled(
-        variationDirections.map(async (feedback) => {
-          const res = await api.post<GenerateCreativeResponse>('/studio/creative/regenerate', { assetId, feedback });
-          return res.data;
-        })
-      );
-      const generated = responses.flatMap((response) => response.status === 'fulfilled' ? [response.value] : []);
-
-      if (generated.length === 0) {
-        throw new Error('Não foi possível gerar variações.');
-      }
-
-      return generated;
+      const batchId = variationBatchId.current ?? crypto.randomUUID();
+      variationBatchId.current = batchId;
+      const res = await api.post<StudioVariationBatchResponse>('/studio/creative/variations', { batchId, assetId });
+      const generated = res.data.slots
+        .filter((slot) => slot.status === 'succeeded' && slot.assetId && slot.imageUrl)
+        .map((slot) => ({
+          assetId: slot.assetId!,
+          imageUrl: slot.imageUrl!,
+          creativeData: {},
+        }));
+      if (generated.length === 0 && res.data.status !== 'partial') throw new Error('Não foi possível gerar variações.');
+      return { generated, partial: res.data.status === 'partial' };
     },
     onSuccess: (data) => {
-      setVariations(data);
+      setVariations(data.generated);
+      setVariationWarning(data.partial ? 'Algumas variações não puderam ser concluídas. O resultado disponível foi preservado.' : null);
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+    },
+  });
+
+  const cancelVariationsMutation = useMutation({
+    mutationFn: async () => {
+      if (!variationBatchId.current) return;
+      const res = await api.post<StudioVariationBatchResponse>(`/studio/creative/variations/${variationBatchId.current}/cancel`);
+      return res.data;
     },
   });
 
@@ -586,6 +595,16 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
         <div className="flex items-center gap-3 rounded-2xl border border-[#E6E8EC] bg-[#FCFCFD] p-4 text-sm text-[#667085]" role="status">
           <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
           Gerando variações do seu criativo...
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => cancelVariationsMutation.mutate()} disabled={cancelVariationsMutation.isPending}>
+            Cancelar
+          </Button>
+        </div>
+      )}
+
+      {variationWarning && (
+        <div className="flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800" role="status">
+          <AlertCircle className="h-4 w-4" />
+          {variationWarning}
         </div>
       )}
 
