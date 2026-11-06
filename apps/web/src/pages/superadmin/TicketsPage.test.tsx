@@ -137,9 +137,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TicketsPage } from './TicketsPage';
 
 const mockPost = vi.hoisted(() => vi.fn());
+const mockPatch = vi.hoisted(() => vi.fn());
 const mockGet = vi.hoisted(() => vi.fn());
 const mockShowSnack = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/api', () => ({ default: { post: mockPost, get: mockGet } }));
+vi.mock('@/lib/api', () => ({ default: { post: mockPost, patch: mockPatch, get: mockGet } }));
 vi.mock('@/lib/snack', () => ({ showSnack: mockShowSnack }));
 
 const NOW = new Date('2026-10-06T12:00:00-03:00');
@@ -158,6 +159,7 @@ function mockTicketsData(ticketLists?: { open: MockTicket[]; resolved: MockTicke
   mockGet.mockImplementation((url: string) => {
     if (url === '/admin/tickets') return Promise.resolve({ data: { data: lists, partial_failures: [] } });
     if (url === '/admin/tickets/assignees') return Promise.resolve({ data: { data: [{ id: 101281834, name: 'Kaio Araújo', email: 'kaio@clickhero.com.br' }] } });
+    if (url === '/admin/tickets/statuses') return Promise.resolve({ data: { data: [{ value: 'pendente', label: 'pendente', type: 'open' }, { value: 'triagem', label: 'triagem', type: 'open' }, { value: 'concluído', label: 'concluído', type: 'closed' }] } });
     return Promise.reject(new Error(`Unexpected URL ${url}`));
   });
   return lists;
@@ -180,8 +182,12 @@ async function openModalAndFill(user = setupUser()) {
 
 describe('TicketsPage', () => {
   beforeEach(() => {
-    mockPost.mockReset(); mockGet.mockReset(); mockShowSnack.mockReset(); mockTicketsData();
+    mockPost.mockReset(); mockPatch.mockReset(); mockGet.mockReset(); mockShowSnack.mockReset(); mockTicketsData();
     vi.useFakeTimers({ now: NOW, shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('fecha o modal e mostra snack de sucesso ao enviar ticket válido', async () => {
@@ -477,6 +483,7 @@ describe('TicketsPage', () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/admin/tickets') return Promise.resolve({ data: { data: current, partial_failures: [] } });
       if (url === '/admin/tickets/assignees') return Promise.resolve({ data: { data: [] } });
+      if (url === '/admin/tickets/statuses') return Promise.resolve({ data: { data: [{ value: 'release', label: 'release', type: 'open' }, { value: 'triagem', label: 'triagem', type: 'open' }] } });
       return Promise.reject(new Error(`Unexpected URL ${url}`));
     });
     render(<TicketsPage />);
@@ -488,6 +495,31 @@ describe('TicketsPage', () => {
     expect(await screen.findByText('Nenhum chamado encontrado para os filtros selecionados.')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('release');
     expect(within(screen.getByRole('tab', { name: /abertos/i })).getByText('0')).toBeInTheDocument();
+  });
+
+  it('abre o diálogo ao clicar no card e envia o status escolhido', async () => {
+    mockPatch.mockResolvedValue({ data: { data: { id: 'open-1', status: 'triagem' } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    await user.click(await screen.findByRole('listitem', { name: 'Alterar status de [N2] Publicação falhou' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('combobox', { name: 'Novo status' })).toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Novo status' }), 'triagem');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirmar alteração' }));
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledWith('/admin/tickets/open-1/status', { expectedStatus: 'em progresso', status: 'triagem' }));
+    expect(mockShowSnack).toHaveBeenCalledWith('Status do ticket atualizado.', 'success');
+  });
+
+  it('recarrega a lista e informa conflito quando o status mudou externamente', async () => {
+    mockPatch.mockRejectedValue({ response: { status: 409, data: { error: { message: 'conflito' } } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    await user.click(await screen.findByRole('listitem', { name: 'Alterar status de [N2] Publicação falhou' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Novo status' }), 'triagem');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirmar alteração' }));
+    await waitFor(() => expect(mockShowSnack).toHaveBeenCalledWith('O status do ticket mudou no ClickUp. Os chamados foram recarregados.', 'error'));
+    expect(mockGet.mock.calls.filter(([url]) => url === '/admin/tickets').length).toBeGreaterThan(1);
   });
 
   it('abre revisão apenas ao selecionar ticket em homologação', async () => {
@@ -550,5 +582,6 @@ describe('TicketsPage', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Não foi possível atualizar o chamado agora. Tente novamente.');
     expect(reason).toHaveValue('O valor total está incorreto.');
     expect(mockShowSnack).not.toHaveBeenCalled();
+
   });
 });

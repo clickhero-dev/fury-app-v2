@@ -52,13 +52,24 @@ export interface ClickUpMember {
   email: string | null;
 }
 
-export interface ClickUpStatusOption { status: string; type: string; }
-export interface UpdatedClickUpTicket { id: string; status: string; statusType: string; }
+export interface ClickUpTicketStatus {
+  value: string;
+  label: string;
+  type: string;
+  color?: string;
+}
+
+export interface ClickUpTicketDetails {
+  id: string;
+  listId: string;
+  status: string;
+  statusType: string;
+}
 
 export class ClickUpTicketsError extends Error {
   constructor(
     public readonly status: number,
-    public readonly code: 'CLICKUP_MISSING_CONFIG' | 'CLICKUP_UNAVAILABLE' | 'CLICKUP_UNAUTHORIZED' | 'CLICKUP_INVALID_RESPONSE' | 'CLICKUP_ATTACHMENT_FAILED' | 'CLICKUP_REVIEW_CONFLICT' | 'CLICKUP_TIMEOUT' | 'CLICKUP_NOT_FOUND' | 'CLICKUP_CONFLICT' | 'CLICKUP_INVALID_STATUS',
+    public readonly code: 'CLICKUP_MISSING_CONFIG' | 'CLICKUP_UNAVAILABLE' | 'CLICKUP_TIMEOUT' | 'CLICKUP_UNAUTHORIZED' | 'CLICKUP_INVALID_RESPONSE' | 'CLICKUP_ATTACHMENT_FAILED' | 'CLICKUP_TASK_NOT_FOUND' | 'CLICKUP_TASK_OUT_OF_SCOPE' | 'CLICKUP_STATUS_CONFLICT' | 'CLICKUP_REVIEW_CONFLICT',
     message: string,
     public readonly clickupTaskUrl?: string,
   ) {
@@ -118,14 +129,16 @@ export class ClickUpTicketsClient {
       });
     } catch (error) {
       if (error instanceof ExternalHttpError) {
-        throw new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'Não foi possível consultar o ClickUp agora.');
+        throw new ClickUpTicketsError(502, error.code === 'TIMEOUT' ? 'CLICKUP_TIMEOUT' : 'CLICKUP_UNAVAILABLE', 'Não foi possível consultar o ClickUp agora.');
       }
       throw error;
     }
     if (response.status === 401 || response.status === 403) {
       throw new ClickUpTicketsError(502, 'CLICKUP_UNAUTHORIZED', 'Não foi possível consultar o ClickUp agora.');
     }
-    if (response.status === 404) throw new ClickUpTicketsError(404, 'CLICKUP_NOT_FOUND', 'Ticket não encontrado no ClickUp.');
+    if (response.status === 404) {
+      throw new ClickUpTicketsError(404, 'CLICKUP_TASK_NOT_FOUND', 'O ticket não foi encontrado.');
+    }
     if (!response.ok) {
       throw new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'Não foi possível consultar o ClickUp agora.');
     }
@@ -304,37 +317,65 @@ export class ClickUpTicketsClient {
     });
   }
 
-  async listStatuses(): Promise<ClickUpStatusOption[]> {
+  async listStatuses(): Promise<ClickUpTicketStatus[]> {
     const { listId } = this.resolveConfig();
     const payload = await this.getJson(`/list/${listId}/status`) as { statuses?: unknown };
-    if (!Array.isArray(payload?.statuses)) throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'O ClickUp retornou uma resposta inválida.');
-    return payload.statuses.map((raw): ClickUpStatusOption => {
-      const item = raw as { status?: unknown; type?: unknown };
-      if (typeof item.status !== 'string' || !item.status.trim() || typeof item.type !== 'string') throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'O ClickUp retornou uma resposta inválida.');
-      return { status: item.status, type: item.type };
+    if (!Array.isArray(payload?.statuses)) {
+      throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'O ClickUp retornou uma resposta inválida.');
+    }
+    return payload.statuses.map((status): ClickUpTicketStatus => {
+      const item = status as { status?: unknown; type?: unknown; color?: unknown };
+      if (typeof item.status !== 'string' || !item.status.trim() || typeof item.type !== 'string') {
+        throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'O ClickUp retornou uma resposta inválida.');
+      }
+      return {
+        value: item.status,
+        label: item.status,
+        type: item.type,
+        ...(typeof item.color === 'string' ? { color: item.color } : {}),
+      };
     });
   }
 
-  async updateTicketStatus(taskId: string, input: { expectedStatus: string; status: string }): Promise<UpdatedClickUpTicket> {
-    const { apiToken, listId } = this.resolveConfig();
-    const destination = (await this.listStatuses()).find((option) => option.status === input.status);
-    if (!destination || input.status === input.expectedStatus) throw new ClickUpTicketsError(400, 'CLICKUP_INVALID_STATUS', 'O status selecionado não é válido para este ticket.');
-    const task = await this.getJson(`/task/${encodeURIComponent(taskId)}`) as { id?: unknown; list?: { id?: unknown }; status?: { status?: unknown; type?: unknown } };
-    if (task.id !== taskId || task.list?.id !== listId) throw new ClickUpTicketsError(404, 'CLICKUP_NOT_FOUND', 'Ticket não encontrado na lista de tickets.');
-    if (typeof task.status?.status !== 'string' || typeof task.status.type !== 'string') throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'O ClickUp retornou uma resposta inválida.');
-    if (task.status.status !== input.expectedStatus) throw new ClickUpTicketsError(409, 'CLICKUP_CONFLICT', 'O status do ticket mudou. Recarregue a lista e tente novamente.');
+  private normalizeTicketDetails(payload: unknown): ClickUpTicketDetails {
+    const item = payload as { id?: unknown; list?: { id?: unknown }; status?: { status?: unknown; type?: unknown } };
+    if (typeof item.id !== 'string' || (typeof item.list?.id !== 'string' && typeof item.list?.id !== 'number') || typeof item.status?.status !== 'string' || typeof item.status?.type !== 'string') {
+      throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'O ClickUp retornou uma resposta inválida.');
+    }
+    return { id: item.id, listId: String(item.list.id), status: item.status.status, statusType: item.status.type };
+  }
+
+  async updateTicketStatus(taskId: string, expectedStatus: string, status: string): Promise<ClickUpTicketDetails> {
+    const { listId, apiToken } = this.resolveConfig();
+    const currentResponse = await this.getJson(`/task/${encodeURIComponent(taskId)}`);
+    const current = this.normalizeTicketDetails(currentResponse);
+    if (current.listId !== listId) {
+      throw new ClickUpTicketsError(404, 'CLICKUP_TASK_OUT_OF_SCOPE', 'O ticket não pertence à lista de chamados.');
+    }
+    if (current.status.trim().toLocaleLowerCase() !== expectedStatus.trim().toLocaleLowerCase()) {
+      throw new ClickUpTicketsError(409, 'CLICKUP_STATUS_CONFLICT', 'O status do ticket mudou no ClickUp.');
+    }
+
     let response: Response;
     try {
-      response = await externalFetch(`${CLICKUP_API_URL}/task/${encodeURIComponent(taskId)}`, { method: 'PUT', headers: { Authorization: apiToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: destination.status }) });
+      response = await externalFetch(`${CLICKUP_API_URL}/task/${encodeURIComponent(taskId)}`, {
+        method: 'PUT',
+        headers: { Authorization: apiToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
     } catch (error) {
-      if (error instanceof ExternalHttpError) throw new ClickUpTicketsError(504, 'CLICKUP_TIMEOUT', 'Não foi possível confirmar a alteração. Recarregue antes de tentar novamente.');
+      if (error instanceof ExternalHttpError) {
+        throw new ClickUpTicketsError(502, error.code === 'TIMEOUT' ? 'CLICKUP_TIMEOUT' : 'CLICKUP_UNAVAILABLE', 'Não foi possível atualizar o ticket agora.');
+      }
       throw error;
     }
-    if (response.status === 401 || response.status === 403) throw new ClickUpTicketsError(502, 'CLICKUP_UNAUTHORIZED', 'Não foi possível alterar o ticket agora.');
-    if (response.status === 404) throw new ClickUpTicketsError(404, 'CLICKUP_NOT_FOUND', 'Ticket não encontrado no ClickUp.');
-    if (!response.ok) throw new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'Não foi possível alterar o ticket agora.');
-    const updated = await response.json().catch(() => null) as { id?: unknown; status?: { status?: unknown; type?: unknown } } | null;
-    if (!updated || updated.id !== taskId || updated.status?.status !== destination.status || typeof updated.status.type !== 'string') throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'Não foi possível confirmar a alteração do ticket.');
-    return { id: taskId, status: updated.status.status, statusType: updated.status.type };
+    if (response.status === 401 || response.status === 403) {
+      throw new ClickUpTicketsError(502, 'CLICKUP_UNAUTHORIZED', 'Não foi possível atualizar o ticket agora.');
+    }
+    if (!response.ok) {
+      throw new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'Não foi possível atualizar o ticket agora.');
+    }
+    const updatedPayload = await response.json().catch(() => null);
+    return this.normalizeTicketDetails(updatedPayload);
   }
 }

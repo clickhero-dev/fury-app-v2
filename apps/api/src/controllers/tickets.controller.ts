@@ -17,15 +17,21 @@ const createTicketSchema = z.object({
   }, z.array(z.enum(TICKET_LABELS)).max(4).refine((labels) => new Set(labels).size === labels.length, 'As etiquetas não podem se repetir').optional().default([])),
 });
 
+const updateTicketStatusSchema = z.object({
+  expectedStatus: z.string().trim().min(1).max(100),
+  status: z.string().trim().min(1).max(100),
+}).refine((input) => input.expectedStatus.toLocaleLowerCase() !== input.status.toLocaleLowerCase(), {
+  message: 'Escolha um status diferente do atual.', path: ['status'],
+});
+
 const reviewTicketSchema = z.discriminatedUnion('decision', [
   z.object({ decision: z.literal('approve') }),
   z.object({ decision: z.literal('reject'), reason: z.string().trim().min(1).max(5_000) }),
 ]);
-const updateStatusSchema = z.object({ expectedStatus: z.string().trim().min(1).max(100), status: z.string().trim().min(1).max(100) });
 
 /** Controller fino; valida o input e delega a abertura ao serviço. */
 export class TicketsController {
-  constructor(private readonly ticketService: Pick<TicketService, 'createTicket' | 'listTickets' | 'listAssignees' | 'reviewTicket' | 'listStatuses' | 'updateTicketStatus'>) {}
+  constructor(private readonly ticketService: Pick<TicketService, 'createTicket' | 'listTickets' | 'listAssignees' | 'listStatuses' | 'updateTicketStatus' | 'reviewTicket'>) {}
 
   create = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -57,6 +63,25 @@ export class TicketsController {
     }
   };
 
+  listStatuses = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const statuses = await this.ticketService.listStatuses();
+      res.json({ success: true, data: statuses, timestamp: new Date().toISOString() });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = updateTicketStatusSchema.parse(req.body);
+      const ticket = await this.ticketService.updateTicketStatus(req.params.ticketId, input);
+      res.json({ success: true, data: ticket, timestamp: new Date().toISOString() });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   review = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = z.string().trim().min(1).max(100).parse(req.params.id);
@@ -66,18 +91,5 @@ export class TicketsController {
     } catch (error) {
       next(error);
     }
-  };
-
-  listStatuses = async (_req: Request, res: Response, next: NextFunction) => {
-    try { res.json({ success: true, data: await this.ticketService.listStatuses(), timestamp: new Date().toISOString() }); }
-    catch (error) { next(error); }
-  };
-
-  updateStatus = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const input = updateStatusSchema.parse(req.body);
-      const result = await this.ticketService.updateTicketStatus(req.params.ticketId, input);
-      res.json({ success: true, data: result, timestamp: new Date().toISOString() });
-    } catch (error) { next(error); }
   };
 }
