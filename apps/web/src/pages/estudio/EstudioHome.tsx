@@ -8,6 +8,7 @@ import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSe
 import { UsageBadge } from '@/components/UsageBadge';
 import type { LibraryPhoto } from '@/hooks/useStudioLibrary';
 import api from '@/lib/api';
+import { downloadStudioAsset } from '@/lib/download-studio-asset';
 import { complianceBadge } from '@/lib/compliance.utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { StudioAsset, GenerateCreativeResponse, StudioVideoJob } from '@/types/studio';
@@ -1087,15 +1088,7 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
     if (!downloadReady || downloadState === 'loading') return;
     setDownloadState('loading');
     try {
-      const response = await api.get(`/studio/assets/${asset.id}/download`, { responseType: 'blob' });
-      const disposition = String(response.headers?.['content-disposition'] ?? '');
-      const fileName = disposition.match(/filename="([^"\\]+)"/)?.[1] ?? `criativo-${asset.id}`;
-      const href = URL.createObjectURL(response.data);
-      const link = document.createElement('a');
-      link.href = href;
-      link.download = fileName;
-      link.click();
-      URL.revokeObjectURL(href);
+      await downloadStudioAsset(asset.id);
       setDownloadState('idle');
     } catch {
       setDownloadState('error');
@@ -1115,6 +1108,18 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
             <Play className="h-3 w-3 fill-current" />
             {duration ? `Vídeo · ${duration}` : 'Vídeo'}
           </span>
+          {canDownload && (
+            <button
+              type="button"
+              onClick={downloadAsset}
+              disabled={!downloadReady || downloadState === 'loading'}
+              aria-label={downloadState === 'loading' ? 'Baixando criativo' : `Baixar ${asset.name ?? 'anúncio de vídeo'}`}
+              title={downloadReady ? 'Baixar arquivo final' : 'Download indisponível enquanto o criativo é processado'}
+              className="absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white shadow-sm transition hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-70"
+            >
+              {downloadState === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            </button>
+          )}
         </div>
       ) : imageUrl && asset.type === 'image' ? (
         <div className="relative aspect-square w-full overflow-hidden bg-surface-muted">
