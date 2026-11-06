@@ -12,6 +12,7 @@ import {
   type StudioImageGenerationResult,
   type StudioComplianceStatusResult,
 } from './studio-image.service.js';
+import { downloadStudioAsset, type StudioAssetDownload } from './studio.service.js';
 import { renderCreative as renderCreativeService, type RenderCreativeInput, type RenderCreativeResult } from './studio-render.service.js';
 import { getCreativeQuotaSnapshot } from './creative-quota.service.js';
 
@@ -74,6 +75,10 @@ export class StudioPublishingService {
 
   async restoreStudioAsset(params: { tenantId: string; assetId: string }): Promise<void> {
     return restoreStudioAsset(params);
+  }
+
+  async downloadStudioAsset(params: { tenantId: string; assetId: string }): Promise<StudioAssetDownload> {
+    return downloadStudioAsset(params);
   }
 
   async getCreativeQuotaSnapshot(

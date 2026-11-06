@@ -106,6 +106,30 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
     expect(screen.queryByTestId('usage-badge')).not.toBeInTheDocument();
   });
 
+  it('baixa o arquivo final pelo endpoint autorizado sem sair da biblioteca', async () => {
+    mockApiGet.mockResolvedValue({ data: MOCK_ASSETS });
+    const createObjectURL = vi.fn(() => 'blob:creative');
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/studio/ai/models')) return Promise.resolve({ data: MOCK_MODELS });
+      if (url === '/studio/assets/asset-1/download') {
+        return Promise.resolve({ data: new Blob(['arquivo final']), headers: { 'content-disposition': 'attachment; filename="criativo-asset-1.png"' } });
+      }
+      return Promise.resolve({ data: MOCK_ASSETS });
+    });
+
+    renderWithProviders();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /baixar anúncio de imagem/i }));
+
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/studio/assets/asset-1/download', { responseType: 'blob' }));
+    expect(click).toHaveBeenCalledOnce();
+    expect(screen.getByText('Biblioteca de anúncios')).toBeInTheDocument();
+    click.mockRestore();
+  });
+
   it('badge em tom de erro + CTA upgrade quando cota zerada', async () => {
     mockApiGet.mockResolvedValue({
       data: { assets: [], creativesRemaining: 0, creativesLimit: 20 },
@@ -140,6 +164,76 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
     expect(
       screen.queryByText(/levar até 15 segundos/i)
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('AssetCard — download da Biblioteca', () => {
+  const cardProps = {
+    onViewDetails: vi.fn(),
+    onDeleteRequest: vi.fn(),
+    onUseInCampaign: vi.fn(),
+  };
+
+  beforeEach(() => {
+    mockApiGet.mockReset();
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:download'),
+      revokeObjectURL: vi.fn(),
+    });
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  /**
+   * Funcionalidade: baixar criativos da Biblioteca do Estúdio
+   * Cenário: usuário baixa imagem ou vídeo pela própria thumbnail
+   * Dado que o asset está disponível
+   * Quando clica no botão de download
+   * Então uma única requisição baixa o arquivo e o usuário permanece na Biblioteca
+   */
+  it('oferece download acessível para imagem e evita cliques duplicados', async () => {
+    const user = userEvent.setup();
+    mockApiGet.mockResolvedValue({ data: new Blob(['final-image'], { type: 'image/png' }) });
+    const { AssetCard } = await import('./EstudioHome');
+    render(
+      <AssetCard
+        asset={{ ...MOCK_ASSETS.assets[0], id: 'image-1' }}
+        {...cardProps}
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: /baixar anúncio de imagem/i });
+    await user.click(button);
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(1));
+    expect(mockApiGet).toHaveBeenCalledWith('/studio/assets/image-1/download', { responseType: 'blob' });
+    expect(screen.getByRole('button', { name: /baixar anúncio de imagem/i })).toBeInTheDocument();
+  });
+
+  it('mostra carregamento, bloqueia novo clique e informa falha client-safe', async () => {
+    const user = userEvent.setup();
+    let rejectDownload!: (reason?: unknown) => void;
+    mockApiGet.mockReturnValue(new Promise((_, reject) => { rejectDownload = reject; }));
+    const { AssetCard } = await import('./EstudioHome');
+    render(<AssetCard asset={{ ...MOCK_ASSETS.assets[0], id: 'image-2' }} {...cardProps} />);
+
+    const button = screen.getByRole('button', { name: /baixar anúncio de imagem/i });
+    await user.click(button);
+    expect(screen.getByRole('button', { name: /baixando criativo/i })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: /baixando criativo/i }));
+    expect(mockApiGet).toHaveBeenCalledTimes(1);
+
+    rejectDownload(new Error('private details'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/não foi possível baixar/i);
+  });
+
+  it('desabilita download de asset sem URL ou ainda processando', async () => {
+    const { AssetCard } = await import('./EstudioHome');
+    const { rerender } = render(<AssetCard asset={{ ...MOCK_ASSETS.assets[0], url: null }} {...cardProps} />);
+    expect(screen.queryByRole('button', { name: /baixar criativo/i })).not.toBeInTheDocument();
+
+    rerender(<AssetCard asset={{ ...MOCK_ASSETS.assets[0], complianceStatus: 'pending_compliance' }} {...cardProps} />);
+    expect(screen.getByRole('button', { name: /baixar anúncio de imagem/i })).toBeDisabled();
   });
 });
 

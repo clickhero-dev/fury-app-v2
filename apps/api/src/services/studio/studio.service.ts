@@ -13,6 +13,7 @@ import { checkAndCompletePlannerJob } from '../planner/planner-studio.service.js
 import { consumeCreativeQuota } from './creative-quota.service.js';
 import { StudioRepository } from '../../repository/studio.repository.js';
 import { PlannerRepository } from '../../repository/planner.repository.js';
+import { externalFetch } from '../../lib/http-client.js';
 
 const CHAR_LIMITS = {
   headline: 40,
@@ -324,6 +325,98 @@ export const studioService = {
 const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const IMAGE_FETCH_TIMEOUT_MS = 90000;
+
+const DOWNLOAD_CONTENT_TYPES: Record<'image' | 'video', { prefix: string }> = {
+  image: { prefix: 'image/' },
+  video: { prefix: 'video/' },
+};
+
+const DOWNLOAD_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+};
+
+const MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024;
+
+export type StudioAssetDownload = {
+  body: Buffer;
+  contentType: string;
+  filename: string;
+};
+
+/** Busca o asset final de forma tenant-bound e o entrega sem expor sua URL privada. */
+export async function downloadStudioAsset(params: { tenantId: string; assetId: string }): Promise<StudioAssetDownload> {
+  const repo = new StudioRepository(params.tenantId);
+  const asset = await repo.findAssetById(params.assetId);
+
+  if (!asset) {
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+  }
+
+  const root = asset.rootAssetId ? await repo.findAssetById(asset.rootAssetId) : asset;
+  if (root?.archivedAt || asset.archivedAt) {
+    throw new AppError(404, 'CREATIVE_ASSET_NOT_FOUND', 'Asset criativo nao encontrado.');
+  }
+
+  if (asset.type !== 'image' && asset.type !== 'video') {
+    throw new AppError(400, 'ASSET_NOT_DOWNLOADABLE', 'Este tipo de criativo nao pode ser baixado.');
+  }
+
+  if (asset.complianceStatus === 'pending' || asset.complianceStatus === 'pending_compliance') {
+    throw new AppError(409, 'ASSET_NOT_READY', 'O criativo ainda esta sendo processado.');
+  }
+
+  let assetUrl: URL;
+  try {
+    assetUrl = new URL(asset.url);
+    if (!['http:', 'https:'].includes(assetUrl.protocol)) throw new Error('unsupported protocol');
+  } catch {
+    throw new AppError(400, 'INVALID_ASSET_URL', 'O arquivo do criativo nao esta disponivel.');
+  }
+
+  let response: Response;
+  try {
+    response = await externalFetch(asset.url);
+  } catch {
+    throw new AppError(502, 'ASSET_DOWNLOAD_FAILED', 'Nao foi possivel preparar o download do criativo.');
+  }
+
+  if (!response.ok) {
+    throw new AppError(502, 'ASSET_DOWNLOAD_FAILED', 'Nao foi possivel preparar o download do criativo.');
+  }
+
+  const contentType = (response.headers.get('content-type') ?? '').split(';', 1)[0].trim().toLowerCase();
+  const typeRule = DOWNLOAD_CONTENT_TYPES[asset.type];
+  if (!contentType.startsWith(typeRule.prefix) || !DOWNLOAD_EXTENSIONS[contentType]) {
+    throw new AppError(400, 'INVALID_ASSET_FORMAT', 'O formato do criativo nao e suportado para download.');
+  }
+
+  const contentLength = Number(response.headers.get('content-length') ?? 0);
+  if (contentLength > MAX_DOWNLOAD_BYTES) {
+    throw new AppError(413, 'ASSET_TOO_LARGE', 'O arquivo do criativo excede o tamanho permitido.');
+  }
+
+  try {
+    const body = Buffer.from(await response.arrayBuffer());
+    if (body.byteLength > MAX_DOWNLOAD_BYTES) {
+      throw new AppError(413, 'ASSET_TOO_LARGE', 'O arquivo do criativo excede o tamanho permitido.');
+    }
+    const safeId = params.assetId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || 'asset';
+    return {
+      body,
+      contentType,
+      filename: `criativo-${safeId}.${DOWNLOAD_EXTENSIONS[contentType]}`,
+    };
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError(502, 'ASSET_DOWNLOAD_FAILED', 'Nao foi possivel preparar o download do criativo.');
+  }
+}
 
 export async function uploadCreativeAssetToMeta(params: {
   tenantId: string;

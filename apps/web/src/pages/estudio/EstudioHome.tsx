@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Image as ImageIcon, Info, Loader2, Plus, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Wand2, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Download, Image as ImageIcon, Info, Loader2, Plus, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Wand2, X } from 'lucide-react';
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
@@ -911,6 +911,29 @@ function resolveAssetUrl(url: string | null | undefined): string | null {
 export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onUseInCampaign, onRestore, restorePending }: AssetCardProps) {
   const imageUrl = resolveAssetUrl(asset.url);
   const badge = complianceBadge(asset.complianceStatus, asset.complianceNotes);
+  const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const canDownload = !archived && !!imageUrl && (asset.type === 'image' || asset.type === 'video');
+  const downloadReady = canDownload && asset.complianceStatus !== 'pending' && asset.complianceStatus !== 'pending_compliance';
+
+  const downloadAsset = async () => {
+    if (!downloadReady || downloadState === 'loading') return;
+    setDownloadState('loading');
+    try {
+      const response = await api.get(`/studio/assets/${asset.id}/download`, { responseType: 'blob' });
+      const disposition = String(response.headers?.['content-disposition'] ?? '');
+      const fileName = disposition.match(/filename="([^"\\]+)"/)?.[1] ?? `criativo-${asset.id}`;
+      const href = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(href);
+      setDownloadState('idle');
+    } catch {
+      setDownloadState('error');
+    }
+  };
+
   return (
     <div className={`group ${SURFACE} ${CARD_HOVER} overflow-hidden`}>
       {imageUrl && asset.type === 'image' ? (
@@ -923,6 +946,18 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
               (e.target as HTMLImageElement).style.display = 'none';
             }}
           />
+          {canDownload && (
+            <button
+              type="button"
+              onClick={downloadAsset}
+              disabled={!downloadReady || downloadState === 'loading'}
+              aria-label={downloadState === 'loading' ? 'Baixando criativo' : `Baixar ${asset.name ?? `anúncio de ${asset.type === 'image' ? 'imagem' : 'vídeo'}`}`}
+              title={downloadReady ? 'Baixar arquivo final' : 'Download indisponível enquanto o criativo é processado'}
+              className="absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white shadow-sm transition hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-70"
+            >
+              {downloadState === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            </button>
+          )}
           {badge.tone === 'approved' && (
             <TooltipProvider delayDuration={200}>
               <Tooltip>
@@ -984,6 +1019,22 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
             </TooltipProvider>
           )}
         </div>
+      ) : imageUrl && asset.type === 'video' ? (
+        <div className="relative aspect-square w-full overflow-hidden bg-surface-muted">
+          <video src={imageUrl} className="h-full w-full object-cover" muted preload="metadata" aria-label={asset.name ?? 'Vídeo gerado'} />
+          {canDownload && (
+            <button
+              type="button"
+              onClick={downloadAsset}
+              disabled={!downloadReady || downloadState === 'loading'}
+              aria-label={downloadState === 'loading' ? 'Baixando criativo' : `Baixar ${asset.name ?? 'vídeo'}`}
+              title={downloadReady ? 'Baixar arquivo final' : 'Download indisponível enquanto o criativo é processado'}
+              className="absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white shadow-sm transition hover:bg-black/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-70"
+            >
+              {downloadState === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            </button>
+          )}
+        </div>
       ) : (
         <div className="flex aspect-square w-full items-center justify-center bg-gradient-to-br from-brand/10 to-background">
           <Sparkles className="h-10 w-10 text-brand/50 transition-transform duration-300 group-hover:scale-110" />
@@ -991,6 +1042,7 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
       )}
 
       <div className="space-y-3 p-4">
+        {downloadState === 'error' && <p role="alert" className="text-xs text-destructive">Não foi possível baixar o arquivo. Tente novamente.</p>}
         <div className="flex items-start justify-between gap-2">
           <h3 className="line-clamp-2 flex-1 text-sm font-semibold text-text-primary transition-colors group-hover:text-text-primary">
             {asset.name ?? `Anúncio de ${asset.type === 'image' ? 'imagem' : asset.type}`}
