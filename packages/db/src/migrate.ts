@@ -162,6 +162,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0051_ady_rbac_partners' },
   { tag: '0052_soft_delete_tenants_users' },
   { tag: '0053_notifications' },
+  { tag: '0056_notification_action_url' },
   { tag: '0054_subscription_renewal_events' },
   { tag: '0055_trial_plan_technical_key' },
   {

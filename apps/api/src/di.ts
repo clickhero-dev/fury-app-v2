@@ -105,9 +105,35 @@ export const brandKitService = new BrandKitService();
 export const brandKitPhotoService = new BrandKitPhotoService();
 export const furyEngineService = new FuryEngineService();
 export const studioAiService = new StudioAiService();
+export const notificationRepository = new NotificationRepository();
+export const notificationService = new NotificationService(notificationRepository, (tenantId, userId) => emitToUser(tenantId, userId, 'notifications.changed', { version: 1 }));
 export const studioVideoService = new StudioVideoService({
   enqueue: enqueueStudioVideo,
   brand: (tenantId) => studioAiService.getBrandContext(tenantId),
+  notifyVideoReady: async (tenantId, userId, jobId, _assetId) => {
+    await notificationService.create({
+      tenantId,
+      callerId: userId,
+      recipientUserId: userId,
+      type: 'general',
+      title: 'Seu vídeo está pronto',
+      body: 'O vídeo foi gerado e já está disponível na sua biblioteca.',
+      actionUrl: `/estudio?assetId=${encodeURIComponent(_assetId)}`,
+      idempotencyKey: `studio-video-ready:${jobId}`,
+    });
+  },
+  notifyVideoFailed: async (tenantId, userId, jobId) => {
+    await notificationService.create({
+      tenantId,
+      callerId: userId,
+      recipientUserId: userId,
+      type: 'general',
+      title: 'Não foi possível gerar o vídeo',
+      body: 'A geração falhou. Abra o Estúdio para tentar novamente.',
+      actionUrl: '/estudio',
+      idempotencyKey: `studio-video-failed:${jobId}`,
+    });
+  },
 });
 export const studioService = new StudioService();
 export const studioVariationsService = new StudioVariationsService(
@@ -142,9 +168,6 @@ export const plannerCaptionSuggestionService = new PlannerCaptionSuggestionServi
   openrouterService,
   (tenantId) => new StudioRepository(tenantId),
 );
-export const notificationRepository = new NotificationRepository();
-export const notificationService = new NotificationService(notificationRepository, (tenantId, userId) => emitToUser(tenantId, userId, 'notifications.changed', { version: 1 }));
-
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
 export const uazapiClient = new UazapiClient();
