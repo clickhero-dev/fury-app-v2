@@ -17,9 +17,14 @@ const createTicketSchema = z.object({
   }, z.array(z.enum(TICKET_LABELS)).max(4).refine((labels) => new Set(labels).size === labels.length, 'As etiquetas não podem se repetir').optional().default([])),
 });
 
+const reviewTicketSchema = z.discriminatedUnion('decision', [
+  z.object({ decision: z.literal('approve') }),
+  z.object({ decision: z.literal('reject'), reason: z.string().trim().min(1).max(5_000) }),
+]);
+
 /** Controller fino; valida o input e delega a abertura ao serviço. */
 export class TicketsController {
-  constructor(private readonly ticketService: Pick<TicketService, 'createTicket' | 'listTickets' | 'listAssignees'>) {}
+  constructor(private readonly ticketService: Pick<TicketService, 'createTicket' | 'listTickets' | 'listAssignees' | 'reviewTicket'>) {}
 
   create = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -46,6 +51,17 @@ export class TicketsController {
     try {
       const assignees = await this.ticketService.listAssignees();
       res.json({ success: true, data: assignees, timestamp: new Date().toISOString() });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  review = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = z.string().trim().min(1).max(100).parse(req.params.id);
+      const input = reviewTicketSchema.parse(req.body);
+      const result = await this.ticketService.reviewTicket(id, input);
+      res.json({ success: true, data: result, timestamp: new Date().toISOString() });
     } catch (error) {
       next(error);
     }
