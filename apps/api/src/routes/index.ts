@@ -28,6 +28,7 @@ import faqRoutes from './faq.routes.js';
 import announcementRoutes from './announcement.routes.js';
 import notificationRoutes from './notification.routes.js';
 import rbacRoutes from "./rbac.routes.js";
+import publicTrialRoutes from './public-trial.routes.js';
 
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { tenantMiddleware } from "../middleware/tenant.middleware.js";
@@ -46,6 +47,7 @@ const router = Router();
 router.use(rbacMiddleware);
 
 router.use("/health", healthRoutes);
+router.use('/public', publicTrialRoutes);
 router.use("/auth", authRoutes);
 router.use('/faqs', faqRoutes);
 router.use('/announcements', announcementRoutes);
