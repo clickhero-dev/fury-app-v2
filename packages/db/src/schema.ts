@@ -1302,6 +1302,7 @@ export const notifications = pgTable(
     type: varchar('type', { length: 32 }).notNull().default('general'),
     title: varchar('title', { length: 120 }).notNull(),
     body: varchar('body', { length: 500 }).notNull(),
+    actionUrl: varchar('action_url', { length: 255 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     readAt: timestamp('read_at', { withTimezone: true }),
     idempotencyKey: varchar('idempotency_key', { length: 128 }),

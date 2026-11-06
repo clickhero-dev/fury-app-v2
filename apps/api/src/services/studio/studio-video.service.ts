@@ -244,6 +244,7 @@ type Deps = {
   sleep: (ms: number) => Promise<void>;
   store: typeof storeFile;
   notifyVideoReady: (tenantId: string, userId: string, jobId: string, assetId: string) => Promise<void>;
+  notifyVideoFailed: (tenantId: string, userId: string, jobId: string) => Promise<void>;
   now: () => number;
 };
 
@@ -267,6 +268,7 @@ export class StudioVideoService {
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       store: storeFile,
       notifyVideoReady: async () => undefined,
+      notifyVideoFailed: async () => undefined,
       now: () => Date.now(),
       ...deps,
     };
@@ -537,6 +539,10 @@ export class StudioVideoService {
     const fail = async (message: string) => {
       await save({ status: 'error', error: message });
       if (meta.rootAssetId) await this.deps.modQuota.refund(meta.rootAssetId);
+      if (meta.initiatedByUserId) {
+        try { await this.deps.notifyVideoFailed(job.tenantId, meta.initiatedByUserId, jobId); }
+        catch (notificationError) { console.error('[studio-video] falha ao criar notificação de erro', { jobId, error: (notificationError as Error).message }); }
+      }
     };
 
     await save({ status: 'running' });

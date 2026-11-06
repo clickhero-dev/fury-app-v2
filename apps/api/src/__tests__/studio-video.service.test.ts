@@ -45,7 +45,7 @@ function makeJobRepo() {
 
 type Limits = { videosPerMonth: number | null; modificationsPerVideo: number | null };
 
-function build(opts: { states?: any[]; asset?: any; photoKind?: string; limits?: Limits; notifyVideoReady?: ReturnType<typeof vi.fn> } = {}) {
+function build(opts: { states?: any[]; asset?: any; photoKind?: string; limits?: Limits; notifyVideoReady?: ReturnType<typeof vi.fn>; notifyVideoFailed?: ReturnType<typeof vi.fn> } = {}) {
   const jobRepo = makeJobRepo();
   const studioRepo = {
     createAsset: vi.fn(async (d: any) => ({ id: 'asset-new', ...d })),
@@ -78,6 +78,7 @@ function build(opts: { states?: any[]; asset?: any; photoKind?: string; limits?:
     limits: async () => ({ ...(opts.limits ?? { videosPerMonth: 10, modificationsPerVideo: 3 }), periodStart: new Date(0) }),
     modQuota,
     notifyVideoReady: opts.notifyVideoReady,
+    notifyVideoFailed: opts.notifyVideoFailed,
     enqueue,
     sleep: async () => undefined,
     store: vi.fn(async () => 'https://cdn/video.mp4') as any,
@@ -256,12 +257,14 @@ describe('StudioVideoService', () => {
 
   it('não notifica quando a geração falha', async () => {
     const notifyVideoReady = vi.fn(async () => undefined);
-    const { svc } = build({ notifyVideoReady, states: [{ status: 'failed', costUsd: null, error: 'safety', unsignedUrls: [] }] });
+    const notifyVideoFailed = vi.fn(async () => undefined);
+    const { svc } = build({ notifyVideoReady, notifyVideoFailed, states: [{ status: 'failed', costUsd: null, error: 'safety', unsignedUrls: [] }] });
     const { jobId } = await svc.createJob(TENANT, baseInput, USER_ID);
 
     await svc.processJob(jobId);
 
     expect(notifyVideoReady).not.toHaveBeenCalled();
+    expect(notifyVideoFailed).toHaveBeenCalledWith(TENANT, USER_ID, jobId);
   });
 
   it('falha de filtro de conteúdo vira mensagem clara, sem reenvio', async () => {

@@ -115,7 +115,20 @@ export const studioVideoService = new StudioVideoService({
       type: 'general',
       title: 'Seu vídeo está pronto',
       body: 'O vídeo foi gerado e já está disponível na sua biblioteca.',
+      actionUrl: `/estudio?assetId=${encodeURIComponent(_assetId)}`,
       idempotencyKey: `studio-video-ready:${jobId}`,
+    });
+  },
+  notifyVideoFailed: async (tenantId, userId, jobId) => {
+    await notificationService.create({
+      tenantId,
+      callerId: userId,
+      recipientUserId: userId,
+      type: 'general',
+      title: 'Não foi possível gerar o vídeo',
+      body: 'A geração falhou. Abra o Estúdio para tentar novamente.',
+      actionUrl: '/estudio',
+      idempotencyKey: `studio-video-failed:${jobId}`,
     });
   },
 });
