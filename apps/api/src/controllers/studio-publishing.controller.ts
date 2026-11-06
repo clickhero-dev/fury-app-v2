@@ -200,6 +200,24 @@ export class StudioPublishingController {
     }
   };
 
+  downloadAsset = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tenantId = this.tenantId(req);
+      if (!tenantId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
+      }
+
+      const assetId = z.string().min(1).parse(req.params.assetId);
+      const result = await this.service.downloadStudioAsset({ tenantId, assetId });
+      res.setHeader('Content-Type', result.contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.send(result.body);
+    } catch (error) {
+      if (!this.zodError(res, error)) next(error);
+    }
+  };
+
   deleteAsset = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const tenantId = this.tenantId(req);

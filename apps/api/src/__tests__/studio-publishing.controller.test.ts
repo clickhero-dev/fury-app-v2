@@ -20,6 +20,7 @@ const service = {
   renderCreative: vi.fn(),
   deleteStudioAsset: vi.fn(),
   getCreativeQuotaSnapshot: vi.fn(),
+  downloadStudioAsset: vi.fn(),
 } as unknown as StudioPublishingService;
 
 const controller = new StudioPublishingController(service);
@@ -108,6 +109,45 @@ describe('StudioPublishingController', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ success: true });
       expect(next).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('downloadAsset', () => {
+    it('happy: entrega o arquivo final com nome informado pelo serviço', async () => {
+      (service.downloadStudioAsset as any).mockResolvedValue({
+        body: Buffer.from('video-final'), contentType: 'video/mp4', filename: 'criativo-a-1.mp4',
+      });
+      const req = { tenant: { tenantId: 't-1' }, params: { assetId: 'a-1' } } as any;
+      const res = { status: vi.fn().mockReturnThis(), setHeader: vi.fn(), send: vi.fn() } as any;
+      const next = vi.fn();
+
+      await controller.downloadAsset(req, res, next);
+
+      expect(service.downloadStudioAsset).toHaveBeenCalledWith({ tenantId: 't-1', assetId: 'a-1' });
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'video/mp4');
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename="criativo-a-1.mp4"');
+      expect(res.send).toHaveBeenCalledWith(Buffer.from('video-final'));
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('401: sem tenant não tenta baixar', async () => {
+      const res = mockRes();
+      const next = vi.fn();
+
+      await controller.downloadAsset({ params: { assetId: 'a-1' } } as any, res, next);
+
+      expect(service.downloadStudioAsset).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401, code: 'UNAUTHORIZED' }));
+    });
+
+    it('400: id vazio não tenta baixar', async () => {
+      const res = mockRes();
+      const next = vi.fn();
+
+      await controller.downloadAsset({ tenant: { tenantId: 't-1' }, params: { assetId: '' } } as any, res, next);
+
+      expect(service.downloadStudioAsset).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
     });
   });
 
