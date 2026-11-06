@@ -24,6 +24,14 @@ const PLAN_DISPLAY: Record<string, {
   ringColor: string;
   features: string[];
 }> = {
+  trial: {
+    icon: <Zap className="w-5 h-5" />,
+    highlight: false,
+    badge: 'Trial gratuito',
+    accentColor: '#1E88A8',
+    ringColor: 'ring-[#1E88A8]/30',
+    features: ['7 dias de acesso', '5 criações de imagem', 'Até 3 revisões por criação', 'Geração de vídeo não incluída'],
+  },
   starter: {
     icon: <Zap className="w-5 h-5" />,
     highlight: false,
@@ -76,6 +84,7 @@ const BILLING_TYPE_LABELS: Record<string, string> = {
 
 function getPlanKey(name: string): string {
   const lower = name.toLowerCase();
+  if (lower.includes('trial')) return 'trial';
   if (lower.includes('enterprise')) return 'enterprise';
   if (lower.includes('pro')) return 'pro';
   return 'starter';
@@ -237,6 +246,7 @@ interface PlanCardProps {
 
 function PlanCard({ plan, isCurrentPlan, onSubscribe }: PlanCardProps) {
   const key = getPlanKey(plan.name);
+  const isTrialPlan = key === 'trial';
   const display = PLAN_DISPLAY[key] ?? PLAN_DISPLAY.starter;
   const features = (plan.features && plan.features.length > 0) ? plan.features : display.features;
 
@@ -301,10 +311,10 @@ function PlanCard({ plan, isCurrentPlan, onSubscribe }: PlanCardProps) {
             ? 'bg-[#17708A] hover:bg-[#17708A]/80 text-white border-transparent'
             : 'border-white/10 text-text-primary hover:bg-white/5'
         }`}
-        disabled={isCurrentPlan}
-        onClick={onSubscribe}
+        disabled={isCurrentPlan || isTrialPlan}
+        onClick={isTrialPlan ? undefined : onSubscribe}
       >
-        {isCurrentPlan ? 'Plano atual' : 'Assinar agora'}
+        {isCurrentPlan ? 'Plano atual' : isTrialPlan ? 'Automático no cadastro' : 'Assinar agora'}
       </Button>
     </div>
   );
@@ -341,7 +351,7 @@ export function Plans() {
                 Turbine seus resultados com o plano certo
               </h2>
               <p className="text-text-secondary text-sm">
-                Todos os planos incluem 7 dias de trial gratuito. Cancele quando quiser.
+                O plano Trial oferece 7 dias gratuitos para novas contas.
               </p>
             </div>
 
@@ -357,7 +367,7 @@ export function Plans() {
             </div>
 
             <p className="text-center text-xs text-text-secondary pt-2">
-              Pagamento processado com segurança via Asaas. Aceita PIX, Boleto e Cartão de Crédito.
+              Assinaturas pagas são processadas com segurança via Asaas. Aceita PIX, Boleto e Cartão de Crédito.
             </p>
           </div>
         )}

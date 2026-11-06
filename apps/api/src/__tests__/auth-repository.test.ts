@@ -3,18 +3,54 @@ import { AuthRepository } from '../repository/auth.repository.js';
 
 function makeDb() {
   const update = vi.fn(() => ({ set: (s: any) => ({ where: () => ({ returning: async () => [{ id: 'u-1', ...s }] }) }) }));
-  const insert = vi.fn(() => ({ values: (v: any) => ({ returning: async () => [{ id: 'new', ...v }] }) }));
+  const insertValues = vi.fn((v: any) => ({ returning: async () => [{ id: 'new', ...v }] }));
+  const insert = vi.fn(() => ({ values: insertValues }));
   const db: any = {
     query: {
       users: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []) },
       tenants: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []) },
+      plans: { findFirst: vi.fn(async () => ({ id: 'plan-trial', name: 'Trial', isActive: true })) },
     },
     update, insert, delete: vi.fn(() => ({ where: async () => {} })),
   };
-  return { db, update, insert };
+  return { db, update, insert, insertValues };
 }
 
 describe('AuthRepository', () => {
+  /*
+   * Funcionalidade: trial automático para novas contas
+   * Cenário: provisionar acesso limitado por sete dias
+   * Dado um plano Trial ativo, quando uma conta nova é provisionada,
+   * então recebe cinco imagens, três revisões e sete dias de trial.
+   */
+  it('provisiona assinatura Trial com 5 imagens e validade de 7 dias', async () => {
+    const { db, insert, insertValues } = makeDb();
+    const repo = new AuthRepository('tenant-1', db);
+    const now = new Date('2026-11-06T12:00:00.000Z');
+
+    await repo.provisionDefaultTrial(now);
+
+    expect(db.query.plans.findFirst).toHaveBeenCalledTimes(1);
+    expect(insert).toHaveBeenCalledTimes(1);
+    const subscription = insertValues.mock.calls[0]![0];
+    expect(subscription).toEqual(expect.objectContaining({
+      tenantId: 'tenant-1',
+      planId: 'plan-trial',
+      status: 'trial',
+      creativesRemaining: 5,
+      trialEndsAt: new Date('2026-11-13T12:00:00.000Z'),
+    }));
+  });
+
+  it('falha explicitamente se o plano Trial não estiver configurado', async () => {
+    const { db, insert } = makeDb();
+    db.query.plans.findFirst.mockResolvedValueOnce(null);
+    const repo = new AuthRepository('tenant-1', db);
+
+    await expect(repo.provisionDefaultTrial()).rejects.toThrow(/plano Trial/i);
+    expect(insert).not.toHaveBeenCalled();
+  });
+
   it('findUserByEmail consulta users por email (GLOBAL)', async () => {
     const { db } = makeDb();
     const repo = new AuthRepository('', db);

@@ -6,7 +6,7 @@ vi.mock('../lib/redis.js', () => ({
 }));
 
 function makeRepo() {
-  return { findUserByGoogleId: vi.fn(), findUserByEmail: vi.fn(), findTenantBySlug: vi.fn(), patchUser: vi.fn() } as any;
+  return { findUserByGoogleId: vi.fn(), findUserByEmail: vi.fn(), findTenantBySlug: vi.fn(), patchUser: vi.fn(), provisionDefaultTrial: vi.fn(async () => {}) } as any;
 }
 
 function makeSvc() {
@@ -46,6 +46,7 @@ function makeFbSvc(repoOverrides: Record<string, unknown> = {}, userInfo?: Recor
     findUserByEmail: vi.fn(async () => null),
     findTenantBySlug: vi.fn(async () => null),
     patchUser: vi.fn(async () => {}),
+    provisionDefaultTrial: vi.fn(async () => {}),
     ...repoOverrides,
   } as any;
   const svc = new SocialAuthService(
@@ -111,6 +112,7 @@ describe('SocialAuthService.handleFacebookSocialLogin', () => {
     expect(db.transaction).toHaveBeenCalledTimes(1);
     expect(r.isNewUser).toBe(true);
     expect(r.user.email).toBe('ana@example.com');
+    expect(repo.provisionDefaultTrial).toHaveBeenCalledWith();
     // não emite tokens aqui — isso é feito em issueSession/handoff
     expect(r).not.toHaveProperty('tokens');
   });

@@ -92,6 +92,14 @@ export function AuthenticatedShell() {
   const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser;
   const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoUser;
 
+  const {
+    data: subscription,
+    isLoading: subLoading,
+    isFetched: subFetched,
+    isError: subError,
+  } = useSubscription();
+  const subscriptionChecked = !subLoading && subFetched;
+
   const { data: connections, isLoading, isFetched } = useQuery({
     queryKey: ['meta-connections'],
     queryFn: async () => {
@@ -117,6 +125,10 @@ export function AuthenticatedShell() {
   });
 
   useEffect(() => {
+    // Trial é reconhecido somente pela assinatura persistida retornada pela API.
+    // Aguarda sua resolução antes de redirecionar, evitando corrida no primeiro login.
+    if (subscriptionChecked && !subError && subscription?.status === 'trial') return;
+    if (!subscriptionChecked) return;
     if (!isLoading && isFetched && shouldCheck && Array.isArray(connections)) {
       if (connections.length > 0) {
         dispatch(setMetaId(connections[0].id ?? null));
@@ -129,16 +141,9 @@ export function AuthenticatedShell() {
         navigate('/onboarding/selecionar-conta', { replace: true });
       }
     }
-  }, [connections, isLoading, isFetched, shouldCheck, navigate, dispatch]);
+  }, [connections, isLoading, isFetched, shouldCheck, navigate, dispatch, subscription, subscriptionChecked, subError]);
 
   // ── Verificação de assinatura ──────
-  const {
-    data: subscription,
-    isLoading: subLoading,
-    isFetched: subFetched,
-    isError: subError,
-  } = useSubscription();
-
   const reduxPlanExpired = useAppSelector(selectIsPlanExpired);
   const userRole = useAppSelector(selectUserRole);
   // Admin/superadmin isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
@@ -148,8 +153,6 @@ export function AuthenticatedShell() {
     () => computeSubscriptionState(subscription),
     [subscription]
   );
-
-  const subscriptionChecked = !subLoading && subFetched;
 
   // Persiste o plano (ou sua ausência) no Redux apenas quando o fetch de assinatura
   // resolveu e NÃO foi erro — assim registra o estado real sem sobrescrever um valor

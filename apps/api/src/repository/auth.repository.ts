@@ -3,6 +3,8 @@ import {
   type Database,
   users,
   tenants,
+  plans,
+  subscriptions,
 } from '@fury/db';
 import { and, eq, ne } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
@@ -75,6 +77,22 @@ export class AuthRepository extends TenantScopedRepository {
   async createUser(data: Partial<User>): Promise<User> {
     const [row] = await this.db.insert(users).values(data as any).returning();
     return row;
+  }
+
+  /** Provisiona o Trial padrão para uma conta recém-criada. */
+  async provisionDefaultTrial(now = new Date()): Promise<void> {
+    const plan = await this.db.query.plans.findFirst({ where: eq(plans.name, 'Trial') });
+    if (!plan || !plan.isActive) {
+      throw new Error('Plano Trial padrão ausente ou inativo; aplique a migration 0052_trial_plan.');
+    }
+
+    await this.db.insert(subscriptions).values({
+      tenantId: this.tenantId,
+      planId: plan.id,
+      status: 'trial',
+      trialEndsAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+      creativesRemaining: 5,
+    });
   }
 
   async patchUser(id: string, data: Partial<User>) {

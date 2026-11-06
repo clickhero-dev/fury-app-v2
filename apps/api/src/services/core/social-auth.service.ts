@@ -231,6 +231,8 @@ export class SocialAuthService {
       return { user: newUser };
     });
 
+    await this.repo(result.user.tenantId).provisionDefaultTrial();
+
     const accessToken = this.deps.jwt.generateAccessToken({ userId: result.user.id, tenantId: result.user.tenantId, email: result.user.email, role: result.user.role });
     const refreshToken = this.deps.jwt.generateRefreshToken(result.user.id);
     await storeRefreshTokenHash(result.user.id, refreshToken);
@@ -321,6 +323,8 @@ export class SocialAuthService {
         .returning();
       return { user: newUser };
     });
+
+    await this.repo(result.user.tenantId).provisionDefaultTrial();
 
     return { user: userToDTO(result.user), isNewUser: true };
   }

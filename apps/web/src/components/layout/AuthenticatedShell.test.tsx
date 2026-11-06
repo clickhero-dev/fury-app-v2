@@ -18,6 +18,7 @@ import type { AuthState } from '../../store/slices/authSlice';
 
 // mock da api: roteia por URL — /policy/current configurável por teste
 const apiGet = vi.fn();
+let subscriptionData: unknown = undefined;
 apiGet.mockImplementation((url: string) => {
   if (url === '/policy/current') {
     return Promise.resolve({
@@ -33,7 +34,7 @@ vi.mock('../../lib/api', () => ({
 }));
 
 vi.mock('../../hooks/useBilling', () => ({
-  useSubscription: () => ({ data: undefined, isLoading: false, isFetched: false, isError: false }),
+  useSubscription: () => ({ data: subscriptionData, isLoading: false, isFetched: subscriptionData !== undefined, isError: false }),
 }));
 
 vi.mock('../../lib/posthog', () => ({ captureEvent: vi.fn() }));
@@ -86,6 +87,7 @@ function renderShell(policy: AuthState['policy']) {
 
 beforeEach(() => {
   localStorage.clear();
+  subscriptionData = undefined;
   apiGet.mockReset();
   apiGet.mockImplementation((url: string) => {
     if (url === '/policy/current') {
@@ -95,6 +97,26 @@ beforeEach(() => {
     }
     // /meta/connections e outros: conexão existente (evita redirect de onboarding)
     return Promise.resolve({ data: { data: [{ id: 'c1', selectedAdAccountId: 'acc-1' }] } });
+  });
+});
+
+/**
+ * Funcionalidade: usuários Trial entram sem conectar Meta
+ * Cenário: trial persistido pela API não deve ser redirecionado ao onboarding Meta
+ * Dado uma assinatura retornada pela API com status trial
+ * Quando o usuário abre uma rota autenticada sem conexão Meta
+ * Então o conteúdo da aplicação é exibido e o onboarding Meta não é aberto
+ */
+describe('AuthenticatedShell — onboarding Trial', () => {
+  it('não redireciona trial confirmado pela API para conectar Meta', async () => {
+    apiGet.mockImplementation((url: string) => {
+      if (url === '/meta/connections') return Promise.resolve({ data: { data: [] } });
+      return Promise.resolve({ data: { data: null } });
+    });
+    subscriptionData = { status: 'trial', plan: { name: 'Trial' } };
+    renderShell({ currentVersion: '1.0', accepted: true });
+    expect(await screen.findByTestId('sidebar-root')).not.toBeNull();
+    expect(screen.queryByText(/Conectar Meta/)).toBeNull();
   });
 });
 

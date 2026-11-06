@@ -35,7 +35,7 @@ export function RegisterPage() {
           policy: data.policy ?? null,
         }));
         if (data.isNewUser) {
-          navigate('/onboarding/conectar-meta');
+          navigate('/dashboard');
         } else {
           navigate('/dashboard');
         }
@@ -56,7 +56,7 @@ export function RegisterPage() {
       .then((session) => {
         if (!session) return;
         stripSocialParams();
-        navigate(session.isNewUser ? '/onboarding/conectar-meta' : '/dashboard');
+        navigate('/dashboard');
       })
       .catch(() => {
         setError('Não foi possível concluir o cadastro com Facebook. Tente novamente.');

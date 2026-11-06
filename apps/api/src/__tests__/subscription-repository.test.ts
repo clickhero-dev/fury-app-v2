@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SubscriptionRepository } from '../repository/subscription.repository.js';
 
+/*
+ * Funcionalidade: limites do plano Trial
+ * Cenário: limites configurados são lidos para as cotas da conta
+ * Dado uma assinatura Trial, quando o sistema consulta suas cotas,
+ * Então permite cinco imagens e até três revisões por criação.
+ */
 /** Testes unitários do SubscriptionRepository — injeta `db` mockado no construtor. */
 
 function makeDb() {
@@ -100,6 +106,17 @@ describe('SubscriptionRepository', () => {
       const repo = new SubscriptionRepository('', db);
       db.query.plans.findFirst.mockResolvedValue({ id: 'p-1', limits: { creativesPerMonth: 30 } });
       expect(await repo.getPlanCreativesLimit('p-1')).toBe(30);
+    });
+
+    it('aplica 5 imagens e 3 revisões para o plano Trial', async () => {
+      const { db } = makeDb();
+      const trialLimits = { creativesPerMonth: 5, modificationsPerCreative: 3, videosPerMonth: 0 };
+      db.query.subscriptions.findFirst.mockResolvedValue({ id: 'sub-trial', tenantId, planId: 'trial-plan' });
+      db.query.plans.findFirst.mockResolvedValue({ id: 'trial-plan', limits: trialLimits });
+      const repo = new SubscriptionRepository(tenantId, db);
+
+      expect(await repo.getPlanCreativesLimit('trial-plan')).toBe(5);
+      expect(await repo.getModificationsPerCreativeLimit()).toBe(3);
     });
 
     it('renewSubscription consome o ciclo original e retorna se o compare-and-set atualizou a assinatura', async () => {

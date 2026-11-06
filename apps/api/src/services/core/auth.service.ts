@@ -138,6 +138,8 @@ export class AuthService {
       return { tenant: { ...tenant, codigo }, user };
     });
 
+    await this.repo(result.user.tenantId).provisionDefaultTrial();
+
     const accessToken = this.deps.jwt.generateAccessToken({
       userId: result.user.id,
       tenantId: result.user.tenantId,
