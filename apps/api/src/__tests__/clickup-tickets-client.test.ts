@@ -215,4 +215,40 @@ describe('ClickUpTicketsClient', () => {
     }]);
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/list/901717485435/member');
   });
+
+  it('lista os status atuais da lista, incluindo status fechados', async () => {
+    const fetchMock = mockFetchOnce(200, {
+      statuses: [{ status: 'triagem', type: 'custom' }, { status: 'concluído', type: 'closed' }],
+    });
+
+    await expect(new ClickUpTicketsClient().listStatuses()).resolves.toEqual([
+      { name: 'triagem', type: 'custom' }, { name: 'concluído', type: 'closed' },
+    ]);
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/list/901717485435');
+  });
+
+  it('lê a tarefa individual e confirma sua lista e status', async () => {
+    const fetchMock = mockFetchOnce(200, {
+      id: 'task-1', status: { status: 'triagem', type: 'custom' }, list: { id: '901717485435' },
+    });
+
+    await expect(new ClickUpTicketsClient().getTicket('task-1')).resolves.toEqual({
+      id: 'task-1', status: 'triagem', statusType: 'custom', listId: '901717485435',
+    });
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/task/task-1');
+  });
+
+  it('atualiza somente o status e valida a resposta confirmada', async () => {
+    const fetchMock = mockFetchOnce(200, {
+      id: 'task-1', status: { status: 'review_spec', type: 'custom' }, list: { id: '901717485435' },
+    });
+
+    await expect(new ClickUpTicketsClient().updateTicketStatus('task-1', 'review_spec')).resolves.toEqual({
+      id: 'task-1', status: 'review_spec', statusType: 'custom', listId: '901717485435',
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.clickup.com/api/v2/task/task-1');
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body as string)).toEqual({ status: 'review_spec' });
+  });
 });

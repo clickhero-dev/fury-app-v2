@@ -118,8 +118,9 @@ import { TicketsPage } from './TicketsPage';
 
 const mockPost = vi.hoisted(() => vi.fn());
 const mockGet = vi.hoisted(() => vi.fn());
+const mockPatch = vi.hoisted(() => vi.fn());
 const mockShowSnack = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/api', () => ({ default: { post: mockPost, get: mockGet } }));
+vi.mock('@/lib/api', () => ({ default: { post: mockPost, get: mockGet, patch: mockPatch } }));
 vi.mock('@/lib/snack', () => ({ showSnack: mockShowSnack }));
 
 const NOW = new Date('2026-10-06T12:00:00-03:00');
@@ -160,7 +161,7 @@ async function openModalAndFill(user = setupUser()) {
 
 describe('TicketsPage', () => {
   beforeEach(() => {
-    mockPost.mockReset(); mockGet.mockReset(); mockShowSnack.mockReset(); mockTicketsData();
+    mockPost.mockReset(); mockGet.mockReset(); mockPatch.mockReset(); mockShowSnack.mockReset(); mockTicketsData();
     vi.useFakeTimers({ now: NOW, shouldAdvanceTime: true });
   });
 
@@ -468,5 +469,41 @@ describe('TicketsPage', () => {
     expect(await screen.findByText('Nenhum chamado encontrado para os filtros selecionados.')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('release');
     expect(within(screen.getByRole('tab', { name: /abertos/i })).getByText('0')).toBeInTheDocument();
+  });
+
+  it('abre o diálogo, carrega status dinâmico e confirma a alteração', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/admin/tickets') return Promise.resolve({ data: { data: { open: [ticket('open-1', '[N2] Publicação falhou', { status: 'triagem' })], resolved: [] }, partial_failures: [] } });
+      if (url === '/admin/tickets/assignees') return Promise.resolve({ data: { data: [] } });
+      if (url === '/admin/tickets/statuses') return Promise.resolve({ data: { data: [{ name: 'triagem', type: 'custom' }, { name: 'review_spec', type: 'custom' }, { name: 'concluído', type: 'closed' }] } });
+      return Promise.reject(new Error(`Unexpected URL ${url}`));
+    });
+    mockPatch.mockResolvedValue({ data: { data: { id: 'open-1', status: 'review_spec', statusType: 'custom' } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    await user.click(await screen.findByRole('button', { name: /alterar status de \[N2\]/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Novo status' }), 'review_spec');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirmar alteração' }));
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledWith('/admin/tickets/open-1/status', { expectedStatus: 'triagem', status: 'review_spec' }));
+    expect(mockShowSnack).toHaveBeenCalledWith('Status do ticket alterado com sucesso.', 'success');
+  });
+
+  it('informa conflito e recarrega quando o status ficou obsoleto', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/admin/tickets') return Promise.resolve({ data: { data: { open: [ticket('open-1', '[N2] Publicação falhou', { status: 'triagem' })], resolved: [] }, partial_failures: [] } });
+      if (url === '/admin/tickets/assignees') return Promise.resolve({ data: { data: [] } });
+      if (url === '/admin/tickets/statuses') return Promise.resolve({ data: { data: [{ name: 'triagem', type: 'custom' }, { name: 'review_spec', type: 'custom' }] } });
+      return Promise.reject(new Error(`Unexpected URL ${url}`));
+    });
+    mockPatch.mockRejectedValue({ response: { status: 409, data: { error: { message: 'O status deste ticket mudou. Atualize a lista e tente novamente.' } } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    await user.click(await screen.findByRole('button', { name: /alterar status de \[N2\]/i }));
+    const dialog = await screen.findByRole('dialog');
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Novo status' }), 'review_spec');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirmar alteração' }));
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('O status deste ticket mudou');
+    expect(mockGet.mock.calls.filter(([url]) => url === '/admin/tickets').length).toBeGreaterThan(1);
   });
 });
