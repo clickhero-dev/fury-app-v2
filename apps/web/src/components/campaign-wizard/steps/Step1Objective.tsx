@@ -228,7 +228,6 @@ function MessagingDestinationFields({
               selected={whatsapp.destinations.includes('messenger')}
               onToggle={() => toggleDestination('messenger')}
             />
-
           </div>
         </div>
       )}

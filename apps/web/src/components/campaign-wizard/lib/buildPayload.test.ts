@@ -101,6 +101,15 @@ describe('buildWizardCampaignPayload', () => {
     expect(conv.destinations).toBeUndefined();
   });
 
+  it('preserva Instagram e Facebook juntos no payload de Gerar Conversas', () => {
+    const payload = buildWizardCampaignPayload(makeState({
+      objective: 'whatsapp',
+      whatsapp: { ...makeState().whatsapp, destinations: ['instagram_direct', 'messenger'] },
+    }));
+
+    expect(payload.destinations).toEqual(['instagram_direct', 'messenger']);
+  });
+
   it('media_url é enviado apenas para criativos do Instagram', () => {
     const state = makeState();
     state.creatives[1] = {
