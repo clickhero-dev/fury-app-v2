@@ -167,6 +167,13 @@ describe('TicketsController', () => {
     }));
   });
 
+  it('valida e encaminha a alteração de status', async () => {
+    const service = { updateTicketStatus: vi.fn().mockResolvedValue({ id: 'task-1', status: 'review_spec', statusType: 'custom' }) };
+    const response = mockRes();
+    await new TicketsController(service as any).updateStatus({ params: { ticketId: 'task-1' }, body: { expectedStatus: 'triagem', status: 'review_spec' } } as any, response, vi.fn());
+    expect(service.updateTicketStatus).toHaveBeenCalledWith('task-1', { expectedStatus: 'triagem', status: 'review_spec' });
+  });
+
   it('propaga somente erro seguro quando o ClickUp está indisponível', async () => {
     const client = { createTicket: vi.fn().mockRejectedValue(new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'token=segredo payload=privado')) };
     const service = new TicketService(client as any);
