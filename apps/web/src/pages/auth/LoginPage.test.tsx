@@ -68,7 +68,7 @@ describe('BDD: LoginPage conta demo', () => {
     fireEvent.click(screen.getByRole('button', { name: /conhecer o ady com uma conta demo/i }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledOnce());
-    expect(screen.getByTestId('location')).toHaveTextContent('/dashboard');
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/dashboard'));
   });
 
   it('Cenário: indisponibilidade da demo informa uma alternativa', async () => {
