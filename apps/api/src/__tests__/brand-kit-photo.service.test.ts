@@ -29,12 +29,34 @@ beforeEach(() => {
 });
 
 describe('BrandKitPhotoService', () => {
+  it('oculta somente no painel do tenant, sem apagar a imagem ou o arquivo', async () => {
+    repo.hideFromReferencePanel = vi.fn(async () => ({ id: 'p1' }));
+    const svc = new BrandKitPhotoService(factory, storage as any);
+    await svc.hideFromReferencePanel('t-1', 'p1');
+    expect(factory).toHaveBeenCalledWith('t-1');
+    expect(repo.hideFromReferencePanel).toHaveBeenCalledWith('p1');
+    expect(repo.softDeleteById).not.toHaveBeenCalled();
+    expect(storage.deleteAsset).not.toHaveBeenCalled();
+  });
+
+  it('inclui a visibilidade na listagem sem retirar a foto da biblioteca', async () => {
+    repo.list.mockResolvedValue([{ id: 'p1', kind: 'produto', url: 'u', createdAt: new Date(), hiddenFromReferencePanel: true }]);
+    const svc = new BrandKitPhotoService(factory, storage as any);
+    expect(await svc.list('t-1')).toEqual([expect.objectContaining({ id: 'p1', hidden_from_reference_panel: true })]);
+  });
+
+  it('não oculta foto ausente ou de outro tenant', async () => {
+    repo.hideFromReferencePanel = vi.fn().mockResolvedValue(undefined);
+    const svc = new BrandKitPhotoService(factory, storage as any);
+    await expect(svc.hideFromReferencePanel('t-1', 'outra')).rejects.toMatchObject({ statusCode: 404 });
+  });
+
   it('list repassa o filtro de tipo e devolve no formato da API', async () => {
     const svc = new BrandKitPhotoService(factory, storage as any);
     const out = await svc.list('t-1', 'modelo');
     expect(factory).toHaveBeenCalledWith('t-1');
     expect(repo.list).toHaveBeenCalledWith('modelo');
-    expect(out).toEqual([{ id: 'p1', kind: 'modelo', url: 'https://cdn/p1.png', created_at: expect.any(Date) }]);
+    expect(out).toEqual([{ id: 'p1', kind: 'modelo', url: 'https://cdn/p1.png', created_at: expect.any(Date), hidden_from_reference_panel: false }]);
   });
 
   it('upload grava cada arquivo com o tipo escolhido, vinculado ao brand kit', async () => {

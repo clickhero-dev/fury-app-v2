@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Download, Image as ImageIcon, Info, Loader2, Plus, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Wand2, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Download, Image as ImageIcon, Info, Loader2, Play, Plus, RectangleVertical, Send, Sparkles, Square, Trash2, Upload, Video, Wand2, X } from 'lucide-react';
 import { AppLayout, Card, CardContent, LoadingSpinner, PageHeader } from '@/components';
 import { useCampaignWizardContext } from '@/contexts/CampaignWizardContext';
 import { ModelSelect, type StudioModelOption } from '@/components/studio/ModelSelect';
@@ -10,19 +10,26 @@ import type { LibraryPhoto } from '@/hooks/useStudioLibrary';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import type { StudioAsset, GenerateCreativeResponse } from '@/types/studio';
+import type { StudioAsset, GenerateCreativeResponse, StudioVideoJob } from '@/types/studio';
+import { formatDuration, parseVideoMeta, useActiveStudioVideoJobs, useStudioVideoOptions } from '@/hooks/useStudioVideo';
 import { CreativeResult } from './components/CreativeResult';
 import { ArchiveConfirmDialog } from './components/ArchiveConfirmDialog';
 import { ArchivedAssetsModal } from './components/ArchivedAssetsModal';
 import { ReferenceImagePanel } from './components/ReferenceImagePanel';
+import { VideoCreateForm } from './components/VideoCreateForm';
+import { VideoProgress } from './components/VideoProgress';
 import { LibraryUploadFlow, type UploadRequest } from './components/LibraryUploadFlow';
 import { LibraryPickerDialog, type PickerMode } from './components/LibraryPickerDialog';
+import { useBlockedViews } from '@/hooks/useBlockedViews';
+import {
+  completeGeneration,
+  failGeneration,
+  startGeneration,
+  tickGeneration,
+  type GenerationProgressState,
+} from './creative-generation-progress';
 
-type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create';
-
-const FEATURES = {
-  videoAnuncios: false,
-};
+type ViewState = 'library' | 'loading' | 'result' | 'error' | 'quick-create' | 'video-progress';
 
 const CREATIVE_TYPE = 'image' as const;
 const IMAGE_MODEL = 'black-forest-labs/flux.2-pro';
@@ -31,6 +38,30 @@ const IMAGE_MODEL = 'black-forest-labs/flux.2-pro';
 const SURFACE = 'rounded-2xl border border-border bg-surface shadow-sm';
 const CARD_HOVER = 'transition-all duration-300 ease-in-out hover:border-brand/50 hover:shadow-lg hover:shadow-brand/5 hover:-translate-y-0.5';
 const BUTTON_HOVER = 'transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]';
+
+function GenerationProgressIndicator({ state }: { state: GenerationProgressState }) {
+  const waiting = state.progress >= 95 && state.phase === 'generating';
+  const label = state.phase === 'completing'
+    ? 'Finalizando a geração...'
+    : waiting
+      ? 'A geração ainda está em andamento. A confirmação pode levar mais alguns instantes.'
+      : 'O ady está criando sua imagem...';
+
+  return (
+    <div className="w-full max-w-md space-y-3 text-left" aria-live="polite">
+      <div className="flex items-center justify-between gap-4 text-sm font-semibold text-text-primary">
+        <span>{label}</span>
+        <span className="text-brand">{state.progress}%</span>
+      </div>
+      <div role="progressbar" aria-label="Progresso estimado da geração da imagem" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.progress} className="h-2.5 overflow-hidden rounded-full bg-brand/15">
+        <div className="h-full rounded-full bg-brand transition-[width] duration-300 ease-out" style={{ width: `${state.progress}%` }} />
+      </div>
+      {state.phase === 'completing' && (
+        <p className="text-sm text-text-tertiary">A imagem foi recebida. Preparando o resultado.</p>
+      )}
+    </div>
+  );
+}
 
 const CHIP_ON = 'bg-brand text-white font-semibold shadow-sm';
 const CHIP_OFF = 'text-text-tertiary hover:text-text-primary hover:bg-surface-hover font-medium';
@@ -47,11 +78,19 @@ export function EstudioHome() {
   const { setPreSelectedAsset } = useCampaignWizardContext();
   const [view, setView] = useState<ViewState>('library');
   const [generationResult, setGenerationResult] = useState<GenerateCreativeResponse | null>(null);
+  const [isNewGeneration, setIsNewGeneration] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'>('all');
   const [confirmArchiveAsset, setConfirmArchiveAsset] = useState<StudioAsset | null>(null);
   const [showArchivedModal, setShowArchivedModal] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [createMode, setCreateMode] = useState<'image' | 'video'>('image');
+  const [videoJobId, setVideoJobId] = useState<string | null>(null);
+  const { data: activeVideoJobs = [] } = useActiveStudioVideoJobs();
+  // cota de vídeo 0 ou vídeo bloqueado no RBAC: sem criação nem filtro de vídeo
+  const { data: videoOptions } = useStudioVideoOptions();
+  const { isBlocked } = useBlockedViews();
+  const videoEnabled = videoOptions?.enabled === true && !isBlocked('studio.video');
 
   // ─── OpenRouter state ──────────────────────────────────────────────
   const [orPrompt, setOrPrompt] = useState('');
@@ -63,18 +102,39 @@ export function EstudioHome() {
   const [progressMessage, setProgressMessage] = useState('');
   const [quotaErrorMessage, setQuotaErrorMessage] = useState<string | null>(null);
   const [selectedImageModel, setSelectedImageModel] = useState(IMAGE_MODEL);
-  const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [generationProgress, setGenerationProgress] = useState<GenerationProgressState | null>(null);
+  const generationPhase = generationProgress?.phase;
+  const generationStartedAtForProgress = generationProgress?.startedAt;
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, 1000);
-
+    if (generationPhase !== 'generating') return;
+    const update = () => setGenerationProgress((current) => current ? tickGeneration(current, Date.now()) : current);
+    update();
+    const timer = window.setInterval(update, 250);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [generationPhase, generationStartedAtForProgress]);
 
-  const elapsedSeconds = generationStartedAt ? Math.max(0, Math.round((nowMs - generationStartedAt) / 1000)) : 0;
+  useEffect(() => {
+    if (generationPhase !== 'completing') return;
+    const completionStartedAt = Date.now();
+    const timer = window.setInterval(() => {
+      const progress = Math.min(100, 95 + Math.round(((Date.now() - completionStartedAt) / 400) * 5));
+      setGenerationProgress((current) => current ? { ...current, progress } : current);
+      if (progress >= 100) {
+        window.clearInterval(timer);
+        setGenerationProgress((current) => current ? { ...current, phase: 'complete', progress: 100 } : current);
+      }
+    }, 50);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [generationPhase]);
+
+  useEffect(() => {
+    if (generationPhase !== 'complete') return;
+    const revealTimer = window.setTimeout(() => setView((current) => current === 'loading' ? 'result' : current), 50);
+    return () => window.clearTimeout(revealTimer);
+  }, [generationPhase]);
 
   const modelsQuery = useQuery({
     queryKey: ['studio-ai', 'models'],
@@ -115,6 +175,7 @@ export function EstudioHome() {
       return res.data;
     },
     onSuccess: (data: { creativeAssetId: string; imageUrl: string; modificationsRemaining?: number | null }) => {
+      setIsNewGeneration(true);
       setGenerationResult({
         type: 'image',
         assetId: data.creativeAssetId,
@@ -122,13 +183,12 @@ export function EstudioHome() {
         creativeData: { headline: '', primary_text: '', cta: '' },
         modificationsRemaining: data.modificationsRemaining ?? null,
       });
-      setGenerationStartedAt(null);
-      setView('result');
+      setGenerationProgress((current) => current ? completeGeneration(current) : current);
       setProgressMessage('');
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
     onError: (error: { response?: { data?: { error?: { message?: string } } } }) => {
-      setGenerationStartedAt(null);
+      setGenerationProgress((current) => current ? failGeneration(current) : current);
       setView('error');
       setProgressMessage('');
       setQuotaErrorMessage(error?.response?.data?.error?.message ?? null);
@@ -177,6 +237,7 @@ export function EstudioHome() {
   if (criarParam !== prevCriarParam) {
     setPrevCriarParam(criarParam);
     if (criarParam === 'rapida') {
+      setCreateMode('image');
       handleStartQuickCreate();
     }
   }
@@ -229,7 +290,8 @@ export function EstudioHome() {
     if (finalPrompt.length < 10) return;
     setView('loading');
     // cronômetro começa no clique — cobre enhance-prompt + geração
-    setGenerationStartedAt(Date.now());
+    const startedAt = Date.now();
+    setGenerationProgress(startGeneration(startedAt));
     const photo_ids = artPhotos.length ? artPhotos.map((p) => p.id) : undefined;
 
     // com modelo: o texto é "o que muda" — vai direto, sem aprimorar
@@ -263,9 +325,27 @@ export function EstudioHome() {
   const handleBackToLibrary = () => {
     setView('library');
     setGenerationResult(null);
+    setIsNewGeneration(false);
+  };
+  const handleNewCreative = () => {
+    setIsNewGeneration(false);
+    handleStartQuickCreate();
   };
 
   const handleViewDetails = (asset: StudioAsset) => {
+    if (asset.type === 'video') {
+      setGenerationResult({
+        type: 'video',
+        assetId: asset.id,
+        imageUrl: '',
+        videoUrl: asset.url ?? undefined,
+        creativeData: {},
+        videoMeta: parseVideoMeta(asset.complianceNotes),
+        modificationsRemaining: asset.modificationsRemaining ?? null,
+      });
+      setView('result');
+      return;
+    }
     let creativeData = { headline: '', primary_text: '', cta: '', subheadline: '', layout: '', color_scheme: '' };
     try {
       const meta = JSON.parse(asset.complianceNotes ?? '{}');
@@ -280,18 +360,48 @@ export function EstudioHome() {
       complianceNotes: asset.complianceNotes,
       modificationsRemaining: asset.modificationsRemaining ?? null,
     });
+    setIsNewGeneration(false);
     setView('result');
   };
 
+  const handleTrackVideo = (jobId: string) => {
+    setVideoJobId(jobId);
+    setView('video-progress');
+  };
+
+  const handleVideoDone = async (job: StudioVideoJob) => {
+    void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
+    void queryClient.invalidateQueries({ queryKey: ['studio-video', 'jobs'] });
+    if (!job.assetId) return;
+    let complianceNotes: string | null = null;
+    let modificationsRemaining: number | null = null;
+    try {
+      const detail = (await api.get(`/studio/assets/${job.assetId}`)).data;
+      complianceNotes = detail?.complianceNotes ?? null;
+      modificationsRemaining = detail?.modificationsRemaining ?? null;
+    } catch { /* sem metadados */ }
+    setGenerationResult({
+      type: 'video',
+      assetId: job.assetId,
+      imageUrl: '',
+      videoUrl: job.videoUrl ?? undefined,
+      creativeData: {},
+      videoMeta: parseVideoMeta(complianceNotes),
+      modificationsRemaining,
+    });
+    // usuário pode ter saído da tela de progresso durante o await
+    setView((v) => (v === 'video-progress' ? 'result' : v));
+  };
+
   const handleUseInCampaign = (asset: StudioAsset) => {
-    setPreSelectedAsset({ id: asset.id, url: asset.url ?? undefined });
+    setPreSelectedAsset({ id: asset.id, url: asset.url ?? undefined, isVideo: asset.type === 'video' });
     navigate('/criar-campanha');
   };
 
   const typeOptions: Array<{ value: 'all' | 'image' | 'video'; label: string }> = [
     { value: 'all' as const, label: 'Todos' },
     { value: 'image' as const, label: 'Imagens' },
-    ...(FEATURES.videoAnuncios ? [{ value: 'video' as const, label: 'Vídeos' }] : []),
+    ...(videoEnabled ? [{ value: 'video' as const, label: 'Vídeos' }] : []),
   ];
 
   const statusOptions: Array<{ value: 'all' | 'pending' | 'pending_compliance' | 'approved' | 'rejected'; label: string }> = [
@@ -327,8 +437,9 @@ export function EstudioHome() {
       'library': 'Estúdio de anúncios',
       'quick-create': 'Criação rápida',
       'loading': 'Gerando...',
-      'result': 'Seu anúncio',
+      'result': generationResult?.type === 'video' ? 'Seu vídeo' : 'Seu anúncio',
       'error': 'Erro na geração',
+      'video-progress': 'Gerando vídeo...',
     };
 
     return (
@@ -472,7 +583,7 @@ export function EstudioHome() {
                 <div className={`${SURFACE} flex items-center justify-center px-6 py-20`}>
                   <LoadingSpinner />
                 </div>
-              ) : filteredAssets.length === 0 ? (
+              ) : filteredAssets.length === 0 && (filterType === 'image' || activeVideoJobs.length === 0) ? (
                 <div className={`${SURFACE} flex flex-col items-center gap-3 px-6 py-16 text-center`}>
                   <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-brand">
                     <ImageIcon className="h-5 w-5" />
@@ -492,6 +603,9 @@ export function EstudioHome() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {filterType !== 'image' && activeVideoJobs.map((job) => (
+                    <GeneratingVideoCard key={job.jobId} job={job} onTrack={() => handleTrackVideo(job.jobId)} />
+                  ))}
                   {filteredAssets.map((asset) => (
                     <AssetCard
                       key={asset.id}
@@ -508,7 +622,33 @@ export function EstudioHome() {
         )}
 
         {/* QUICK CREATE VIEW */}
-        {view === 'quick-create' && (
+        {view === 'quick-create' && videoEnabled && (
+          <div className="flex items-center gap-1 self-start rounded-full border border-border bg-surface-secondary p-1 w-fit">
+            {([['image', 'Imagem', ImageIcon], ['video', 'Vídeo', Video]] as const).map(([mode, label, Icon]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setCreateMode(mode)}
+                aria-pressed={createMode === mode}
+                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm transition ${createMode === mode ? 'bg-brand font-semibold text-white shadow-sm' : CHIP_OFF}`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {view === 'quick-create' && videoEnabled && createMode === 'video' && (
+          <>
+            <p className="text-sm text-text-tertiary">
+              Descreva o vídeo, revise o roteiro e o ady gera o vídeo com IA usando suas fotos
+            </p>
+            <VideoCreateForm onCreated={handleTrackVideo} />
+          </>
+        )}
+
+        {view === 'quick-create' && (createMode === 'image' || !videoEnabled) && (
           <div className="w-full space-y-5">
             <p className="text-sm text-text-tertiary">
               Descreva o anúncio que deseja gerar para criar a imagem ideal
@@ -763,6 +903,15 @@ export function EstudioHome() {
           </div>
         )}
 
+        {view === 'video-progress' && videoJobId && (
+          <VideoProgress
+            jobId={videoJobId}
+            onDone={(job) => void handleVideoDone(job)}
+            onRetry={handleStartQuickCreate}
+            onBack={handleBackToLibrary}
+          />
+        )}
+
         {/* LOADING VIEW */}
         {view === 'loading' && (
           <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-5 text-center">
@@ -772,11 +921,8 @@ export function EstudioHome() {
             <div>
               <h2 className="text-2xl font-semibold tracking-[-0.02em] text-text-primary">
                 {progressMessage || 'O ady está criando sua imagem...'}
-                {elapsedSeconds > 0 && <span> ({elapsedSeconds}s)</span>}
               </h2>
-              <p className="mt-2 text-sm text-text-tertiary">
-                A geração com IA e a renderização podem levar de 1 a 2 minutos
-              </p>
+              {generationProgress && <GenerationProgressIndicator state={generationProgress} />}
             </div>
             <div className="flex flex-col gap-1.5 text-xs text-text-tertiary">
               {templatePhoto ? (
@@ -799,14 +945,25 @@ export function EstudioHome() {
         {view === 'result' && generationResult && (
           <>
             <div className="pt-1">
-              <p className="text-sm text-text-tertiary">Regenere com ajustes, salve ou publique direto na sua conta</p>
+              <p className="text-sm text-text-tertiary">
+                {generationResult.type === 'video'
+                  ? 'Assista, baixe ou peça um ajuste'
+                  : 'Regenere com ajustes, salve ou publique direto na sua conta'}
+              </p>
             </div>
             <CreativeResult
               result={generationResult}
               onBack={handleBackToLibrary}
-              onNewCreative={handleStartQuickCreate}
+              onNewCreative={handleNewCreative}
+              showVariationSuggestion={isNewGeneration}
+              onTrackVideo={handleTrackVideo}
               onPublish={() => {
-                setPreSelectedAsset({ id: generationResult.assetId, url: generationResult.imageUrl });
+                const isVideo = generationResult.type === 'video';
+                setPreSelectedAsset({
+                  id: generationResult.assetId,
+                  url: isVideo ? generationResult.videoUrl : generationResult.imageUrl,
+                  isVideo,
+                });
                 navigate('/criar-campanha');
               }}
             />
@@ -935,9 +1092,21 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
     }
   };
 
+  const isVideo = asset.type === 'video';
+  const videoMeta = isVideo ? parseVideoMeta(asset.complianceNotes) : null;
+  const duration = formatDuration(videoMeta?.durationSeconds);
   return (
     <div className={`group ${SURFACE} ${CARD_HOVER} overflow-hidden`}>
-      {imageUrl && asset.type === 'image' ? (
+      {imageUrl && isVideo ? (
+        <div className="relative aspect-square w-full overflow-hidden bg-surface-secondary">
+          {/* #t=0.1 força o navegador a mostrar o 1º quadro como miniatura */}
+          <video src={`${imageUrl}#t=0.1`} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+          <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white">
+            <Play className="h-3 w-3 fill-current" />
+            {duration ? `Vídeo · ${duration}` : 'Vídeo'}
+          </span>
+        </div>
+      ) : imageUrl && asset.type === 'image' ? (
         <div className="relative aspect-square w-full overflow-hidden bg-surface-muted">
           <img
             src={imageUrl}
@@ -1046,7 +1215,7 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
         {downloadState === 'error' && <p role="alert" className="text-xs text-destructive">Não foi possível baixar o arquivo. Tente novamente.</p>}
         <div className="flex items-start justify-between gap-2">
           <h3 className="line-clamp-2 flex-1 text-sm font-semibold text-text-primary transition-colors group-hover:text-text-primary">
-            {asset.name ?? `Anúncio de ${asset.type === 'image' ? 'imagem' : asset.type}`}
+            {videoMeta?.prompt ?? asset.name ?? `Anúncio de ${asset.type === 'image' ? 'imagem' : 'vídeo'}`}
           </h3>
           {!archived && (
             <button
@@ -1087,6 +1256,27 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
             Ver detalhes
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function GeneratingVideoCard({ job, onTrack }: { job: StudioVideoJob; onTrack: () => void }) {
+  return (
+    <div className={`${SURFACE} overflow-hidden`}>
+      <div className="flex aspect-square w-full flex-col items-center justify-center gap-3 bg-surface-secondary p-6 text-center">
+        <Loader2 className="h-7 w-7 animate-spin text-brand" />
+        <span className="text-sm font-semibold text-text-primary">Gerando vídeo...</span>
+      </div>
+      <div className="space-y-3 p-4">
+        <h3 className="line-clamp-2 text-sm font-semibold text-text-primary">{job.prompt}</h3>
+        <button
+          type="button"
+          onClick={onTrack}
+          className="w-full rounded-full bg-brand-hover px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-brand-hover/90"
+        >
+          Acompanhar
+        </button>
       </div>
     </div>
   );

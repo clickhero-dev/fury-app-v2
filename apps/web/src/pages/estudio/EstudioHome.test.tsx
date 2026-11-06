@@ -142,7 +142,7 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
     expect(screen.getByTestId('usage-upgrade-cta')).toBeInTheDocument();
   });
 
-  it('exibe o novo texto de duração (1 a 2 minutos) na tela de loading', async () => {
+  it('mantém a tela de loading sem textos de prazo ou estimativa de percentual', async () => {
     const user = userEvent.setup();
     renderWithProviders();
 
@@ -155,11 +155,8 @@ describe('EstudioHome — mensagem de tempo de geração de imagem', () => {
     const generateBtn = screen.getByRole('button', { name: /gerar imagem/i });
     await user.click(generateBtn);
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(/a geração com ia e a renderização podem levar de 1 a 2 minutos/i)
-      ).toBeInTheDocument();
-    });
+    expect(screen.queryByText(/a geração com ia e a renderização podem levar de 1 a 2 minutos/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/o percentual é uma estimativa visual/i)).not.toBeInTheDocument();
 
     expect(
       screen.queryByText(/levar até 15 segundos/i)

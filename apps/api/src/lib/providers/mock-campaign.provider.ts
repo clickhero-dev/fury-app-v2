@@ -146,5 +146,15 @@ export class MockMetaCampaignProvider implements IMetaCampaignProvider {
 
   async uploadAdImage(params: any) { return this.uploadAdImageResult; }
 
+  uploadAdVideoCalls: any[] = [];
+  videoStatusResult: { status?: string; picture?: string } = { status: 'ready', picture: 'https://cdn.meta/thumb.jpg' };
+
+  async uploadAdVideo(params: any) {
+    this.uploadAdVideoCalls.push(params);
+    return 'mock_video_id';
+  }
+
+  async getAdVideoStatus(videoId: string, accessToken: string) { return this.videoStatusResult; }
+
   async downloadImage(url: string, signal: AbortSignal) { return this.downloadImageResult; }
 }

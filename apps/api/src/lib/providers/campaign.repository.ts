@@ -51,6 +51,8 @@ export interface CreativeAssetRecord {
   id: string;
   tenantId: string;
   url: string;
+  type?: string;
+  complianceNotes?: string | null;
   createdAt: Date;
 }
 

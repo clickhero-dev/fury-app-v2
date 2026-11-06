@@ -3,13 +3,14 @@ import fs from 'fs';
 import { join } from 'path';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
+import { superadminMiddleware } from '../middleware/superadmin.middleware.js';
 import { studioAssetsDir } from '../lib/temp-storage.js';
 import { controllers } from '../di.js';
 
 const router = Router();
 
-// Diagnóstico de storage (infra).
-router.get('/storage-check', async (_req: any, res: any) => {
+// Diagnóstico de storage (infra): só super_admin, sem listar arquivos
+router.get('/storage-check', authMiddleware, superadminMiddleware, async (_req: any, res: any) => {
   const testFile = join(studioAssetsDir, 'test.txt');
   let writeOk = false;
   let error: string | null = null;
@@ -26,7 +27,6 @@ router.get('/storage-check', async (_req: any, res: any) => {
     dirExists: fs.existsSync(studioAssetsDir),
     writeOk,
     error,
-    files: fs.existsSync(studioAssetsDir) ? fs.readdirSync(studioAssetsDir).slice(0, 5) : [],
   });
 });
 

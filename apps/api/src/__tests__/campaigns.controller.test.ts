@@ -3,8 +3,27 @@ import type { Request, Response, NextFunction } from 'express';
 import { CampaignsController } from '../controllers/campaigns.controller.js';
 import type { CampaignsService } from '../services/campaigns/campaigns.service.js';
 
+/*
+Funcionalidade: criação de campanha do wizard com lote de criativos
+
+Cenário: aceitar mais de quatro criativos
+  Dado um pedido autenticado com dezesseis criativos válidos
+  Quando o endpoint create-wizard valida e encaminha o pedido
+  Então o serviço recebe os dezesseis itens na mesma ordem
+
+Cenário: rejeitar criativo sem mídia
+  Dado um pedido com um item de creatives sem uma mídia válida
+  Quando o endpoint valida o pedido
+  Então responde com erro de validação seguro
+*/
+
 vi.mock('../services/email/notify.js', () => ({
   sendToTenant: vi.fn().mockResolvedValue(undefined),
+}));
+
+const { mockChat } = vi.hoisted(() => ({ mockChat: vi.fn() }));
+vi.mock('../services/llms/openrouter.service.js', () => ({
+  openrouterService: { chat: mockChat },
 }));
 
 function makeReq(overrides: Partial<Request> = {}): Request {
@@ -197,12 +216,13 @@ describe('CampaignsController', () => {
       );
     });
 
-    it('400 quando creatives tem 5 itens (cap 4) → ZodError', async () => {
-      const ctrl = makeController();
+    it('201 quando creatives tem 16 itens → service recebe o lote completo em ordem', async () => {
+      const createCampaignFromWizard = vi.fn().mockResolvedValue({ success: true });
+      const ctrl = makeController({ createCampaignFromWizard });
       const req = makeReq({
         body: {
           ...baseBody,
-          creatives: Array.from({ length: 5 }, (_, i) => ({
+          creatives: Array.from({ length: 16 }, (_, i) => ({
             creative_upload_url: `https://example.com/${i}.jpg`,
             headline: `T${i}`,
             primary_text: `P${i}`,
@@ -213,9 +233,12 @@ describe('CampaignsController', () => {
 
       await ctrl.createWizardCampaign(req, res, next);
 
-      expect(res.status).not.toHaveBeenCalledWith(201);
-      expect(next).toHaveBeenCalledTimes(1);
-      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+      expect(createCampaignFromWizard).toHaveBeenCalledWith(expect.objectContaining({
+        creatives: expect.arrayContaining([expect.objectContaining({ creativeUploadUrl: 'https://example.com/15.jpg', headline: 'T15' })]),
+      }));
+      expect((createCampaignFromWizard.mock.calls[0][0] as any).creatives).toHaveLength(16);
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(next).not.toHaveBeenCalled();
     });
 
     it('400 quando creatives ausente e legacy sem imagem → mantém mensagem atual', async () => {
@@ -455,6 +478,45 @@ describe('CampaignsController', () => {
       await ctrl.getAllCampaignLeads(req, res, next);
 
       expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'META_CONNECTION_NOT_FOUND', statusCode: 403 }));
+    });
+  });
+
+  describe('suggestText com vídeo do Estúdio', () => {
+    const VIDEO_ID = '11111111-1111-4111-8111-111111111111';
+    function makeVideoController(asset: Record<string, unknown> | null) {
+      const repo = {
+        findCreativeAsset: vi.fn().mockResolvedValue(asset),
+        findBrandKit: vi.fn().mockResolvedValue(null),
+        findTenant: vi.fn().mockResolvedValue({ businessContext: 'Padaria' }),
+      };
+      return new CampaignsController({} as CampaignsService, (() => repo) as any);
+    }
+
+    it('gera a sugestão só com texto a partir do roteiro', async () => {
+      mockChat.mockResolvedValue('{"headline":"Pão quentinho","primaryText":"Venha provar hoje mesmo!"}');
+      const ctrl = makeVideoController({
+        id: VIDEO_ID, type: 'video',
+        complianceNotes: JSON.stringify({ prompt: 'Promo do pão', scenes: [{ visual: 'forno', narration: 'Saindo agora' }] }),
+      });
+      const res = makeRes();
+
+      await ctrl.suggestText(makeReq({ body: { assetId: VIDEO_ID } }), res, next);
+
+      const userMsg = mockChat.mock.calls[0][0][1];
+      expect(typeof userMsg.content).toBe('string');
+      expect(userMsg.content).toContain('Saindo agora');
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        data: { headline: 'Pão quentinho', primaryText: 'Venha provar hoje mesmo!' },
+      }));
+    });
+
+    it('asset que não é vídeo → 404', async () => {
+      const ctrl = makeVideoController({ id: VIDEO_ID, type: 'image', complianceNotes: null });
+
+      await ctrl.suggestText(makeReq({ body: { assetId: VIDEO_ID } }), makeRes(), next);
+
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 'CREATIVE_ASSET_NOT_FOUND' }));
+      expect(mockChat).not.toHaveBeenCalled();
     });
   });
 });

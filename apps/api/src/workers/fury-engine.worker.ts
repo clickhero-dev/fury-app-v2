@@ -1,5 +1,6 @@
 import { Worker, type Job } from 'bullmq';
-import { eq } from 'drizzle-orm';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
+import { eq, isNull } from 'drizzle-orm';
 import { db, campaigns, tenants } from '@fury/db';
 import { emitToTenant } from '../lib/sse.js';
 import { createBullConnection, FURY_ENGINE_QUEUE_NAME, type FuryEngineJobPayload } from '../lib/queue.js';
@@ -50,7 +51,8 @@ async function processJob(job: Job<FuryEngineJobPayload>): Promise<FuryJobResult
 
   const stats: FuryJobResult = { tenantsProcessed: 0, campaignsScored: 0, errors: [] };
 
-  const allTenants = await db.query.tenants.findMany();
+  // cliente excluído (soft-delete) fica de fora
+  const allTenants = await db.query.tenants.findMany({ where: isNull(tenants.deletedAt) });
   for (const tenant of allTenants) {
     await processTenant(tenant.id, stats);
   }
@@ -65,6 +67,7 @@ export async function startFuryEngineWorker(): Promise<Worker<FuryEngineJobPaylo
   const worker = new Worker<FuryEngineJobPayload>(FURY_ENGINE_QUEUE_NAME, processJob, {
     connection,
     concurrency: 1,
+    ...getWorkerMetricsOptions('fury-engine-worker'),
   });
 
   worker.on('completed', (job, result) => {

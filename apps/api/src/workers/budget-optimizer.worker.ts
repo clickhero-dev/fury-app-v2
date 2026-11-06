@@ -1,7 +1,9 @@
 import { Worker, Queue } from 'bullmq';
+import { getWorkerMetricsOptions } from '../lib/worker-metrics.js';
 import { eq } from 'drizzle-orm';
 import { db, budgetOptimizations } from '@fury/db';
 import { getRedis } from '../lib/redis.js';
+import { replaceLegacyRepeatablesWithScheduler } from '../lib/job-scheduler.js';
 import { emitToTenant } from '../lib/sse.js';
 import {
   optimizeBudget,
@@ -153,6 +155,7 @@ const createBudgetOptimizerWorker = (): Worker<BudgetOptimizeJobData> => {
     {
       connection: getRedis(),
       concurrency: 3, // Max 3 concurrent optimizations
+      ...getWorkerMetricsOptions('budget-optimize-worker'),
     },
   );
 };
@@ -184,13 +187,16 @@ export async function startBudgetOptimizerWorker(): Promise<void> {
   // Pattern: minute hour day month day-of-week
   // 0 6 * * * = every day at 6:00 AM
   try {
-    await budgetOptimizerQueueInstance.add(
-      'daily-optimization',
-      { tenantId: 'system', totalBudget: 0 }, // Placeholder, real data comes from tenant config
+    await replaceLegacyRepeatablesWithScheduler(
+      budgetOptimizerQueueInstance,
+      ['daily-optimization'],
+      ['budget-optimize-daily-at-06'],
+      'cron-ady-budget-optimize-accounts-daily-0600',
+      { pattern: '0 6 * * *' },
       {
-        repeat: {
-          pattern: '0 6 * * *', // Daily at 6:00 AM
-        },
+        name: 'cron-ady-budget-optimize-accounts',
+        data: { tenantId: 'system', totalBudget: 0 },
+        opts: { attempts: 3, backoff: { type: 'exponential', delay: 2_000 } },
       },
     );
     console.log('[BUDGET-OPTIMIZER] ⏰ Daily job scheduled at 06:00');
@@ -233,7 +239,7 @@ export async function triggerBudgetOptimization(
   }
 
   const job = await budgetOptimizerQueueInstance.add(
-    'manual-optimization',
+    'worker-ady-budget-optimize-account',
     { tenantId, totalBudget, force: true },
     {
       removeOnComplete: true,

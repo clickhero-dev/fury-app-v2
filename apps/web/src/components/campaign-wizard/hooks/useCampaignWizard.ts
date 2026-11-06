@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { WizardCreativeState, WizardObjective, WizardState } from '../types';
-import { createEmptyCreative, MAX_CREATIVES, isValidGeo } from '../types';
+import { createEmptyCreative, isValidGeo } from '../types';
 import { isCreativesStepValid } from '../lib/creativeValidation';
 import { isValidBusinessPhone } from '../lib/phone-format';
 import api from '@/lib/api';
@@ -78,11 +78,7 @@ export function useCampaignWizard(preSelectedAssetId?: string) {
   }, []);
 
   const addCreative = useCallback(() => {
-    setState((prev) =>
-      prev.creatives.length >= MAX_CREATIVES
-        ? prev
-        : { ...prev, creatives: [...prev.creatives, createEmptyCreative()] }
-    );
+    setState((prev) => ({ ...prev, creatives: [...prev.creatives, createEmptyCreative()] }));
   }, []);
 
   const updateCreative = useCallback((id: string, updates: Partial<WizardCreativeState>) => {

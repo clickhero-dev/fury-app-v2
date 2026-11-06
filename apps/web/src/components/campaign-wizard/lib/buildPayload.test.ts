@@ -116,6 +116,34 @@ describe('buildWizardCampaignPayload', () => {
     expect(payload.creatives[0].creative_instagram_media_id).toBeUndefined();
     expect(payload.creatives[0].creative_media_url).toBeUndefined();
   });
+
+  it('preserva os 16 criativos mistos e a ordem no contrato creatives[]', () => {
+    const state = makeState();
+    state.creatives = Array.from({ length: 16 }, (_, index) => ({
+      id: `c${index}`,
+      ...(index % 3 === 0
+        ? { assetId: `asset-${index}` }
+        : index % 3 === 1
+          ? { uploadUrl: `https://cdn.example.com/${index}.jpg` }
+          : { instagramMediaId: `ig-${index}`, mediaUrl: `https://instagram.example.com/${index}.jpg` }),
+      headline: `Título ${index}`,
+      primaryText: `Texto ${index}`,
+      destinationUrl: `https://example.com/${index}`,
+    }));
+
+    const payload = buildWizardCampaignPayload(state);
+
+    expect(payload.creatives).toHaveLength(16);
+    expect(payload.creatives.map((creative) => creative.headline)).toEqual(
+      Array.from({ length: 16 }, (_, index) => `Título ${index}`)
+    );
+    expect(payload.creatives[15]).toMatchObject({
+      creative_asset_id: 'asset-15',
+      headline: 'Título 15',
+      primary_text: 'Texto 15',
+      destination_url: 'https://example.com/15',
+    });
+  });
 });
 
 describe('buildWizardCampaignPayload — geo', () => {

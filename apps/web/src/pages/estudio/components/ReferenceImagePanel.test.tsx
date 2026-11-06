@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { ReferenceImagePanel } from './ReferenceImagePanel';
 
-const mockApiGet = vi.hoisted(() => vi.fn());
+const { mockApiGet, mockApiPost } = vi.hoisted(() => ({ mockApiGet: vi.fn(), mockApiPost: vi.fn() }));
 
 vi.mock('@/lib/api', () => ({
-  default: { get: mockApiGet, post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+  default: { get: mockApiGet, post: mockApiPost, put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
 const LIB = [
@@ -35,6 +35,7 @@ function renderPanel(props: Partial<React.ComponentProps<typeof ReferenceImagePa
 describe('ReferenceImagePanel', () => {
   beforeEach(() => {
     mockApiGet.mockReset();
+    mockApiPost.mockReset();
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/brand-kit/library') return Promise.resolve({ data: { success: true, data: LIB } });
       return Promise.reject(new Error(`unexpected GET ${url}`));
@@ -49,6 +50,91 @@ describe('ReferenceImagePanel', () => {
     expect(screen.getByRole('button', { name: /todas 4/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /produtos 2/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /equipe 1/i })).toBeInTheDocument();
+  });
+
+  it('confirma a ocultação sem alterar a seleção', async () => {
+    mockApiPost.mockResolvedValue({ data: { success: true } });
+    const h = renderPanel({ templateId: 'm1' });
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /remover imagem: modelo/i });
+    await user.click(screen.getAllByRole('button', { name: /ocultar imagem/i })[0]);
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/biblioteca/i)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: /^ocultar$/i }));
+    expect(mockApiPost).toHaveBeenCalledWith('/brand-kit/library/m1/hide-from-reference-panel');
+    expect(h.onPickTemplate).not.toHaveBeenCalled();
+    expect(h.onToggleArtPhoto).not.toHaveBeenCalled();
+  });
+
+  it('mostra erro sem esconder a imagem quando a gravação falha', async () => {
+    mockApiPost.mockRejectedValue(new Error('falha'));
+    renderPanel();
+    const user = userEvent.setup();
+    await screen.findAllByRole('button', { name: /usar imagem/i });
+    await user.click(screen.getAllByRole('button', { name: /ocultar imagem/i })[0]);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^ocultar$/i }));
+    expect(await within(screen.getByRole('dialog')).findByText(/não foi possível ocultar/i)).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /cancelar/i }));
+    expect(screen.getAllByRole('button', { name: /usar imagem/i })).toHaveLength(4);
+  });
+
+  it('não leva o erro da tentativa anterior para outro diálogo', async () => {
+    mockApiPost.mockRejectedValue(new Error('falha'));
+    renderPanel();
+    const user = userEvent.setup();
+    await screen.findAllByRole('button', { name: /usar imagem/i });
+    await user.click(screen.getAllByRole('button', { name: /ocultar imagem/i })[0]);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^ocultar$/i }));
+    await within(screen.getByRole('dialog')).findByRole('alert');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /cancelar/i }));
+    await user.click(screen.getAllByRole('button', { name: /ocultar imagem/i })[1]);
+    expect(within(screen.getByRole('dialog')).queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('limpa a mensagem de sucesso ao abrir outra confirmação', async () => {
+    mockApiPost.mockResolvedValue({ data: { success: true } });
+    renderPanel();
+    const user = userEvent.setup();
+    await screen.findAllByRole('button', { name: /usar imagem/i });
+    await user.click(screen.getAllByRole('button', { name: /ocultar imagem/i })[0]);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^ocultar$/i }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/imagem ocultada/i);
+    await user.click(screen.getAllByRole('button', { name: /ocultar imagem/i })[0]);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('explica quando todas as imagens elegíveis estão ocultas', async () => {
+    mockApiGet.mockResolvedValue({ data: { success: true, data: [{ ...LIB[1], hidden_from_reference_panel: true }] } });
+    renderPanel();
+    expect(await screen.findByText(/imagens ocultas.*biblioteca/i)).toBeInTheDocument();
+    expect(screen.queryByText(/nenhuma imagem ainda/i)).not.toBeInTheDocument();
+  });
+
+  it('atualiza mudanças de outra sessão enquanto montado e para ao desmontar', async () => {
+    vi.useFakeTimers();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(<QueryClientProvider client={client}><ReferenceImagePanel templateId={null} artPhotoIds={[]} onToggleArtPhoto={vi.fn()} onUploadClick={vi.fn()} /></QueryClientProvider>);
+    try {
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+      expect(screen.getAllByRole('button', { name: /usar imagem/i })).toHaveLength(4);
+      mockApiGet.mockResolvedValue({ data: { success: true, data: LIB.map((p) => ({ ...p, hidden_from_reference_panel: true })) } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_100); });
+      expect(screen.queryAllByRole('button', { name: /usar imagem/i })).toHaveLength(0);
+      expect(screen.getByText(/imagens ocultas.*biblioteca/i)).toBeInTheDocument();
+      view.unmount();
+      const calls = mockApiGet.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(mockApiGet).toHaveBeenCalledTimes(calls);
+    } finally { vi.useRealTimers(); client.clear(); }
+  });
+
+  it('não mostra imagens ocultas no painel e ajusta as contagens', async () => {
+    mockApiGet.mockResolvedValue({ data: { success: true, data: [LIB[0], { ...LIB[1], hidden_from_reference_panel: true }] } });
+    renderPanel();
+    expect(await screen.findByRole('button', { name: /todas 1/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /usar imagem: produto/i })).not.toBeInTheDocument();
   });
 
   it('filtrar mostra só o tipo escolhido e "Limpar filtro" volta para todas', async () => {

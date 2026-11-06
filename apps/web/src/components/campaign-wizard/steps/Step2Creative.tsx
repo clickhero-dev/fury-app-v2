@@ -1,13 +1,12 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, ImagePlus, Loader2, Sparkles, UploadCloud, X } from 'lucide-react';
+import { Check, ImagePlus, Loader2, Play, Sparkles, UploadCloud, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import { complianceBadge } from '@/lib/compliance.utils';
 import type { StudioAsset } from '@/types/studio';
 import { useUploadCreative } from '../hooks/useCreateCampaign';
-import { MAX_CREATIVES } from '../types';
 import type { WizardCreativeState, WizardObjective } from '../types';
 import { InstagramPostsTab } from './InstagramPostsTab';
 
@@ -43,16 +42,18 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
     primaryText: value[0]?.primaryText ?? '',
     destinationUrl: value[0]?.destinationUrl ?? '',
   }));
+  const latestValueRef = useRef(value);
+  const latestCopyRef = useRef(copy);
+  latestValueRef.current = value;
+  latestCopyRef.current = copy;
 
   const canUseInstagramPost = objective === 'engagement' || objective === 'messages' || objective === 'whatsapp' || objective === 'leads';
-  const atCapacity = value.length >= MAX_CREATIVES;
-  const canAddMore = !atCapacity;
 
   const uploadMutation = useUploadCreative();
 
   const suggestMutation = useMutation({
-    mutationFn: async ({ imageUrl }: { imageUrl: string | null }) => {
-      const res = await api.post('/campaigns/suggest-text', { imageUrl });
+    mutationFn: async (body: { imageUrl: string } | { assetId: string }) => {
+      const res = await api.post('/campaigns/suggest-text', body);
       return res.data.data as SuggestResponse;
     },
     onSuccess: (data) => {
@@ -71,9 +72,17 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
   });
 
   // Assets reprovados continuam visíveis (com badge + motivo), mas não selecionáveis.
-  const galleryAssets = (data?.assets ?? []).filter((asset) => asset.type === 'image');
+  const galleryAssets = (data?.assets ?? []).filter((asset) => asset.type === 'image' || asset.type === 'video');
 
-  const selectedImageUrl = value[0]?.assetUrl || value[0]?.uploadUrl || value[0]?.mediaUrl || null;
+  // Sugestão IA: imagem pela foto; vídeo do Estúdio pelo roteiro
+  const firstImage = value.find((c) => !c.isVideo);
+  const selectedImageUrl = firstImage?.assetUrl || firstImage?.uploadUrl || firstImage?.mediaUrl || null;
+  const selectedVideoAssetId = value.find((c) => c.isVideo && c.assetId)?.assetId ?? null;
+  const suggestBody = selectedImageUrl
+    ? { imageUrl: selectedImageUrl }
+    : selectedVideoAssetId
+      ? { assetId: selectedVideoAssetId }
+      : null;
 
   const suggestErrorMessage =
     (suggestMutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error
@@ -82,6 +91,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
   /** Aplica o texto (headline/primary/destino) a TODOS os criativos selecionados. */
   function applyCopy(updates: Partial<CopyFields>) {
     const next = { ...copy, ...updates };
+    latestCopyRef.current = next;
     setCopy(next);
     if (value.length === 0) return;
     onChange(value.map((c) => ({ ...c, ...next })));
@@ -98,8 +108,6 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
       onChange(value.filter((c) => c.id !== existing.id));
       return;
     }
-    if (!canAddMore) return;
-
     // pré-preenche o texto com o do asset apenas se o usuário ainda não digitou nada
     const headline = copy.headline || (asset.headline || asset.title || asset.name || '').slice(0, 40);
     const primaryText = copy.primaryText || (asset.primaryText || asset.description || '').slice(0, 125);
@@ -112,6 +120,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
         id: crypto.randomUUID(),
         assetId: asset.id,
         assetUrl: asset.url ?? undefined,
+        isVideo: asset.type === 'video',
         headline,
         primaryText,
         destinationUrl: copy.destinationUrl,
@@ -125,8 +134,6 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
       onChange(value.filter((c) => c.id !== existing.id));
       return;
     }
-    if (!canAddMore) return;
-
     const primaryText = copy.primaryText || (post.caption ?? '').slice(0, 125);
     if (primaryText !== copy.primaryText) setCopy({ ...copy, primaryText });
     onChange([
@@ -159,26 +166,17 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
       return;
     }
 
-    const remaining = MAX_CREATIVES - value.length;
-    if (remaining <= 0) {
-      setUploadError(`Máximo de ${MAX_CREATIVES} criativos por campanha.`);
-      return;
-    }
-    const toUpload = files.slice(0, remaining);
-    if (toUpload.length < files.length) {
-      setUploadError(`Limite de ${MAX_CREATIVES} atingido — ${files.length - toUpload.length} arquivo(s) não enviados.`);
-    }
-
     try {
-      const urls = await Promise.all(toUpload.map((file) => uploadMutation.mutateAsync(file)));
+      const urls = await Promise.all(files.map((file) => uploadMutation.mutateAsync(file)));
+      const currentCopy = latestCopyRef.current;
       onChange([
-        ...value,
+        ...latestValueRef.current,
         ...urls.map((url) => ({
           id: crypto.randomUUID(),
           uploadUrl: url,
-          headline: copy.headline,
-          primaryText: copy.primaryText,
-          destinationUrl: copy.destinationUrl,
+          headline: currentCopy.headline,
+          primaryText: currentCopy.primaryText,
+          destinationUrl: currentCopy.destinationUrl,
         })),
       ]);
     } catch {
@@ -201,20 +199,21 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
     <div className="space-y-5">
       <div>
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-lg font-bold text-text-primary">Qual imagem vai usar?</h3>
+          <h3 className="text-lg font-bold text-text-primary">Qual imagem ou vídeo vai usar?</h3>
           {value.length > 0 && (
             <span
               role="status"
               aria-atomic="true"
               className="text-sm font-bold text-brand whitespace-nowrap"
             >
-              {value.length}/{MAX_CREATIVES} selecionadas
+              {value.length} selecionada{value.length === 1 ? '' : 's'}
             </span>
           )}
         </div>
         <p className="text-sm text-text-secondary mt-1">
-          Selecione até {MAX_CREATIVES} imagens. O texto abaixo vale para todas as imagens escolhidas.
+          O texto abaixo vale para todas as imagens escolhidas.
         </p>
+        <p className="mt-1 text-xs text-text-tertiary">Considere usar pelo menos 16 criativos para oferecer mais variações.</p>
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as 'gallery' | 'upload' | 'instagram')}>
@@ -245,18 +244,23 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
                     key={asset.id}
                     type="button"
                     data-testid="wizard-gallery-asset"
+                    data-asset-type={asset.type}
                     onClick={() => handleToggleAsset(asset)}
-                    disabled={isRejected || (!isSelected && !canAddMore)}
+                    disabled={isRejected}
                     title={isRejected ? badge.reasons.join(' • ') : (asset.name ?? 'Criativo')}
                     className={cn(
                       'relative rounded-lg overflow-hidden border-2 transition-all aspect-square bg-surface-secondary',
                       isSelected ? 'border-brand' : 'border-transparent hover:border-brand/40',
-                      (!isSelected && !canAddMore) || isRejected
-                        ? 'opacity-60 cursor-not-allowed'
-                        : ''
+                      isRejected ? 'opacity-60 cursor-not-allowed' : ''
                     )}
                   >
-                    {asset.url ? (
+                    {asset.url && asset.type === 'video' ? (
+                      <>
+                        {/* #t=0.1 mostra o 1º quadro */}
+                        <video src={`${asset.url}#t=0.1`} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                        <Play className="absolute bottom-1.5 left-1.5 z-10 h-4 w-4 fill-white text-white drop-shadow" />
+                      </>
+                    ) : asset.url ? (
                       <img
                         src={asset.url}
                         alt={asset.name ?? 'Criativo'}
@@ -324,7 +328,7 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
             )}
             <p className="text-sm font-medium text-text-primary">Arraste imagens ou clique para selecionar</p>
             <p className="text-xs text-text-tertiary mt-1">
-              PNG ou JPG, até 5MB cada — até {MAX_CREATIVES} imagens por campanha
+              PNG ou JPG, até 5MB cada
             </p>
             <input
               ref={fileInputRef}
@@ -343,7 +347,6 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
             <InstagramPostsTab
               selected={value}
               onToggle={handleToggleInstagramPost}
-              canAdd={canAddMore}
               objective={objective}
               instagramUserId={instagramUserId}
             />
@@ -351,15 +354,13 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
         )}
       </Tabs>
 
-      {atCapacity && <p className="text-xs text-warning">Máximo de {MAX_CREATIVES} criativos atingido.</p>}
-
       {/* Imagens selecionadas (across tabs) */}
       {value.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-text-tertiary uppercase tracking-wide">Selecionadas</span>
             <span role="status" aria-atomic="true" className="text-xs font-medium text-text-tertiary">
-              {value.length}/{MAX_CREATIVES} selecionadas
+              {value.length} selecionada{value.length === 1 ? '' : 's'}
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -369,7 +370,9 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
                 <div key={c.id} className="relative w-11 h-11">
                   {/* thumb com overflow-hidden; o botão de remover fica FORA desse wrapper para não ser cortado */}
                   <div className="w-full h-full rounded-lg overflow-hidden border border-border bg-surface-secondary">
-                    {image ? (
+                    {image && c.isVideo ? (
+                      <video src={`${image}#t=0.1`} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                    ) : image ? (
                       <img src={image} alt="Criativo selecionado" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-text-tertiary">
@@ -401,10 +404,10 @@ export function Step2Creative({ value, onChange, objective, instagramUserId }: S
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => suggestMutation.mutate({ imageUrl: selectedImageUrl })}
-                disabled={suggestMutation.isPending || !selectedImageUrl}
+                onClick={() => suggestBody && suggestMutation.mutate(suggestBody)}
+                disabled={suggestMutation.isPending || !suggestBody}
                 className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:text-brand-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title={!selectedImageUrl ? 'Selecione uma imagem primeiro' : 'Sugerir com IA'}
+                title={!suggestBody ? 'Selecione uma imagem ou vídeo primeiro' : 'Sugerir com IA'}
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 {suggestMutation.isPending ? 'Gerando...' : 'Sugestão IA'}

@@ -5,7 +5,7 @@ import type { InstagramService, InstagramRankingObjective } from '../services/me
 import type { MetaService } from '../services/meta/meta.service.js';
 
 const postsRankedQuerySchema = z.object({
-  objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp']),
+  objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp', 'leads']),
   instagramUserId: z.string().min(1).optional(),
 });
 

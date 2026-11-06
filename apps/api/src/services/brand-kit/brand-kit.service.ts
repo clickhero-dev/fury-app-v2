@@ -94,10 +94,11 @@ export class BrandKitService {
     const existingPhotos = (existing?.photoUrls as string[] | null) ?? [];
     const photoUrls = existingPhotos.filter((u) => u !== url);
 
+    // só apaga do storage arquivo que é deste tenant
     if (photoUrls.length !== existingPhotos.length) {
       await this.repo(tenantId).updateTenantBrandKit({ photoUrls });
+      await this.storage.deleteAsset(url);
     }
-    await this.storage.deleteAsset(url);
     return photoUrls;
   }
 }

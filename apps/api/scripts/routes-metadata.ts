@@ -161,7 +161,7 @@ export const ROUTE_METADATA: Record<string, RouteMeta> = {
   'GET /api/goals/progress': { summary: 'Progresso dos objetivos', tags: ['Goals'], auth: true },
 
   // ═══════════ Billing ═══════════
-  'GET /api/billing/plans': { summary: 'Listar planos disponíveis', tags: ['Billing'], auth: false },
+  'GET /api/billing/plans': { summary: 'Listar planos do cliente (ady ou do parceiro)', tags: ['Billing'], auth: true },
   'POST /api/billing/webhook': { summary: 'Webhook do Asaas', tags: ['Billing'], auth: false },
   'POST /api/billing/subscribe': { summary: 'Assinar plano', tags: ['Billing'], auth: true, requestSchema: 'SubscribeRequest' },
   'GET /api/billing/subscription': { summary: 'Assinatura atual', tags: ['Billing'], auth: true },

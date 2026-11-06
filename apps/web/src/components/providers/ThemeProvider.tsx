@@ -14,7 +14,7 @@ import { selectTheme } from '@/store/slices/authSlice';
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useAppSelector(selectTheme);
 
-  // Layout effect: roda antes dos useEffect (ex.: ForceDarkMode vence no admin)
+  // Layout effect: aplica o tema antes da pintura
   useLayoutEffect(() => {
     const html = document.documentElement;
 

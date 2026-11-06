@@ -91,17 +91,17 @@ export function TenantCampaignsPage() {
                         {c.name}
                       </td>
                       <td className="py-3 pr-4">
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        <div
+                          className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
                             c.status === "active"
-                              ? "bg-admin-success/20 text-admin-success"
+                              ? "bg-success/15 text-[#1F7A33] dark:text-success"
                               : c.status === "draft"
                                 ? "bg-admin-surface-2 text-admin-text-muted"
                                 : "bg-admin-surface-2 text-admin-text-faint"
                           }`}
                         >
                           {c.status}
-                        </span>
+                        </div>
                       </td>
                       <td className="py-3 pr-4 text-xs text-admin-text-muted max-w-[240px] truncate">
                         {metricsStr}
@@ -146,17 +146,17 @@ export function TenantCampaignsPage() {
                   )}
                 </div>
                 <div className="mt-2">
-                  <span
+                  <div
                     className={`text-[10px] px-1.5 py-0.5 rounded font-medium inline-block ${
                       a.complianceStatus === "approved"
-                        ? "bg-admin-success/20 text-admin-success"
+                        ? "bg-success/15 text-[#1F7A33] dark:text-success"
                         : a.complianceStatus === "pending_compliance"
-                          ? "bg-admin-spark/20 text-admin-spark"
+                          ? "bg-spark/15 text-[#B55F02] dark:text-spark"
                           : "bg-admin-danger/20 text-admin-danger"
                     }`}
                   >
                     {a.complianceStatus}
-                  </span>
+                  </div>
                 </div>
               </div>
             ))}

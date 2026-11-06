@@ -1,3 +1,21 @@
+/*
+Funcionalidade: administração segura de contas assinantes
+
+Cenário: impedir conta assinante sem usuário ativo
+  Dado um usuário que é o último acesso ativo de uma conta com assinatura vigente
+  Quando um superadmin tenta removê-lo
+  Então a remoção é recusada e a conta mantém um acesso recuperável
+
+Cenário: remover usuário sem deixar conta assinante órfã
+  Dado uma conta assinante que ainda possui outro usuário ativo
+  Quando um superadmin remove um usuário
+  Então a remoção é concluída
+
+Cenário: localizar conta assinante sem usuários ativos
+  Dado uma conta com assinatura ativa e zero usuários ativos
+  Quando o superadmin lista as contas
+  Então encontra a conta e seus dados de assinatura para recuperar o acesso
+*/
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SuperAdminController } from "../controllers/superadmin.controller.js";
 
@@ -7,6 +25,7 @@ function mockRepo() {
     countUsersByTenant: vi.fn(),
     findLatestSubscriptionByTenant: vi.fn(),
     findPlanById: vi.fn(),
+    findPlanInScope: vi.fn(),
     getTenantById: vi.fn(),
     listUsersByTenant: vi.fn(),
     findFuryConfig: vi.fn(),
@@ -17,6 +36,7 @@ function mockRepo() {
     findUserById: vi.fn(),
     updateUser: vi.fn(),
     deleteUser: vi.fn(),
+    hasAccessibleSubscription: vi.fn(),
     deleteTenant: vi.fn(),
     findTenantBySlug: vi.fn(),
     listPlans: vi.fn(),
@@ -35,6 +55,9 @@ function mockRepo() {
     updateBrandKit: vi.fn(),
   };
 }
+
+// escopo do super_admin (todos os clientes), gravado pelo adminScopeMiddleware
+const SUPER = { adminScope: { partnerId: null } };
 
 function mockRes() {
   const res = {} as any;
@@ -62,7 +85,7 @@ describe("SuperAdminController — happy path", () => {
     const res = mockRes();
     const next = vi.fn();
 
-    await c.listTenants({ params: {}, query: {} } as any, res, next);
+    await c.listTenants({ ...SUPER, params: {}, query: {} } as any, res, next);
 
     expect(repo.listTenants).toHaveBeenCalledTimes(1);
     expect(next).not.toHaveBeenCalled();
@@ -88,9 +111,9 @@ describe("SuperAdminController — happy path", () => {
     const res = mockRes();
     const next = vi.fn();
 
-    await c.listUsers({ query: { page: "1", limit: "10", search: "" } } as any, res, next);
+    await c.listUsers({ ...SUPER, query: { page: "1", limit: "10", search: "" } } as any, res, next);
 
-    expect(repo.paginateUsersAdmin).toHaveBeenCalledWith("", 10, 0);
+    expect(repo.paginateUsersAdmin).toHaveBeenCalledWith("", 10, 0, null);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
@@ -115,8 +138,10 @@ describe("SuperAdminController — happy path", () => {
     const res = mockRes();
     const next = vi.fn();
 
+    repo.getTenantById.mockResolvedValue({ id: "e19f2a88-1f1a-4c7b-9e0f-000000000001", partnerId: null });
     await c.createUser(
       {
+        ...SUPER,
         body: {
           tenantId: "e19f2a88-1f1a-4c7b-9e0f-000000000001",
           name: "Ana",
@@ -148,7 +173,7 @@ describe("SuperAdminController — happy path", () => {
     const res = mockRes();
     const next = vi.fn();
 
-    await c.listPlans({ params: {}, query: {} } as any, res, next);
+    await c.listPlans({ ...SUPER, params: {}, query: {} } as any, res, next);
 
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -187,8 +212,10 @@ describe("SuperAdminController — erros e validação", () => {
     const res = mockRes();
     const next = vi.fn();
 
+    repo.getTenantById.mockResolvedValue({ id: "e19f2a88-1f1a-4c7b-9e0f-000000000001", partnerId: null });
     await c.createUser(
       {
+        ...SUPER,
         body: {
           tenantId: "e19f2a88-1f1a-4c7b-9e0f-000000000001",
           name: "Ana",
@@ -205,6 +232,17 @@ describe("SuperAdminController — erros e validação", () => {
     );
   });
 
+  it("sem adminScope (rota fora do adminScopeMiddleware) nega com 403", async () => {
+    const repo = mockRepo();
+    const c = new SuperAdminController(repo as any);
+    const next = vi.fn();
+
+    await c.listTenants({ params: {}, query: {} } as any, mockRes(), next);
+
+    expect(repo.listTenants).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
+  });
+
   it("getTenant com tenant inexistente propaga 404 TENANT_NOT_FOUND", async () => {
     const repo = mockRepo();
     repo.getTenantById.mockResolvedValue(null);
@@ -213,7 +251,7 @@ describe("SuperAdminController — erros e validação", () => {
     const res = mockRes();
     const next = vi.fn();
 
-    await c.getTenant({ params: { id: "t-0" } } as any, res, next);
+    await c.getTenant({ ...SUPER, params: { id: "t-0" } } as any, res, next);
 
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({ statusCode: 404, code: "TENANT_NOT_FOUND" }),
@@ -222,13 +260,13 @@ describe("SuperAdminController — erros e validação", () => {
 
   it("updatePlan com plano inexistente propaga 404 PLAN_NOT_FOUND", async () => {
     const repo = mockRepo();
-    repo.findPlanById.mockResolvedValue(null);
+    repo.findPlanInScope.mockResolvedValue(undefined);
 
     const c = new SuperAdminController(repo as any);
     const res = mockRes();
     const next = vi.fn();
 
-    await c.updatePlan({ params: { id: "plan-0" }, body: { name: "X" } } as any, res, next);
+    await c.updatePlan({ ...SUPER, params: { id: "00000000-0000-4000-8000-000000000000" }, body: { name: "X" } } as any, res, next);
 
     expect(repo.updatePlan).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(
@@ -238,14 +276,14 @@ describe("SuperAdminController — erros e validação", () => {
 
   it("deletePlan com assinantes e sem migrateTo propaga 409 PLAN_HAS_SUBSCRIBERS", async () => {
     const repo = mockRepo();
-    repo.findPlanById.mockResolvedValue({ id: "plan-1" });
+    repo.findPlanInScope.mockResolvedValue({ id: "00000000-0000-4000-8000-000000000001" });
     repo.countSubscriptionsByPlan.mockResolvedValue(2);
 
     const c = new SuperAdminController(repo as any);
     const res = mockRes();
     const next = vi.fn();
 
-    await c.deletePlan({ params: { id: "plan-1" }, query: {} } as any, res, next);
+    await c.deletePlan({ ...SUPER, params: { id: "00000000-0000-4000-8000-000000000001" }, query: {} } as any, res, next);
 
     expect(repo.deletePlan).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(
@@ -268,5 +306,113 @@ describe("SuperAdminController — erros e validação", () => {
     expect(repo.createClientGoal).not.toHaveBeenCalled();
     expect(repo.updateClientGoal).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: "ZodError" }));
+  });
+});
+describe("SuperAdminController — usuários do cliente e aba Público", () => {
+  const sensitive = {
+    passwordHash: "hash", resetToken: "reset", resetTokenExpiresAt: new Date(), otpCode: "123456",
+    otpExpiresAt: new Date(), googleId: "g-1", facebookId: "f-1",
+  };
+  const member = { id: "u-member", name: "Membro", email: "m@x.com", role: "member", platformRole: "user", createdAt: new Date(), ...sensitive };
+  const owner = { ...member, id: "u-owner", name: "Dono", email: "o@x.com", role: "owner" };
+  const partnerAdmin = { ...member, id: "u-adm", role: "owner", platformRole: "admin_partner" };
+
+  function tenantRepo(users: unknown[]) {
+    const repo = mockRepo() as any;
+    repo.getTenantById.mockResolvedValue({ id: "t-1", partnerId: "p-1" });
+    repo.listUsersByTenant.mockResolvedValue(users);
+    repo.updateUserAudienceDefaults = vi.fn();
+    repo.updateTenant = vi.fn();
+    return repo;
+  }
+
+  it("getTenant não devolve senha, token de reset, OTP nem ids sociais", async () => {
+    const repo = tenantRepo([member, owner]);
+    const res = mockRes();
+
+    await new SuperAdminController(repo).getTenant({ ...SUPER, params: { id: "t-1" } } as any, res, vi.fn());
+
+    const users = res.json.mock.calls[0][0].data.users;
+    expect(users).toHaveLength(2);
+    for (const u of users) {
+      expect(Object.keys(u).sort()).toEqual(["createdAt", "email", "id", "name", "platformRole", "role"]);
+    }
+  });
+
+  it("Salvar Público grava no dono, não no primeiro usuário", async () => {
+    const repo = tenantRepo([member, owner]);
+
+    await new SuperAdminController(repo).updateAudience(
+      { ...SUPER, params: { tenantId: "t-1" }, body: { city: "Recife" } } as any, mockRes(), vi.fn(),
+    );
+
+    expect(repo.updateUserAudienceDefaults).toHaveBeenCalledWith("u-owner", expect.objectContaining({ city: "Recife" }));
+  });
+
+  it("parceiro: Público nunca grava em conta de admin", async () => {
+    const repo = tenantRepo([partnerAdmin, member]);
+
+    await new SuperAdminController(repo).updateAudience(
+      { adminScope: { partnerId: "p-1" }, params: { tenantId: "t-1" }, body: { city: "Recife" } } as any, mockRes(), vi.fn(),
+    );
+
+    expect(repo.updateUserAudienceDefaults).toHaveBeenCalledWith("u-member", expect.anything());
+  });
+});
+
+describe("SuperAdminController — proteção de acesso de assinantes", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("recusa remover o último usuário ativo de tenant com assinatura acessível", async () => {
+    const repo = mockRepo();
+    repo.findUserById.mockResolvedValue({ id: "u-1", tenantId: "tenant-1", platformRole: "user" });
+    repo.countUsersByTenant.mockResolvedValue(1);
+    repo.hasAccessibleSubscription.mockResolvedValue(true);
+    const ctrl = new SuperAdminController(repo as any);
+    const next = vi.fn();
+
+    await ctrl.deleteUser({ ...SUPER, params: { id: "u-1" } } as any, mockRes(), next);
+
+    expect(repo.deleteUser).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 409,
+      code: "LAST_SUBSCRIBER_USER",
+    }));
+  });
+
+  it("mantém localizável a conta assinante que já não possui usuários ativos", async () => {
+    const repo = mockRepo();
+    repo.listTenants.mockResolvedValue([{ id: "tenant-1", name: "Jesus Cristo" }]);
+    repo.countUsersByTenant.mockResolvedValue(0);
+    repo.findLatestSubscriptionByTenant.mockResolvedValue({ id: "sub-1", planId: "plan-1", status: "active" });
+    repo.findPlanById.mockResolvedValue({ id: "plan-1", name: "Intermediário" });
+    const res = mockRes();
+
+    await new SuperAdminController(repo as any).listTenants({ ...SUPER } as any, res, vi.fn());
+
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      data: [expect.objectContaining({
+        id: "tenant-1",
+        userCount: 0,
+        subscription: expect.objectContaining({ status: "active", plan: { id: "plan-1", name: "Intermediário" } }),
+      })],
+    }));
+  });
+
+  it("remove usuário quando a conta assinante ainda possui outro acesso ativo", async () => {
+    const repo = mockRepo();
+    repo.findUserById.mockResolvedValue({ id: "u-1", tenantId: "tenant-1", platformRole: "user" });
+    repo.countUsersByTenant.mockResolvedValue(2);
+    const ctrl = new SuperAdminController(repo as any);
+    const res = mockRes();
+    const next = vi.fn();
+
+    await ctrl.deleteUser({ ...SUPER, params: { id: "u-1" } } as any, res, next);
+
+    expect(repo.hasAccessibleSubscription).not.toHaveBeenCalled();
+    expect(repo.deleteUser).toHaveBeenCalledWith("u-1");
+    expect(next).not.toHaveBeenCalled();
   });
 });

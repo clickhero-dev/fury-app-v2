@@ -18,8 +18,14 @@ export const CONVERSION_ACTION_TYPES: readonly string[] = [
 
 const CONVERSION_SET = new Set(CONVERSION_ACTION_TYPES);
 
+// Conversões personalizadas criadas no Events Manager são retornadas pela
+// Insights API como `offsite_conversion.custom.<custom_conversion_id>`. Em
+// campanhas de leads com destino website, esse é o único resultado disponível
+// quando o anunciante configurou o pixel fora do Ady.
+const OFFSITE_CUSTOM_CONVERSION_PREFIX = 'offsite_conversion.custom.';
+
 export function isConversionEvent(actionType: string): boolean {
-  return CONVERSION_SET.has(actionType);
+  return CONVERSION_SET.has(actionType) || actionType.startsWith(OFFSITE_CUSTOM_CONVERSION_PREFIX);
 }
 
 /**
@@ -168,7 +174,7 @@ function pickFirstActionValue(
   actions: MetaInsightsAction[],
   types: readonly string[],
   uniqueActions?: MetaInsightsAction[]
-): number {
+): number | null {
   for (const type of types) {
     const entry = actions.find((a) => a.action_type === type);
     if (!entry) continue;
@@ -178,7 +184,25 @@ function pickFirstActionValue(
     const value = parseInt(String((uniqueEntry ?? entry).value), 10);
     if (Number.isFinite(value)) return value;
   }
-  return 0;
+  return null;
+}
+
+/**
+ * Lê uma conversão personalizada de website. O prefixo inclui o ID da
+ * conversão, portanto não pode entrar na lista estática de action types.
+ */
+function pickOffsiteCustomConversionValue(
+  actions: MetaInsightsAction[],
+  uniqueActions?: MetaInsightsAction[]
+): number | null {
+  const entry = actions.find((action) =>
+    action.action_type.startsWith(OFFSITE_CUSTOM_CONVERSION_PREFIX)
+  );
+  if (!entry) return null;
+
+  const uniqueEntry = uniqueActions?.find((action) => action.action_type === entry.action_type);
+  const value = parseInt(String((uniqueEntry ?? entry).value), 10);
+  return Number.isFinite(value) ? value : null;
 }
 
 /**
@@ -202,13 +226,19 @@ export function getConversionsFromActions(
   const family = getConversionObjectiveFamily(objective);
 
   if (family === 'LEADS') {
-    // Formulário/cadastro → envios de formulário. Conversa iniciada NÃO conta.
-    return pickFirstActionValue(actions, LEAD_CONVERSION_ACTION_TYPES, uniqueActions);
+    // Formulário/cadastro → envios de formulário. Campanhas manuais de site
+    // externo podem reportar somente uma conversão personalizada do pixel.
+    // Conversa iniciada NÃO conta em nenhum dos dois casos.
+    return (
+      pickFirstActionValue(actions, LEAD_CONVERSION_ACTION_TYPES, uniqueActions) ??
+      pickOffsiteCustomConversionValue(actions, uniqueActions) ??
+      0
+    );
   }
 
   if (family === 'MESSAGING') {
     // Conversas (WhatsApp/Messenger/IG Direct) → conversas iniciadas. Lead NÃO conta.
-    return pickFirstActionValue(actions, MESSAGING_CONVERSION_ACTION_TYPES, uniqueActions);
+    return pickFirstActionValue(actions, MESSAGING_CONVERSION_ACTION_TYPES, uniqueActions) ?? 0;
   }
 
   const candidateTypes = getConversionActionTypesForObjective(objective);

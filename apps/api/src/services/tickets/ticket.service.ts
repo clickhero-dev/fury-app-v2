@@ -29,6 +29,10 @@ export class TicketService {
       return await this.clickUpClient.createTicket(input);
     } catch (error) {
       const reason = error instanceof ClickUpTicketsError ? toSafeFailureReason(error) : 'provider_unavailable';
+      if (error instanceof ClickUpTicketsError && error.code === 'CLICKUP_ATTACHMENT_FAILED' && error.clickupTaskUrl) {
+        captureServerEvent('ticket_clickup_attachment_failed', { reason });
+        throw new AppError(502, 'TICKET_ATTACHMENTS_UNAVAILABLE', 'O ticket foi aberto, mas não foi possível anexar todos os arquivos.', { clickupTaskUrl: error.clickupTaskUrl });
+      }
       captureServerEvent('ticket_clickup_creation_failed', { reason });
       throw new AppError(502, 'TICKET_PROVIDER_UNAVAILABLE', 'Não foi possível abrir o ticket agora. Tente novamente.');
     }

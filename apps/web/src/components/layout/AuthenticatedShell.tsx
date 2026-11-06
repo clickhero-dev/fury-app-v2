@@ -4,13 +4,19 @@ import { useQuery } from '@tanstack/react-query';
 import { Sidebar } from '../Sidebar';
 import { SnackHost } from './SnackHost';
 import { AnnouncementsModal } from './AnnouncementsModal';
+import { NotificationsBell } from '../notifications/NotificationsBell';
 import { FabActions } from '../fab/FabActions';
 import api from '../../lib/api';
 import { useSubscription } from '../../hooks/useBilling';
+import { useBlockedViews } from '../../hooks/useBlockedViews';
+import { viewKeyForPath } from '../../lib/rbac-views';
+import { NotFoundPage } from '../../pages/NotFoundPage';
+import { canAccessAdmin, getStoredPlatformRole, hasLifetimeAccess, isBillingPath } from '../../lib/platform-role';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { setMetaId, setPlan, selectIsPlanExpired, selectUserRole, selectNeedsPolicyAcceptance, setPolicyAccepted } from '../../store/slices/authSlice';
 import {
   computeSubscriptionState,
+  getSubscriptionExpiration,
   shouldRedirectToExpired,
 } from './subscriptionGuard';
 
@@ -65,6 +71,8 @@ export function AuthenticatedShell() {
   const isPolicyExempt =
     isPolicyRoute || POLICY_EXEMPT.some((p) => location.pathname.startsWith(p)) || isOnboarding;
   const needsPolicy = useAppSelector(selectNeedsPolicyAcceptance);
+  const { isBlocked } = useBlockedViews();
+  const viewKey = viewKeyForPath(location.pathname);
 
   const shouldCheckPolicy = !!token && !isPolicyExempt;
 
@@ -140,8 +148,8 @@ export function AuthenticatedShell() {
 
   const reduxPlanExpired = useAppSelector(selectIsPlanExpired);
   const userRole = useAppSelector(selectUserRole);
-  // Admin/superadmin isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
-  const isAdmin = userRole === 'superadmin' || userRole === 'admin';
+  // Isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
+  const isAdmin = userRole === 'admin' || canAccessAdmin(getStoredPlatformRole());
 
   const subscriptionState = useMemo(
     () => computeSubscriptionState(subscription),
@@ -156,19 +164,17 @@ export function AuthenticatedShell() {
   useEffect(() => {
     if (subscriptionChecked && !subError) {
       const planName = subscription?.plan?.name ?? null;
-      const expiration = subscription?.trialEndsAt ?? subscription?.currentPeriodEnd ?? null;
+      const expiration = getSubscriptionExpiration(subscription);
       dispatch(setPlan({ plan: planName, planExpiration: expiration }));
     }
   }, [subscription, subscriptionChecked, subError, dispatch]);
 
   // Redireciona para /assinatura-vencida apenas com evidência confiável, e NUNCA para
-  // admin/superadmin (isenção do backend). O Redux (valor persistido de um fetch
-  // bem-sucedido) prevalece: se ainda aponta data futura, o usuário é considerado válido
-  // mesmo que a chamada atual tenha falhado (500 etc), evitando exibir "assinatura vencida"
-  // para quem tem assinatura válida.
+  // admin/superadmin (isenção do backend). Uma assinatura ativa confirmada prevalece
+  // sobre uma data antiga; em caso de erro, conserva o último estado persistido.
   const redirectToExpired = shouldRedirectToExpired({
-    subscriptionChecked,
-    state: subscriptionState,
+    subscriptionChecked: subscriptionChecked && !subError,
+    state: subError ? 'none' : subscriptionState,
     reduxPlanExpired,
   });
 
@@ -194,13 +200,18 @@ export function AuthenticatedShell() {
         />
       )}
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+      <NotificationsBell />
       <SnackHost />
       <AnnouncementsModal enabled={!isOnboarding} />
       {/* Ações flutuantes de criação (fora das rotas: sobrevivem à navegação).
           FabActions retorna null em telas onde não fazem sentido. */}
       <FabActions />
       {/* Outlet renderiza a página da rota ativa com acesso ao ShellContext */}
-      <Outlet context={{ setMobileOpen } satisfies ShellContext} />
+      {(viewKey && isBlocked(viewKey)) || (hasLifetimeAccess() && isBillingPath(location.pathname)) ? (
+        <div className="flex-1"><NotFoundPage /></div>
+      ) : (
+        <Outlet context={{ setMobileOpen } satisfies ShellContext} />
+      )}
     </div>
   );
 }

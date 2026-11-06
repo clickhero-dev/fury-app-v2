@@ -3,6 +3,8 @@ import {
   getMetaInsights,
   searchMetaCityLocations,
   uploadAdImage as metaUploadAdImage,
+  uploadAdVideo as metaUploadAdVideo,
+  getAdVideoStatus as metaGetAdVideoStatus,
   getPageAccessToken as metaGetPageAccessToken,
   listAccountCampaigns as metaListAccountCampaigns,
   listCampaignAds as metaListCampaignAds,
@@ -196,6 +198,20 @@ export class DefaultMetaCampaignProvider implements IMetaCampaignProvider {
     accessToken: string;
   }): Promise<string | undefined> {
     return metaUploadAdImage(params) as Promise<string | undefined>;
+  }
+
+  async uploadAdVideo(params: {
+    adAccountId: string;
+    buffer: Buffer;
+    filename: string;
+    contentType: string;
+    accessToken: string;
+  }): Promise<string> {
+    return metaUploadAdVideo(params);
+  }
+
+  async getAdVideoStatus(videoId: string, accessToken: string): Promise<{ status?: string; picture?: string }> {
+    return metaGetAdVideoStatus(videoId, accessToken);
   }
 
   async downloadImage(

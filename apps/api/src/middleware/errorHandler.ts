@@ -21,6 +21,15 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ) {
+  // JSON inválido: o body-parser anexa o corpo bruto (pode ter senha/chave); não registrar
+  if ((err as { type?: string }).type === 'entity.parse.failed') {
+    console.error('Error: JSON inválido em', req.method, req.path);
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_JSON', message: 'Requisição inválida' },
+      timestamp: new Date().toISOString(),
+    });
+  }
   console.error('Error:', err);
 
   // Tenant context (derivado de req, presente quando há autenticação)

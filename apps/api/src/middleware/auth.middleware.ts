@@ -22,33 +22,57 @@ function tryParseMockQuickstartToken(rawToken: string): AccessTokenPayload | nul
   return null;
 }
 
-function verifyTokenAndSetUser(token: string, req: Request): boolean {
+function decodeUser(token: string): NonNullable<Request['user']> {
   try {
     const payload = verifyAccessToken(token);
-    req.user = {
+    return {
       userId: payload.userId,
       tenantId: payload.tenantId,
       email: payload.email,
       role: payload.role,
     };
-    return true;
   } catch (jwtError) {
     const allowMockToken =
       process.env.AUTH_BYPASS_DEV === 'true' && process.env.NODE_ENV !== 'production';
     if (allowMockToken) {
       const mockPayload = tryParseMockQuickstartToken(token);
       if (mockPayload) {
-        req.user = {
+        return {
           userId: mockPayload.userId,
           tenantId: mockPayload.tenantId,
           email: mockPayload.email,
           role: mockPayload.role,
         };
-        return true;
       }
     }
     throw jwtError;
   }
+}
+
+function verifyTokenAndSetUser(token: string, req: Request): boolean {
+  req.user = decodeUser(token);
+  return true;
+}
+
+// Usuários de todos os tokens válidos (header e ?token=), sem lançar erro — usado pelo RBAC global
+export function peekUsersFromRequest(req: Request): NonNullable<Request['user']>[] {
+  const authHeader = req.headers.authorization;
+  // substring(7) sem checar "Bearer " espelha o authSSEMiddleware (cobre também o authMiddleware)
+  const headerToken = authHeader ? authHeader.substring(7).trim() : '';
+  const rawQuery = req.query?.token;
+  const queryTokens = (Array.isArray(rawQuery) ? rawQuery : [rawQuery]).filter(
+    (t): t is string => typeof t === 'string',
+  );
+  const found: NonNullable<Request['user']>[] = [];
+  for (const token of [headerToken, ...queryTokens]) {
+    if (!token) continue;
+    try {
+      found.push(decodeUser(token));
+    } catch {
+      // token inválido → a auth da própria rota rejeita
+    }
+  }
+  return found;
 }
 
 export function authMiddleware(req: Request, _res: Response, next: NextFunction) {
