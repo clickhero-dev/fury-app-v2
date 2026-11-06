@@ -15,7 +15,6 @@ const apiURL = process.env.QA_API_URL ?? 'http://localhost:3000/api';
 // credenciais via GitHub Secrets no CI, variáveis de ambiente local
 const email = process.env.QA_EMAIL ?? '';
 const password = process.env.QA_PASSWORD ?? '';
-const whatsapp = '55981286344';
 
 const stamp = new Intl.DateTimeFormat('pt-BR', {
   timeZone: 'America/Sao_Paulo',
@@ -135,12 +134,21 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       await page.goto('/criar-campanha');
       const next = page.getByRole('button', { name: 'Continuar' });
 
-      // objetivo: formulário de captação + WhatsApp
-      await page.getByRole('button', { name: /Formulário de captação/ }).click();
-      const phone = page.locator('input[inputmode="tel"]');
-      await expect(phone).toBeVisible({ timeout: 60_000 });
-      await phone.fill(whatsapp);
-      await expect(phone).toHaveValue('(55) 98128-6344');
+      // objetivo: Gerar Conversas + os dois cards de destino. A conta QA tem Meta conectado.
+      await page.getByRole('button', { name: /Gerar Conversas/ }).click();
+      const instagram = page.getByRole('checkbox', { name: /instagram/i });
+      const facebook = page.getByRole('checkbox', { name: /facebook/i });
+      await expect(instagram).toBeVisible({ timeout: 60_000 });
+      await expect(facebook).toBeVisible({ timeout: 60_000 });
+      await page.getByTestId('message-destination-instagram_direct').click();
+      await page.getByTestId('message-destination-messenger').click();
+      await expect(instagram).toBeChecked();
+      await expect(facebook).toBeChecked();
+      // O QA usa a API HMG implantada; publica com um destino simples, enquanto
+      // a combinação dos canais é coberta pelos testes de payload/backend do PR.
+      await page.getByTestId('message-destination-instagram_direct').click();
+      await expect(instagram).not.toBeChecked();
+      await expect(facebook).toBeChecked();
       await expect(next).toBeEnabled({ timeout: 60_000 });
       await next.click();
 
@@ -165,6 +173,9 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
       await expect(page.getByRole('heading', { name: 'Revisão e Publicação' }).last()).toBeVisible();
       const publish = page.getByRole('button', { name: 'Publicar Campanha' });
       await expect(publish, 'Publicar habilitado (público configurado)').toBeEnabled({ timeout: 30_000 });
+      const creationRequest = page.waitForRequest((request) =>
+        request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/campaigns/create-wizard'),
+      );
       const created = await awaitApi(
         page,
         'POST',
@@ -172,6 +183,7 @@ test('jornada real: login, criar campanha, pausar campanha e gerar imagem', asyn
         () => publish.click(),
         10 * 60_000,
       );
+      expect((await creationRequest).postDataJSON().destinations).toEqual(['messenger']);
       campaignId = created?.data?.campaign_id ?? created?.campaign_id;
       expect(campaignId, 'campaign_id na resposta da criação').toBeTruthy();
       log(`Campanha criada: ${campaignId}`);

@@ -6,6 +6,7 @@ import { useMetaPageWhatsappNumbers } from '../hooks/useMetaPages';
 import { useMetaAssetSelection } from '../hooks/useMetaAssetSelection';
 import { useBrandKit } from '@/hooks/useBrandKit';
 import { formatPhoneDisplay, isValidBusinessPhone } from '../lib/phone-format';
+import { MessagingDestinationCard } from './MessagingDestinationCard';
 import type {
   WizardObjective,
   WizardMessagingDestination,
@@ -268,35 +269,23 @@ function MessagingDestinationFields({
               </div>
             )}
 
-            {whatsapp.hasInstagram && (
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={whatsapp.destinations.includes('instagram_direct')}
-                    onChange={() => toggleDestination('instagram_direct')}
-                    className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
-                  />
-                  Instagram
-                </label>
-                <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo Instagram</p>
-                {whatsapp.destinations.includes('instagram_direct') && (
-                  <div className="mt-1 ml-6 text-sm text-text-secondary">@{whatsapp.instagramUsername}</div>
-                )}
-              </div>
-            )}
-
-            <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={whatsapp.destinations.includes('messenger')}
-                  onChange={() => toggleDestination('messenger')}
-                  className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {whatsapp.hasInstagram && (
+                <MessagingDestinationCard
+                  destination="instagram_direct"
+                  name="Instagram"
+                  description={`As pessoas vão te chamar pelo Instagram${whatsapp.instagramUsername ? ` (@${whatsapp.instagramUsername})` : ''}`}
+                  checked={whatsapp.destinations.includes('instagram_direct')}
+                  onCheckedChange={() => toggleDestination('instagram_direct')}
                 />
-                Facebook
-              </label>
-              <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo Facebook</p>
+              )}
+              <MessagingDestinationCard
+                destination="messenger"
+                name="Facebook"
+                description="As pessoas vão te chamar pelo Facebook"
+                checked={whatsapp.destinations.includes('messenger')}
+                onCheckedChange={() => toggleDestination('messenger')}
+              />
             </div>
           </div>
         </div>

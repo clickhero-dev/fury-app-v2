@@ -30,4 +30,18 @@ describe('Step1Objective — tipos de campanha', () => {
     expect(gerarConversasCard!.textContent).toMatch(/facebook|messenger/i);
     expect(gerarConversasCard!.textContent).toMatch(/instagram/i);
   });
+
+  it('Cenário: destino das mensagens só aparece ao escolher Gerar Conversas', () => {
+    render(
+      <Step1Objective
+        value="whatsapp_conv"
+        onChange={vi.fn()}
+        whatsapp={{ pageId: 'page-1', hasInstagram: true, destinations: [] }}
+        onWhatsappChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText('Destino das mensagens')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /instagram/i })).not.toBeInTheDocument();
+  });
 });

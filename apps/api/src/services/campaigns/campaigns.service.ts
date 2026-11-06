@@ -69,6 +69,26 @@ export interface CampaignListItem {
 export type WizardObjective = 'visits' | 'whatsapp_conv' | 'engagement' | 'messages' | 'whatsapp' | 'leads';
 export type WizardMessagingDestination = 'whatsapp' | 'instagram_direct' | 'messenger';
 
+export function resolveMessagingDestinationType(destinations: WizardMessagingDestination[]): string | undefined {
+  const selected = new Set(destinations);
+  if (selected.size === 0) return undefined;
+  if (selected.size === 1) {
+    if (selected.has('whatsapp')) return 'WHATSAPP';
+    if (selected.has('instagram_direct')) return 'INSTAGRAM_DIRECT';
+    return 'MESSENGER';
+  }
+  if (selected.has('instagram_direct') && selected.has('messenger') && selected.has('whatsapp')) {
+    return 'MESSAGING_INSTAGRAM_DIRECT_MESSENGER_WHATSAPP';
+  }
+  if (selected.has('instagram_direct') && selected.has('messenger')) {
+    return 'MESSAGING_INSTAGRAM_DIRECT_MESSENGER';
+  }
+  if (selected.has('instagram_direct') && selected.has('whatsapp')) {
+    return 'MESSAGING_INSTAGRAM_DIRECT_WHATSAPP';
+  }
+  return 'MESSAGING_MESSENGER_WHATSAPP';
+}
+
 export interface CreateWizardCampaignArgs {
   tenantId: string; objective: WizardObjective; creativeAssetId?: string;
   creativeUploadUrl?: string; creativeInstagramMediaId?: string;
@@ -1073,9 +1093,7 @@ export class CampaignsService {
     if (args.objective === 'whatsapp') {
       promotedObject = { page_id: args.whatsappPageId };
       if (messagingDestinations.includes('whatsapp')) promotedObject.whatsapp_phone_number = args.whatsappPhoneNumber;
-      messagingDestinationType = messagingDestinations.length > 1 ? 'MESSAGING_APPS'
-        : messagingDestinations[0] === 'whatsapp' ? 'WHATSAPP'
-        : messagingDestinations[0] === 'instagram_direct' ? 'INSTAGRAM_DIRECT' : 'MESSENGER';
+      messagingDestinationType = resolveMessagingDestinationType(messagingDestinations);
     } else if (args.objective === 'visits' || args.objective === 'whatsapp_conv' || args.objective === 'engagement' || args.objective === 'messages' || args.objective === 'leads') {
       promotedObject = { page_id: pageId };
     }
