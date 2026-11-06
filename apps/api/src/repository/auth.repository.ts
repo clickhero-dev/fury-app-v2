@@ -4,7 +4,7 @@ import {
   users,
   tenants,
 } from '@fury/db';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { TenantScopedRepository } from './base.repository.js';
 import { slugify } from '../lib/slug.js';
 
@@ -60,6 +60,17 @@ export class AuthRepository extends TenantScopedRepository {
 
   async findUserById(id: string) {
     return this.db.query.users.findFirst({ where: eq(users.id, id) });
+  }
+
+  // false se o usuário ou o cliente (tenant) foi excluído (soft-delete)
+  async isAccountActive(userId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .innerJoin(tenants, eq(tenants.id, users.tenantId))
+      .where(and(eq(users.id, userId), isNull(users.deletedAt), isNull(tenants.deletedAt)))
+      .limit(1);
+    return !!row;
   }
 
   async createTenant(data: Partial<Tenant>): Promise<Tenant> {

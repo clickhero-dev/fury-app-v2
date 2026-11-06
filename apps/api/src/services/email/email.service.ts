@@ -9,6 +9,7 @@ import {
   gmbUnlinkedEmailTemplate,
   campaignPublishedEmailTemplate,
   gmbProfileVerifiedEmailTemplate,
+  publicTrialMagicLinkEmailTemplate,
 } from './email-templates.js';
 
 type EmailTransporter = ReturnType<typeof nodemailer.createTransport>;
@@ -87,6 +88,14 @@ export class EmailService {
       to,
       subject: 'Bem-vindo ao Ady!',
       html: welcomeEmailTemplate(name),
+    });
+  }
+
+  sendPublicTrialMagicLink(to: string, name: string, url: string): Promise<void> {
+    return this.sendEmail({
+      to,
+      subject: 'Seu acesso ao Ady',
+      html: publicTrialMagicLinkEmailTemplate(name, url),
     });
   }
 

@@ -6,12 +6,36 @@ import { Step2Creative } from './Step2Creative';
 import type { WizardCreativeState, WizardObjective } from '../types';
 import type { StudioAsset } from '@/types/studio';
 
+/*
+Funcionalidade: seleção livre de criativos
+
+Cenário: selecionar cinco e dezesseis assets aprovados sem bloquear a galeria
+  Dado que a galeria contém dezesseis assets aprovados
+  Quando seleciono cinco e depois dezesseis assets
+  Então todos permanecem selecionados e os contadores mostram a quantidade selecionada
+
+Cenário: recomendação editorial não bloqueia a continuidade
+  Dado que há menos de dezesseis criativos selecionados
+  Quando a etapa de criativos é exibida
+  Então a recomendação de usar ao menos dezesseis criativos fica visível sem impedir a seleção
+
+Cenário: remover um criativo preserva os demais
+  Dado que há criativos de fontes diferentes selecionados
+  Quando removo uma miniatura
+  Então somente o criativo alvo é removido
+*/
+
 const mockApiGet = vi.hoisted(() => vi.fn());
 const mockApiPost = vi.hoisted(() => vi.fn());
 const onCreativesChange = vi.hoisted(() => vi.fn());
+const mockUploadMutateAsync = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api', () => ({
   default: { get: mockApiGet, post: mockApiPost },
+}));
+
+vi.mock('../hooks/useCreateCampaign', () => ({
+  useUploadCreative: () => ({ mutateAsync: mockUploadMutateAsync, isPending: false }),
 }));
 
 function makeCreative(overrides: Partial<WizardCreativeState> = {}): WizardCreativeState {
@@ -60,7 +84,11 @@ beforeEach(() => {
   onCreativesChange.mockClear();
   mockApiGet.mockReset();
   mockApiPost.mockReset();
-  mockApiGet.mockResolvedValue({ data: { assets: [makeAsset('a1', 'Banner A'), makeAsset('a2', 'Banner B')] } });
+  mockUploadMutateAsync.mockReset();
+  mockUploadMutateAsync.mockImplementation(async (file: File) => `https://cdn.example.com/${file.name}`);
+  mockApiGet.mockResolvedValue({
+    data: { assets: Array.from({ length: 16 }, (_, index) => makeAsset(`a${index + 1}`, `Banner ${index + 1}`)) },
+  });
 });
 
 describe('Step2Creative — seleção múltipla de imagens', () => {
@@ -70,7 +98,7 @@ describe('Step2Creative — seleção múltipla de imagens', () => {
    */
   it('solicita um lote de variações apenas para a imagem selecionada da Galeria', async () => {
     render(<Harness initial={[]} />);
-    fireEvent.click(await screen.findByRole('button', { name: /Banner A/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Banner 1$/ }));
     const button = screen.getByRole('button', { name: /Gerar variações visuais/ });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
@@ -80,7 +108,7 @@ describe('Step2Creative — seleção múltipla de imagens', () => {
   it('renderiza os campos de texto UMA única vez (headline, texto e contador)', async () => {
     render(<Harness initial={[makeCreative()]} />);
 
-    expect(await screen.findByRole('button', { name: /Banner A/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Banner 1' })).toBeInTheDocument();
     // um único input de headline e uma única textarea (texto compartilhado entre os criativos)
     expect(screen.getAllByPlaceholderText('Ex: Promoção imperdível este mês!')).toHaveLength(1);
     expect(screen.getAllByPlaceholderText('Descreva sua oferta de forma clara e atrativa.')).toHaveLength(1);
@@ -91,7 +119,7 @@ describe('Step2Creative — seleção múltipla de imagens', () => {
   it('seleciona uma imagem da galeria (vira 1 criativo) e o contador atualiza', async () => {
     render(<Harness initial={[]} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Banner A/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Banner 1' }));
 
     expect(onCreativesChange).toHaveBeenCalledTimes(1);
     const next = onCreativesChange.mock.calls[0][0] as WizardCreativeState[];
@@ -103,7 +131,7 @@ describe('Step2Creative — seleção múltipla de imagens', () => {
   it('clica de novo na mesma imagem e desmarca (remove o criativo)', async () => {
     render(<Harness initial={[makeCreative({ id: 'c1', assetId: 'a1', assetUrl: 'https://cdn.example.com/a1.jpg' })]} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Banner A/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Banner 1' }));
 
     const next = onCreativesChange.mock.calls[0][0] as WizardCreativeState[];
     expect(next).toHaveLength(0);
@@ -112,8 +140,8 @@ describe('Step2Creative — seleção múltipla de imagens', () => {
   it('seleciona 2 imagens e o texto digitado é aplicado a TODOS os criativos', async () => {
     render(<Harness initial={[]} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Banner A/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Banner B/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Banner 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Banner 2' }));
     expect(onCreativesChange).toHaveBeenCalledTimes(2);
 
     fireEvent.change(screen.getByPlaceholderText('Ex: Promoção imperdível este mês!'), {
@@ -125,24 +153,41 @@ describe('Step2Creative — seleção múltipla de imagens', () => {
     expect(next.every((c) => c.headline === 'Oferta única')).toBe(true);
   });
 
-  it('no cap de 4, clicar numa 5ª imagem não adiciona e mostra o aviso', async () => {
+  it('seleciona cinco e depois dezesseis imagens sem bloquear a galeria', async () => {
     const initial = Array.from({ length: 4 }, (_, i) =>
       makeCreative({ id: `c${i}`, assetId: `sel${i}`, assetUrl: `https://cdn.example.com/sel${i}.jpg` })
     );
     render(<Harness initial={initial} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Banner A/ }));
+    for (let index = 1; index <= 16; index += 1) {
+      fireEvent.click(await screen.findByRole('button', { name: `Banner ${index}` }));
+    }
 
-    expect(onCreativesChange).not.toHaveBeenCalled();
-    expect(screen.getByText(/Máximo de 4 criativos atingido/)).toBeInTheDocument();
+    expect(onCreativesChange.mock.calls[0][0]).toHaveLength(5);
+    expect(onCreativesChange.mock.calls.at(-1)?.[0]).toHaveLength(20);
+    expect(screen.getAllByRole('button', { name: 'Banner 16' })[0]).not.toBeDisabled();
   });
 
-  it('mostra o contador de criativos selecionados via role="status"', async () => {
+  it('mostra contadores dinâmicos com singular e plural via role="status"', async () => {
     render(<Harness initial={[makeCreative({ id: 'c1', assetId: 'a1', assetUrl: 'https://cdn.example.com/a1.jpg' })]} />);
-    await screen.findByRole('button', { name: /Banner B/ });
+    await screen.findByRole('button', { name: 'Banner 2' });
 
     const statuses = screen.getAllByRole('status');
-    expect(statuses.some((el) => el.textContent?.includes('1/4 selecionadas'))).toBe(true);
+    expect(statuses.some((el) => el.textContent?.includes('1 selecionada'))).toBe(true);
+    expect(screen.getByText('Considere usar pelo menos 16 criativos para oferecer mais variações.')).toBeInTheDocument();
+  });
+
+  it('envia cinco PNG/JPG válidos sem truncar o lote', async () => {
+    const { container } = render(<Harness initial={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Fazer Upload' }));
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const files = Array.from({ length: 5 }, (_, index) => new File(['image'], `criativo-${index}.jpg`, { type: 'image/jpeg' }));
+
+    fireEvent.change(input, { target: { files } });
+
+    await waitFor(() => expect(onCreativesChange).toHaveBeenCalledTimes(1));
+    expect(mockUploadMutateAsync).toHaveBeenCalledTimes(5);
+    expect(onCreativesChange.mock.calls[0][0]).toHaveLength(5);
   });
 
   it('remove uma imagem selecionada pelo X da faixa "Selecionadas"', async () => {
@@ -154,7 +199,7 @@ describe('Step2Creative — seleção múltipla de imagens', () => {
         ]}
       />
     );
-    await screen.findByRole('button', { name: /Banner A/ });
+    await screen.findByRole('button', { name: 'Banner 1' });
 
     const removeButtons = screen.getAllByRole('button', { name: 'Remover criativo' });
     expect(removeButtons).toHaveLength(2);

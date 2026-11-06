@@ -4,8 +4,6 @@ export type WizardGender = 'all' | 'male' | 'female';
 
 export const AGE_OPTIONS = [18, 21, 25, 30, 35, 40, 45, 50, 55, 60, 65] as const;
 
-export const MAX_CREATIVES = 4;
-
 export const MAX_GEO_REGIONS = 4;
 export const MAX_GEO_POINTS = 4;
 export const DEFAULT_POINT_RADIUS_KM = 10;
@@ -58,6 +56,8 @@ export interface WizardCreativeState {
   id: string; // chave estável p/ listas (crypto.randomUUID)
   assetId?: string;
   assetUrl?: string;
+  // asset de vídeo do Estúdio
+  isVideo?: boolean;
   uploadUrl?: string;
   headline: string;
   primaryText: string;

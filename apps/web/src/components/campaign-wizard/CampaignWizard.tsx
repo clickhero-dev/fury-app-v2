@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useCampaignWizard } from './hooks/useCampaignWizard';
 import { useMetaAssetSelection } from './hooks/useMetaAssetSelection';
+import { useMetaPages } from './hooks/useMetaPages';
 import { Step1Objective } from './steps/Step1Objective';
 import { Step2Creative } from './steps/Step2Creative';
 import { Step3Audience } from './steps/Step3Audience';
@@ -25,6 +26,7 @@ interface CampaignWizardProps {
   onOpenChange?: (open: boolean) => void;
   preSelectedAssetId?: string;
   preSelectedAssetUrl?: string;
+  preSelectedAssetIsVideo?: boolean;
   mode?: 'modal' | 'page';
   onViewCampaigns?: () => void;
   onCreateAnother?: () => void;
@@ -52,6 +54,7 @@ export function CampaignWizard({
   onOpenChange,
   preSelectedAssetId,
   preSelectedAssetUrl,
+  preSelectedAssetIsVideo,
   mode = 'page',
   onViewCampaigns,
   onCreateAnother,
@@ -62,6 +65,7 @@ export function CampaignWizard({
   const { state, hasAudienceData } = wizard;
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const assetSelection = useMetaAssetSelection();
+  const metaPages = useMetaPages(!state.whatsapp.pageId && !assetSelection.isLoading);
   const isModal = mode === 'modal';
   
   // Calculate visible steps based on audience data
@@ -75,7 +79,7 @@ export function CampaignWizard({
     preSelectedAssetUrl &&
     !state.creatives[0]?.assetUrl
   ) {
-    wizard.updateCreative(state.creatives[0].id, { assetUrl: preSelectedAssetUrl });
+    wizard.updateCreative(state.creatives[0].id, { assetUrl: preSelectedAssetUrl, isVideo: preSelectedAssetIsVideo });
   }
 
   // Resolve automaticamente a Pagina do tenant a partir da selecao salva do
@@ -83,7 +87,7 @@ export function CampaignWizard({
   // Publico ja tenham pageId/instagramUserId disponiveis sem pedir ao usuario.
   useEffect(() => {
     if (state.whatsapp.pageId) return;
-    const page = assetSelection.data?.pages[0];
+    const page = assetSelection.data?.pages[0] ?? metaPages.pages[0];
     if (!page) return;
 
     wizard.setWhatsapp({
@@ -96,7 +100,7 @@ export function CampaignWizard({
       destinations: page.hasWhatsApp || page.hasInstagram ? [] : ['messenger'],
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assetSelection.data, state.whatsapp.pageId]);
+  }, [assetSelection.data, metaPages.pages, state.whatsapp.pageId]);
 
   function handleClose() {
     if (isModal && onOpenChange) {

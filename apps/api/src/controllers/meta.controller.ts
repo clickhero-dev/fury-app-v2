@@ -6,6 +6,7 @@ import { emailService } from '../services/email/email.service.js';
 import { sendToTenant } from '../services/email/notify.js';
 import { invalidateHttpCache } from '../lib/http-cache.js';
 import { invalidateCampaignsCache } from '../lib/campaigns-cache.js';
+import { demoMetaConnection } from '../services/demo/demo-data.js';
 
 const callbackQuerySchema = z.object({
   code: z.string().min(1, 'Code OAuth ausente'),
@@ -260,6 +261,14 @@ export class MetaController {
 
   getConnections = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (req.user?.role === 'demo') {
+        return res.status(200).json({
+          success: true,
+          data: [demoMetaConnection],
+          demo: true,
+          timestamp: new Date().toISOString(),
+        });
+      }
       if (!req.tenant?.tenantId) {
         throw new AppError(401, 'UNAUTHORIZED', 'Tenant nao encontrado no contexto da requisicao.');
       }

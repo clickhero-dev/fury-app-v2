@@ -3,13 +3,14 @@ import fs from 'fs';
 import { join } from 'path';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { tenantMiddleware } from '../middleware/tenant.middleware.js';
+import { superadminMiddleware } from '../middleware/superadmin.middleware.js';
 import { studioAssetsDir } from '../lib/temp-storage.js';
 import { controllers } from '../di.js';
 
 const router = Router();
 
-// Diagnóstico de storage (infra).
-router.get('/storage-check', async (_req: any, res: any) => {
+// Diagnóstico de storage (infra): só super_admin, sem listar arquivos
+router.get('/storage-check', authMiddleware, superadminMiddleware, async (_req: any, res: any) => {
   const testFile = join(studioAssetsDir, 'test.txt');
   let writeOk = false;
   let error: string | null = null;
@@ -26,12 +27,12 @@ router.get('/storage-check', async (_req: any, res: any) => {
     dirExists: fs.existsSync(studioAssetsDir),
     writeOk,
     error,
-    files: fs.existsSync(studioAssetsDir) ? fs.readdirSync(studioAssetsDir).slice(0, 5) : [],
   });
 });
 
 // Assets + geração de imagem única (StudiopublishingController via DI).
 router.get('/assets', authMiddleware, tenantMiddleware, controllers.studioPublishing.listAssets);
+router.get('/assets/:assetId/download', authMiddleware, tenantMiddleware, controllers.studioPublishing.downloadAsset);
 router.delete('/assets/:assetId', authMiddleware, tenantMiddleware, controllers.studioPublishing.deleteAsset);
 router.post('/assets/:assetId/restore', authMiddleware, tenantMiddleware, controllers.studioPublishing.restoreAsset);
 router.get('/assets/:assetId', authMiddleware, tenantMiddleware, controllers.studioPublishing.getAsset);
@@ -48,6 +49,9 @@ router.post('/copy/generate', authMiddleware, tenantMiddleware, controllers.stud
 router.post('/creative/validate-context', authMiddleware, tenantMiddleware, controllers.studio.validateContext);
 router.post('/creative/generate', authMiddleware, tenantMiddleware, controllers.studio.generateCreative);
 router.post('/creative/regenerate', authMiddleware, tenantMiddleware, controllers.studio.regenerateCreative);
+router.post('/creative/variations', authMiddleware, tenantMiddleware, controllers.studioVariations.create);
+router.get('/creative/variations/:batchId', authMiddleware, tenantMiddleware, controllers.studioVariations.get);
+router.post('/creative/variations/:batchId/cancel', authMiddleware, tenantMiddleware, controllers.studioVariations.cancel);
 router.post('/select-layout', authMiddleware, tenantMiddleware, controllers.studio.selectLayout);
 router.post('/preview-png', authMiddleware, tenantMiddleware, controllers.studio.previewPng);
 

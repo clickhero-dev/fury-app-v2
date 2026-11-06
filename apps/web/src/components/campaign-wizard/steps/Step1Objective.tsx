@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
-import { Check, Loader2 } from 'lucide-react';
+import { useEffect, type ReactNode } from 'react';
+import { Check, Loader2, Camera, Send } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
-import { useMetaPageWhatsappNumbers } from '../hooks/useMetaPages';
 import { useMetaAssetSelection } from '../hooks/useMetaAssetSelection';
 import { useBrandKit } from '@/hooks/useBrandKit';
 import { formatPhoneDisplay, isValidBusinessPhone } from '../lib/phone-format';
@@ -20,12 +20,6 @@ interface ObjectiveOption {
 }
 
 const OBJECTIVE_OPTIONS: ObjectiveOption[] = [
-  {
-    value: 'whatsapp_conv',
-    emoji: '💬',
-    title: 'Conversas WhatsApp',
-    description: 'Direcione clientes para uma página personalizada com botão de WhatsApp.',
-  },
   {
     value: 'whatsapp',
     emoji: '📲',
@@ -112,16 +106,6 @@ function MessagingDestinationFields({
 }) {
   const { data: assetSelection, isLoading: isLoadingPages, isError: isPagesError } = useMetaAssetSelection();
   const pages = assetSelection?.pages ?? [];
-  const {
-    numbers,
-    isLoading: isLoadingNumbers,
-    isError: isNumbersError,
-    isLoaded: numbersLoaded,
-  } = useMetaPageWhatsappNumbers(whatsapp.hasWhatsApp ? whatsapp.pageId : undefined);
-
-  const pageHasNoWhatsapp =
-    Boolean(whatsapp.pageId) && whatsapp.hasWhatsApp && numbersLoaded && numbers.length === 0;
-
   const onlyMessengerAvailable = Boolean(whatsapp.pageId) && !whatsapp.hasWhatsApp && !whatsapp.hasInstagram;
 
   function handleSelectPage(pageId: string) {
@@ -144,14 +128,6 @@ function MessagingDestinationFields({
       phoneNumberId: undefined, phoneNumberDisplay: undefined,
       instagramUserId: page.hasInstagram ? page.instagramUserId ?? undefined : undefined,
       instagramUsername: page.hasInstagram ? page.instagramUsername ?? undefined : undefined,
-    });
-  }
-
-  function handleSelectNumber(phoneNumberId: string) {
-    const number = numbers.find((n) => n.phoneNumberId === phoneNumberId);
-    onWhatsappChange({
-      phoneNumberId: phoneNumberId || undefined,
-      phoneNumberDisplay: number?.displayPhoneNumber,
     });
   }
 
@@ -212,103 +188,111 @@ function MessagingDestinationFields({
         </div>
       )}
 
-      {whatsapp.pageId && (
+      {mode === 'whatsapp_only' ? (
+        <BrandKitPhoneField whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} />
+      ) : whatsapp.pageId && (
         <div>
           {mode === 'destinations' && (
-            <label className="text-sm font-bold text-text-primary mb-2 block">Onde quer receber as mensagens?</label>
+            <>
+              <label className="text-sm font-bold text-text-primary mb-1 block">Onde quer receber as mensagens?</label>
+              <p className="text-xs text-text-secondary mb-3">Escolha um ou mais canais</p>
+            </>
           )}
           {mode === 'destinations' && onlyMessengerAvailable && (
             <p className="text-xs text-warning mb-2">
               Este negócio só tem Facebook disponível. Para usar WhatsApp, vincule um número WABA. Para usar Instagram, conecte sua conta Instagram à Página no Meta Business.
             </p>
           )}
-          {mode === 'whatsapp_only' ? (
-            <BrandKitPhoneField whatsapp={whatsapp} onWhatsappChange={onWhatsappChange} />
-          ) : (
-          <div className="space-y-3">
-            {whatsapp.hasWhatsApp && (
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={whatsapp.destinations.includes('whatsapp')}
-                    onChange={() => toggleDestination('whatsapp')}
-                    className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
-                  />
-                  WhatsApp
-                </label>
-                <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo WhatsApp</p>
-                {whatsapp.destinations.includes('whatsapp') && (
-                  <div className="mt-2 ml-6">
-                    <div className="relative">
-                      <Select
-                        value={whatsapp.phoneNumberId ?? ''}
-                        onChange={(e) => handleSelectNumber(e.target.value)}
-                        disabled={isLoadingNumbers || pageHasNoWhatsapp}
-                      >
-                        <option value="">
-                          {isLoadingNumbers ? 'Carregando números...' : 'Selecione o número'}
-                        </option>
-                        {numbers.map((number) => (
-                          <option key={number.phoneNumberId} value={number.phoneNumberId}>
-                            {number.displayPhoneNumber}
-                            {number.verifiedName ? ` — ${number.verifiedName}` : ''}
-                          </option>
-                        ))}
-                      </Select>
-                      {isLoadingNumbers && (
-                        <Loader2 className="absolute right-8 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary animate-spin" />
-                      )}
-                    </div>
-                    {pageHasNoWhatsapp && (
-                      <p className="text-xs text-warning mt-1">
-                        Esta página não tem número de WhatsApp vinculado. Vincule um número no Meta Business.
-                      </p>
-                    )}
-                    {isNumbersError && (
-                      <p className="text-xs text-error mt-1">
-                        Não foi possível carregar os números de WhatsApp desta página. Tente novamente.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <DestinationCard
+              destination="instagram_direct"
+              title="Instagram"
+              description="Receba mensagens no Direct"
+              icon={Camera}
+              available={Boolean(whatsapp.hasInstagram)}
+              selected={whatsapp.destinations.includes('instagram_direct')}
+              onToggle={() => toggleDestination('instagram_direct')}
+              unavailableMessage="Conecte sua conta do Instagram à Página no Meta Business."
+            >
+              {whatsapp.destinations.includes('instagram_direct') && (
+                <p className="mt-3 text-xs text-text-secondary">@{whatsapp.instagramUsername}</p>
+              )}
+            </DestinationCard>
 
-            {whatsapp.hasInstagram && (
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={whatsapp.destinations.includes('instagram_direct')}
-                    onChange={() => toggleDestination('instagram_direct')}
-                    className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
-                  />
-                  Instagram
-                </label>
-                <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo Instagram</p>
-                {whatsapp.destinations.includes('instagram_direct') && (
-                  <div className="mt-1 ml-6 text-sm text-text-secondary">@{whatsapp.instagramUsername}</div>
-                )}
-              </div>
-            )}
-
-            <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={whatsapp.destinations.includes('messenger')}
-                  onChange={() => toggleDestination('messenger')}
-                  className="w-4 h-4 rounded border-border text-brand focus:ring-brand"
-                />
-                Facebook
-              </label>
-              <p className="text-xs text-text-secondary ml-6">As pessoas vão te chamar pelo Facebook</p>
-            </div>
+            <DestinationCard
+              destination="messenger"
+              title="Facebook"
+              description="Receba mensagens no Messenger"
+              icon={Send}
+              available
+              selected={whatsapp.destinations.includes('messenger')}
+              onToggle={() => toggleDestination('messenger')}
+            />
           </div>
-          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function DestinationCard({
+  destination,
+  title,
+  description,
+  icon: Icon,
+  available,
+  selected,
+  onToggle,
+  unavailableMessage,
+  children,
+}: {
+  destination: WizardMessagingDestination;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  available: boolean;
+  selected: boolean;
+  onToggle: () => void;
+  unavailableMessage?: string;
+  children?: ReactNode;
+}) {
+  const inputId = `destination-${destination}`;
+
+  return (
+    <div
+      onClick={(event) => {
+        if (available && event.target === event.currentTarget) onToggle();
+      }}
+      className={cn(
+        'rounded-xl border p-3 transition-colors',
+        selected ? 'border-brand bg-brand/5 ring-1 ring-brand/30' : 'border-border bg-surface',
+        !available && 'opacity-60'
+      )}
+    >
+      <label
+        htmlFor={inputId}
+        onClick={(event) => event.stopPropagation()}
+        className={cn('flex items-start gap-3', available ? 'cursor-pointer' : 'cursor-not-allowed')}
+      >
+        <span className={cn('rounded-lg p-2', selected ? 'bg-brand text-white' : 'bg-surface-secondary text-text-secondary')}>
+          <Icon className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold text-text-primary">{title}</span>
+          <span className="mt-1 block text-xs text-text-secondary">{description}</span>
+        </span>
+        <input
+          id={inputId}
+          type="checkbox"
+          aria-label={title}
+          checked={selected}
+          onChange={onToggle}
+          disabled={!available}
+          className="mt-1 h-4 w-4 rounded border-border text-brand focus:ring-brand"
+        />
+      </label>
+      {!available && unavailableMessage && <p className="mt-3 text-xs text-warning">{unavailableMessage}</p>}
+      {children}
     </div>
   );
 }

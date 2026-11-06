@@ -27,15 +27,22 @@ function resolveRequestId(req: Request): string {
 // requests em request_logs. As demais rotas de auth seguem passando por
 // sanitizeBody (que redige senha/otp/token).
 // case-insensitive: o roteamento do Express casa `/API/Auth/Facebook/...`
-const SENSITIVE_PATH_RE = /^\/api\/auth\/(facebook|google|social)(\/|$)/i;
+// login social e chave de IA: nunca gravar corpo nem query
+const SENSITIVE_PATH_RE = /^\/api\/(auth\/(facebook|google|social)|admin\/(my-partner|partners\/[^/]+)\/ai-key)(\/|$)/i;
 function isSensitivePath(req: Request): boolean {
   return SENSITIVE_PATH_RE.test(req.path || req.originalUrl || '');
+}
+
+// token do SSE e state/code do OAuth viajam na query: nunca gravar o valor
+const SECRET_QUERY_RE = /([?&](?:token|access_token|state|code)=)[^&#]*/gi;
+export function redactQuery(url: string): string {
+  return url.replace(SECRET_QUERY_RE, '$1[REDACTED]');
 }
 
 function extractQueryString(req: Request): string | null {
   if (isSensitivePath(req)) return null;
   const qs = req.url?.split('?')[1];
-  return qs && qs.length <= 2048 ? qs : null;
+  return qs && qs.length <= 2048 ? redactQuery(`?${qs}`).slice(1) : null;
 }
 
 function captureRequestBody(req: Request): unknown {
@@ -118,7 +125,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
       method: req.method,
       // `req.originalUrl` inclui a query — nos paths sensíveis (OAuth code/state)
       // grava só `req.path`, sem a query.
-      path: (isSensitivePath(req) ? req.path : req.originalUrl).slice(0, 2048),
+      path: (isSensitivePath(req) ? req.path : redactQuery(req.originalUrl)).slice(0, 2048),
       queryString: extractQueryString(req),
       statusCode: res.statusCode,
       responseTimeMs: Date.now() - start,

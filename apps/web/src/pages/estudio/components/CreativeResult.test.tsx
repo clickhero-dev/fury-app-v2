@@ -6,12 +6,13 @@ import type { ReactNode } from 'react';
 import { CreativeResult } from './CreativeResult';
 import type { GenerateCreativeResponse } from '@/types/studio';
 
+const mockApiGet = vi.hoisted(() => vi.fn() as any);
 const mockApiPost = vi.hoisted(() => vi.fn() as any);
 
 vi.mock('@/lib/api', () => ({
   default: {
     defaults: { baseURL: 'http://localhost/api' },
-    get: vi.fn(),
+    get: mockApiGet,
     post: mockApiPost,
     put: vi.fn(),
     patch: vi.fn(),
@@ -53,6 +54,7 @@ function renderWithProviders(result: GenerateCreativeResponse = BASE_RESULT) {
 
 describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
   beforeEach(() => {
+    mockApiGet.mockReset();
     mockApiPost.mockReset();
     // jsdom não implementa canvas 2D de verdade — o componente usa um
     // <canvas> pra pintura de máscara (inpainting), pré-existente, sem
@@ -66,6 +68,32 @@ describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
       fillRect: vi.fn(),
       drawImage: vi.fn(),
     })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+  });
+
+  it('baixa o vídeo final pelo endpoint autorizado na tela de detalhes', async () => {
+    mockApiPost.mockResolvedValue({ data: { groupId: 'video-1', activeVersionId: 'video-1', archivedAt: null, versions: [] } });
+    mockApiGet.mockResolvedValue({
+      data: new Blob(['video-final'], { type: 'video/mp4' }),
+      headers: { 'content-disposition': 'attachment; filename="criativo-video-1.mp4"' },
+    });
+    vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:video'), revokeObjectURL: vi.fn() });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    renderWithProviders({
+      ...BASE_RESULT,
+      type: 'video',
+      assetId: 'video-1',
+      imageUrl: 'https://example.com/video.mp4',
+      videoUrl: 'https://example.com/video.mp4',
+    });
+
+    await user.click(await screen.findByRole('button', { name: /baixar vídeo/i }));
+
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/studio/assets/video-1/download', { responseType: 'blob' }));
+    expect(click).toHaveBeenCalledOnce();
+    click.mockRestore();
+    vi.unstubAllGlobals();
   });
 
   it('carrega o histórico ao montar (set-active na versão inicial) e mostra a numeração', async () => {

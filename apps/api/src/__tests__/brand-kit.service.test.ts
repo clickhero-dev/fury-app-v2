@@ -76,4 +76,13 @@ describe('BrandKitService', () => {
     expect(repo.updateTenantBrandKit).toHaveBeenCalled();
     expect(storage.deleteAsset).toHaveBeenCalledWith('https://cdn/a.jpg');
   });
+
+  it('deletePhoto com url que não é do tenant não apaga do storage', async () => {
+    repo = makeRepo();
+    storage.deleteAsset.mockClear();
+    const list = await svc.deletePhoto('t-1', 'https://cdn/brand-kit/outro-tenant/logo.png');
+    expect(list).toEqual(['https://cdn/a.jpg']);
+    expect(repo.updateTenantBrandKit).not.toHaveBeenCalled();
+    expect(storage.deleteAsset).not.toHaveBeenCalled();
+  });
 });

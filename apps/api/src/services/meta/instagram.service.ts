@@ -10,7 +10,7 @@ import { AppError } from '../../middleware/errorHandler.js';
 import { MetaRepository } from '../../repository/meta.repository.js';
 import { MetaService, metaService } from './meta.service.js';
 
-export type InstagramRankingObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp';
+export type InstagramRankingObjective = 'visits' | 'engagement' | 'messages' | 'whatsapp' | 'leads';
 
 export interface RankedInstagramPost {
   id: string;
@@ -22,6 +22,15 @@ export interface RankedInstagramPost {
   insights: InstagramMediaInsights;
   score: number;
   recommended: boolean;
+  recommendationReason?: string;
+}
+
+function getRecommendationReason(objective: InstagramRankingObjective): string | undefined {
+  if (objective === 'engagement' || objective === 'messages' || objective === 'whatsapp' || objective === 'leads') {
+    return 'Mais chance de trazer novos clientes.';
+  }
+
+  return undefined;
 }
 
 function computeScore(
@@ -188,7 +197,7 @@ export class InstagramService {
         (item) => item.media_type === 'IMAGE' || item.media_type === 'CAROUSEL_ALBUM'
       );
 
-      const posts = await Promise.all(
+      const posts: RankedInstagramPost[] = await Promise.all(
         imageMedia.map(async (item) => {
           const insights = await this.deps.metaApi.getInstagramMediaInsights(
             item.id,
@@ -220,6 +229,10 @@ export class InstagramService {
       posts.sort((a, b) => b.score - a.score);
       if (posts[0]) {
         posts[0].recommended = true;
+        const recommendationReason = getRecommendationReason(objective);
+        if (recommendationReason) {
+          posts[0].recommendationReason = recommendationReason;
+        }
       }
 
       return posts;

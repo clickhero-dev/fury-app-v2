@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { useCampaignWizard } from './useCampaignWizard';
 
 const mockApiGet = vi.hoisted(() => vi.fn());
@@ -25,5 +25,24 @@ describe('useCampaignWizard — estado inicial dos criativos', () => {
 
     await waitFor(() => expect(result.current.state.creatives).toHaveLength(1));
     expect(result.current.state.creatives[0].assetId).toBe('a1');
+  });
+});
+
+describe('useCampaignWizard — destinos de mensagens', () => {
+  it('Cenário: Gerar Conversas exige destino, mas mantém Instagram e Facebook selecionados juntos', async () => {
+    const { result } = renderHook(() => useCampaignWizard());
+    await waitFor(() => expect(result.current.audienceLoaded).toBe(true));
+
+    act(() => {
+      result.current.setObjective('whatsapp');
+      result.current.setWhatsapp({ pageId: 'page-1', destinations: [] });
+    });
+    expect(result.current.isStepValid[1]).toBe(false);
+
+    act(() => {
+      result.current.setWhatsapp({ destinations: ['instagram_direct', 'messenger'] });
+    });
+    expect(result.current.state.whatsapp.destinations).toEqual(['instagram_direct', 'messenger']);
+    expect(result.current.isStepValid[1]).toBe(true);
   });
 });

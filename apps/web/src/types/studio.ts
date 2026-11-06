@@ -276,4 +276,81 @@ export interface GenerateCreativeResponse {
   modificationsRemaining?: number | null;
   complianceStatus?: 'pending' | 'pending_compliance' | 'approved' | 'rejected';
   complianceNotes?: string | null;
+  /** Metadados de vídeo (source = openrouter-video). */
+  videoMeta?: StudioVideoMeta | null;
+}
+
+export interface StudioVariationBatchResponse {
+  batchId: string;
+  assetId: string;
+  status: 'processing' | 'succeeded' | 'partial' | 'cancelled';
+  slots: Array<{
+    index: number;
+    status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+    assetId?: string;
+    imageUrl?: string;
+    errorCode?: string;
+    retryable?: boolean;
+  }>;
+}
+
+export type StudioVideoAspect = '9:16' | '16:9';
+
+export interface StudioVideoScene {
+  start: number;
+  end: number;
+  visual: string;
+  narration: string;
+}
+
+export interface StudioVideoLogEntry {
+  at: string;
+  step: string;
+  detail?: string;
+}
+
+/** Metadados salvos no complianceNotes de um vídeo. */
+export interface StudioVideoMeta {
+  prompt?: string;
+  scenes?: StudioVideoScene[];
+  aspectRatio?: StudioVideoAspect;
+  durationSeconds?: number | null;
+  model?: string;
+  feedback?: string | null;
+}
+
+export interface StudioVideoOptions {
+  durations: number[];
+  aspectRatios: StudioVideoAspect[];
+  maxPhotos: number;
+  /** false = plano sem vídeo (cota 0): esconde criação e filtro. */
+  enabled: boolean;
+  /** null = sem limite. */
+  videosLimit: number | null;
+  videosRemaining: number | null;
+}
+
+export interface StudioVideoScriptResponse {
+  scenes: StudioVideoScene[];
+}
+
+export interface CreateStudioVideoPayload {
+  prompt: string;
+  scenes: StudioVideoScene[];
+  photoIds: string[];
+  aspectRatio: StudioVideoAspect;
+  duration: number;
+}
+
+export type StudioVideoStage = 'queued' | 'submitting' | 'generating' | 'saving' | 'done';
+
+export interface StudioVideoJob {
+  jobId: string;
+  status: 'pending' | 'running' | 'done' | 'error';
+  stage: StudioVideoStage;
+  prompt: string;
+  error: string | null;
+  assetId: string | null;
+  videoUrl: string | null;
+  createdAt: string;
 }

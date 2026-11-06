@@ -558,7 +558,10 @@ describe('DELETE /api/campaigns/:id', () => {
       .delete(`/api/campaigns/${otherCampaign.id}`)
       .set(getAuthHeader(testUser.token));
 
-    expect(response.status).toBe(403);
+    // não revela que a campanha existe em outro tenant
+    expect(response.status).toBe(404);
+    const [row] = await db.select().from(campaigns).where(eq(campaigns.id, otherCampaign.id));
+    expect(row?.status).toBe('active');
   });
 });
 

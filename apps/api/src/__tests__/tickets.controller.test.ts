@@ -30,6 +30,41 @@
  * Dado que há chamados pendentes, em progresso e concluídos
  * Quando o superadmin abre a tela
  * Então recebe as listas Abertos e Resolvidos separadas
+ *
+ * Cenário: receber ticket multipart com anexos
+ * Dado que o formulário envia campos textuais como multipart
+ * Quando o superadmin abre o chamado com uma evidência
+ * Então a API converte os campos e encaminha o arquivo ao serviço
+ *
+ * Cenário: falha parcial de anexos
+ * Dado que o ClickUp criou a tarefa mas falhou ao anexar um arquivo
+ * Quando a API devolve o erro ao painel
+ * Então preserva apenas a URL segura da tarefa criada
+ *
+ * Cenário: aprovar ticket em homologação
+ * Dado que o superadmin escolheu aprovar um ticket
+ * Quando envia a revisão válida
+ * Então a API confirma o status Aprovado
+ *
+ * Cenário: reprovar ticket com motivo
+ * Dado que o superadmin informou o motivo da reprovação
+ * Quando envia a revisão válida
+ * Então a API encaminha decisão e motivo para o serviço
+ *
+ * Cenário: exigir motivo para reprovar
+ * Dado que o superadmin escolheu reprovar sem motivo válido
+ * Quando envia a revisão
+ * Então a API rejeita a entrada sem chamar o ClickUp
+ *
+ * Cenário: tratar ticket que deixou de estar em homologação
+ * Dado que o ClickUp informa conflito de status
+ * Quando a revisão é enviada
+ * Então a API devolve erro seguro de conflito
+ *
+ * Cenário: ClickUp indisponível durante a revisão
+ * Dado que o provedor retorna uma falha com detalhes privados
+ * Quando o serviço tenta salvar a decisão
+ * Então devolve erro seguro sem expor os detalhes
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TicketsController } from '../controllers/tickets.controller.js';
@@ -75,13 +110,50 @@ describe('TicketsController', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
   });
 
-  it('rejeita uma única etiqueta de área sem chamar o serviço', async () => {
-    const service = { createTicket: vi.fn() };
-    const next = vi.fn();
-    await new TicketsController(service as any).create({ body: { ...validInput, labels: ['app', 'meta'] } } as any, mockRes(), next);
+  it('aceita N5 para solicitações de feature', async () => {
+    const service = { createTicket: vi.fn().mockResolvedValue({ clickupTaskId: 'feature-123', clickupTaskUrl: 'https://app.clickup.com/t/feature-123' }) };
+    const response = mockRes();
+    const input = { ...validInput, level: 'N5', subject: 'Exportar relatórios em CSV' };
 
-    expect(service.createTicket).not.toHaveBeenCalled();
-    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+    await new TicketsController(service as any).create({ body: input } as any, response, vi.fn());
+
+    expect(service.createTicket).toHaveBeenCalledWith(input);
+    expect(response.status).toHaveBeenCalledWith(201);
+  });
+
+  it('aceita ticket sem etiquetas de escopo ou área', async () => {
+    const service = { createTicket: vi.fn().mockResolvedValue({ clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' }) };
+    const response = mockRes();
+    const { labels: _labels, ...input } = validInput;
+
+    await new TicketsController(service as any).create({ body: input } as any, response, vi.fn());
+
+    expect(service.createTicket).toHaveBeenCalledWith({ ...input, labels: [] });
+    expect(response.status).toHaveBeenCalledWith(201);
+  });
+
+  it('normaliza campos multipart e encaminha os anexos', async () => {
+    const service = { createTicket: vi.fn().mockResolvedValue({ clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' }) };
+    const response = mockRes();
+    const file = { buffer: Buffer.from('imagem'), originalname: 'erro.png', mimetype: 'image/png' };
+    const multipartBody = { ...validInput, assigneeId: '101281834', labels: JSON.stringify(validInput.labels) };
+
+    await new TicketsController(service as any).create({ body: multipartBody, files: [file] } as any, response, vi.fn());
+
+    expect(service.createTicket).toHaveBeenCalledWith({ ...validInput, attachments: [{ buffer: file.buffer, filename: 'erro.png', mimeType: 'image/png' }] });
+  });
+
+  it('preserva o link seguro da tarefa em uma falha parcial de anexos', async () => {
+    const client = { createTicket: vi.fn().mockRejectedValue(new ClickUpTicketsError(502, 'CLICKUP_ATTACHMENT_FAILED', 'detalhe privado', 'https://app.clickup.com/t/task-123')) };
+    const next = vi.fn();
+
+    await new TicketsController(new TicketService(client as any)).create({ body: validInput } as any, mockRes(), next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 502,
+      code: 'TICKET_ATTACHMENTS_UNAVAILABLE',
+      details: { clickupTaskUrl: 'https://app.clickup.com/t/task-123' },
+    }));
   });
 
   it('propaga somente erro seguro quando o ClickUp está indisponível', async () => {
@@ -132,5 +204,51 @@ describe('TicketsController', () => {
     await new TicketsController(service as any).listAssignees({} as any, response, vi.fn());
 
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ data: [{ id: 101281834, name: 'Kaio Araújo', email: 'kaio@clickhero.com.br' }] }));
+  });
+
+  it('aprova ticket em homologação e retorna o novo status', async () => {
+    const service = { reviewTicket: vi.fn().mockResolvedValue({ status: 'Aprovado' }) };
+    const response = mockRes();
+    await new TicketsController(service as any).review({ params: { id: 'task-123' }, body: { decision: 'approve' } } as any, response, vi.fn());
+
+    expect(service.reviewTicket).toHaveBeenCalledWith('task-123', { decision: 'approve' });
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'Aprovado' } }));
+  });
+
+  it('encaminha motivo de reprovação após validá-lo', async () => {
+    const service = { reviewTicket: vi.fn().mockResolvedValue({ status: 'Implement' }) };
+    const response = mockRes();
+    await new TicketsController(service as any).review({ params: { id: 'task-123' }, body: { decision: 'reject', reason: '  Corrigir o fluxo.  ' } } as any, response, vi.fn());
+
+    expect(service.reviewTicket).toHaveBeenCalledWith('task-123', { decision: 'reject', reason: 'Corrigir o fluxo.' });
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'Implement' } }));
+  });
+
+  it('rejeita motivo vazio e decisão desconhecida sem chamar o serviço', async () => {
+    const service = { reviewTicket: vi.fn() };
+    const next = vi.fn();
+    const controller = new TicketsController(service as any);
+    await controller.review({ params: { id: 'task-123' }, body: { decision: 'reject', reason: '  ' } } as any, mockRes(), next);
+    await controller.review({ params: { id: 'task-123' }, body: { decision: 'later' } } as any, mockRes(), next);
+
+    expect(service.reviewTicket).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(next.mock.calls[0][0]).toMatchObject({ name: 'ZodError' });
+  });
+
+  it('converte conflito de status em erro 409 seguro', async () => {
+    const client = { reviewTicket: vi.fn().mockRejectedValue(new ClickUpTicketsError(409, 'CLICKUP_REVIEW_CONFLICT', 'O chamado não está mais em homologação.')) };
+    const error = await new TicketService(client as any).reviewTicket('task-123', { decision: 'approve' }).catch((cause) => cause);
+
+    expect(error).toMatchObject({ statusCode: 409, code: 'TICKET_REVIEW_CONFLICT' });
+  });
+
+  it('não expõe detalhes privados quando o ClickUp falha ao salvar a revisão', async () => {
+    const client = { reviewTicket: vi.fn().mockRejectedValue(new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'token=secreto payload=privado')) };
+    const error = await new TicketService(client as any).reviewTicket('task-123', { decision: 'approve' }).catch((cause) => cause);
+
+    expect(error).toMatchObject({ statusCode: 502, code: 'TICKET_REVIEW_UNAVAILABLE' });
+    expect(error.message).not.toContain('secreto');
+    expect(error.message).not.toContain('privado');
   });
 });

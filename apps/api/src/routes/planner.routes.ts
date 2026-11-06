@@ -30,6 +30,7 @@ router.get('/prerequisites', tenantMiddleware, planner.handleGetPrerequisites);
 router.post('/plans/confirm', tenantMiddleware, planner.handleConfirm);
 router.post('/plans/revalidate', tenantMiddleware, planner.handleRevalidate);
 router.patch('/posts/:postId', tenantMiddleware, planner.handleEditPost);
+router.post('/posts/suggest-caption', tenantMiddleware, planner.handleSuggestCaption);
 
 // Calendário Editorial
 router.get('/calendar', tenantMiddleware, planner.handleGetCalendar);

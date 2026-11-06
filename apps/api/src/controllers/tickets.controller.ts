@@ -1,31 +1,37 @@
 import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { TicketService } from '../services/tickets/ticket.service.js';
-import { TICKET_AREA_LABELS, TICKET_LABELS, TICKET_SCOPE_LABELS } from '../lib/clickup-tickets.client.js';
+import { TICKET_LABELS } from '../lib/clickup-tickets.client.js';
 
 const createTicketSchema = z.object({
   email: z.string().trim().email(),
   subject: z.string().trim().min(3).max(160),
   description: z.string().trim().min(10).max(5_000),
   priority: z.enum(['low', 'normal', 'high', 'urgent']),
-  level: z.enum(['N1', 'N2', 'N3', 'N4']),
-  assigneeId: z.number().int().positive().optional(),
-  labels: z.array(z.enum(TICKET_LABELS)).min(1).max(4).refine((labels) => new Set(labels).size === labels.length, 'As etiquetas não podem se repetir'),
-}).superRefine(({ labels }, context) => {
-  const scopeCount = labels.filter((label) => (TICKET_SCOPE_LABELS as readonly string[]).includes(label)).length;
-  const areaCount = labels.filter((label) => (TICKET_AREA_LABELS as readonly string[]).includes(label)).length;
-  if (scopeCount < 1 || scopeCount > 2) context.addIssue({ code: z.ZodIssueCode.custom, path: ['labels'], message: 'Selecione uma ou duas etiquetas de escopo.' });
-  if (areaCount !== 0 && areaCount !== 2) context.addIssue({ code: z.ZodIssueCode.custom, path: ['labels'], message: 'Selecione zero ou duas etiquetas de área.' });
+  level: z.enum(['N1', 'N2', 'N3', 'N4', 'N5']),
+  assigneeId: z.preprocess((value) => value === '' || value === undefined ? undefined : Number(value), z.number().int().positive().optional()),
+  labels: z.preprocess((value) => {
+    if (value === undefined || value === '') return undefined;
+    if (typeof value !== 'string') return value;
+    try { return JSON.parse(value); } catch { return value; }
+  }, z.array(z.enum(TICKET_LABELS)).max(4).refine((labels) => new Set(labels).size === labels.length, 'As etiquetas não podem se repetir').optional().default([])),
 });
+
+const reviewTicketSchema = z.discriminatedUnion('decision', [
+  z.object({ decision: z.literal('approve') }),
+  z.object({ decision: z.literal('reject'), reason: z.string().trim().min(1).max(5_000) }),
+]);
 
 /** Controller fino; valida o input e delega a abertura ao serviço. */
 export class TicketsController {
-  constructor(private readonly ticketService: Pick<TicketService, 'createTicket' | 'listTickets' | 'listAssignees'>) {}
+  constructor(private readonly ticketService: Pick<TicketService, 'createTicket' | 'listTickets' | 'listAssignees' | 'reviewTicket'>) {}
 
   create = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = createTicketSchema.parse(req.body);
-      const ticket = await this.ticketService.createTicket(input);
+      const files = Array.isArray(req.files) ? req.files : [];
+      const attachments = files.map((file) => ({ buffer: file.buffer, filename: file.originalname, mimeType: file.mimetype }));
+      const ticket = await this.ticketService.createTicket({ ...input, ...(attachments.length > 0 ? { attachments } : {}) });
       res.status(201).json({ success: true, data: ticket, timestamp: new Date().toISOString() });
     } catch (error) {
       next(error);
@@ -45,6 +51,17 @@ export class TicketsController {
     try {
       const assignees = await this.ticketService.listAssignees();
       res.json({ success: true, data: assignees, timestamp: new Date().toISOString() });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  review = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = z.string().trim().min(1).max(100).parse(req.params.id);
+      const input = reviewTicketSchema.parse(req.body);
+      const result = await this.ticketService.reviewTicket(id, input);
+      res.json({ success: true, data: result, timestamp: new Date().toISOString() });
     } catch (error) {
       next(error);
     }

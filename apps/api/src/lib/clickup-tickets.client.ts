@@ -3,7 +3,7 @@ import { externalFetch, ExternalHttpError } from './http-client.js';
 const CLICKUP_API_URL = 'https://api.clickup.com/api/v2';
 
 export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
-export type TicketLevel = 'N1' | 'N2' | 'N3' | 'N4';
+export type TicketLevel = 'N1' | 'N2' | 'N3' | 'N4' | 'N5';
 export const TICKET_SCOPE_LABELS = ['app', 'ux', 'infra', 'api', 'dados', 'integracoes', 'seguranca'] as const;
 export const TICKET_AREA_LABELS = ['meta', 'sincronizacao-dados', 'dados-usuario', 'google'] as const;
 export const TICKET_LABELS = [...TICKET_SCOPE_LABELS, ...TICKET_AREA_LABELS] as const;
@@ -15,14 +15,25 @@ export interface CreateClickUpTicketInput {
   description: string;
   priority: TicketPriority;
   level: TicketLevel;
-  labels: TicketLabel[];
+  labels?: TicketLabel[];
   assigneeId?: number;
+  attachments?: TicketAttachment[];
+}
+
+export interface TicketAttachment {
+  buffer: Buffer;
+  filename: string;
+  mimeType: string;
 }
 
 export interface CreatedClickUpTicket {
   clickupTaskId: string;
   clickupTaskUrl: string;
 }
+
+export type ReviewClickUpTicketInput =
+  | { decision: 'approve' }
+  | { decision: 'reject'; reason: string };
 
 export interface ClickUpTicketSummary {
   id: string;
@@ -44,8 +55,9 @@ export interface ClickUpMember {
 export class ClickUpTicketsError extends Error {
   constructor(
     public readonly status: number,
-    public readonly code: 'CLICKUP_MISSING_CONFIG' | 'CLICKUP_UNAVAILABLE' | 'CLICKUP_UNAUTHORIZED' | 'CLICKUP_INVALID_RESPONSE',
+    public readonly code: 'CLICKUP_MISSING_CONFIG' | 'CLICKUP_UNAVAILABLE' | 'CLICKUP_UNAUTHORIZED' | 'CLICKUP_INVALID_RESPONSE' | 'CLICKUP_ATTACHMENT_FAILED' | 'CLICKUP_REVIEW_CONFLICT',
     message: string,
+    public readonly clickupTaskUrl?: string,
   ) {
     super(message);
     Error.captureStackTrace(this, this.constructor);
@@ -118,6 +130,32 @@ export class ClickUpTicketsClient {
     });
   }
 
+  private async uploadAttachment(taskId: string, attachment: TicketAttachment): Promise<void> {
+    const { apiToken } = this.resolveConfig();
+    const form = new FormData();
+    form.append('attachment', new Blob([new Uint8Array(attachment.buffer)], { type: attachment.mimeType }), attachment.filename);
+
+    let response: Response;
+    try {
+      response = await externalFetch(`${CLICKUP_API_URL}/task/${taskId}/attachment`, {
+        method: 'POST',
+        headers: { Authorization: apiToken },
+        body: form,
+      });
+    } catch (error) {
+      if (error instanceof ExternalHttpError) {
+        throw new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'Não foi possível anexar o arquivo ao ticket agora.');
+      }
+      throw error;
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new ClickUpTicketsError(502, 'CLICKUP_UNAUTHORIZED', 'Não foi possível anexar o arquivo ao ticket agora.');
+    }
+    if (!response.ok) {
+      throw new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'Não foi possível anexar o arquivo ao ticket agora.');
+    }
+  }
+
   async createTicket(input: CreateClickUpTicketInput): Promise<CreatedClickUpTicket> {
     const { apiToken, listId } = this.resolveConfig();
     let response: Response;
@@ -133,7 +171,7 @@ export class ClickUpTicketsClient {
           description: toClickUpDescription(input),
           priority: clickUpPriority[input.priority],
           status: 'pendente',
-          tags: input.labels,
+          ...(input.labels?.length ? { tags: input.labels } : {}),
           ...(input.assigneeId ? { assignees: [input.assigneeId] } : {}),
         }),
       });
@@ -156,7 +194,19 @@ export class ClickUpTicketsClient {
       throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'Não foi possível confirmar a criação do ticket.');
     }
 
-    return { clickupTaskId: payload.id, clickupTaskUrl: payload.url };
+    const ticket = { clickupTaskId: payload.id, clickupTaskUrl: payload.url };
+    try {
+      for (const attachment of input.attachments ?? []) {
+        await this.uploadAttachment(ticket.clickupTaskId, attachment);
+      }
+    } catch (error) {
+      if (error instanceof ClickUpTicketsError) {
+        throw new ClickUpTicketsError(502, 'CLICKUP_ATTACHMENT_FAILED', 'Não foi possível anexar todos os arquivos ao ticket.', ticket.clickupTaskUrl);
+      }
+      throw error;
+    }
+
+    return ticket;
   }
 
   async listTickets(): Promise<ClickUpTicketSummary[]> {
@@ -191,6 +241,46 @@ export class ClickUpTicketsClient {
         labels,
       };
     });
+  }
+
+  async reviewTicket(taskId: string, input: ReviewClickUpTicketInput): Promise<{ status: string }> {
+    const task = await this.getJson(`/task/${encodeURIComponent(taskId)}`) as {
+      description?: unknown;
+      status?: { status?: unknown };
+    };
+    if (typeof task.status?.status !== 'string' || task.status.status.trim().toLocaleLowerCase() !== 'homologação') {
+      throw new ClickUpTicketsError(409, 'CLICKUP_REVIEW_CONFLICT', 'O chamado não está mais em homologação. Atualize a lista e tente novamente.');
+    }
+    if (input.decision === 'reject' && task.description != null && typeof task.description !== 'string') {
+      throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'Não foi possível atualizar a descrição do chamado.');
+    }
+
+    const status = input.decision === 'approve' ? 'Aprovado' : 'Implement';
+    const currentDescription = typeof task.description === 'string' ? task.description.trimEnd() : '';
+    const payload = input.decision === 'approve'
+      ? { status }
+      : { status, description: `${currentDescription ? `${currentDescription}\n\n` : ''}## Reprovação na homologação\n${input.reason.trim()}` };
+    const { apiToken } = this.resolveConfig();
+    let response: Response;
+    try {
+      response = await externalFetch(`${CLICKUP_API_URL}/task/${encodeURIComponent(taskId)}`, {
+        method: 'PUT',
+        headers: { Authorization: apiToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      if (error instanceof ExternalHttpError) {
+        throw new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'Não foi possível atualizar o chamado no ClickUp agora.');
+      }
+      throw error;
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new ClickUpTicketsError(502, 'CLICKUP_UNAUTHORIZED', 'Não foi possível atualizar o chamado no ClickUp agora.');
+    }
+    if (!response.ok) {
+      throw new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'Não foi possível atualizar o chamado no ClickUp agora.');
+    }
+    return { status };
   }
 
   async listMembers(): Promise<ClickUpMember[]> {

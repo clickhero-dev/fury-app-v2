@@ -270,6 +270,8 @@ export class AuthController {
             id: result.user.id,
             email: result.user.email,
             role: result.user.role,
+            // o admin decide quem entra por aqui (super_admin / admin_partner)
+            platformRole: result.user.platformRole,
             tenantId: result.user.tenantId,
           },
           ...(policy ? { policy } : {}),
@@ -559,6 +561,7 @@ export class AuthController {
           email: result.user.email,
           name: result.user.name,
           role: result.user.role,
+          platformRole: result.user.platformRole,
           tenantId: result.user.tenantId,
         },
         isNewUser: result.isNewUser,

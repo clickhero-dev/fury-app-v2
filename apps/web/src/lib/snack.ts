@@ -10,6 +10,7 @@ export interface Snack {
   id: number;
   message: string;
   type: SnackType;
+  action?: { label: string; href: string };
 }
 
 type Listener = (snack: Snack | null) => void;
@@ -19,8 +20,8 @@ let listeners: Listener[] = [];
 let timer: ReturnType<typeof setTimeout> | undefined;
 let nextId = 1;
 
-export function showSnack(message: string, type: SnackType = 'success') {
-  current = { id: nextId++, message, type };
+export function showSnack(message: string, type: SnackType = 'success', action?: Snack['action']) {
+  current = { id: nextId++, message, type, action };
   listeners.forEach((l) => l(current));
   clearTimeout(timer);
   timer = setTimeout(() => {
