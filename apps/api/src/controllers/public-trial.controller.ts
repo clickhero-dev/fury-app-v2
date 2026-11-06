@@ -11,6 +11,7 @@ export class PublicTrialController {
 
   signup = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      res.set('Cache-Control', 'no-store');
       if (process.env.TRIAL_WEBHOOK_SECRET) {
         const raw = (req as Request & { rawBody?: string }).rawBody || JSON.stringify(req.body);
         const { verifyWebhookSignature } = await import('../services/core/public-trial-signup.js');
@@ -20,12 +21,13 @@ export class PublicTrialController {
       }
       const payload = normalizePublicTrialSignup(req.body);
       await this.service.signup(payload);
-      res.set('Cache-Control', 'no-store').status(202).json({ message: 'Se for possível, enviaremos um link de acesso.' });
+      res.status(202).json({ message: 'Se for possível, enviaremos um link de acesso.' });
     } catch (error) { next(error); }
   };
 
   access = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      res.set('Cache-Control', 'no-store');
       const { token } = accessSchema.parse(req.body);
       const result = await this.service.access(token);
       res.set('Cache-Control', 'no-store').json({ success: true, data: result });

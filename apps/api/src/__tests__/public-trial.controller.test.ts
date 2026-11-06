@@ -3,6 +3,7 @@ import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { PublicTrialController } from '../controllers/public-trial.controller.js';
 import { errorHandler } from '../middleware/errorHandler.js';
+import { isTrialOriginAllowed } from '../routes/public-trial.routes.js';
 
 describe('POST /api/public/trial/signup', () => {
   function createApp() {
@@ -45,5 +46,18 @@ describe('POST /api/public/trial/signup', () => {
     const response = await request(app).post('/api/public/trial/access').send({ token: 'not-a-token' });
     expect(response.status).toBe(400);
     expect(service.access).not.toHaveBeenCalled();
+  });
+
+  it('não cacheia respostas de validação', async () => {
+    const { app } = createApp();
+    const response = await request(app).post('/api/public/trial/signup').send({ email: 'bad' });
+    expect(response.status).toBe(400);
+    expect(response.headers['cache-control']).toBe('no-store');
+  });
+
+  it('aplica allowlist de origem somente quando configurada e quando Origin é enviado', () => {
+    expect(isTrialOriginAllowed(undefined, 'https://forms.example')).toBe(true);
+    expect(isTrialOriginAllowed('https://forms.example', 'https://forms.example,https://another.example')).toBe(true);
+    expect(isTrialOriginAllowed('https://evil.example', 'https://forms.example')).toBe(false);
   });
 });

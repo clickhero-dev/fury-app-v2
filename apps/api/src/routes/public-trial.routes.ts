@@ -6,9 +6,16 @@ import { AppError } from '../middleware/errorHandler.js';
 import { getClientIp } from '../middleware/rate-limit.middleware.js';
 
 const router = Router();
+export function isTrialOriginAllowed(origin: string | undefined, configured: string | undefined = process.env.TRIAL_WEBHOOK_ORIGINS): boolean {
+  if (!origin || !configured?.trim()) return true;
+  const allowed = configured.split(',').map((value) => value.trim()).filter(Boolean);
+  return allowed.includes(origin);
+}
+
 async function publicTrialAbuseGuard(req: any, _res: any, next: any) {
   if (process.env.NODE_ENV === 'test') return next();
   if (Number(req.headers['content-length'] || 0) > 4096) return next(new AppError(413, 'PAYLOAD_TOO_LARGE', 'Requisição muito grande.'));
+  if (!isTrialOriginAllowed(req.header('origin'))) return next(new AppError(403, 'ORIGIN_NOT_ALLOWED', 'Origem não autorizada.'));
   try {
     const redis = getRedis();
     const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
