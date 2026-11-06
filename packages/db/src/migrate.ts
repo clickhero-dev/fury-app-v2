@@ -164,6 +164,13 @@ const STEPS: MigrationStep[] = [
   { tag: '0053_notifications' },
   { tag: '0054_subscription_renewal_events' },
   { tag: '0055_trial_plan_technical_key' },
+  {
+    tag: '0056_add_demo_role',
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "user_role" ADD VALUE IF NOT EXISTS 'demo'`);
+      console.log('    + added demo to user_role');
+    },
+  },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
