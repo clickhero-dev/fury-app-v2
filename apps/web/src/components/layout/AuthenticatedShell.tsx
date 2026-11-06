@@ -57,7 +57,10 @@ export function AuthenticatedShell() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
-  const isDemoUser = false;
+  // O role vem da sessão assinada pelo backend; o frontend apenas espelha o
+  // modo para evitar gates de onboarding/Meta que não existem na demonstração.
+  const userRole = useAppSelector(selectUserRole);
+  const isDemoUser = userRole === 'demo';
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const isSubscriptionExempt =
@@ -147,7 +150,6 @@ export function AuthenticatedShell() {
   } = useSubscription();
 
   const reduxPlanExpired = useAppSelector(selectIsPlanExpired);
-  const userRole = useAppSelector(selectUserRole);
   // Isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
   const isAdmin = userRole === 'admin' || canAccessAdmin(getStoredPlatformRole());
 
