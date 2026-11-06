@@ -8,6 +8,7 @@ import {
   type UpdatedClickUpTicket,
   type CreatedClickUpTicket,
   type CreateClickUpTicketInput,
+  type ReviewClickUpTicketInput,
 } from '../../lib/clickup-tickets.client.js';
 import { AppError } from '../../middleware/errorHandler.js';
 
@@ -25,7 +26,42 @@ function toSafeFailureReason(error: ClickUpTicketsError): SafeFailureReason {
 
 /** Caso de uso de tickets: não conhece HTTP/Express nem segredos do ClickUp. */
 export class TicketService {
-  constructor(private readonly clickUpClient: Pick<ClickUpTicketsClient, 'createTicket' | 'listTickets' | 'listMembers' | 'listStatuses' | 'updateTicketStatus'>) {}
+  constructor(private readonly clickUpClient: Pick<ClickUpTicketsClient, 'createTicket' | 'listTickets' | 'listMembers' | 'reviewTicket' | 'listStatuses' | 'updateTicketStatus'>) {}
+
+  async listStatuses(): Promise<ClickUpStatusOption[]> {
+    try { return await this.clickUpClient.listStatuses(); }
+    catch (error) {
+      const reason = error instanceof ClickUpTicketsError ? toSafeFailureReason(error) : 'provider_unavailable';
+      captureServerEvent('ticket_clickup_statuses_failed', { reason });
+      throw new AppError(502, 'TICKET_PROVIDER_UNAVAILABLE', 'Não foi possível carregar os status agora.');
+    }
+  }
+
+  async updateTicketStatus(taskId: string, input: { expectedStatus: string; status: string }): Promise<UpdatedClickUpTicket> {
+    try { return await this.clickUpClient.updateTicketStatus(taskId, input); }
+    catch (error) {
+      if (error instanceof ClickUpTicketsError && error.code === 'CLICKUP_INVALID_STATUS') throw new AppError(400, 'INVALID_TICKET_STATUS', error.message);
+      if (error instanceof ClickUpTicketsError && error.code === 'CLICKUP_CONFLICT') throw new AppError(409, 'TICKET_STATUS_CONFLICT', 'O status do ticket mudou. Recarregue a lista e tente novamente.');
+      if (error instanceof ClickUpTicketsError && error.code === 'CLICKUP_NOT_FOUND') throw new AppError(404, 'TICKET_NOT_FOUND', 'Ticket não encontrado na lista de tickets.');
+      const reason = error instanceof ClickUpTicketsError ? toSafeFailureReason(error) : 'provider_unavailable';
+      captureServerEvent('ticket_clickup_status_update_failed', { reason });
+      if (error instanceof ClickUpTicketsError && error.code === 'CLICKUP_TIMEOUT') throw new AppError(504, 'TICKET_STATUS_UPDATE_UNKNOWN', 'Não foi possível confirmar a alteração. Recarregue a lista antes de tentar novamente.');
+      throw new AppError(502, 'TICKET_PROVIDER_UNAVAILABLE', 'Não foi possível alterar o status agora. Tente novamente.');
+    }
+  }
+
+  async reviewTicket(taskId: string, input: ReviewClickUpTicketInput): Promise<{ status: string }> {
+    try {
+      return await this.clickUpClient.reviewTicket(taskId, input);
+    } catch (error) {
+      if (error instanceof ClickUpTicketsError && error.code === 'CLICKUP_REVIEW_CONFLICT') {
+        throw new AppError(409, 'TICKET_REVIEW_CONFLICT', error.message);
+      }
+      const reason = error instanceof ClickUpTicketsError ? toSafeFailureReason(error) : 'provider_unavailable';
+      captureServerEvent('ticket_clickup_review_failed', { reason });
+      throw new AppError(502, 'TICKET_REVIEW_UNAVAILABLE', 'Não foi possível atualizar o chamado agora. Tente novamente.');
+    }
+  }
 
   async createTicket(input: CreateClickUpTicketInput): Promise<CreatedClickUpTicket> {
     try {
@@ -68,38 +104,6 @@ export class TicketService {
       const reason = error instanceof ClickUpTicketsError ? toSafeFailureReason(error) : 'provider_unavailable';
       captureServerEvent('ticket_clickup_assignees_failed', { reason });
       throw new AppError(502, 'TICKET_PROVIDER_UNAVAILABLE', 'Não foi possível carregar os responsáveis agora.');
-    }
-  }
-
-  async listStatuses(): Promise<ClickUpStatusOption[]> {
-    try {
-      return await this.clickUpClient.listStatuses();
-    } catch (error) {
-      const reason = error instanceof ClickUpTicketsError ? toSafeFailureReason(error) : 'provider_unavailable';
-      captureServerEvent('ticket_clickup_statuses_failed', { reason });
-      throw new AppError(502, 'TICKET_PROVIDER_UNAVAILABLE', 'Não foi possível carregar os status agora.');
-    }
-  }
-
-  async updateTicketStatus(taskId: string, input: { expectedStatus: string; status: string }): Promise<UpdatedClickUpTicket> {
-    try {
-      return await this.clickUpClient.updateTicketStatus(taskId, input);
-    } catch (error) {
-      if (error instanceof ClickUpTicketsError && (error.code === 'CLICKUP_INVALID_STATUS')) {
-        throw new AppError(400, 'INVALID_TICKET_STATUS', error.message);
-      }
-      if (error instanceof ClickUpTicketsError && error.code === 'CLICKUP_CONFLICT') {
-        throw new AppError(409, 'TICKET_STATUS_CONFLICT', 'O status do ticket mudou. Recarregue a lista e tente novamente.');
-      }
-      if (error instanceof ClickUpTicketsError && error.code === 'CLICKUP_NOT_FOUND') {
-        throw new AppError(404, 'TICKET_NOT_FOUND', 'Ticket não encontrado na lista de tickets.');
-      }
-      const reason = error instanceof ClickUpTicketsError ? toSafeFailureReason(error) : 'provider_unavailable';
-      captureServerEvent('ticket_clickup_status_update_failed', { reason });
-      if (error instanceof ClickUpTicketsError && error.code === 'CLICKUP_TIMEOUT') {
-        throw new AppError(504, 'TICKET_STATUS_UPDATE_UNKNOWN', 'Não foi possível confirmar a alteração. Recarregue a lista antes de tentar novamente.');
-      }
-      throw new AppError(502, 'TICKET_PROVIDER_UNAVAILABLE', 'Não foi possível alterar o status agora. Tente novamente.');
     }
   }
 }
