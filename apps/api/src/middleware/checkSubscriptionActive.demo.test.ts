@@ -25,4 +25,11 @@ describe('BDD: checkSubscriptionActive para demo', () => {
     checkSubscriptionActive({ user: { userId: 'demo-user', role: 'owner', tenantId: 'demo' }, tenant: { tenantId: 'demo' } } as never, {} as never, next);
     await vi.waitFor(() => expect(next).toHaveBeenCalledWith());
   });
+
+  it('Cenário: plano demo continua liberado mesmo com status inativo', async () => {
+    findSubscription.mockResolvedValue({ status: 'inactive', isNonExpirable: true, trialEndsAt: new Date(0), currentPeriodEnd: new Date(0) });
+    const next = vi.fn();
+    checkSubscriptionActive({ user: { userId: 'demo-user', role: 'owner', tenantId: 'demo' }, tenant: { tenantId: 'demo' } } as never, {} as never, next);
+    await vi.waitFor(() => expect(next).toHaveBeenCalledWith());
+  });
 });

@@ -23,7 +23,7 @@ vi.mock('../lib/redis.js', () => ({
 
 const demoUser = {
   id: 'demo-user', tenantId: 'demo-tenant', name: 'Fashion Demo', email: 'demo@example.test',
-  role: 'owner', createdAt: new Date(), notificationPrefs: {}, audienceDefaults: null,
+  role: 'owner', type: 'demo', createdAt: new Date(), notificationPrefs: {}, audienceDefaults: null,
 };
 
 function makeService(repo: any) {
@@ -45,7 +45,7 @@ describe('BDD: AuthService.demoLogin', () => {
 
     expect(repo.findTenantBySlug).toHaveBeenCalledWith('fashion-demo');
     expect(result.tokens).toEqual({ accessToken: 'access', refreshToken: 'refresh' });
-    expect(result.user).toEqual(expect.objectContaining({ id: 'demo-user', tenantId: 'demo-tenant' }));
+    expect(result.user).toEqual(expect.objectContaining({ id: 'demo-user', tenantId: 'demo-tenant', type: 'demo' }));
   });
 
   it('Cenário: conta demo indisponível não gera sessão', async () => {

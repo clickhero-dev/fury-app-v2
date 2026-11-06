@@ -57,7 +57,12 @@ export function AuthenticatedShell() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
-  const isDemoUser = localStorage.getItem('ady-demo-session') === 'true';
+  const storedUser = (() => {
+    try { return JSON.parse(localStorage.getItem('user') ?? '{}') as { type?: string }; } catch { return {}; }
+  })();
+  // A flag antiga só mantém compatibilidade com sessões já abertas; APIs e
+  // datasets demo continuam protegidos pela identidade persistida no backend.
+  const isDemoUser = storedUser.type === 'demo' || localStorage.getItem('ady-demo-session') === 'true';
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const isSubscriptionExempt =
@@ -69,7 +74,7 @@ export function AuthenticatedShell() {
   // /policy/current uma única vez para decidir (sem loop: /politica é isenta).
   const isPolicyRoute = location.pathname.startsWith('/politica');
   const isPolicyExempt =
-    isPolicyRoute || POLICY_EXEMPT.some((p) => location.pathname.startsWith(p)) || isOnboarding;
+    isPolicyRoute || POLICY_EXEMPT.some((p) => location.pathname.startsWith(p)) || isOnboarding || isDemoUser;
   const needsPolicy = useAppSelector(selectNeedsPolicyAcceptance);
   const { isBlocked } = useBlockedViews();
   const viewKey = viewKeyForPath(location.pathname);

@@ -7,6 +7,7 @@ export interface User {
   tenantName?: string;
   tenantId?: string;
   role?: string;
+  type?: 'user' | 'demo';
   /** Papel na plataforma (super_admin, admin_partner, user_partner, user). */
   platformRole?: string;
 }

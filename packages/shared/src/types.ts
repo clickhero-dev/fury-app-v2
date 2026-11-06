@@ -13,6 +13,8 @@ export interface User {
   email: string;
   passwordHash: string;
   role: UserRole;
+  /** Identidade operacional da conta; contas demonstrativas usam `demo`. */
+  type: 'user' | 'demo';
   createdAt: Date;
 }
 

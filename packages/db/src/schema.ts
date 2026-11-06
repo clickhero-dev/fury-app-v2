@@ -149,6 +149,8 @@ export const users = pgTable(
     googleId: varchar('google_id', { length: 255 }),
     facebookId: varchar('facebook_id', { length: 255 }),
     role: userRoleEnum('role').notNull().default('member'),
+    /** Identidade operacional da conta; contas demonstrativas usam `demo`. */
+    type: varchar('user_type', { length: 20 }).notNull().default('user'),
     platformRole: varchar('platform_role', { length: 50 })
       .notNull()
       .default('user')

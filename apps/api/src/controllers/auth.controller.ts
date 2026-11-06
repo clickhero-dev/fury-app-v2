@@ -292,7 +292,7 @@ export class AuthController {
         data: {
           token: result.tokens.accessToken,
           refreshToken: result.tokens.refreshToken,
-          user: { id: result.user.id, name: result.user.name, email: result.user.email, role: result.user.role, tenantId: result.user.tenantId },
+          user: { id: result.user.id, name: result.user.name, email: result.user.email, role: result.user.role, type: result.user.type, tenantId: result.user.tenantId },
           demo: true,
           ...(policy ? { policy } : {}),
         },
