@@ -102,9 +102,22 @@ export const brandKitService = new BrandKitService();
 export const brandKitPhotoService = new BrandKitPhotoService();
 export const furyEngineService = new FuryEngineService();
 export const studioAiService = new StudioAiService();
+export const notificationRepository = new NotificationRepository();
+export const notificationService = new NotificationService(notificationRepository, (tenantId, userId) => emitToUser(tenantId, userId, 'notifications.changed', { version: 1 }));
 export const studioVideoService = new StudioVideoService({
   enqueue: enqueueStudioVideo,
   brand: (tenantId) => studioAiService.getBrandContext(tenantId),
+  notifyVideoReady: async (tenantId, userId, jobId, _assetId) => {
+    await notificationService.create({
+      tenantId,
+      callerId: userId,
+      recipientUserId: userId,
+      type: 'general',
+      title: 'Seu vídeo está pronto',
+      body: 'O vídeo foi gerado e já está disponível na sua biblioteca.',
+      idempotencyKey: `studio-video-ready:${jobId}`,
+    });
+  },
 });
 export const studioService = new StudioService();
 export const studioPublishingService = new StudioPublishingService();
@@ -132,9 +145,6 @@ export const plannerCaptionSuggestionService = new PlannerCaptionSuggestionServi
   openrouterService,
   (tenantId) => new StudioRepository(tenantId),
 );
-export const notificationRepository = new NotificationRepository();
-export const notificationService = new NotificationService(notificationRepository, (tenantId, userId) => emitToUser(tenantId, userId, 'notifications.changed', { version: 1 }));
-
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
 export const uazapiClient = new UazapiClient();
