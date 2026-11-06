@@ -8,6 +8,7 @@ import {
   type ClickUpTicketSummary,
   type CreatedClickUpTicket,
   type CreateClickUpTicketInput,
+  type ReviewClickUpTicketInput,
 } from '../../lib/clickup-tickets.client.js';
 import { AppError } from '../../middleware/errorHandler.js';
 
@@ -25,7 +26,18 @@ function toSafeFailureReason(error: ClickUpTicketsError): SafeFailureReason {
 
 /** Caso de uso de tickets: não conhece HTTP/Express nem segredos do ClickUp. */
 export class TicketService {
-  constructor(private readonly clickUpClient: Pick<ClickUpTicketsClient, 'createTicket' | 'listTickets' | 'listMembers' | 'listStatuses' | 'getTicket' | 'updateTicketStatus' | 'getConfiguredListId'>) {}
+  constructor(private readonly clickUpClient: Pick<ClickUpTicketsClient, 'createTicket' | 'listTickets' | 'listMembers' | 'listStatuses' | 'getTicket' | 'updateTicketStatus' | 'getConfiguredListId' | 'reviewTicket'>) {}
+
+  async reviewTicket(taskId: string, input: ReviewClickUpTicketInput): Promise<{ status: string }> {
+    try {
+      return await this.clickUpClient.reviewTicket(taskId, input);
+    } catch (error) {
+      if (error instanceof ClickUpTicketsError && error.code === 'CLICKUP_REVIEW_CONFLICT') throw new AppError(409, 'TICKET_REVIEW_CONFLICT', error.message);
+      const reason = error instanceof ClickUpTicketsError ? toSafeFailureReason(error) : 'provider_unavailable';
+      captureServerEvent('ticket_clickup_review_failed', { reason });
+      throw new AppError(502, 'TICKET_REVIEW_UNAVAILABLE', 'Não foi possível atualizar o chamado agora. Tente novamente.');
+    }
+  }
 
   async createTicket(input: CreateClickUpTicketInput): Promise<CreatedClickUpTicket> {
     try {
