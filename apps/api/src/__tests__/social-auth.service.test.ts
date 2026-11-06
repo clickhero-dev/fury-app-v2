@@ -89,7 +89,7 @@ function fakeTxDb() {
     } })),
     update: vi.fn(() => ({ set: () => ({ where: async () => {} }) })),
     query: {
-      plans: { findFirst: vi.fn(async () => ({ id: 'trial-plan', technicalKey: 'trial_new_signup', priceCents: 0, isActive: true, limits: { creativesPerMonth: 5 } })) },
+      plans: { findFirst: vi.fn(async () => ({ id: 'trial-plan', technicalKey: 'trial_new_signup', priceCents: 0, isActive: true, limits: { creativesPerMonth: 7 } })) },
       subscriptions: { findFirst: vi.fn(async () => null) },
     },
   };
@@ -132,7 +132,7 @@ describe('SocialAuthService.handleFacebookSocialLogin', () => {
     expect(r).not.toHaveProperty('tokens');
     const subscriptionValues = db.insertedValues.find((values: any) => values?.status === 'trial');
     expect(subscriptionValues).toMatchObject({
-      tenantId: 't1', planId: 'trial-plan', status: 'trial', creativesRemaining: 5,
+      tenantId: 't1', planId: 'trial-plan', status: 'trial', creativesRemaining: 7,
     });
   });
 

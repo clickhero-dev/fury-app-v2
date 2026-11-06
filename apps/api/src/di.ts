@@ -88,6 +88,9 @@ import { NotificationController } from './controllers/notification.controller.js
 import { emitToUser } from './lib/sse.js';
 import { BusinessContextService } from './services/core/business-context.service.js';
 import { BusinessContextController } from './controllers/business-context.controller.js';
+import { StudioVariationsService } from './services/studio/studio-variations.service.js';
+import { StudioVariationsController } from './controllers/studio-variations.controller.js';
+import { WorkflowJobRepository } from './repository/workflow-job.repository.js';
 
 /**
  * Composition root (DI) da API.
@@ -106,11 +109,44 @@ export const brandKitService = new BrandKitService();
 export const brandKitPhotoService = new BrandKitPhotoService();
 export const furyEngineService = new FuryEngineService();
 export const studioAiService = new StudioAiService();
+export const notificationRepository = new NotificationRepository();
+export const notificationService = new NotificationService(notificationRepository, (tenantId, userId) => emitToUser(tenantId, userId, 'notifications.changed', { version: 1 }));
 export const studioVideoService = new StudioVideoService({
   enqueue: enqueueStudioVideo,
   brand: (tenantId) => studioAiService.getBrandContext(tenantId),
+  notifyVideoReady: async (tenantId, userId, jobId, _assetId) => {
+    await notificationService.create({
+      tenantId,
+      callerId: userId,
+      recipientUserId: userId,
+      type: 'general',
+      title: 'Seu vídeo está pronto',
+      body: 'O vídeo foi gerado e já está disponível na sua biblioteca.',
+      actionUrl: `/estudio?assetId=${encodeURIComponent(_assetId)}`,
+      idempotencyKey: `studio-video-ready:${jobId}`,
+    });
+  },
+  notifyVideoFailed: async (tenantId, userId, jobId) => {
+    await notificationService.create({
+      tenantId,
+      callerId: userId,
+      recipientUserId: userId,
+      type: 'general',
+      title: 'Não foi possível gerar o vídeo',
+      body: 'A geração falhou. Abra o Estúdio para tentar novamente.',
+      actionUrl: '/estudio',
+      idempotencyKey: `studio-video-failed:${jobId}`,
+    });
+  },
 });
 export const studioService = new StudioService();
+export const studioVariationsService = new StudioVariationsService(
+  (tenantId) => new StudioRepository(tenantId),
+  (tenantId) => new WorkflowJobRepository(tenantId),
+  studioService,
+  studioAiService,
+);
+export const studioVariationsController = new StudioVariationsController(studioVariationsService);
 export const studioPublishingService = new StudioPublishingService();
 export const billingService = new BillingService();
 export const policyService = new PolicyService();
@@ -125,6 +161,7 @@ export const publicTrialFlowService = new PublicTrialFlowService(new PublicTrial
 });
 export const businessContextService = new BusinessContextService();
 export const businessContextController = new BusinessContextController(businessContextService);
+
 export const socialAuthService = new SocialAuthService();
 export const metricsService = new MetricsService(metricsProvider);
 export const budgetOptimizerService = new BudgetOptimizerService();
@@ -141,9 +178,6 @@ export const plannerCaptionSuggestionService = new PlannerCaptionSuggestionServi
   openrouterService,
   (tenantId) => new StudioRepository(tenantId),
 );
-export const notificationRepository = new NotificationRepository();
-export const notificationService = new NotificationService(notificationRepository, (tenantId, userId) => emitToUser(tenantId, userId, 'notifications.changed', { version: 1 }));
-
 // WhatsApp (uazapi) — webhook GLOBAL (evento chega antes de sessão);
 // verificação tenant-bound via factory (padrão CampaignRepository).
 export const uazapiClient = new UazapiClient();
@@ -170,6 +204,7 @@ export const controllers = {
   studioAi: new StudioAiController(studioAiService),
   studioVideo: new StudioVideoController(studioVideoService),
   studio: new CreativeStudioController(studioService),
+  studioVariations: studioVariationsController,
   studioPublishing: new StudioPublishingController(studioPublishingService),
   billing: new BillingController(billingService),
   policy: new PolicyController(policyService),
@@ -177,8 +212,9 @@ export const controllers = {
   forms: new FormsController(formsService),
   metrics: new MetricsController(metricsService),
   auth: new AuthController(authService, socialAuthService, policyService),
-  publicTrial: new PublicTrialController(publicTrialFlowService),
+
   businessContext: businessContextController,
+  publicTrial: new PublicTrialController(publicTrialFlowService),
   automation: new AutomationController(automationService),
   google: new GoogleController(googleService),
   meta: new MetaController(metaService),

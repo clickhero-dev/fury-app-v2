@@ -162,9 +162,18 @@ const STEPS: MigrationStep[] = [
   { tag: '0051_ady_rbac_partners' },
   { tag: '0052_soft_delete_tenants_users' },
   { tag: '0053_notifications' },
+  { tag: '0056_notification_action_url' },
   { tag: '0054_subscription_renewal_events' },
   { tag: '0055_trial_plan_technical_key' },
-  { tag: '0056_public_trial_signup' },
+  { tag: '0058_public_trial_signup' },
+  {
+    tag: '0056_add_demo_role',
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "user_role" ADD VALUE IF NOT EXISTS 'demo'`);
+      console.log('    + added demo to user_role');
+    },
+  },
+  { tag: '0059_unified_trial_access' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
@@ -219,6 +228,8 @@ export const REQUIRED_TABLES = [
   'ady_rbac_views_blocked',
   'ady_rbac_audit_log',
   'notifications',
+  'public_trial_accounts',
+  'public_trial_magic_links',
 ];
 
 /**

@@ -21,7 +21,7 @@ export function validateTrialPlan(input: {
     input.technicalKey !== TRIAL_PLAN_KEY ||
     input.priceCents !== 0 ||
     !input.isActive ||
-    input.creativesPerMonth !== 5
+    input.creativesPerMonth !== 7
   ) {
     return { ok: false, reason: 'INVALID_TRIAL_PLAN' };
   }
@@ -78,7 +78,7 @@ export async function provisionTrialSubscription(
     status: 'trial',
     trialEndsAt,
     currentPeriodEnd,
-    creativesRemaining: 5,
+    creativesRemaining: 7,
     asaasSubscriptionId: null,
     asaasCustomerId: null,
   });

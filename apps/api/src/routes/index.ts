@@ -1,7 +1,6 @@
 import { Router } from "express";
 import healthRoutes from "./health.js";
 import authRoutes from "./auth.routes.js";
-import publicTrialRoutes from './public-trial.routes.js';
 import metaRoutes from "./meta.routes.js";
 import googleRoutes from "./google.routes.js";
 import metricsRoutes from "./metrics.routes.js";
@@ -29,6 +28,7 @@ import faqRoutes from './faq.routes.js';
 import announcementRoutes from './announcement.routes.js';
 import notificationRoutes from './notification.routes.js';
 import rbacRoutes from "./rbac.routes.js";
+import publicTrialRoutes from './public-trial.routes.js';
 
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { tenantMiddleware } from "../middleware/tenant.middleware.js";

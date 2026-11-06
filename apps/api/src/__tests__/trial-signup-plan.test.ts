@@ -3,7 +3,7 @@ Funcionalidade: provisionar Trial no cadastro de um tenant novo
 Cenário: existe um único plano Trial ativo
   Dado que o catálogo possui trial_new_signup ativo
   Quando o tenant novo for provisionado
-  Então uma assinatura trial de 7 dias e quota 5 será criada sem identificador Asaas
+  Então uma assinatura trial de 7 dias e quota 7 será criada sem identificador Asaas
 
 Cenário: o plano Trial não existe ou é inválido
   Dado que o catálogo não possui Trial válido
@@ -13,7 +13,7 @@ Cenário: o plano Trial não existe ou é inválido
 import { describe, expect, it, vi } from 'vitest';
 import { provisionTrialSubscription, isTrialExpired } from '../services/billing/trial-signup.js';
 
-const plan = { id: 'plan-trial', technicalKey: 'trial_new_signup', priceCents: 0, isActive: true, limits: { creativesPerMonth: 5 } };
+const plan = { id: 'plan-trial', technicalKey: 'trial_new_signup', priceCents: 0, isActive: true, limits: { creativesPerMonth: 7 } };
 
 describe('provisionTrialSubscription', () => {
   it('cria uma assinatura Trial única, com quota e sem Asaas', async () => {
@@ -27,7 +27,7 @@ describe('provisionTrialSubscription', () => {
     await expect(provisionTrialSubscription(tx, 'tenant-1', start)).resolves.toEqual({ id: 'sub-1' });
     expect(tx.insertSubscription).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-1', planId: 'plan-trial', status: 'trial',
-      creativesRemaining: 5, asaasSubscriptionId: null, asaasCustomerId: null,
+      creativesRemaining: 7, asaasSubscriptionId: null, asaasCustomerId: null,
       trialEndsAt: new Date('2026-11-06T12:00:00.000Z'),
       currentPeriodEnd: new Date('2026-11-06T12:00:00.000Z'),
     }));

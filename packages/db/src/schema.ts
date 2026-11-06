@@ -23,7 +23,7 @@ import {
 import { relations, sql } from 'drizzle-orm';
 
 // Enums
-export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member', 'superadmin']);
+export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member', 'superadmin', 'demo']);
 export const conditionFieldEnum = pgEnum('condition_field', ['cpc', 'ctr', 'roas', 'cpa', 'spend']);
 export const conditionOperatorEnum = pgEnum('condition_operator', ['gt', 'lt', 'eq']);
 export const ruleActionEnum = pgEnum('rule_action', ['pause_campaign', 'reduce_budget', 'notify', 'increase_budget']);
@@ -121,8 +121,6 @@ export const tenants = pgTable(
     slug: varchar('slug', { length: 255 }).notNull().unique(),
     codigo: varchar('codigo', { length: 20 }).unique(),
     businessContext: text('business_context'),
-    /** Tenant explicitly created by the public, passwordless trial acquisition flow. */
-    publicTrial: boolean('public_trial').notNull().default(false),
     partnerId: uuid('partner_id').references(() => adyPartners.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     // soft-delete: excluído some do admin e perde o acesso
@@ -145,7 +143,6 @@ export const users = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 255 }),
     email: varchar('email', { length: 255 }).notNull().unique(),
-    phone: varchar('phone', { length: 20 }),
     passwordHash: text('password_hash'),
     googleId: varchar('google_id', { length: 255 }),
     facebookId: varchar('facebook_id', { length: 255 }),
@@ -171,23 +168,38 @@ export const users = pgTable(
     emailTenantIdx: index('users_email_tenant_idx').on(table.email, table.tenantId),
     facebookIdIdx: index('users_facebook_id_idx').on(table.facebookId),
     partnerIdIdx: index('users_partner_id_idx').on(table.partnerId),
+    emailNormalizedUnique: uniqueIndex('users_email_lower_unique').on(sql`lower(${table.email})`),
   })
 );
 
-/** Hashed, single-use credentials for the public trial access email. */
-export const publicTrialAccessTokens = pgTable('public_trial_access_tokens', {
-  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  consumedAt: timestamp('consumed_at', { withTimezone: true }),
-  revokedAt: timestamp('revoked_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  userIdx: index('public_trial_access_tokens_user_idx').on(table.userId),
-  expiresIdx: index('public_trial_access_tokens_expires_idx').on(table.expiresAt),
-}));
+/** Identidade e origem das contas criadas pelo formulário público de trial. */
+export const publicTrialAccounts = pgTable(
+  'public_trial_accounts',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().unique().references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+    phone: varchar('phone', { length: 20 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({ userIdx: index('public_trial_accounts_user_idx').on(table.userId) }),
+);
+
+/** Tokens mágicos: somente o hash é persistido. */
+export const publicTrialMagicLinks = pgTable(
+  'public_trial_magic_links',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id').notNull().references(() => publicTrialAccounts.id, { onDelete: 'cascade' }),
+    tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({ accountIdx: index('public_trial_magic_links_account_idx').on(table.accountId) }),
+);
 
 // Meta connections table
 export const metaConnections = pgTable(
@@ -1320,6 +1332,7 @@ export const notifications = pgTable(
     type: varchar('type', { length: 32 }).notNull().default('general'),
     title: varchar('title', { length: 120 }).notNull(),
     body: varchar('body', { length: 500 }).notNull(),
+    actionUrl: varchar('action_url', { length: 255 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     readAt: timestamp('read_at', { withTimezone: true }),
     idempotencyKey: varchar('idempotency_key', { length: 128 }),

@@ -93,6 +93,7 @@ export const router = createBrowserRouter([
     path: '/reset-password/success',
     element: <ResetPasswordSuccessPage />,
   },
+  { path: '/trial/acesso', element: <TrialAccessPage /> },
   {
     path: '/onboarding/conectar-meta',
     element: <ConectarMetaPage />,

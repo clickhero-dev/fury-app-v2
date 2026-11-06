@@ -21,7 +21,8 @@ export class PublicTrialFlowService {
     if (!result.isPublicTrial) return { message: PUBLIC_TRIAL_ACCEPTED_MESSAGE };
     const token = createMagicLinkToken();
     const now = this.deps.now?.() ?? new Date();
-    await this.repository.issueToken(result.user.id, result.user.tenantId, hashMagicLinkToken(token), new Date(now.getTime() + 15 * 60 * 1000));
+    if (!result.accountId) return { message: PUBLIC_TRIAL_ACCEPTED_MESSAGE };
+    await this.repository.issueToken(result.accountId, hashMagicLinkToken(token), new Date(now.getTime() + 15 * 60 * 1000));
     await this.deps.sendAccessEmail(result.user.email, result.user.name || signup.name, `${this.deps.accessUrl}#token=${token}`);
     return { message: PUBLIC_TRIAL_ACCEPTED_MESSAGE };
   }

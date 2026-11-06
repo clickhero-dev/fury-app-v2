@@ -280,6 +280,20 @@ export interface GenerateCreativeResponse {
   videoMeta?: StudioVideoMeta | null;
 }
 
+export interface StudioVariationBatchResponse {
+  batchId: string;
+  assetId: string;
+  status: 'processing' | 'succeeded' | 'partial' | 'cancelled';
+  slots: Array<{
+    index: number;
+    status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+    assetId?: string;
+    imageUrl?: string;
+    errorCode?: string;
+    retryable?: boolean;
+  }>;
+}
+
 export type StudioVideoAspect = '9:16' | '16:9';
 
 export interface StudioVideoScene {

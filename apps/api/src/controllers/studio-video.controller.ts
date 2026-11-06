@@ -61,13 +61,13 @@ export class StudioVideoController {
 
   createJob = this.handle(async (req) => {
     const body = createJobSchema.parse(req.body);
-    return this.service.createJob(this.tenantId(req), body);
+    return this.service.createJob(this.tenantId(req), body, req.user!.userId);
   }, 202);
 
   adjust = this.handle(async (req) => {
     const assetId = z.string().uuid().parse(req.params.assetId);
     const { feedback } = adjustSchema.parse(req.body);
-    return this.service.adjustVideo(this.tenantId(req), assetId, feedback);
+    return this.service.adjustVideo(this.tenantId(req), assetId, feedback, req.user!.userId);
   }, 202);
 
   getJob = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

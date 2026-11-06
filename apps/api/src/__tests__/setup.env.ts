@@ -22,7 +22,7 @@ if (process.env.TEST_DATABASE_URL && !process.env.TEST_DATABASE_URL.includes('**
       priceCents: 0,
       interval: 'monthly',
       features: {},
-      limits: { creativesPerMonth: 5 },
+      limits: { creativesPerMonth: 7 },
       isActive: true,
     }).onConflictDoNothing();
   } catch {
