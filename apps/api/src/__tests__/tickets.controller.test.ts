@@ -40,6 +40,16 @@
  * Dado que o ClickUp criou a tarefa mas falhou ao anexar um arquivo
  * Quando a API devolve o erro ao painel
  * Então preserva apenas a URL segura da tarefa criada
+ *
+ * Cenário: consultar e alterar status
+ * Dado que o superadmin acessa a fila e confirma um destino válido
+ * Quando consulta ou altera o status
+ * Então recebe a opção dinâmica ou o ticket atualizado
+ *
+ * Cenário: conflito de status
+ * Dado que o ticket mudou no ClickUp
+ * Quando confirma o status antigo
+ * Então recebe conflito seguro
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TicketsController } from '../controllers/tickets.controller.js';
@@ -179,5 +189,48 @@ describe('TicketsController', () => {
     await new TicketsController(service as any).listAssignees({} as any, response, vi.fn());
 
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ data: [{ id: 101281834, name: 'Kaio Araújo', email: 'kaio@clickhero.com.br' }] }));
+  });
+
+  it('lista status dinâmicos', async () => {
+    const service = { listStatuses: vi.fn().mockResolvedValue([{ value: 'triagem', label: 'triagem', type: 'open' }]) };
+    const response = mockRes();
+    await new TicketsController(service as any).listStatuses({} as any, response, vi.fn());
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, data: [{ value: 'triagem', label: 'triagem', type: 'open' }] }));
+  });
+
+  it('valida e encaminha a alteração de status', async () => {
+    const service = { updateTicketStatus: vi.fn().mockResolvedValue({ id: 'task-1', status: 'review_spec' }) };
+    const response = mockRes();
+    await new TicketsController(service as any).updateStatus({ params: { ticketId: 'task-1' }, body: { expectedStatus: 'triagem', status: 'review_spec' } } as any, response, vi.fn());
+    expect(service.updateTicketStatus).toHaveBeenCalledWith('task-1', { expectedStatus: 'triagem', status: 'review_spec' });
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, data: { id: 'task-1', status: 'review_spec' } }));
+  });
+
+  it('rejeita status de destino igual ao atual antes do serviço', async () => {
+    const service = { updateTicketStatus: vi.fn() };
+    const next = vi.fn();
+    await new TicketsController(service as any).updateStatus({ params: { ticketId: 'task-1' }, body: { expectedStatus: 'triagem', status: 'triagem' } } as any, mockRes(), next);
+    expect(service.updateTicketStatus).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+  });
+
+  it('rejeita destino que não existe na lista sem mutar o ClickUp', async () => {
+    const client = {
+      listStatuses: vi.fn().mockResolvedValue([{ value: 'triagem', label: 'triagem', type: 'open' }]),
+      updateTicketStatus: vi.fn(),
+    };
+    const error = await new TicketService(client as any).updateTicketStatus('task-1', { expectedStatus: 'triagem', status: 'desconhecido' }).catch((reason) => reason);
+    expect(error).toMatchObject({ statusCode: 400, code: 'INVALID_TICKET_STATUS' });
+    expect(client.updateTicketStatus).not.toHaveBeenCalled();
+  });
+
+  it('converte ticket fora da lista em 404 sem expor detalhes do provedor', async () => {
+    const client = {
+      listStatuses: vi.fn().mockResolvedValue([{ value: 'triagem', label: 'triagem', type: 'open' }]),
+      updateTicketStatus: vi.fn().mockRejectedValue(new ClickUpTicketsError(404, 'CLICKUP_TASK_OUT_OF_SCOPE', 'lista privada=segredo')),
+    };
+    const error = await new TicketService(client as any).updateTicketStatus('task-1', { expectedStatus: 'pendente', status: 'triagem' }).catch((reason) => reason);
+    expect(error).toMatchObject({ statusCode: 404, code: 'TICKET_NOT_FOUND' });
+    expect(error.message).not.toContain('segredo');
   });
 });
