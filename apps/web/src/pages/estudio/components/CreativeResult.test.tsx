@@ -41,13 +41,13 @@ const GROUP_3_VERSIONS = {
   ],
 };
 
-function renderWithProviders(result: GenerateCreativeResponse = BASE_RESULT) {
+function renderWithProviders(result: GenerateCreativeResponse = BASE_RESULT, showVariationSuggestion = false) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
   return render(
-    <CreativeResult result={result} onBack={() => {}} onNewCreative={() => {}} />,
+    <CreativeResult result={result} onBack={() => {}} onNewCreative={() => {}} showVariationSuggestion={showVariationSuggestion} />,
     { wrapper },
   );
 }
@@ -229,5 +229,32 @@ describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
       expect(mockApiPost).toHaveBeenCalledWith('/studio/assets/v1/set-active');
     });
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+  });
+
+  it('inicia o lote de variações pelo contrato unificado', async () => {
+    const batchResponse = {
+      batchId: 'batch-1',
+      assetId: 'v1',
+      status: 'succeeded',
+      slots: [
+        { index: 0, status: 'succeeded', assetId: 'v2', imageUrl: 'https://example.com/v2.png' },
+        { index: 1, status: 'succeeded', assetId: 'v3', imageUrl: 'https://example.com/v3.png' },
+      ],
+    };
+    mockApiPost.mockImplementation((url: string) => {
+      if (url === '/studio/assets/v1/set-active') return Promise.resolve({ data: GROUP_3_VERSIONS });
+      if (url === '/studio/creative/variations') return Promise.resolve({ data: batchResponse });
+      return Promise.resolve({ data: {} });
+    });
+    vi.stubGlobal('crypto', { ...crypto, randomUUID: vi.fn(() => 'batch-1') });
+
+    const user = userEvent.setup();
+    renderWithProviders(BASE_RESULT, true);
+    await user.click(screen.getByRole('button', { name: /sim, gerar variações/i }));
+
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/studio/creative/variations', { batchId: 'batch-1', assetId: 'v1' }));
+    expect(await screen.findByRole('heading', { name: 'Variações geradas' })).toBeInTheDocument();
+    expect(screen.getByAltText('Variação 1 do criativo')).toBeInTheDocument();
+    vi.unstubAllGlobals();
   });
 });
