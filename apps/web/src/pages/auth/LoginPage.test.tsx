@@ -80,3 +80,7 @@ describe('BDD: LoginPage conta demo', () => {
     expect(await screen.findByText(/conta demo está temporariamente indisponível/i)).toBeInTheDocument();
   });
 });
+// @vitest-environment jsdom
+
+import '../../test/setup';
+

@@ -256,3 +256,7 @@ describe('BDD: Dashboard usa endpoints v2', () => {
   });
 
 });
+// @vitest-environment jsdom
+
+import '../../test/setup';
+
