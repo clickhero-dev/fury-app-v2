@@ -84,6 +84,9 @@ import { NotificationController } from './controllers/notification.controller.js
 import { emitToUser } from './lib/sse.js';
 import { BusinessContextService } from './services/core/business-context.service.js';
 import { BusinessContextController } from './controllers/business-context.controller.js';
+import { StudioVariationsService } from './services/studio/studio-variations.service.js';
+import { StudioVariationsController } from './controllers/studio-variations.controller.js';
+import { WorkflowJobRepository } from './repository/workflow-job.repository.js';
 
 /**
  * Composition root (DI) da API.
@@ -107,6 +110,13 @@ export const studioVideoService = new StudioVideoService({
   brand: (tenantId) => studioAiService.getBrandContext(tenantId),
 });
 export const studioService = new StudioService();
+export const studioVariationsService = new StudioVariationsService(
+  (tenantId) => new StudioRepository(tenantId),
+  (tenantId) => new WorkflowJobRepository(tenantId),
+  studioService,
+  studioAiService,
+);
+export const studioVariationsController = new StudioVariationsController(studioVariationsService);
 export const studioPublishingService = new StudioPublishingService();
 export const billingService = new BillingService();
 export const policyService = new PolicyService();
@@ -161,6 +171,7 @@ export const controllers = {
   studioAi: new StudioAiController(studioAiService),
   studioVideo: new StudioVideoController(studioVideoService),
   studio: new CreativeStudioController(studioService),
+  studioVariations: studioVariationsController,
   studioPublishing: new StudioPublishingController(studioPublishingService),
   billing: new BillingController(billingService),
   policy: new PolicyController(policyService),
