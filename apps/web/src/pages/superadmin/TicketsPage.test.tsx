@@ -186,6 +186,10 @@ describe('TicketsPage', () => {
     vi.useFakeTimers({ now: NOW, shouldAdvanceTime: true });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('fecha o modal e mostra snack de sucesso ao enviar ticket válido', async () => {
     mockPost.mockResolvedValue({ data: { data: { clickupTaskId: 'task-123', clickupTaskUrl: 'https://app.clickup.com/t/task-123' } } });
     render(<TicketsPage />);
