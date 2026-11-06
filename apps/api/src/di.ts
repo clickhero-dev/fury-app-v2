@@ -195,6 +195,7 @@ export const controllers = {
     metaSyncService,
     (tenantId: string) => new MetaSyncRepository(tenantId),
     enqueueMetaSyncTenantRun,
+    demoDashboardService,
   ),
   wppWebhook: new WppWebhookController(wppWebhookService),
   wppVerify: new WppVerificationController(wppVerificationService),

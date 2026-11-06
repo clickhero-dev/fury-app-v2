@@ -121,6 +121,8 @@ export const tenants = pgTable(
     slug: varchar('slug', { length: 255 }).notNull().unique(),
     codigo: varchar('codigo', { length: 20 }).unique(),
     businessContext: text('business_context'),
+    /** Tenant comercial isolado, servido exclusivamente por datasets determinísticos. */
+    isDemo: boolean('is_demo').notNull().default(false),
     partnerId: uuid('partner_id').references(() => adyPartners.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     // soft-delete: excluído some do admin e perde o acesso

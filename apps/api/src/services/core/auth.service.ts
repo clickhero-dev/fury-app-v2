@@ -186,9 +186,11 @@ export class AuthService {
   async demoLogin(): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
     const repo = this.repoFactory('');
     const tenant = await repo.findTenantBySlug(DEMO_TENANT_SLUG);
-    const user = tenant ? await this.repoFactory(tenant.id).findUserByTenant() : null;
-
-    if (!tenant || !user || !(await repo.isAccountActive(user.id))) {
+    if (!tenant || tenant.isDemo !== true) {
+      throw new AppError(503, 'DEMO_UNAVAILABLE', 'Conta demo indisponível');
+    }
+    const user = await this.repoFactory(tenant.id).findUserByTenant();
+    if (!user || !(await repo.isAccountActive(user.id))) {
       throw new AppError(503, 'DEMO_UNAVAILABLE', 'Conta demo indisponível');
     }
 

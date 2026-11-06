@@ -29,7 +29,7 @@ function responseRecorder() {
 
 describe('BDD: GET /v2/dashboard/demo', () => {
   it('Cenário: conta demo recebe dados determinísticos sem consultar provedores', async () => {
-    const findTenant = vi.fn().mockResolvedValue({ slug: 'fashion-demo' });
+    const findTenant = vi.fn().mockResolvedValue({ slug: 'fashion-demo', isDemo: true });
     const controller = new DemoDashboardController(
       new DemoDashboardService(() => ({ findTenant } as never)),
     );

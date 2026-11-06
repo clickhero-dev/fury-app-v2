@@ -6,7 +6,7 @@ import type { DemoDashboardController } from '../controllers/demo-dashboard.cont
  * Rotas v2 — dados Meta direto do banco com fallback stale (T005).
  * Montadas em /api/v2 com authMiddleware + tenantMiddleware (routes/index.ts).
  */
-export function createV2Router(controller: MetaSyncV2Controller, demoController: DemoDashboardController): Router {
+export function createV2Router(controller: MetaSyncV2Controller, demoController?: DemoDashboardController): Router {
   const router = Router();
 
   router.get('/campaigns', controller.getCampaigns);
@@ -19,7 +19,7 @@ export function createV2Router(controller: MetaSyncV2Controller, demoController:
   router.get('/metrics/daily', controller.getMetricsDaily);
   router.get('/metrics/goals-progress', controller.getGoalsProgress);
   router.get('/dashboard/instagram-insights', controller.getInstagramInsights);
-  router.get('/dashboard/demo', demoController.getDashboardDemo);
+  if (demoController) router.get('/dashboard/demo', demoController.getDashboardDemo);
 
   return router;
 }

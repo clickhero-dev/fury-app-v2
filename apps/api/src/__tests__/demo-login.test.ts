@@ -36,7 +36,7 @@ function makeService(repo: any) {
 describe('BDD: AuthService.demoLogin', () => {
   it('Cenário: visitante recebe uma sessão demo sem enviar credenciais', async () => {
     const repo = {
-      findTenantBySlug: vi.fn().mockResolvedValue({ id: 'demo-tenant', slug: 'fashion-demo' }),
+      findTenantBySlug: vi.fn().mockResolvedValue({ id: 'demo-tenant', slug: 'fashion-demo', isDemo: true }),
       findUserByTenant: vi.fn().mockResolvedValue(demoUser),
       isAccountActive: vi.fn().mockResolvedValue(true),
     };
@@ -51,6 +51,13 @@ describe('BDD: AuthService.demoLogin', () => {
   it('Cenário: conta demo indisponível não gera sessão', async () => {
     const repo = { findTenantBySlug: vi.fn().mockResolvedValue(null) };
 
+    await expect(makeService(repo).demoLogin()).rejects.toMatchObject(
+      new AppError(503, 'DEMO_UNAVAILABLE', 'Conta demo indisponível'),
+    );
+  });
+
+  it('Cenário: tenant com mesmo slug mas sem tipo demo não gera sessão', async () => {
+    const repo = { findTenantBySlug: vi.fn().mockResolvedValue({ id: 'real-tenant', slug: 'fashion-demo', isDemo: false }) };
     await expect(makeService(repo).demoLogin()).rejects.toMatchObject(
       new AppError(503, 'DEMO_UNAVAILABLE', 'Conta demo indisponível'),
     );
