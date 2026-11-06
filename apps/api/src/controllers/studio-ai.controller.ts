@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { readFile } from 'node:fs/promises';
 import { StudioAiService } from '../services/studio/studio-ai.service.js';
+import { VisualVariationService } from '../services/studio/visual-variation.service.js';
 import { IMAGE_MODELS, VIDEO_MODELS } from '../services/studio/studio-model-catalog.js';
 
 /**
@@ -41,9 +42,10 @@ const enhancePromptSchema = z.object({
   photo_kinds: z.array(z.enum(['produto', 'equipe'])).max(2).optional(),
 });
 const regenerateQuickSchema = z.object({ assetId: z.string().uuid(), feedback: z.string().min(3) });
+const variationSchema = z.object({ baseAssetId: z.string().uuid() });
 
 export class StudioAiController {
-  constructor(private service: StudioAiService) {}
+  constructor(private service: StudioAiService, private variations = new VisualVariationService(service)) {}
 
   private validationError(res: Response, error: unknown): boolean {
     if (error instanceof z.ZodError) {
@@ -113,5 +115,24 @@ export class StudioAiController {
       const data = await this.service.regenerateAd(tenantId, { assetId, feedback, mask });
       res.json(data);
     } catch (e) { next(e); }
+  };
+
+  createVisualVariationBatch = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const key = req.header('Idempotency-Key');
+      if (!key || !z.string().uuid().safeParse(key).success) { res.status(400).json({ error: 'Idempotency-Key UUID é obrigatório.' }); return; }
+      const body = variationSchema.parse(req.body); const tenantId = (req as any).tenant?.tenantId as string;
+      const { batch, reused } = await this.variations.create(tenantId, body.baseAssetId, key);
+      res.status(reused ? 200 : 202).json(batch);
+    } catch (e) { if (!this.validationError(res, e)) next(e); }
+  };
+  getVisualVariationBatch = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try { res.json(await this.variations.getBatch((req as any).tenant?.tenantId, req.params.batchId)); } catch (e) { next(e); }
+  };
+  cancelVisualVariationBatch = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try { const batch = await this.variations.cancel((req as any).tenant?.tenantId, req.params.batchId); res.status(['completed','partial','failed','cancelled'].includes(batch.status) ? 200 : 202).json(batch); } catch (e) { next(e); }
+  };
+  retryVisualVariationItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try { const index = z.coerce.number().int().min(0).max(9).parse(req.params.index); const batch = await this.variations.retry((req as any).tenant?.tenantId, req.params.batchId, index); res.status(202).json(batch); } catch (e) { if (!this.validationError(res, e)) next(e); }
   };
 }

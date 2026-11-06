@@ -161,6 +161,43 @@ export class StudioAiService {
     return { image: IMAGE_MODELS, video: VIDEO_MODELS };
   }
 
+  /**
+   * Geração interna para derivados. A URL de referência vem de um asset já
+   * resolvido pelo repositório tenant-scoped; por isso ela não passa pela
+   * validação pública de reference_image_urls (brand-kit only).
+   */
+  async generateVisualVariation(tenantId: string, baseAssetId: string): Promise<Record<string, any>> {
+    const repo = this.repo(tenantId);
+    const base = await repo.findAssetById(baseAssetId);
+    if (!base) throw new AppError(404, 'ASSET_NOT_FOUND', 'Criativo não encontrado.');
+    if (base.type !== 'image' || !base.url || base.complianceStatus === 'rejected') {
+      throw new AppError(400, 'INVALID_BASE_ASSET', 'Escolha uma imagem aprovada ou pendente da Galeria.');
+    }
+    await this.quota.consumeCreativeQuota(tenantId);
+    const startedAt = performance.now();
+    try {
+      const generated = await this.llm.generateImageWithMeta({
+        model: 'black-forest-labs/flux.2-klein-4b',
+        aspect_ratio: '1:1',
+        resolution: '2K',
+        referenceImageUrls: [base.url],
+        normalizePixels: true,
+        prompt: 'Crie uma variação visual SUTIL deste criativo. Preserve rigorosamente a mesma pessoa ou produto, identidade visual e informação essencial. Altere apenas fundo, paleta, elementos gráficos/ícones ou enquadramento de forma leve. Não invente texto, marca, produto ou pessoa. A imagem deve continuar sendo um anúncio profissional.',
+      });
+      const imageUrl = await uploadImageToStorage(generated.dataUrl);
+      const asset = await repo.createAsset({
+        tenantId, type: 'image', url: imageUrl, rootAssetId: base.rootAssetId ?? base.id,
+        complianceStatus: 'pending_compliance', costUsd: generated.costUsd,
+        processingTimeMs: Math.round(performance.now() - startedAt),
+        complianceNotes: JSON.stringify({ source: 'visual-variation', baseAssetId: base.id, model: 'black-forest-labs/flux.2-klein-4b' }),
+      });
+      return { creativeAssetId: asset.id, imageUrl, complianceStatus: asset.complianceStatus };
+    } catch (error) {
+      await this.quota.refundCreativeQuota(tenantId);
+      throw error;
+    }
+  }
+
   async getBrandContext(tenantId: string): Promise<{
     businessName: string;
     logoUrl?: string;
