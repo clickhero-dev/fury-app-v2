@@ -47,7 +47,7 @@ const router = Router();
 router.use(rbacMiddleware);
 
 router.use("/health", healthRoutes);
-router.use('/public', publicTrialRoutes);
+router.use("/public", publicTrialRoutes);
 router.use("/auth", authRoutes);
 router.use('/faqs', faqRoutes);
 router.use('/announcements', announcementRoutes);
