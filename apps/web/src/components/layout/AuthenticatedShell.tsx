@@ -57,7 +57,11 @@ export function AuthenticatedShell() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
-  const isDemoUser = false;
+  // O role vem da sessão assinada pelo backend; o frontend apenas espelha o
+  // modo para evitar gates de onboarding/Meta que não existem na demonstração.
+  const userRole = useAppSelector(selectUserRole);
+  const isDemoUser = userRole === 'demo';
+  const isPublicTrial = localStorage.getItem('fury-public-trial') === 'true';
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const isSubscriptionExempt =
@@ -96,7 +100,7 @@ export function AuthenticatedShell() {
     shouldCheckPolicy && (needsPolicy === true || (needsPolicy === null && policyResolved?.accepted === false));
 
   // ── Verificação de conexão Meta ──────
-  const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser;
+  const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser && !isPublicTrial;
   const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoUser;
 
   const { data: connections, isLoading, isFetched } = useQuery({
@@ -147,7 +151,6 @@ export function AuthenticatedShell() {
   } = useSubscription();
 
   const reduxPlanExpired = useAppSelector(selectIsPlanExpired);
-  const userRole = useAppSelector(selectUserRole);
   // Isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
   const isAdmin = userRole === 'admin' || canAccessAdmin(getStoredPlatformRole());
 

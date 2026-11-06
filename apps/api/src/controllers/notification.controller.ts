@@ -13,7 +13,7 @@ const decodeCursor = (raw: string | undefined) => {
   try { return cursorSchema.parse(JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'))); }
   catch { throw new AppError(400, 'INVALID_CURSOR', 'Cursor inválido'); }
 };
-const item = (row: any) => ({ id: row.id, type: row.type, title: row.title, body: row.body, createdAt: row.createdAt, readAt: row.readAt });
+const item = (row: any) => ({ id: row.id, type: row.type, title: row.title, body: row.body, actionUrl: row.actionUrl ?? null, createdAt: row.createdAt, readAt: row.readAt });
 
 export class NotificationController {
   constructor(private readonly service: NotificationService) {}

@@ -5,14 +5,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { CreativeResult } from './CreativeResult';
 import type { GenerateCreativeResponse } from '@/types/studio';
-import { variationDirections } from '@/lib/creative-variations';
 
+const mockApiGet = vi.hoisted(() => vi.fn() as any);
 const mockApiPost = vi.hoisted(() => vi.fn() as any);
 
 vi.mock('@/lib/api', () => ({
   default: {
     defaults: { baseURL: 'http://localhost/api' },
-    get: vi.fn(),
+    get: mockApiGet,
     post: mockApiPost,
     put: vi.fn(),
     patch: vi.fn(),
@@ -41,19 +41,20 @@ const GROUP_3_VERSIONS = {
   ],
 };
 
-function renderWithProviders(result: GenerateCreativeResponse = BASE_RESULT) {
+function renderWithProviders(result: GenerateCreativeResponse = BASE_RESULT, showVariationSuggestion = false) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
   return render(
-    <CreativeResult result={result} onBack={() => {}} onNewCreative={() => {}} />,
+    <CreativeResult result={result} onBack={() => {}} onNewCreative={() => {}} showVariationSuggestion={showVariationSuggestion} />,
     { wrapper },
   );
 }
 
 describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
   beforeEach(() => {
+    mockApiGet.mockReset();
     mockApiPost.mockReset();
     // jsdom não implementa canvas 2D de verdade — o componente usa um
     // <canvas> pra pintura de máscara (inpainting), pré-existente, sem
@@ -67,6 +68,32 @@ describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
       fillRect: vi.fn(),
       drawImage: vi.fn(),
     })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+  });
+
+  it('baixa o vídeo final pelo endpoint autorizado na tela de detalhes', async () => {
+    mockApiPost.mockResolvedValue({ data: { groupId: 'video-1', activeVersionId: 'video-1', archivedAt: null, versions: [] } });
+    mockApiGet.mockResolvedValue({
+      data: new Blob(['video-final'], { type: 'video/mp4' }),
+      headers: { 'content-disposition': 'attachment; filename="criativo-video-1.mp4"' },
+    });
+    vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:video'), revokeObjectURL: vi.fn() });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    renderWithProviders({
+      ...BASE_RESULT,
+      type: 'video',
+      assetId: 'video-1',
+      imageUrl: 'https://example.com/video.mp4',
+      videoUrl: 'https://example.com/video.mp4',
+    });
+
+    await user.click(await screen.findByRole('button', { name: /baixar vídeo/i }));
+
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/studio/assets/video-1/download', { responseType: 'blob' }));
+    expect(click).toHaveBeenCalledOnce();
+    click.mockRestore();
+    vi.unstubAllGlobals();
   });
 
   it('carrega o histórico ao montar (set-active na versão inicial) e mostra a numeração', async () => {
@@ -204,62 +231,30 @@ describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
   });
 
-  it('envia variações da criação rápida para o contrato regenerate-ad', async () => {
+  it('inicia o lote de variações pelo contrato unificado', async () => {
+    const batchResponse = {
+      batchId: 'batch-1',
+      assetId: 'v1',
+      status: 'succeeded',
+      slots: [
+        { index: 0, status: 'succeeded', assetId: 'v2', imageUrl: 'https://example.com/v2.png' },
+        { index: 1, status: 'succeeded', assetId: 'v3', imageUrl: 'https://example.com/v3.png' },
+      ],
+    };
     mockApiPost.mockImplementation((url: string) => {
       if (url === '/studio/assets/v1/set-active') return Promise.resolve({ data: GROUP_3_VERSIONS });
-      if (url === '/studio/ai/regenerate-ad') {
-        return Promise.resolve({ data: { ...BASE_RESULT, assetId: `variation-${mockApiPost.mock.calls.length}` } });
-      }
+      if (url === '/studio/creative/variations') return Promise.resolve({ data: batchResponse });
       return Promise.resolve({ data: {} });
     });
+    vi.stubGlobal('crypto', { ...crypto, randomUUID: vi.fn(() => 'batch-1') });
 
     const user = userEvent.setup();
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <CreativeResult result={BASE_RESULT} onBack={() => {}} onNewCreative={() => {}} showVariationSuggestion />
-      </QueryClientProvider>,
-    );
-
+    renderWithProviders(BASE_RESULT, true);
     await user.click(screen.getByRole('button', { name: /sim, gerar variações/i }));
 
-    await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledTimes(4);
-    });
-    expect(mockApiPost.mock.calls.filter(([url]: [string]) => url === '/studio/ai/regenerate-ad')).toHaveLength(3);
-    expect(mockApiPost.mock.calls.some(([url]: [string]) => url === '/studio/creative/regenerate')).toBe(false);
-  });
-
-  it('preserva as variações concluídas e repete somente a direção que falhou', async () => {
-    let firstFailure = true;
-    mockApiPost.mockImplementation((url: string, body?: { feedback?: string }) => {
-      if (url === '/studio/assets/v1/set-active') return Promise.resolve({ data: GROUP_3_VERSIONS });
-      if (url === '/studio/ai/regenerate-ad' && body?.feedback === variationDirections[1] && firstFailure) {
-        firstFailure = false;
-        return Promise.reject(new Error('provider timeout'));
-      }
-      if (url === '/studio/ai/regenerate-ad') {
-        return Promise.resolve({ data: { ...BASE_RESULT, assetId: `variation-${mockApiPost.mock.calls.length}` } });
-      }
-      return Promise.resolve({ data: {} });
-    });
-
-    const user = userEvent.setup();
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <CreativeResult result={BASE_RESULT} onBack={() => {}} onNewCreative={() => {}} showVariationSuggestion />
-      </QueryClientProvider>,
-    );
-
-    await user.click(screen.getByRole('button', { name: /sim, gerar variações/i }));
-    const partialStatus = await screen.findByRole('status');
-    expect(partialStatus).toHaveTextContent('2 variação(ões) gerada(s); 1 não pôde(ram) ser concluída(s).');
-
-    await user.click(screen.getByRole('button', { name: /tentar novamente/i }));
-    await waitFor(() => {
-      expect(mockApiPost.mock.calls.filter(([url]: [string]) => url === '/studio/ai/regenerate-ad')).toHaveLength(4);
-    });
-    expect(screen.queryByText(/não pôde\(ram\) ser concluída/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/studio/creative/variations', { batchId: 'batch-1', assetId: 'v1' }));
+    expect(await screen.findByRole('heading', { name: 'Variações geradas' })).toBeInTheDocument();
+    expect(screen.getByAltText('Variação 1 do criativo')).toBeInTheDocument();
+    vi.unstubAllGlobals();
   });
 });
