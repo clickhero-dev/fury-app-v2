@@ -17,17 +17,17 @@
  * Então a operação retorna não encontrado sem mutação
  */
 import { describe, expect, it, vi } from 'vitest';
+import { ClickUpTicketsError } from '../lib/clickup-tickets.client.js';
 import { TicketService } from '../services/tickets/ticket.service.js';
 
-const baseTicket = { id: 'task-1', status: 'triagem', statusType: 'custom', listId: 'list-1' };
-const statuses = [{ name: 'triagem', type: 'custom' }, { name: 'review_spec', type: 'custom' }, { name: 'concluído', type: 'closed' }];
+const statuses = [{ value: 'triagem', label: 'triagem', type: 'custom' }, { value: 'review_spec', label: 'review_spec', type: 'custom' }, { value: 'concluído', label: 'concluído', type: 'closed' }];
 
 function client(over: Record<string, unknown> = {}) {
   return {
     createTicket: vi.fn(), listTickets: vi.fn(), listMembers: vi.fn(),
-    listStatuses: vi.fn().mockResolvedValue(statuses), getTicket: vi.fn().mockResolvedValue(baseTicket),
-    updateTicketStatus: vi.fn().mockResolvedValue({ ...baseTicket, status: 'review_spec' }),
-    getConfiguredListId: vi.fn().mockReturnValue('list-1'), ...over,
+    listStatuses: vi.fn().mockResolvedValue(statuses),
+    updateTicketStatus: vi.fn().mockResolvedValue({ id: 'task-1', listId: 'list-1', status: 'review_spec', statusType: 'custom' }),
+    reviewTicket: vi.fn(), ...over,
   };
 }
 
@@ -36,26 +36,23 @@ describe('TicketService status', () => {
     const c = client();
     await expect(new TicketService(c as any).updateTicketStatus('task-1', { expectedStatus: 'triagem', status: 'review_spec' })).resolves.toMatchObject({ status: 'review_spec' });
     expect(c.listStatuses).toHaveBeenCalledOnce();
-    expect(c.getTicket).toHaveBeenCalledWith('task-1');
-    expect(c.updateTicketStatus).toHaveBeenCalledWith('task-1', 'review_spec');
+    expect(c.updateTicketStatus).toHaveBeenCalledWith('task-1', 'triagem', 'review_spec');
   });
 
-  it('não envia PUT quando o status exibido ficou obsoleto', async () => {
-    const c = client({ getTicket: vi.fn().mockResolvedValue({ ...baseTicket, status: 'implement' }) });
+  it('converte status obsoleto em conflito seguro', async () => {
+    const c = client({ updateTicketStatus: vi.fn().mockRejectedValue(new ClickUpTicketsError(409, 'CLICKUP_STATUS_CONFLICT', 'stale')) });
     await expect(new TicketService(c as any).updateTicketStatus('task-1', { expectedStatus: 'triagem', status: 'review_spec' })).rejects.toMatchObject({ statusCode: 409, code: 'TICKET_STATUS_CONFLICT' });
-    expect(c.updateTicketStatus).not.toHaveBeenCalled();
   });
 
   it('não altera uma tarefa de outra lista', async () => {
-    const c = client({ getTicket: vi.fn().mockResolvedValue({ ...baseTicket, listId: 'other-list' }) });
+    const c = client({ updateTicketStatus: vi.fn().mockRejectedValue(new ClickUpTicketsError(404, 'CLICKUP_TASK_OUT_OF_SCOPE', 'private')) });
     await expect(new TicketService(c as any).updateTicketStatus('task-1', { expectedStatus: 'triagem', status: 'review_spec' })).rejects.toMatchObject({ statusCode: 404, code: 'TICKET_NOT_FOUND' });
-    expect(c.updateTicketStatus).not.toHaveBeenCalled();
   });
 
   it('rejeita destino desconhecido ou igual sem ler a tarefa', async () => {
     const c = client();
     await expect(new TicketService(c as any).updateTicketStatus('task-1', { expectedStatus: 'triagem', status: 'desconhecido' })).rejects.toMatchObject({ statusCode: 400, code: 'INVALID_TICKET_STATUS' });
     await expect(new TicketService(c as any).updateTicketStatus('task-1', { expectedStatus: 'triagem', status: 'triagem' })).rejects.toMatchObject({ statusCode: 400, code: 'INVALID_TICKET_STATUS' });
-    expect(c.getTicket).not.toHaveBeenCalled();
+    expect(c.updateTicketStatus).not.toHaveBeenCalled();
   });
 });
