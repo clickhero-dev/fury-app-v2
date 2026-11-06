@@ -79,7 +79,7 @@ vi.mock('../services/meta/meta.service.js', () => ({
 }));
 
 // ─── Imports ──────────────────────────────────────────────────────────────
-import { createCampaign, createCampaignFromWizard } from '../services/campaigns/campaigns.service.js';
+import { createCampaign, createCampaignFromWizard, resolveMessagingDestinationType } from '../services/campaigns/campaigns.service.js';
 
 // O wizard baixa o criativo via fetch real (downloadImage) quando usa
 // creativeUploadUrl. Stub global p/ manter o teste offline (como o restante).
@@ -179,6 +179,24 @@ describe('createCampaign', () => {
     await expect(createCampaign(args)).rejects.toMatchObject({
       statusCode: 400, code: 'INVALID_PARAMETER',
     });
+  });
+});
+
+describe('resolveMessagingDestinationType', () => {
+  it.each([
+    [['whatsapp'], 'WHATSAPP'],
+    [['instagram_direct'], 'INSTAGRAM_DIRECT'],
+    [['messenger'], 'MESSENGER'],
+    [['instagram_direct', 'messenger'], 'MESSAGING_INSTAGRAM_DIRECT_MESSENGER'],
+    [['instagram_direct', 'whatsapp'], 'MESSAGING_INSTAGRAM_DIRECT_WHATSAPP'],
+    [['messenger', 'whatsapp'], 'MESSAGING_MESSENGER_WHATSAPP'],
+    [['instagram_direct', 'messenger', 'whatsapp'], 'MESSAGING_INSTAGRAM_DIRECT_MESSENGER_WHATSAPP'],
+  ] as const)('mapeia %j para %s', (destinations, expected) => {
+    expect(resolveMessagingDestinationType([...destinations])).toBe(expected);
+  });
+
+  it('não envia destino quando nenhum canal foi selecionado', () => {
+    expect(resolveMessagingDestinationType([])).toBeUndefined();
   });
 });
 

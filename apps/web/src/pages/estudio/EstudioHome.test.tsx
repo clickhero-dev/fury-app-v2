@@ -498,7 +498,7 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     expect(screen.getByText(/limite de 2 fotos na arte/i)).toBeInTheDocument();
   });
 
-  it('mostra cronômetro (Xs) desde o clique, mesmo durante o enhance-prompt', async () => {
+  it('exibe progresso visual desde o clique, mesmo durante o enhance-prompt', async () => {
     vi.useFakeTimers();
     mockApiPost.mockImplementation(() => new Promise(() => {})); // enhance nunca resolve
     renderWithProviders();
@@ -510,12 +510,12 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
 
     act(() => { vi.advanceTimersByTime(3000); });
 
-    expect(screen.getByText(/\(3s\)/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Progresso estimado da geração da imagem' })).toBeInTheDocument();
   });
 
-  it('mostra cronômetro (Xs) na tela de loading enquanto gera', async () => {
+  it('exibe progresso visual na tela de loading enquanto gera', async () => {
     vi.useFakeTimers();
-    // enhance-prompt resolve; generate-image fica pendente (cronômetro ativo)
+    // enhance-prompt resolve; generate-image fica pendente (progresso ativo)
     mockApiPost.mockImplementation((url: string) =>
       url.includes('/enhance-prompt')
         ? Promise.resolve({ data: { enhancedPrompt: 'prompt melhorado', brand: {} } })
@@ -528,12 +528,12 @@ describe('EstudioHome — seletor de modelos na criação rápida', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /gerar imagem/i }));
 
-    // flush microtasks: enhance → mutate → onMutate (startedAt)
+    // flush microtasks: enhance → mutate → onMutate (progresso iniciado)
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
     act(() => { vi.advanceTimersByTime(3000); });
 
-    expect(screen.getByText(/\(3s\)/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Progresso estimado da geração da imagem' })).toBeInTheDocument();
   });
 
   it('não exibe tempo de processamento nem custo na tela de resultado', async () => {

@@ -63,6 +63,10 @@ export function AuthenticatedShell() {
   // A flag antiga só mantém compatibilidade com sessões já abertas; APIs e
   // datasets demo continuam protegidos pela identidade persistida no backend.
   const isDemoUser = storedUser.type === 'demo' || localStorage.getItem('ady-demo-session') === 'true';
+  // O role vem da sessão assinada pelo backend; o frontend apenas espelha o
+  // modo para evitar gates de onboarding/Meta que não existem na demonstração.
+  const userRole = useAppSelector(selectUserRole);
+  const isDemoSession = userRole === 'demo' || isDemoUser;
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const isSubscriptionExempt =
@@ -74,7 +78,7 @@ export function AuthenticatedShell() {
   // /policy/current uma única vez para decidir (sem loop: /politica é isenta).
   const isPolicyRoute = location.pathname.startsWith('/politica');
   const isPolicyExempt =
-    isPolicyRoute || POLICY_EXEMPT.some((p) => location.pathname.startsWith(p)) || isOnboarding || isDemoUser;
+    isPolicyRoute || POLICY_EXEMPT.some((p) => location.pathname.startsWith(p)) || isOnboarding || isDemoSession;
   const needsPolicy = useAppSelector(selectNeedsPolicyAcceptance);
   const { isBlocked } = useBlockedViews();
   const viewKey = viewKeyForPath(location.pathname);
@@ -101,8 +105,8 @@ export function AuthenticatedShell() {
     shouldCheckPolicy && (needsPolicy === true || (needsPolicy === null && policyResolved?.accepted === false));
 
   // ── Verificação de conexão Meta ──────
-  const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser;
-  const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoUser;
+  const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoSession;
+  const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoSession;
 
   const { data: connections, isLoading, isFetched } = useQuery({
     queryKey: ['meta-connections'],
@@ -152,7 +156,6 @@ export function AuthenticatedShell() {
   } = useSubscription();
 
   const reduxPlanExpired = useAppSelector(selectIsPlanExpired);
-  const userRole = useAppSelector(selectUserRole);
   // Isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
   const isAdmin = userRole === 'admin' || canAccessAdmin(getStoredPlatformRole());
 

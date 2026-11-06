@@ -1,19 +1,23 @@
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { db } from './client.js';
-import { tenants, users, furyConfig } from './schema.js';
+import { tenants, users, furyConfig, plans, subscriptions } from './schema.js';
 
 async function createDemoUser() {
   console.log('🌱 Criando usuário demo...');
 
   try {
-    const email = process.env.DEMO_EMAIL || 'dev.fashion@fury.test';
+    const email = process.env.DEMO_EMAIL || 'demo@fury.test';
     const password = process.env.DEMO_PASSWORD || 'Dev@12345';
 
     // Check existing
     const existing = await db.query.users.findFirst({
       where: eq(users.email, email),
     });
+
+    if (existing && existing.role !== 'demo') {
+      throw new Error(`O e-mail ${email} já pertence a uma conta não-demo; escolha DEMO_EMAIL exclusivo.`);
+    }
 
     if (existing) {
       console.log(`✅ Usuário demo já existe: ${existing.email}`);
@@ -40,7 +44,8 @@ async function createDemoUser() {
         tenantId: tenant.id,
         email,
         passwordHash,
-        role: 'owner',
+        role: 'demo',
+        type: 'demo',
         name: 'Fashion Demo',
       })
       .returning();
@@ -54,6 +59,25 @@ async function createDemoUser() {
       targetCpa: '50.00',
       targetCtr: '3.00',
       targetBudgetUtilization: '80.00',
+    });
+
+    // Plano próprio da demonstração: ativo, sem cobrança e sem expiração.
+    let demoPlan = await db.query.plans.findFirst({ where: eq(plans.name, 'Demo') });
+    if (!demoPlan) {
+      [demoPlan] = await db.insert(plans).values({
+        name: 'Demo',
+        priceCents: 0,
+        interval: 'monthly',
+        features: { demo: true },
+        limits: {},
+        isActive: true,
+      }).returning();
+    }
+    await db.insert(subscriptions).values({
+      tenantId: tenant.id,
+      planId: demoPlan.id,
+      status: 'active',
+      isNonExpirable: true,
     });
 
     console.log('✅ Config FURY criada');

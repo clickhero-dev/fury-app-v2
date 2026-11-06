@@ -162,8 +162,16 @@ const STEPS: MigrationStep[] = [
   { tag: '0051_ady_rbac_partners' },
   { tag: '0052_soft_delete_tenants_users' },
   { tag: '0053_notifications' },
+  { tag: '0056_notification_action_url' },
   { tag: '0054_subscription_renewal_events' },
   { tag: '0055_trial_plan_technical_key' },
+  {
+    tag: '0056_add_demo_role',
+    afterHook: async (client) => {
+      await client.unsafe(`ALTER TYPE "user_role" ADD VALUE IF NOT EXISTS 'demo'`);
+      console.log('    + added demo to user_role');
+    },
+  },
   { tag: '0056_demo_tenant' },
 ];
 

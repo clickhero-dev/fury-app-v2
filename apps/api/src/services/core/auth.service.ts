@@ -195,7 +195,7 @@ export class AuthService {
       throw new AppError(503, 'DEMO_UNAVAILABLE', 'Conta demo indisponível');
     }
 
-    const accessToken = this.deps.jwt.generateAccessToken({ userId: user.id, tenantId: user.tenantId, email: user.email, role: user.role });
+    const accessToken = this.deps.jwt.generateAccessToken({ userId: user.id, tenantId: user.tenantId, email: user.email, role: 'demo' });
     const refreshToken = this.deps.jwt.generateRefreshToken(user.id);
     await storeRefreshTokenHash(user.id, refreshToken);
     return { user: userToDTO(user), tokens: { accessToken, refreshToken } };

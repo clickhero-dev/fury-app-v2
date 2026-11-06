@@ -11,7 +11,7 @@ SELECT 'Fashion Demo', 'fashion-demo', true
 WHERE NOT EXISTS (SELECT 1 FROM "tenants" WHERE "slug" = 'fashion-demo');
 
 INSERT INTO "users" ("tenant_id", "name", "email", "role", "user_type")
-SELECT t.id, 'Fashion Demo', 'demo@ady.local', 'owner', 'demo'
+SELECT t.id, 'Fashion Demo', 'demo@ady.local', 'demo', 'demo'
 FROM "tenants" t
 WHERE t.slug = 'fashion-demo'
   AND t.is_demo = true
@@ -19,6 +19,11 @@ WHERE t.slug = 'fashion-demo'
 
 UPDATE "users" u
 SET "user_type" = 'demo'
+FROM "tenants" t
+WHERE u."tenant_id" = t."id" AND t."slug" = 'fashion-demo' AND t."is_demo" = true;
+
+UPDATE "users" u
+SET "role" = 'demo'
 FROM "tenants" t
 WHERE u."tenant_id" = t."id" AND t."slug" = 'fashion-demo' AND t."is_demo" = true;
 

@@ -364,6 +364,16 @@ export function EstudioHome() {
     setView('result');
   };
 
+  const assetParam = searchParams.get('assetId');
+  useEffect(() => {
+    if (!assetParam || !assetList.length) return;
+    const asset = assetList.find((item) => item.id === assetParam);
+    if (asset) handleViewDetails(asset);
+    const next = new URLSearchParams(searchParams);
+    next.delete('assetId');
+    setSearchParams(next, { replace: true });
+  }, [assetParam, assetList, searchParams, setSearchParams]);
+
   const handleTrackVideo = (jobId: string) => {
     setVideoJobId(jobId);
     setView('video-progress');

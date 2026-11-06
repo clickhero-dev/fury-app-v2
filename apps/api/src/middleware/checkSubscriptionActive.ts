@@ -15,7 +15,7 @@ export function checkSubscriptionActive(
       // - Admin: Tenant admin role can manage tenant even if plan is expired
       //   (needed to renew subscription, handle billing, etc)
       // Only 'member' and 'owner' roles are subject to subscription verification
-      if (req.user?.role === 'admin') return next();
+      if (req.user?.role === 'demo' || req.user?.role === 'admin') return next();
       if (req.user?.userId && req.user.role !== 'mock') {
         const platformRole = await rbacService.getPlatformRole(req.user.userId);
         if (platformRole === 'super_admin' || platformRole === 'admin_partner') return next();
