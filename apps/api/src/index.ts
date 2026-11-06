@@ -63,6 +63,9 @@ app.use(cors({
   credentials: true,
 }));
 
+// This endpoint verifies an HMAC over the exact incoming bytes. It must be
+// registered before the general JSON parser (which discards byte fidelity).
+app.use('/api/public/trial/signup', express.raw({ type: 'application/json', limit: '4kb' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(loggerMiddleware);

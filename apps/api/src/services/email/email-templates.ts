@@ -201,6 +201,16 @@ export function welcomeEmailTemplate(name: string): string {
   return getBaseTemplate(content);
 }
 
+export function publicTrialAccessEmailTemplate(name: string, accessUrl: string): string {
+  const content = `
+    ${eyebrow('Seu acesso ao Ady')}
+    ${bodyText(`Olá, <strong style="color: ${TEXT};">${name}</strong>! Seu teste já está pronto para explorar o Estúdio.`)}
+    ${ctaButton(accessUrl, 'Entrar no Ady')}
+    ${bodyText('Este link é pessoal, pode ser usado uma única vez e expira em 15 minutos.', 'center')}
+  `;
+  return getBaseTemplate(content);
+}
+
 export function passwordResetConfirmationTemplate(): string {
   const loginUrl = process.env.APP_URL ? `${process.env.APP_URL}/login` : 'https://app.clickhero.com/login';
 

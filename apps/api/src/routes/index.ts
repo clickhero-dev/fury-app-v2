@@ -1,6 +1,7 @@
 import { Router } from "express";
 import healthRoutes from "./health.js";
 import authRoutes from "./auth.routes.js";
+import publicTrialRoutes from './public-trial.routes.js';
 import metaRoutes from "./meta.routes.js";
 import googleRoutes from "./google.routes.js";
 import metricsRoutes from "./metrics.routes.js";
@@ -47,6 +48,7 @@ router.use(rbacMiddleware);
 
 router.use("/health", healthRoutes);
 router.use("/auth", authRoutes);
+router.use('/public/trial', publicTrialRoutes);
 router.use('/faqs', faqRoutes);
 router.use('/announcements', announcementRoutes);
 router.use('/notifications', notificationRoutes);

@@ -8,6 +8,7 @@ import {
   gmbLinkedEmailTemplate,
   gmbUnlinkedEmailTemplate,
   campaignPublishedEmailTemplate,
+  publicTrialAccessEmailTemplate,
   gmbProfileVerifiedEmailTemplate,
 } from './email-templates.js';
 
@@ -88,6 +89,10 @@ export class EmailService {
       subject: 'Bem-vindo ao Ady!',
       html: welcomeEmailTemplate(name),
     });
+  }
+
+  sendPublicTrialAccessEmail(to: string, name: string, accessUrl: string): Promise<void> {
+    return this.sendEmail({ to, subject: 'Seu acesso ao Ady', html: publicTrialAccessEmailTemplate(name, accessUrl) });
   }
 
   sendPasswordResetConfirmation(to: string): Promise<void> {

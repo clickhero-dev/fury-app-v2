@@ -5,6 +5,7 @@ import { RegisterFormPage } from './pages/auth/RegisterFormPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
 import { ResetPasswordSuccessPage } from './pages/auth/ResetPasswordSuccessPage';
+import { TrialAccessPage } from './pages/auth/TrialAccessPage';
 import { LandingPage } from './pages/landing/LandingPage';
 import { ConectarMetaPage } from './pages/onboarding/ConectarMetaPage';
 import { MetaAuthorizePage } from './pages/onboarding/MetaAuthorizePage';
@@ -71,6 +72,7 @@ export const router = createBrowserRouter([
     path: '/login',
     element: <LoginPage />,
   },
+  { path: '/trial/acesso', element: <TrialAccessPage /> },
   {
     path: '/cadastro',
     element: <RegisterPage />,

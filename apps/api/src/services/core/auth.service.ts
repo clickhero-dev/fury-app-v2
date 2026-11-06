@@ -181,6 +181,15 @@ export class AuthService {
     return { user: userToDTO(user), tokens: { accessToken, refreshToken } };
   }
 
+  /** Issues the normal JWT/refresh session after a separately authenticated flow (e.g. one-time access link). */
+  async issueSessionForUser(user: any): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
+    if (!(await this.repo('').isAccountActive(user.id))) throw new AppError(401, 'INVALID_ACCESS_LINK', 'Link inválido ou expirado.');
+    const accessToken = this.deps.jwt.generateAccessToken({ userId: user.id, tenantId: user.tenantId, email: user.email, role: user.role });
+    const refreshToken = this.deps.jwt.generateRefreshToken(user.id);
+    await storeRefreshTokenHash(user.id, refreshToken);
+    return { user: userToDTO(user), tokens: { accessToken, refreshToken } };
+  }
+
   async refresh(data: { refreshToken: string }): Promise<{ tokens: { accessToken: string; refreshToken: string } }> {
     const t0 = Date.now();
     const payload = this.deps.jwt.verifyRefreshToken(data.refreshToken);

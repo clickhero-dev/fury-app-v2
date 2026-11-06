@@ -6,6 +6,7 @@ import { getComplianceQueue } from '../../lib/queue.js';
 import { openrouterService } from '../llms/openrouter.service.js';
 import { enhancePromptForImage } from '../llms/prompt-enhancer.js';
 import { StudioRepository } from '../../repository/studio.repository.js';
+import { consumeCreativeQuota, refundCreativeQuota } from './creative-quota.service.js';
 
 export type StudioImageGenerationResult = {
   creativeAssetId: string;
@@ -205,11 +206,15 @@ export async function generateImage(prompt: string, tenantId: string, publicBase
     throw new AppError(500, 'PUBLIC_BASE_URL_MISSING', 'PUBLIC_BASE_URL nao configurada.');
   }
 
-  return persistGeneratedImage({
-    tenantId,
-    prompt: normalizedPrompt,
-    publicBaseUrl,
-  });
+  // This legacy Studio endpoint bypassed the quota service. Reserve before
+  // calling the provider so the eighth public-trial generation never starts.
+  await consumeCreativeQuota(tenantId);
+  try {
+    return await persistGeneratedImage({ tenantId, prompt: normalizedPrompt, publicBaseUrl });
+  } catch (error) {
+    await refundCreativeQuota(tenantId);
+    throw error;
+  }
 }
 
 /**

@@ -31,6 +31,10 @@ import { AutomationController } from './controllers/automation.controller.js';
 import { AuthService } from './services/core/auth.service.js';
 import { SocialAuthService } from './services/core/social-auth.service.js';
 import { AuthController } from './controllers/auth.controller.js';
+import { PublicTrialController } from './controllers/public-trial.controller.js';
+import { PublicTrialRepository } from './repository/public-trial.repository.js';
+import { PublicTrialFlowService } from './services/billing/public-trial-flow.service.js';
+import { emailService } from './services/email/email.service.js';
 import { UazapiClient } from './lib/uazapi-client.js';
 import { WppWebhookRepository } from './repository/wpp-webhook.repository.js';
 import { WppVerificationRepository } from './repository/wpp-verification.repository.js';
@@ -114,6 +118,11 @@ export const observabilityService = new ObservabilityService();
 export const formsService = new FormsService();
 export const automationService = new AutomationService();
 export const authService = new AuthService();
+export const publicTrialFlowService = new PublicTrialFlowService(new PublicTrialRepository(), {
+  issueSession: (user) => authService.issueSessionForUser(user),
+  sendAccessEmail: (to, name, url) => emailService.sendPublicTrialAccessEmail(to, name, url),
+  accessUrl: `${process.env.APP_URL || 'https://app.clickhero.com'}/trial/acesso`,
+});
 export const businessContextService = new BusinessContextService();
 export const businessContextController = new BusinessContextController(businessContextService);
 export const socialAuthService = new SocialAuthService();
@@ -168,6 +177,7 @@ export const controllers = {
   forms: new FormsController(formsService),
   metrics: new MetricsController(metricsService),
   auth: new AuthController(authService, socialAuthService, policyService),
+  publicTrial: new PublicTrialController(publicTrialFlowService),
   businessContext: businessContextController,
   automation: new AutomationController(automationService),
   google: new GoogleController(googleService),
