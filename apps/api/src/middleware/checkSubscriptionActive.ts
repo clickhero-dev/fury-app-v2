@@ -32,7 +32,7 @@ export function checkSubscriptionActive(
 
       // A conta demo é um plano interno sem ciclo comercial. A exceção vem
       // antes dos status/datas para não depender de cobrança ou expiração.
-      if (sub.isNonExpirable) return next();
+      if (req.user?.role === 'demo' && sub.isNonExpirable) return next();
 
       if (sub.status === 'cancelled' || sub.status === 'inactive') {
         return next(new AppError(403, 'SUBSCRIPTION_EXPIRED', 'Sua assinatura está vencida. Entre em contato com o suporte.'));
