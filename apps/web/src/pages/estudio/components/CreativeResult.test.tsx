@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { CreativeResult } from './CreativeResult';
 import type { GenerateCreativeResponse } from '@/types/studio';
+import { variationDirections } from '@/lib/creative-variations';
 
 const mockApiPost = vi.hoisted(() => vi.fn() as any);
 
@@ -201,5 +202,64 @@ describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
       expect(mockApiPost).toHaveBeenCalledWith('/studio/assets/v1/set-active');
     });
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+  });
+
+  it('envia variações da criação rápida para o contrato regenerate-ad', async () => {
+    mockApiPost.mockImplementation((url: string) => {
+      if (url === '/studio/assets/v1/set-active') return Promise.resolve({ data: GROUP_3_VERSIONS });
+      if (url === '/studio/ai/regenerate-ad') {
+        return Promise.resolve({ data: { ...BASE_RESULT, assetId: `variation-${mockApiPost.mock.calls.length}` } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <CreativeResult result={BASE_RESULT} onBack={() => {}} onNewCreative={() => {}} showVariationSuggestion />
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: /sim, gerar variações/i }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledTimes(4);
+    });
+    expect(mockApiPost.mock.calls.filter(([url]: [string]) => url === '/studio/ai/regenerate-ad')).toHaveLength(3);
+    expect(mockApiPost.mock.calls.some(([url]: [string]) => url === '/studio/creative/regenerate')).toBe(false);
+  });
+
+  it('preserva as variações concluídas e repete somente a direção que falhou', async () => {
+    let firstFailure = true;
+    mockApiPost.mockImplementation((url: string, body?: { feedback?: string }) => {
+      if (url === '/studio/assets/v1/set-active') return Promise.resolve({ data: GROUP_3_VERSIONS });
+      if (url === '/studio/ai/regenerate-ad' && body?.feedback === variationDirections[1] && firstFailure) {
+        firstFailure = false;
+        return Promise.reject(new Error('provider timeout'));
+      }
+      if (url === '/studio/ai/regenerate-ad') {
+        return Promise.resolve({ data: { ...BASE_RESULT, assetId: `variation-${mockApiPost.mock.calls.length}` } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <CreativeResult result={BASE_RESULT} onBack={() => {}} onNewCreative={() => {}} showVariationSuggestion />
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: /sim, gerar variações/i }));
+    const partialStatus = await screen.findByRole('status');
+    expect(partialStatus).toHaveTextContent('2 variação(ões) gerada(s); 1 não pôde(ram) ser concluída(s).');
+
+    await user.click(screen.getByRole('button', { name: /tentar novamente/i }));
+    await waitFor(() => {
+      expect(mockApiPost.mock.calls.filter(([url]: [string]) => url === '/studio/ai/regenerate-ad')).toHaveLength(4);
+    });
+    expect(screen.queryByText(/não pôde\(ram\) ser concluída/i)).not.toBeInTheDocument();
   });
 });

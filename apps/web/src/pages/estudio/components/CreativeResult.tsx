@@ -47,6 +47,8 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
   const [currentResult, setCurrentResult] = useState(result);
   const [showVariationPrompt, setShowVariationPrompt] = useState(showVariationSuggestion);
   const [variations, setVariations] = useState<GenerateCreativeResponse[]>([]);
+  const [variationFailures, setVariationFailures] = useState<string[]>([]);
+  const variationAbortRef = useRef<AbortController | null>(null);
   const [feedback, setFeedback] = useState('');
   const [publishFeedback, setPublishFeedback] = useState<StudioPublishResponse | null>(null);
 
@@ -206,26 +208,46 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
   });
 
   const variationsMutation = useMutation({
-    mutationFn: async (assetId: string) => {
-      const responses = await Promise.allSettled(
-        variationDirections.map(async (feedback) => {
-          const res = await api.post<GenerateCreativeResponse>('/studio/creative/regenerate', { assetId, feedback });
-          return res.data;
-        })
-      );
-      const generated = responses.flatMap((response) => response.status === 'fulfilled' ? [response.value] : []);
+    mutationFn: async ({ assetId, feedbacks }: { assetId: string; feedbacks: readonly string[] }) => {
+      const controller = new AbortController();
+      variationAbortRef.current = controller;
+      const endpoint = isQuickCreate ? '/studio/ai/regenerate-ad' : '/studio/creative/regenerate';
+      const generated: GenerateCreativeResponse[] = [];
+      const failures: string[] = [];
 
-      if (generated.length === 0) {
-        throw new Error('Não foi possível gerar variações.');
+      // Processa uma direção por vez para não concorrer pela mesma quota nem
+      // provocar três jobs simultâneos para o mesmo criativo.
+      for (const feedback of feedbacks) {
+        try {
+          const res = await api.post<GenerateCreativeResponse>(endpoint, { assetId, feedback }, { signal: controller.signal });
+          generated.push(res.data);
+        } catch (error) {
+          if (controller.signal.aborted) throw error;
+          failures.push(feedback);
+        }
       }
 
-      return generated;
+      if (generated.length === 0 && failures.length > 0) throw new Error('VARIATIONS_FAILED');
+      return { generated, failures };
     },
     onSuccess: (data) => {
-      setVariations(data);
+      setVariations((current) => [...current, ...data.generated.filter((item) => !current.some((saved) => saved.assetId === item.assetId))]);
+      setVariationFailures(data.failures);
       void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
     },
+    onSettled: () => { variationAbortRef.current = null; },
   });
+
+  const startVariations = (feedbacks: readonly string[] = variationDirections) => {
+    setVariationFailures([]);
+    variationsMutation.mutate({ assetId: currentResult.assetId, feedbacks });
+  };
+
+  const cancelVariations = () => {
+    variationAbortRef.current?.abort();
+    variationAbortRef.current = null;
+    variationsMutation.reset();
+  };
 
   const handleSaveToLibrary = () => {
     void queryClient.invalidateQueries({ queryKey: ['studio/assets'] });
@@ -567,7 +589,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
                 size="sm"
                 onClick={() => {
                   setShowVariationPrompt(false);
-                  variationsMutation.mutate(currentResult.assetId);
+                  startVariations();
                 }}
                 disabled={variationsMutation.isPending}
                 className="bg-[#E8631A] hover:bg-[#D45714] text-white"
@@ -586,6 +608,7 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
         <div className="flex items-center gap-3 rounded-2xl border border-[#E6E8EC] bg-[#FCFCFD] p-4 text-sm text-[#667085]" role="status">
           <Loader2 className="h-4 w-4 animate-spin text-[#E8631A]" />
           Gerando variações do seu criativo...
+          <Button size="sm" variant="outline" onClick={cancelVariations}>Cancelar</Button>
         </div>
       )}
 
@@ -593,6 +616,14 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
         <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <AlertCircle className="h-4 w-4" />
           Não foi possível gerar as variações. Tente novamente mais tarde.
+          <Button size="sm" variant="outline" onClick={() => startVariations(variationDirections)}>Tentar novamente</Button>
+        </div>
+      )}
+
+      {variationFailures.length > 0 && !variationsMutation.isPending && (
+        <div className="flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800" role="status">
+          {variations.length} variação(ões) gerada(s); {variationFailures.length} não pôde(ram) ser concluída(s).
+          <Button size="sm" variant="outline" onClick={() => startVariations(variationFailures)}>Tentar novamente</Button>
         </div>
       )}
 
