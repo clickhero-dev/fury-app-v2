@@ -40,7 +40,7 @@ vi.mock('../../lib/posthog', () => ({ captureEvent: vi.fn() }));
 
 import { AuthenticatedShell } from './AuthenticatedShell';
 
-function makeStore(policy: AuthState['policy'], withToken = true) {
+function makeStore(policy: AuthState['policy'], withToken = true, role = 'owner') {
   return configureStore({
     reducer: { auth: authReducer as Reducer<AuthState> },
     preloadedState: {
@@ -49,7 +49,7 @@ function makeStore(policy: AuthState['policy'], withToken = true) {
         refreshToken: withToken ? 'ref' : null,
         name: 'Ana',
         email: 'a@b.com',
-        role: 'owner',
+        role,
         tenantId: 't1',
         metaId: null,
         plan: 'Pro',
@@ -61,11 +61,11 @@ function makeStore(policy: AuthState['policy'], withToken = true) {
   });
 }
 
-function renderShell(policy: AuthState['policy']) {
+function renderShell(policy: AuthState['policy'], role = 'owner') {
   // O shell lê o token do localStorage (não do Redux) — seed obrigatório.
   localStorage.setItem('token', 'tok');
   localStorage.setItem('ady-meta-connected', 'true');
-  const store = makeStore(policy);
+  const store = makeStore(policy, true, role);
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -119,6 +119,13 @@ describe('AuthenticatedShell — gate de política de uso', () => {
     expect(await screen.findByTestId('sidebar-root')).not.toBeNull();
     expect(screen.queryByTestId('politica-page')).toBeNull();
     expect(policyCalls()).toHaveLength(0);
+  });
+
+  it('Cenário: usuário demo acessa o dashboard sem consultar conexão Meta', async () => {
+    renderShell({ currentVersion: '1.0', accepted: true }, 'demo');
+
+    expect(await screen.findByTestId('sidebar-root')).not.toBeNull();
+    expect(apiGet.mock.calls.some((call) => call[0] === '/meta/connections')).toBe(false);
   });
 
   it('sessão antiga (policy=null) busca /policy/current UMA vez e bloqueia quando pendente', async () => {

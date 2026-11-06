@@ -31,6 +31,10 @@ export interface CreatedClickUpTicket {
   clickupTaskUrl: string;
 }
 
+export type ReviewClickUpTicketInput =
+  | { decision: 'approve' }
+  | { decision: 'reject'; reason: string };
+
 export interface ClickUpTicketSummary {
   id: string;
   name: string;
@@ -65,7 +69,7 @@ export interface ClickUpTicketDetails {
 export class ClickUpTicketsError extends Error {
   constructor(
     public readonly status: number,
-    public readonly code: 'CLICKUP_MISSING_CONFIG' | 'CLICKUP_UNAVAILABLE' | 'CLICKUP_TIMEOUT' | 'CLICKUP_UNAUTHORIZED' | 'CLICKUP_INVALID_RESPONSE' | 'CLICKUP_ATTACHMENT_FAILED' | 'CLICKUP_TASK_NOT_FOUND' | 'CLICKUP_TASK_OUT_OF_SCOPE' | 'CLICKUP_STATUS_CONFLICT',
+    public readonly code: 'CLICKUP_MISSING_CONFIG' | 'CLICKUP_UNAVAILABLE' | 'CLICKUP_TIMEOUT' | 'CLICKUP_UNAUTHORIZED' | 'CLICKUP_INVALID_RESPONSE' | 'CLICKUP_ATTACHMENT_FAILED' | 'CLICKUP_TASK_NOT_FOUND' | 'CLICKUP_TASK_OUT_OF_SCOPE' | 'CLICKUP_STATUS_CONFLICT' | 'CLICKUP_REVIEW_CONFLICT',
     message: string,
     public readonly clickupTaskUrl?: string,
   ) {
@@ -254,6 +258,46 @@ export class ClickUpTicketsClient {
         labels,
       };
     });
+  }
+
+  async reviewTicket(taskId: string, input: ReviewClickUpTicketInput): Promise<{ status: string }> {
+    const task = await this.getJson(`/task/${encodeURIComponent(taskId)}`) as {
+      description?: unknown;
+      status?: { status?: unknown };
+    };
+    if (typeof task.status?.status !== 'string' || task.status.status.trim().toLocaleLowerCase() !== 'homologação') {
+      throw new ClickUpTicketsError(409, 'CLICKUP_REVIEW_CONFLICT', 'O chamado não está mais em homologação. Atualize a lista e tente novamente.');
+    }
+    if (input.decision === 'reject' && task.description != null && typeof task.description !== 'string') {
+      throw new ClickUpTicketsError(502, 'CLICKUP_INVALID_RESPONSE', 'Não foi possível atualizar a descrição do chamado.');
+    }
+
+    const status = input.decision === 'approve' ? 'Aprovado' : 'Implement';
+    const currentDescription = typeof task.description === 'string' ? task.description.trimEnd() : '';
+    const payload = input.decision === 'approve'
+      ? { status }
+      : { status, description: `${currentDescription ? `${currentDescription}\n\n` : ''}## Reprovação na homologação\n${input.reason.trim()}` };
+    const { apiToken } = this.resolveConfig();
+    let response: Response;
+    try {
+      response = await externalFetch(`${CLICKUP_API_URL}/task/${encodeURIComponent(taskId)}`, {
+        method: 'PUT',
+        headers: { Authorization: apiToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      if (error instanceof ExternalHttpError) {
+        throw new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'Não foi possível atualizar o chamado no ClickUp agora.');
+      }
+      throw error;
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new ClickUpTicketsError(502, 'CLICKUP_UNAUTHORIZED', 'Não foi possível atualizar o chamado no ClickUp agora.');
+    }
+    if (!response.ok) {
+      throw new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'Não foi possível atualizar o chamado no ClickUp agora.');
+    }
+    return { status };
   }
 
   async listMembers(): Promise<ClickUpMember[]> {

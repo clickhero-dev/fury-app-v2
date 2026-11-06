@@ -110,6 +110,26 @@ Funcionalidade: tela de chamados do painel administrativo
     Dado que o status selecionado não está mais nos chamados atualizados
     Quando a tela termina de atualizar
     Então a seleção permanece identificável e a contagem filtrada fica zero
+
+  Cenário: abrir revisão somente para ticket em homologação
+    Dado que há um ticket em HOMOLOGAÇÃO e outro em progresso
+    Quando o superadmin seleciona o ticket em homologação
+    Então vê a modal de aprovação ou reprovação
+
+  Cenário: aprovar ticket em homologação
+    Dado que a modal de revisão está aberta
+    Quando escolhe aprovar
+    Então a tela solicita aprovação à API e confirma o sucesso
+
+  Cenário: reprovar ticket com motivo
+    Dado que a modal de revisão está aberta
+    Quando informa o motivo e confirma a reprovação
+    Então a tela envia o motivo à API e confirma o sucesso
+
+  Cenário: impedir reprovação sem motivo
+    Dado que o superadmin escolheu reprovar
+    Quando tenta confirmar sem motivo
+    Então a revisão não é enviada e a orientação aparece
 */
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -496,5 +516,68 @@ describe('TicketsPage', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Confirmar alteração' }));
     await waitFor(() => expect(mockShowSnack).toHaveBeenCalledWith('O status do ticket mudou no ClickUp. Os chamados foram recarregados.', 'error'));
     expect(mockGet.mock.calls.filter(([url]) => url === '/admin/tickets').length).toBeGreaterThan(1);
+  });
+
+  it('abre revisão apenas ao selecionar ticket em homologação', async () => {
+    mockTicketsData({
+      open: [ticket('review-1', 'Revisar entrega', { status: 'HOMOLOGAÇÃO' }), ticket('progress-1', 'Em progresso', { status: 'em progresso' })],
+      resolved: [],
+    });
+    render(<TicketsPage />);
+    const user = setupUser();
+
+    await user.click(await screen.findByRole('button', { name: 'Revisar ticket: Revisar entrega' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Deseja aprovar ou reprovar este ticket?');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Revisar ticket: Em progresso' })).not.toBeInTheDocument();
+  });
+
+  it('aprova ticket em homologação pela API', async () => {
+    mockTicketsData({ open: [ticket('review-1', 'Revisar entrega', { status: 'HOMOLOGAÇÃO' })], resolved: [] });
+    mockPost.mockResolvedValue({ data: { success: true, data: { status: 'Aprovado' } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    await user.click(await screen.findByRole('button', { name: 'Revisar ticket: Revisar entrega' }));
+    await user.click(screen.getByRole('button', { name: 'Aprovar' }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets/review-1/review', { decision: 'approve' }));
+    expect(mockShowSnack).toHaveBeenCalledWith('Ticket aprovado.', 'success');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('reprova ticket enviando motivo obrigatório', async () => {
+    mockTicketsData({ open: [ticket('review-2', 'Cadastro incompleto', { status: 'homologação' })], resolved: [] });
+    mockPost.mockResolvedValue({ data: { success: true, data: { status: 'Implement' } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    await user.click(await screen.findByRole('button', { name: 'Revisar ticket: Cadastro incompleto' }));
+    await user.click(screen.getByRole('button', { name: 'Reprovar' }));
+    const dialog = screen.getByRole('dialog');
+    const submit = within(dialog).getByRole('button', { name: 'Confirmar reprovação' });
+    expect(submit).toBeDisabled();
+    await user.type(within(dialog).getByLabelText('Motivo da reprovação'), 'Falta validar no celular.');
+    await user.click(submit);
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets/review-2/review', { decision: 'reject', reason: 'Falta validar no celular.' }));
+    expect(mockShowSnack).toHaveBeenCalledWith('Ticket reprovado e devolvido para implementação.', 'success');
+  });
+
+  it('mantém motivo na modal quando a API falha para permitir nova tentativa', async () => {
+    mockTicketsData({ open: [ticket('review-3', 'Ajustar relatório', { status: 'homologação' })], resolved: [] });
+    mockPost.mockRejectedValue({ response: { data: { error: { message: 'Não foi possível atualizar o chamado agora. Tente novamente.' } } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    await user.click(await screen.findByRole('button', { name: 'Revisar ticket: Ajustar relatório' }));
+    await user.click(screen.getByRole('button', { name: 'Reprovar' }));
+    const dialog = screen.getByRole('dialog');
+    const reason = within(dialog).getByLabelText('Motivo da reprovação');
+    await user.type(reason, 'O valor total está incorreto.');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirmar reprovação' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Não foi possível atualizar o chamado agora. Tente novamente.');
+    expect(reason).toHaveValue('O valor total está incorreto.');
+    expect(mockShowSnack).not.toHaveBeenCalled();
+
   });
 });

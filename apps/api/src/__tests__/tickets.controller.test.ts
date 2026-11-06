@@ -50,6 +50,32 @@
  * Dado que o ticket mudou no ClickUp
  * Quando confirma o status antigo
  * Então recebe conflito seguro
+
+ * Cenário: aprovar ticket em homologação
+ * Dado que o superadmin escolheu aprovar um ticket
+ * Quando envia a revisão válida
+ * Então a API confirma o status Aprovado
+ *
+ * Cenário: reprovar ticket com motivo
+ * Dado que o superadmin informou o motivo da reprovação
+ * Quando envia a revisão válida
+ * Então a API encaminha decisão e motivo para o serviço
+ *
+ * Cenário: exigir motivo para reprovar
+ * Dado que o superadmin escolheu reprovar sem motivo válido
+ * Quando envia a revisão
+ * Então a API rejeita a entrada sem chamar o ClickUp
+ *
+ * Cenário: tratar ticket que deixou de estar em homologação
+ * Dado que o ClickUp informa conflito de status
+ * Quando a revisão é enviada
+ * Então a API devolve erro seguro de conflito
+ *
+ * Cenário: ClickUp indisponível durante a revisão
+ * Dado que o provedor retorna uma falha com detalhes privados
+ * Quando o serviço tenta salvar a decisão
+ * Então devolve erro seguro sem expor os detalhes
+
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TicketsController } from '../controllers/tickets.controller.js';
@@ -232,5 +258,52 @@ describe('TicketsController', () => {
     const error = await new TicketService(client as any).updateTicketStatus('task-1', { expectedStatus: 'pendente', status: 'triagem' }).catch((reason) => reason);
     expect(error).toMatchObject({ statusCode: 404, code: 'TICKET_NOT_FOUND' });
     expect(error.message).not.toContain('segredo');
+  });
+
+  it('aprova ticket em homologação e retorna o novo status', async () => {
+    const service = { reviewTicket: vi.fn().mockResolvedValue({ status: 'Aprovado' }) };
+    const response = mockRes();
+    await new TicketsController(service as any).review({ params: { id: 'task-123' }, body: { decision: 'approve' } } as any, response, vi.fn());
+
+    expect(service.reviewTicket).toHaveBeenCalledWith('task-123', { decision: 'approve' });
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'Aprovado' } }));
+  });
+
+  it('encaminha motivo de reprovação após validá-lo', async () => {
+    const service = { reviewTicket: vi.fn().mockResolvedValue({ status: 'Implement' }) };
+    const response = mockRes();
+    await new TicketsController(service as any).review({ params: { id: 'task-123' }, body: { decision: 'reject', reason: '  Corrigir o fluxo.  ' } } as any, response, vi.fn());
+
+    expect(service.reviewTicket).toHaveBeenCalledWith('task-123', { decision: 'reject', reason: 'Corrigir o fluxo.' });
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'Implement' } }));
+  });
+
+  it('rejeita motivo vazio e decisão desconhecida sem chamar o serviço', async () => {
+    const service = { reviewTicket: vi.fn() };
+    const next = vi.fn();
+    const controller = new TicketsController(service as any);
+    await controller.review({ params: { id: 'task-123' }, body: { decision: 'reject', reason: '  ' } } as any, mockRes(), next);
+    await controller.review({ params: { id: 'task-123' }, body: { decision: 'later' } } as any, mockRes(), next);
+
+    expect(service.reviewTicket).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(next.mock.calls[0][0]).toMatchObject({ name: 'ZodError' });
+  });
+
+  it('converte conflito de status em erro 409 seguro', async () => {
+    const client = { reviewTicket: vi.fn().mockRejectedValue(new ClickUpTicketsError(409, 'CLICKUP_REVIEW_CONFLICT', 'O chamado não está mais em homologação.')) };
+    const error = await new TicketService(client as any).reviewTicket('task-123', { decision: 'approve' }).catch((cause) => cause);
+
+    expect(error).toMatchObject({ statusCode: 409, code: 'TICKET_REVIEW_CONFLICT' });
+  });
+
+  it('não expõe detalhes privados quando o ClickUp falha ao salvar a revisão', async () => {
+    const client = { reviewTicket: vi.fn().mockRejectedValue(new ClickUpTicketsError(502, 'CLICKUP_UNAVAILABLE', 'token=secreto payload=privado')) };
+    const error = await new TicketService(client as any).reviewTicket('task-123', { decision: 'approve' }).catch((cause) => cause);
+
+    expect(error).toMatchObject({ statusCode: 502, code: 'TICKET_REVIEW_UNAVAILABLE' });
+    expect(error.message).not.toContain('secreto');
+    expect(error.message).not.toContain('privado');
+
   });
 });

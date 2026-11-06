@@ -2,11 +2,11 @@ import { createHash } from 'node:crypto';
 import { AppError } from '../../middleware/errorHandler.js';
 import type { NotificationRepository } from '../../repository/notification.repository.js';
 
-export type NotificationInput = { tenantId: string; callerId: string; recipientUserId: string; type: 'general'; title: string; body: string; idempotencyKey?: string };
+export type NotificationInput = { tenantId: string; callerId: string; recipientUserId: string; type: 'general'; title: string; body: string; actionUrl?: string; idempotencyKey?: string };
 export type NotificationEvent = (tenantId: string, userId: string) => void;
 
 function hash(input: NotificationInput) {
-  return createHash('sha256').update(JSON.stringify({ type: input.type, title: input.title, body: input.body, recipientUserId: input.recipientUserId })).digest('hex');
+  return createHash('sha256').update(JSON.stringify({ type: input.type, title: input.title, body: input.body, actionUrl: input.actionUrl, recipientUserId: input.recipientUserId })).digest('hex');
 }
 
 export class NotificationService {
@@ -24,7 +24,7 @@ export class NotificationService {
     }
     let item;
     try {
-      item = await this.repository.create({ tenantId: input.tenantId, recipientUserId: input.recipientUserId, createdByUserId: input.callerId, type: input.type, title: input.title, body: input.body, idempotencyKey: input.idempotencyKey, payloadHash });
+      item = await this.repository.create({ tenantId: input.tenantId, recipientUserId: input.recipientUserId, createdByUserId: input.callerId, type: input.type, title: input.title, body: input.body, actionUrl: input.actionUrl, idempotencyKey: input.idempotencyKey, payloadHash });
     } catch (error) {
       // A concorrência entre retries pode vencer a checagem anterior; a constraint
       // única é a autoridade final da idempotência.

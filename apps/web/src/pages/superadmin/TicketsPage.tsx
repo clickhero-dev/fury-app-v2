@@ -91,12 +91,15 @@ function Chip({ children, className }: { children: ReactNode; className?: string
   return <b className={`inline-flex max-w-full shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${className ?? 'bg-brand/10 text-[#17708A] dark:text-[#5cc5e4]'}`}>{children}</b>;
 }
 
-function TicketRow({ ticket, onStatusChange }: { ticket: Ticket; onStatusChange: (ticket: Ticket) => void }) {
+function TicketRow({ ticket, onStatusChange, onReview }: { ticket: Ticket; onStatusChange: (ticket: Ticket) => void; onReview: (ticket: Ticket) => void }) {
   const priority = ticket.priority ? priorityStyles[ticket.priority.toLowerCase()] : undefined;
   const age = ticket.createdAt ? formatRelativeDate(ticket.createdAt) : '';
-  return <li role="listitem" tabIndex={0} onClick={(event) => { if (!(event.target as HTMLElement).closest('a')) onStatusChange(ticket); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onStatusChange(ticket); } }} aria-label={`Alterar status de ${ticket.name}`} className="rounded-lg bg-admin-bg px-3 py-2.5 transition-colors hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
+  const needsReview = ticket.status.trim().toLocaleLowerCase() === 'homologação';
+  return <li role="listitem" tabIndex={0} onClick={(event) => { if (!(event.target as HTMLElement).closest('a,button')) onStatusChange(ticket); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onStatusChange(ticket); } }} aria-label={`Alterar status de ${ticket.name}`} className="rounded-lg bg-admin-bg px-3 py-2.5 transition-colors hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
     <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0 break-words text-sm font-medium text-text-primary">{ticket.name}</div>
+      {needsReview
+        ? <button type="button" onClick={() => onReview(ticket)} aria-label={`Revisar ticket: ${ticket.name}`} className="min-w-0 break-words text-left text-sm font-medium text-text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">{ticket.name}</button>
+        : <div className="min-w-0 break-words text-sm font-medium text-text-primary">{ticket.name}</div>}
       <a aria-label={`Ver no ClickUp: ${ticket.name}`} href={ticket.url} target="_blank" rel="noreferrer" className="shrink-0 rounded p-1.5 text-[#17708A] dark:text-[#5cc5e4] transition-colors hover:bg-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]"><ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
     </div>
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-text-secondary">
@@ -121,7 +124,7 @@ function normalizeStatus(status: string): string {
   return status.trim().toLocaleLowerCase() || EMPTY_STATUS;
 }
 
-function TicketsTabs({ lists, loading, onStatusChange }: { lists: TicketLists; loading: boolean; onStatusChange: (ticket: Ticket) => void }) {
+function TicketsTabs({ lists, loading, onStatusChange, onReview }: { lists: TicketLists; loading: boolean; onStatusChange: (ticket: Ticket) => void; onReview: (ticket: Ticket) => void }) {
   const [queue, setQueue] = useState<Queue>('open');
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
@@ -197,7 +200,7 @@ function TicketsTabs({ lists, loading, onStatusChange }: { lists: TicketLists; l
       ) : (
         <>
           <ul className="max-h-[480px] space-y-2 overflow-y-auto pr-1">
-            {visible.map((ticket) => <TicketRow key={ticket.id} ticket={ticket} onStatusChange={onStatusChange} />)}
+            {visible.map((ticket) => <TicketRow key={ticket.id} ticket={ticket} onStatusChange={onStatusChange} onReview={onReview} />)}
           </ul>
           <nav aria-label="Paginação de chamados" className="mt-4 flex items-center justify-between gap-2 text-sm text-text-secondary">
             <span role="status">Página {safePage + 1} de {pageCount}</span>
@@ -465,11 +468,77 @@ function LabelGroup({ title, labels, selected, register }: { title: string; labe
   </div></div>;
 }
 
+function ReviewTicketDialog({ ticket, onClose, onComplete }: {
+  ticket: Ticket | null;
+  onClose: () => void;
+  onComplete: (decision: 'approve' | 'reject') => void;
+}) {
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (decision: 'approve' | 'reject') => {
+    if (!ticket || submitting) return;
+    const trimmedReason = reason.trim();
+    if (decision === 'reject' && !trimmedReason) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.post(`/admin/tickets/${encodeURIComponent(ticket.id)}/review`, decision === 'approve'
+        ? { decision }
+        : { decision, reason: trimmedReason });
+      onComplete(decision);
+    } catch (cause) {
+      const responseError = (cause as { response?: { data?: TicketApiResponse } })?.response?.data?.error;
+      setError(responseError?.message ?? 'Não foi possível atualizar o ticket. Tente novamente.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <DialogPrimitive.Root open={Boolean(ticket)} onOpenChange={(open) => { if (!open && !submitting) onClose(); }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <DialogPrimitive.Content aria-describedby={undefined} className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-surface p-5 shadow-xl sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <DialogPrimitive.Title className="text-lg font-semibold">Revisar ticket</DialogPrimitive.Title>
+                <p className="mt-1 break-words text-sm text-text-secondary">{ticket?.name}</p>
+              </div>
+              <DialogPrimitive.Close disabled={submitting} aria-label="Fechar" className="ady-btn rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]"><X className="h-4 w-4" aria-hidden="true" /></DialogPrimitive.Close>
+            </div>
+            {!rejecting ? <>
+              <p className="mt-5 text-sm text-text-primary">Deseja aprovar ou reprovar este ticket?</p>
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <DialogPrimitive.Close disabled={submitting} className="ady-btn rounded-lg border border-border px-4 py-2 text-sm text-text-primary hover:bg-surface-secondary">Cancelar</DialogPrimitive.Close>
+                <button type="button" disabled={submitting} onClick={() => setRejecting(true)} className="ady-btn rounded-lg border border-error/40 px-4 py-2 text-sm text-error hover:bg-error/10">Reprovar</button>
+                <button type="button" disabled={submitting} onClick={() => void submit('approve')} className="ady-btn rounded-lg bg-[#17708A] px-4 py-2 text-sm font-medium text-white hover:bg-[#17708A]/90 disabled:opacity-60">{submitting ? 'Salvando…' : 'Aprovar'}</button>
+              </div>
+            </> : <>
+              <label className="mt-5 block text-sm font-medium text-text-primary" htmlFor="ticket-review-reason">Motivo da reprovação</label>
+              <textarea id="ticket-review-reason" value={reason} maxLength={5_000} onChange={(event) => setReason(event.target.value)} className="mt-1 min-h-28 w-full resize-y rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30" />
+              {error && <p role="alert" className="mt-2 text-sm text-error">{error}</p>}
+              <div className="mt-5 flex justify-end gap-2">
+                <button type="button" disabled={submitting} onClick={() => { setRejecting(false); setError(null); }} className="ady-btn rounded-lg border border-border px-4 py-2 text-sm text-text-primary hover:bg-surface-secondary">Voltar</button>
+                <button type="button" disabled={submitting || !reason.trim()} onClick={() => void submit('reject')} className="ady-btn rounded-lg bg-error px-4 py-2 text-sm font-medium text-white hover:bg-error/90 disabled:cursor-not-allowed disabled:opacity-60">{submitting ? 'Salvando…' : 'Confirmar reprovação'}</button>
+              </div>
+            </>}
+            {!rejecting && error && <p role="alert" className="mt-3 text-sm text-error">{error}</p>}
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Overlay>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}
+
 export function TicketsPage() {
   const [lists, setLists] = useState<TicketLists>({ open: [], resolved: [] });
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [statuses, setStatuses] = useState<TicketStatus[]>([]);
   const [statusTicket, setStatusTicket] = useState<Ticket | null>(null);
+  const [reviewingTicket, setReviewingTicket] = useState<Ticket | null>(null);
   const [listWarning, setListWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -523,8 +592,8 @@ export function TicketsPage() {
       {loading ? 'Carregando chamados…' : 'Chamados carregados.'}
     </p>
     {listWarning && <div role="alert" className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-[#92400E] dark:text-amber-100">{listWarning}</div>}
-    <TicketsTabs lists={lists} loading={loading} onStatusChange={setStatusTicket} />
-    <StatusDialog key={statusTicket?.id ?? 'closed'} ticket={statusTicket} statuses={statuses} open={statusTicket !== null} onOpenChange={(open) => { if (!open) setStatusTicket(null); }} onSaved={refresh} />
+    <TicketsTabs lists={lists} loading={loading} onStatusChange={setStatusTicket} onReview={setReviewingTicket} />
+    <StatusDialog key={`status-${statusTicket?.id ?? 'closed'}`} ticket={statusTicket} statuses={statuses} open={statusTicket !== null} onOpenChange={(open) => { if (!open) setStatusTicket(null); }} onSaved={refresh} />
     <details className="group rounded-xl border border-border bg-surface">
       <summary className="flex cursor-pointer select-none items-center gap-2 p-5 text-sm font-semibold transition-colors hover:text-[#17708A] dark:hover:text-[#5cc5e4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
         <Users className="h-4 w-4 text-[#17708A] dark:text-[#5cc5e4]" aria-hidden="true" />
@@ -540,6 +609,16 @@ export function TicketsPage() {
         ))}
       </div>
     </details>
+    <ReviewTicketDialog
+      key={reviewingTicket?.id ?? 'closed'}
+      ticket={reviewingTicket}
+      onClose={() => setReviewingTicket(null)}
+      onComplete={(decision) => {
+        setReviewingTicket(null);
+        showSnack(decision === 'approve' ? 'Ticket aprovado.' : 'Ticket reprovado e devolvido para implementação.', 'success');
+        void load();
+      }}
+    />
     <NewTicketDialog open={modalOpen} onOpenChange={setModalOpen} assignees={assignees} onCreated={() => void load()} />
   </div>;
 }

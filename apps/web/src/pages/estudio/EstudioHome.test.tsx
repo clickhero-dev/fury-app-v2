@@ -189,22 +189,25 @@ describe('AssetCard — download da Biblioteca', () => {
    * Quando clica no botão de download
    * Então uma única requisição baixa o arquivo e o usuário permanece na Biblioteca
    */
-  it('oferece download acessível para imagem e evita cliques duplicados', async () => {
+  it.each([
+    ['image', 'image-1', 'https://example.com/ad1.png', 'Anúncio de imagem'],
+    ['video', 'video-1', 'https://example.com/video.mp4', 'Anúncio de vídeo'],
+  ] as const)('oferece download acessível para %s e evita cliques duplicados', async (type, id, url, name) => {
     const user = userEvent.setup();
     mockApiGet.mockResolvedValue({ data: new Blob(['final-image'], { type: 'image/png' }) });
     const { AssetCard } = await import('./EstudioHome');
     render(
       <AssetCard
-        asset={{ ...MOCK_ASSETS.assets[0], id: 'image-1' }}
+        asset={{ ...MOCK_ASSETS.assets[0], id, type, url, name }}
         {...cardProps}
       />,
     );
 
-    const button = screen.getByRole('button', { name: /baixar anúncio de imagem/i });
+    const button = screen.getByRole('button', { name: new RegExp(`baixar ${name}`, 'i') });
     await user.click(button);
     await waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(1));
-    expect(mockApiGet).toHaveBeenCalledWith('/studio/assets/image-1/download', { responseType: 'blob' });
-    expect(screen.getByRole('button', { name: /baixar anúncio de imagem/i })).toBeInTheDocument();
+    expect(mockApiGet).toHaveBeenCalledWith(`/studio/assets/${id}/download`, { responseType: 'blob' });
+    expect(screen.getByRole('button', { name: new RegExp(`baixar ${name}`, 'i') })).toBeInTheDocument();
   });
 
   it('mostra carregamento, bloqueia novo clique e informa falha client-safe', async () => {

@@ -40,6 +40,22 @@
  * Dado que a tarefa mudou de status externamente
  * Quando o status é alterado
  * Então retorna conflito sem enviar PUT
+
+ * Cenário: aprovar ticket em homologação
+ * Dado que a tarefa está em HOMOLOGAÇÃO
+ * Quando o superadmin aprova
+ * Então o ClickUp move a tarefa para Aprovado
+ *
+ * Cenário: reprovar ticket em homologação
+ * Dado que a tarefa está em HOMOLOGAÇÃO e há um motivo
+ * Quando o superadmin reprova
+ * Então o ClickUp acrescenta o motivo e move a tarefa para Implement
+ *
+ * Cenário: recusar decisão para ticket fora da homologação
+ * Dado que o ticket já mudou de status
+ * Quando o superadmin tenta revisá-lo
+ * Então o ClickUp não recebe atualização
+
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClickUpTicketsClient, ClickUpTicketsError } from '../lib/clickup-tickets.client.js';
@@ -269,4 +285,70 @@ describe('ClickUpTicketsClient', () => {
     expect(error).toMatchObject({ code: 'CLICKUP_STATUS_CONFLICT' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('aprova ticket em homologação e atualiza o status sem alterar descrição', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ description: 'Descrição original', status: { status: 'HOMOLOGAÇÃO' } }) } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(new ClickUpTicketsClient().reviewTicket('task-123', { decision: 'approve' }))
+      .resolves.toEqual({ status: 'Aprovado' });
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/task/task-123');
+    expect(String(fetchMock.mock.calls[1][0])).toBe('https://api.clickup.com/api/v2/task/task-123');
+    const init = fetchMock.mock.calls[1][1] as RequestInit;
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body as string)).toEqual({ status: 'Aprovado' });
+  });
+
+  it('acrescenta motivo e reprova ticket em homologação', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ description: 'Descrição original', status: { status: 'homologação' } }) } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(new ClickUpTicketsClient().reviewTicket('task-456', { decision: 'reject', reason: 'Corrigir o fluxo de cadastro.' }))
+      .resolves.toEqual({ status: 'Implement' });
+
+    const init = fetchMock.mock.calls[1][1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toEqual({
+      description: 'Descrição original\n\n## Reprovação na homologação\nCorrigir o fluxo de cadastro.',
+      status: 'Implement',
+    });
+  });
+
+  it('não atualiza ticket que já não está em homologação', async () => {
+    const fetchMock = mockFetchOnce(200, { description: 'Descrição original', status: { status: 'Implement' } });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(new ClickUpTicketsClient().reviewTicket('task-456', { decision: 'approve' }))
+      .rejects.toMatchObject({ code: 'CLICKUP_REVIEW_CONFLICT' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('não reprova se a descrição retornada pelo ClickUp não for válida', async () => {
+    const fetchMock = mockFetchOnce(200, { description: 123, status: { status: 'HOMOLOGAÇÃO' } });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(new ClickUpTicketsClient().reviewTicket('task-456', { decision: 'reject', reason: 'Corrigir o fluxo.' }))
+      .rejects.toMatchObject({ code: 'CLICKUP_INVALID_RESPONSE' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('registra motivo quando o ticket ainda não tem descrição', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ description: null, status: { status: 'HOMOLOGAÇÃO' } }) } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await new ClickUpTicketsClient().reviewTicket('task-456', { decision: 'reject', reason: 'Ajustar o fluxo.' });
+
+    const init = fetchMock.mock.calls[1][1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toEqual({
+      description: '## Reprovação na homologação\nAjustar o fluxo.',
+      status: 'Implement',
+    });
+  });
+
 });

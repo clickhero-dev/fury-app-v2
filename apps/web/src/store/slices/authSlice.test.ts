@@ -1,5 +1,11 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 
+// Funcionalidade: tema padrão para novos usuários
+// Cenário: iniciar no tema claro mesmo com o sistema configurado para escuro
+// Dado que não existe uma preferência de tema salva
+// Quando a sessão inicial é hidratada
+// Então o tema selecionado deve ser claro
+
 /**
  * A slice roda `hydrate()` no top-level (initialState), que lê `localStorage`/`window`.
  * Instalamos mocks antes de cada import e usamos `vi.resetModules()` para que o próximo
@@ -83,6 +89,24 @@ describe('authSlice — persistência do plano', () => {
     expect(after.planExpiration).toBeNull();
     expect(localStorage.getItem(PLAN_KEY)).toBeNull();
     expect(localStorage.getItem(PLAN_EXPIRATION_KEY)).toBeNull();
+  });
+});
+
+describe('authSlice — tema padrão', () => {
+  it('inicia no tema claro quando não há preferência salva, mesmo com o sistema escuro', async () => {
+    vi.stubGlobal('window', { matchMedia: () => ({ matches: true }) } as never);
+    const { reducer, selectTheme } = await importSlice();
+    const state = reducer(undefined, { type: '@@init' });
+
+    expect(selectTheme({ auth: state })).toBe('light');
+  });
+
+  it('preserva uma preferência escura salva explicitamente', async () => {
+    installDomGlobals({ 'fury-theme': 'dark' });
+    const { reducer, selectTheme } = await importSlice();
+    const state = reducer(undefined, { type: '@@init' });
+
+    expect(selectTheme({ auth: state })).toBe('dark');
   });
 });
 
