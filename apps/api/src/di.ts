@@ -87,6 +87,8 @@ import { BusinessContextController } from './controllers/business-context.contro
 import { StudioVariationsService } from './services/studio/studio-variations.service.js';
 import { StudioVariationsController } from './controllers/studio-variations.controller.js';
 import { WorkflowJobRepository } from './repository/workflow-job.repository.js';
+import { PublicTrialService } from './services/core/public-trial.service.js';
+import { PublicTrialController } from './controllers/public-trial.controller.js';
 
 /**
  * Composition root (DI) da API.
@@ -152,6 +154,7 @@ export const automationService = new AutomationService();
 export const authService = new AuthService();
 export const businessContextService = new BusinessContextService();
 export const businessContextController = new BusinessContextController(businessContextService);
+export const publicTrialService = new PublicTrialService();
 export const socialAuthService = new SocialAuthService();
 export const metricsService = new MetricsService(metricsProvider);
 export const budgetOptimizerService = new BudgetOptimizerService();
@@ -203,6 +206,7 @@ export const controllers = {
   metrics: new MetricsController(metricsService),
   auth: new AuthController(authService, socialAuthService, policyService),
   businessContext: businessContextController,
+  publicTrial: new PublicTrialController(publicTrialService),
   automation: new AutomationController(automationService),
   google: new GoogleController(googleService),
   meta: new MetaController(metaService),
