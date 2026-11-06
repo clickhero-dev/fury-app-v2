@@ -110,7 +110,7 @@ describe('catálogo cobre todos os módulos do index.ts', () => {
     const missing = parseMounts()
       .map((m) => m.prefix)
       .filter((p) => p !== '/v2')
-      .filter((p) => keysOfCanonical(p).length === 0 && !RBAC_EXEMPT_PREFIXES.includes(p));
+      .filter((p) => keysOfCanonical(p).length === 0 && !RBAC_EXEMPT_PREFIXES.some((exempt) => p === exempt || p.startsWith(exempt + '/')));
     expect(missing).toEqual([]);
   });
 

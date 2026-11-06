@@ -20,6 +20,11 @@ vi.mock('../lib/queue.js', () => ({
   getComplianceQueue: vi.fn(async () => ({ add: state.enqueueCompliance })),
 }));
 
+vi.mock('../services/studio/creative-quota.service.js', () => ({
+  consumeCreativeQuota: vi.fn(async () => undefined),
+  refundCreativeQuota: vi.fn(async () => undefined),
+}));
+
 vi.mock('../repository/studio.repository.js', () => ({
   StudioRepository: vi.fn().mockImplementation(function () {
     return {
