@@ -35,14 +35,8 @@ function getInitialTheme(): 'light' | 'dark' {
   if (stored === 'dark' || stored === 'escuro') return 'dark';
   if (stored === 'light' || stored === 'claro') return 'light';
 
-  // Sem escolha salva (primeiro acesso ou 'system'): segue a preferência do SO
-  let prefersDark = false;
-  try {
-    prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  } catch {
-    // matchMedia indisponível: mantém claro
-  }
-  return prefersDark ? 'dark' : 'light';
+  // Sem escolha salva, novos usuários começam sempre no tema claro.
+  return 'light';
 }
 
 /** Lê e valida o estado da política persistido (null se ausente/corrompido). */
