@@ -215,4 +215,41 @@ describe('ClickUpTicketsClient', () => {
     }]);
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/list/901717485435/member');
   });
+
+  it('lista os status configurados, inclusive fechados', async () => {
+    const fetchMock = mockFetchOnce(200, { statuses: [
+      { status: 'triagem', type: 'open', orderindex: '1' },
+      { status: 'concluído', type: 'closed', orderindex: '12' },
+    ] });
+
+    await expect(new ClickUpTicketsClient().listStatuses()).resolves.toEqual([
+      { status: 'triagem', type: 'open' }, { status: 'concluído', type: 'closed' },
+    ]);
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.clickup.com/api/v2/list/901717485435/status');
+  });
+
+  it('rele a tarefa, valida a lista e envia somente o status', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ statuses: [{ status: 'triagem', type: 'open' }, { status: 'review_spec', type: 'custom' }] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'task-1', list: { id: '901717485435' }, status: { status: 'triagem', type: 'open' } }) } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'task-1', list: { id: '901717485435' }, status: { status: 'review_spec', type: 'custom' } }) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(new ClickUpTicketsClient().updateTicketStatus('task-1', { expectedStatus: 'triagem', status: 'review_spec' }))
+      .resolves.toEqual({ id: 'task-1', status: 'review_spec', statusType: 'custom' });
+    expect(String(fetchMock.mock.calls[2][0])).toBe('https://api.clickup.com/api/v2/task/task-1');
+    expect((fetchMock.mock.calls[2][1] as RequestInit).method).toBe('PUT');
+    expect(JSON.parse((fetchMock.mock.calls[2][1] as RequestInit).body as string)).toEqual({ status: 'review_spec' });
+  });
+
+  it('não envia PUT quando o status foi alterado externamente', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ statuses: [{ status: 'triagem', type: 'open' }, { status: 'review_spec', type: 'custom' }] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'task-1', list: { id: '901717485435' }, status: { status: 'implement', type: 'custom' } }) } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(new ClickUpTicketsClient().updateTicketStatus('task-1', { expectedStatus: 'triagem', status: 'review_spec' }))
+      .rejects.toMatchObject({ status: 409, code: 'CLICKUP_CONFLICT' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

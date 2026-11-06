@@ -180,4 +180,27 @@ describe('TicketsController', () => {
 
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ data: [{ id: 101281834, name: 'Kaio Araújo', email: 'kaio@clickhero.com.br' }] }));
   });
+
+  it('lista status dinâmicos do ClickUp', async () => {
+    const service = { listStatuses: vi.fn().mockResolvedValue([{ status: 'triagem', type: 'open' }, { status: 'concluído', type: 'closed' }]) };
+    const response = mockRes();
+    await new TicketsController(service as any).listStatuses({} as any, response, vi.fn());
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ data: [{ status: 'triagem', type: 'open' }, { status: 'concluído', type: 'closed' }] }));
+  });
+
+  it('valida e encaminha a alteração de status', async () => {
+    const service = { updateTicketStatus: vi.fn().mockResolvedValue({ id: 'task-1', status: 'review_spec', statusType: 'custom' }) };
+    const response = mockRes();
+    await new TicketsController(service as any).updateStatus({ params: { ticketId: 'task-1' }, body: { expectedStatus: 'triagem', status: 'review_spec' } } as any, response, vi.fn());
+    expect(service.updateTicketStatus).toHaveBeenCalledWith('task-1', { expectedStatus: 'triagem', status: 'review_spec' });
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'review_spec' }) }));
+  });
+
+  it('rejeita corpo de status inválido sem chamar o serviço', async () => {
+    const service = { updateTicketStatus: vi.fn() };
+    const next = vi.fn();
+    await new TicketsController(service as any).updateStatus({ params: { ticketId: 'task-1' }, body: { expectedStatus: 'triagem', status: '' } } as any, mockRes(), next);
+    expect(service.updateTicketStatus).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ZodError' }));
+  });
 });

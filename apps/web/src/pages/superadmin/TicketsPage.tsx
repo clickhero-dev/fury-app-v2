@@ -34,6 +34,7 @@ type TicketForm = z.infer<typeof ticketSchema>;
 type CreatedTicket = { clickupTaskId: string; clickupTaskUrl: string };
 type TicketApiResponse = { data?: CreatedTicket; error?: { message?: string; details?: { clickupTaskUrl?: string } } };
 type Ticket = { id: string; name: string; status: string; priority: string | null; url: string; createdAt: string; labels?: TicketLabel[] };
+type TicketStatus = { status: string; type: string };
 type TicketLists = { open: Ticket[]; resolved: Ticket[] };
 type Assignee = { id: number; name: string; email: string | null };
 type Queue = 'open' | 'resolved';
@@ -90,13 +91,13 @@ function Chip({ children, className }: { children: ReactNode; className?: string
   return <b className={`inline-flex max-w-full shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${className ?? 'bg-brand/10 text-[#17708A] dark:text-[#5cc5e4]'}`}>{children}</b>;
 }
 
-function TicketRow({ ticket }: { ticket: Ticket }) {
+function TicketRow({ ticket, onSelect }: { ticket: Ticket; onSelect: (ticket: Ticket) => void }) {
   const priority = ticket.priority ? priorityStyles[ticket.priority.toLowerCase()] : undefined;
   const age = ticket.createdAt ? formatRelativeDate(ticket.createdAt) : '';
-  return <li className="rounded-lg bg-admin-bg px-3 py-2.5 transition-colors hover:bg-surface-secondary">
+  return <li className="rounded-lg bg-admin-bg transition-colors hover:bg-surface-secondary"><div role="button" tabIndex={0} onClick={() => onSelect(ticket)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(ticket); } }} aria-label={`Editar status: ${ticket.name}`} className="px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 break-words text-sm font-medium text-text-primary">{ticket.name}</div>
-      <a aria-label={`Ver no ClickUp: ${ticket.name}`} href={ticket.url} target="_blank" rel="noreferrer" className="shrink-0 rounded p-1.5 text-[#17708A] dark:text-[#5cc5e4] transition-colors hover:bg-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]"><ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
+      <a onClick={(event) => event.stopPropagation()} aria-label={`Ver no ClickUp: ${ticket.name}`} href={ticket.url} target="_blank" rel="noreferrer" className="shrink-0 rounded p-1.5 text-[#17708A] dark:text-[#5cc5e4] transition-colors hover:bg-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]"><ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
     </div>
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-text-secondary">
       <Chip>{statusLabel(ticket.status)}</Chip>
@@ -104,7 +105,7 @@ function TicketRow({ ticket }: { ticket: Ticket }) {
       {ticket.labels?.map((label) => <Chip key={label}>{allLabels.find(([value]) => value === label)?.[1] ?? label}</Chip>)}
       {age && <span>{age}</span>}
     </div>
-  </li>;
+  </div></li>;
 }
 
 const queueLabels: Record<Queue, string> = { open: 'Abertos', resolved: 'Resolvidos' };
@@ -120,7 +121,7 @@ function normalizeStatus(status: string): string {
   return status.trim().toLocaleLowerCase() || EMPTY_STATUS;
 }
 
-function TicketsTabs({ lists, loading }: { lists: TicketLists; loading: boolean }) {
+function TicketsTabs({ lists, loading, onSelectTicket }: { lists: TicketLists; loading: boolean; onSelectTicket: (ticket: Ticket) => void }) {
   const [queue, setQueue] = useState<Queue>('open');
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
@@ -196,7 +197,7 @@ function TicketsTabs({ lists, loading }: { lists: TicketLists; loading: boolean 
       ) : (
         <>
           <ul className="max-h-[480px] space-y-2 overflow-y-auto pr-1">
-            {visible.map((ticket) => <TicketRow key={ticket.id} ticket={ticket} />)}
+            {visible.map((ticket) => <TicketRow key={ticket.id} ticket={ticket} onSelect={onSelectTicket} />)}
           </ul>
           <nav aria-label="Paginação de chamados" className="mt-4 flex items-center justify-between gap-2 text-sm text-text-secondary">
             <span role="status">Página {safePage + 1} de {pageCount}</span>
@@ -409,12 +410,56 @@ function LabelGroup({ title, labels, selected, register }: { title: string; labe
   </div></div>;
 }
 
+function TicketStatusDialog({ ticket, statuses, open, onOpenChange, onChanged, onConflict }: {
+  ticket: Ticket | null;
+  statuses: TicketStatus[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onChanged: () => void;
+  onConflict: () => void;
+}) {
+  const [selected, setSelected] = useState(ticket?.status ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (!ticket || selected === ticket.status) { setError('Escolha um status diferente do atual.'); return; }
+    setSaving(true); setError(null);
+    try {
+      await api.patch(`/admin/tickets/${encodeURIComponent(ticket.id)}/status`, { expectedStatus: ticket.status, status: selected });
+      onOpenChange(false); onChanged(); showSnack('Status do ticket atualizado.', 'success');
+    } catch (error) {
+      const responseError = (error as { response?: { status?: number; data?: { error?: { message?: string } } } })?.response;
+      if (responseError?.status === 409) { onConflict(); return; }
+      setError(responseError?.data?.error?.message ?? 'Não foi possível alterar o status agora. Tente novamente.');
+    } finally { setSaving(false); }
+  };
+
+  return <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+    <DialogPrimitive.Portal><DialogPrimitive.Overlay className="fixed inset-0 z-50" style={{ background: 'rgba(0,0,0,0.6)' }}>
+      <DialogPrimitive.Content aria-describedby={undefined} className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-surface p-5 shadow-xl">
+        <DialogPrimitive.Title className="text-lg font-semibold">Alterar status do ticket</DialogPrimitive.Title>
+        <p className="mt-1 text-sm text-text-secondary">{ticket?.name}</p>
+        <label className="mt-5 block text-sm font-medium" htmlFor="ticket-status-select">Novo status
+          <select id="ticket-status-select" aria-label="Novo status" value={selected} onChange={(event) => setSelected(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-admin-bg px-3 py-2.5 text-sm text-text-primary outline-none focus:border-[#1E88A8] focus-visible:ring-2 focus-visible:ring-[#1E88A8]/30">
+            {statuses.map((status) => <option key={status.status} value={status.status}>{statusLabel(status.status)}</option>)}
+          </select>
+        </label>
+        {error && <p role="alert" className="mt-3 text-sm text-[#DC2626] dark:text-red-300">{error}</p>}
+        <div className="mt-6 flex justify-end gap-2"><DialogPrimitive.Close className="ady-btn rounded-lg border border-border px-3 py-2 text-sm">Cancelar</DialogPrimitive.Close><button type="button" onClick={() => void submit()} disabled={saving} className="ady-btn rounded-lg bg-[#17708A] px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{saving ? 'Salvando…' : 'Confirmar alteração'}</button></div>
+      </DialogPrimitive.Content>
+    </DialogPrimitive.Overlay></DialogPrimitive.Portal>
+  </DialogPrimitive.Root>;
+}
+
 export function TicketsPage() {
   const [lists, setLists] = useState<TicketLists>({ open: [], resolved: [] });
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [listWarning, setListWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [statusDialogTicket, setStatusDialogTicket] = useState<Ticket | null>(null);
+  const [statuses, setStatuses] = useState<TicketStatus[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -434,6 +479,16 @@ export function TicketsPage() {
     void load();
     setLoading(true);
   }, [load]);
+
+  const openStatusEditor = useCallback(async (ticket: Ticket) => {
+    try {
+      const response = await api.get('/admin/tickets/statuses');
+      setStatuses(response.data.data ?? []);
+      setStatusDialogTicket(ticket);
+    } catch {
+      showSnack('Não foi possível carregar os status do ticket agora.', 'error');
+    }
+  }, []);
 
   // Carregamento inicial assíncrono: o setState acontece apenas no retorno da promise
   // (não sincronamente no corpo do efeito) — padrão fetch-on-mount do repo.
@@ -461,7 +516,7 @@ export function TicketsPage() {
       {loading ? 'Carregando chamados…' : 'Chamados carregados.'}
     </p>
     {listWarning && <div role="alert" className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-[#92400E] dark:text-amber-100">{listWarning}</div>}
-    <TicketsTabs lists={lists} loading={loading} />
+    <TicketsTabs lists={lists} loading={loading} onSelectTicket={(ticket) => void openStatusEditor(ticket)} />
     <details className="group rounded-xl border border-border bg-surface">
       <summary className="flex cursor-pointer select-none items-center gap-2 p-5 text-sm font-semibold transition-colors hover:text-[#17708A] dark:hover:text-[#5cc5e4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E88A8]">
         <Users className="h-4 w-4 text-[#17708A] dark:text-[#5cc5e4]" aria-hidden="true" />
@@ -478,5 +533,6 @@ export function TicketsPage() {
       </div>
     </details>
     <NewTicketDialog open={modalOpen} onOpenChange={setModalOpen} assignees={assignees} onCreated={() => void load()} />
+    <TicketStatusDialog key={statusDialogTicket?.id ?? 'closed'} ticket={statusDialogTicket} statuses={statuses} open={Boolean(statusDialogTicket)} onOpenChange={(open) => { if (!open) setStatusDialogTicket(null); }} onChanged={() => { setStatusDialogTicket(null); void load(); }} onConflict={() => { setStatusDialogTicket(null); refresh(); showSnack('O status mudou no ClickUp. A lista foi recarregada.', 'error'); }} />
   </div>;
 }
