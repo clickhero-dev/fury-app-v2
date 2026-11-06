@@ -82,7 +82,9 @@ export interface ClickUpTicketsConfig {
 }
 
 export function getClickUpTicketsConfig(): ClickUpTicketsConfig {
-  const apiToken = process.env.CLICKUP_API_TOKEN;
+  // CLICKUP_API_KEY é o nome usado pelo ambiente legado do painel; preserve
+  // TOKEN como fonte preferencial para instalações novas.
+  const apiToken = process.env.CLICKUP_API_TOKEN ?? process.env.CLICKUP_API_KEY;
   const listId = process.env.CLICKUP_TICKETS_LIST_ID;
   if (!apiToken || !listId) {
     throw new ClickUpTicketsError(500, 'CLICKUP_MISSING_CONFIG', 'Integração de tickets não configurada.');
