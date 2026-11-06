@@ -95,9 +95,9 @@ function TicketRow({ ticket, onReview, onEdit }: { ticket: Ticket; onReview: (ti
   const priority = ticket.priority ? priorityStyles[ticket.priority.toLowerCase()] : undefined;
   const age = ticket.createdAt ? formatRelativeDate(ticket.createdAt) : '';
   const needsReview = ticket.status.trim().toLocaleLowerCase() === 'homologação';
-  return <li className="cursor-pointer rounded-lg bg-admin-bg px-3 py-2.5 transition-colors hover:bg-surface-secondary" role="button" tabIndex={0} aria-label={`Alterar status de ${ticket.name}`} onClick={() => onEdit(ticket)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onEdit(ticket); } }}>
+  return <li className="cursor-pointer rounded-lg bg-admin-bg px-3 py-2.5 transition-colors hover:bg-surface-secondary" onClick={() => onEdit(ticket)}>
     <div className="flex items-start justify-between gap-3">
-      {needsReview ? <button type="button" onClick={(event) => { event.stopPropagation(); onReview(ticket); }} aria-label={`Revisar ticket: ${ticket.name}`} className="min-w-0 break-words text-left text-sm font-medium text-text-primary underline-offset-2 hover:underline">{ticket.name}</button> : <div className="min-w-0 break-words text-sm font-medium text-text-primary">{ticket.name}</div>}
+      {needsReview ? <button type="button" onClick={(event) => { event.stopPropagation(); onReview(ticket); }} aria-label={`Revisar ticket: ${ticket.name}`} className="min-w-0 break-words text-left text-sm font-medium text-text-primary underline-offset-2 hover:underline">{ticket.name}</button> : <button type="button" onClick={(event) => { event.stopPropagation(); onEdit(ticket); }} aria-label={`Alterar status de ${ticket.name}`} className="min-w-0 break-words text-left text-sm font-medium text-text-primary">{ticket.name}</button>}
       <a aria-label={`Ver no ClickUp: ${ticket.name}`} href={ticket.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="shrink-0 rounded p-1.5 text-[#17708A] dark:text-[#5cc5e4]"><ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
     </div>
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-text-secondary">
