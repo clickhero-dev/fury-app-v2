@@ -19,7 +19,8 @@ export class PublicTrialService {
     const result = await this.repository.createAccount(data);
     if (!result.accountId) return; // conta existente que não é trial público
     const token = createMagicLinkToken();
-    await this.repository.issueMagicLink(result.accountId, token.hash, token.expiresAt);
+    const link = await this.repository.issueMagicLink(result.accountId, token.hash, token.expiresAt);
+    if (!link) return;
     const baseUrl = process.env.PUBLIC_TRIAL_FRONTEND_URL || process.env.APP_URL || 'http://localhost:5173';
     const url = `${baseUrl.replace(/\/$/, '')}/trial/acesso#token=${token.raw}`;
     try {

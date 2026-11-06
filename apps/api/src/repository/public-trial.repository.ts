@@ -1,5 +1,5 @@
 import { db as defaultDb, publicTrialAccounts, publicTrialMagicLinks, tenants, users, subscriptions, plans, type Database } from '@fury/db';
-import { and, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, isNull, sql } from 'drizzle-orm';
 
 export class PublicTrialRepository {
   constructor(private readonly db: Database = defaultDb) {}
@@ -48,6 +48,17 @@ export class PublicTrialRepository {
 
   async issueMagicLink(accountId: string, tokenHash: string, expiresAt: Date) {
     return this.db.transaction(async (tx) => {
+      const cooldownSince = new Date(Date.now() - 5 * 60 * 1000);
+      const recent = await tx.query.publicTrialMagicLinks.findFirst({
+        where: and(
+          eq(publicTrialMagicLinks.accountId, accountId),
+          gte(publicTrialMagicLinks.createdAt, cooldownSince),
+          isNull(publicTrialMagicLinks.consumedAt),
+          isNull(publicTrialMagicLinks.revokedAt),
+        ),
+      });
+      if (recent) return null;
+
       await tx.update(publicTrialMagicLinks).set({ revokedAt: new Date() }).where(and(eq(publicTrialMagicLinks.accountId, accountId), isNull(publicTrialMagicLinks.consumedAt), isNull(publicTrialMagicLinks.revokedAt)));
       const [link] = await tx.insert(publicTrialMagicLinks).values({ accountId, tokenHash, expiresAt }).returning();
       return link;

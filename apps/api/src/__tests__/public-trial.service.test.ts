@@ -5,7 +5,9 @@ describe('PublicTrialService', () => {
   it('mantém o fluxo idempotente no mesmo tenant e emite novo link', async () => {
     const repository = {
       createAccount: vi.fn().mockResolvedValue({ accountId: 'account-1', user: { id: 'user-1', tenantId: 'tenant-1', email: 'ana@example.com', name: 'Ana', role: 'owner' } }),
-      issueMagicLink: vi.fn().mockResolvedValue({}),
+      issueMagicLink: vi.fn()
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce(null),
     };
     const mailer = { sendPublicTrialMagicLink: vi.fn().mockResolvedValue(undefined) };
     const service = new PublicTrialService(repository as any, mailer as any);
@@ -13,7 +15,7 @@ describe('PublicTrialService', () => {
     await service.signup({ name: 'Ana', email: 'ana@example.com' });
     expect(repository.createAccount).toHaveBeenCalledTimes(2);
     expect(repository.issueMagicLink).toHaveBeenCalledTimes(2);
-    expect(mailer.sendPublicTrialMagicLink).toHaveBeenCalledTimes(2);
+    expect(mailer.sendPublicTrialMagicLink).toHaveBeenCalledTimes(1);
     expect(mailer.sendPublicTrialMagicLink.mock.calls[0][2]).toContain('#token=');
   });
 
