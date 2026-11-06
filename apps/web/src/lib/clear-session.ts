@@ -7,6 +7,7 @@ const SESSION_KEYS = [
   'token',
   'refreshToken',
   'user',
+  'ady-demo-session',
   'ady-meta-connected',
   'fury-meta-connected',
   'fury_selected_copy',

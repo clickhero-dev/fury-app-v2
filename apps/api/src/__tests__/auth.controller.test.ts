@@ -13,6 +13,7 @@ vi.mock('../middleware/rate-limit.middleware.js', () => ({
 const authService = {
   register: vi.fn(),
   login: vi.fn(),
+  demoLogin: vi.fn(),
   refresh: vi.fn(),
   logout: vi.fn(),
   getMe: vi.fn(),

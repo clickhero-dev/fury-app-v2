@@ -29,6 +29,7 @@ export interface LoginResponse {
   refreshToken: string;
   user: User;
   policy?: PolicyState | null;
+  demo?: boolean;
 }
 
 /** Payload enviado no corpo da requisição de cadastro. */

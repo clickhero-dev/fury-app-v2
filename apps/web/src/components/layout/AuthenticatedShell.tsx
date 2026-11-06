@@ -57,7 +57,7 @@ export function AuthenticatedShell() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
-  const isDemoUser = false;
+  const isDemoUser = localStorage.getItem('ady-demo-session') === 'true';
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const isSubscriptionExempt =

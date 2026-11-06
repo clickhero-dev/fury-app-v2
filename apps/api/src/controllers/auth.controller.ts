@@ -283,6 +283,26 @@ export class AuthController {
     }
   };
 
+  demoLogin = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await this.authService.demoLogin();
+      const policy = await this.policyState(result.user.id);
+      res.status(200).json({
+        success: true,
+        data: {
+          token: result.tokens.accessToken,
+          refreshToken: result.tokens.refreshToken,
+          user: { id: result.user.id, name: result.user.name, email: result.user.email, role: result.user.role, tenantId: result.user.tenantId },
+          demo: true,
+          ...(policy ? { policy } : {}),
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   refresh = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = refreshSchema.parse(req.body);
