@@ -180,6 +180,7 @@ describe('createCampaign', () => {
       statusCode: 400, code: 'INVALID_PARAMETER',
     });
   });
+
 });
 
 describe('resolveMessagingDestinationType', () => {
@@ -244,6 +245,23 @@ describe('createCampaignFromWizard', () => {
     const result = await createCampaignFromWizard(w);
     expect(result).toHaveProperty('success', true);
     expect(mockMetaApiCall).toHaveBeenCalledTimes(4);
+  });
+
+  it('configura seguidores para visitar o perfil do Instagram', async () => {
+    await createCampaignFromWizard({
+      ...w,
+      objective: 'followers' as const,
+      instagramUserId: 'ig-user-1',
+      instagramUsername: 'marca',
+    });
+
+    const campaignBody = (mockMetaApiCall.mock.calls[0] as any[])[2].body;
+    const adSetBody = (mockMetaApiCall.mock.calls[1] as any[])[2].body;
+    const creativeBody = (mockMetaApiCall.mock.calls[2] as any[])[2].body;
+    expect(campaignBody.objective).toBe('OUTCOME_TRAFFIC');
+    expect(adSetBody.optimization_goal).toBe('VISIT_INSTAGRAM_PROFILE');
+    expect(adSetBody.destination_type).toBe('INSTAGRAM_PROFILE');
+    expect(creativeBody.object_story_spec.link_data.link).toBe('https://instagram.com/marca');
   });
 
   it('AD_ACCOUNT_NOT_SELECTED', async () => {
@@ -332,6 +350,19 @@ describe('createCampaignFromWizard', () => {
       })
     ).rejects.toMatchObject({
       statusCode: 400, code: 'WHATSAPP_NUMBER_REQUIRED',
+    });
+  });
+
+  it('FOLLOWERS_INSTAGRAM_REQUIRED', async () => {
+    await expect(
+      createCampaignFromWizard({
+        ...w,
+        objective: 'followers' as const,
+        instagramUserId: undefined,
+        instagramUsername: undefined,
+      })
+    ).rejects.toMatchObject({
+      statusCode: 400, code: 'FOLLOWERS_INSTAGRAM_REQUIRED',
     });
   });
 });

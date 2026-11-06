@@ -74,7 +74,7 @@ const wizardCreativeItemSchema = z.object({
 
 const createWizardSchema = z
   .object({
-    objective: z.enum(['visits', 'engagement', 'messages', 'whatsapp', 'whatsapp_conv', 'leads']),
+    objective: z.enum(['visits', 'followers', 'engagement', 'messages', 'whatsapp', 'whatsapp_conv', 'leads']),
 
     creatives: z.array(wizardCreativeItemSchema).min(1).optional(),
     // campos únicos legados — mantidos para clientes antigos
@@ -179,6 +179,13 @@ const createWizardSchema = z
     {
       message: 'Informe o número de WhatsApp que receberá os clientes após o formulário.',
       path: ['whatsapp_phone_number'],
+    }
+  )
+  .refine(
+    (data) => data.objective !== 'followers' || (Boolean(data.instagram_user_id) && Boolean(data.instagram_username)),
+    {
+      message: 'Conecte uma conta do Instagram para criar uma campanha de aumento de seguidores.',
+      path: ['instagram_user_id'],
     }
   );
 
