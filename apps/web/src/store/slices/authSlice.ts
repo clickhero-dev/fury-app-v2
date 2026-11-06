@@ -172,6 +172,7 @@ const authSlice = createSlice({
       state.metaId = null;
       state.plan = null;
       state.planExpiration = null;
+      localStorage.removeItem('fury-public-trial');
       state.policy = null;
       localStorage.removeItem(PLAN_KEY);
       localStorage.removeItem(PLAN_EXPIRATION_KEY);

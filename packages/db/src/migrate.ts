@@ -165,6 +165,7 @@ const STEPS: MigrationStep[] = [
   { tag: '0056_notification_action_url' },
   { tag: '0054_subscription_renewal_events' },
   { tag: '0055_trial_plan_technical_key' },
+  { tag: '0058_public_trial_signup' },
   {
     tag: '0056_add_demo_role',
     afterHook: async (client) => {
@@ -227,6 +228,8 @@ export const REQUIRED_TABLES = [
   'ady_rbac_views_blocked',
   'ady_rbac_audit_log',
   'notifications',
+  'public_trial_accounts',
+  'public_trial_magic_links',
 ];
 
 /**
