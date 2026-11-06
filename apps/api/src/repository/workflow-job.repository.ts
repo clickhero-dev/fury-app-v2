@@ -29,6 +29,58 @@ export class WorkflowJobRepository extends TenantScopedRepository {
     await this.db.update(workflowJobs).set(patch as any).where(eq(workflowJobs.id, id));
   }
 
+  /**
+   * Claim de um lote do Estúdio. O advisory lock torna o replay atômico por
+   * tenant+lote sem exigir migration/índice novo em `workflow_jobs`.
+   */
+  async findOrCreateStudioVariationsJob(data: {
+    id: string;
+    tenantId: string;
+    assetId: string;
+    origin: 'quick' | 'creative';
+  }) {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`studio-variations:${data.tenantId}:${data.id}`}))`);
+      const [existing] = await tx
+        .select()
+        .from(workflowJobs)
+        .where(and(eq(workflowJobs.id, data.id), eq(workflowJobs.tenantId, data.tenantId), eq(workflowJobs.workflow, 'studio-creative-variations')))
+        .limit(1);
+      if (existing) return existing;
+      const [created] = await tx
+        .insert(workflowJobs)
+        .values({
+          id: data.id,
+          tenantId: data.tenantId,
+          workflow: 'studio-creative-variations',
+          status: 'pending',
+          lockKey: `${data.tenantId}:${data.assetId}:${data.id}`,
+          currentStage: 'queued',
+          metadata: { batchId: data.id, assetId: data.assetId, origin: data.origin, slots: [] },
+        } as any)
+        .returning();
+      return created;
+    });
+  }
+
+  async getStudioVariationsJob(tenantId: string, id: string) {
+    const [row] = await this.db
+      .select()
+      .from(workflowJobs)
+      .where(and(eq(workflowJobs.id, id), eq(workflowJobs.tenantId, tenantId), eq(workflowJobs.workflow, 'studio-creative-variations')))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async claimStudioVariationsJob(id: string, tenantId: string, metadata: unknown) {
+    const [row] = await this.db
+      .update(workflowJobs)
+      .set({ status: 'running', currentStage: 'generating', metadata: metadata as any, updatedAt: new Date() })
+      .where(and(eq(workflowJobs.id, id), eq(workflowJobs.tenantId, tenantId), eq(workflowJobs.workflow, 'studio-creative-variations'), eq(workflowJobs.status, 'pending')))
+      .returning({ id: workflowJobs.id });
+    return !!row;
+  }
+
   async listRecoverableWorkflowJobs(opts?: { workflow?: string; sinceMs?: number }) {
     const cutoff = opts?.sinceMs ? new Date(Date.now() - opts.sinceMs) : new Date(0);
     const conditions = [

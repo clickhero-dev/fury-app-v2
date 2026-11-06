@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 
-export type NotificationItem = { id: string; type: 'general'; title: string; body: string; createdAt: string; readAt: string | null };
+export type NotificationItem = { id: string; type: 'general'; title: string; body: string; actionUrl: string | null; createdAt: string; readAt: string | null };
 type Page = { items: NotificationItem[]; nextCursor: string | null; unreadCount: number };
 
 const key = ['notifications'];

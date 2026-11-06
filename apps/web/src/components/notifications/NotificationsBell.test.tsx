@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { NotificationsBell } from './NotificationsBell';
 
 const { get, patch } = vi.hoisted(() => ({
-  get: vi.fn().mockResolvedValue({ data: { data: { items: [{ id: 'n1', type: 'general', title: 'Aviso', body: 'Texto', createdAt: new Date().toISOString(), readAt: null }], nextCursor: null, unreadCount: 1 } } }),
+  get: vi.fn().mockResolvedValue({ data: { data: { items: [{ id: 'n1', type: 'general', title: 'Aviso', body: 'Texto', actionUrl: '/estudio?assetId=a1', createdAt: new Date().toISOString(), readAt: null }], nextCursor: null, unreadCount: 1 } } }),
   patch: vi.fn().mockResolvedValue({ data: { data: { id: 'n1', readAt: new Date().toISOString() } } }),
 }));
 vi.mock('@/lib/api', () => ({ default: { get, patch, post: vi.fn() } }));
@@ -24,6 +24,7 @@ describe('NotificationsBell', () => {
     expect(await screen.findByLabelText(/notificações, 1 não lida/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /notificações/i }));
     expect(await screen.findByText('Aviso')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Aviso' })).toHaveAttribute('href', '/estudio?assetId=a1');
     const markReadButton = screen.getByRole('button', { name: /marcar aviso como lida/i });
     expect(markReadButton).toHaveAttribute('title', 'Marcar como lida');
     expect(markReadButton.querySelector('svg')).toBeInTheDocument();
