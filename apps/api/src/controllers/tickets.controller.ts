@@ -17,11 +17,13 @@ const createTicketSchema = z.object({
   }, z.array(z.enum(TICKET_LABELS)).max(4).refine((labels) => new Set(labels).size === labels.length, 'As etiquetas não podem se repetir').optional().default([])),
 });
 
-const updateStatusSchema = z.object({
-  expectedStatus: z.string().trim().min(1).max(200),
-  status: z.string().trim().min(1).max(200),
-}).strict();
-const ticketIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
+const updateTicketStatusSchema = z.object({
+  expectedStatus: z.string().trim().min(1).max(100),
+  status: z.string().trim().min(1).max(100),
+}).refine((input) => input.expectedStatus.toLocaleLowerCase() !== input.status.toLocaleLowerCase(), {
+  message: 'Escolha um status diferente do atual.', path: ['status'],
+});
+
 const reviewTicketSchema = z.discriminatedUnion('decision', [
   z.object({ decision: z.literal('approve') }),
   z.object({ decision: z.literal('reject'), reason: z.string().trim().min(1).max(5_000) }),
@@ -72,10 +74,9 @@ export class TicketsController {
 
   updateStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const ticketId = ticketIdSchema.parse(req.params.ticketId);
-      const input = updateStatusSchema.parse(req.body);
-      const ticket = await this.ticketService.updateTicketStatus(ticketId, input);
-      res.status(200).json({ success: true, data: ticket, timestamp: new Date().toISOString() });
+      const input = updateTicketStatusSchema.parse(req.body);
+      const ticket = await this.ticketService.updateTicketStatus(req.params.ticketId, input);
+      res.json({ success: true, data: ticket, timestamp: new Date().toISOString() });
     } catch (error) {
       next(error);
     }

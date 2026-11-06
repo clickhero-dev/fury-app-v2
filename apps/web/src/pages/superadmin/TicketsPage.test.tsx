@@ -110,6 +110,26 @@ Funcionalidade: tela de chamados do painel administrativo
     Dado que o status selecionado não está mais nos chamados atualizados
     Quando a tela termina de atualizar
     Então a seleção permanece identificável e a contagem filtrada fica zero
+
+  Cenário: abrir revisão somente para ticket em homologação
+    Dado que há um ticket em HOMOLOGAÇÃO e outro em progresso
+    Quando o superadmin seleciona o ticket em homologação
+    Então vê a modal de aprovação ou reprovação
+
+  Cenário: aprovar ticket em homologação
+    Dado que a modal de revisão está aberta
+    Quando escolhe aprovar
+    Então a tela solicita aprovação à API e confirma o sucesso
+
+  Cenário: reprovar ticket com motivo
+    Dado que a modal de revisão está aberta
+    Quando informa o motivo e confirma a reprovação
+    Então a tela envia o motivo à API e confirma o sucesso
+
+  Cenário: impedir reprovação sem motivo
+    Dado que o superadmin escolheu reprovar
+    Quando tenta confirmar sem motivo
+    Então a revisão não é enviada e a orientação aparece
 */
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -117,10 +137,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TicketsPage } from './TicketsPage';
 
 const mockPost = vi.hoisted(() => vi.fn());
-const mockGet = vi.hoisted(() => vi.fn());
 const mockPatch = vi.hoisted(() => vi.fn());
+const mockGet = vi.hoisted(() => vi.fn());
 const mockShowSnack = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/api', () => ({ default: { post: mockPost, get: mockGet, patch: mockPatch } }));
+vi.mock('@/lib/api', () => ({ default: { post: mockPost, patch: mockPatch, get: mockGet } }));
 vi.mock('@/lib/snack', () => ({ showSnack: mockShowSnack }));
 
 const NOW = new Date('2026-10-06T12:00:00-03:00');
@@ -139,6 +159,7 @@ function mockTicketsData(ticketLists?: { open: MockTicket[]; resolved: MockTicke
   mockGet.mockImplementation((url: string) => {
     if (url === '/admin/tickets') return Promise.resolve({ data: { data: lists, partial_failures: [] } });
     if (url === '/admin/tickets/assignees') return Promise.resolve({ data: { data: [{ id: 101281834, name: 'Kaio Araújo', email: 'kaio@clickhero.com.br' }] } });
+    if (url === '/admin/tickets/statuses') return Promise.resolve({ data: { data: [{ value: 'pendente', label: 'pendente', type: 'open' }, { value: 'triagem', label: 'triagem', type: 'open' }, { value: 'concluído', label: 'concluído', type: 'closed' }] } });
     return Promise.reject(new Error(`Unexpected URL ${url}`));
   });
   return lists;
@@ -161,8 +182,12 @@ async function openModalAndFill(user = setupUser()) {
 
 describe('TicketsPage', () => {
   beforeEach(() => {
-    mockPost.mockReset(); mockGet.mockReset(); mockPatch.mockReset(); mockShowSnack.mockReset(); mockTicketsData();
+    mockPost.mockReset(); mockPatch.mockReset(); mockGet.mockReset(); mockShowSnack.mockReset(); mockTicketsData();
     vi.useFakeTimers({ now: NOW, shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('fecha o modal e mostra snack de sucesso ao enviar ticket válido', async () => {
@@ -458,6 +483,7 @@ describe('TicketsPage', () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/admin/tickets') return Promise.resolve({ data: { data: current, partial_failures: [] } });
       if (url === '/admin/tickets/assignees') return Promise.resolve({ data: { data: [] } });
+      if (url === '/admin/tickets/statuses') return Promise.resolve({ data: { data: [{ value: 'release', label: 'release', type: 'open' }, { value: 'triagem', label: 'triagem', type: 'open' }] } });
       return Promise.reject(new Error(`Unexpected URL ${url}`));
     });
     render(<TicketsPage />);
@@ -471,39 +497,91 @@ describe('TicketsPage', () => {
     expect(within(screen.getByRole('tab', { name: /abertos/i })).getByText('0')).toBeInTheDocument();
   });
 
-  it('abre o diálogo, carrega status dinâmico e confirma a alteração', async () => {
-    mockGet.mockImplementation((url: string) => {
-      if (url === '/admin/tickets') return Promise.resolve({ data: { data: { open: [ticket('open-1', '[N2] Publicação falhou', { status: 'triagem' })], resolved: [] }, partial_failures: [] } });
-      if (url === '/admin/tickets/assignees') return Promise.resolve({ data: { data: [] } });
-      if (url === '/admin/tickets/statuses') return Promise.resolve({ data: { data: [{ name: 'triagem', type: 'custom' }, { name: 'review_spec', type: 'custom' }, { name: 'concluído', type: 'closed' }] } });
-      return Promise.reject(new Error(`Unexpected URL ${url}`));
-    });
-    mockPatch.mockResolvedValue({ data: { data: { id: 'open-1', status: 'review_spec', statusType: 'custom' } } });
+  it('abre o diálogo ao clicar no card e envia o status escolhido', async () => {
+    mockPatch.mockResolvedValue({ data: { data: { id: 'open-1', status: 'triagem' } } });
     render(<TicketsPage />);
     const user = setupUser();
-    await user.click(await screen.findByRole('button', { name: /alterar status de \[N2\]/i }));
+    await user.click(await screen.findByRole('listitem', { name: 'Alterar status de [N2] Publicação falhou' }));
     const dialog = await screen.findByRole('dialog');
-    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Novo status' }), 'review_spec');
+    expect(within(dialog).getByRole('combobox', { name: 'Novo status' })).toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Novo status' }), 'triagem');
     await user.click(within(dialog).getByRole('button', { name: 'Confirmar alteração' }));
-    await waitFor(() => expect(mockPatch).toHaveBeenCalledWith('/admin/tickets/open-1/status', { expectedStatus: 'triagem', status: 'review_spec' }));
-    expect(mockShowSnack).toHaveBeenCalledWith('Status do ticket alterado com sucesso.', 'success');
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledWith('/admin/tickets/open-1/status', { expectedStatus: 'em progresso', status: 'triagem' }));
+    expect(mockShowSnack).toHaveBeenCalledWith('Status do ticket atualizado.', 'success');
   });
 
-  it('informa conflito e recarrega quando o status ficou obsoleto', async () => {
-    mockGet.mockImplementation((url: string) => {
-      if (url === '/admin/tickets') return Promise.resolve({ data: { data: { open: [ticket('open-1', '[N2] Publicação falhou', { status: 'triagem' })], resolved: [] }, partial_failures: [] } });
-      if (url === '/admin/tickets/assignees') return Promise.resolve({ data: { data: [] } });
-      if (url === '/admin/tickets/statuses') return Promise.resolve({ data: { data: [{ name: 'triagem', type: 'custom' }, { name: 'review_spec', type: 'custom' }] } });
-      return Promise.reject(new Error(`Unexpected URL ${url}`));
-    });
-    mockPatch.mockRejectedValue({ response: { status: 409, data: { error: { message: 'O status deste ticket mudou. Atualize a lista e tente novamente.' } } } });
+  it('recarrega a lista e informa conflito quando o status mudou externamente', async () => {
+    mockPatch.mockRejectedValue({ response: { status: 409, data: { error: { message: 'conflito' } } } });
     render(<TicketsPage />);
     const user = setupUser();
-    await user.click(await screen.findByRole('button', { name: /alterar status de \[N2\]/i }));
+    await user.click(await screen.findByRole('listitem', { name: 'Alterar status de [N2] Publicação falhou' }));
     const dialog = await screen.findByRole('dialog');
-    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Novo status' }), 'review_spec');
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Novo status' }), 'triagem');
     await user.click(within(dialog).getByRole('button', { name: 'Confirmar alteração' }));
-    expect((await within(dialog).findByRole('alert')).textContent).toContain('O status deste ticket mudou');
+    await waitFor(() => expect(mockShowSnack).toHaveBeenCalledWith('O status do ticket mudou no ClickUp. Os chamados foram recarregados.', 'error'));
     expect(mockGet.mock.calls.filter(([url]) => url === '/admin/tickets').length).toBeGreaterThan(1);
+  });
+
+  it('abre revisão apenas ao selecionar ticket em homologação', async () => {
+    mockTicketsData({
+      open: [ticket('review-1', 'Revisar entrega', { status: 'HOMOLOGAÇÃO' }), ticket('progress-1', 'Em progresso', { status: 'em progresso' })],
+      resolved: [],
+    });
+    render(<TicketsPage />);
+    const user = setupUser();
+
+    await user.click(await screen.findByRole('button', { name: 'Revisar ticket: Revisar entrega' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Deseja aprovar ou reprovar este ticket?');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Revisar ticket: Em progresso' })).not.toBeInTheDocument();
+  });
+
+  it('aprova ticket em homologação pela API', async () => {
+    mockTicketsData({ open: [ticket('review-1', 'Revisar entrega', { status: 'HOMOLOGAÇÃO' })], resolved: [] });
+    mockPost.mockResolvedValue({ data: { success: true, data: { status: 'Aprovado' } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    await user.click(await screen.findByRole('button', { name: 'Revisar ticket: Revisar entrega' }));
+    await user.click(screen.getByRole('button', { name: 'Aprovar' }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets/review-1/review', { decision: 'approve' }));
+    expect(mockShowSnack).toHaveBeenCalledWith('Ticket aprovado.', 'success');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('reprova ticket enviando motivo obrigatório', async () => {
+    mockTicketsData({ open: [ticket('review-2', 'Cadastro incompleto', { status: 'homologação' })], resolved: [] });
+    mockPost.mockResolvedValue({ data: { success: true, data: { status: 'Implement' } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    await user.click(await screen.findByRole('button', { name: 'Revisar ticket: Cadastro incompleto' }));
+    await user.click(screen.getByRole('button', { name: 'Reprovar' }));
+    const dialog = screen.getByRole('dialog');
+    const submit = within(dialog).getByRole('button', { name: 'Confirmar reprovação' });
+    expect(submit).toBeDisabled();
+    await user.type(within(dialog).getByLabelText('Motivo da reprovação'), 'Falta validar no celular.');
+    await user.click(submit);
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/admin/tickets/review-2/review', { decision: 'reject', reason: 'Falta validar no celular.' }));
+    expect(mockShowSnack).toHaveBeenCalledWith('Ticket reprovado e devolvido para implementação.', 'success');
+  });
+
+  it('mantém motivo na modal quando a API falha para permitir nova tentativa', async () => {
+    mockTicketsData({ open: [ticket('review-3', 'Ajustar relatório', { status: 'homologação' })], resolved: [] });
+    mockPost.mockRejectedValue({ response: { data: { error: { message: 'Não foi possível atualizar o chamado agora. Tente novamente.' } } } });
+    render(<TicketsPage />);
+    const user = setupUser();
+    await user.click(await screen.findByRole('button', { name: 'Revisar ticket: Ajustar relatório' }));
+    await user.click(screen.getByRole('button', { name: 'Reprovar' }));
+    const dialog = screen.getByRole('dialog');
+    const reason = within(dialog).getByLabelText('Motivo da reprovação');
+    await user.type(reason, 'O valor total está incorreto.');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirmar reprovação' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Não foi possível atualizar o chamado agora. Tente novamente.');
+    expect(reason).toHaveValue('O valor total está incorreto.');
+    expect(mockShowSnack).not.toHaveBeenCalled();
+
   });
 });
