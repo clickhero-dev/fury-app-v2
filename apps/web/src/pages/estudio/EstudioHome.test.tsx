@@ -232,7 +232,7 @@ describe('AssetCard — download da Biblioteca', () => {
     const { rerender } = render(<AssetCard asset={{ ...MOCK_ASSETS.assets[0], url: null }} {...cardProps} />);
     expect(screen.queryByRole('button', { name: /baixar criativo/i })).not.toBeInTheDocument();
 
-    rerender(<AssetCard asset={{ ...MOCK_ASSETS.assets[0], complianceStatus: 'pending_compliance' }} {...cardProps} />);
+    rerender(<AssetCard asset={{ ...MOCK_ASSETS.assets[0], complianceStatus: 'pending' }} {...cardProps} />);
     expect(screen.getByRole('button', { name: /baixar anúncio de imagem/i })).toBeDisabled();
   });
 });

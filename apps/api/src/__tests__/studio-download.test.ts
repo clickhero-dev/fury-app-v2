@@ -80,6 +80,15 @@ describe('downloadStudioAsset', () => {
     });
   });
 
+  it('permite baixar arquivo final enquanto a análise de compliance está pendente', async () => {
+    findAssetById.mockResolvedValue({ ...imageAsset, complianceStatus: 'pending_compliance' });
+    externalFetch.mockResolvedValue(response('image-final', 'image/png'));
+
+    await expect(downloadStudioAsset({ tenantId: 'tenant-1', assetId: imageAsset.id })).resolves.toMatchObject({
+      filename: 'criativo-asset-image-1.png',
+    });
+  });
+
   it('rejeita asset inexistente, arquivado ou ainda processando sem buscar URL', async () => {
     findAssetById.mockResolvedValueOnce(null);
     await expect(downloadStudioAsset({ tenantId: 'tenant-1', assetId: 'missing' })).rejects.toMatchObject({ statusCode: 404 });
@@ -87,7 +96,7 @@ describe('downloadStudioAsset', () => {
     findAssetById.mockResolvedValueOnce({ ...imageAsset, archivedAt: new Date() });
     await expect(downloadStudioAsset({ tenantId: 'tenant-1', assetId: imageAsset.id })).rejects.toMatchObject({ statusCode: 404 });
 
-    findAssetById.mockResolvedValueOnce({ ...imageAsset, complianceStatus: 'pending_compliance' });
+    findAssetById.mockResolvedValueOnce({ ...imageAsset, complianceStatus: 'pending' });
     await expect(downloadStudioAsset({ tenantId: 'tenant-1', assetId: imageAsset.id })).rejects.toMatchObject({ statusCode: 409 });
     expect(externalFetch).not.toHaveBeenCalled();
   });

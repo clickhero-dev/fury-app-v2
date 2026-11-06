@@ -913,7 +913,8 @@ export function AssetCard({ asset, onViewDetails, archived, onDeleteRequest, onU
   const badge = complianceBadge(asset.complianceStatus, asset.complianceNotes);
   const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const canDownload = !archived && !!imageUrl && (asset.type === 'image' || asset.type === 'video');
-  const downloadReady = canDownload && asset.complianceStatus !== 'pending' && asset.complianceStatus !== 'pending_compliance';
+  // pending_compliance é análise posterior: o arquivo final já existe.
+  const downloadReady = canDownload && asset.complianceStatus !== 'pending';
 
   const downloadAsset = async () => {
     if (!downloadReady || downloadState === 'loading') return;

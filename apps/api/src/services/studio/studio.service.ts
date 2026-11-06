@@ -367,7 +367,9 @@ export async function downloadStudioAsset(params: { tenantId: string; assetId: s
     throw new AppError(400, 'ASSET_NOT_DOWNLOADABLE', 'Este tipo de criativo nao pode ser baixado.');
   }
 
-  if (asset.complianceStatus === 'pending' || asset.complianceStatus === 'pending_compliance') {
+  // pending_compliance significa que a mídia final já foi persistida e aguarda
+  // apenas a análise opcional; só `pending` representa geração ainda em curso.
+  if (asset.complianceStatus === 'pending') {
     throw new AppError(409, 'ASSET_NOT_READY', 'O criativo ainda esta sendo processado.');
   }
 
