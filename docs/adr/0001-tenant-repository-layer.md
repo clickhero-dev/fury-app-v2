@@ -24,11 +24,12 @@ base comum:
   intenção original (construtor já carrega `tenantId` e `db`). Hospeda as **lookups
   reutilizadas por vários domínios**: `findBrandKit`, `findClientGoal`/`findClientGoals`,
   `findMetaConnection`, `findBusinessProfile`, `findTenant`.
-- **~12 repositórios por agregado de domínio**, herdando a base: `PlannerRepository`,
+- **Repositórios por agregado de domínio**, herdando a base: `PlannerRepository`,
   `StudioRepository`, `CampaignRepository`, `MetaRepository`, `GoogleRepository`,
   `SubscriptionRepository`, `FuryEngineRepository`, `AutomationRepository`,
   `AuthRepository`, `FormsRepository`, `WorkflowJobRepository` (GLOBAL),
-  `SuperAdminRepository` (GLOBAL).
+  `SuperAdminRepository` (GLOBAL) e `PublicTrialRepository` (GLOBAL, aquisição antes
+  de existir tenant autenticado).
 - Critérios de agrupamento: **agregado raiz (DDD)**, **frequência de uso compartilhado**
   (lookups na base), **carga/volume** (infra apartada) e **escopo** (queries GLOBAL fora
   do padrão tenant-scoped).

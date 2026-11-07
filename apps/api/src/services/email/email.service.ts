@@ -9,6 +9,7 @@ import {
   gmbUnlinkedEmailTemplate,
   campaignPublishedEmailTemplate,
   gmbProfileVerifiedEmailTemplate,
+  trialAccessEmailTemplate,
 } from './email-templates.js';
 
 type EmailTransporter = ReturnType<typeof nodemailer.createTransport>;
@@ -87,6 +88,14 @@ export class EmailService {
       to,
       subject: 'Bem-vindo ao Ady!',
       html: welcomeEmailTemplate(name),
+    });
+  }
+
+  sendTrialAccessEmail(to: string, name: string, accessUrl: string): Promise<void> {
+    return this.sendEmail({
+      to,
+      subject: 'Seu acesso ao Trial está pronto',
+      html: trialAccessEmailTemplate(name, accessUrl),
     });
   }
 

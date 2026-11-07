@@ -4,12 +4,41 @@ const KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
 
 export const posthogEnabled = Boolean(KEY);
 
+export function hasTrialAccessTokenInLocation(pathname: string, hash: string): boolean {
+  return pathname === '/trial/acesso' && new URLSearchParams(hash.replace(/^#/, '')).has('token');
+}
+
+type PostHogEvent = { properties?: Record<string, unknown> };
+
+export function sanitizeTrialAccessEvent<T extends PostHogEvent>(event: T): T {
+  if (!event.properties) return event;
+  let changed = false;
+  const properties = { ...event.properties };
+  for (const key of ['$current_url', '$url']) {
+    const value = properties[key];
+    if (typeof value !== 'string') continue;
+    try {
+      const url = new URL(value);
+      if (url.pathname === '/trial/acesso' && url.hash) {
+        url.hash = '';
+        properties[key] = url.toString();
+        changed = true;
+      }
+    } catch {
+      // Preserve non-URL values; only sanitize valid Trial access URLs.
+    }
+  }
+  return changed ? { ...event, properties } as T : event;
+}
+
 export function initPosthog() {
   if (!posthogEnabled || typeof window === 'undefined') return;
   posthog.init(KEY, {
     autocapture: true,
     capture_pageview: true,
     capture_pageleave: true,
+    disable_session_recording: hasTrialAccessTokenInLocation(window.location.pathname, window.location.hash),
+    before_send: (event) => sanitizeTrialAccessEvent(event),
     session_recording: {
       recordCrossOriginIframes: false,
       maskInputOptions: { password: true, number: true },
@@ -42,6 +71,7 @@ export function resetUser() {
 
 export function startReplay() {
   if (!posthogEnabled) return;
+  if (typeof window !== 'undefined' && hasTrialAccessTokenInLocation(window.location.pathname, window.location.hash)) return;
   posthog.startSessionRecording();
 }
 

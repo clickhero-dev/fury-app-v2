@@ -65,6 +65,11 @@ Funcionalidade: Endpoints v2 de dados Meta (direto do banco, fallback stale)
     Quando GET /api/v2/metrics/daily e /api/v2/dashboard/instagram-insights
     Então 200 com os agregados e syncedAt
 
+  Cenário: rota de dashboard demo montada
+    Dado o router v2 com controller de dashboard demo
+    Quando GET /api/v2/dashboard/demo com auth + tenant
+    Então 200 com a resposta do controller de dashboard demo
+
   Cenário: alterar status de um lead (manual, transições livres)
     Dado lead persistido no tenant
     Quando PATCH /api/v2/leads/:id/status com { status: "negociando" }
@@ -192,7 +197,12 @@ function makeFakes(overrides: Record<string, unknown> = {}) {
 function buildApp(controller: MetaSyncV2Controller) {
   const app = express();
   app.use(express.json());
-  app.use('/api/v2', authMiddleware, tenantMiddleware, createV2Router(controller));
+  const demoController = {
+    getDashboardDemo: (_req: unknown, res: { json: (body: unknown) => unknown }) => {
+      res.json({ success: true, data: { mode: 'demo' } });
+    },
+  };
+  app.use('/api/v2', authMiddleware, tenantMiddleware, createV2Router(controller, demoController as never));
   app.use(errorHandler);
   return app;
 }
@@ -223,6 +233,17 @@ describe('BDD: Endpoints v2', () => {
       .set('Authorization', `Bearer ${authToken(TENANT)}`);
     expect(res.status).toBe(400);
     expect(res.body.error?.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('Cenário: rota de dashboard demo montada → 200 com resposta do controller', async () => {
+    const app = buildApp(makeFakes().controller);
+
+    const res = await request(app)
+      .get('/api/v2/dashboard/demo')
+      .set('Authorization', `Bearer ${authToken(TENANT)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ success: true, data: { mode: 'demo' } });
   });
 
   it('Cenário: intervalo de campanha com data malformada → 400', async () => {

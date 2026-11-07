@@ -7,6 +7,7 @@ import {
   jsonb,
   pgEnum,
   index,
+  uniqueIndex,
   boolean,
   numeric,
   integer,
@@ -131,6 +132,40 @@ export const users = pgTable(
     emailTenantIdx: index('users_email_tenant_idx').on(table.email, table.tenantId),
     facebookIdIdx: index('users_facebook_id_idx').on(table.facebookId),
   })
+);
+
+/** Identidade e origem das contas criadas pelo formulário público de Trial. */
+export const publicTrialAccounts = pgTable(
+  'public_trial_accounts',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().unique().references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+    signupEmail: varchar('signup_email', { length: 255 }),
+    phone: varchar('phone', { length: 20 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    signupEmailUnique: uniqueIndex('public_trial_accounts_signup_email_unique')
+      .on(table.signupEmail)
+      .where(sql`${table.signupEmail} IS NOT NULL`),
+  }),
+);
+
+/** Tokens mágicos: somente o hash é persistido. */
+export const publicTrialMagicLinks = pgTable(
+  'public_trial_magic_links',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id').notNull().references(() => publicTrialAccounts.id, { onDelete: 'cascade' }),
+    tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({ accountIdx: index('public_trial_magic_links_account_idx').on(table.accountId) }),
 );
 
 // Meta connections table

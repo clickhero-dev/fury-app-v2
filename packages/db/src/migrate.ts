@@ -160,9 +160,11 @@ const STEPS: MigrationStep[] = [
   { tag: '0050_announcements' },
   { tag: '0051_brand_kit_photo_panel_visibility' },
   { tag: '0052_trial_plan' },
+  { tag: '0053_public_trial_access' },
+  { tag: '0054_public_trial_email_snapshot' },
 ];
 
-/** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */
+/** Tabelas obrigatórias do schema — usadas para validação após as migrations. */
 export const REQUIRED_TABLES = [
   'tenants',
   'users',
@@ -205,6 +207,8 @@ export const REQUIRED_TABLES = [
   'faq_slug_redirects',
   'announcements',
   'announcement_views',
+  'public_trial_accounts',
+  'public_trial_magic_links',
 ];
 
 /**

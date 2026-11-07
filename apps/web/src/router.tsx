@@ -1,6 +1,8 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { TrialAccessPage } from './pages/auth/TrialAccessPage';
+import { TrialSignupPage } from './pages/auth/TrialSignupPage';
 import { RegisterFormPage } from './pages/auth/RegisterFormPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
@@ -67,6 +69,8 @@ export const router = createBrowserRouter([
     path: '/login',
     element: <LoginPage />,
   },
+  { path: '/trial/acesso', element: <TrialAccessPage /> },
+  { path: '/trial/solicitar', element: <TrialSignupPage /> },
   {
     path: '/cadastro',
     element: <RegisterPage />,
