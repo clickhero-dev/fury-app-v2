@@ -1,7 +1,7 @@
 import { db as defaultDb, publicTrialAccounts, publicTrialMagicLinks, tenants, users, subscriptions, plans, type Database } from '@fury/db';
 import { and, eq, gt, gte, isNull, sql } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
-import { PUBLIC_TRIAL_IMAGE_LIMIT } from '../services/core/public-trial-signup.js';
+import { PUBLIC_TRIAL_IMAGE_LIMIT, PUBLIC_TRIAL_PLAN_KEY } from '../services/core/public-trial-signup.js';
 import { createTemporaryPassword } from '../services/core/public-trial-signup.js';
 
 export class PublicTrialRepository {
@@ -35,7 +35,7 @@ export class PublicTrialRepository {
         role: 'owner',
         emailVerified: true,
       }).returning();
-      const plan = await tx.query.plans.findFirst({ where: eq(plans.technicalKey, 'public_trial_signup') });
+      const plan = await tx.query.plans.findFirst({ where: eq(plans.technicalKey, PUBLIC_TRIAL_PLAN_KEY) });
       if (!plan) throw new Error('public_trial_signup plan is not configured');
       await tx.insert(subscriptions).values({
         tenantId: tenant.id,

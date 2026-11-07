@@ -89,7 +89,7 @@ function fakeTxDb() {
     } })),
     update: vi.fn(() => ({ set: () => ({ where: async () => {} }) })),
     query: {
-      plans: { findFirst: vi.fn(async () => ({ id: 'trial-plan', technicalKey: 'trial_new_signup', priceCents: 0, isActive: true, limits: { creativesPerMonth: 5 } })) },
+      plans: { findFirst: vi.fn(async () => ({ id: 'trial-plan', technicalKey: 'public_trial_signup', priceCents: 0, isActive: true, limits: { creativesPerMonth: 5 } })) },
       subscriptions: { findFirst: vi.fn(async () => null) },
     },
   };
