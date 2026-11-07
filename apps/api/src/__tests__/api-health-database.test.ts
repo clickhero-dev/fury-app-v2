@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Quando a consulta de probe falha
 // Então o check db é marcado como falho com diagnóstico sanitizado
 
-const { executeMock } = vi.hoisted(() => ({ executeMock: vi.fn() }));
+const { executeMock, workflowRunMock } = vi.hoisted(() => ({ executeMock: vi.fn(), workflowRunMock: vi.fn() }));
 
 vi.mock('@fury/db', () => ({
   db: { execute: executeMock },
@@ -22,10 +22,21 @@ vi.mock('../lib/redis.js', () => ({
   waitForRedisReady: vi.fn(),
 }));
 
+vi.mock('../services/stateMachine/workflow.engine.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/stateMachine/workflow.engine.js')>();
+  return {
+    ...actual,
+    WorkflowEngine: class {
+      run = workflowRunMock;
+    },
+  };
+});
+
 describe('health check — conexão do banco', () => {
   beforeEach(() => {
     vi.resetModules();
     executeMock.mockReset();
+    workflowRunMock.mockReset();
   });
 
   it('Cenário: falha de conexão registra check db falso sem expor credenciais', async () => {
@@ -134,5 +145,17 @@ describe('health check — conexão do banco', () => {
     expect(response.status).toBe(503);
     expect(response.body).toEqual({ error: 'SERVICE_UNAVAILABLE' });
     apiState.setStatus('healthy');
+  });
+
+  it('Cenário: falha terminal do banco devolve o controle ao servidor para fechar o listener', async () => {
+    const { WorkflowFailedError } = await import('../services/stateMachine/workflow.engine.js');
+    workflowRunMock.mockRejectedValueOnce(
+      new WorkflowFailedError('api-startup-global', 'db-connect', 'database connection failed (unavailable)'),
+    );
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const { runApiStartupWorkflow } = await import('../workflows/api-startup-runner.js');
+
+    await expect(runApiStartupWorkflow()).rejects.toMatchObject({ stageId: 'db-connect' });
+    expect(exitSpy).not.toHaveBeenCalled();
   });
 });
