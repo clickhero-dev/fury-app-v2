@@ -18,6 +18,7 @@ import {
   smallint,
   date,
   primaryKey,
+  check,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -282,6 +283,24 @@ export const creativeAssets = pgTable(
     rootAssetIdIdx: index('creative_assets_root_asset_id_idx').on(table.rootAssetId),
     activeAssetIdIdx: index('creative_assets_active_asset_id_idx').on(table.activeAssetId),
   })
+);
+
+export const creativeAssetRatings = pgTable(
+  'creative_asset_ratings',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    creativeAssetId: uuid('creative_asset_id').notNull().references(() => creativeAssets.id, { onDelete: 'cascade' }),
+    rating: integer('rating').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    ratingRange: check('creative_asset_ratings_rating_check', sql`${table.rating} BETWEEN 1 AND 5`),
+    tenantUserAssetUnique: unique('creative_asset_ratings_tenant_user_asset_unique').on(table.tenantId, table.userId, table.creativeAssetId),
+    tenantAssetIdx: index('creative_asset_ratings_tenant_asset_idx').on(table.tenantId, table.creativeAssetId),
+  }),
 );
 
 // Client goals table
@@ -1429,6 +1448,7 @@ export const allTables = {
   metaConnections,
   campaigns,
   creativeAssets,
+  creativeAssetRatings,
   clientGoals,
   furyInsights,
   automationRules,

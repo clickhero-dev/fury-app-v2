@@ -18,6 +18,8 @@ import { StudioService } from './services/studio/creative-studio.service.js';
 import { StudioPublishingService } from './services/studio/studio-publishing.service.js';
 import { CreativeStudioController } from './controllers/creative-studio.controller.js';
 import { StudioPublishingController } from './controllers/studio-publishing.controller.js';
+import { StudioRatingService } from './services/studio/studio-rating.service.js';
+import { StudioRatingController } from './controllers/studio-rating.controller.js';
 import { BillingService } from './services/billing/billing.service.js';
 import { BillingController } from './controllers/billing.controller.js';
 import { PolicyService } from './services/policy/policy.service.js';
@@ -146,6 +148,7 @@ export const studioVariationsService = new StudioVariationsService(
 );
 export const studioVariationsController = new StudioVariationsController(studioVariationsService);
 export const studioPublishingService = new StudioPublishingService();
+export const studioRatingService = new StudioRatingService();
 export const billingService = new BillingService();
 export const policyService = new PolicyService();
 export const observabilityService = new ObservabilityService();
@@ -199,6 +202,7 @@ export const controllers = {
   studio: new CreativeStudioController(studioService),
   studioVariations: studioVariationsController,
   studioPublishing: new StudioPublishingController(studioPublishingService),
+  studioRating: new StudioRatingController(studioRatingService),
   billing: new BillingController(billingService),
   policy: new PolicyController(policyService),
   observability: new ObservabilityController(observabilityService),

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -68,6 +68,19 @@ describe('CreativeResult — carrossel de histórico (Fase 5)', () => {
       fillRect: vi.fn(),
       drawImage: vi.fn(),
     })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it('exibe o convite cinco segundos após a conclusão e permite avaliar o resultado', async () => {
+    vi.useFakeTimers();
+    mockApiPost.mockResolvedValue({ data: { groupId: 'v1', activeVersionId: 'v1', archivedAt: null, versions: [] } });
+    renderWithProviders(BASE_RESULT, true);
+    act(() => { vi.advanceTimersByTime(4_999); });
+    expect(screen.queryByText('Como você avalia este criativo?')).not.toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(screen.getByText('Como você avalia este criativo?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enviar avaliação' })).toBeDisabled();
   });
 
   it('baixa o vídeo final pelo endpoint autorizado na tela de detalhes', async () => {
