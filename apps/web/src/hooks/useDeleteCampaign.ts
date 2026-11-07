@@ -2,12 +2,27 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import api from '../lib/api';
 
+function isCampaignUnavailableError(err: unknown): boolean {
+  if (!isAxiosError(err)) return false;
+  const status = err.response?.status;
+  const code = err.response?.data?.error?.code as string | undefined;
+  return (status === 404 && code === 'CAMPAIGN_NOT_FOUND')
+    || (status === 400 && code === 'CAMPAIGN_DELETED');
+}
+
 export function useDeleteCampaign() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      await api.delete(`/campaigns/${id}`);
+      try {
+        await api.delete(`/campaigns/${id}`);
+      } catch (err) {
+        // A stale row is already in the desired end state for the list. Keep
+        // this fallback restricted to the two explicit, client-safe contracts.
+        if (isCampaignUnavailableError(err)) return;
+        throw err;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
