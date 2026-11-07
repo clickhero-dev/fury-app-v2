@@ -47,6 +47,22 @@ describe('StudioVariationsService', () => {
     expect(JSON.stringify(result)).not.toContain('CONTEXT_NOT_FOUND');
   });
 
+  it('inicializa os slots quando o job novo foi persistido com lista vazia', async () => {
+    repo.findAssetById.mockResolvedValue(asset({ source: 'openrouter-image', model: 'flux' }));
+    jobs.findOrCreateStudioVariationsJob.mockResolvedValue({
+      id: batchId,
+      metadata: { batchId, assetId, origin: 'quick', slots: [] },
+      status: 'pending',
+    });
+    quick.regenerateAd.mockResolvedValue({ assetId: '44444444-4444-4444-8444-444444444444', imageUrl: 'https://img/1' });
+
+    const result = await service.createBatch(tenantId, { batchId, assetId }, 'https://api.test');
+
+    expect(quick.regenerateAd).toHaveBeenCalledTimes(3);
+    expect(result.status).toBe('succeeded');
+    expect(result.slots).toHaveLength(3);
+  });
+
   it('preserva o contrato criativo para assets do wizard', async () => {
     repo.findAssetById.mockResolvedValue(asset({ context: { layout: 'offer_burst', businessName: 'Acme' } }));
     jobs.findOrCreateStudioVariationsJob.mockResolvedValue({ id: batchId, metadata: null, status: 'pending' });
