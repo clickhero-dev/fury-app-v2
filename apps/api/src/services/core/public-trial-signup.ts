@@ -4,7 +4,8 @@ import { z } from 'zod';
 export const PUBLIC_TRIAL_PLAN_KEY = 'public_trial_signup' as const;
 /** Limites imutáveis do trial adquirido pelo formulário público. */
 export const PUBLIC_TRIAL_IMAGE_LIMIT = 5;
-/** Links são opacos, de uso único e válidos por uma hora. */
+/** Links são opacos, válidos por uma hora e limitados a três usos. */
+export const MAGIC_LINK_MAX_USES = 3;
 export const MAGIC_LINK_TTL_MS = 60 * 60 * 1000;
 
 const signupSchema = z.object({

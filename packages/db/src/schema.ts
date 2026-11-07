@@ -201,6 +201,7 @@ export const publicTrialMagicLinks = pgTable(
     tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    useCount: integer('use_count').notNull().default(0),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },

@@ -1,8 +1,8 @@
 import { db as defaultDb, publicTrialAccounts, publicTrialMagicLinks, tenants, users, subscriptions, plans, type Database } from '@fury/db';
-import { and, eq, gt, gte, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, isNull, lt, sql } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { PUBLIC_TRIAL_IMAGE_LIMIT, PUBLIC_TRIAL_PLAN_KEY } from '../services/core/public-trial-signup.js';
-import { createTemporaryPassword } from '../services/core/public-trial-signup.js';
+import { createTemporaryPassword, MAGIC_LINK_MAX_USES } from '../services/core/public-trial-signup.js';
 
 export class PublicTrialRepository {
   constructor(private readonly db: Database = defaultDb) {}
@@ -74,8 +74,8 @@ export class PublicTrialRepository {
   async consumeMagicLink(tokenHash: string) {
     const now = new Date();
     const [link] = await this.db.update(publicTrialMagicLinks)
-      .set({ consumedAt: now })
-      .where(and(eq(publicTrialMagicLinks.tokenHash, tokenHash), gt(publicTrialMagicLinks.expiresAt, now), isNull(publicTrialMagicLinks.consumedAt), isNull(publicTrialMagicLinks.revokedAt)))
+      .set({ useCount: sql`${publicTrialMagicLinks.useCount} + 1`, consumedAt: sql`CASE WHEN ${publicTrialMagicLinks.useCount} + 1 >= ${MAGIC_LINK_MAX_USES} THEN ${now.toISOString()}::timestamptz ELSE NULL END` })
+      .where(and(eq(publicTrialMagicLinks.tokenHash, tokenHash), gt(publicTrialMagicLinks.expiresAt, now), isNull(publicTrialMagicLinks.consumedAt), lt(publicTrialMagicLinks.useCount, MAGIC_LINK_MAX_USES), isNull(publicTrialMagicLinks.revokedAt)))
       .returning({ accountId: publicTrialMagicLinks.accountId });
     if (!link) return null;
     const account = await this.db.query.publicTrialAccounts.findFirst({ where: eq(publicTrialAccounts.id, link.accountId) });

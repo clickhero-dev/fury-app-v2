@@ -11,7 +11,7 @@ const REFRESH_TTL = 7 * 24 * 60 * 60;
 export class PublicTrialService {
   constructor(
     private readonly repository = new PublicTrialRepository(),
-    private readonly mailer: Pick<typeof emailService, 'sendPublicTrialMagicLink'> = emailService,
+    private readonly mailer: Pick<typeof emailService, 'sendPublicTrialMagicLink' | 'sendPublicTrialExistingAccount'> = emailService,
   ) {}
 
   async signup(input: unknown): Promise<
@@ -22,14 +22,19 @@ export class PublicTrialService {
     const result = await this.repository.createAccount(data);
     // Não emitimos um token novo para uma identidade existente: isso impediria
     // que o webhook alterasse o acesso de uma conta já criada.
-    if (!result.accountId) return { created: false, error: 'EMAIL_JA_CADASTRADO' };
+    if (!result.accountId) {
+      const baseUrl = process.env.PUBLIC_TRIAL_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
+      try { await this.mailer.sendPublicTrialExistingAccount(data.email, baseUrl.replace(/\/$/, '')); }
+      catch { console.error('[public-trial] falha no envio do aviso de conta existente'); }
+      return { created: false, error: 'EMAIL_JA_CADASTRADO' };
+    }
     const token = createMagicLinkToken();
     const link = await this.repository.issueMagicLink(result.accountId, token.hash, token.expiresAt);
     if (!link) return { created: true, redirectUrl: '' };
     const baseUrl = process.env.PUBLIC_TRIAL_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
     const url = `${baseUrl.replace(/\/$/, '')}/trial/acesso#token=${token.raw}`;
     try {
-      await this.mailer.sendPublicTrialMagicLink(result.user.email, result.user.name || data.name, url, result.temporaryPassword);
+      await this.mailer.sendPublicTrialMagicLink(result.user.email, result.user.name || data.name, url, result.temporaryPassword, baseUrl);
     } catch (error) {
       // O cadastro já está durável; o próximo pedido após o cooldown pode emitir
       // outro link. Nunca transformar falha do SMTP em vazamento de existência.

@@ -201,14 +201,31 @@ export function welcomeEmailTemplate(name: string): string {
   return getBaseTemplate(content);
 }
 
-export function publicTrialMagicLinkEmailTemplate(name: string, url: string, temporaryPassword?: string): string {
-  const safeName = name.replace(/[<&>"']/g, '');
+function escapeTrialHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
+}
+
+export function publicTrialMagicLinkEmailTemplate(name: string, url: string, temporaryPassword: string | undefined, email: string, baseUrl: string): string {
+  const firstName = escapeTrialHtml(name.trim().split(/\s+/)[0]);
+  const loginUrl = escapeTrialHtml(`${baseUrl.replace(/\/$/, '')}/login`);
   return getBaseTemplate(`
     ${eyebrow('Seu acesso está pronto')}
-    ${bodyText(`Olá, <strong style="color: ${TEXT};">${safeName}</strong>! Sua conta trial foi criada.`, 'center')}
-    ${ctaButton(url, 'Entrar no Ady')}
-    ${bodyText('Este link é de uso único e expira em 1 hora. Se você não solicitou este acesso, ignore este email.', 'center')}
-    ${temporaryPassword ? bodyText(`Senha temporária: <strong style="color: ${TEXT};">${temporaryPassword}</strong><br/>Troque-a no primeiro acesso.`, 'center') : ''}
+    ${bodyText(`Oi, ${firstName}! Sua conta no ady foi criada. É só clicar no botão para entrar:`)}
+    ${ctaButton(escapeTrialHtml(url), 'Entrar no ady')}
+    ${bodyText('O link vale por 1 hora e pode ser usado até 3 vezes. Seus 7 dias de teste começam no primeiro acesso.')}
+    ${bodyText(`Se o link vencer, entre em <a href="${loginUrl}">ady</a> com:<br/>E-mail: ${escapeTrialHtml(email)}<br/>Senha temporária: ${escapeTrialHtml(temporaryPassword || '')}`)}
+    ${bodyText('No primeiro acesso, o ady pede para você criar sua própria senha.')}
+  `);
+}
+
+export function publicTrialExistingAccountEmailTemplate(baseUrl: string): string {
+  const base = escapeTrialHtml(baseUrl.replace(/\/$/, ''));
+  return getBaseTemplate(`
+    ${eyebrow('Seu e-mail já tem conta no ady')}
+    ${bodyText('Alguém tentou criar um teste grátis com este e-mail, mas ele já tem uma conta. Seu teste não foi reiniciado e nada foi alterado.')}
+    ${ctaButton(`${base}/login`, 'Entrar no ady')}
+    ${bodyText(`Esqueceu a senha? <a href="${base}/forgot-password">Criar uma nova senha</a>.`)}
+    ${bodyText('Se não foi você, pode ignorar este e-mail. Sua conta continua segura.')}
   `);
 }
 

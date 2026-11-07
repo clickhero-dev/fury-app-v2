@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  publicTrialMagicLinkEmailTemplate,
+  publicTrialExistingAccountEmailTemplate,
   otpEmailTemplate,
   welcomeEmailTemplate,
   passwordResetConfirmationTemplate,
@@ -63,5 +65,17 @@ describe('email-templates (identidade ADY)', () => {
       if (name === 'otp') continue;
       expect(html, name).toMatch(/<a href="https?:/);
     }
+  });
+});
+describe('emails do trial público', () => {
+  it('mostra acesso, limite, login e senha temporária sem prometer início antecipado', () => {
+    const html = publicTrialMagicLinkEmailTemplate('Ana Silva', 'https://app.test/trial/acesso#token=abc', 'SenhaSegura', 'ana@example.com', 'https://app.test');
+    for (const text of ['Ana', 'https://app.test/trial/acesso#token=abc', '3 vezes', '1 hora', 'https://app.test/login', 'ana@example.com', 'SenhaSegura', 'primeiro acesso']) expect(html).toContain(text);
+  });
+  it('avisa sobre conta existente e inclui login e recuperação', () => {
+    const html = publicTrialExistingAccountEmailTemplate('https://app.test');
+    expect(html).toContain('https://app.test/login');
+    expect(html).toContain('https://app.test/forgot-password');
+    expect(html).toContain('não foi reiniciado');
   });
 });
