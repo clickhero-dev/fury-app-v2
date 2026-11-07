@@ -64,6 +64,21 @@ describe('health check — conexão do banco', () => {
     expect(apiState.getApiState().checks.db.detail).toMatch(/^latency \d+ms$/);
   });
 
+  it('Cenário: recuperação limpa a categoria de falha anterior', async () => {
+    const [{ apiStartupWorkflow }, apiState] = await Promise.all([
+      import('../workflows/api-startup.workflow.js'),
+      import('../lib/api-state.js'),
+    ]);
+    executeMock
+      .mockRejectedValueOnce(Object.assign(new Error('connection refused'), { code: 'ECONNREFUSED' }))
+      .mockResolvedValueOnce([]);
+
+    await expect(apiStartupWorkflow.stages[0].execute({}, {})).rejects.toThrow();
+    await expect(apiStartupWorkflow.stages[0].execute({}, {})).resolves.toEqual(expect.objectContaining({ ok: true }));
+
+    expect(apiState.getApiState().checks.db).not.toHaveProperty('category');
+  });
+
   it('Cenário: timeout e erro de query recebem categorias distintas', async () => {
     const { classifyDatabaseError } = await import('../lib/api-state.js');
 

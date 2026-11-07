@@ -80,7 +80,12 @@ export function setCheck(
     ...state,
     checks: {
       ...state.checks,
-      [name]: { ok, detail, category, at: new Date().toISOString() },
+      [name]: {
+        ok,
+        detail,
+        ...(category ? { category } : {}),
+        at: new Date().toISOString(),
+      },
     },
   };
 }

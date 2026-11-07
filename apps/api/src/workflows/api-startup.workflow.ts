@@ -57,7 +57,12 @@ export const apiStartupWorkflow: WorkflowDefinition<ApiStartupContext> = {
             attempt: dbAttempt,
             latency_ms: Date.now() - start,
           });
-          throw new Error(databaseCheckErrorDetail(error), { cause: error });
+          // O alvo atual é ES2020, cujo tipo de Error ainda não aceita `cause`
+          // no construtor. A causa é preservada para diagnóstico interno sem
+          // deixar a mensagem crua chegar ao motor de workflow.
+          const sanitizedError = new Error(databaseCheckErrorDetail(error));
+          (sanitizedError as Error & { cause?: unknown }).cause = error;
+          throw sanitizedError;
         }
       },
     },
