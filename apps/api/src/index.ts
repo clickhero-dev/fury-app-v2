@@ -40,6 +40,8 @@ import { recoverInterruptedPlannerWorkflows } from './planner-workflow-runner.js
 import { runApiStartupWorkflow } from './workflows/api-startup-runner.js';
 import { flushAnalytics, captureServerException } from './lib/analytics.js';
 import { initializeBullBoardRoutes, shutdownBullBoardMetrics } from './routes/bull-board.routes.js';
+import { startupGate } from './middleware/startup-gate.js';
+import { setStatus } from './lib/api-state.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -217,6 +219,7 @@ app.get('/api/public/brand-kit/:slug', async (req, res) => {
 });
 
 app.use('/api', rateLimitMiddleware);
+app.use('/api', startupGate);
 app.use('/api', routes);
 
 // ── Swagger UI ────────────────────────────────────────────────────────
@@ -248,6 +251,7 @@ app.use((req, res) => {
 
     // 🚀 Run seed: ensures superadmin + demo users exist before accepting requests
     await seedStartup();
+    setStatus('healthy');
 
     const server = app.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
