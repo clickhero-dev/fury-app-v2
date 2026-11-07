@@ -6,6 +6,7 @@ import { AdySymbol } from "@/components/AdySymbol";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { getMetaSelectionError, isConfirmedMetaSelection } from './meta-selection-errors';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────────
 
@@ -34,16 +35,6 @@ interface MetaAdAccountOption {
 
 interface ApiListResponse<T> {
   data: T[];
-}
-
-export function isConfirmedMetaSelection(
-  saved: any,
-  expected: { businessIds: string[]; pageIds: string[]; adAccountIds: string[]; instagramUserId: string },
-) {
-  return Boolean(saved) && saved.instagramUserId === expected.instagramUserId &&
-    expected.businessIds.every((id) => saved.businessIds?.includes(id)) &&
-    expected.pageIds.every((id) => saved.pageIds?.includes(id)) &&
-    expected.adAccountIds.every((id) => saved.adAccountIds?.includes(id));
 }
 
 // ─── Constantes de Configuração ─────────────────────────────────────────────────
@@ -224,6 +215,34 @@ function EmptyState({
   );
 }
 
+function MetaConnectionError({ onRetry, onReconnect }: { onRetry: () => void; onReconnect: () => void }) {
+  return (
+    <div className="space-y-3 rounded-2xl border border-admin-danger/30 bg-admin-danger/5 p-5" role="alert">
+      <p className="font-semibold text-admin-text">Sua conexão com a Meta precisa de atenção</p>
+      <p className="text-sm text-admin-text-muted">
+        Entre no Facebook e siga as instruções. Depois reconecte sua conta e tente novamente. Se o problema continuar, confira as permissões de acesso.
+      </p>
+      <div className="flex flex-wrap justify-center gap-3">
+        <Button type="button" onClick={onReconnect} variant="primary" size="md">Reconectar Meta</Button>
+        <Button type="button" onClick={onRetry} variant="outline" size="md">Tentar novamente</Button>
+      </div>
+    </div>
+  );
+}
+
+function QueryErrorState({ error, onRetry, onReconnect }: { error: unknown; onRetry: () => void; onReconnect: () => void }) {
+  const details = getMetaSelectionError(error);
+  return details.isConnectionError ? (
+    <MetaConnectionError onRetry={onRetry} onReconnect={onReconnect} />
+  ) : (
+    <div className="space-y-3 rounded-2xl border border-admin-danger/30 bg-admin-danger/5 p-5" role="alert">
+      <p className="font-semibold text-admin-text">Não foi possível carregar os ativos</p>
+      <p className="text-sm text-admin-text-muted">{details.message}</p>
+      <div className="flex justify-center"><Button type="button" onClick={onRetry} variant="outline" size="md">Tentar novamente</Button></div>
+    </div>
+  );
+}
+
 function LoadingSpinner() {
   return (
     <div className="flex justify-center py-12" aria-label="Carregando dados">
@@ -244,6 +263,20 @@ export function SelecionarAtivosPage() {
   const [adAccountIds, setAdAccountIds] = useState<string[]>([]);
   const [businessPage, setBusinessPage] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+
+  const reconnectMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.get<{ success: boolean; data: { authUrl: string } }>('/meta/auth/url', {
+        params: { context: 'onboarding', frontendUrl: window.location.origin, rerequest: 'true' },
+      });
+      return response.data.data.authUrl;
+    },
+    onSuccess: (authUrl) => {
+      window.location.href = authUrl;
+    },
+  });
+
+  const reconnect = () => reconnectMutation.mutate();
 
   function showError(message: string) {
     setToast(message);
@@ -405,6 +438,8 @@ export function SelecionarAtivosPage() {
 
               {businessesQuery.isLoading ? (
                 <LoadingSpinner />
+              ) : businessesQuery.isError ? (
+                <QueryErrorState error={businessesQuery.error} onRetry={() => void businessesQuery.refetch()} onReconnect={reconnect} />
               ) : businesses.length === 0 ? (
                 <EmptyState
                   title="Nenhuma Business Manager encontrada"
@@ -495,6 +530,8 @@ export function SelecionarAtivosPage() {
 
               {adAccountsQuery.isLoading ? (
                 <LoadingSpinner />
+              ) : adAccountsQuery.isError ? (
+                <QueryErrorState error={adAccountsQuery.error} onRetry={() => void adAccountsQuery.refetch()} onReconnect={reconnect} />
               ) : adAccounts.length === 0 ? (
                 <EmptyState
                   title="Nenhuma conta de anúncio encontrada"
@@ -564,6 +601,8 @@ export function SelecionarAtivosPage() {
 
               {pagesQuery.isLoading ? (
                 <LoadingSpinner />
+              ) : pagesQuery.isError ? (
+                <QueryErrorState error={pagesQuery.error} onRetry={() => void pagesQuery.refetch()} onReconnect={reconnect} />
               ) : pages.length === 0 ? (
                 <EmptyState
                   title="Nenhuma Página nesta Business Manager"
@@ -670,9 +709,13 @@ export function SelecionarAtivosPage() {
               </div>
 
               {saveMutation.isError && (
-                <p className="text-center text-sm text-admin-danger font-medium" role="alert">
-                  Erro ao salvar a seleção. Tente novamente.
-                </p>
+                getMetaSelectionError(saveMutation.error).isConnectionError ? (
+                  <MetaConnectionError onRetry={() => saveMutation.reset()} onReconnect={reconnect} />
+                ) : (
+                  <p className="text-center text-sm text-admin-danger font-medium" role="alert">
+                    {getMetaSelectionError(saveMutation.error).message}
+                  </p>
+                )
               )}
 
               <div className="flex gap-3">
