@@ -10,7 +10,7 @@ Funcionalidade: confirmação dos ativos Meta no onboarding
     Então a navegação é bloqueada
 */
 import { describe, expect, it } from 'vitest';
-import { isConfirmedMetaSelection } from './SelecionarAtivosPage';
+import { isConfirmedMetaSelection } from './meta-selection-errors';
 
 const expected = { businessIds: ['bm_1'], pageIds: ['page_1'], adAccountIds: ['act_1'], instagramUserId: 'ig_1' };
 

@@ -7,6 +7,7 @@ export interface User {
   tenantName?: string;
   tenantId?: string;
   role?: string;
+  type?: 'user' | 'demo';
   /** Papel na plataforma (super_admin, admin_partner, user_partner, user). */
   platformRole?: string;
 }
@@ -29,6 +30,7 @@ export interface LoginResponse {
   refreshToken: string;
   user: User;
   policy?: PolicyState | null;
+  demo?: boolean;
 }
 
 /** Payload enviado no corpo da requisição de cadastro. */

@@ -175,6 +175,7 @@ const STEPS: MigrationStep[] = [
       console.log('    + added demo to user_role');
     },
   },
+  { tag: '0056_demo_tenant' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */

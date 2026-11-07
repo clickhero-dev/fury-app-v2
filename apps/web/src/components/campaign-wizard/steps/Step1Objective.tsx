@@ -317,7 +317,7 @@ function BrandKitPhoneField({
   whatsapp: WizardWhatsappState;
   onWhatsappChange: (updates: Partial<WizardWhatsappState>) => void;
 }) {
-  const { brandKit, isLoading: isLoadingBrandKit } = useBrandKit();
+  const { brandKit, isLoading: isLoadingBrandKit, isError, refetch } = useBrandKit();
   const brandKitDigits = brandKit?.whatsapp_number?.replace(/\D/g, '') ?? '';
 
   // Pre-preenche uma unica vez com o numero do Brand Kit (usuario pode editar).
@@ -333,8 +333,15 @@ function BrandKitPhoneField({
 
   return (
     <div>
-      <label className="text-sm font-bold text-text-primary mb-1 block">WhatsApp que vai atender</label>
+      <label htmlFor="brand-kit-whatsapp" className="text-sm font-bold text-text-primary mb-1 block">WhatsApp que vai atender</label>
+      {isError && (
+        <div className="mb-2 flex items-center gap-2 text-xs text-error">
+          <p role="alert">Não foi possível carregar o número do Brand Kit. Preencha-o manualmente ou tente novamente.</p>
+          <button type="button" className="underline" onClick={() => void refetch()}>Tentar novamente</button>
+        </div>
+      )}
       <input
+        id="brand-kit-whatsapp"
         type="text"
         inputMode="tel"
         value={formatPhoneDisplay(digits)}

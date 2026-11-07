@@ -204,9 +204,15 @@ export function UsersPage() {
       setTouched({});
       navigate(`/admin/tenants/${res.data.data.tenant.id}`);
     } catch (err) {
+      const apiError = (err as {
+        response?: { data?: { error?: { code?: string } } };
+      })?.response?.data?.error;
       setError(
-        (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "Erro ao criar cliente",
+        apiError?.code === "SLUG_EXISTS"
+          ? "Já existe um cliente com este identificador. Altere o nome ou verifique os clientes cadastrados."
+          : apiError?.code === "EMAIL_EXISTS"
+            ? "Este email já está em uso."
+            : "Não foi possível criar o cliente. Tente novamente.",
       );
     } finally {
       setSaving(false);
@@ -363,10 +369,11 @@ export function UsersPage() {
             <div className="space-y-4">
               {/* Tenant Name */}
               <div>
-                <label className="block text-xs font-medium text-admin-text-muted mb-1.5">
+                <label htmlFor="setup-tenant-name" className="block text-xs font-medium text-admin-text-muted mb-1.5">
                   Nome do Tenant
                 </label>
                 <input
+                  id="setup-tenant-name"
                   value={form.tenantName}
                   onChange={(e) => {
                     setForm({ ...form, tenantName: e.target.value });
@@ -387,10 +394,11 @@ export function UsersPage() {
 
               {/* User Name */}
               <div>
-                <label className="block text-xs font-medium text-admin-text-muted mb-1.5">
+                <label htmlFor="setup-user-name" className="block text-xs font-medium text-admin-text-muted mb-1.5">
                   Nome do Usuário
                 </label>
                 <input
+                  id="setup-user-name"
                   value={form.userName}
                   onChange={(e) => {
                     setForm({ ...form, userName: e.target.value });
@@ -411,11 +419,12 @@ export function UsersPage() {
 
               {/* Email */}
               <div>
-                <label className="block text-xs font-medium text-admin-text-muted mb-1.5">
+                <label htmlFor="setup-user-email" className="block text-xs font-medium text-admin-text-muted mb-1.5">
                   Email
                 </label>
                 <div className="relative">
                   <input
+                    id="setup-user-email"
                     value={form.userEmail}
                     onChange={(e) => {
                       setForm({ ...form, userEmail: e.target.value });
@@ -443,10 +452,11 @@ export function UsersPage() {
 
               {/* Password */}
               <div>
-                <label className="block text-xs font-medium text-admin-text-muted mb-1.5">
+                <label htmlFor="setup-user-password" className="block text-xs font-medium text-admin-text-muted mb-1.5">
                   Senha
                 </label>
                 <input
+                  id="setup-user-password"
                   value={form.userPassword}
                   onChange={(e) => {
                     setForm({ ...form, userPassword: e.target.value });

@@ -720,16 +720,25 @@ export class CampaignsService {
     // Check if already deleted on Meta before calling update.
     // If this fails (e.g. already removed by Meta), fall through to local archive.
     let campaignMeta: Record<string, unknown> | undefined;
+    let metaCampaignUnavailable = false;
     try {
       campaignMeta = await this.meta.getCampaign(metaCampaignId, accessToken, 'status');
     } catch (err) {
-      const code = (err as AppError)?.code;
-      if (code !== 'CAMPAIGN_DELETED' && code !== 'CAMPAIGN_NOT_FOUND') {
-        throw err;
+      // Normaliza a resposta bruta da Graph API antes de decidir se o
+      // arquivamento local pode continuar. Sem isso, code 100/803 escapava
+      // como erro não tratado quando a campanha já havia sido removida.
+      try {
+        this.handleMetaError(err);
+      } catch (mappedErr) {
+        const code = (mappedErr as AppError)?.code;
+        if (code !== 'CAMPAIGN_DELETED' && code !== 'CAMPAIGN_NOT_FOUND') {
+          throw mappedErr;
+        }
+        metaCampaignUnavailable = true;
       }
     }
     const metaStatus = campaignMeta?.status as string | undefined;
-    if (metaStatus !== 'DELETED' && metaStatus !== 'ARCHIVED') {
+    if (!metaCampaignUnavailable && metaStatus !== 'DELETED' && metaStatus !== 'ARCHIVED') {
       try { await this.meta.updateCampaign(metaCampaignId, accessToken, { status: 'ARCHIVED' }); }
       catch (err) { this.handleMetaError(err); }
     }

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import bcrypt from "bcrypt";
-import { db, tenants, users, clientGoals } from "@fury/db";
+import { users, clientGoals } from "@fury/db";
 import { AppError } from "../middleware/errorHandler.js";
 import { PARTNER_REACHABLE_ROLES, SuperAdminRepository } from "../repository/superadmin.repository.js";
 import { audienceGeoSchema } from "../lib/audience-geo.js";
@@ -374,33 +374,32 @@ export class SuperAdminController {
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/(^-|-$)/g, "");
 
+      if (!slug || slug.length > 255) {
+        throw new AppError(400, "VALIDATION_ERROR", "Identificador do cliente inválido");
+      }
+
       const repo = this.repo;
       const existingSlug = await repo.findTenantBySlug(slug);
       if (existingSlug) throw new AppError(409, "SLUG_EXISTS", "Slug já existe");
 
-      const existingEmail = await repo.findUserByEmail(body.userEmail);
+      const existingEmail = await repo.findUserByEmailCaseInsensitive(body.userEmail);
       if (existingEmail)
         throw new AppError(409, "EMAIL_EXISTS", "Email já cadastrado");
 
       const passwordHash = await bcrypt.hash(body.userPassword, 10);
 
-      const result = await db.transaction(async (tx) => {
-        const [tenant] = await tx
-          .insert(tenants)
-          .values({ name: body.name, slug })
-          .returning();
-        const [user] = await tx
-          .insert(users)
-          .values({
-            tenantId: tenant.id,
-            name: body.userName,
-            email: body.userEmail,
-            passwordHash,
-            role: body.userRole,
-          })
-          .returning();
-        return { tenant, user };
+      const result = await repo.createTenantWithUser({
+        name: body.name,
+        slug,
+        userName: body.userName,
+        userEmail: body.userEmail,
+        passwordHash,
+        userRole: body.userRole,
       });
+      if (result.status === "conflict") {
+        const message = result.code === "SLUG_EXISTS" ? "Slug já existe" : "Email já cadastrado";
+        throw new AppError(409, result.code, message);
+      }
 
       const { passwordHash: _, ...safeUser } = result.user;
 

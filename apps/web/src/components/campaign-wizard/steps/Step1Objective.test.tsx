@@ -14,8 +14,19 @@ const mockAssetSelection = vi.hoisted(() => ({
   isError: false,
 }));
 
+const mockBrandKit = vi.hoisted(() => ({
+  brandKit: null as { whatsapp_number?: string } | null,
+  isLoading: false,
+  isError: false,
+  refetch: vi.fn(),
+}));
+
 vi.mock('../hooks/useMetaAssetSelection', () => ({
   useMetaAssetSelection: () => mockAssetSelection,
+}));
+
+vi.mock('@/hooks/useBrandKit', () => ({
+  useBrandKit: () => mockBrandKit,
 }));
 
 /*
@@ -106,6 +117,10 @@ describe('Step1Objective — destinos de mensagens', () => {
   beforeEach(() => {
     mockAssetSelection.isLoading = false;
     mockAssetSelection.isError = false;
+    mockBrandKit.brandKit = null;
+    mockBrandKit.isLoading = false;
+    mockBrandKit.isError = false;
+    mockBrandKit.refetch.mockReset();
   });
 
   it('exibe Instagram e Facebook como cartões selecionáveis', () => {
@@ -134,5 +149,22 @@ describe('Step1Objective — destinos de mensagens', () => {
     const instagram = screen.getByRole('checkbox', { name: /instagram/i });
     expect(instagram).toBeDisabled();
     expect(screen.getByText(/conecte sua conta do instagram/i)).toBeInTheDocument();
+  });
+
+  it('Cenário: falha ao carregar o Brand Kit mantém o telefone editável e oferece retry', () => {
+    mockBrandKit.isError = true;
+
+    render(
+      <Step1Objective
+        value="leads"
+        onChange={vi.fn()}
+        whatsapp={{ pageId: 'page-1', hasInstagram: true, destinations: ['whatsapp'] }}
+        onWhatsappChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível carregar o número do Brand Kit');
+    expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeEnabled();
+    expect(screen.getByRole('textbox', { name: 'WhatsApp que vai atender' })).toBeEnabled();
   });
 });
