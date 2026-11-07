@@ -260,6 +260,7 @@ function DestinationCard({
 
   return (
     <div
+      data-testid={`message-destination-${destination}`}
       onClick={(event) => {
         if (available && event.target === event.currentTarget) onToggle();
       }}
