@@ -41,6 +41,12 @@ describe('useDeleteCampaign', () => {
   ])('trata %s/%s como exclusão concluída', async (status, code) => {
     const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    queryClient.setQueryData(['campaigns', '2026-10-01', '2026-10-31'], {
+      data: [{ id: 'campaign-1' }, { id: 'campaign-2' }],
+    });
+    queryClient.setQueryData(['campaigns', '2026-11-01', '2026-11-06'], {
+      data: [{ id: 'campaign-1' }, { id: 'campaign-3' }],
+    });
     mockDelete.mockRejectedValueOnce(apiError(status, code));
 
     const { result } = renderHook(() => useDeleteCampaign(), { wrapper: makeWrapper(queryClient) });
@@ -49,10 +55,19 @@ describe('useDeleteCampaign', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.isError).toBe(false);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['campaigns'] });
+    expect(queryClient.getQueryData(['campaigns', '2026-10-01', '2026-10-31'])).toEqual({
+      data: [{ id: 'campaign-2' }],
+    });
+    expect(queryClient.getQueryData(['campaigns', '2026-11-01', '2026-11-06'])).toEqual({
+      data: [{ id: 'campaign-3' }],
+    });
   });
 
   it('mantém erro de permissão como falha', async () => {
     const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    queryClient.setQueryData(['campaigns', '2026-11-01', '2026-11-06'], {
+      data: [{ id: 'campaign-1' }],
+    });
     mockDelete.mockRejectedValueOnce(apiError(403, 'FORBIDDEN'));
 
     const { result } = renderHook(() => useDeleteCampaign(), { wrapper: makeWrapper(queryClient) });
@@ -60,5 +75,8 @@ describe('useDeleteCampaign', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.isSuccess).toBe(false);
+    expect(queryClient.getQueryData(['campaigns', '2026-11-01', '2026-11-06'])).toEqual({
+      data: [{ id: 'campaign-1' }],
+    });
   });
 });
