@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 import { getMetaSelectionError, isConfirmedMetaSelection } from './meta-selection-errors';
+import { metaSelectionQuerySafety } from './meta-selection-query-options';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────────
 
@@ -291,7 +292,7 @@ export function SelecionarAtivosPage() {
       return res.data.data;
     },
     staleTime: 1000 * 60 * 5,
-    retry: false,
+    ...metaSelectionQuerySafety,
   });
 
   const adAccountsQuery = useQuery({
@@ -305,7 +306,7 @@ export function SelecionarAtivosPage() {
     },
     enabled: subStep >= 2 && businessIds.length > 0,
     staleTime: 1000 * 60 * 5,
-    retry: false,
+    ...metaSelectionQuerySafety,
   });
 
   const pagesQuery = useQuery({
@@ -319,7 +320,7 @@ export function SelecionarAtivosPage() {
     },
     enabled: subStep >= 3 && businessIds.length > 0,
     staleTime: 1000 * 60 * 5,
-    retry: false,
+    ...metaSelectionQuerySafety,
   });
 
   // ── Mutations ────────────────────────────────────────────────────────────────

@@ -6,10 +6,11 @@ Funcionalidade: recuperação de conexão Meta na seleção de ativos
     Então vê orientação de reconexão, não vê lista vazia e não há retry automático
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import axios, { type AxiosResponse } from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 import { SelecionarAtivosPage } from './SelecionarAtivosPage';
+import { metaSelectionQuerySafety } from './meta-selection-query-options';
 
 const { getMock } = vi.hoisted(() => ({ getMock: vi.fn() }));
 
@@ -21,6 +22,14 @@ function renderPage() {
 }
 
 describe('SelecionarAtivosPage — falhas de conexão Meta', () => {
+  it('desabilita refetch automático para não repetir token inválido ao focar ou reconectar', () => {
+    expect(metaSelectionQuerySafety).toMatchObject({
+      retry: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    });
+  });
+
   it('mostra reconexão em 190 sem renderizar estado vazio nem repetir a chamada', async () => {
     const error = new axios.AxiosError('request failed', 'ERR_BAD_REQUEST', undefined, undefined, {
       status: 401,
@@ -35,5 +44,9 @@ describe('SelecionarAtivosPage — falhas de conexão Meta', () => {
     expect(screen.getByRole('button', { name: /tentar novamente/i })).toBeInTheDocument();
     expect(screen.queryByText(/nenhuma business manager encontrada/i)).not.toBeInTheDocument();
     await waitFor(() => expect(getMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.focus(window);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(getMock).toHaveBeenCalledTimes(1);
   });
 });
