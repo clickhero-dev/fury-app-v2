@@ -8,13 +8,25 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import authReducer, { setPolicyAccepted, login as loginAction } from '../../store/slices/authSlice';
 import type { AuthState } from '../../store/slices/authSlice';
 
-/**
- * Testes do gate de política no AuthenticatedShell.
- *
- * O router de teste modela o router real: o shell só monta em rotas de app
- * (path="*") e /politica é uma rota SEPARADA (fora do shell) — é o destino
- * do redirect quando o aceite está pendente.
- */
+const { billingState } = vi.hoisted(() => ({
+  billingState: { data: null as { status: string } | null, isLoading: false, isFetched: false, isError: false },
+}));
+
+/*
+Funcionalidade: proteger o shell e liberar o Trial confirmado sem Meta
+Cenário: usuário com política pendente vai para /politica
+  Dado que o estado autenticado informa aceite pendente
+  Quando o shell é aberto
+  Então a rota de política aparece e o conteúdo protegido fica oculto
+Cenário: Trial confirmado acessa o dashboard sem Meta
+  Dado que a API confirma assinatura Trial e não há conexão Meta
+  Quando o shell é aberto
+  Então o dashboard aparece sem chamar o onboarding Meta
+Cenário: flag local não concede bypass a outra assinatura
+  Dado que a API confirma assinatura ativa e existe uma flag local de Trial
+  Quando não há conexão Meta
+  Então o usuário continua direcionado ao onboarding Meta
+*/
 
 // mock da api: roteia por URL — /policy/current configurável por teste
 const apiGet = vi.fn();
@@ -33,7 +45,7 @@ vi.mock('../../lib/api', () => ({
 }));
 
 vi.mock('../../hooks/useBilling', () => ({
-  useSubscription: () => ({ data: undefined, isLoading: false, isFetched: false, isError: false }),
+  useSubscription: () => billingState,
 }));
 
 vi.mock('../../lib/posthog', () => ({ captureEvent: vi.fn() }));
@@ -61,10 +73,10 @@ function makeStore(policy: AuthState['policy'], withToken = true, role = 'owner'
   });
 }
 
-function renderShell(policy: AuthState['policy'], role = 'owner') {
+function renderShell(policy: AuthState['policy'], role = 'owner', metaConnected = true) {
   // O shell lê o token do localStorage (não do Redux) — seed obrigatório.
   localStorage.setItem('token', 'tok');
-  localStorage.setItem('ady-meta-connected', 'true');
+  if (metaConnected) localStorage.setItem('ady-meta-connected', 'true');
   const store = makeStore(policy, true, role);
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -76,6 +88,7 @@ function renderShell(policy: AuthState['policy'], role = 'owner') {
           <Routes>
             {/* /politica fora do shell, como no router real */}
             <Route path="/politica" element={<div data-testid="politica-page" />} />
+            <Route path="/onboarding/conectar-meta" element={<div data-testid="meta-onboarding-page" />} />
             <Route path="*" element={<AuthenticatedShell />} />
           </Routes>
         </MemoryRouter>
@@ -86,6 +99,10 @@ function renderShell(policy: AuthState['policy'], role = 'owner') {
 
 beforeEach(() => {
   localStorage.clear();
+  billingState.data = null;
+  billingState.isLoading = false;
+  billingState.isFetched = false;
+  billingState.isError = false;
   apiGet.mockReset();
   apiGet.mockImplementation((url: string) => {
     if (url === '/policy/current') {
@@ -193,5 +210,42 @@ describe('AuthenticatedShell — gate de política de uso', () => {
     );
     expect(store.getState().auth.policy).toEqual({ currentVersion: '1.0', accepted: true });
     expect(localStorage.getItem('fury-policy')).toBe(JSON.stringify({ currentVersion: '1.0', accepted: true }));
+  });
+});
+
+describe('AuthenticatedShell — onboarding Meta para Trial', () => {
+  it('Trial confirmado pela API acessa o dashboard sem conexão Meta', async () => {
+    billingState.data = { status: 'trial' };
+    billingState.isFetched = true;
+    apiGet.mockImplementation((url: string) => {
+      if (url === '/meta/connections') return Promise.resolve({ data: { data: [] } });
+      if (url === '/policy/current') {
+        return Promise.resolve({ data: { data: { currentVersion: '1.0', currentVersionId: 'v1', accepted: true, content: 'texto' } } });
+      }
+      return Promise.resolve({ data: { data: [] } });
+    });
+
+    renderShell({ currentVersion: '1.0', accepted: true }, 'owner', false);
+
+    expect(await screen.findByTestId('sidebar-root')).not.toBeNull();
+    expect(screen.queryByTestId('meta-onboarding-page')).toBeNull();
+    expect(apiGet.mock.calls.some((call) => call[0] === '/meta/connections')).toBe(false);
+  });
+
+  it('flag local de Trial não dispensa o onboarding de uma assinatura ativa', async () => {
+    billingState.data = { status: 'active' };
+    billingState.isFetched = true;
+    localStorage.setItem('fury-public-trial', 'true');
+    apiGet.mockImplementation((url: string) => {
+      if (url === '/meta/connections') return Promise.resolve({ data: { data: [] } });
+      if (url === '/policy/current') {
+        return Promise.resolve({ data: { data: { currentVersion: '1.0', currentVersionId: 'v1', accepted: true, content: 'texto' } } });
+      }
+      return Promise.resolve({ data: { data: [] } });
+    });
+
+    renderShell({ currentVersion: '1.0', accepted: true }, 'owner', false);
+
+    expect(await screen.findByTestId('meta-onboarding-page')).not.toBeNull();
   });
 });

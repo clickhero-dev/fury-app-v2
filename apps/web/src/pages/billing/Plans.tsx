@@ -75,6 +75,14 @@ const BILLING_TYPE_LABELS: Record<string, string> = {
   CREDIT_CARD: 'Cartão de Crédito',
 };
 
+const TRIAL_PLAN_KEY = 'trial_new_signup';
+const TRIAL_FEATURES = [
+  'Acesso grátis por 7 dias',
+  '5 imagens para criar',
+  'Até 3 revisões por criação',
+  'Sem criação de vídeos',
+];
+
 function getPlanKey(name: string): string {
   const lower = name.toLowerCase();
   if (lower.includes('enterprise')) return 'enterprise';
@@ -240,8 +248,13 @@ interface PlanCardProps {
 
 function PlanCard({ plan, isCurrentPlan, onSubscribe, managedByPartner = false }: PlanCardProps) {
   const key = getPlanKey(plan.name);
-  const display = PLAN_DISPLAY[key] ?? PLAN_DISPLAY.starter;
-  const features = (plan.features && plan.features.length > 0) ? plan.features : display.features;
+  const isTrialPlan = plan.technicalKey === TRIAL_PLAN_KEY;
+  const baseDisplay = PLAN_DISPLAY[key] ?? PLAN_DISPLAY.starter;
+  const display = isTrialPlan ? { ...baseDisplay, badge: 'Trial automático' } : baseDisplay;
+  const planFeatures = Array.isArray(plan.features) ? plan.features : [];
+  const features = isTrialPlan
+    ? TRIAL_FEATURES
+    : planFeatures.length > 0 ? planFeatures : display.features;
 
   return (
     <div
@@ -280,9 +293,11 @@ function PlanCard({ plan, isCurrentPlan, onSubscribe, managedByPartner = false }
 
       <div className="mb-6">
         <span className="text-3xl font-extrabold text-text-primary">
-          {formatCurrency(plan.priceCents)}
+          {isTrialPlan ? 'Grátis' : formatCurrency(plan.priceCents)}
         </span>
-        <span className="text-text-secondary text-sm">/mês</span>
+        <span className="text-text-secondary text-sm">
+          {isTrialPlan ? 'por 7 dias' : plan.interval === 'yearly' ? '/ano' : '/mês'}
+        </span>
       </div>
 
       <ul className="space-y-3 flex-1 mb-8">
@@ -304,10 +319,16 @@ function PlanCard({ plan, isCurrentPlan, onSubscribe, managedByPartner = false }
             ? 'bg-[#17708A] hover:bg-[#17708A]/80 text-white border-transparent'
             : 'border-white/10 text-text-primary hover:bg-white/5'
         }`}
-        disabled={isCurrentPlan || managedByPartner}
+        disabled={isCurrentPlan || managedByPartner || isTrialPlan}
         onClick={onSubscribe}
       >
-        {isCurrentPlan ? 'Plano atual' : managedByPartner ? 'Fale com seu parceiro' : 'Assinar agora'}
+        {isCurrentPlan
+          ? 'Plano atual'
+          : managedByPartner
+            ? 'Fale com seu parceiro'
+            : isTrialPlan
+              ? 'Automático no cadastro'
+              : 'Assinar agora'}
       </Button>
     </div>
   );
@@ -348,7 +369,7 @@ export function Plans() {
               <p className="text-text-secondary text-sm">
                 {managedByPartner
                   ? 'Seu plano é contratado e alterado pelo seu parceiro.'
-                  : 'Todos os planos incluem 7 dias de trial gratuito. Cancele quando quiser.'}
+                  : 'Novas contas começam com 7 dias grátis para criar imagens antes de escolher um plano.'}
               </p>
             </div>
 

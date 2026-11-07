@@ -174,6 +174,7 @@ const STEPS: MigrationStep[] = [
     },
   },
   { tag: '0059_unified_trial_access' },
+  { tag: '0060_trial_plan_limits' },
 ];
 
 /** Nomes de todas as tabelas do schema (35 tabelas) — usados para validação. */

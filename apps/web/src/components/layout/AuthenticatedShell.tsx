@@ -61,7 +61,15 @@ export function AuthenticatedShell() {
   // modo para evitar gates de onboarding/Meta que não existem na demonstração.
   const userRole = useAppSelector(selectUserRole);
   const isDemoUser = userRole === 'demo';
-  const isPublicTrial = localStorage.getItem('fury-public-trial') === 'true';
+  const {
+    data: subscription,
+    isLoading: subLoading,
+    isFetched: subFetched,
+    isError: subError,
+  } = useSubscription();
+  const trialSubscriptionChecked = !subLoading && subFetched;
+  const isTrialSubscription =
+    trialSubscriptionChecked && !subError && subscription?.status === 'trial';
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const isSubscriptionExempt =
@@ -100,7 +108,8 @@ export function AuthenticatedShell() {
     shouldCheckPolicy && (needsPolicy === true || (needsPolicy === null && policyResolved?.accepted === false));
 
   // ── Verificação de conexão Meta ──────
-  const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser && !isPublicTrial;
+  const shouldCheck =
+    !!token && !isOnboarding && !isExempt && !isDemoUser && trialSubscriptionChecked && !isTrialSubscription;
   const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoUser;
 
   const { data: connections, isLoading, isFetched } = useQuery({
@@ -143,13 +152,6 @@ export function AuthenticatedShell() {
   }, [connections, isLoading, isFetched, shouldCheck, navigate, dispatch]);
 
   // ── Verificação de assinatura ──────
-  const {
-    data: subscription,
-    isLoading: subLoading,
-    isFetched: subFetched,
-    isError: subError,
-  } = useSubscription();
-
   const reduxPlanExpired = useAppSelector(selectIsPlanExpired);
   // Isentos de bloqueio por plano (mesma regra do backend checkSubscriptionActive).
   const isAdmin = userRole === 'admin' || canAccessAdmin(getStoredPlatformRole());

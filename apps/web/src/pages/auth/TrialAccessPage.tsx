@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { store } from '@/store';
@@ -10,8 +10,11 @@ export function TrialAccessPage() {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const tokenProcessed = useRef(false);
 
   useEffect(() => {
+    if (tokenProcessed.current) return;
+    tokenProcessed.current = true;
     const value = new URLSearchParams(window.location.hash.slice(1)).get('token');
     // Never leave the credential in history/referrer after reading it.
     window.history.replaceState(null, '', window.location.pathname);

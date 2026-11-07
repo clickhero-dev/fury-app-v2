@@ -16,12 +16,18 @@ export function validateTrialPlan(input: {
   priceCents: number;
   isActive: boolean;
   creativesPerMonth: number | null | undefined;
+  modificationsPerCreative: number | null | undefined;
+  videosPerMonth: number | null | undefined;
+  modificationsPerVideo: number | null | undefined;
 }): TrialPlanValidation {
   if (
     input.technicalKey !== TRIAL_PLAN_KEY ||
     input.priceCents !== 0 ||
     !input.isActive ||
-    input.creativesPerMonth !== 7
+    input.creativesPerMonth !== 5 ||
+    input.modificationsPerCreative !== 3 ||
+    input.videosPerMonth !== 0 ||
+    input.modificationsPerVideo !== 0
   ) {
     return { ok: false, reason: 'INVALID_TRIAL_PLAN' };
   }
@@ -58,12 +64,20 @@ export async function provisionTrialSubscription(
   startedAt: Date,
 ): Promise<{ id: string }> {
   const plan = await tx.queryPlan(TRIAL_PLAN_KEY);
-  const limits = (plan?.limits ?? {}) as { creativesPerMonth?: number | null };
+  const limits = (plan?.limits ?? {}) as {
+    creativesPerMonth?: number | null;
+    modificationsPerCreative?: number | null;
+    videosPerMonth?: number | null;
+    modificationsPerVideo?: number | null;
+  };
   if (!plan || !validateTrialPlan({
     technicalKey: plan.technicalKey,
     priceCents: plan.priceCents,
     isActive: plan.isActive,
     creativesPerMonth: limits.creativesPerMonth,
+    modificationsPerCreative: limits.modificationsPerCreative,
+    videosPerMonth: limits.videosPerMonth,
+    modificationsPerVideo: limits.modificationsPerVideo,
   }).ok) {
     throw new AppError(503, 'INVALID_TRIAL_PLAN', 'O plano de teste não está disponível.');
   }
@@ -78,7 +92,7 @@ export async function provisionTrialSubscription(
     status: 'trial',
     trialEndsAt,
     currentPeriodEnd,
-    creativesRemaining: 7,
+    creativesRemaining: 5,
     asaasSubscriptionId: null,
     asaasCustomerId: null,
   });

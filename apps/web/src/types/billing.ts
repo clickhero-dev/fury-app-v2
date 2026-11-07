@@ -1,11 +1,21 @@
+/** Limites configurados para um plano. */
+export interface PlanLimits {
+  creativesPerMonth?: number | null;
+  modificationsPerCreative?: number | null;
+  videosPerMonth?: number | null;
+  modificationsPerVideo?: number | null;
+}
+
 /** Plano de assinatura disponível na plataforma. */
 export interface Plan {
   id: string;
   name: string;
+  technicalKey?: string | null;
   /** Preço em centavos (ex: 9900 = R$ 99,00). */
   priceCents: number;
   interval: 'monthly' | 'yearly';
-  features: string[] | null;
+  features: string[] | Record<string, boolean> | null;
+  limits?: PlanLimits | null;
   isActive: boolean;
   createdAt: string;
 }

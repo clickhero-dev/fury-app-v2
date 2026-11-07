@@ -10,6 +10,10 @@ Cenário: parceiro sem planos
 
 Cenário: cliente ady
   Então o botão de assinar abre o pagamento, como hoje
+
+Cenário: plano Trial automático
+  Dado que a API retorna o plano trial_new_signup
+  Então /planos mostra 7 dias, 5 imagens, 3 revisões e vídeo desativado sem botão de compra
 */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -28,6 +32,17 @@ vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { name: 'Ana', email
 vi.mock('@/components/layout/AppLayout', () => ({ AppLayout: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 
 const partnerPlan = { id: 'pl-1', name: 'Básico Parceiro', priceCents: 5000, interval: 'monthly', features: ['Suporte'], isActive: true, createdAt: '' };
+const trialPlan = {
+  id: 'trial-1',
+  name: 'Trial 7 dias',
+  technicalKey: 'trial_new_signup',
+  priceCents: 0,
+  interval: 'monthly',
+  features: { studio: true, downloads: true, metaPublishing: false },
+  limits: { creativesPerMonth: 5, modificationsPerCreative: 3, videosPerMonth: 0, modificationsPerVideo: 0 },
+  isActive: true,
+  createdAt: '',
+};
 
 function renderAs(platformRole: string, plans: unknown[]) {
   localStorage.setItem('user', JSON.stringify({ platformRole }));
@@ -57,5 +72,16 @@ describe('Plans', () => {
     expect(screen.getByText(/Asaas/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Assinar agora' }));
     expect(screen.getByText('Assinar plano Pro')).toBeInTheDocument();
+  });
+
+  it('mostra os limites do Trial automático sem permitir compra manual', () => {
+    renderAs('user', [trialPlan]);
+
+    expect(screen.getByText('Trial 7 dias')).toBeInTheDocument();
+    expect(screen.getByText('5 imagens para criar')).toBeInTheDocument();
+    expect(screen.getByText('Até 3 revisões por criação')).toBeInTheDocument();
+    expect(screen.getByText('Sem criação de vídeos')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Automático no cadastro' })).toBeDisabled();
+    expect(screen.queryByText('Assinar plano Trial 7 dias')).toBeNull();
   });
 });
