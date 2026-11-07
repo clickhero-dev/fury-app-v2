@@ -25,6 +25,22 @@ test('mostra progresso estimado e conclui antes de exibir o resultado', async ({
     await new Promise((resolve) => setTimeout(resolve, 1_500));
     await route.fulfill({ json: { creativeAssetId: 'e2e-asset', imageUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP', modificationsRemaining: 9 } });
   });
+  await page.route('**/studio/creative/variations', async (route) => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({
+      json: {
+        batchId: body.batchId,
+        assetId: body.assetId,
+        status: 'succeeded',
+        slots: [0, 1, 2].map((index) => ({
+          index,
+          status: 'succeeded',
+          assetId: `e2e-variation-${index}`,
+          imageUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP',
+        })),
+      },
+    });
+  });
   await page.goto('/estudio?criar=rapida');
   await expect(page.getByRole('heading', { name: 'Criação rápida' })).toBeVisible();
   await page.getByLabel('Descreva o anúncio').fill('Imagem de teste com produto em destaque e fundo claro.');
@@ -37,4 +53,8 @@ test('mostra progresso estimado e conclui antes de exibir o resultado', async ({
   await page.screenshot({ path: 'test-results/n5-progress-100.png', fullPage: true });
   await expect(page.getByRole('heading', { name: 'Seu anúncio' })).toBeVisible();
   await page.screenshot({ path: 'test-results/n5-progress-result.png', fullPage: true });
+
+  await page.getByRole('button', { name: /sim, gerar variações/i }).click();
+  await expect(page.getByRole('heading', { name: 'Variações geradas' })).toBeVisible();
+  await expect(page.getByAltText('Variação 1 do criativo')).toBeVisible();
 });

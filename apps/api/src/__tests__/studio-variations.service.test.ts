@@ -47,10 +47,8 @@ describe('StudioVariationsService', () => {
     expect(JSON.stringify(result)).not.toContain('CONTEXT_NOT_FOUND');
   });
 
-  it('Cenário: lote recém-criado com slots vazios inicializa e retorna as três variações', async () => {
+  it('inicializa os slots quando o job novo foi persistido com lista vazia', async () => {
     repo.findAssetById.mockResolvedValue(asset({ source: 'openrouter-image', model: 'flux' }));
-    // O repositório persiste o lote novo com slots: []; o serviço precisa
-    // completar os slots antes de iniciar a geração.
     jobs.findOrCreateStudioVariationsJob.mockResolvedValue({
       id: batchId,
       metadata: { batchId, assetId, origin: 'quick', slots: [] },
@@ -61,7 +59,7 @@ describe('StudioVariationsService', () => {
     const result = await service.createBatch(tenantId, { batchId, assetId }, 'https://api.test');
 
     expect(quick.regenerateAd).toHaveBeenCalledTimes(3);
-    expect(result).toMatchObject({ status: 'succeeded' });
+    expect(result.status).toBe('succeeded');
     expect(result.slots).toHaveLength(3);
   });
 

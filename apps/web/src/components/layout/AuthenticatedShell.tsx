@@ -61,6 +61,7 @@ export function AuthenticatedShell() {
   // modo para evitar gates de onboarding/Meta que não existem na demonstração.
   const userRole = useAppSelector(selectUserRole);
   const isDemoUser = userRole === 'demo';
+  const isPublicTrial = localStorage.getItem('fury-public-trial') === 'true';
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const isSubscriptionExempt =
@@ -99,7 +100,7 @@ export function AuthenticatedShell() {
     shouldCheckPolicy && (needsPolicy === true || (needsPolicy === null && policyResolved?.accepted === false));
 
   // ── Verificação de conexão Meta ──────
-  const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser;
+  const shouldCheck = !!token && !isOnboarding && !isExempt && !isDemoUser && !isPublicTrial;
   const shouldCheckSubscription = !!token && !isOnboarding && !isSubscriptionExempt && !isDemoUser;
 
   const { data: connections, isLoading, isFetched } = useQuery({

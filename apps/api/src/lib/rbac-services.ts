@@ -35,6 +35,7 @@ export const RBAC_SERVICES: readonly RbacServiceEntry[] = [
 // Prefixos que nunca são bloqueados pelo RBAC
 export const RBAC_EXEMPT_PREFIXES: readonly string[] = [
   '/health',
+  '/public',
   '/auth',
   '/faqs',
   '/announcements',
