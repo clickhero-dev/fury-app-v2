@@ -8,6 +8,7 @@ const router = Router();
 // Public routes
 router.post('/register', controllers.auth.register);
 router.post('/login', controllers.auth.login);
+router.post('/demo-login', controllers.auth.demoLogin);
 router.post('/refresh', controllers.auth.refresh);
 router.post('/verify-email', controllers.auth.verifyEmail);
 router.post('/forgot-password', controllers.auth.forgotPassword);

@@ -19,6 +19,7 @@ import { provisionTrialSubscription, TRIAL_PLAN_KEY } from '../billing/trial-sig
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 const DEFAULT_NOTIFICATION_PREFS = { campanhas: true, performance: true, equipe: false };
 const RESET_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+export const DEMO_TENANT_SLUG = 'fashion-demo';
 
 export type MeResponse = UserDTO & {
   hasPassword: boolean;
@@ -53,6 +54,7 @@ function userToDTO(user: any): UserDTO {
     name: user.name ?? null,
     email: user.email,
     role: user.role,
+    type: user.type === 'demo' || user.role === 'demo' ? 'demo' : 'user',
     platformRole: user.platformRole,
     tenantId: user.tenantId,
     notificationPrefs: (user.notificationPrefs as UserDTO['notificationPrefs']) ?? DEFAULT_NOTIFICATION_PREFS,
@@ -178,6 +180,24 @@ export class AuthService {
     const refreshToken = this.deps.jwt.generateRefreshToken(user.id);
     await storeRefreshTokenHash(user.id, refreshToken);
 
+    return { user: userToDTO(user), tokens: { accessToken, refreshToken } };
+  }
+
+  /** Emite uma sessão limitada à conta comercial demo, sem expor credenciais ao cliente. */
+  async demoLogin(): Promise<{ user: UserDTO; tokens: { accessToken: string; refreshToken: string } }> {
+    const repo = this.repoFactory('');
+    const tenant = await repo.findTenantBySlug(DEMO_TENANT_SLUG);
+    if (!tenant || tenant.isDemo !== true) {
+      throw new AppError(503, 'DEMO_UNAVAILABLE', 'Conta demo indisponível');
+    }
+    const user = await this.repoFactory(tenant.id).findUserByTenant();
+    if (!user || !(await repo.isAccountActive(user.id))) {
+      throw new AppError(503, 'DEMO_UNAVAILABLE', 'Conta demo indisponível');
+    }
+
+    const accessToken = this.deps.jwt.generateAccessToken({ userId: user.id, tenantId: user.tenantId, email: user.email, role: 'demo' });
+    const refreshToken = this.deps.jwt.generateRefreshToken(user.id);
+    await storeRefreshTokenHash(user.id, refreshToken);
     return { user: userToDTO(user), tokens: { accessToken, refreshToken } };
   }
 

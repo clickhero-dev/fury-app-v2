@@ -57,6 +57,9 @@ import { CampaignRepository } from './repository/campaign.repository.js';
 import { CampaignsController } from './controllers/campaigns.controller.js';
 import { metaSyncService } from './services/meta/meta-sync.service.js';
 import { MetaSyncV2Controller } from './controllers/meta-sync.controller.js';
+import { DemoDashboardRepository } from './repository/demo-dashboard.repository.js';
+import { DemoDashboardService } from './services/dashboard/demo-dashboard.service.js';
+import { DemoDashboardController } from './controllers/demo-dashboard.controller.js';
 import { MetaSyncRepository } from './repository/meta-sync.repository.js';
 import { enqueueMetaSyncTenantRun } from './workers/meta-sync.worker.js';
 import { SuperAdminRepository } from './repository/superadmin.repository.js';
@@ -152,6 +155,7 @@ export const observabilityService = new ObservabilityService();
 export const formsService = new FormsService();
 export const automationService = new AutomationService();
 export const authService = new AuthService();
+export const demoDashboardService = new DemoDashboardService((tenantId) => new DemoDashboardRepository(tenantId));
 export const businessContextService = new BusinessContextService();
 export const businessContextController = new BusinessContextController(businessContextService);
 export const publicTrialService = new PublicTrialService();
@@ -205,6 +209,7 @@ export const controllers = {
   forms: new FormsController(formsService),
   metrics: new MetricsController(metricsService),
   auth: new AuthController(authService, socialAuthService, policyService),
+  demoDashboard: new DemoDashboardController(demoDashboardService),
   businessContext: businessContextController,
   publicTrial: new PublicTrialController(publicTrialService),
   automation: new AutomationController(automationService),
@@ -228,6 +233,7 @@ export const controllers = {
     metaSyncService,
     (tenantId: string) => new MetaSyncRepository(tenantId),
     enqueueMetaSyncTenantRun,
+    demoDashboardService,
   ),
   wppWebhook: new WppWebhookController(wppWebhookService),
   wppVerify: new WppVerificationController(wppVerificationService),

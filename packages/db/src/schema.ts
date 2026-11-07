@@ -121,6 +121,8 @@ export const tenants = pgTable(
     slug: varchar('slug', { length: 255 }).notNull().unique(),
     codigo: varchar('codigo', { length: 20 }).unique(),
     businessContext: text('business_context'),
+    /** Tenant comercial isolado, servido exclusivamente por datasets determinísticos. */
+    isDemo: boolean('is_demo').notNull().default(false),
     partnerId: uuid('partner_id').references(() => adyPartners.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     // soft-delete: excluído some do admin e perde o acesso
@@ -147,6 +149,8 @@ export const users = pgTable(
     googleId: varchar('google_id', { length: 255 }),
     facebookId: varchar('facebook_id', { length: 255 }),
     role: userRoleEnum('role').notNull().default('member'),
+    /** Identidade operacional da conta; contas demonstrativas usam `demo`. */
+    type: varchar('user_type', { length: 20 }).notNull().default('user'),
     platformRole: varchar('platform_role', { length: 50 })
       .notNull()
       .default('user')

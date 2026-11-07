@@ -94,7 +94,7 @@ export function translateObjective(key?: string) {
  * @example
  * const { data, isLoading } = useGoalsProgress('2026-06-01', '2026-06-30');
  */
-export function useGoalsProgress(startDate?: string, endDate?: string) {
+export function useGoalsProgress(startDate?: string, endDate?: string, enabled = true) {
   return useQuery<GoalsProgressData | null>({
     queryKey: ['goals-progress-v2', startDate, endDate],
     queryFn: async () => {
@@ -108,5 +108,6 @@ export function useGoalsProgress(startDate?: string, endDate?: string) {
     refetchInterval: (query) => query.state.data?.degraded ? 30_000 : 5 * 60 * 1000,
     placeholderData: (previousData) => previousData, // Mantém dados anteriores durante refetch
     retry: 1,
+    enabled,
   });
 }
