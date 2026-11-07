@@ -113,6 +113,8 @@ describe('Step1Objective — destinos de mensagens', () => {
 
     expect(screen.getByRole('checkbox', { name: /instagram/i })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: /facebook/i })).toBeInTheDocument();
+    expect(screen.getByTestId('message-destination-instagram_direct')).toBeInTheDocument();
+    expect(screen.getByTestId('message-destination-messenger')).toBeInTheDocument();
     expect(screen.getByText('Escolha um ou mais canais')).toBeInTheDocument();
   });
 

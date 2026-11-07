@@ -29,11 +29,14 @@ function generateMaskBlob(source: HTMLCanvasElement): Blob | null {
   const tiny = document.createElement('canvas');
   tiny.width = SIZE;
   tiny.height = SIZE;
-  tiny.getContext('2d')!.drawImage(source, 0, 0, SIZE, SIZE);
+  const tinyContext = tiny.getContext('2d');
+  if (!tinyContext) return null;
+  tinyContext.drawImage(source, 0, 0, SIZE, SIZE);
   const mask = document.createElement('canvas');
   mask.width = SIZE;
   mask.height = SIZE;
-  const ctx = mask.getContext('2d')!;
+  const ctx = mask.getContext('2d');
+  if (!ctx) return null;
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, SIZE, SIZE);
   ctx.globalCompositeOperation = 'destination-out';
@@ -132,8 +135,8 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
   const clearMask = useCallback(() => {
     const c = maskCanvasRef.current;
     if (c) {
-      const ctx = c.getContext('2d')!;
-      ctx.clearRect(0, 0, c.width, c.height);
+      const ctx = c.getContext('2d');
+      ctx?.clearRect(0, 0, c.width, c.height);
     }
     setHasMask(false);
   }, []);
@@ -160,7 +163,8 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
       paintingRef.current = true;
       const c = maskCanvasRef.current!;
       const rect = c.getBoundingClientRect();
-      const ctx = c.getContext('2d')!;
+      const ctx = c.getContext('2d');
+      if (!ctx) return;
       ctx.beginPath();
       ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
     },
@@ -168,7 +172,8 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
       if (!paintingRef.current) return;
       const c = maskCanvasRef.current!;
       const rect = c.getBoundingClientRect();
-      const ctx = c.getContext('2d')!;
+      const ctx = c.getContext('2d');
+      if (!ctx) return;
       ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
       ctx.strokeStyle = 'rgba(232,99,26,1.0)';
       ctx.lineWidth = 40;
@@ -624,9 +629,17 @@ export function CreativeResult({ result, onBack, onNewCreative, onPublish, onTra
       )}
 
       {variationsMutation.isError && (
-        <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
           <AlertCircle className="h-4 w-4" />
-          Não foi possível gerar as variações. Tente novamente mais tarde.
+          <span className="flex-1">Não foi possível gerar as variações. Tente novamente.</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => variationsMutation.mutate(currentResult.assetId)}
+            disabled={variationsMutation.isPending}
+          >
+            Tentar novamente
+          </Button>
         </div>
       )}
 
