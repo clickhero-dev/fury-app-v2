@@ -11,6 +11,7 @@ import { useSubscription } from '../../hooks/useBilling';
 import { useBlockedViews } from '../../hooks/useBlockedViews';
 import { viewKeyForPath } from '../../lib/rbac-views';
 import { NotFoundPage } from '../../pages/NotFoundPage';
+import { TrialPasswordModal } from './TrialPasswordModal';
 import { canAccessAdmin, getStoredPlatformRole, hasLifetimeAccess, isBillingPath } from '../../lib/platform-role';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { setMetaId, setPlan, selectIsPlanExpired, selectUserRole, selectNeedsPolicyAcceptance, setPolicyAccepted } from '../../store/slices/authSlice';
@@ -68,6 +69,7 @@ export function AuthenticatedShell() {
   const userRole = useAppSelector(selectUserRole);
   const isDemoSession = userRole === 'demo' || isDemoUser;
   const isPublicTrial = localStorage.getItem('fury-public-trial') === 'true';
+  const [showTrialPasswordModal, setShowTrialPasswordModal] = useState(() => localStorage.getItem('fury-trial-password-pending') === 'true');
   const isOnboarding = location.pathname.startsWith('/onboarding');
   const isExempt = ONBOARDING_EXEMPT.some((p) => location.pathname.startsWith(p));
   const isSubscriptionExempt =
@@ -201,6 +203,7 @@ export function AuthenticatedShell() {
 
   return (
     <div className="flex min-h-screen bg-background text-text-primary">
+      {showTrialPasswordModal && <TrialPasswordModal onComplete={() => { localStorage.removeItem('fury-trial-password-pending'); setShowTrialPasswordModal(false); }} />}
       {/* Overlay escuro ao abrir sidebar no mobile */}
       {mobileOpen && (
         <div

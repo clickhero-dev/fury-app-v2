@@ -91,11 +91,11 @@ export class EmailService {
     });
   }
 
-  sendPublicTrialMagicLink(to: string, name: string, url: string): Promise<void> {
+  sendPublicTrialMagicLink(to: string, name: string, url: string, temporaryPassword?: string): Promise<void> {
     return this.sendEmail({
       to,
       subject: 'Seu acesso ao Ady',
-      html: publicTrialMagicLinkEmailTemplate(name, url),
+      html: publicTrialMagicLinkEmailTemplate(name, url, temporaryPassword),
     });
   }
 

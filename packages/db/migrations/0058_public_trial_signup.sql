@@ -22,5 +22,5 @@ CREATE INDEX IF NOT EXISTS "public_trial_magic_links_account_idx" ON "public_tri
 
 INSERT INTO "plans" ("name", "technical_key", "price_cents", "interval", "features", "limits", "is_active")
 SELECT 'Trial formulário público', 'public_trial_signup', 0, 'monthly', '{}'::jsonb,
-       '{"creativesPerMonth":7,"source":"public_trial"}'::jsonb, true
+       '{"creativesPerMonth":5,"source":"public_trial"}'::jsonb, true
 WHERE NOT EXISTS (SELECT 1 FROM "plans" WHERE "technical_key" = 'public_trial_signup');
