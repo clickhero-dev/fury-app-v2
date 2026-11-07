@@ -40,6 +40,8 @@ import { recoverInterruptedPlannerWorkflows } from './planner-workflow-runner.js
 import { runApiStartupWorkflow } from './workflows/api-startup-runner.js';
 import { flushAnalytics, captureServerException } from './lib/analytics.js';
 import { initializeBullBoardRoutes, shutdownBullBoardMetrics } from './routes/bull-board.routes.js';
+import { startupGate } from './middleware/startup-gate.js';
+import { setStatus } from './lib/api-state.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -217,6 +219,7 @@ app.get('/api/public/brand-kit/:slug', async (req, res) => {
 });
 
 app.use('/api', rateLimitMiddleware);
+app.use('/api', startupGate);
 app.use('/api', routes);
 
 // ── Swagger UI ────────────────────────────────────────────────────────
@@ -243,11 +246,10 @@ app.use((req, res) => {
 // Tudo que precisa de await fica dentro da IIFE
 (async () => {
   if (NODE_ENV !== 'test') {
-    // 🚀 Run API startup workflow: db check → migrations → redis → env validation
-    await runApiStartupWorkflow();
-
-    // 🚀 Run seed: ensures superadmin + demo users exist before accepting requests
-    await seedStartup();
+    let markStartupReady: (() => void) | undefined;
+    const startupReady = new Promise<void>((resolve) => {
+      markStartupReady = resolve;
+    });
 
     const server = app.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
@@ -275,7 +277,11 @@ app.use((req, res) => {
       };
       console.log('📋 Registered routes:');
       printRoutes((app as any)._router.stack);
-      
+
+      // Workers só podem começar depois do probe, migrations e seed. O
+      // listener já está disponível para GET /api/health; o startupGate mantém
+      // todas as demais rotas fechadas enquanto esta promise não resolve.
+      void startupReady.then(() => {
       void ensureStudioAssetsDir().catch((error) => {
         console.error('Failed to prepare studio assets dir:', error);
       });
@@ -330,7 +336,23 @@ app.use((req, res) => {
       }).catch((error) => {
         console.error('Failed to start planner worker:', error);
       });
+      });
     });
+
+    try {
+      // 🚀 Run API startup workflow: db check → migrations → redis → env validation
+      await runApiStartupWorkflow();
+
+      // 🚀 Run seed: ensures superadmin + demo users exist before accepting requests
+      await seedStartup();
+      setStatus('healthy');
+      markStartupReady?.();
+    } catch (error) {
+      // Em falha de bootstrap o health já refletiu o estado crítico; não deixe
+      // um listener órfão até o supervisor finalizar o processo.
+      server.close();
+      throw error;
+    }
 
     // Tratamento de encerramento (único handler)
     process.on('SIGTERM', () => {
