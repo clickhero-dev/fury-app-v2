@@ -19,6 +19,19 @@ describe('PublicTrialService', () => {
     expect(mailer.sendPublicTrialMagicLink.mock.calls[0][2]).toContain('#token=');
   });
 
+  it('usa FRONTEND_URL em vez da URL da API', async () => {
+    vi.stubEnv('PUBLIC_TRIAL_FRONTEND_URL', '');
+    vi.stubEnv('APP_URL', 'https://api.example.com');
+    vi.stubEnv('FRONTEND_URL', 'https://frontend.example.com/');
+    try {
+      const repository = { createAccount: vi.fn().mockResolvedValue({ accountId: '1', user: { email: 'ana@example.com', name: 'Ana' } }), issueMagicLink: vi.fn().mockResolvedValue({}) };
+      const mailer = { sendPublicTrialMagicLink: vi.fn().mockResolvedValue(undefined) };
+      const result = await new PublicTrialService(repository as any, mailer as any).signup({ name: 'Ana', email: 'ana@example.com' });
+      expect(result).toMatchObject({ created: true, redirectUrl: expect.stringMatching(/^https:\/\/frontend\.example\.com\/trial\/acesso#token=/) });
+      expect(mailer.sendPublicTrialMagicLink.mock.calls[0][2]).toBe((result as { redirectUrl: string }).redirectUrl);
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it('não emite nem retorna token quando o e-mail já existe', async () => {
     const repository = { createAccount: vi.fn().mockResolvedValue({ accountId: '', user: { email: 'ana@example.com' } }), issueMagicLink: vi.fn() };
     const service = new PublicTrialService(repository as any, { sendPublicTrialMagicLink: vi.fn() } as any);

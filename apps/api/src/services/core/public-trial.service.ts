@@ -26,7 +26,7 @@ export class PublicTrialService {
     const token = createMagicLinkToken();
     const link = await this.repository.issueMagicLink(result.accountId, token.hash, token.expiresAt);
     if (!link) return { created: true, redirectUrl: '' };
-    const baseUrl = process.env.PUBLIC_TRIAL_FRONTEND_URL || process.env.APP_URL || 'http://localhost:5173';
+    const baseUrl = process.env.PUBLIC_TRIAL_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
     const url = `${baseUrl.replace(/\/$/, '')}/trial/acesso#token=${token.raw}`;
     try {
       await this.mailer.sendPublicTrialMagicLink(result.user.email, result.user.name || data.name, url, result.temporaryPassword);
