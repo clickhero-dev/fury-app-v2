@@ -1,7 +1,7 @@
 # QA — N5 Avaliação do criativo após geração
 
-Data: 2026-11-07  
-Card: `1dfch0amj6h`  
+Data: 2026-11-07
+Card: `1dfch0amj6h`
 PR: #408 — `[N5] Avaliação do criativo após geração`
 
 ## Escopo validado
